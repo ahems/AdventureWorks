@@ -404,6 +404,43 @@ try {
         
         # ===== SHOPPING CART =====
         @{ Table='Sales.ShoppingCartItem'; File='ShoppingCartItem.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        
+        # ===== ADDITIONAL LOOKUP TABLES =====
+        @{ Table='Sales.CountryRegionCurrency'; File='CountryRegionCurrency.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Sales.SalesTaxRate'; File='SalesTaxRate.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Production.ScrapReason'; File='ScrapReason.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='dbo.AWBuildVersion'; File='AWBuildVersion.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        
+        # ===== HUMAN RESOURCES =====
+        @{ Table='HumanResources.Department'; File='Department.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='HumanResources.Shift'; File='Shift.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='HumanResources.EmployeeDepartmentHistory'; File='EmployeeDepartmentHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='HumanResources.EmployeePayHistory'; File='EmployeePayHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='HumanResources.JobCandidate'; File='JobCandidate.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
+        
+        # ===== PERSON CONTACTS =====
+        @{ Table='Person.BusinessEntityContact'; File='BusinessEntityContact.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
+        
+        # ===== PURCHASING =====
+        @{ Table='Purchasing.Vendor'; File='Vendor.csv'; Delimiter="+|"; RowTerminator='&|'; IsWideChar=$true }
+        @{ Table='Purchasing.ProductVendor'; File='ProductVendor.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Purchasing.PurchaseOrderHeader'; File='PurchaseOrderHeader.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Purchasing.PurchaseOrderDetail'; File='PurchaseOrderDetail.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        
+        # ===== PRODUCTION =====
+        @{ Table='Production.BillOfMaterials'; File='BillOfMaterials.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Production.Document'; File='Document.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
+        @{ Table='Production.ProductDocument'; File='ProductDocument.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Production.ProductPhoto'; File='ProductPhoto.csv'; Delimiter="+|"; RowTerminator='&|'; IsWideChar=$true }
+        @{ Table='Production.ProductProductPhoto'; File='ProductProductPhoto.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Production.TransactionHistory'; File='TransactionHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Production.TransactionHistoryArchive'; File='TransactionHistoryArchive.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Production.WorkOrder'; File='WorkOrder.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Production.WorkOrderRouting'; File='WorkOrderRouting.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        
+        # ===== SALES HISTORY =====
+        @{ Table='Sales.SalesPersonQuotaHistory'; File='SalesPersonQuotaHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Sales.SalesTerritoryHistory'; File='SalesTerritoryHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
     )
     
     $csvLoadSuccess = 0
@@ -464,6 +501,22 @@ try {
                 continue
             }
             
+            # Check if this table has required UDT/binary columns that we can't load
+            $cmd.CommandText = @"
+SELECT COUNT(*) 
+FROM INFORMATION_SCHEMA.COLUMNS 
+WHERE TABLE_SCHEMA = '$schemaName' AND TABLE_NAME = '$tableName'
+AND IS_NULLABLE = 'NO'
+AND DATA_TYPE IN ('hierarchyid', 'geography', 'varbinary', 'image')
+"@
+            $hasRequiredUdtColumns = ($cmd.ExecuteScalar() -gt 0)
+            
+            if ($hasRequiredUdtColumns) {
+                Write-Output "    Table has required UDT/binary columns that cannot be loaded from CSV - Skipping"
+                $csvLoadSkipped++
+                continue
+            }
+            
             # Get column schema from database including nullable information
             $cmd.CommandText = @"
 SELECT 
@@ -492,6 +545,11 @@ ORDER BY c.ORDINAL_POSITION
                     Default = $colDefault
                 }
                 
+                # Skip UDT and binary columns that can't be bulk copied from CSV easily
+                if ($colType -in @('geography', 'hierarchyid', 'varbinary', 'image')) {
+                    continue
+                }
+                
                 # Add column to DataTable with appropriate .NET type
                 $netType = switch ($colType) {
                     'int' { [int] }
@@ -517,6 +575,10 @@ ORDER BY c.ORDINAL_POSITION
             # Parse CSV rows into DataTable
             $rowCount = 0
             $delimiter = $config.Delimiter
+            
+            # Track which columns we're actually loading (excluding skipped UDT/binary columns)
+            $loadedColumns = $columns | Where-Object { $_.Type -notin @('geography', 'hierarchyid', 'varbinary', 'image') }
+            
             foreach ($row in $rows) {
                 if ([string]::IsNullOrWhiteSpace($row)) { continue }
                 
@@ -524,9 +586,16 @@ ORDER BY c.ORDINAL_POSITION
                 if ($values.Count -ne $columns.Count) { continue }
                 
                 $dataRow = $dataTable.NewRow()
+                $dataTableColIndex = 0
+                
                 for ($i = 0; $i -lt $columns.Count; $i++) {
                     $col = $columns[$i]
                     $val = $values[$i].Trim()
+                    
+                    # Skip columns we didn't add to DataTable (UDT/binary types)
+                    if ($col.Type -in @('geography', 'hierarchyid', 'varbinary', 'image')) {
+                        continue
+                    }
                     
                     # Handle NULL values
                     $isNull = [string]::IsNullOrWhiteSpace($val) -or $val -in @('NULL', '\N', 'null')
@@ -535,92 +604,88 @@ ORDER BY c.ORDINAL_POSITION
                         if (-not $col.IsNullable) {
                             # Provide default values for non-nullable columns
                             switch ($col.Type) {
-                                'bit' { $dataRow[$i] = $false }
-                                'int' { $dataRow[$i] = 0 }
-                                'bigint' { $dataRow[$i] = 0 }
-                                'smallint' { $dataRow[$i] = 0 }
-                                'tinyint' { $dataRow[$i] = 0 }
-                                'decimal' { $dataRow[$i] = 0 }
-                                'numeric' { $dataRow[$i] = 0 }
-                                'money' { $dataRow[$i] = 0 }
-                                'float' { $dataRow[$i] = 0.0 }
-                                default { $dataRow[$i] = '' }
+                                'bit' { $dataRow[$dataTableColIndex] = $false }
+                                'int' { $dataRow[$dataTableColIndex] = 0 }
+                                'bigint' { $dataRow[$dataTableColIndex] = 0 }
+                                'smallint' { $dataRow[$dataTableColIndex] = 0 }
+                                'tinyint' { $dataRow[$dataTableColIndex] = 0 }
+                                'decimal' { $dataRow[$dataTableColIndex] = 0 }
+                                'numeric' { $dataRow[$dataTableColIndex] = 0 }
+                                'money' { $dataRow[$dataTableColIndex] = 0 }
+                                'float' { $dataRow[$dataTableColIndex] = 0.0 }
+                                default { $dataRow[$dataTableColIndex] = '' }
                             }
                         }
                         else {
-                            $dataRow[$i] = [DBNull]::Value
+                            $dataRow[$dataTableColIndex] = [DBNull]::Value
                         }
                     }
                     else {
-                        # Skip geography and hierarchyid columns (UDT types)
-                        if ($col.Type -in @('geography', 'hierarchyid')) {
-                            $dataRow[$i] = [DBNull]::Value
-                        }
-                        else {
-                            try {
-                                # Convert string value to appropriate type
-                                switch ($col.Type) {
-                                    'bit' {
-                                        $dataRow[$i] = $val -in @('1', 'true', 'True', 'TRUE')
-                                    }
-                                    'int' {
-                                        $dataRow[$i] = [int]::Parse($val)
-                                    }
-                                    'bigint' {
-                                        $dataRow[$i] = [long]::Parse($val)
-                                    }
-                                    'smallint' {
-                                        $dataRow[$i] = [Int16]::Parse($val)
-                                    }
-                                    'tinyint' {
-                                        $dataRow[$i] = [byte]::Parse($val)
-                                    }
-                                    'decimal' {
-                                        $dataRow[$i] = [decimal]::Parse($val)
-                                    }
-                                    'numeric' {
-                                        $dataRow[$i] = [decimal]::Parse($val)
-                                    }
-                                    'money' {
-                                        $dataRow[$i] = [decimal]::Parse($val)
-                                    }
-                                    'float' {
-                                        $dataRow[$i] = [double]::Parse($val)
-                                    }
-                                    'datetime' {
-                                        $dataRow[$i] = [datetime]::Parse($val)
-                                    }
-                                    'datetime2' {
-                                        $dataRow[$i] = [datetime]::Parse($val)
-                                    }
-                                    'date' {
-                                        $dataRow[$i] = [datetime]::Parse($val)
-                                    }
-                                    'uniqueidentifier' {
-                                        $dataRow[$i] = [guid]::Parse($val)
-                                    }
-                                    default {
-                                        $dataRow[$i] = $val
-                                    }
+                        try {
+                            # Convert string value to appropriate type
+                            switch ($col.Type) {
+                                'bit' {
+                                    $dataRow[$dataTableColIndex] = $val -in @('1', 'true', 'True', 'TRUE')
+                                }
+                                'int' {
+                                    $dataRow[$dataTableColIndex] = [int]::Parse($val)
+                                }
+                                'bigint' {
+                                    $dataRow[$dataTableColIndex] = [long]::Parse($val)
+                                }
+                                'smallint' {
+                                    $dataRow[$dataTableColIndex] = [Int16]::Parse($val)
+                                }
+                                'tinyint' {
+                                    $dataRow[$dataTableColIndex] = [byte]::Parse($val)
+                                }
+                                'decimal' {
+                                    $dataRow[$dataTableColIndex] = [decimal]::Parse($val)
+                                }
+                                'numeric' {
+                                    $dataRow[$dataTableColIndex] = [decimal]::Parse($val)
+                                }
+                                'money' {
+                                    $dataRow[$dataTableColIndex] = [decimal]::Parse($val)
+                                }
+                                'float' {
+                                    $dataRow[$dataTableColIndex] = [double]::Parse($val)
+                                }
+                                'datetime' {
+                                    $dataRow[$dataTableColIndex] = [datetime]::Parse($val)
+                                }
+                                'datetime2' {
+                                    $dataRow[$dataTableColIndex] = [datetime]::Parse($val)
+                                }
+                                'date' {
+                                    $dataRow[$dataTableColIndex] = [datetime]::Parse($val)
+                                }
+                                'uniqueidentifier' {
+                                    $dataRow[$dataTableColIndex] = [guid]::Parse($val)
+                                }
+                                default {
+                                    $dataRow[$dataTableColIndex] = $val
                                 }
                             }
-                            catch {
-                                # If conversion fails, use default or NULL
-                                if (-not $col.IsNullable) {
-                                    switch ($col.Type) {
-                                        'bit' { $dataRow[$i] = $false }
-                                        { $_ -in @('int', 'bigint', 'smallint', 'tinyint', 'decimal', 'numeric', 'money', 'float') } {
-                                            $dataRow[$i] = 0
-                                        }
-                                        default { $dataRow[$i] = '' }
+                        }
+                        catch {
+                            # If conversion fails, use default or NULL
+                            if (-not $col.IsNullable) {
+                                switch ($col.Type) {
+                                    'bit' { $dataRow[$dataTableColIndex] = $false }
+                                    { $_ -in @('int', 'bigint', 'smallint', 'tinyint', 'decimal', 'numeric', 'money', 'float') } {
+                                        $dataRow[$dataTableColIndex] = 0
                                     }
+                                    default { $dataRow[$dataTableColIndex] = '' }
                                 }
-                                else {
-                                    $dataRow[$i] = [DBNull]::Value
-                                }
+                            }
+                            else {
+                                $dataRow[$dataTableColIndex] = [DBNull]::Value
                             }
                         }
                     }
+                    
+                    $dataTableColIndex++
                 }
                 $dataTable.Rows.Add($dataRow)
                 $rowCount++
@@ -637,8 +702,8 @@ ORDER BY c.ORDINAL_POSITION
             $bulkCopy.BatchSize = 5000
             $bulkCopy.BulkCopyTimeout = 300
             
-            # Map columns
-            foreach ($col in $columns) {
+            # Map columns (only the ones we loaded, excluding UDT/binary types)
+            foreach ($col in $loadedColumns) {
                 $null = $bulkCopy.ColumnMappings.Add($col.Name, $col.Name)
             }
             
