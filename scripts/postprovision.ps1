@@ -320,7 +320,11 @@ try {
             # Only warn on unexpected errors (ignore common expected failures)
             if ($errorMsg -notmatch 'already exists' -and 
                 $errorMsg -notmatch 'Cannot find the object' -and
-                $errorMsg -notmatch 'Invalid object name') {
+                $errorMsg -notmatch 'Invalid object name' -and
+                $errorMsg -notmatch 'There is already an object named' -and
+                $errorMsg -notmatch 'already has a primary key defined on it' -and
+                $errorMsg -notmatch 'Altering existing schema components is not allowed' -and
+                $errorMsg -notmatch 'A full-text index for table') {
                 Write-Warning "Batch $batchNum failed: $errorMsg"
             }
         }
@@ -332,14 +336,14 @@ try {
     Write-Output "  - $skipCount batches skipped (unsupported operations)"
     
     # ---------------------------------------------------------------------
-    # Load CSV data into tables
+    # Load CSV data into tables using SqlBulkCopy
     # ---------------------------------------------------------------------
-    Write-Output "`nLoading CSV data into tables..."
+    Write-Output "`nLoading CSV data into tables using SqlBulkCopy..."
     
     $csvFolder = Join-Path $PSScriptRoot 'sql'
     
     # Define table load order and CSV configurations
-    # Format: @{ Table='SchemaName.TableName'; File='filename.csv'; Delimiter='\t' or '+|'; RowTerminator='\n' or '&|\n'; IsWideChar=$true/$false }
+    # Format: @{ Table='SchemaName.TableName'; File='filename.csv'; Delimiter='\t' or '+|'; RowTerminator='\n' or '&|'; IsWideChar=$true/$false }
     # Loading e-commerce relevant tables in dependency order
     $csvLoadConfig = @(
         # ===== LOOKUP/REFERENCE TABLES =====
@@ -416,39 +420,19 @@ try {
         }
         
         Write-Output "  Loading $($config.Table) from $($config.File)..."
-        $hasIdentity = $false
-        $schemaName = $null
-        $tableName = $null
-
+        
         try {
-            $tableParts = $config.Table.Split('.', 2)
+            # Parse table name
+            $tableParts = $config.Table -split '\.'
             if ($tableParts.Count -ne 2) {
-                Write-Warning "  Invalid table specification '$($config.Table)' - Skipping"
+                Write-Warning "    Invalid table name format - Skipping"
                 $csvLoadSkipped++
                 continue
             }
-
             $schemaName = $tableParts[0]
             $tableName = $tableParts[1]
-
-            # Ensure table exists before attempting to load
-            $cmd.Parameters.Clear()
-            $cmd.CommandText = @"
-SELECT COUNT(*)
-FROM sys.tables t
-INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
-WHERE t.name = '$tableName'
-  AND s.name = '$schemaName'
-"@
-            $tableExists = ($cmd.ExecuteScalar() -gt 0)
-            if (-not $tableExists) {
-                Write-Warning "    Table $($config.Table) not found - Skipping"
-                $csvLoadSkipped++
-                continue
-            }
-
+            
             # Check if table already has data
-            $cmd.Parameters.Clear()
             $cmd.CommandText = "SELECT COUNT(*) FROM [$schemaName].[$tableName]"
             $existingCount = $cmd.ExecuteScalar()
             
@@ -458,363 +442,215 @@ WHERE t.name = '$tableName'
                 continue
             }
             
-            # Read CSV file with proper encoding
-            $encoding = if ($config.IsWideChar) { [System.Text.Encoding]::Unicode } else { [System.Text.Encoding]::Default }
+            # Read CSV with proper encoding
+            $encoding = if ($config.IsWideChar) { [System.Text.Encoding]::Unicode } else { [System.Text.Encoding]::UTF8 }
             $csvContent = [System.IO.File]::ReadAllText($csvPath, $encoding)
             
-            # Split into rows - handle different row terminators
+            # Parse CSV into DataTable
+            $dataTable = New-Object System.Data.DataTable
+            
+            # Split into rows
             if ($config.IsWideChar -and $config.RowTerminator -eq '&|') {
-                # For wide char files with &| terminator, it's actually &|\r\n in the file
-                $rows = $csvContent -split '&\|\r?\n' | Where-Object { $_.Trim() -ne '' }
+                $rows = $csvContent -split '&\|\r?\n'
             }
             else {
-                $rows = $csvContent -split $config.RowTerminator | Where-Object { $_.Trim() -ne '' }
+                $rows = $csvContent -split [regex]::Escape($config.RowTerminator)
             }
+            $rows = $rows | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
             
             if ($rows.Count -eq 0) {
-                Write-Warning "  No data rows found in $($config.File) - Skipping"
+                Write-Warning "    No data rows found - Skipping"
                 $csvLoadSkipped++
                 continue
             }
             
-            # Get table schema to understand column types (exclude computed columns)
-            $schemaQuery = @"
+            # Get column schema from database including nullable information
+            $cmd.CommandText = @"
 SELECT 
-    c.COLUMN_NAME,
-    c.DATA_TYPE,
+    c.COLUMN_NAME, 
+    c.DATA_TYPE, 
     c.ORDINAL_POSITION,
-        COLUMNPROPERTY(OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME), c.COLUMN_NAME, 'IsComputed') as IsComputed,
-        c.CHARACTER_MAXIMUM_LENGTH,
-        c.NUMERIC_PRECISION,
-        c.NUMERIC_SCALE
+    c.IS_NULLABLE,
+    c.COLUMN_DEFAULT
 FROM INFORMATION_SCHEMA.COLUMNS c
-WHERE c.TABLE_SCHEMA = '$schemaName'
-  AND c.TABLE_NAME = '$tableName'
+WHERE c.TABLE_SCHEMA = '$schemaName' AND c.TABLE_NAME = '$tableName'
+AND COLUMNPROPERTY(OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME), c.COLUMN_NAME, 'IsComputed') = 0
 ORDER BY c.ORDINAL_POSITION
 "@
-            
-            $cmd.Parameters.Clear()
-            $cmd.CommandText = $schemaQuery
             $reader = $cmd.ExecuteReader()
             $columns = @()
             while ($reader.Read()) {
-                $columns += @{
-                    Name = $reader['COLUMN_NAME']
-                    Type = $reader['DATA_TYPE']
-                    Position = $reader['ORDINAL_POSITION']
-                    IsComputed = $reader['IsComputed']
-                    CharacterLength = $reader['CHARACTER_MAXIMUM_LENGTH']
-                    NumericPrecision = $reader['NUMERIC_PRECISION']
-                    NumericScale = $reader['NUMERIC_SCALE']
+                $colName = $reader['COLUMN_NAME']
+                $colType = $reader['DATA_TYPE']
+                $isNullable = $reader['IS_NULLABLE'] -eq 'YES'
+                $colDefault = $reader['COLUMN_DEFAULT']
+                
+                $columns += @{ 
+                    Name = $colName
+                    Type = $colType
+                    IsNullable = $isNullable
+                    Default = $colDefault
                 }
+                
+                # Add column to DataTable with appropriate .NET type
+                $netType = switch ($colType) {
+                    'int' { [int] }
+                    'bigint' { [long] }
+                    'smallint' { [Int16] }
+                    'tinyint' { [byte] }
+                    'bit' { [bool] }
+                    'decimal' { [decimal] }
+                    'numeric' { [decimal] }
+                    'money' { [decimal] }
+                    'float' { [double] }
+                    'datetime' { [datetime] }
+                    'datetime2' { [datetime] }
+                    'date' { [datetime] }
+                    'uniqueidentifier' { [guid] }
+                    default { [string] }
+                }
+                $dataColumn = $dataTable.Columns.Add($colName, $netType)
+                $dataColumn.AllowDBNull = $isNullable
             }
             $reader.Close()
             
-            if ($columns.Count -eq 0) {
-                Write-Warning "  Could not retrieve schema for $($config.Table) - Skipping"
-                $csvLoadSkipped++
-                continue
-            }
-            
-            # Filter out columns with unsupported data types and computed columns
-            $unsupportedTypes = @('geometry', 'varbinary', 'image')
-            $supportedColumns = $columns | Where-Object { 
-                $_.Type -notin $unsupportedTypes -and 
-                $_.IsComputed -eq 0
-            }
-            
-            if ($supportedColumns.Count -eq 0) {
-                Write-Warning "  No supported columns found in $($config.Table) - Skipping"
-                $csvLoadSkipped++
-                continue
-            }
-            
-            # Check if table has identity column
-            $identityCheckQuery = @"
-SELECT COUNT(*) as HasIdentity
-FROM sys.columns c
-INNER JOIN sys.tables t ON c.object_id = t.object_id
-INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
-WHERE s.name = '$schemaName'
-  AND t.name = '$tableName'
-  AND c.is_identity = 1
-"@
-            $cmd.Parameters.Clear()
-            $cmd.CommandText = $identityCheckQuery
-            $identityResult = $cmd.ExecuteScalar()
-            $hasIdentity = ($identityResult -gt 0)
-            
-            # Build parameterized INSERT statement (only for supported columns)
-            $cmd.Parameters.Clear()
-            $columnMapping = @{}
-            $columnNames = @()
-            $valueExpressions = @()
-            $paramCounter = 0
-
-            for ($i = 0; $i -lt $columns.Count; $i++) {
-                $columnInfo = $columns[$i]
-
-                if ($columnInfo.Type -in $unsupportedTypes -or $columnInfo.IsComputed -ne 0) {
-                    continue
-                }
-
-                $paramCounter++
-                $paramName = "@p$paramCounter"
-                $param = $cmd.CreateParameter()
-                $param.ParameterName = $paramName
-
-                switch ($columnInfo.Type) {
-                    'uniqueidentifier' { $param.SqlDbType = [System.Data.SqlDbType]::UniqueIdentifier }
-                    'int' { $param.SqlDbType = [System.Data.SqlDbType]::Int }
-                    'bigint' { $param.SqlDbType = [System.Data.SqlDbType]::BigInt }
-                    'smallint' { $param.SqlDbType = [System.Data.SqlDbType]::SmallInt }
-                    'tinyint' { $param.SqlDbType = [System.Data.SqlDbType]::TinyInt }
-                    'bit' { $param.SqlDbType = [System.Data.SqlDbType]::Bit }
-                    'datetime' { $param.SqlDbType = [System.Data.SqlDbType]::DateTime }
-                    'datetime2' { $param.SqlDbType = [System.Data.SqlDbType]::DateTime2 }
-                    'date' { $param.SqlDbType = [System.Data.SqlDbType]::Date }
-                    'money' { $param.SqlDbType = [System.Data.SqlDbType]::Money }
-                    'decimal' { $param.SqlDbType = [System.Data.SqlDbType]::Decimal }
-                    'numeric' { $param.SqlDbType = [System.Data.SqlDbType]::Decimal }
-                    'float' { $param.SqlDbType = [System.Data.SqlDbType]::Float }
-                    'xml' { $param.SqlDbType = [System.Data.SqlDbType]::Xml }
-                    'geography' { $param.SqlDbType = [System.Data.SqlDbType]::VarBinary }
-                    'hierarchyid' { $param.SqlDbType = [System.Data.SqlDbType]::VarBinary }
-                    default { $param.SqlDbType = [System.Data.SqlDbType]::NVarChar }
-                }
-
-                if ($columnInfo.Type -in @('decimal', 'numeric')) {
-                    if ($null -ne $columnInfo.NumericPrecision -and $columnInfo.NumericPrecision -ne [DBNull]::Value) {
-                        $param.Precision = [byte][int]$columnInfo.NumericPrecision
-                    }
-                    if ($null -ne $columnInfo.NumericScale -and $columnInfo.NumericScale -ne [DBNull]::Value) {
-                        $param.Scale = [byte][int]$columnInfo.NumericScale
-                    }
-                }
-
-                if ($columnInfo.Type -in @('nvarchar', 'varchar', 'nchar', 'char')) {
-                    if ($null -ne $columnInfo.CharacterLength -and $columnInfo.CharacterLength -ne [DBNull]::Value) {
-                        $lengthValue = [int]$columnInfo.CharacterLength
-                        if ($lengthValue -gt 0) {
-                            $param.Size = $lengthValue
-                        }
-                        elseif ($lengthValue -eq -1) {
-                            $param.Size = -1
-                        }
-                    }
-                }
-
-                if ($columnInfo.Type -eq 'geography') {
-                    $param.Size = -1
-                }
-                elseif ($columnInfo.Type -eq 'hierarchyid') {
-                    $param.Size = -1
-                }
-
-                $null = $cmd.Parameters.Add($param)
-
-                $columnNames += "[$($columnInfo.Name)]"
-                if ($columnInfo.Type -eq 'geography') {
-                    $valueExpressions += "geography::Deserialize($paramName)"
-                }
-                elseif ($columnInfo.Type -eq 'hierarchyid') {
-                    $valueExpressions += "CAST($paramName AS hierarchyid)"
-                }
-                else {
-                    $valueExpressions += $paramName
-                }
-
-                $columnMapping[$i] = @{
-                    ParamIndex = $paramCounter - 1
-                    Column = $columnInfo
-                }
-            }
-
-            $insertSql = "INSERT INTO [$schemaName].[$tableName] ($($columnNames -join ', ')) VALUES ($($valueExpressions -join ', '))"
-            $cmd.CommandText = $insertSql
-            
-            # Insert rows in batches
-            $batchSize = 1000
+            # Parse CSV rows into DataTable
             $rowCount = 0
-            $mismatchRows = 0
-            $transaction = $conn.BeginTransaction()
-            $cmd.Transaction = $transaction
-            
-            try {
-                # Enable IDENTITY_INSERT if needed (must be inside transaction)
-                if ($hasIdentity) {
-                    $tempCmd = $conn.CreateCommand()
-                    $tempCmd.Transaction = $transaction
-                    $tempCmd.CommandText = "SET IDENTITY_INSERT [$schemaName].[$tableName] ON"
-                    $null = $tempCmd.ExecuteNonQuery()
-                }
+            $delimiter = $config.Delimiter
+            foreach ($row in $rows) {
+                if ([string]::IsNullOrWhiteSpace($row)) { continue }
                 
-                for ($rowIndex = 0; $rowIndex -lt $rows.Count; $rowIndex++) {
-                    $row = $rows[$rowIndex]
-                    if ([string]::IsNullOrWhiteSpace($row)) { continue }
+                $values = $row -split [regex]::Escape($delimiter)
+                if ($values.Count -ne $columns.Count) { continue }
+                
+                $dataRow = $dataTable.NewRow()
+                for ($i = 0; $i -lt $columns.Count; $i++) {
+                    $col = $columns[$i]
+                    $val = $values[$i].Trim()
                     
-                    $values = $row -split [regex]::Escape($config.Delimiter)
-                    if ($values -isnot [System.Array]) {
-                        $values = @($values)
-                    }
-
-                    $values = Remove-TrailingEmptyFields -Values $values
+                    # Handle NULL values
+                    $isNull = [string]::IsNullOrWhiteSpace($val) -or $val -in @('NULL', '\N', 'null')
                     
-                    if ($values.Count -eq 0 -or $values.Count -ne $columns.Count) {
-                        $mismatchRows++
-                        continue
-                    }
-                    
-                    $displayRowNumber = $rowIndex + 1
-
-                    # Set parameter values with proper type conversion (only for supported columns)
-                    for ($i = 0; $i -lt $values.Count; $i++) {
-                        if (-not $columnMapping.ContainsKey($i)) {
-                            continue
-                        }
-
-                        $mapping = $columnMapping[$i]
-                        $param = $cmd.Parameters[$mapping.ParamIndex]
-                        $columnDef = $mapping.Column
-                        $trimmedValue = $values[$i].Trim()
-
-                        if ([string]::IsNullOrWhiteSpace($trimmedValue) -or $trimmedValue -eq 'NULL' -or $trimmedValue -eq '\\N' -or $trimmedValue -eq 'null') {
-                            $param.Value = [DBNull]::Value
-                            continue
-                        }
-
-                        if ($columnDef.Type -eq 'uniqueidentifier') {
-                            $cleanGuid = $trimmedValue -replace '[{}]', ''
-                            try {
-                                $param.Value = [Guid]::Parse($cleanGuid)
-                            }
-                            catch {
-                                Write-Warning "  Invalid GUID format in row $displayRowNumber, column $($columnDef.Name): $trimmedValue"
-                                $param.Value = [DBNull]::Value
-                            }
-                        }
-                        elseif ($columnDef.Type -in @('datetime', 'datetime2', 'date')) {
-                            try {
-                                $param.Value = [DateTime]::Parse($trimmedValue)
-                            }
-                            catch {
-                                $param.Value = [DBNull]::Value
-                            }
-                        }
-                        elseif ($columnDef.Type -eq 'bit') {
-                            $param.Value = if ($trimmedValue -in @('1', 'true', 'True', 'TRUE')) { $true } else { $false }
-                        }
-                        elseif ($columnDef.Type -eq 'geography') {
-                            try {
-                                $bytes = Convert-HexStringToByteArray -HexString $trimmedValue
-                                if ($bytes.Length -eq 0) {
-                                    $param.Value = [DBNull]::Value
-                                }
-                                else {
-                                    $param.Value = [byte[]]$bytes
-                                }
-                            }
-                            catch {
-                                Write-Warning "  Invalid geography payload in row $displayRowNumber, column $($columnDef.Name): $($_.Exception.Message)"
-                                $param.Value = [DBNull]::Value
-                            }
-                        }
-                        elseif ($columnDef.Type -eq 'hierarchyid') {
-                            try {
-                                $bytes = Convert-HexStringToByteArray -HexString $trimmedValue
-                                if ($bytes.Length -eq 0) {
-                                    $param.Value = [DBNull]::Value
-                                }
-                                else {
-                                    $param.Value = [byte[]]$bytes
-                                }
-                            }
-                            catch {
-                                Write-Warning "  Invalid hierarchyid payload in row $displayRowNumber, column $($columnDef.Name): $($_.Exception.Message)"
-                                $param.Value = [DBNull]::Value
+                    if ($isNull) {
+                        if (-not $col.IsNullable) {
+                            # Provide default values for non-nullable columns
+                            switch ($col.Type) {
+                                'bit' { $dataRow[$i] = $false }
+                                'int' { $dataRow[$i] = 0 }
+                                'bigint' { $dataRow[$i] = 0 }
+                                'smallint' { $dataRow[$i] = 0 }
+                                'tinyint' { $dataRow[$i] = 0 }
+                                'decimal' { $dataRow[$i] = 0 }
+                                'numeric' { $dataRow[$i] = 0 }
+                                'money' { $dataRow[$i] = 0 }
+                                'float' { $dataRow[$i] = 0.0 }
+                                default { $dataRow[$i] = '' }
                             }
                         }
                         else {
-                            $param.Value = $trimmedValue
+                            $dataRow[$i] = [DBNull]::Value
                         }
                     }
-                    
-                    $null = $cmd.ExecuteNonQuery()
-                    $rowCount++
-                    
-                    # Show progress for large tables
-                    if ($rowCount % 500 -eq 0) {
-                        Write-Output "    ...inserted $rowCount rows"
-                    }
-                    
-                    # Commit in batches to avoid long-running transactions
-                    if ($rowCount % $batchSize -eq 0) {
-                        # Disable IDENTITY_INSERT before commit if enabled
-                        if ($hasIdentity) {
-                            $tempCmd = $conn.CreateCommand()
-                            $tempCmd.Transaction = $transaction
-                            $tempCmd.CommandText = "SET IDENTITY_INSERT [$schemaName].[$tableName] OFF"
-                            $null = $tempCmd.ExecuteNonQuery()
+                    else {
+                        # Skip geography and hierarchyid columns (UDT types)
+                        if ($col.Type -in @('geography', 'hierarchyid')) {
+                            $dataRow[$i] = [DBNull]::Value
                         }
-                        
-                        $transaction.Commit()
-                        $transaction = $conn.BeginTransaction()
-                        $cmd.Transaction = $transaction
-                        
-                        # Re-enable IDENTITY_INSERT for next batch if needed
-                        if ($hasIdentity) {
-                            $tempCmd = $conn.CreateCommand()
-                            $tempCmd.Transaction = $transaction
-                            $tempCmd.CommandText = "SET IDENTITY_INSERT [$schemaName].[$tableName] ON"
-                            $null = $tempCmd.ExecuteNonQuery()
+                        else {
+                            try {
+                                # Convert string value to appropriate type
+                                switch ($col.Type) {
+                                    'bit' {
+                                        $dataRow[$i] = $val -in @('1', 'true', 'True', 'TRUE')
+                                    }
+                                    'int' {
+                                        $dataRow[$i] = [int]::Parse($val)
+                                    }
+                                    'bigint' {
+                                        $dataRow[$i] = [long]::Parse($val)
+                                    }
+                                    'smallint' {
+                                        $dataRow[$i] = [Int16]::Parse($val)
+                                    }
+                                    'tinyint' {
+                                        $dataRow[$i] = [byte]::Parse($val)
+                                    }
+                                    'decimal' {
+                                        $dataRow[$i] = [decimal]::Parse($val)
+                                    }
+                                    'numeric' {
+                                        $dataRow[$i] = [decimal]::Parse($val)
+                                    }
+                                    'money' {
+                                        $dataRow[$i] = [decimal]::Parse($val)
+                                    }
+                                    'float' {
+                                        $dataRow[$i] = [double]::Parse($val)
+                                    }
+                                    'datetime' {
+                                        $dataRow[$i] = [datetime]::Parse($val)
+                                    }
+                                    'datetime2' {
+                                        $dataRow[$i] = [datetime]::Parse($val)
+                                    }
+                                    'date' {
+                                        $dataRow[$i] = [datetime]::Parse($val)
+                                    }
+                                    'uniqueidentifier' {
+                                        $dataRow[$i] = [guid]::Parse($val)
+                                    }
+                                    default {
+                                        $dataRow[$i] = $val
+                                    }
+                                }
+                            }
+                            catch {
+                                # If conversion fails, use default or NULL
+                                if (-not $col.IsNullable) {
+                                    switch ($col.Type) {
+                                        'bit' { $dataRow[$i] = $false }
+                                        { $_ -in @('int', 'bigint', 'smallint', 'tinyint', 'decimal', 'numeric', 'money', 'float') } {
+                                            $dataRow[$i] = 0
+                                        }
+                                        default { $dataRow[$i] = '' }
+                                    }
+                                }
+                                else {
+                                    $dataRow[$i] = [DBNull]::Value
+                                }
+                            }
                         }
                     }
                 }
+                $dataTable.Rows.Add($dataRow)
+                $rowCount++
                 
-                # Disable IDENTITY_INSERT before final commit if enabled
-                if ($hasIdentity) {
-                    $tempCmd = $conn.CreateCommand()
-                    $tempCmd.Transaction = $transaction
-                    $tempCmd.CommandText = "SET IDENTITY_INSERT [$schemaName].[$tableName] OFF"
-                    $null = $tempCmd.ExecuteNonQuery()
+                if ($rowCount % 5000 -eq 0) {
+                    Write-Output "    ...parsed $rowCount rows"
                 }
-                
-                $transaction.Commit()
-                $cmd.Transaction = $null
-                
-                if ($mismatchRows -gt 0) {
-                    Write-Warning "    Skipped $mismatchRows row(s) in $($config.File) due to unexpected column counts."
-                }
-
-                Write-Output "    Loaded $rowCount rows into $($config.Table)"
-                $csvLoadSuccess++
             }
-            catch {
-                try {
-                    $transaction.Rollback()
-                }
-                catch {
-                    # Transaction may already be rolled back
-                }
-                $cmd.Transaction = $null
-                throw
+            
+            # Use SqlBulkCopy for fast insert
+            Write-Output "    Bulk inserting $rowCount rows..."
+            $bulkCopy = New-Object System.Data.SqlClient.SqlBulkCopy($conn)
+            $bulkCopy.DestinationTableName = "[$schemaName].[$tableName]"
+            $bulkCopy.BatchSize = 5000
+            $bulkCopy.BulkCopyTimeout = 300
+            
+            # Map columns
+            foreach ($col in $columns) {
+                $null = $bulkCopy.ColumnMappings.Add($col.Name, $col.Name)
             }
+            
+            $bulkCopy.WriteToServer($dataTable)
+            $bulkCopy.Close()
+            
+            Write-Output "    Successfully loaded $rowCount rows"
+            $csvLoadSuccess++
         }
         catch {
-            Write-Warning "  Failed to load $($config.File): $($_.Exception.Message)"
+            Write-Warning "    Failed to load $($config.File): $($_.Exception.Message)"
             $csvLoadFailed++
-            
-            # Ensure IDENTITY_INSERT is turned off for this table if it has identity
-            if ($hasIdentity -and $schemaName -and $tableName) {
-                try {
-                    $cleanupCmd = $conn.CreateCommand()
-                    $cleanupCmd.CommandText = "SET IDENTITY_INSERT [$schemaName].[$tableName] OFF"
-                    $null = $cleanupCmd.ExecuteNonQuery()
-                }
-                catch {
-                    # Ignore cleanup errors
-                }
-            }
         }
     }
     
