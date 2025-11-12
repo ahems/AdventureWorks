@@ -191,6 +191,172 @@ function Remove-TrailingEmptyFields {
     return $list.ToArray()
 }
 
+function Import-JsonTable {
+    param(
+        [Parameter(Mandatory)]
+        [string] $SchemaName,
+        
+        [Parameter(Mandatory)]
+        [string] $TableName,
+        
+        [Parameter(Mandatory)]
+        [string] $JsonFilePath,
+        
+        [Parameter(Mandatory)]
+        [System.Data.Common.DbConnection] $Connection,
+        
+        [Parameter(Mandatory)]
+        [System.Data.Common.DbCommand] $Command
+    )
+    
+    Write-Output "  Loading [$SchemaName].[$TableName] from JSON file..."
+    
+    try {
+        # Check if table already has data
+        $Command.CommandText = "SELECT COUNT(*) FROM [$SchemaName].[$TableName]"
+        $existingCount = $Command.ExecuteScalar()
+        
+        if ($existingCount -gt 0) {
+            Write-Output "    Table already contains $existingCount rows - Skipping"
+            return $true
+        }
+        
+        # Read and parse JSON file
+        if (-not (Test-Path $JsonFilePath)) {
+            Write-Warning "    JSON file not found: $JsonFilePath - Skipping"
+            return $false
+        }
+        
+        $jsonContent = Get-Content -Path $JsonFilePath -Raw -Encoding UTF8
+        if ([string]::IsNullOrWhiteSpace($jsonContent)) {
+            Write-Output "    JSON file is empty - Skipping"
+            return $true
+        }
+        
+        $records = $jsonContent | ConvertFrom-Json
+        if (-not $records -or $records.Count -eq 0) {
+            Write-Output "    No records in JSON file - Skipping"
+            return $true
+        }
+        
+        Write-Output "    Parsed $($records.Count) records from JSON"
+        
+        # Get column information (excluding IDENTITY and computed columns)
+        $Command.CommandText = @"
+SELECT 
+    c.COLUMN_NAME, 
+    c.DATA_TYPE,
+    c.IS_NULLABLE,
+    COLUMNPROPERTY(OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME), c.COLUMN_NAME, 'IsComputed') AS IsComputed,
+    COLUMNPROPERTY(OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME), c.COLUMN_NAME, 'IsIdentity') AS IsIdentity
+FROM INFORMATION_SCHEMA.COLUMNS c
+WHERE c.TABLE_SCHEMA = '$SchemaName' AND c.TABLE_NAME = '$TableName'
+    AND COLUMNPROPERTY(OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME), c.COLUMN_NAME, 'IsComputed') = 0
+    AND COLUMNPROPERTY(OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME), c.COLUMN_NAME, 'IsIdentity') = 0
+ORDER BY c.ORDINAL_POSITION
+"@
+        $reader = $Command.ExecuteReader()
+        $columns = @()
+        while ($reader.Read()) {
+            $columns += @{
+                Name = $reader['COLUMN_NAME']
+                Type = $reader['DATA_TYPE']
+                IsNullable = $reader['IS_NULLABLE'] -eq 'YES'
+            }
+        }
+        $reader.Close()
+        
+        # Build INSERT statements in batches
+        $batchSize = 100
+        $insertedRows = 0
+        $transaction = $Connection.BeginTransaction()
+        $Command.Transaction = $transaction
+        
+        try {
+            for ($i = 0; $i -lt $records.Count; $i += $batchSize) {
+                $batchEnd = [Math]::Min($i + $batchSize, $records.Count)
+                $batchRecords = $records[$i..($batchEnd - 1)]
+                
+                # Build column list
+                $columnList = ($columns | ForEach-Object { "[$($_.Name)]" }) -join ', '
+                $insertSql = "INSERT INTO [$SchemaName].[$TableName] ($columnList) VALUES "
+                
+                $valuesClauses = @()
+                foreach ($record in $batchRecords) {
+                    $values = @()
+                    foreach ($col in $columns) {
+                        $value = $record.($col.Name)
+                        
+                        if ($null -eq $value -or $value -eq '') {
+                            $values += "NULL"
+                        }
+                        elseif ($col.Type -eq 'xml') {
+                            # Escape single quotes and wrap in XML cast
+                            $escapedVal = $value.ToString().Replace("'", "''")
+                            $values += "CAST(N'$escapedVal' AS XML)"
+                        }
+                        elseif ($col.Type -eq 'hierarchyid') {
+                            # Use hierarchyid::Parse()
+                            $values += "hierarchyid::Parse('$($value.ToString())')"
+                        }
+                        elseif ($col.Type -eq 'varbinary') {
+                            # Value should be hex string with 0x prefix
+                            if ($value.ToString().StartsWith('0x')) {
+                                $values += $value.ToString()
+                            } else {
+                                $values += "0x$($value.ToString())"
+                            }
+                        }
+                        elseif ($col.Type -in @('varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext')) {
+                            # Escape single quotes
+                            $escapedVal = $value.ToString().Replace("'", "''")
+                            $values += "N'$escapedVal'"
+                        }
+                        elseif ($col.Type -eq 'bit') {
+                            $values += if ($value -eq $true -or $value -eq 1) { '1' } else { '0' }
+                        }
+                        elseif ($col.Type -in @('datetime', 'datetime2', 'date')) {
+                            $values += "'$($value.ToString())'"
+                        }
+                        elseif ($col.Type -eq 'uniqueidentifier') {
+                            $values += "'$($value.ToString())'"
+                        }
+                        else {
+                            # Numeric types
+                            $values += $value.ToString()
+                        }
+                    }
+                    $valuesClauses += "(" + ($values -join ', ') + ")"
+                }
+                
+                $insertSql += ($valuesClauses -join ",`n")
+                $Command.CommandText = $insertSql
+                $Command.ExecuteNonQuery() | Out-Null
+                
+                $insertedRows += ($batchEnd - $i)
+                if ($insertedRows % 500 -eq 0) {
+                    Write-Output "    ...inserted $insertedRows rows"
+                }
+            }
+            
+            $transaction.Commit()
+            Write-Output "    Successfully loaded $insertedRows rows from JSON"
+            return $true
+        }
+        catch {
+            $transaction.Rollback()
+            throw
+        }
+        finally {
+            $Command.Transaction = $null
+        }
+    }
+    catch {
+        Write-Warning "    Failed to load from JSON: $($_.Exception.Message)"
+        return $false
+    }
+}
+
 try {
     $rawToken = (Get-AzAccessToken -ResourceUrl 'https://database.windows.net/').Token
     if (-not $rawToken) { throw 'Access token empty' }
@@ -348,7 +514,6 @@ try {
     $csvLoadConfig = @(
         # ===== LOOKUP/REFERENCE TABLES =====
         @{ Table='Production.UnitMeasure'; File='UnitMeasure.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        # Culture.csv has malformed first row (2 fields merged) - only 7 of 8 rows load successfully
         @{ Table='Production.Culture'; File='Culture.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Sales.Currency'; File='Currency.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Person.AddressType'; File='AddressType.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -372,7 +537,7 @@ try {
         @{ Table='Person.Password'; File='Password.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
         @{ Table='Person.EmailAddress'; File='EmailAddress.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
         @{ Table='Person.PersonPhone'; File='PersonPhone.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
-        @{ Table='HumanResources.Employee'; File='Employee.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$true }
+        @{ Table='HumanResources.Employee'; File='Employee.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Sales.PersonCreditCard'; File='PersonCreditCard.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
     @{ Table='Sales.SalesPerson'; File='SalesPerson.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Sales.Store'; File='Store.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
@@ -383,14 +548,12 @@ try {
         @{ Table='Production.Location'; File='Location.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductCategory'; File='ProductCategory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductSubcategory'; File='ProductSubcategory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        # ProductModel.csv has XML content with embedded newlines - only 128 of 364 rows load (CatalogDescription column)
         @{ Table='Production.ProductModel'; File='ProductModel.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
-        @{ Table='Production.ProductDescription'; File='ProductDescription.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$true }
+        @{ Table='Production.ProductDescription'; File='ProductDescription.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModelIllustration'; File='ProductModelIllustration.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        # Skipping ProductPhoto - contains binary data (varbinary) that requires special handling
         @{ Table='Production.Product'; File='Product.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        # Skipping ProductReview.csv - contains multi-line text fields (Comments) that break simple line parsing
+        @{ Table='Production.ProductReview'; File='ProductReview.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments') }
         @{ Table='Production.ProductCostHistory'; File='ProductCostHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductListPriceHistory'; File='ProductListPriceHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductInventory'; File='ProductInventory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -418,7 +581,6 @@ try {
         @{ Table='HumanResources.Shift'; File='Shift.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='HumanResources.EmployeeDepartmentHistory'; File='EmployeeDepartmentHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='HumanResources.EmployeePayHistory'; File='EmployeePayHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        # Skipping JobCandidate.csv - XML Resume content with embedded newlines breaks simple line parsing (only 13 of 133 rows would load)
         
         # ===== PERSON CONTACTS =====
         @{ Table='Person.BusinessEntityContact'; File='BusinessEntityContact.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
@@ -431,10 +593,13 @@ try {
         
         # ===== PRODUCTION =====
         @{ Table='Production.BillOfMaterials'; File='BillOfMaterials.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        # Skipping Document.csv - complex hierarchyid format with embedded binary data
-        # Skipping ProductDocument.csv - depends on Document table
-        @{ Table='Production.ProductPhoto'; File='ProductPhoto.csv'; Delimiter="+|"; RowTerminator='&|'; IsWideChar=$true }
+        # ProductPhoto has ThumbNailPhoto and LargePhoto fields hex-encoded to handle varbinary data
+        @{ Table='Production.ProductPhoto'; File='ProductPhoto.csv'; Delimiter="+|"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('ThumbNailPhoto', 'LargePhoto') }
         @{ Table='Production.ProductProductPhoto'; File='ProductProductPhoto.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # Document has hierarchyid DocumentNode (hex-encoded), varbinary Document field (hex-encoded), and nvarchar DocumentSummary (hex-encoded to handle newlines)
+        @{ Table='Production.Document'; File='Document.csv'; Delimiter="+|"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('DocumentNode', 'DocumentSummary', 'Document') }
+        # ProductDocument references ProductIDs that all exist in Product.csv - load order ensures Product is loaded first
+        @{ Table='Production.ProductDocument'; File='ProductDocument.csv'; Delimiter="+|"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('DocumentNode') }
         @{ Table='Production.TransactionHistory'; File='TransactionHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.TransactionHistoryArchive'; File='TransactionHistoryArchive.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.WorkOrder'; File='WorkOrder.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -504,14 +669,15 @@ try {
                 continue
             }
             
-            # Check if this table has hierarchyid columns (we'll handle these with INSERT statements)
+            # Check if this table has hierarchyid or geography columns (we'll handle these with INSERT statements)
+            # Also use INSERT for tables with hex-encoded columns (varbinary/text with special handling)
             $cmd.CommandText = @"
 SELECT COUNT(*) 
 FROM INFORMATION_SCHEMA.COLUMNS 
 WHERE TABLE_SCHEMA = '$schemaName' AND TABLE_NAME = '$tableName'
-AND DATA_TYPE = 'hierarchyid'
+AND DATA_TYPE IN ('hierarchyid', 'geography', 'geometry')
 "@
-            $hasHierarchyIdColumns = ($cmd.ExecuteScalar() -gt 0)
+            $hasSpecialColumns = ($cmd.ExecuteScalar() -gt 0) -or ($config.HexColumns -and $config.HexColumns.Count -gt 0)
             
             # First, get ALL columns from the database to understand CSV structure
             $cmd.CommandText = @"
@@ -549,14 +715,15 @@ ORDER BY c.ORDINAL_POSITION
                 }
                 $csvColumnIndex++
                 
-                # Only process non-computed, non-identity columns for insertion
-                if (-not $isComputed -and -not $isIdentity) {
+                # Only process non-computed columns for insertion (INCLUDE identity columns to preserve IDs from CSV)
+                if (-not $isComputed) {
                     $columns += @{ 
                         Name = $colName
                         Type = $colType
                         IsNullable = $isNullable
                         Default = $colDefault
                         CSVIndex = $allColumns.Count - 1  # Track original CSV column position
+                        IsIdentity = $isIdentity
                     }
                     
                     # Add column to DataTable with appropriate .NET type (include hierarchyid as string for INSERT method)
@@ -614,6 +781,11 @@ ORDER BY c.ORDINAL_POSITION
                     # Use the CSVIndex to get the correct value from the CSV
                     $val = $values[$col.CSVIndex].Trim()
                     
+                        # BCP with -w (Unicode) and -t delimiter may add & prefix to fields - remove it
+                        if ($config.IsWideChar -and $val.StartsWith('&')) {
+                            $val = $val.Substring(1).Trim()
+                        
+                        }
                     # Handle NULL values
                     $isNull = [string]::IsNullOrWhiteSpace($val) -or $val -in @('NULL', '\N', 'null')
                     
@@ -630,6 +802,8 @@ ORDER BY c.ORDINAL_POSITION
                                 'numeric' { $dataRow[$dataTableColIndex] = 0 }
                                 'money' { $dataRow[$dataTableColIndex] = 0 }
                                 'float' { $dataRow[$dataTableColIndex] = 0.0 }
+                                { $_ -in @('datetime', 'datetime2', 'date') } { $dataRow[$dataTableColIndex] = [datetime]::new(1900, 1, 1, 0, 0, 0) }
+                                'uniqueidentifier' { $dataRow[$dataTableColIndex] = [guid]::Empty }
                                 default { $dataRow[$dataTableColIndex] = '' }
                             }
                         }
@@ -675,7 +849,13 @@ ORDER BY c.ORDINAL_POSITION
                                         $dataRow[$dataTableColIndex] = [datetime]::Parse($truncated)
                                     }
                                     else {
-                                        $dataRow[$dataTableColIndex] = [datetime]::Parse($val)
+                                        try {
+                                            $dataRow[$dataTableColIndex] = [datetime]::Parse($val)
+                                        }
+                                        catch {
+                                            Write-Warning "Failed to parse datetime for column '$($col.Name)': Value=[$val], Length=$($val.Length), Chars=$([string]::Join(',', [char[]]$val))"
+                                            throw
+                                        }
                                     }
                                 }
                                 'datetime2' {
@@ -695,19 +875,51 @@ ORDER BY c.ORDINAL_POSITION
                                     $dataRow[$dataTableColIndex] = [guid]::Parse($val)
                                 }
                                 'varbinary' {
-                                    # Convert hex string to byte array
-                                    $byteArray = New-Object byte[] ($val.Length / 2)
-                                    for ($j = 0; $j -lt $val.Length; $j += 2) {
-                                        $byteArray[$j / 2] = [Convert]::ToByte($val.Substring($j, 2), 16)
+                                    # Check if this column is hex-encoded (for large binary data exported via CONVERT)
+                                    if ($config.HexColumns -and $col.Name -in $config.HexColumns) {
+                                        # Decode hex string to byte array using helper function
+                                        $bytes = Convert-HexStringToByteArray -HexString $val
+                                        $dataRow[$dataTableColIndex] = $bytes
                                     }
-                                    $dataRow[$dataTableColIndex] = $byteArray
+                                    else {
+                                        # Convert hex string to byte array (original logic for inline hex)
+                                        $byteArray = New-Object byte[] ($val.Length / 2)
+                                        for ($j = 0; $j -lt $val.Length; $j += 2) {
+                                            $byteArray[$j / 2] = [Convert]::ToByte($val.Substring($j, 2), 16)
+                                        }
+                                        $dataRow[$dataTableColIndex] = $byteArray
+                                    }
                                 }
                                 'hierarchyid' {
-                                    # Store as string for INSERT method (will use hierarchyid::Parse())
+                                    # Check if this column is hex-encoded (BCP export with CONVERT style 1)
+                                    if ($config.HexColumns -and $col.Name -in $config.HexColumns) {
+                                        # Keep hex string for INSERT method (will use CONVERT or direct hex)
+                                        $dataRow[$dataTableColIndex] = $val
+                                    }
+                                    else {
+                                        # Store as string for INSERT method (will use hierarchyid::Parse())
+                                        $dataRow[$dataTableColIndex] = $val
+                                    }
+                                }
+                                'geography' {
+                                    # Store hex string as-is for INSERT method (will use geography::STGeomFromWKB())
+                                    $dataRow[$dataTableColIndex] = $val
+                                }
+                                'geometry' {
+                                    # Store hex string as-is for INSERT method (will use geometry::STGeomFromWKB())
                                     $dataRow[$dataTableColIndex] = $val
                                 }
                                 default {
-                                    $dataRow[$dataTableColIndex] = $val
+                                    # Check if this column is hex-encoded (for multi-line text fields)
+                                    if ($config.HexColumns -and $col.Name -in $config.HexColumns) {
+                                        # Decode hex string back to Unicode text
+                                        $bytes = Convert-HexStringToByteArray -HexString $val
+                                        $decodedValue = [System.Text.Encoding]::Unicode.GetString($bytes)
+                                        $dataRow[$dataTableColIndex] = $decodedValue
+                                    }
+                                    else {
+                                        $dataRow[$dataTableColIndex] = $val
+                                    }
                                 }
                             }
                         }
@@ -719,6 +931,9 @@ ORDER BY c.ORDINAL_POSITION
                                     { $_ -in @('int', 'bigint', 'smallint', 'tinyint', 'decimal', 'numeric', 'money', 'float') } {
                                         $dataRow[$dataTableColIndex] = 0
                                     }
+                                    { $_ -in @('datetime', 'datetime2', 'date') } { $dataRow[$dataTableColIndex] = [datetime]::new(1900, 1, 1, 0, 0, 0) }
+                                    'uniqueidentifier' { $dataRow[$dataTableColIndex] = [guid]::Empty }
+                                    'varbinary' { $dataRow[$dataTableColIndex] = [byte[]]::new(0) }
                                     default { $dataRow[$dataTableColIndex] = '' }
                                 }
                             }
@@ -738,14 +953,27 @@ ORDER BY c.ORDINAL_POSITION
                 }
             }
             
-            # Use different insert method depending on whether table has hierarchyid columns
-            if ($hasHierarchyIdColumns) {
-                # Use batched INSERT statements for hierarchyid tables
-                Write-Output "    Inserting $rowCount rows using batched INSERT (hierarchyid table)..."
+            # Check if any column is an IDENTITY column (need to enable IDENTITY_INSERT)
+            $hasIdentityColumn = $columns | Where-Object { $_.IsIdentity } | Measure-Object | Select-Object -ExpandProperty Count
+            $hasIdentityColumn = $hasIdentityColumn -gt 0
+            
+            # Use different insert method depending on whether table has special columns, hex encoding, or identity columns
+            # SqlBulkCopy does NOT support IDENTITY_INSERT, so we must use batched INSERT for identity columns
+            if ($hasSpecialColumns -or $hasIdentityColumn) {
+                # Use batched INSERT statements for special tables (hierarchyid, geography, hex-encoded columns)
+                Write-Output "    Inserting $rowCount rows using batched INSERT (special columns)..."
                 
                 $batchSize = 100
                 $insertedRows = 0
                 $transaction = $conn.BeginTransaction()
+                
+                # Enable IDENTITY_INSERT if needed
+                if ($hasIdentityColumn) {
+                    $cmd.Transaction = $transaction
+                    $cmd.CommandText = "SET IDENTITY_INSERT [$schemaName].[$tableName] ON"
+                    $cmd.ExecuteNonQuery() | Out-Null
+                    Write-Output "    Enabled IDENTITY_INSERT for table with identity column"
+                }
                 
                 try {
                     for ($batchStart = 0; $batchStart -lt $dataTable.Rows.Count; $batchStart += $batchSize) {
@@ -771,6 +999,16 @@ ORDER BY c.ORDINAL_POSITION
                                     # hierarchyid in CSV is hex-encoded binary, convert to binary format
                                     # Format: CAST(0x6AC0 AS hierarchyid)
                                     $values += "CAST(0x$($value.ToString()) AS hierarchyid)"
+                                }
+                                elseif ($col.Type -eq 'geography') {
+                                    # geography in CSV is hex-encoded in SQL Server's internal format
+                                    # Use direct CAST from varbinary to geography
+                                    $values += "CAST(0x$($value.ToString()) AS geography)"
+                                }
+                                elseif ($col.Type -eq 'geometry') {
+                                    # geometry in CSV is hex-encoded in SQL Server's internal format
+                                    # Use direct CAST from varbinary to geometry
+                                    $values += "CAST(0x$($value.ToString()) AS geometry)"
                                 }
                                 elseif ($col.Type -eq 'varbinary') {
                                     # Convert byte array to hex string with 0x prefix
@@ -822,6 +1060,12 @@ ORDER BY c.ORDINAL_POSITION
                         }
                     }
                     
+                    # Disable IDENTITY_INSERT if it was enabled
+                    if ($hasIdentityColumn) {
+                        $cmd.CommandText = "SET IDENTITY_INSERT [$schemaName].[$tableName] OFF"
+                        $cmd.ExecuteNonQuery() | Out-Null
+                    }
+                    
                     $transaction.Commit()
                     Write-Output "    Successfully loaded $rowCount rows"
                     $csvLoadSuccess++
@@ -835,8 +1079,9 @@ ORDER BY c.ORDINAL_POSITION
                 }
             }
             else {
-                # Use SqlBulkCopy for fast insert (non-hierarchyid tables)
+                # Use SqlBulkCopy for fast insert (tables without special columns or identity columns)
                 Write-Output "    Bulk inserting $rowCount rows..."
+                
                 $bulkCopy = New-Object System.Data.SqlClient.SqlBulkCopy($conn)
                 $bulkCopy.DestinationTableName = "[$schemaName].[$tableName]"
                 $bulkCopy.BatchSize = 5000
@@ -860,12 +1105,12 @@ ORDER BY c.ORDINAL_POSITION
         }
     }
     
-    $conn.Close()
-    
     Write-Output "`nCSV Data Loading Summary:"
     Write-Output "  - $csvLoadSuccess tables loaded successfully"
     Write-Output "  - $csvLoadFailed tables failed to load"
     Write-Output "  - $csvLoadSkipped tables skipped"
+    
+    $conn.Close()
 }
 catch {
     Write-Error "Failed to execute T-SQL for managed identity via ADO.NET: $($_.Exception.Message)"
