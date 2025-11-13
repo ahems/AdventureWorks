@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
 
-name: my-to-do-app
+name: AdventureWorks
 hooks:
   preup:
     shell: pwsh
@@ -23,13 +23,6 @@ hooks:
     run: ./scripts/postdown.ps1
     interactive: true
 services:
-    app:
-        project: ./app
-        host: containerapp
-        language: python
-        docker:
-            path: dockerfile
-            remoteBuild: true
     api:
         project: ./api
         host: containerapp

@@ -1,5 +1,5 @@
 {
-    "name": "Automated IaC Demo",
+    "name": "AdventureWorks",
     "build": {
         "dockerfile": "Dockerfile"
     },

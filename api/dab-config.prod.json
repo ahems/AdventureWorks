@@ -6,44 +6,39 @@
   "runtime": {
     "rest": {
       "enabled": true,
-      "path": "/api",
-      "request-body-strict": false
+      "path": "/api"
     },
     "graphql": {
       "enabled": true,
-      "path": "/graphql",
-      "allow-introspection": true
+      "path": "/graphql"
     },
     "host": {
       "port": 5000,
-      "mode": "development",
       "cors": {
-        "origins": ["*"],
-        "allow-credentials": false
+        "origins": ["@env('APP_URL')"],
+        "allow-credentials": true
       },
       "authentication": {
-        "provider": "StaticWebApps"
+        "provider": "AzureAD",
+        "jwt": {
+          "audience": "@env('API_APP_ID_URI')",
+          "issuer": "https://sts.windows.net/@env('TENANT_ID')/"
+        }
       }
     },
     "telemetry": {
       "application-insights": {
-        "enabled": false
+        "enabled": true,
+        "connection-string": "@env('APPLICATIONINSIGHTS_CONNECTION_STRING')"
       }
-    },
-    "cache": {
-      "enabled": false
     }
-  },
-  "swagger": {
-    "enabled": true,
-    "path": "/swagger"
   },
   "entities": {
     "UnitMeasure": {
       "source": "Production.UnitMeasure",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -52,7 +47,7 @@
       "source": "Production.Culture",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -61,7 +56,7 @@
       "source": "Sales.Currency",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -70,7 +65,7 @@
       "source": "Person.AddressType",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -79,7 +74,7 @@
       "source": "Person.ContactType",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -88,7 +83,7 @@
       "source": "Person.PhoneNumberType",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -97,7 +92,7 @@
       "source": "Sales.SalesReason",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -106,7 +101,7 @@
       "source": "Sales.CreditCard",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -115,7 +110,7 @@
       "source": "Sales.CurrencyRate",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -124,7 +119,7 @@
       "source": "Person.CountryRegion",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -133,7 +128,7 @@
       "source": "Sales.SalesTerritory",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -142,7 +137,7 @@
       "source": "Purchasing.ShipMethod",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -151,7 +146,16 @@
       "source": "Person.StateProvince",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "Address": {
+      "source": "Person.Address",
+      "permissions": [
+        {
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -160,7 +164,7 @@
       "source": "Person.BusinessEntity",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -169,7 +173,7 @@
       "source": "Person.BusinessEntityAddress",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -178,7 +182,7 @@
       "source": "Person.Person",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -187,7 +191,7 @@
       "source": "Person.Password",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -196,7 +200,7 @@
       "source": "Person.EmailAddress",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -205,7 +209,16 @@
       "source": "Person.PersonPhone",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "Employee": {
+      "source": "HumanResources.Employee",
+      "permissions": [
+        {
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -214,7 +227,7 @@
       "source": "Sales.PersonCreditCard",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -223,7 +236,7 @@
       "source": "Sales.SalesPerson",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -232,7 +245,7 @@
       "source": "Sales.Store",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -241,7 +254,7 @@
       "source": "Sales.Customer",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -250,7 +263,7 @@
       "source": "Production.Illustration",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -259,7 +272,7 @@
       "source": "Production.Location",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -268,7 +281,7 @@
       "source": "Production.ProductCategory",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -277,7 +290,7 @@
       "source": "Production.ProductSubcategory",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -286,7 +299,7 @@
       "source": "Production.ProductModel",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -295,7 +308,7 @@
       "source": "Production.ProductDescription",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -304,7 +317,7 @@
       "source": "Production.ProductModelProductDescriptionCulture",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -313,7 +326,7 @@
       "source": "Production.ProductModelIllustration",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -322,7 +335,7 @@
       "source": "Production.Product",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -331,7 +344,7 @@
       "source": "Production.ProductCostHistory",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -340,7 +353,7 @@
       "source": "Production.ProductListPriceHistory",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -349,7 +362,7 @@
       "source": "Production.ProductInventory",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -358,7 +371,7 @@
       "source": "Sales.SpecialOffer",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -367,7 +380,7 @@
       "source": "Sales.SpecialOfferProduct",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -376,7 +389,7 @@
       "source": "Sales.SalesOrderHeader",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -385,7 +398,7 @@
       "source": "Sales.SalesOrderDetail",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -394,7 +407,7 @@
       "source": "Sales.SalesOrderHeaderSalesReason",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -403,7 +416,7 @@
       "source": "Sales.ShoppingCartItem",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -412,7 +425,7 @@
       "source": "Sales.CountryRegionCurrency",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -421,7 +434,7 @@
       "source": "Sales.SalesTaxRate",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -430,7 +443,7 @@
       "source": "Production.ScrapReason",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -439,7 +452,7 @@
       "source": "dbo.AWBuildVersion",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -448,7 +461,7 @@
       "source": "HumanResources.Department",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -457,7 +470,7 @@
       "source": "HumanResources.Shift",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -466,7 +479,7 @@
       "source": "HumanResources.EmployeeDepartmentHistory",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -475,7 +488,7 @@
       "source": "HumanResources.EmployeePayHistory",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -484,7 +497,7 @@
       "source": "Person.BusinessEntityContact",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -493,7 +506,7 @@
       "source": "Purchasing.Vendor",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -502,7 +515,7 @@
       "source": "Purchasing.ProductVendor",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -511,7 +524,7 @@
       "source": "Purchasing.PurchaseOrderHeader",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -520,7 +533,16 @@
       "source": "Purchasing.PurchaseOrderDetail",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "BillOfMaterials": {
+      "source": "Production.BillOfMaterials",
+      "permissions": [
+        {
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -529,7 +551,7 @@
       "source": "Production.ProductPhoto",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -538,7 +560,7 @@
       "source": "Production.ProductProductPhoto",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -547,7 +569,7 @@
       "source": "Production.TransactionHistory",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -556,7 +578,7 @@
       "source": "Production.TransactionHistoryArchive",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -565,7 +587,7 @@
       "source": "Production.WorkOrder",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -574,7 +596,7 @@
       "source": "Production.WorkOrderRouting",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -583,7 +605,7 @@
       "source": "Sales.SalesPersonQuotaHistory",
       "permissions": [
         {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
@@ -592,43 +614,7 @@
       "source": "Sales.SalesTerritoryHistory",
       "permissions": [
         {
-          "role": "anonymous",
-          "actions": ["*"]
-        }
-      ]
-    },
-    "DatabaseLog": {
-      "source": "dbo.DatabaseLog",
-      "permissions": [
-        {
-          "role": "anonymous",
-          "actions": ["*"]
-        }
-      ]
-    },
-    "ErrorLog": {
-      "source": "dbo.ErrorLog",
-      "permissions": [
-        {
-          "role": "anonymous",
-          "actions": ["*"]
-        }
-      ]
-    },
-    "JobCandidate": {
-      "source": "HumanResources.JobCandidate",
-      "permissions": [
-        {
-          "role": "anonymous",
-          "actions": ["*"]
-        }
-      ]
-    },
-    "ProductReview": {
-      "source": "Production.ProductReview",
-      "permissions": [
-        {
-          "role": "anonymous",
+          "role": "authenticated",
           "actions": ["*"]
         }
       ]
