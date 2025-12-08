@@ -59,6 +59,14 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         external: true
         targetPort: 5000
         allowInsecure: false
+        transport: 'http'
+        clientCertificateMode: 'ignore'
+        corsPolicy: {
+          allowedOrigins: ['*']
+          allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
+          allowedHeaders: ['*']
+          allowCredentials: false
+        }
         traffic: [
           {
             latestRevision: true
@@ -127,6 +135,26 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             http: {
               metadata: {
                 concurrentRequests: '10'
+              }
+            }
+          }
+          {
+            name: 'cpu-utilization'
+            custom: {
+              type: 'cpu'
+              metadata: {
+                type: 'Utilization'
+                value: '70'
+              }
+            }
+          }
+          {
+            name: 'memory-utilization'
+            custom: {
+              type: 'memory'
+              metadata: {
+                type: 'Utilization'
+                value: '75'
               }
             }
           }

@@ -30,6 +30,13 @@ services:
         docker:
             path: dockerfile
             remoteBuild: true
+    app:
+        project: ./app
+        host: containerapp
+        language: js
+        docker:
+            path: Dockerfile
+            remoteBuild: true
 infra:
   provider: bicep
   path: ./infra

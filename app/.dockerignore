@@ -1,0 +1,22 @@
+# Ignore everything
+*
+
+# Allow git files for version info
+!.git/
+
+# Allow source code and config
+!src/
+!src/**
+!public/
+!public/**
+!components.json
+!eslint.config.js
+!index.html
+!package*.json
+!postcss.config.js
+!tailwind.config.ts
+!tsconfig*.json
+!vite.config.ts
+
+# Ignore node_modules even if allowed above
+node_modules/

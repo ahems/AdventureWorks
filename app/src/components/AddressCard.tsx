@@ -1,0 +1,112 @@
+import React from 'react';
+import { MapPin, Edit2, Trash2, Star } from 'lucide-react';
+import type { Address } from '@/hooks/useAddresses';
+
+interface AddressCardProps {
+  address: Address;
+  onEdit: (address: Address) => void;
+  onDelete: (id: string) => void;
+  onSetDefault: (id: string) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onSelect?: (address: Address) => void;
+}
+
+export const AddressCard: React.FC<AddressCardProps> = ({
+  address,
+  onEdit,
+  onDelete,
+  onSetDefault,
+  selectable = false,
+  selected = false,
+  onSelect,
+}) => {
+  const handleClick = () => {
+    if (selectable && onSelect) {
+      onSelect(address);
+    }
+  };
+
+  return (
+    <div
+      onClick={handleClick}
+      className={`border-2 p-4 transition-all ${
+        selectable ? 'cursor-pointer hover:border-doodle-accent' : ''
+      } ${
+        selected 
+          ? 'border-doodle-accent bg-doodle-accent/5' 
+          : 'border-dashed border-doodle-text/20'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <MapPin className="w-5 h-5 text-doodle-accent flex-shrink-0 mt-0.5" />
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="font-doodle font-bold text-doodle-text">
+                {address.label}
+              </span>
+              {address.isDefault && (
+                <span className="font-doodle text-xs bg-doodle-accent text-white px-2 py-0.5 rounded">
+                  Default
+                </span>
+              )}
+            </div>
+            <p className="font-doodle text-sm text-doodle-text/70">
+              {address.firstName} {address.lastName}
+            </p>
+            <p className="font-doodle text-sm text-doodle-text/70">
+              {address.address}
+            </p>
+            <p className="font-doodle text-sm text-doodle-text/70">
+              {address.city}, {address.state} {address.zipCode}
+            </p>
+            <p className="font-doodle text-sm text-doodle-text/70">
+              {address.country}
+            </p>
+            <p className="font-doodle text-sm text-doodle-text/50 mt-1">
+              {address.phone}
+            </p>
+          </div>
+        </div>
+
+        {!selectable && (
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(address);
+              }}
+              className="p-2 hover:bg-doodle-text/5 rounded transition-colors"
+              title="Edit address"
+            >
+              <Edit2 className="w-4 h-4 text-doodle-text/70" />
+            </button>
+            {!address.isDefault && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSetDefault(address.id);
+                }}
+                className="p-2 hover:bg-doodle-text/5 rounded transition-colors"
+                title="Set as default"
+              >
+                <Star className="w-4 h-4 text-doodle-text/70" />
+              </button>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(address.id);
+              }}
+              className="p-2 hover:bg-doodle-accent/10 rounded transition-colors"
+              title="Delete address"
+            >
+              <Trash2 className="w-4 h-4 text-doodle-accent" />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

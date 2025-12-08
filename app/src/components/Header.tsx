@@ -1,0 +1,268 @@
+import React from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ShoppingCart, Menu, X, Bike, User, LogOut, ChevronDown, Search, Heart } from 'lucide-react';
+import { useCart } from '@/context/CartContext';
+import { useWishlist } from '@/context/WishlistContext';
+import { useAuth } from '@/context/AuthContext';
+import { categories } from '@/data/mockData';
+
+const Header: React.FC = () => {
+  const { getTotalItems } = useCart();
+  const { items: wishlistItems } = useWishlist();
+  const { user, isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [userMenuOpen, setUserMenuOpen] = React.useState(false);
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [showSearch, setShowSearch] = React.useState(false);
+  const totalItems = getTotalItems();
+
+  const userMenuRef = React.useRef<HTMLDivElement>(null);
+
+  // Close user menu when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+      setSearchQuery('');
+      setShowSearch(false);
+    }
+  };
+
+  return (
+    <header className="sticky top-0 z-50 bg-doodle-bg border-b-4 border-doodle-text">
+      <div className="container mx-auto px-4">
+        <div className="flex items-center justify-between h-16 md:h-20">
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-2 group">
+            <div className="doodle-border-light p-1.5 group-hover:rotate-6 transition-transform">
+              <Bike className="w-6 h-6 md:w-8 md:h-8 text-doodle-text" />
+            </div>
+            <span className="font-doodle text-lg md:text-2xl font-bold text-doodle-text">
+              Adventure<span className="text-doodle-accent">Works</span>
+            </span>
+          </Link>
+
+          {/* Desktop Navigation */}
+          <nav className="hidden md:flex items-center gap-6">
+            <Link 
+              to="/" 
+              className="font-doodle text-doodle-text hover:text-doodle-accent transition-colors squiggle"
+            >
+              Home
+            </Link>
+            {categories.map((category) => (
+              <Link
+                key={category.ProductCategoryID}
+                to={`/category/${category.ProductCategoryID}`}
+                className="font-doodle text-doodle-text hover:text-doodle-accent transition-colors"
+              >
+                {category.Name}
+              </Link>
+            ))}
+            <Link 
+              to="/sale" 
+              className="font-doodle text-doodle-accent font-bold hover:text-doodle-green transition-colors"
+            >
+              🏷️ Sale
+            </Link>
+          </nav>
+
+          {/* Right Side: Search + Auth + Cart + Mobile Menu */}
+          <div className="flex items-center gap-2 md:gap-3">
+            {/* Search Button */}
+            <button
+              onClick={() => setShowSearch(!showSearch)}
+              className="doodle-button p-2"
+              aria-label="Search"
+            >
+              <Search className="w-5 h-5" />
+            </button>
+
+            {/* Auth Section */}
+            {/* Auth Section */}
+            {isAuthenticated && user ? (
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="doodle-button flex items-center gap-2 py-2 px-3"
+                >
+                  <div className="w-6 h-6 rounded-full bg-doodle-accent flex items-center justify-center">
+                    <span className="text-white text-xs font-bold">
+                      {user.firstName[0]}{user.lastName[0]}
+                    </span>
+                  </div>
+                  <span className="hidden sm:inline font-doodle text-sm">
+                    {user.firstName}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Dropdown Menu */}
+                {userMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-48 doodle-card p-2 z-50">
+                    <div className="px-3 py-2 border-b-2 border-dashed border-doodle-text/20 mb-2">
+                      <p className="font-doodle font-bold text-doodle-text">
+                        {user.firstName} {user.lastName}
+                      </p>
+                      <p className="font-doodle text-xs text-doodle-text/60 truncate">
+                        {user.email}
+                      </p>
+                    </div>
+                    <Link
+                      to="/account"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="flex items-center gap-2 px-3 py-2 font-doodle text-doodle-text hover:bg-doodle-text/10 transition-colors"
+                    >
+                      <User className="w-4 h-4" />
+                      My Account
+                    </Link>
+                    <button
+                      onClick={() => {
+                        logout();
+                        setUserMenuOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 font-doodle text-doodle-accent hover:bg-doodle-text/10 transition-colors"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link 
+                to="/auth" 
+                className="doodle-button flex items-center gap-2 py-2 px-3"
+              >
+                <User className="w-5 h-5" />
+                <span className="hidden sm:inline font-doodle">Sign In</span>
+              </Link>
+            )}
+
+            {/* Wishlist */}
+            <Link 
+              to="/wishlist" 
+              className="doodle-button relative flex items-center gap-2 py-2 px-3"
+            >
+              <Heart className="w-5 h-5" />
+              {wishlistItems.length > 0 && (
+                <span className="absolute -top-2 -right-2 bg-doodle-accent text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-doodle-text">
+                  {wishlistItems.length}
+                </span>
+              )}
+            </Link>
+
+            {/* Cart */}
+            <Link 
+              to="/cart" 
+              className="doodle-button relative flex items-center gap-2 py-2 px-3"
+            >
+              <ShoppingCart className="w-5 h-5" />
+              <span className="hidden sm:inline font-doodle">Cart</span>
+              {totalItems > 0 && (
+                <span className="absolute -top-2 -right-2 bg-doodle-accent text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-doodle-text">
+                  {totalItems}
+                </span>
+              )}
+            </Link>
+
+            {/* Mobile Menu Button */}
+            <button
+              className="md:hidden doodle-button p-2"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Navigation */}
+        {mobileMenuOpen && (
+          <nav className="md:hidden py-4 border-t-2 border-doodle-text border-dashed">
+            <div className="flex flex-col gap-3">
+              <Link 
+                to="/" 
+                className="font-doodle text-lg text-doodle-text hover:text-doodle-accent py-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                * Home
+              </Link>
+              {categories.map((category) => (
+                <Link
+                  key={category.ProductCategoryID}
+                  to={`/category/${category.ProductCategoryID}`}
+                  className="font-doodle text-lg text-doodle-text hover:text-doodle-accent py-2"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  * {category.Name}
+                </Link>
+              ))}
+              <Link
+                to="/sale"
+                className="font-doodle text-lg text-doodle-accent font-bold hover:text-doodle-green py-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                * 🏷️ Sale
+              </Link>
+              {!isAuthenticated && (
+                <Link
+                  to="/auth"
+                  className="font-doodle text-lg text-doodle-accent hover:text-doodle-green py-2"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  * Sign In / Create Account
+                </Link>
+              )}
+            </div>
+          </nav>
+        )}
+
+        {/* Expandable Search Bar */}
+        {showSearch && (
+          <div className="py-3 border-t-2 border-doodle-text border-dashed">
+            <form onSubmit={handleSearch} className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-text/50" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search for bikes, gear, clothing..."
+                  className="w-full pl-10 pr-4 py-2 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
+                  autoFocus
+                />
+              </div>
+              <button
+                type="submit"
+                className="doodle-button doodle-button-primary px-4"
+              >
+                Search
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSearch(false)}
+                className="doodle-button p-2"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
+    </header>
+  );
+};
+
+export default Header;

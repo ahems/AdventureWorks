@@ -1,0 +1,92 @@
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowRight, Sparkles } from 'lucide-react';
+import { getSaleProducts } from '@/data/mockData';
+
+const PromoBanner: React.FC = () => {
+  const saleProducts = getSaleProducts();
+  const maxDiscount = Math.max(...saleProducts.map(p => p.salePercent || 0));
+
+  if (saleProducts.length === 0) return null;
+
+  return (
+    <section className="relative overflow-hidden bg-doodle-accent">
+      {/* Animated background pattern */}
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute top-0 left-0 w-full h-full" style={{
+          backgroundImage: `repeating-linear-gradient(
+            45deg,
+            transparent,
+            transparent 20px,
+            rgba(0,0,0,0.1) 20px,
+            rgba(0,0,0,0.1) 40px
+          )`
+        }} />
+      </div>
+
+      {/* Decorative elements */}
+      <div className="absolute top-2 left-[10%] text-white/20 text-4xl animate-bounce" style={{ animationDelay: '0s' }}>
+        🏷️
+      </div>
+      <div className="absolute bottom-2 right-[15%] text-white/20 text-3xl animate-bounce" style={{ animationDelay: '0.5s' }}>
+        ⭐
+      </div>
+      <div className="absolute top-4 right-[25%] text-white/20 text-2xl animate-bounce" style={{ animationDelay: '1s' }}>
+        🎉
+      </div>
+
+      <div className="container mx-auto px-4 py-6 md:py-8 relative">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
+          {/* Left: Message */}
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center justify-center w-12 h-12 bg-white/20 border-2 border-white/30 rotate-3">
+              <Sparkles className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h3 className="font-doodle text-xl md:text-2xl font-bold text-white">
+                Limited-Time Sale!
+              </h3>
+              <p className="font-doodle text-white/90 text-sm md:text-base">
+                Save up to <span className="font-bold text-doodle-bg">{maxDiscount}% OFF</span> on select gear
+              </p>
+            </div>
+          </div>
+
+          {/* Center: Sale items count */}
+          <div className="hidden lg:block font-doodle text-white/80 text-sm border-l-2 border-r-2 border-white/20 px-6">
+            <span className="text-2xl font-bold text-white">{saleProducts.length}</span>
+            <br />
+            items on sale
+          </div>
+
+          {/* Right: CTA */}
+          <Link
+            to="/sale"
+            className="group inline-flex items-center gap-2 bg-white text-doodle-accent font-doodle font-bold px-6 py-3 border-2 border-doodle-text hover:bg-doodle-bg transition-all hover:rotate-1"
+          >
+            Shop Sale Now
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+          </Link>
+        </div>
+
+        {/* Scrolling ticker for mobile */}
+        <div className="mt-4 md:mt-0 md:hidden overflow-hidden">
+          <div className="flex gap-8 animate-marquee whitespace-nowrap font-doodle text-xs text-white/70">
+            {saleProducts.map((product) => (
+              <span key={product.ProductID} className="flex items-center gap-1">
+                🏷️ {product.Name} - {product.salePercent}% OFF
+              </span>
+            ))}
+            {saleProducts.map((product) => (
+              <span key={`dup-${product.ProductID}`} className="flex items-center gap-1">
+                🏷️ {product.Name} - {product.salePercent}% OFF
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+export default PromoBanner;
