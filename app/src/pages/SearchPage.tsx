@@ -6,8 +6,7 @@ import Footer from '@/components/Footer';
 import ProductCard from '@/components/ProductCard';
 import { useProducts, useCategories, useSubcategories } from '@/hooks/useProducts';
 import { Product, getSalePrice } from '@/types/product';
-import { useReviews } from '@/hooks/useReviews';
-import { getAverageRating } from '@/data/mockReviews';
+import { useAllReviews } from '@/hooks/useReviews';
 
 type SortOption = 'relevance' | 'price-asc' | 'price-desc' | 'discount' | 'rating';
 
@@ -24,6 +23,22 @@ const SearchPage: React.FC = () => {
   const { data: products = [] } = useProducts();
   const { data: categories = [] } = useCategories();
   const { data: subcategories = [] } = useSubcategories();
+  const { data: allReviews = [] } = useAllReviews();
+
+  // Create a map of product ratings from all reviews
+  const productRatings = useMemo(() => {
+    const ratingsMap = new Map<number, { total: number; count: number }>();
+    
+    allReviews.forEach(review => {
+      const current = ratingsMap.get(review.ProductID) || { total: 0, count: 0 };
+      ratingsMap.set(review.ProductID, {
+        total: current.total + review.Rating,
+        count: current.count + 1
+      });
+    });
+    
+    return ratingsMap;
+  }, [allReviews]);
 
   // Get min/max prices from products
   const priceStats = useMemo(() => {
@@ -84,8 +99,10 @@ const SearchPage: React.FC = () => {
         break;
       case 'rating':
         result.sort((a, b) => {
-          const ratingA = getAverageRating(a.ProductID);
-          const ratingB = getAverageRating(b.ProductID);
+          const ratingDataA = productRatings.get(a.ProductID);
+          const ratingDataB = productRatings.get(b.ProductID);
+          const ratingA = ratingDataA ? ratingDataA.total / ratingDataA.count : 0;
+          const ratingB = ratingDataB ? ratingDataB.total / ratingDataB.count : 0;
           return ratingB - ratingA;
         });
         break;
@@ -102,7 +119,7 @@ const SearchPage: React.FC = () => {
     }
 
     return result;
-  }, [searchQuery, selectedCategory, priceRange, sortBy]);
+  }, [products, searchQuery, selectedCategory, priceRange, sortBy, productRatings, subcategories]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

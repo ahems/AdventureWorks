@@ -9,3 +9,14 @@ export interface Review {
   helpful: number;
   markedUsefulBy: string[]; // User IDs who marked this as useful
 }
+
+// API ProductReview structure
+export interface ProductReview {
+  ProductReviewID: number;
+  ProductID: number;
+  ReviewerName: string;
+  ReviewDate: string;
+  EmailAddress: string;
+  Rating: number;
+  Comments: string;
+}

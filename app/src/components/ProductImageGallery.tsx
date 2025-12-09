@@ -4,6 +4,8 @@ import { ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react';
 interface ProductImageGalleryProps {
   productName: string;
   color?: string | null;
+  largePhoto?: string | null;
+  thumbnailPhoto?: string | null;
 }
 
 // Mock image data - in a real app these would come from the product
@@ -16,7 +18,7 @@ const getProductImages = (productName: string) => {
   ];
 };
 
-const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({ productName, color }) => {
+const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({ productName, color, largePhoto, thumbnailPhoto }) => {
   const images = getProductImages(productName);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isZoomed, setIsZoomed] = useState(false);
@@ -30,6 +32,7 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({ productName, 
   };
 
   const selectedImage = images[selectedIndex];
+  const hasPhoto = largePhoto || thumbnailPhoto;
 
   return (
     <div className="space-y-4">
@@ -41,20 +44,30 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({ productName, 
           }`}
           onClick={() => setIsZoomed(!isZoomed)}
         >
-          <div className="text-center p-8">
-            <span className="text-8xl block mb-4">{selectedImage.emoji}</span>
-            <p className="font-doodle text-lg text-doodle-text/60">
-              {productName}
-            </p>
-            <p className="font-doodle text-sm text-doodle-text/40 mt-1">
-              {selectedImage.label}
-            </p>
-            {color && (
-              <p className="font-doodle text-sm text-doodle-accent mt-2">
-                Color: {color}
+          {hasPhoto ? (
+            <img 
+              src={`data:image/gif;base64,${largePhoto || thumbnailPhoto}`}
+              alt={productName}
+              className={`w-full h-full object-contain transition-transform ${
+                isZoomed ? 'scale-110' : ''
+              }`}
+            />
+          ) : (
+            <div className="text-center p-8">
+              <span className="text-8xl block mb-4">{selectedImage.emoji}</span>
+              <p className="font-doodle text-lg text-doodle-text/60">
+                {productName}
               </p>
-            )}
-          </div>
+              <p className="font-doodle text-sm text-doodle-text/40 mt-1">
+                {selectedImage.label}
+              </p>
+              {color && (
+                <p className="font-doodle text-sm text-doodle-accent mt-2">
+                  Color: {color}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Navigation Arrows */}

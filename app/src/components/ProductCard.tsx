@@ -63,9 +63,21 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, variant = 'default' 
         className="doodle-card block p-4 group relative"
       >
         {/* Sale Badge */}
-        {product.salePercent && (
+        {(product.DiscountPct || product.salePercent) && (
           <div className="absolute top-6 left-6 z-10 bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text rotate-[-3deg]">
-            {variant === 'featured' ? 'Limited-Time Special' : `${product.salePercent}% OFF`}
+            {variant === 'featured' ? (product.SpecialOfferDescription || 'Limited-Time Special') : `${Math.round((product.DiscountPct || product.salePercent! / 100) * 100)}% OFF`}
+          </div>
+        )}
+
+        {/* Stock Badge */}
+        {!product.inStock && (
+          <div className="absolute bottom-6 left-6 z-10 bg-red-500 text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text">
+            OUT OF STOCK
+          </div>
+        )}
+        {product.inStock && product.quantityAvailable !== undefined && product.quantityAvailable < 50 && (
+          <div className="absolute bottom-6 left-6 z-10 bg-orange-500 text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text">
+            LOW STOCK
           </div>
         )}
 
@@ -97,12 +109,20 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, variant = 'default' 
 
         {/* Product Image */}
         <div className="aspect-square mb-4 bg-doodle-bg border-2 border-doodle-text border-dashed flex items-center justify-center overflow-hidden relative">
-          <div className="text-center p-4">
-            <span className="font-doodle text-4xl">🚴</span>
-            <p className="font-doodle text-xs text-doodle-text/60 mt-2">
-              {product.Color || 'Product Image'}
-            </p>
-          </div>
+          {product.ThumbNailPhoto ? (
+            <img 
+              src={`data:image/gif;base64,${product.ThumbNailPhoto}`}
+              alt={product.Name}
+              className="w-full h-full object-contain"
+            />
+          ) : (
+            <div className="text-center p-4">
+              <span className="font-doodle text-4xl">🚴</span>
+              <p className="font-doodle text-xs text-doodle-text/60 mt-2">
+                {product.Color || 'Product Image'}
+              </p>
+            </div>
+          )}
           
           {/* Quick View Button - appears on hover */}
           <button
@@ -183,11 +203,16 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, variant = 'default' 
             
             <button
               onClick={handleAddToCart}
-              className="doodle-button doodle-button-primary p-2 text-sm flex items-center gap-1"
+              disabled={!product.inStock}
+              className={`p-2 text-sm flex items-center gap-1 ${
+                product.inStock
+                  ? 'doodle-button doodle-button-primary'
+                  : 'doodle-button bg-doodle-text/20 text-doodle-text/50 cursor-not-allowed border-doodle-text/30'
+              }`}
               aria-label="Add to cart"
             >
               <ShoppingCart className="w-4 h-4" />
-              <span className="hidden sm:inline">Add</span>
+              <span className="hidden sm:inline">{product.inStock ? 'Add' : 'N/A'}</span>
             </button>
           </div>
         </div>

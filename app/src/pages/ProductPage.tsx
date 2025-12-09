@@ -164,7 +164,9 @@ const ProductPage: React.FC = () => {
             {/* Product Image Gallery */}
             <ProductImageGallery 
               productName={product.Name} 
-              color={selectedColor || product.Color} 
+              color={selectedColor || product.Color}
+              largePhoto={product.LargePhoto}
+              thumbnailPhoto={product.ThumbNailPhoto}
             />
 
             {/* Product Info */}
@@ -177,9 +179,9 @@ const ProductPage: React.FC = () => {
                       {subcategory.Name}
                     </span>
                   )}
-                  {product.salePercent && (
+                  {(product.DiscountPct || product.salePercent) && (
                     <span className="bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text rotate-[-2deg]">
-                      Limited-Time Special
+                      {product.SpecialOfferDescription || 'Limited-Time Special'}
                     </span>
                   )}
                 </div>
@@ -218,7 +220,7 @@ const ProductPage: React.FC = () => {
                       </span>
                     </div>
                     <span className="font-doodle text-sm text-doodle-green font-bold">
-                      Save {product.salePercent}%
+                      Save {Math.round((product.DiscountPct || product.salePercent! / 100) * 100)}%
                     </span>
                   </div>
                 ) : (
@@ -235,9 +237,40 @@ const ProductPage: React.FC = () => {
               </p>
 
               {/* Specs */}
+              {/* Stock Status */}
+              <div className={`doodle-card p-4 ${
+                product.inStock 
+                  ? 'bg-green-50 border-green-300' 
+                  : 'bg-red-50 border-red-300'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className={`text-2xl ${product.inStock ? '' : 'grayscale opacity-50'}`}>
+                    {product.inStock ? '✅' : '❌'}
+                  </div>
+                  <div className="flex-1">
+                    <h3 className={`font-doodle font-bold ${
+                      product.inStock ? 'text-green-700' : 'text-red-700'
+                    }`}>
+                      {product.inStock ? 'In Stock' : 'Out of Stock'}
+                    </h3>
+                    {product.quantityAvailable !== undefined && (
+                      <p className="font-doodle text-sm text-doodle-text/70">
+                        {product.inStock 
+                          ? `${product.quantityAvailable} units available`
+                          : 'Currently unavailable'
+                        }
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="doodle-card p-4 space-y-2">
                 <h3 className="font-doodle font-bold text-doodle-text">Specifications:</h3>
                 <div className="grid grid-cols-2 gap-2 font-doodle text-sm">
+                  <span className="text-doodle-text/60">SKU:</span>
+                  <span className="text-doodle-text">{product.ProductNumber}</span>
+                  
                   {product.Color && !hasVariants && (
                     <>
                       <span className="text-doodle-text/60">Color:</span>
@@ -256,8 +289,42 @@ const ProductPage: React.FC = () => {
                       <span className="text-doodle-text">{product.Weight} lbs</span>
                     </>
                   )}
-                  <span className="text-doodle-text/60">SKU:</span>
-                  <span className="text-doodle-text">{product.ProductNumber}</span>
+                  {product.ProductLine && (
+                    <>
+                      <span className="text-doodle-text/60">Product Line:</span>
+                      <span className="text-doodle-text">{product.ProductLine}</span>
+                    </>
+                  )}
+                  {product.Class && (
+                    <>
+                      <span className="text-doodle-text/60">Class:</span>
+                      <span className="text-doodle-text">{product.Class}</span>
+                    </>
+                  )}
+                  {product.Style && (
+                    <>
+                      <span className="text-doodle-text/60">Style:</span>
+                      <span className="text-doodle-text">{product.Style}</span>
+                    </>
+                  )}
+                  {product.StandardCost && (
+                    <>
+                      <span className="text-doodle-text/60">Cost:</span>
+                      <span className="text-doodle-text">${product.StandardCost.toFixed(2)}</span>
+                    </>
+                  )}
+                  {product.SellStartDate && (
+                    <>
+                      <span className="text-doodle-text/60">Date First Available:</span>
+                      <span className="text-doodle-text">
+                        {new Date(product.SellStartDate).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -359,17 +426,22 @@ const ProductPage: React.FC = () => {
 
                 <button
                   onClick={handleAddToCart}
-                  disabled={hasVariants && selectedSize && selectedColor && !currentVariantAvailable}
+                  disabled={
+                    !product.inStock || 
+                    (hasVariants && selectedSize && selectedColor && !currentVariantAvailable)
+                  }
                   className={`flex-1 flex items-center justify-center gap-2 text-lg py-3 ${
-                    hasVariants && selectedSize && selectedColor && !currentVariantAvailable
+                    !product.inStock || (hasVariants && selectedSize && selectedColor && !currentVariantAvailable)
                       ? 'doodle-button bg-doodle-text/20 text-doodle-text/50 cursor-not-allowed border-doodle-text/30'
                       : 'doodle-button doodle-button-primary'
                   }`}
                 >
                   <ShoppingCart className="w-5 h-5" />
-                  {hasVariants && selectedSize && selectedColor && !currentVariantAvailable
-                    ? 'Unavailable'
-                    : 'Add to Cart'}
+                  {!product.inStock 
+                    ? 'Out of Stock'
+                    : (hasVariants && selectedSize && selectedColor && !currentVariantAvailable
+                      ? 'Unavailable'
+                      : 'Add to Cart')}
                 </button>
 
                 <button

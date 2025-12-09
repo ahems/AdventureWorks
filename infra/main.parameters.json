@@ -57,7 +57,7 @@
       "value": "${availableEmbeddingDeploymentCapacity}"
     },
     "cognitiveservicesLocation": {
-      "value": "${AZURE_LOCATION}"
+      "value": "swedencentral"
     }
   }
 }

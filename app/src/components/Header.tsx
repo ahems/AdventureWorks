@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ShoppingCart, Menu, X, Bike, User, LogOut, ChevronDown, Search, Heart } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
@@ -12,6 +12,7 @@ const Header: React.FC = () => {
   const { user, isAuthenticated, logout } = useAuth();
   const { data: categories = [] } = useCategories();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [userMenuOpen, setUserMenuOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
@@ -58,7 +59,7 @@ const Header: React.FC = () => {
           <nav className="hidden md:flex items-center gap-6">
             <Link 
               to="/" 
-              className="font-doodle text-doodle-text hover:text-doodle-accent transition-colors squiggle"
+              className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors ${location.pathname === '/' ? 'squiggle' : ''}`}
             >
               Home
             </Link>
@@ -66,14 +67,14 @@ const Header: React.FC = () => {
               <Link
                 key={category.ProductCategoryID}
                 to={`/category/${category.ProductCategoryID}`}
-                className="font-doodle text-doodle-text hover:text-doodle-accent transition-colors"
+                className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors ${location.pathname === `/category/${category.ProductCategoryID}` ? 'squiggle' : ''}`}
               >
                 {category.Name}
               </Link>
             ))}
             <Link 
               to="/sale" 
-              className="font-doodle text-doodle-accent font-bold hover:text-doodle-green transition-colors"
+              className={`font-doodle text-doodle-accent font-bold hover:text-doodle-green transition-colors ${location.pathname === '/sale' ? 'squiggle' : ''}`}
             >
               🏷️ Sale
             </Link>

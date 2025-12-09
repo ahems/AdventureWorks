@@ -1,75 +1,145 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, X, Star, ShoppingCart, Scale, Plus } from 'lucide-react';
+import { ArrowLeft, X, Star, ShoppingCart, Scale, Plus, Trophy, TrendingDown, Sparkles } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import { useCompare } from '@/context/CompareContext';
 import { useCart } from '@/context/CartContext';
 import { useReviews } from '@/hooks/useReviews';
-import { getSalePrice } from '@/types/product';
+import { getSalePrice, Product } from '@/types/product';
 
-const CompareProductReview: React.FC<{ productId: number }> = ({ productId }) => {
+const CompareProductReview: React.FC<{ productId: number; isBest?: boolean }> = ({ productId, isBest }) => {
   const { averageRating, reviewCount } = useReviews(productId);
   
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div className={`flex flex-col items-center gap-1 p-2 rounded-lg transition-colors ${isBest ? 'bg-doodle-green/10 ring-2 ring-doodle-green ring-dashed' : ''}`}>
+      {isBest && (
+        <div className="flex items-center gap-1 text-doodle-green font-doodle text-xs font-bold mb-1">
+          <Trophy className="w-3 h-3" />
+          Best Rated
+        </div>
+      )}
       <div className="flex items-center gap-0.5">
         {[...Array(5)].map((_, i) => (
           <Star
             key={i}
             className={`w-4 h-4 ${
               i < Math.round(averageRating)
-                ? 'text-doodle-accent fill-current'
+                ? isBest ? 'text-doodle-green fill-current' : 'text-doodle-accent fill-current'
                 : 'text-doodle-text/20'
             }`}
           />
         ))}
       </div>
-      <span className="font-doodle text-sm text-doodle-text/70">
+      <span className={`font-doodle text-sm ${isBest ? 'text-doodle-green font-bold' : 'text-doodle-text/70'}`}>
         {averageRating.toFixed(1)} ({reviewCount} reviews)
       </span>
     </div>
   );
 };
 
+// Helper to check if values differ across products
+const hasDifference = (items: Product[], getValue: (p: Product) => string | number | null | undefined): boolean => {
+  if (items.length < 2) return false;
+  const values = items.map(getValue).filter(v => v !== null && v !== undefined && v !== '—');
+  if (values.length < 2) return false;
+  return new Set(values.map(String)).size > 1;
+};
+
+// Get the effective price for comparison
+const getEffectivePrice = (product: Product): number => {
+  const salePrice = getSalePrice(product);
+  return salePrice ?? product.ListPrice;
+};
+
 const ComparePage: React.FC = () => {
   const { items, removeFromCompare, clearCompare } = useCompare();
   const { addToCart } = useCart();
 
+  // Calculate best values for highlighting
+  const highlights = useMemo(() => {
+    if (items.length < 2) return { lowestPriceId: null, lightestId: null };
+    
+    // Find lowest price
+    const lowestPrice = Math.min(...items.map(getEffectivePrice));
+    const lowestPriceId = items.find(p => getEffectivePrice(p) === lowestPrice)?.ProductID ?? null;
+    
+    // Find lightest weight (if applicable)
+    const weights = items.filter(p => p.Weight != null).map(p => ({ id: p.ProductID, weight: p.Weight! }));
+    const lightestId = weights.length > 1 
+      ? weights.reduce((min, curr) => curr.weight < min.weight ? curr : min).id 
+      : null;
+    
+    return { lowestPriceId, lightestId };
+  }, [items]);
+
   const specs = [
-    { key: 'Price', getValue: (p: typeof items[0]) => {
-      const salePrice = getSalePrice(p);
-      if (salePrice) {
+    { 
+      key: 'Price', 
+      getValue: (p: Product) => p.ListPrice,
+      render: (p: Product, isBest: boolean) => {
+        const salePrice = getSalePrice(p);
+        if (salePrice) {
+          return (
+            <div className={`flex flex-col items-center p-2 rounded-lg transition-colors ${isBest ? 'bg-doodle-green/10 ring-2 ring-doodle-green ring-dashed' : ''}`}>
+              {isBest && (
+                <div className="flex items-center gap-1 text-doodle-green font-doodle text-xs font-bold mb-1">
+                  <TrendingDown className="w-3 h-3" />
+                  Best Price
+                </div>
+              )}
+              <span className="font-doodle text-sm text-doodle-text/50 line-through">
+                ${p.ListPrice.toFixed(2)}
+              </span>
+              <span className={`font-doodle text-xl font-bold ${isBest ? 'text-doodle-green' : 'text-doodle-accent'}`}>
+                ${salePrice.toFixed(2)}
+              </span>
+              <span className="font-doodle text-xs text-doodle-green font-bold">
+                Save {p.salePercent}%
+              </span>
+            </div>
+          );
+        }
         return (
-          <div className="flex flex-col items-center">
-            <span className="font-doodle text-sm text-doodle-text/50 line-through">
+          <div className={`p-2 rounded-lg transition-colors ${isBest ? 'bg-doodle-green/10 ring-2 ring-doodle-green ring-dashed' : ''}`}>
+            {isBest && (
+              <div className="flex items-center justify-center gap-1 text-doodle-green font-doodle text-xs font-bold mb-1">
+                <TrendingDown className="w-3 h-3" />
+                Best Price
+              </div>
+            )}
+            <span className={`font-doodle text-xl font-bold ${isBest ? 'text-doodle-green' : 'text-doodle-green'}`}>
               ${p.ListPrice.toFixed(2)}
-            </span>
-            <span className="font-doodle text-xl font-bold text-doodle-accent">
-              ${salePrice.toFixed(2)}
-            </span>
-            <span className="font-doodle text-xs text-doodle-green font-bold">
-              Save {p.salePercent}%
             </span>
           </div>
         );
       }
-      return (
-        <span className="font-doodle text-xl font-bold text-doodle-green">
-          ${p.ListPrice.toFixed(2)}
-        </span>
-      );
-    }},
-    { key: 'Color', getValue: (p: typeof items[0]) => p.Color || '—' },
-    { key: 'Size', getValue: (p: typeof items[0]) => p.Size || '—' },
-    { key: 'Weight', getValue: (p: typeof items[0]) => p.Weight ? `${p.Weight} lbs` : '—' },
-    { key: 'Product Number', getValue: (p: typeof items[0]) => p.ProductNumber },
-    { key: 'Available Sizes', getValue: (p: typeof items[0]) => 
-      p.availableSizes?.join(', ') || '—' 
     },
-    { key: 'Available Colors', getValue: (p: typeof items[0]) => 
-      p.availableColors?.join(', ') || '—' 
+    { key: 'Color', getValue: (p: Product) => p.Color || '—' },
+    { key: 'Size', getValue: (p: Product) => p.Size || '—' },
+    { 
+      key: 'Weight', 
+      getValue: (p: Product) => p.Weight ?? null,
+      render: (p: Product, isBest: boolean) => {
+        if (!p.Weight) return <span className="text-doodle-text/50">—</span>;
+        return (
+          <div className={`inline-flex flex-col items-center p-2 rounded-lg transition-colors ${isBest ? 'bg-doodle-green/10 ring-2 ring-doodle-green ring-dashed' : ''}`}>
+            {isBest && (
+              <div className="flex items-center gap-1 text-doodle-green font-doodle text-xs font-bold mb-1">
+                <Sparkles className="w-3 h-3" />
+                Lightest
+              </div>
+            )}
+            <span className={`font-doodle ${isBest ? 'text-doodle-green font-bold' : ''}`}>
+              {p.Weight} lbs
+            </span>
+          </div>
+        );
+      }
     },
+    { key: 'Product Number', getValue: (p: Product) => p.ProductNumber },
+    { key: 'Available Sizes', getValue: (p: Product) => p.availableSizes?.join(', ') || '—' },
+    { key: 'Available Colors', getValue: (p: Product) => p.availableColors?.join(', ') || '—' },
   ];
 
   if (items.length === 0) {
@@ -178,38 +248,75 @@ const ComparePage: React.FC = () => {
 
               <tbody>
                 {/* Reviews Row */}
-                <tr>
+                <tr className="bg-doodle-bg/50">
                   <td className="p-4 font-doodle font-bold text-doodle-text border-b border-dashed border-doodle-text/10">
-                    Reviews
+                    <div className="flex items-center gap-2">
+                      Reviews
+                      {items.length > 1 && (
+                        <span className="text-xs font-normal text-doodle-accent">(compared)</span>
+                      )}
+                    </div>
                   </td>
-                  {items.map((product) => (
-                    <td key={product.ProductID} className="p-4 text-center border-b border-dashed border-doodle-text/10">
-                      <CompareProductReview productId={product.ProductID} />
-                    </td>
-                  ))}
+                  {items.map((product, idx) => {
+                    // Determine best rating among items
+                    const ratings = items.map(p => {
+                      const { averageRating } = useReviews(p.ProductID);
+                      return { id: p.ProductID, rating: averageRating };
+                    });
+                    const bestRating = Math.max(...ratings.map(r => r.rating));
+                    const isBest = items.length > 1 && ratings.find(r => r.id === product.ProductID)?.rating === bestRating;
+                    
+                    return (
+                      <td key={product.ProductID} className="p-4 text-center border-b border-dashed border-doodle-text/10">
+                        <CompareProductReview productId={product.ProductID} isBest={isBest} />
+                      </td>
+                    );
+                  })}
                   {Array.from({ length: 3 - items.length }).map((_, i) => (
                     <td key={`empty-${i}`} className="p-4 border-b border-dashed border-doodle-text/10" />
                   ))}
                 </tr>
 
                 {/* Spec Rows */}
-                {specs.map((spec) => (
-                  <tr key={spec.key}>
-                    <td className="p-4 font-doodle font-bold text-doodle-text border-b border-dashed border-doodle-text/10">
-                      {spec.key}
-                    </td>
-                    {items.map((product) => (
-                      <td key={product.ProductID} className="p-4 text-center border-b border-dashed border-doodle-text/10">
-                        <span className="font-doodle text-doodle-text">
-                          {spec.getValue(product)}
-                        </span>
+                {specs.map((spec) => {
+                  const isDifferent = hasDifference(items, spec.getValue as (p: Product) => string | number | null | undefined);
+                  
+                  return (
+                    <tr key={spec.key} className={isDifferent ? 'bg-doodle-accent/5' : ''}>
+                      <td className="p-4 font-doodle font-bold text-doodle-text border-b border-dashed border-doodle-text/10">
+                        <div className="flex items-center gap-2">
+                          {spec.key}
+                          {isDifferent && (
+                            <span className="inline-flex items-center gap-1 text-xs font-normal text-doodle-accent bg-doodle-accent/10 px-2 py-0.5 rounded-full">
+                              <Sparkles className="w-3 h-3" />
+                              differs
+                            </span>
+                          )}
+                        </div>
                       </td>
-                    ))}
-                    {Array.from({ length: 3 - items.length }).map((_, i) => (
-                      <td key={`empty-${i}`} className="p-4 border-b border-dashed border-doodle-text/10" />
-                    ))}
-                  </tr>
-                ))}
+                      {items.map((product) => {
+                        const isBestPrice = spec.key === 'Price' && product.ProductID === highlights.lowestPriceId;
+                        const isLightest = spec.key === 'Weight' && product.ProductID === highlights.lightestId;
+                        const isBest = isBestPrice || isLightest;
+                        
+                        return (
+                          <td key={product.ProductID} className="p-4 text-center border-b border-dashed border-doodle-text/10">
+                            {spec.render ? (
+                              spec.render(product, isBest)
+                            ) : (
+                              <span className={`font-doodle ${isDifferent ? 'font-semibold text-doodle-text' : 'text-doodle-text'}`}>
+                                {spec.getValue(product)}
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
+                      {Array.from({ length: 3 - items.length }).map((_, i) => (
+                        <td key={`empty-${i}`} className="p-4 border-b border-dashed border-doodle-text/10" />
+                      ))}
+                    </tr>
+                  );
+                })}
 
                 {/* Description Row */}
                 <tr>

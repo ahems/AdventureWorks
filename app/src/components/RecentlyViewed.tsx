@@ -11,10 +11,10 @@ interface RecentlyViewedProps {
 const RecentlyViewed: React.FC<RecentlyViewedProps> = ({ currentProductId }) => {
   const { recentlyViewed, clearRecentlyViewed } = useRecentlyViewed();
 
-  // Filter out current product if viewing a product page
+  // Filter out current product if viewing a product page and limit to 4 products
   const productsToShow = currentProductId 
-    ? recentlyViewed.filter(p => p.ProductID !== currentProductId)
-    : recentlyViewed;
+    ? recentlyViewed.filter(p => p.ProductID !== currentProductId).slice(0, 4)
+    : recentlyViewed.slice(0, 4);
 
   if (productsToShow.length === 0) {
     return null;
@@ -50,8 +50,21 @@ const RecentlyViewed: React.FC<RecentlyViewedProps> = ({ currentProductId }) => 
             >
               <div className="doodle-card p-3 h-full hover:border-doodle-accent transition-colors">
                 {/* Image */}
-                <div className="aspect-square bg-doodle-bg border-2 border-dashed border-doodle-text/30 flex items-center justify-center mb-2 group-hover:border-doodle-accent transition-colors">
-                  <span className="text-3xl">🚴</span>
+                <div className="aspect-square bg-doodle-bg border-2 border-dashed border-doodle-text/30 flex items-center justify-center mb-2 group-hover:border-doodle-accent transition-colors overflow-hidden">
+                  {product.ThumbNailPhoto ? (
+                    <img 
+                      src={`data:image/gif;base64,${product.ThumbNailPhoto}`}
+                      alt={product.Name}
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <div className="text-center">
+                      <span className="text-3xl">🚴</span>
+                      {product.Color && (
+                        <p className="text-xs text-doodle-text/60 mt-1">{product.Color}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
                 
                 {/* Info */}

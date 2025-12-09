@@ -69,17 +69,34 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
       {/* Image & Badge */}
       <Link to={`/product/${product.ProductID}`} className="block relative">
         <div className="aspect-square bg-doodle-bg border-b-2 border-dashed border-doodle-text flex items-center justify-center overflow-hidden">
-          <span className="text-6xl group-hover:scale-110 transition-transform duration-300">
-            🚴
-          </span>
+          {product.ThumbNailPhoto ? (
+            <img 
+              src={`data:image/gif;base64,${product.ThumbNailPhoto}`}
+              alt={product.Name}
+              className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300"
+            />
+          ) : (
+            <span className="text-6xl group-hover:scale-110 transition-transform duration-300">
+              🚴
+            </span>
+          )}
         </div>
         
         {/* Sale Badge */}
         <div className="absolute top-2 left-2">
           <span className="bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text rotate-[-3deg] inline-block">
-            Limited-Time Special
+            {product.SpecialOfferDescription || 'Limited-Time Special'}
           </span>
         </div>
+
+        {/* Stock Badge */}
+        {!product.inStock && (
+          <div className="absolute bottom-2 left-2">
+            <span className="bg-red-500 text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text inline-block">
+              OUT OF STOCK
+            </span>
+          </div>
+        )}
       </Link>
 
       {/* Content */}
@@ -121,7 +138,7 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
             </span>
           </div>
           <span className="font-doodle text-xs text-doodle-green font-bold">
-            Save {product.salePercent}%
+            Save {Math.round((product.DiscountPct || product.salePercent! / 100) * 100)}%
           </span>
         </div>
 
@@ -201,15 +218,15 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
         <div className="mt-auto">
           <button
             onClick={handleAddToCart}
-            disabled={showUnavailable}
+            disabled={!product.inStock || showUnavailable}
             className={`w-full flex items-center justify-center gap-2 py-2 ${
-              showUnavailable
+              !product.inStock || showUnavailable
                 ? 'doodle-button bg-doodle-text/20 text-doodle-text/50 cursor-not-allowed border-doodle-text/30'
                 : 'doodle-button doodle-button-primary'
             }`}
           >
             <ShoppingCart className="w-4 h-4" />
-            {showUnavailable ? 'Unavailable' : 'Add to Cart'}
+            {!product.inStock ? 'Out of Stock' : (showUnavailable ? 'Unavailable' : 'Add to Cart')}
           </button>
         </div>
       </div>

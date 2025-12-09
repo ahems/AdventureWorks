@@ -1,6 +1,6 @@
 import React from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Filter } from 'lucide-react';
+import { ArrowLeft, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import ProductCard from '@/components/ProductCard';
@@ -10,10 +10,20 @@ import {
   useSubcategoriesByCategory,
   useProductsBySubcategory
 } from '@/hooks/useProducts';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const CategoryPage: React.FC = () => {
   const { categoryId } = useParams<{ categoryId: string }>();
   const [selectedSubcategory, setSelectedSubcategory] = React.useState<number | null>(null);
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [itemsPerPage, setItemsPerPage] = React.useState(6);
+  const [sortBy, setSortBy] = React.useState('name-asc');
   
   const { data: category, isLoading: categoryLoading } = useCategory(categoryId ? parseInt(categoryId) : 0);
   const { data: subcategories = [] } = useSubcategoriesByCategory(categoryId ? parseInt(categoryId) : 0);
@@ -21,11 +31,74 @@ const CategoryPage: React.FC = () => {
   const { data: subcategoryProducts = [] } = useProductsBySubcategory(selectedSubcategory || 0);
   
   const products = React.useMemo(() => {
-    if (selectedSubcategory) {
-      return subcategoryProducts;
+    let productList = selectedSubcategory ? subcategoryProducts : allCategoryProducts;
+    
+    // Apply sorting
+    const sorted = [...productList].sort((a, b) => {
+      switch (sortBy) {
+        case 'price-asc':
+          return a.ListPrice - b.ListPrice;
+        case 'price-desc':
+          return b.ListPrice - a.ListPrice;
+        case 'name-asc':
+          return a.Name.localeCompare(b.Name);
+        case 'name-desc':
+          return b.Name.localeCompare(a.Name);
+        case 'newest':
+          return new Date(b.SellStartDate || 0).getTime() - new Date(a.SellStartDate || 0).getTime();
+        default:
+          return 0;
+      }
+    });
+    
+    return sorted;
+  }, [selectedSubcategory, allCategoryProducts, subcategoryProducts, sortBy]);
+
+  // Reset to page 1 when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedSubcategory, products.length, sortBy]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(products.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedProducts = products.slice(startIndex, endIndex);
+
+  // Generate page numbers to display
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 5;
+    
+    if (totalPages <= maxVisible) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
     }
-    return allCategoryProducts;
-  }, [selectedSubcategory, allCategoryProducts, subcategoryProducts]);
+    
+    if (currentPage <= 3) {
+      pages.push(1, 2, 3, 4, '...', totalPages);
+    } else if (currentPage >= totalPages - 2) {
+      pages.push(1, '...', totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+    } else {
+      pages.push(1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages);
+    }
+    
+    return pages;
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(parseInt(value));
+    setCurrentPage(1);
+  };
+
+  const handleSortChange = (value: string) => {
+    setSortBy(value);
+    setCurrentPage(1);
+  };
 
   if (categoryLoading) {
     return (
@@ -135,11 +208,111 @@ const CategoryPage: React.FC = () => {
             {/* Product Grid */}
             <div className="flex-1">
               {products.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {products.map((product) => (
-                    <ProductCard key={product.ProductID} product={product} />
-                  ))}
-                </div>
+                <>
+                  {/* Controls Bar */}
+                  <div className="doodle-card p-4 mb-6">
+                    <div className="flex items-center justify-between flex-wrap gap-4">
+                      {/* Left side: Items per page */}
+                      <div className="flex items-center gap-3">
+                        <span className="font-doodle text-sm text-doodle-text">
+                          Show:
+                        </span>
+                        <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+                          <SelectTrigger className="w-20 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-white border-2 border-doodle-text">
+                            <SelectItem value="6" className="font-doodle">6</SelectItem>
+                            <SelectItem value="12" className="font-doodle">12</SelectItem>
+                            <SelectItem value="24" className="font-doodle">24</SelectItem>
+                            <SelectItem value="48" className="font-doodle">48</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <span className="font-doodle text-sm text-doodle-text">
+                          per page
+                        </span>
+                      </div>
+
+                      {/* Middle: Sort options */}
+                      <div className="flex items-center gap-3">
+                        <span className="font-doodle text-sm text-doodle-text">
+                          Sort by:
+                        </span>
+                        <Select value={sortBy} onValueChange={handleSortChange}>
+                          <SelectTrigger className="w-48 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-white border-2 border-doodle-text">
+                            <SelectItem value="name-asc" className="font-doodle">Name (A-Z)</SelectItem>
+                            <SelectItem value="name-desc" className="font-doodle">Name (Z-A)</SelectItem>
+                            <SelectItem value="price-asc" className="font-doodle">Price (Low to High)</SelectItem>
+                            <SelectItem value="price-desc" className="font-doodle">Price (High to Low)</SelectItem>
+                            <SelectItem value="newest" className="font-doodle">Newest First</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Right side: Results count */}
+                      <div className="font-doodle text-sm text-doodle-text">
+                        Showing {startIndex + 1}-{Math.min(endIndex, products.length)} of {products.length}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Products */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
+                    {paginatedProducts.map((product) => (
+                      <ProductCard key={product.ProductID} product={product} />
+                    ))}
+                  </div>
+
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-2 flex-wrap">
+                      {/* Previous Button */}
+                      <button
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1}
+                        className="doodle-button p-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Previous page"
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                      </button>
+
+                      {/* Page Numbers */}
+                      {getPageNumbers().map((page, index) => (
+                        <React.Fragment key={index}>
+                          {typeof page === 'number' ? (
+                            <button
+                              onClick={() => handlePageChange(page)}
+                              className={`min-w-[40px] h-[40px] font-doodle font-bold border-2 transition-colors ${
+                                currentPage === page
+                                  ? 'bg-doodle-accent text-white border-doodle-accent'
+                                  : 'bg-white text-doodle-text border-doodle-text hover:bg-doodle-accent/10 hover:border-doodle-accent'
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          ) : (
+                            <span className="px-2 font-doodle text-doodle-text/50">
+                              {page}
+                            </span>
+                          )}
+                        </React.Fragment>
+                      ))}
+
+                      {/* Next Button */}
+                      <button
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                        className="doodle-button p-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Next page"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="doodle-card p-12 text-center">
                   <span className="text-6xl mb-4 block">📦</span>
