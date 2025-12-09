@@ -5,25 +5,43 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import ProductCard from '@/components/ProductCard';
 import { 
-  getCategoryById, 
-  getProductsByCategory, 
-  getSubcategoriesByCategory,
-  getProductsBySubcategory 
-} from '@/data/mockData';
+  useCategory,
+  useProductsByCategory,
+  useSubcategoriesByCategory,
+  useProductsBySubcategory
+} from '@/hooks/useProducts';
 
 const CategoryPage: React.FC = () => {
   const { categoryId } = useParams<{ categoryId: string }>();
   const [selectedSubcategory, setSelectedSubcategory] = React.useState<number | null>(null);
   
-  const category = categoryId ? getCategoryById(parseInt(categoryId)) : undefined;
-  const subcategories = categoryId ? getSubcategoriesByCategory(parseInt(categoryId)) : [];
+  const { data: category, isLoading: categoryLoading } = useCategory(categoryId ? parseInt(categoryId) : 0);
+  const { data: subcategories = [] } = useSubcategoriesByCategory(categoryId ? parseInt(categoryId) : 0);
+  const { data: allCategoryProducts = [] } = useProductsByCategory(categoryId ? parseInt(categoryId) : 0);
+  const { data: subcategoryProducts = [] } = useProductsBySubcategory(selectedSubcategory || 0);
   
   const products = React.useMemo(() => {
     if (selectedSubcategory) {
-      return getProductsBySubcategory(selectedSubcategory);
+      return subcategoryProducts;
     }
-    return categoryId ? getProductsByCategory(parseInt(categoryId)) : [];
-  }, [categoryId, selectedSubcategory]);
+    return allCategoryProducts;
+  }, [selectedSubcategory, allCategoryProducts, subcategoryProducts]);
+
+  if (categoryLoading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-1 container mx-auto px-4 py-12">
+          <div className="text-center">
+            <h1 className="font-doodle text-3xl font-bold text-doodle-text mb-4">
+              Loading category...
+            </h1>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!category) {
     return (

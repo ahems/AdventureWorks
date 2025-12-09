@@ -10,7 +10,7 @@ import NotifyWhenAvailable from '@/components/NotifyWhenAvailable';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useRecentlyViewed } from '@/context/RecentlyViewedContext';
-import { getProductById, getSubcategoryById, getCategoryById } from '@/data/mockData';
+import { useProduct, useSubcategory, useCategory } from '@/hooks/useProducts';
 import { getSalePrice, isVariantAvailable } from '@/types/product';
 import { useReviews } from '@/hooks/useReviews';
 import { toast } from '@/hooks/use-toast';
@@ -31,14 +31,11 @@ const ProductPage: React.FC = () => {
   const [selectedSize, setSelectedSize] = React.useState<string | undefined>(undefined);
   const [selectedColor, setSelectedColor] = React.useState<string | undefined>(undefined);
   
-  const product = productId ? getProductById(parseInt(productId)) : undefined;
+  const { data: product, isLoading: productLoading } = useProduct(productId ? parseInt(productId) : 0);
+  const { data: subcategory } = useSubcategory(product?.ProductSubcategoryID || 0);
+  const { data: category } = useCategory(subcategory?.ProductCategoryID || 0);
+  
   const inWishlist = product ? isInWishlist(product.ProductID) : false;
-  const subcategory = product?.ProductSubcategoryID 
-    ? getSubcategoryById(product.ProductSubcategoryID) 
-    : undefined;
-  const category = subcategory 
-    ? getCategoryById(subcategory.ProductCategoryID) 
-    : undefined;
   const salePrice = product ? getSalePrice(product) : null;
   const { averageRating, reviewCount } = useReviews(product?.ProductID || 0);
 
@@ -57,6 +54,22 @@ const ProductPage: React.FC = () => {
       addToRecentlyViewed(product);
     }
   }, [product, addToRecentlyViewed]);
+
+  if (productLoading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-1 container mx-auto px-4 py-12">
+          <div className="text-center">
+            <h1 className="font-doodle text-3xl font-bold text-doodle-text mb-4">
+              Loading product...
+            </h1>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!product) {
     return (

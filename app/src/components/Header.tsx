@@ -4,12 +4,13 @@ import { ShoppingCart, Menu, X, Bike, User, LogOut, ChevronDown, Search, Heart }
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
-import { categories } from '@/data/mockData';
+import { useCategories } from '@/hooks/useProducts';
 
 const Header: React.FC = () => {
   const { getTotalItems } = useCart();
   const { items: wishlistItems } = useWishlist();
   const { user, isAuthenticated, logout } = useAuth();
+  const { data: categories = [] } = useCategories();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [userMenuOpen, setUserMenuOpen] = React.useState(false);

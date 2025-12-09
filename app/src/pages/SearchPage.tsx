@@ -4,7 +4,7 @@ import { Search, SlidersHorizontal, X } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import ProductCard from '@/components/ProductCard';
-import { products, categories, subcategories } from '@/data/mockData';
+import { useProducts, useCategories, useSubcategories } from '@/hooks/useProducts';
 import { Product, getSalePrice } from '@/types/product';
 import { useReviews } from '@/hooks/useReviews';
 import { getAverageRating } from '@/data/mockReviews';
@@ -21,14 +21,19 @@ const SearchPage: React.FC = () => {
   const [sortBy, setSortBy] = useState<SortOption>('relevance');
   const [showFilters, setShowFilters] = useState(false);
 
+  const { data: products = [] } = useProducts();
+  const { data: categories = [] } = useCategories();
+  const { data: subcategories = [] } = useSubcategories();
+
   // Get min/max prices from products
   const priceStats = useMemo(() => {
+    if (products.length === 0) return { min: 0, max: 5000 };
     const prices = products.map(p => p.ListPrice);
     return {
       min: Math.floor(Math.min(...prices)),
       max: Math.ceil(Math.max(...prices))
     };
-  }, []);
+  }, [products]);
 
   // Filter and sort products
   const filteredProducts = useMemo(() => {
@@ -38,8 +43,7 @@ const SearchPage: React.FC = () => {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(p => 
-        p.Name.toLowerCase().includes(query) ||
-        p.Description?.toLowerCase().includes(query)
+        p.Name.toLowerCase().includes(query)
       );
     }
 

@@ -448,15 +448,6 @@
         }
       ]
     },
-    "AWBuildVersion": {
-      "source": "dbo.AWBuildVersion",
-      "permissions": [
-        {
-          "role": "authenticated",
-          "actions": ["*"]
-        }
-      ]
-    },
     "Department": {
       "source": "HumanResources.Department",
       "permissions": [

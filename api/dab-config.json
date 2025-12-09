@@ -435,15 +435,6 @@
         }
       ]
     },
-    "AWBuildVersion": {
-      "source": "dbo.AWBuildVersion",
-      "permissions": [
-        {
-          "role": "anonymous",
-          "actions": ["*"]
-        }
-      ]
-    },
     "Department": {
       "source": "HumanResources.Department",
       "permissions": [
@@ -590,24 +581,6 @@
     },
     "SalesTerritoryHistory": {
       "source": "Sales.SalesTerritoryHistory",
-      "permissions": [
-        {
-          "role": "anonymous",
-          "actions": ["*"]
-        }
-      ]
-    },
-    "DatabaseLog": {
-      "source": "dbo.DatabaseLog",
-      "permissions": [
-        {
-          "role": "anonymous",
-          "actions": ["*"]
-        }
-      ]
-    },
-    "ErrorLog": {
-      "source": "dbo.ErrorLog",
       "permissions": [
         {
           "role": "anonymous",

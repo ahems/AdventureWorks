@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Bike, Cog, Shirt, Backpack, ArrowRight } from 'lucide-react';
-import { categories } from '@/data/mockData';
+import { useCategories } from '@/hooks/useProducts';
 
 const iconMap: Record<string, React.ElementType> = {
   bike: Bike,
@@ -11,6 +11,18 @@ const iconMap: Record<string, React.ElementType> = {
 };
 
 const CategoryGrid: React.FC = () => {
+  const { data: categories = [], isLoading } = useCategories();
+
+  if (isLoading) {
+    return (
+      <section className="py-12">
+        <div className="container mx-auto px-4">
+          <div className="text-center text-doodle-text/70">Loading categories...</div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="py-12">
       <div className="container mx-auto px-4">

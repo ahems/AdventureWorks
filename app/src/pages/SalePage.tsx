@@ -2,10 +2,10 @@ import React from 'react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import SaleProductCard from '@/components/SaleProductCard';
-import { getSaleProducts } from '@/data/mockData';
+import { useSaleProducts } from '@/hooks/useProducts';
 
 const SalePage: React.FC = () => {
-  const saleProducts = getSaleProducts();
+  const { data: saleProducts = [], isLoading } = useSaleProducts();
 
   return (
     <div className="min-h-screen flex flex-col">

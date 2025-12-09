@@ -1,10 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Sparkles } from 'lucide-react';
-import { getSaleProducts } from '@/data/mockData';
+import { useSaleProducts } from '@/hooks/useProducts';
 
 const PromoBanner: React.FC = () => {
-  const saleProducts = getSaleProducts();
+  const { data: saleProducts = [] } = useSaleProducts();
   const maxDiscount = Math.max(...saleProducts.map(p => p.salePercent || 0));
 
   if (saleProducts.length === 0) return null;

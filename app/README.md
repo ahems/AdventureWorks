@@ -1,4 +1,39 @@
-# Welcome to your Lovable project
+# AdventureWorks E-Commerce Application
+
+A modern e-commerce web application built with React, TypeScript, and Vite, featuring a GraphQL API integration with the AdventureWorks database.
+
+## Features
+
+- 🛒 Full-featured e-commerce with shopping cart and wishlist
+- 🎨 Modern UI with doodle-style design system
+- 📱 Responsive design for all devices
+- 🔍 Advanced search and filtering
+- 🎯 Product categories and subcategories
+- ⭐ Product reviews and ratings
+- 🔐 User authentication
+- 🌐 GraphQL API integration
+
+## GraphQL API Integration
+
+This app fetches data from a GraphQL API powered by Microsoft Data API Builder. See [GRAPHQL_INTEGRATION.md](./GRAPHQL_INTEGRATION.md) for detailed documentation.
+
+### Quick Start
+
+1. Copy the environment template:
+```bash
+cp .env.example .env
+```
+
+2. Update `.env` with your API URL:
+```env
+VITE_API_URL=https://your-api-url.azurecontainerapps.io/graphql
+```
+
+3. Install dependencies and run:
+```bash
+npm install
+npm run dev
+```
 
 ## Project info
 

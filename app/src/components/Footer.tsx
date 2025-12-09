@@ -1,9 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Bike, Mail, MapPin, Phone } from 'lucide-react';
-import { categories } from '@/data/mockData';
+import { useCategories } from '@/hooks/useProducts';
 
 const Footer: React.FC = () => {
+  const { data: categories = [] } = useCategories();
+
   return (
     <footer className="bg-doodle-text text-doodle-bg mt-16">
       <div className="container mx-auto px-4 py-12">

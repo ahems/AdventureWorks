@@ -2,10 +2,20 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import ProductCard from './ProductCard';
-import { getFeaturedProducts } from '@/data/mockData';
+import { useFeaturedProducts } from '@/hooks/useProducts';
 
 const FeaturedProducts: React.FC = () => {
-  const featuredProducts = getFeaturedProducts();
+  const { data: featuredProducts = [], isLoading } = useFeaturedProducts();
+
+  if (isLoading) {
+    return (
+      <section className="py-12 bg-doodle-text/5">
+        <div className="container mx-auto px-4">
+          <div className="text-center text-doodle-text/70">Loading featured products...</div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="py-12 bg-doodle-text/5">

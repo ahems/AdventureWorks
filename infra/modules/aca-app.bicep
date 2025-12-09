@@ -97,15 +97,14 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
           }
           probes: [
             {
-              type: 'Startup'
+              type: 'Liveness'
               httpGet: {
-                path: '/startupz'
+                path: '/'
                 port: 80
               }
-              // Startup probe tuned for slow MI availability
-              initialDelaySeconds: 15
-              periodSeconds: 5
-              timeoutSeconds: 30
+              initialDelaySeconds: 10
+              periodSeconds: 10
+              timeoutSeconds: 5
               successThreshold: 1
               failureThreshold: 3
             }
