@@ -57,12 +57,6 @@ const Header: React.FC = () => {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-6">
-            <Link 
-              to="/" 
-              className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors ${location.pathname === '/' ? 'squiggle' : ''}`}
-            >
-              Home
-            </Link>
             {categories.map((category) => (
               <Link
                 key={category.ProductCategoryID}
@@ -194,13 +188,6 @@ const Header: React.FC = () => {
         {mobileMenuOpen && (
           <nav className="md:hidden py-4 border-t-2 border-doodle-text border-dashed">
             <div className="flex flex-col gap-3">
-              <Link 
-                to="/" 
-                className="font-doodle text-lg text-doodle-text hover:text-doodle-accent py-2"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                * Home
-              </Link>
               {categories.map((category) => (
                 <Link
                   key={category.ProductCategoryID}

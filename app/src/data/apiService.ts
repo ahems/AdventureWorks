@@ -495,9 +495,20 @@ export const getFeaturedProducts = async (): Promise<Product[]> => {
     // Filter to only in-stock products
     const inStockProducts = products.filter(p => p.inStock);
     
-    // Randomly shuffle and take 6
-    const shuffled = [...inStockProducts].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, 6);
+    // Separate sale and non-sale products
+    const saleProducts = inStockProducts.filter(p => p.DiscountPct && p.DiscountPct > 0);
+    const nonSaleProducts = inStockProducts.filter(p => !p.DiscountPct || p.DiscountPct === 0);
+    
+    // Get 1 random sale product
+    const shuffledSale = [...saleProducts].sort(() => Math.random() - 0.5);
+    const featuredSale = shuffledSale.slice(0, 1);
+    
+    // Get 5 random non-sale products
+    const shuffledNonSale = [...nonSaleProducts].sort(() => Math.random() - 0.5);
+    const featuredNonSale = shuffledNonSale.slice(0, 5);
+    
+    // Combine: sale item first, then non-sale items
+    return [...featuredSale, ...featuredNonSale];
   } catch (error) {
     console.error('Error fetching featured products:', error);
     return [];
