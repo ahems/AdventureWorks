@@ -492,7 +492,12 @@ export const getSubcategoryById = async (subcategoryId: number): Promise<Product
 export const getFeaturedProducts = async (): Promise<Product[]> => {
   try {
     const products = await getProducts(true); // Include photos
-    return products.slice(0, 6);
+    // Filter to only in-stock products
+    const inStockProducts = products.filter(p => p.inStock);
+    
+    // Randomly shuffle and take 6
+    const shuffled = [...inStockProducts].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, 6);
   } catch (error) {
     console.error('Error fetching featured products:', error);
     return [];

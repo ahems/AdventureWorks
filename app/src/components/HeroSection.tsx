@@ -1,8 +1,18 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Sparkles } from 'lucide-react';
+import { useProducts } from '@/hooks/useProducts';
 
 const HeroSection: React.FC = () => {
+  const { data: products = [] } = useProducts();
+
+  // Calculate available products count (in stock and for sale)
+  const availableProductsCount = useMemo(() => {
+    const inStockProducts = products.filter(p => p.inStock);
+    // Round down to nearest 10
+    const roundedCount = Math.floor(inStockProducts.length / 10) * 10;
+    return roundedCount;
+  }, [products]);
   return (
     <section className="relative overflow-hidden py-12 md:py-20">
       {/* Decorative Elements */}
@@ -64,7 +74,9 @@ const HeroSection: React.FC = () => {
           {/* Trust Badges */}
           <div className="mt-12 flex flex-wrap justify-center gap-6 md:gap-10">
             <div className="text-center">
-              <div className="font-doodle text-2xl md:text-3xl font-bold text-doodle-green">500+</div>
+              <div className="font-doodle text-2xl md:text-3xl font-bold text-doodle-green">
+                {availableProductsCount > 0 ? `${availableProductsCount}+` : '500+'}
+              </div>
               <div className="font-doodle text-sm text-doodle-text/60">Products</div>
             </div>
             <div className="text-center">

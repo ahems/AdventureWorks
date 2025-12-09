@@ -1,11 +1,95 @@
 import React from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import SaleProductCard from '@/components/SaleProductCard';
 import { useSaleProducts } from '@/hooks/useProducts';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const SalePage: React.FC = () => {
-  const { data: saleProducts = [], isLoading } = useSaleProducts();
+  const { data: allSaleProducts = [], isLoading } = useSaleProducts();
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [itemsPerPage, setItemsPerPage] = React.useState(12);
+  const [sortBy, setSortBy] = React.useState('discount-desc');
+
+  // Apply sorting
+  const saleProducts = React.useMemo(() => {
+    const sorted = [...allSaleProducts].sort((a, b) => {
+      switch (sortBy) {
+        case 'discount-desc':
+          return (b.DiscountPct || 0) - (a.DiscountPct || 0);
+        case 'discount-asc':
+          return (a.DiscountPct || 0) - (b.DiscountPct || 0);
+        case 'price-asc':
+          const priceA = a.ListPrice * (1 - (a.DiscountPct || 0));
+          const priceB = b.ListPrice * (1 - (b.DiscountPct || 0));
+          return priceA - priceB;
+        case 'price-desc':
+          const priceA2 = a.ListPrice * (1 - (a.DiscountPct || 0));
+          const priceB2 = b.ListPrice * (1 - (b.DiscountPct || 0));
+          return priceB2 - priceA2;
+        case 'name-asc':
+          return a.Name.localeCompare(b.Name);
+        case 'name-desc':
+          return b.Name.localeCompare(a.Name);
+        default:
+          return 0;
+      }
+    });
+    return sorted;
+  }, [allSaleProducts, sortBy]);
+
+  // Reset to page 1 when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [sortBy, saleProducts.length]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(saleProducts.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedProducts = saleProducts.slice(startIndex, endIndex);
+
+  // Generate page numbers to display
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 5;
+    
+    if (totalPages <= maxVisible) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    
+    if (currentPage <= 3) {
+      pages.push(1, 2, 3, 4, '...', totalPages);
+    } else if (currentPage >= totalPages - 2) {
+      pages.push(1, '...', totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+    } else {
+      pages.push(1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages);
+    }
+    
+    return pages;
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(parseInt(value));
+    setCurrentPage(1);
+  };
+
+  const handleSortChange = (value: string) => {
+    setSortBy(value);
+    setCurrentPage(1);
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -30,14 +114,110 @@ const SalePage: React.FC = () => {
         <section className="container mx-auto px-4 py-8 md:py-12">
           {saleProducts.length > 0 ? (
             <>
-              <p className="font-doodle text-doodle-text/60 mb-6">
-                {saleProducts.length} item{saleProducts.length !== 1 ? 's' : ''} on sale
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {saleProducts.map((product) => (
+              {/* Controls Bar */}
+              <div className="doodle-card p-4 mb-6">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  {/* Left side: Items per page */}
+                  <div className="flex items-center gap-3">
+                    <span className="font-doodle text-sm text-doodle-text">
+                      Show:
+                    </span>
+                    <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+                      <SelectTrigger className="w-20 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border-2 border-doodle-text">
+                        <SelectItem value="12" className="font-doodle">12</SelectItem>
+                        <SelectItem value="24" className="font-doodle">24</SelectItem>
+                        <SelectItem value="48" className="font-doodle">48</SelectItem>
+                        <SelectItem value="96" className="font-doodle">96</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <span className="font-doodle text-sm text-doodle-text">
+                      per page
+                    </span>
+                  </div>
+
+                  {/* Middle: Sort options */}
+                  <div className="flex items-center gap-3">
+                    <span className="font-doodle text-sm text-doodle-text">
+                      Sort by:
+                    </span>
+                    <Select value={sortBy} onValueChange={handleSortChange}>
+                      <SelectTrigger className="w-48 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border-2 border-doodle-text">
+                        <SelectItem value="discount-desc" className="font-doodle">Discount (High to Low)</SelectItem>
+                        <SelectItem value="discount-asc" className="font-doodle">Discount (Low to High)</SelectItem>
+                        <SelectItem value="price-asc" className="font-doodle">Price (Low to High)</SelectItem>
+                        <SelectItem value="price-desc" className="font-doodle">Price (High to Low)</SelectItem>
+                        <SelectItem value="name-asc" className="font-doodle">Name (A-Z)</SelectItem>
+                        <SelectItem value="name-desc" className="font-doodle">Name (Z-A)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Right side: Results count */}
+                  <div className="font-doodle text-sm text-doodle-text">
+                    Showing {startIndex + 1}-{Math.min(endIndex, saleProducts.length)} of {saleProducts.length}
+                  </div>
+                </div>
+              </div>
+
+              {/* Products Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+                {paginatedProducts.map((product) => (
                   <SaleProductCard key={product.ProductID} product={product} />
                 ))}
               </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                  {/* Previous Button */}
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="doodle-button p-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+
+                  {/* Page Numbers */}
+                  {getPageNumbers().map((page, index) => (
+                    <React.Fragment key={index}>
+                      {typeof page === 'number' ? (
+                        <button
+                          onClick={() => handlePageChange(page)}
+                          className={`min-w-[40px] h-[40px] font-doodle font-bold border-2 transition-colors ${
+                            currentPage === page
+                              ? 'bg-doodle-accent text-white border-doodle-accent'
+                              : 'bg-white text-doodle-text border-doodle-text hover:bg-doodle-accent/10 hover:border-doodle-accent'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ) : (
+                        <span className="px-2 font-doodle text-doodle-text/50">
+                          {page}
+                        </span>
+                      )}
+                    </React.Fragment>
+                  ))}
+
+                  {/* Next Button */}
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="doodle-button p-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Next page"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
             </>
           ) : (
             <div className="text-center py-12">
