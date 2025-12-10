@@ -66,13 +66,53 @@ const AccountPage: React.FC = () => {
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [editingAddress, setEditingAddress] = useState<Address | null>(null);
 
+  const [memberSinceDate, setMemberSinceDate] = useState<string>('Recently');
+
   useEffect(() => {
     if (user) {
+      console.log('[AccountPage] User object:', user);
+      console.log('[AccountPage] user.createdAt:', user.createdAt);
+      
       setProfileData({
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
       });
+
+      // If createdAt is not in user object, fetch it from API
+      if (!user.createdAt && user.businessEntityId) {
+        const fetchCreatedDate = async () => {
+          try {
+            const apiUrl = window.APP_CONFIG?.API_URL?.replace('/graphql', '/api') || 
+                          import.meta.env.VITE_API_URL?.replace('/graphql', '/api') || 
+                          'http://localhost:5000/api';
+            
+            const response = await fetch(`${apiUrl}/Person/BusinessEntityID/${user.businessEntityId}`);
+            if (response.ok) {
+              const result = await response.json();
+              const personData = result.value?.[0];
+              if (personData?.ModifiedDate) {
+                const date = new Date(personData.ModifiedDate).toLocaleDateString('en-US', {
+                  month: 'long',
+                  year: 'numeric'
+                });
+                console.log('[AccountPage] Fetched ModifiedDate from API:', personData.ModifiedDate, '→', date);
+                setMemberSinceDate(date);
+              }
+            }
+          } catch (error) {
+            console.error('[AccountPage] Error fetching creation date:', error);
+          }
+        };
+        fetchCreatedDate();
+      } else if (user.createdAt) {
+        const date = new Date(user.createdAt).toLocaleDateString('en-US', {
+          month: 'long',
+          year: 'numeric'
+        });
+        console.log('[AccountPage] Using createdAt from user object:', user.createdAt, '→', date);
+        setMemberSinceDate(date);
+      }
     }
   }, [user]);
 
@@ -97,11 +137,6 @@ const AccountPage: React.FC = () => {
   if (!isAuthenticated || !user) {
     return <Navigate to="/auth" state={{ from: { pathname: '/account' } }} replace />;
   }
-
-  const memberSince = new Date(user.createdAt).toLocaleDateString('en-US', {
-    month: 'long',
-    year: 'numeric'
-  });
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -134,7 +169,7 @@ const AccountPage: React.FC = () => {
                   </h1>
                   <p className="font-doodle text-doodle-text/70">{user.email}</p>
                   <p className="font-doodle text-sm text-doodle-text/50 mt-1">
-                    Member since {memberSince}
+                    Member since {memberSinceDate}
                   </p>
                 </div>
               </div>

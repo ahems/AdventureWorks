@@ -197,7 +197,11 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": ["create", "read", "update", "delete"],
+          "fields": {
+            "include": ["*"],
+            "exclude": ["rowguid", "ModifiedDate"]
+          }
         }
       ]
     },
@@ -242,7 +246,11 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": ["create", "read", "update", "delete"],
+          "fields": {
+            "include": ["*"],
+            "exclude": ["rowguid", "ModifiedDate"]
+          }
         }
       ]
     },

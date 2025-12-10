@@ -261,7 +261,7 @@ const AuthPage: React.FC = () => {
             {/* Demo Hint */}
             <div className="mt-6 pt-4 border-t-2 border-dashed border-doodle-text/20">
               <p className="font-doodle text-xs text-center text-doodle-text/50">
-                🎭 This is a demo. Your data is stored locally in your browser.
+                🎭 This is a demo. Your data is stored in a demo database.
               </p>
             </div>
           </div>

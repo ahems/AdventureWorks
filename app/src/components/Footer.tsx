@@ -100,7 +100,7 @@ const Footer: React.FC = () => {
         <div className="mt-12 pt-6 border-t-2 border-dashed border-doodle-bg/30">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="font-doodle text-sm opacity-60">
-              © 2024 Adventure Works. All rights reserved. (Demo Store)
+              © {new Date().getFullYear()} Adventure Works. All rights reserved. (Demo Store)
             </p>
             <p className="font-doodle text-sm opacity-60">
               Built with ♥ and DoodleCSS vibes
