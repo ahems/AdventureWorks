@@ -149,19 +149,9 @@ export const useUpdateProfile = () => {
       if (profile.PhoneNumber) {
         const phoneNumberTypeId = profile.PhoneNumberTypeID || 1; // Default to Cell
         
-        console.log('[useProfile] Updating phone number:', {
-          phoneNumber: profile.PhoneNumber,
-          phoneNumberTypeId,
-          businessEntityId: profile.BusinessEntityID,
-          restApiUrl
-        });
-        
         // Check if phone exists
         const checkUrl = `${restApiUrl}/PersonPhone?$filter=BusinessEntityID eq ${profile.BusinessEntityID}`;
-        console.log('[useProfile] Checking for existing phone:', checkUrl);
         const existingPhones = await fetch(checkUrl).then(r => r.json());
-
-        console.log('[useProfile] Existing phones:', existingPhones);
         
         if (existingPhones.value && existingPhones.value.length > 0) {
           // PersonPhone has a composite primary key (BusinessEntityID, PhoneNumber, PhoneNumberTypeID)
@@ -170,7 +160,6 @@ export const useUpdateProfile = () => {
           
           for (const existingPhone of existingPhones.value) {
             const deleteUrl = `${restApiUrl}/PersonPhone/BusinessEntityID/${profile.BusinessEntityID}/PhoneNumber/${encodeURIComponent(existingPhone.PhoneNumber)}/PhoneNumberTypeID/${existingPhone.PhoneNumberTypeID}`;
-            console.log('[useProfile] Deleting old phone at:', deleteUrl);
             
             const deleteResponse = await fetch(deleteUrl, {
               method: 'DELETE',
@@ -178,10 +167,8 @@ export const useUpdateProfile = () => {
             
             if (!deleteResponse.ok) {
               const errorText = await deleteResponse.text();
-              console.error('[useProfile] Phone deletion failed:', deleteResponse.status, errorText);
               throw new Error(`Phone deletion failed: ${deleteResponse.status} ${errorText}`);
             }
-            console.log('[useProfile] Old phone deleted successfully');
           }
           
           // Now create the new phone record
@@ -191,8 +178,6 @@ export const useUpdateProfile = () => {
             PhoneNumber: profile.PhoneNumber,
             PhoneNumberTypeID: phoneNumberTypeId,
           };
-          console.log('[useProfile] Creating new phone at:', createUrl);
-          console.log('[useProfile] Create payload:', createPayload);
           
           const createResponse = await fetch(createUrl, {
             method: 'POST',
@@ -202,10 +187,8 @@ export const useUpdateProfile = () => {
           
           if (!createResponse.ok) {
             const errorText = await createResponse.text();
-            console.error('[useProfile] Phone creation failed:', createResponse.status, errorText);
             throw new Error(`Phone creation failed: ${createResponse.status} ${errorText}`);
           }
-          console.log('[useProfile] New phone created successfully');
         } else {
           // Create new phone
           const createUrl = `${restApiUrl}/PersonPhone`;
@@ -214,8 +197,6 @@ export const useUpdateProfile = () => {
             PhoneNumber: profile.PhoneNumber,
             PhoneNumberTypeID: phoneNumberTypeId,
           };
-          console.log('[useProfile] Creating phone at:', createUrl);
-          console.log('[useProfile] Create payload:', createPayload);
           
           const response = await fetch(createUrl, {
             method: 'POST',
@@ -225,7 +206,6 @@ export const useUpdateProfile = () => {
           
           if (!response.ok) {
             const errorText = await response.text();
-            console.error('[useProfile] Phone creation failed:', response.status, errorText);
             throw new Error(`Phone creation failed: ${response.status} ${errorText}`);
           }
           console.log('[useProfile] Phone created successfully');

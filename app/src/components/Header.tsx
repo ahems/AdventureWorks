@@ -10,7 +10,7 @@ const Header: React.FC = () => {
   const { getTotalItems } = useCart();
   const { items: wishlistItems } = useWishlist();
   const { user, isAuthenticated, logout } = useAuth();
-  const { data: categories = [] } = useCategories();
+  const { data: categories = [], isLoading: categoriesLoading } = useCategories();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -57,21 +57,33 @@ const Header: React.FC = () => {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-6">
-            {categories.map((category) => (
-              <Link
-                key={category.ProductCategoryID}
-                to={`/category/${category.ProductCategoryID}`}
-                className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors ${location.pathname === `/category/${category.ProductCategoryID}` ? 'squiggle' : ''}`}
-              >
-                {category.Name}
-              </Link>
-            ))}
-            <Link 
-              to="/sale" 
-              className={`font-doodle text-doodle-accent font-bold hover:text-doodle-green transition-colors ${location.pathname === '/sale' ? 'squiggle' : ''}`}
-            >
-              🏷️ Sale
-            </Link>
+            {categoriesLoading ? (
+              // Loading skeleton for categories
+              <>
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="h-4 w-20 bg-doodle-text/10 animate-pulse"></div>
+                ))}
+                <div className="h-4 w-16 bg-doodle-accent/20 animate-pulse"></div>
+              </>
+            ) : (
+              <>
+                {categories.map((category) => (
+                  <Link
+                    key={category.ProductCategoryID}
+                    to={`/category/${category.ProductCategoryID}`}
+                    className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors ${location.pathname === `/category/${category.ProductCategoryID}` ? 'squiggle' : ''}`}
+                  >
+                    {category.Name}
+                  </Link>
+                ))}
+                <Link 
+                  to="/sale" 
+                  className={`font-doodle text-doodle-accent font-bold hover:text-doodle-green transition-colors ${location.pathname === '/sale' ? 'squiggle' : ''}`}
+                >
+                  🏷️ Sale
+                </Link>
+              </>
+            )}
           </nav>
 
           {/* Right Side: Search + Auth + Cart + Mobile Menu */}
@@ -188,23 +200,35 @@ const Header: React.FC = () => {
         {mobileMenuOpen && (
           <nav className="md:hidden py-4 border-t-2 border-doodle-text border-dashed">
             <div className="flex flex-col gap-3">
-              {categories.map((category) => (
-                <Link
-                  key={category.ProductCategoryID}
-                  to={`/category/${category.ProductCategoryID}`}
-                  className="font-doodle text-lg text-doodle-text hover:text-doodle-accent py-2"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  * {category.Name}
-                </Link>
-              ))}
-              <Link
-                to="/sale"
-                className="font-doodle text-lg text-doodle-accent font-bold hover:text-doodle-green py-2"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                * 🏷️ Sale
-              </Link>
+              {categoriesLoading ? (
+                // Loading skeleton for mobile menu
+                <>
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="h-6 w-32 bg-doodle-text/10 animate-pulse"></div>
+                  ))}
+                  <div className="h-6 w-24 bg-doodle-accent/20 animate-pulse"></div>
+                </>
+              ) : (
+                <>
+                  {categories.map((category) => (
+                    <Link
+                      key={category.ProductCategoryID}
+                      to={`/category/${category.ProductCategoryID}`}
+                      className="font-doodle text-lg text-doodle-text hover:text-doodle-accent py-2"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      * {category.Name}
+                    </Link>
+                  ))}
+                  <Link
+                    to="/sale"
+                    className="font-doodle text-lg text-doodle-accent font-bold hover:text-doodle-green py-2"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    * 🏷️ Sale
+                  </Link>
+                </>
+              )}
               {!isAuthenticated && (
                 <Link
                   to="/auth"

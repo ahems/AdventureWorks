@@ -214,6 +214,15 @@
         }
       ]
     },
+    "PhoneNumberType": {
+      "source": "Person.PhoneNumberType",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
     "PersonCreditCard": {
       "source": "Sales.PersonCreditCard",
       "permissions": [

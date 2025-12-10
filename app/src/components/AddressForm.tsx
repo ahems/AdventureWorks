@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Save } from 'lucide-react';
 import { z } from 'zod';
 import type { Address } from '@/hooks/useAddresses';
+import { formatPhoneNumber, parsePhoneNumber } from '@/lib/phoneFormatter';
 
 const addressSchema = z.object({
   label: z.string().min(1, 'Label is required').max(50, 'Label must be less than 50 characters'),
@@ -23,11 +24,26 @@ interface AddressFormProps {
 }
 
 export const AddressForm: React.FC<AddressFormProps> = ({ address, onSave, onCancel }) => {
+  // Parse phone number to extract country code
+  let initialCountryCode = '+1';
+  let initialPhoneNumber = '';
+  
+  if (address?.phone) {
+    const match = address.phone.match(/^(\+\d+)\s*(.*)$/);
+    if (match) {
+      initialCountryCode = match[1];
+      initialPhoneNumber = formatPhoneNumber(match[2], match[1]);
+    } else {
+      initialPhoneNumber = formatPhoneNumber(address.phone, '+1');
+    }
+  }
+  
   const [formData, setFormData] = useState({
     label: address?.label || '',
     firstName: address?.firstName || '',
     lastName: address?.lastName || '',
-    phone: address?.phone || '',
+    countryCode: initialCountryCode,
+    phone: initialPhoneNumber,
     address: address?.address || '',
     city: address?.city || '',
     state: address?.state || '',
@@ -49,9 +65,17 @@ export const AddressForm: React.FC<AddressFormProps> = ({ address, onSave, onCan
     e.preventDefault();
     
     try {
-      addressSchema.parse(formData);
+      // Combine country code with phone number
+      const cleanPhone = parsePhoneNumber(formData.phone);
+      const fullPhone = cleanPhone ? `${formData.countryCode} ${cleanPhone}` : '';
+      
+      const dataToValidate = { ...formData, phone: fullPhone };
+      addressSchema.parse(dataToValidate);
       setErrors({});
-      onSave(formData);
+      
+      // Save with combined phone number
+      const { countryCode, ...dataToSave } = dataToValidate;
+      onSave(dataToSave);
     } catch (error) {
       if (error instanceof z.ZodError) {
         const newErrors: Record<string, string> = {};
@@ -114,13 +138,36 @@ export const AddressForm: React.FC<AddressFormProps> = ({ address, onSave, onCan
         <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
           Phone *
         </label>
-        <input
-          type="tel"
-          value={formData.phone}
-          onChange={(e) => handleChange('phone', e.target.value)}
-          className="doodle-input w-full"
-          placeholder="(555) 123-4567"
-        />
+        <div className="flex gap-2">
+          <select
+            value={formData.countryCode}
+            onChange={(e) => handleChange('countryCode', e.target.value)}
+            className="doodle-input w-24 flex-shrink-0"
+          >
+            <option value="+1">🇺🇸 +1</option>
+            <option value="+44">🇬🇧 +44</option>
+            <option value="+61">🇦🇺 +61</option>
+            <option value="+81">🇯🇵 +81</option>
+            <option value="+86">🇨🇳 +86</option>
+            <option value="+49">🇩🇪 +49</option>
+            <option value="+33">🇫🇷 +33</option>
+            <option value="+39">🇮🇹 +39</option>
+            <option value="+34">🇪🇸 +34</option>
+            <option value="+52">🇲🇽 +52</option>
+            <option value="+55">🇧🇷 +55</option>
+            <option value="+91">🇮🇳 +91</option>
+          </select>
+          <input
+            type="tel"
+            value={formData.phone}
+            onChange={(e) => {
+              const formatted = formatPhoneNumber(e.target.value, formData.countryCode);
+              handleChange('phone', formatted);
+            }}
+            className="doodle-input flex-1"
+            placeholder="(555) 123-4567"
+          />
+        </div>
         {errors.phone && <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.phone}</p>}
       </div>
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { MapPin, Edit2, Trash2, Star } from 'lucide-react';
 import type { Address } from '@/hooks/useAddresses';
+import { formatPhoneNumber } from '@/lib/phoneFormatter';
 
 interface AddressCardProps {
   address: Address;
@@ -65,7 +66,16 @@ export const AddressCard: React.FC<AddressCardProps> = ({
               {address.country}
             </p>
             <p className="font-doodle text-sm text-doodle-text/50 mt-1">
-              {address.phone}
+              {(() => {
+                // Parse and format phone number for display
+                if (!address.phone) return '';
+                const match = address.phone.match(/^(\+\d+)\s*(.*)$/);
+                if (match) {
+                  const formatted = formatPhoneNumber(match[2], match[1]);
+                  return `${match[1]} ${formatted}`;
+                }
+                return formatPhoneNumber(address.phone, '+1');
+              })()}
             </p>
           </div>
         </div>

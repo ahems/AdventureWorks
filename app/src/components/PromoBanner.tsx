@@ -4,11 +4,39 @@ import { ArrowRight, Sparkles } from 'lucide-react';
 import { useSaleProducts } from '@/hooks/useProducts';
 
 const PromoBanner: React.FC = () => {
-  const { data: saleProducts = [] } = useSaleProducts();
+  const { data: saleProducts = [], isLoading } = useSaleProducts();
   const maxDiscount = Math.max(...saleProducts.map(p => {
     // Convert DiscountPct (decimal) to percentage, or use legacy salePercent
     return p.DiscountPct ? Math.round(p.DiscountPct * 100) : (p.salePercent || 0);
   }), 0);
+
+  if (isLoading) {
+    return (
+      <section className="relative overflow-hidden bg-doodle-accent">
+        <div className="container mx-auto px-4 py-6 md:py-8 relative">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            {/* Left: Message Skeleton */}
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:block w-12 h-12 bg-white/20 animate-pulse"></div>
+              <div className="space-y-2">
+                <div className="h-6 w-40 bg-white/20 animate-pulse"></div>
+                <div className="h-4 w-48 bg-white/20 animate-pulse"></div>
+              </div>
+            </div>
+
+            {/* Center: Count Skeleton */}
+            <div className="hidden lg:flex flex-col items-center gap-1 border-l-2 border-r-2 border-white/20 px-6">
+              <div className="h-8 w-12 bg-white/20 animate-pulse"></div>
+              <div className="h-3 w-20 bg-white/20 animate-pulse"></div>
+            </div>
+
+            {/* Right: CTA Skeleton */}
+            <div className="h-12 w-36 bg-white/20 animate-pulse"></div>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   if (saleProducts.length === 0) return null;
 

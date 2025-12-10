@@ -91,6 +91,73 @@ const SalePage: React.FC = () => {
     setCurrentPage(1);
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-1">
+          {/* Hero Section Skeleton */}
+          <section className="bg-doodle-accent/10 border-b-4 border-doodle-text py-8 md:py-12">
+            <div className="container mx-auto px-4 text-center space-y-4">
+              <div className="h-16 w-16 bg-doodle-text/10 animate-pulse mx-auto rounded-full"></div>
+              <div className="h-12 w-48 bg-doodle-text/10 animate-pulse mx-auto"></div>
+              <div className="h-4 w-96 max-w-full bg-doodle-text/10 animate-pulse mx-auto"></div>
+            </div>
+          </section>
+
+          {/* Products Grid Skeleton */}
+          <section className="container mx-auto px-4 py-8 md:py-12">
+            {/* Controls Bar Skeleton */}
+            <div className="doodle-card p-4 mb-6">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-4 w-12 bg-doodle-text/10 animate-pulse"></div>
+                  <div className="h-10 w-20 bg-doodle-text/10 animate-pulse"></div>
+                  <div className="h-4 w-16 bg-doodle-text/10 animate-pulse"></div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="h-4 w-16 bg-doodle-text/10 animate-pulse"></div>
+                  <div className="h-10 w-48 bg-doodle-text/10 animate-pulse"></div>
+                </div>
+                <div className="h-4 w-32 bg-doodle-text/10 animate-pulse"></div>
+              </div>
+            </div>
+
+            {/* Products Grid Skeleton */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+              {[...Array(12)].map((_, i) => (
+                <div key={i} className="doodle-card overflow-hidden">
+                  <div className="aspect-square bg-doodle-text/10 animate-pulse"></div>
+                  <div className="p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-16 bg-doodle-text/10 animate-pulse"></div>
+                      <div className="h-4 w-12 bg-doodle-text/10 animate-pulse"></div>
+                    </div>
+                    <div className="h-4 w-3/4 bg-doodle-text/10 animate-pulse"></div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-20 bg-doodle-text/10 animate-pulse"></div>
+                      <div className="h-6 w-16 bg-doodle-text/10 animate-pulse"></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination Skeleton */}
+            <div className="flex items-center justify-center gap-2">
+              <div className="h-10 w-10 bg-doodle-text/10 animate-pulse"></div>
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-10 w-10 bg-doodle-text/10 animate-pulse"></div>
+              ))}
+              <div className="h-10 w-10 bg-doodle-text/10 animate-pulse"></div>
+            </div>
+          </section>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />

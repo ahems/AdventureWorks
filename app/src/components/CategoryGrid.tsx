@@ -17,7 +17,18 @@ const CategoryGrid: React.FC = () => {
     return (
       <section className="py-12">
         <div className="container mx-auto px-4">
-          <div className="text-center text-doodle-text/70">Loading categories...</div>
+          <div className="h-10 w-64 bg-doodle-text/10 rounded mx-auto mb-2 animate-pulse"></div>
+          <div className="h-4 w-96 bg-doodle-text/10 rounded mx-auto mb-8 animate-pulse"></div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="doodle-card p-6 animate-pulse">
+                <div className="w-16 h-16 mx-auto mb-4 bg-doodle-text/10 rounded"></div>
+                <div className="h-6 bg-doodle-text/10 rounded mb-3 mx-auto w-3/4"></div>
+                <div className="h-4 bg-doodle-text/10 rounded mx-auto w-1/2"></div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
     );
