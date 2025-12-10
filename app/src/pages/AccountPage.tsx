@@ -8,6 +8,8 @@ import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
 import { useAddresses, Address } from '@/hooks/useAddresses';
 import { usePaymentMethods } from '@/hooks/usePaymentMethods';
+import { useOrders, getOrderStatusText, getOrderStatusColor } from '@/hooks/useOrders';
+import { getCustomerByPersonId } from '@/lib/customerService';
 import { AddressForm } from '@/components/AddressForm';
 import { AddressCard } from '@/components/AddressCard';
 import { toast } from '@/hooks/use-toast';
@@ -19,42 +21,15 @@ const profileSchema = z.object({
   email: z.string().trim().email('Valid email is required').max(255, 'Email must be less than 255 characters'),
 });
 
-interface OrderItem {
-  ProductID: number;
-  Name: string;
-  ListPrice: number;
-  quantity: number;
-}
-
-interface Order {
-  id: string;
-  items: OrderItem[];
-  shipping: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    address: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    country: string;
-  };
-  paymentMethod: string;
-  subtotal: number;
-  shippingCost: number;
-  tax: number;
-  total: number;
-  date: string;
-}
-
 const AccountPage: React.FC = () => {
   const { user, isAuthenticated, logout, updateProfile, isLoading } = useAuth();
   const { items: wishlistItems, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
   const { addresses, addAddress, updateAddress, deleteAddress, setDefaultAddress } = useAddresses();
   const { paymentMethods, deletePaymentMethod, setDefaultPaymentMethod } = usePaymentMethods();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [customerId, setCustomerId] = useState<number | null>(null);
+  const { data: orders = [], isLoading: ordersLoading } = useOrders(customerId || 0);
+  const [expandedOrder, setExpandedOrder] = useState<number | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [profileData, setProfileData] = useState({
@@ -78,6 +53,15 @@ const AccountPage: React.FC = () => {
         lastName: user.lastName,
         email: user.email,
       });
+
+      // Fetch customer ID for orders
+      if (user.businessEntityId) {
+        getCustomerByPersonId(user.businessEntityId).then(customer => {
+          if (customer) {
+            setCustomerId(customer.CustomerID);
+          }
+        });
+      }
 
       // If createdAt is not in user object, fetch it from API
       if (!user.createdAt && user.businessEntityId) {
@@ -115,13 +99,6 @@ const AccountPage: React.FC = () => {
       }
     }
   }, [user]);
-
-  useEffect(() => {
-    const savedOrders = localStorage.getItem('orderHistory');
-    if (savedOrders) {
-      setOrders(JSON.parse(savedOrders));
-    }
-  }, []);
 
   if (isLoading) {
     return (
@@ -182,12 +159,19 @@ const AccountPage: React.FC = () => {
                 <h2 className="font-doodle text-xl font-bold text-doodle-text">
                   Order History
                 </h2>
-                <span className="font-doodle text-sm text-doodle-text/50">
-                  ({orders.length} {orders.length === 1 ? 'order' : 'orders'})
-                </span>
+                {!ordersLoading && (
+                  <span className="font-doodle text-sm text-doodle-text/50">
+                    ({orders.length} {orders.length === 1 ? 'order' : 'orders'})
+                  </span>
+                )}
               </div>
 
-              {orders.length === 0 ? (
+              {ordersLoading ? (
+                <div className="text-center py-8">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-doodle-accent"></div>
+                  <p className="font-doodle text-doodle-text/70 mt-4">Loading orders...</p>
+                </div>
+              ) : orders.length === 0 ? (
                 <div className="text-center py-8">
                   <Package className="w-16 h-16 mx-auto mb-4 text-doodle-text/30" />
                   <p className="font-doodle text-doodle-text/70 mb-4">
@@ -200,18 +184,23 @@ const AccountPage: React.FC = () => {
               ) : (
                 <div className="space-y-4">
                   {orders.map((order) => (
-                    <div key={order.id} className="border-2 border-dashed border-doodle-text/20 p-4">
+                    <div key={order.SalesOrderID} className="border-2 border-dashed border-doodle-text/20 p-4">
                       <button
-                        onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)}
+                        onClick={() => setExpandedOrder(expandedOrder === order.SalesOrderID ? null : order.SalesOrderID)}
                         className="w-full flex items-center justify-between"
                       >
                         <div className="flex items-center gap-4">
                           <div className="text-left">
-                            <p className="font-doodle font-bold text-doodle-accent">
-                              {order.id}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-doodle font-bold text-doodle-accent">
+                                {order.SalesOrderNumber}
+                              </p>
+                              <span className={`text-xs px-2 py-1 rounded-full border ${getOrderStatusColor(order.Status)}`}>
+                                {getOrderStatusText(order.Status)}
+                              </span>
+                            </div>
                             <p className="font-doodle text-sm text-doodle-text/70">
-                              {new Date(order.date).toLocaleDateString('en-US', {
+                              {new Date(order.OrderDate).toLocaleDateString('en-US', {
                                 month: 'long',
                                 day: 'numeric',
                                 year: 'numeric'
@@ -221,9 +210,9 @@ const AccountPage: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-4">
                           <span className="font-doodle font-bold text-doodle-green">
-                            ${order.total.toFixed(2)}
+                            ${order.TotalDue.toFixed(2)}
                           </span>
-                          {expandedOrder === order.id ? (
+                          {expandedOrder === order.SalesOrderID ? (
                             <ChevronUp className="w-5 h-5 text-doodle-text/50" />
                           ) : (
                             <ChevronDown className="w-5 h-5 text-doodle-text/50" />
@@ -231,16 +220,16 @@ const AccountPage: React.FC = () => {
                         </div>
                       </button>
 
-                      {expandedOrder === order.id && (
+                      {expandedOrder === order.SalesOrderID && (
                         <div className="mt-4 pt-4 border-t border-dashed border-doodle-text/20">
                           {/* Order Items */}
                           <div className="space-y-2 mb-4">
-                            {order.items.map((item) => (
-                              <div key={item.ProductID} className="flex justify-between font-doodle text-sm">
+                            {order.salesOrderDetails.items.map((item, index) => (
+                              <div key={`${item.ProductID}-${index}`} className="flex justify-between font-doodle text-sm">
                                 <span className="text-doodle-text/70">
-                                  {item.Name} × {item.quantity}
+                                  {item.product.Name} × {item.OrderQty}
                                 </span>
-                                <span>${(item.ListPrice * item.quantity).toFixed(2)}</span>
+                                <span>${item.LineTotal.toFixed(2)}</span>
                               </div>
                             ))}
                           </div>
@@ -251,42 +240,31 @@ const AccountPage: React.FC = () => {
                           <div className="space-y-1 font-doodle text-sm">
                             <div className="flex justify-between">
                               <span className="text-doodle-text/70">Subtotal</span>
-                              <span>${order.subtotal.toFixed(2)}</span>
+                              <span>${order.SubTotal.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-doodle-text/70">Shipping</span>
-                              <span>{order.shippingCost === 0 ? 'FREE' : `$${order.shippingCost.toFixed(2)}`}</span>
+                              <span>${order.Freight.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-doodle-text/70">Tax</span>
-                              <span>${order.tax.toFixed(2)}</span>
+                              <span>${order.TaxAmt.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between font-bold text-base pt-2 border-t border-dashed border-doodle-text/20">
+                              <span>Total</span>
+                              <span className="text-doodle-green">${order.TotalDue.toFixed(2)}</span>
                             </div>
                           </div>
 
-                          <hr className="border-dashed border-doodle-text/20 my-3" />
-
-                          {/* Shipping Address */}
-                          <div className="font-doodle text-sm">
-                            <p className="font-bold text-doodle-text mb-1">Shipped to:</p>
-                            <p className="text-doodle-text/70">
-                              {order.shipping.firstName} {order.shipping.lastName}
-                            </p>
-                            <p className="text-doodle-text/70">{order.shipping.address}</p>
-                            <p className="text-doodle-text/70">
-                              {order.shipping.city}, {order.shipping.state} {order.shipping.zipCode}
-                            </p>
-                          </div>
-
-                          <hr className="border-dashed border-doodle-text/20 my-3" />
-
-                          {/* Track Order Button */}
-                          <Link
-                            to={`/order-tracking/${order.id}`}
-                            className="doodle-button doodle-button-primary w-full text-center flex items-center justify-center gap-2"
-                          >
-                            <Truck className="w-4 h-4" />
-                            Track Order
-                          </Link>
+                          {order.Comment && (
+                            <>
+                              <hr className="border-dashed border-doodle-text/20 my-3" />
+                              <div className="font-doodle text-sm">
+                                <p className="font-bold text-doodle-text mb-1">Order Notes:</p>
+                                <p className="text-doodle-text/70">{order.Comment}</p>
+                              </div>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>

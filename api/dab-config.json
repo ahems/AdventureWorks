@@ -387,7 +387,15 @@
           "role": "anonymous",
           "actions": ["*"]
         }
-      ]
+      ],
+      "relationships": {
+        "salesOrderDetails": {
+          "cardinality": "many",
+          "target.entity": "SalesOrderDetail",
+          "source.fields": ["SalesOrderID"],
+          "target.fields": ["SalesOrderID"]
+        }
+      }
     },
     "SalesOrderDetail": {
       "source": "Sales.SalesOrderDetail",
@@ -396,7 +404,21 @@
           "role": "anonymous",
           "actions": ["*"]
         }
-      ]
+      ],
+      "relationships": {
+        "salesOrderHeader": {
+          "cardinality": "one",
+          "target.entity": "SalesOrderHeader",
+          "source.fields": ["SalesOrderID"],
+          "target.fields": ["SalesOrderID"]
+        },
+        "product": {
+          "cardinality": "one",
+          "target.entity": "Product",
+          "source.fields": ["ProductID"],
+          "target.fields": ["ProductID"]
+        }
+      }
     },
     "SalesOrderHeaderSalesReason": {
       "source": "Sales.SalesOrderHeaderSalesReason",
