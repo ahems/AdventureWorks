@@ -119,10 +119,12 @@ export const useUpdateProfile = () => {
   
   return useMutation({
     mutationFn: async (profile: ProfileData) => {
-      // Get REST API URL
-      const restApiUrl = window.APP_CONFIG?.API_URL?.replace('/graphql', '/api') || 
-                        import.meta.env.VITE_API_URL?.replace('/graphql', '/api') || 
-                        'http://localhost:5000/api';
+      // Get REST API URL and ensure no trailing slash
+      let restApiUrl = window.APP_CONFIG?.API_URL?.replace('/graphql', '/api') || 
+                       import.meta.env.VITE_API_URL?.replace('/graphql', '/api') || 
+                       'http://localhost:5000/api';
+      // Remove trailing slash if present
+      restApiUrl = restApiUrl.replace(/\/$/, '');
 
       // Update Person
       await graphqlClient.request(UPDATE_PERSON, {
@@ -147,35 +149,86 @@ export const useUpdateProfile = () => {
       if (profile.PhoneNumber) {
         const phoneNumberTypeId = profile.PhoneNumberTypeID || 1; // Default to Cell
         
+        console.log('[useProfile] Updating phone number:', {
+          phoneNumber: profile.PhoneNumber,
+          phoneNumberTypeId,
+          businessEntityId: profile.BusinessEntityID,
+          restApiUrl
+        });
+        
         // Check if phone exists
-        const existingPhones = await fetch(
-          `${restApiUrl}/PersonPhone?$filter=BusinessEntityID eq ${profile.BusinessEntityID}`
-        ).then(r => r.json());
+        const checkUrl = `${restApiUrl}/PersonPhone?$filter=BusinessEntityID eq ${profile.BusinessEntityID}`;
+        console.log('[useProfile] Checking for existing phone:', checkUrl);
+        const existingPhones = await fetch(checkUrl).then(r => r.json());
 
+        console.log('[useProfile] Existing phones:', existingPhones);
+        
         if (existingPhones.value && existingPhones.value.length > 0) {
-          // Update existing phone
-          await fetch(
-            `${restApiUrl}/PersonPhone/BusinessEntityID/${profile.BusinessEntityID}/PhoneNumberTypeID/${existingPhones.value[0].PhoneNumberTypeID}`,
-            {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                PhoneNumber: profile.PhoneNumber,
-                PhoneNumberTypeID: phoneNumberTypeId,
-              }),
+          // PersonPhone has a composite primary key (BusinessEntityID, PhoneNumber, PhoneNumberTypeID)
+          // Since PhoneNumber is part of the primary key, we can't update it directly
+          // Instead, delete the old record and create a new one
+          
+          for (const existingPhone of existingPhones.value) {
+            const deleteUrl = `${restApiUrl}/PersonPhone/BusinessEntityID/${profile.BusinessEntityID}/PhoneNumber/${encodeURIComponent(existingPhone.PhoneNumber)}/PhoneNumberTypeID/${existingPhone.PhoneNumberTypeID}`;
+            console.log('[useProfile] Deleting old phone at:', deleteUrl);
+            
+            const deleteResponse = await fetch(deleteUrl, {
+              method: 'DELETE',
+            });
+            
+            if (!deleteResponse.ok) {
+              const errorText = await deleteResponse.text();
+              console.error('[useProfile] Phone deletion failed:', deleteResponse.status, errorText);
+              throw new Error(`Phone deletion failed: ${deleteResponse.status} ${errorText}`);
             }
-          );
-        } else {
-          // Create new phone
-          await fetch(`${restApiUrl}/PersonPhone`, {
+            console.log('[useProfile] Old phone deleted successfully');
+          }
+          
+          // Now create the new phone record
+          const createUrl = `${restApiUrl}/PersonPhone`;
+          const createPayload = {
+            BusinessEntityID: profile.BusinessEntityID,
+            PhoneNumber: profile.PhoneNumber,
+            PhoneNumberTypeID: phoneNumberTypeId,
+          };
+          console.log('[useProfile] Creating new phone at:', createUrl);
+          console.log('[useProfile] Create payload:', createPayload);
+          
+          const createResponse = await fetch(createUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              BusinessEntityID: profile.BusinessEntityID,
-              PhoneNumber: profile.PhoneNumber,
-              PhoneNumberTypeID: phoneNumberTypeId,
-            }),
+            body: JSON.stringify(createPayload),
           });
+          
+          if (!createResponse.ok) {
+            const errorText = await createResponse.text();
+            console.error('[useProfile] Phone creation failed:', createResponse.status, errorText);
+            throw new Error(`Phone creation failed: ${createResponse.status} ${errorText}`);
+          }
+          console.log('[useProfile] New phone created successfully');
+        } else {
+          // Create new phone
+          const createUrl = `${restApiUrl}/PersonPhone`;
+          const createPayload = {
+            BusinessEntityID: profile.BusinessEntityID,
+            PhoneNumber: profile.PhoneNumber,
+            PhoneNumberTypeID: phoneNumberTypeId,
+          };
+          console.log('[useProfile] Creating phone at:', createUrl);
+          console.log('[useProfile] Create payload:', createPayload);
+          
+          const response = await fetch(createUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(createPayload),
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[useProfile] Phone creation failed:', response.status, errorText);
+            throw new Error(`Phone creation failed: ${response.status} ${errorText}`);
+          }
+          console.log('[useProfile] Phone created successfully');
         }
       }
 

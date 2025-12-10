@@ -15,6 +15,7 @@ import { AddressForm } from '@/components/AddressForm';
 import { AddressCard } from '@/components/AddressCard';
 import { toast } from '@/hooks/use-toast';
 import { z } from 'zod';
+import { formatPhoneNumber, parsePhoneNumber } from '@/lib/phoneFormatter';
 
 const profileSchema = z.object({
   title: z.string().optional(),
@@ -46,6 +47,7 @@ const AccountPage: React.FC = () => {
     lastName: '',
     suffix: '',
     email: '',
+    countryCode: '+1',
     phoneNumber: '',
     phoneNumberTypeId: 1,
   });
@@ -57,9 +59,6 @@ const AccountPage: React.FC = () => {
 
   useEffect(() => {
     if (user) {
-      console.log('[AccountPage] User object:', user);
-      console.log('[AccountPage] user.createdAt:', user.createdAt);
-
       // Fetch customer ID for orders
       if (user.businessEntityId) {
         getCustomerByPersonId(user.businessEntityId).then(customer => {
@@ -86,7 +85,6 @@ const AccountPage: React.FC = () => {
                   month: 'long',
                   year: 'numeric'
                 });
-                console.log('[AccountPage] Fetched ModifiedDate from API:', personData.ModifiedDate, '→', date);
                 setMemberSinceDate(date);
               }
             }
@@ -100,7 +98,6 @@ const AccountPage: React.FC = () => {
           month: 'long',
           year: 'numeric'
         });
-        console.log('[AccountPage] Using createdAt from user object:', user.createdAt, '→', date);
         setMemberSinceDate(date);
       }
     }
@@ -109,6 +106,21 @@ const AccountPage: React.FC = () => {
   // Initialize edit form when profile data loads
   useEffect(() => {
     if (profileData) {
+      // Parse country code from phone number if it exists
+      let countryCode = '+1';
+      let phoneNumber = profileData.PhoneNumber || '';
+      
+      if (phoneNumber.startsWith('+')) {
+        const match = phoneNumber.match(/^(\+\d+)\s*(.*)$/);
+        if (match) {
+          countryCode = match[1];
+          phoneNumber = match[2];
+        }
+      }
+      
+      // Format the phone number for display
+      const formattedPhone = phoneNumber ? formatPhoneNumber(phoneNumber, countryCode) : '';
+      
       setEditProfileData({
         title: profileData.Title || '',
         firstName: profileData.FirstName,
@@ -116,7 +128,8 @@ const AccountPage: React.FC = () => {
         lastName: profileData.LastName,
         suffix: profileData.Suffix || '',
         email: profileData.EmailAddress,
-        phoneNumber: profileData.PhoneNumber || '',
+        countryCode: countryCode,
+        phoneNumber: formattedPhone,
         phoneNumberTypeId: profileData.PhoneNumberTypeID || 1,
       });
     }
@@ -527,18 +540,41 @@ const AccountPage: React.FC = () => {
                         <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
                           Phone Number
                         </label>
-                        <input
-                          type="tel"
-                          value={editProfileData.phoneNumber}
-                          onChange={(e) => {
-                            setEditProfileData(prev => ({ ...prev, phoneNumber: e.target.value }));
-                            if (profileErrors.phoneNumber) {
-                              setProfileErrors(prev => ({ ...prev, phoneNumber: '' }));
-                            }
-                          }}
-                          className="doodle-input w-full"
-                          placeholder="(555) 123-4567"
-                        />
+                        <div className="flex gap-2">
+                          <select
+                            value={editProfileData.countryCode}
+                            onChange={(e) => {
+                              setEditProfileData(prev => ({ ...prev, countryCode: e.target.value }));
+                            }}
+                            className="doodle-input w-24 flex-shrink-0"
+                          >
+                            <option value="+1">🇺🇸 +1</option>
+                            <option value="+44">🇬🇧 +44</option>
+                            <option value="+61">🇦🇺 +61</option>
+                            <option value="+81">🇯🇵 +81</option>
+                            <option value="+86">🇨🇳 +86</option>
+                            <option value="+49">🇩🇪 +49</option>
+                            <option value="+33">🇫🇷 +33</option>
+                            <option value="+39">🇮🇹 +39</option>
+                            <option value="+34">🇪🇸 +34</option>
+                            <option value="+52">🇲🇽 +52</option>
+                            <option value="+55">🇧🇷 +55</option>
+                            <option value="+91">🇮🇳 +91</option>
+                          </select>
+                          <input
+                            type="tel"
+                            value={editProfileData.phoneNumber}
+                            onChange={(e) => {
+                              const formatted = formatPhoneNumber(e.target.value, editProfileData.countryCode);
+                              setEditProfileData(prev => ({ ...prev, phoneNumber: formatted }));
+                              if (profileErrors.phoneNumber) {
+                                setProfileErrors(prev => ({ ...prev, phoneNumber: '' }));
+                              }
+                            }}
+                            className="doodle-input flex-1"
+                            placeholder="555-123-4567"
+                          />
+                        </div>
                         {profileErrors.phoneNumber && (
                           <p className="font-doodle text-xs text-doodle-accent mt-1">{profileErrors.phoneNumber}</p>
                         )}
@@ -568,6 +604,12 @@ const AccountPage: React.FC = () => {
                             setProfileErrors({});
                             
                             if (profileData) {
+                              // Strip formatting from phone number before saving
+                              const cleanPhoneNumber = parsePhoneNumber(editProfileData.phoneNumber);
+                              const fullPhoneNumber = cleanPhoneNumber 
+                                ? `${editProfileData.countryCode} ${cleanPhoneNumber}`
+                                : null;
+                              
                               await updateProfileMutation.mutateAsync({
                                 BusinessEntityID: profileData.BusinessEntityID,
                                 Title: editProfileData.title || null,
@@ -577,7 +619,7 @@ const AccountPage: React.FC = () => {
                                 Suffix: editProfileData.suffix || null,
                                 EmailAddress: editProfileData.email.trim(),
                                 EmailAddressID: profileData.EmailAddressID,
-                                PhoneNumber: editProfileData.phoneNumber.trim() || null,
+                                PhoneNumber: fullPhoneNumber,
                                 PhoneNumberTypeID: editProfileData.phoneNumberTypeId,
                               });
                               
@@ -613,6 +655,21 @@ const AccountPage: React.FC = () => {
                           setIsEditingProfile(false);
                           setProfileErrors({});
                           if (profileData) {
+                            // Parse country code from phone number
+                            let countryCode = '+1';
+                            let phoneNumber = profileData.PhoneNumber || '';
+                            
+                            if (phoneNumber.startsWith('+')) {
+                              const match = phoneNumber.match(/^(\+\d+)\s*(.*)$/);
+                              if (match) {
+                                countryCode = match[1];
+                                phoneNumber = match[2];
+                              }
+                            }
+                            
+                            // Format the phone number for display
+                            const formattedPhone = phoneNumber ? formatPhoneNumber(phoneNumber, countryCode) : '';
+                            
                             setEditProfileData({
                               title: profileData.Title || '',
                               firstName: profileData.FirstName,
@@ -620,7 +677,8 @@ const AccountPage: React.FC = () => {
                               lastName: profileData.LastName,
                               suffix: profileData.Suffix || '',
                               email: profileData.EmailAddress,
-                              phoneNumber: profileData.PhoneNumber || '',
+                              countryCode: countryCode,
+                              phoneNumber: formattedPhone,
                               phoneNumberTypeId: profileData.PhoneNumberTypeID || 1,
                             });
                           }
@@ -651,7 +709,22 @@ const AccountPage: React.FC = () => {
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
                         <span className="font-doodle text-sm text-doodle-text/70 sm:w-24">Phone:</span>
                         <span className="font-doodle font-bold text-doodle-text">
-                          {profileData.PhoneNumber}
+                          {(() => {
+                            // Parse and format the phone number for display
+                            let countryCode = '+1';
+                            let phoneNumber = profileData.PhoneNumber;
+                            
+                            if (phoneNumber.startsWith('+')) {
+                              const match = phoneNumber.match(/^(\+\d+)\s*(.*)$/);
+                              if (match) {
+                                countryCode = match[1];
+                                phoneNumber = match[2];
+                              }
+                            }
+                            
+                            const formatted = formatPhoneNumber(phoneNumber, countryCode);
+                            return `${countryCode} ${formatted}`;
+                          })()}
                           <span className="text-sm text-doodle-text/50 ml-2">
                             ({profileData.PhoneNumberTypeID === 1 ? 'Cell' : profileData.PhoneNumberTypeID === 2 ? 'Home' : 'Work'})
                           </span>
