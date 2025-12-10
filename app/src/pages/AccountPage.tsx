@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { ArrowLeft, User, Package, Heart, Settings, LogOut, ChevronDown, ChevronUp, ShoppingCart, X, Edit2, Save, Truck, MapPin, Plus, CreditCard, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, User, Package, Heart, Settings, LogOut, ChevronDown, ChevronUp, ShoppingCart, X, Edit2, Save, Truck, MapPin, Plus, CreditCard, Star, Trash2, Phone } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import { useAuth } from '@/context/AuthContext';
@@ -9,6 +9,7 @@ import { useCart } from '@/context/CartContext';
 import { useAddresses, Address } from '@/hooks/useAddresses';
 import { usePaymentMethods } from '@/hooks/usePaymentMethods';
 import { useOrders, getOrderStatusText, getOrderStatusColor } from '@/hooks/useOrders';
+import { useProfile, useUpdateProfile } from '@/hooks/useProfile';
 import { getCustomerByPersonId } from '@/lib/customerService';
 import { AddressForm } from '@/components/AddressForm';
 import { AddressCard } from '@/components/AddressCard';
@@ -16,9 +17,14 @@ import { toast } from '@/hooks/use-toast';
 import { z } from 'zod';
 
 const profileSchema = z.object({
+  title: z.string().optional(),
   firstName: z.string().trim().min(1, 'First name is required').max(50, 'First name must be less than 50 characters'),
+  middleName: z.string().trim().max(50, 'Middle name must be less than 50 characters').optional(),
   lastName: z.string().trim().min(1, 'Last name is required').max(50, 'Last name must be less than 50 characters'),
+  suffix: z.string().optional(),
   email: z.string().trim().email('Valid email is required').max(255, 'Email must be less than 255 characters'),
+  phoneNumber: z.string().trim().regex(/^[0-9\-\(\)\s\+]*$/, 'Invalid phone number format').max(25, 'Phone number must be less than 25 characters').optional(),
+  phoneNumberTypeId: z.number().optional(),
 });
 
 const AccountPage: React.FC = () => {
@@ -29,13 +35,19 @@ const AccountPage: React.FC = () => {
   const { paymentMethods, deletePaymentMethod, setDefaultPaymentMethod } = usePaymentMethods();
   const [customerId, setCustomerId] = useState<number | null>(null);
   const { data: orders = [], isLoading: ordersLoading } = useOrders(customerId || 0);
+  const { data: profileData, isLoading: profileLoading } = useProfile(user?.businessEntityId || 0);
+  const updateProfileMutation = useUpdateProfile();
   const [expandedOrder, setExpandedOrder] = useState<number | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [profileData, setProfileData] = useState({
+  const [editProfileData, setEditProfileData] = useState({
+    title: '',
     firstName: '',
+    middleName: '',
     lastName: '',
+    suffix: '',
     email: '',
+    phoneNumber: '',
+    phoneNumberTypeId: 1,
   });
   const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
   const [showAddressForm, setShowAddressForm] = useState(false);
@@ -47,12 +59,6 @@ const AccountPage: React.FC = () => {
     if (user) {
       console.log('[AccountPage] User object:', user);
       console.log('[AccountPage] user.createdAt:', user.createdAt);
-      
-      setProfileData({
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-      });
 
       // Fetch customer ID for orders
       if (user.businessEntityId) {
@@ -99,6 +105,22 @@ const AccountPage: React.FC = () => {
       }
     }
   }, [user]);
+
+  // Initialize edit form when profile data loads
+  useEffect(() => {
+    if (profileData) {
+      setEditProfileData({
+        title: profileData.Title || '',
+        firstName: profileData.FirstName,
+        middleName: profileData.MiddleName || '',
+        lastName: profileData.LastName,
+        suffix: profileData.Suffix || '',
+        email: profileData.EmailAddress,
+        phoneNumber: profileData.PhoneNumber || '',
+        phoneNumberTypeId: profileData.PhoneNumberTypeID || 1,
+      });
+    }
+  }, [profileData]);
 
   if (isLoading) {
     return (
@@ -349,7 +371,7 @@ const AccountPage: React.FC = () => {
                       Profile Settings
                     </h2>
                   </div>
-                  {!isEditingProfile && (
+                  {!isEditingProfile && !profileLoading && (
                     <button
                       onClick={() => setIsEditingProfile(true)}
                       className="doodle-button text-sm py-1 px-3 flex items-center gap-2"
@@ -360,18 +382,47 @@ const AccountPage: React.FC = () => {
                   )}
                 </div>
 
-                {isEditingProfile ? (
+                {profileLoading ? (
+                  <div className="text-center py-8">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-doodle-accent"></div>
+                    <p className="font-doodle text-doodle-text/70 mt-4">Loading profile...</p>
+                  </div>
+                ) : isEditingProfile ? (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div>
                         <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                          First Name
+                          Title
+                        </label>
+                        <select
+                          value={editProfileData.title}
+                          onChange={(e) => {
+                            setEditProfileData(prev => ({ ...prev, title: e.target.value }));
+                            if (profileErrors.title) {
+                              setProfileErrors(prev => ({ ...prev, title: '' }));
+                            }
+                          }}
+                          className="doodle-input w-full"
+                        >
+                          <option value="">None</option>
+                          <option value="Mr.">Mr.</option>
+                          <option value="Ms.">Ms.</option>
+                          <option value="Mrs.">Mrs.</option>
+                          <option value="Dr.">Dr.</option>
+                        </select>
+                        {profileErrors.title && (
+                          <p className="font-doodle text-xs text-doodle-accent mt-1">{profileErrors.title}</p>
+                        )}
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+                          First Name *
                         </label>
                         <input
                           type="text"
-                          value={profileData.firstName}
+                          value={editProfileData.firstName}
                           onChange={(e) => {
-                            setProfileData(prev => ({ ...prev, firstName: e.target.value }));
+                            setEditProfileData(prev => ({ ...prev, firstName: e.target.value }));
                             if (profileErrors.firstName) {
                               setProfileErrors(prev => ({ ...prev, firstName: '' }));
                             }
@@ -383,15 +434,37 @@ const AccountPage: React.FC = () => {
                           <p className="font-doodle text-xs text-doodle-accent mt-1">{profileErrors.firstName}</p>
                         )}
                       </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                          Last Name
+                          Middle Name
                         </label>
                         <input
                           type="text"
-                          value={profileData.lastName}
+                          value={editProfileData.middleName}
                           onChange={(e) => {
-                            setProfileData(prev => ({ ...prev, lastName: e.target.value }));
+                            setEditProfileData(prev => ({ ...prev, middleName: e.target.value }));
+                            if (profileErrors.middleName) {
+                              setProfileErrors(prev => ({ ...prev, middleName: '' }));
+                            }
+                          }}
+                          className="doodle-input w-full"
+                          placeholder="Middle name (optional)"
+                        />
+                        {profileErrors.middleName && (
+                          <p className="font-doodle text-xs text-doodle-accent mt-1">{profileErrors.middleName}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+                          Last Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={editProfileData.lastName}
+                          onChange={(e) => {
+                            setEditProfileData(prev => ({ ...prev, lastName: e.target.value }));
                             if (profileErrors.lastName) {
                               setProfileErrors(prev => ({ ...prev, lastName: '' }));
                             }
@@ -406,13 +479,38 @@ const AccountPage: React.FC = () => {
                     </div>
                     <div>
                       <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                        Email
+                        Suffix
+                      </label>
+                      <select
+                        value={editProfileData.suffix}
+                        onChange={(e) => {
+                          setEditProfileData(prev => ({ ...prev, suffix: e.target.value }));
+                          if (profileErrors.suffix) {
+                            setProfileErrors(prev => ({ ...prev, suffix: '' }));
+                          }
+                        }}
+                        className="doodle-input w-full"
+                      >
+                        <option value="">None</option>
+                        <option value="Jr.">Jr.</option>
+                        <option value="Sr.">Sr.</option>
+                        <option value="II">II</option>
+                        <option value="III">III</option>
+                        <option value="IV">IV</option>
+                      </select>
+                      {profileErrors.suffix && (
+                        <p className="font-doodle text-xs text-doodle-accent mt-1">{profileErrors.suffix}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+                        Email *
                       </label>
                       <input
                         type="email"
-                        value={profileData.email}
+                        value={editProfileData.email}
                         onChange={(e) => {
-                          setProfileData(prev => ({ ...prev, email: e.target.value }));
+                          setEditProfileData(prev => ({ ...prev, email: e.target.value }));
                           if (profileErrors.email) {
                             setProfileErrors(prev => ({ ...prev, email: '' }));
                           }
@@ -424,22 +522,74 @@ const AccountPage: React.FC = () => {
                         <p className="font-doodle text-xs text-doodle-accent mt-1">{profileErrors.email}</p>
                       )}
                     </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+                          Phone Number
+                        </label>
+                        <input
+                          type="tel"
+                          value={editProfileData.phoneNumber}
+                          onChange={(e) => {
+                            setEditProfileData(prev => ({ ...prev, phoneNumber: e.target.value }));
+                            if (profileErrors.phoneNumber) {
+                              setProfileErrors(prev => ({ ...prev, phoneNumber: '' }));
+                            }
+                          }}
+                          className="doodle-input w-full"
+                          placeholder="(555) 123-4567"
+                        />
+                        {profileErrors.phoneNumber && (
+                          <p className="font-doodle text-xs text-doodle-accent mt-1">{profileErrors.phoneNumber}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+                          Phone Type
+                        </label>
+                        <select
+                          value={editProfileData.phoneNumberTypeId}
+                          onChange={(e) => {
+                            setEditProfileData(prev => ({ ...prev, phoneNumberTypeId: parseInt(e.target.value) }));
+                          }}
+                          className="doodle-input w-full"
+                        >
+                          <option value="1">Cell</option>
+                          <option value="2">Home</option>
+                          <option value="3">Work</option>
+                        </select>
+                      </div>
+                    </div>
                     <div className="flex gap-3 pt-2">
                       <button
                         onClick={async () => {
                           try {
-                            profileSchema.parse(profileData);
+                            profileSchema.parse(editProfileData);
                             setProfileErrors({});
-                            setIsSaving(true);
-                            const success = await updateProfile(
-                              profileData.firstName.trim(),
-                              profileData.lastName.trim(),
-                              profileData.email.trim()
-                            );
-                            if (success) {
+                            
+                            if (profileData) {
+                              await updateProfileMutation.mutateAsync({
+                                BusinessEntityID: profileData.BusinessEntityID,
+                                Title: editProfileData.title || null,
+                                FirstName: editProfileData.firstName.trim(),
+                                MiddleName: editProfileData.middleName.trim() || null,
+                                LastName: editProfileData.lastName.trim(),
+                                Suffix: editProfileData.suffix || null,
+                                EmailAddress: editProfileData.email.trim(),
+                                EmailAddressID: profileData.EmailAddressID,
+                                PhoneNumber: editProfileData.phoneNumber.trim() || null,
+                                PhoneNumberTypeID: editProfileData.phoneNumberTypeId,
+                              });
+                              
+                              // Update auth context with new name/email
+                              await updateProfile(
+                                editProfileData.firstName.trim(),
+                                editProfileData.lastName.trim(),
+                                editProfileData.email.trim()
+                              );
+                              
                               setIsEditingProfile(false);
                             }
-                            setIsSaving(false);
                           } catch (error) {
                             if (error instanceof z.ZodError) {
                               const newErrors: Record<string, string> = {};
@@ -452,21 +602,26 @@ const AccountPage: React.FC = () => {
                             }
                           }
                         }}
-                        disabled={isSaving}
+                        disabled={updateProfileMutation.isPending}
                         className="doodle-button doodle-button-primary py-2 px-4 flex items-center gap-2"
                       >
                         <Save className="w-4 h-4" />
-                        {isSaving ? 'Saving...' : 'Save Changes'}
+                        {updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
                       </button>
                       <button
                         onClick={() => {
                           setIsEditingProfile(false);
                           setProfileErrors({});
-                          if (user) {
-                            setProfileData({
-                              firstName: user.firstName,
-                              lastName: user.lastName,
-                              email: user.email,
+                          if (profileData) {
+                            setEditProfileData({
+                              title: profileData.Title || '',
+                              firstName: profileData.FirstName,
+                              middleName: profileData.MiddleName || '',
+                              lastName: profileData.LastName,
+                              suffix: profileData.Suffix || '',
+                              email: profileData.EmailAddress,
+                              phoneNumber: profileData.PhoneNumber || '',
+                              phoneNumberTypeId: profileData.PhoneNumberTypeID || 1,
                             });
                           }
                         }}
@@ -476,18 +631,37 @@ const AccountPage: React.FC = () => {
                       </button>
                     </div>
                   </div>
-                ) : (
+                ) : profileData ? (
                   <div className="space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
                       <span className="font-doodle text-sm text-doodle-text/70 sm:w-24">Name:</span>
                       <span className="font-doodle font-bold text-doodle-text">
-                        {user?.firstName} {user?.lastName}
+                        {profileData.Title && `${profileData.Title} `}
+                        {profileData.FirstName}
+                        {profileData.MiddleName && ` ${profileData.MiddleName}`}
+                        {` ${profileData.LastName}`}
+                        {profileData.Suffix && `, ${profileData.Suffix}`}
                       </span>
                     </div>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
                       <span className="font-doodle text-sm text-doodle-text/70 sm:w-24">Email:</span>
-                      <span className="font-doodle font-bold text-doodle-text">{user?.email}</span>
+                      <span className="font-doodle font-bold text-doodle-text">{profileData.EmailAddress}</span>
                     </div>
+                    {profileData.PhoneNumber && (
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
+                        <span className="font-doodle text-sm text-doodle-text/70 sm:w-24">Phone:</span>
+                        <span className="font-doodle font-bold text-doodle-text">
+                          {profileData.PhoneNumber}
+                          <span className="text-sm text-doodle-text/50 ml-2">
+                            ({profileData.PhoneNumberTypeID === 1 ? 'Cell' : profileData.PhoneNumberTypeID === 2 ? 'Home' : 'Work'})
+                          </span>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="font-doodle text-doodle-text/70">Unable to load profile data.</p>
                   </div>
                 )}
               </div>
