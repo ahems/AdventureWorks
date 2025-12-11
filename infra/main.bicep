@@ -247,10 +247,12 @@ module staticWebAppFrontend 'modules/swa-app.bicep' = {
     keyVaultName: keyVaultName
     openAiDeploymentName: openAiDeploymentName
     redisConnectionString: redis.outputs.entraConnectionString
+    sqlConnectionString: database.outputs.connectionString
   }
   dependsOn: [
     cognitiveservices
     keyvault
+    database
   ]
 }
 

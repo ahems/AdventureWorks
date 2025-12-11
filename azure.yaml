@@ -38,6 +38,7 @@ services:
         config:
             buildCommand: VITE_API_URL=${VITE_API_URL} npm run build
             outputLocation: dist
+            apiLocation: ../api-functions
 infra:
   provider: bicep
   path: ./infra

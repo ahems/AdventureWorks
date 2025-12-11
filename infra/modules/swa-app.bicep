@@ -7,6 +7,7 @@ param apiAppIdUri string
 param keyVaultName string
 param openAiDeploymentName string
 param redisConnectionString string
+param sqlConnectionString string
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -38,12 +39,23 @@ resource staticWebApp 'Microsoft.Web/staticSites@2023-01-01' = {
     provider: 'None'
     buildProperties: {
       appLocation: '/'
-      apiLocation: ''
+      apiLocation: 'api-functions'
       outputLocation: 'dist'
     }
     stagingEnvironmentPolicy: 'Enabled'
     allowConfigFileUpdates: true
     enterpriseGradeCdnStatus: 'Disabled'
+  }
+}
+
+// Configure app settings for managed Functions API
+resource swaAppSettings 'Microsoft.Web/staticSites/config@2023-01-01' = {
+  parent: staticWebApp
+  name: 'functionappsettings'
+  properties: {
+    AZURE_CLIENT_ID: azidentity.properties.clientId
+    SQL_CONNECTION_STRING: sqlConnectionString
+    APPLICATIONINSIGHTS_CONNECTION_STRING: appInsights.properties.ConnectionString
   }
 }
 
