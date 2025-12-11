@@ -23,8 +23,8 @@ resource staticWebApp 'Microsoft.Web/staticSites@2023-01-01' = {
     'azd-service-name': 'app'
   }
   sku: {
-    name: 'Free'
-    tier: 'Free'
+    name: 'Standard'
+    tier: 'Standard'
   }
   identity: {
     type: 'UserAssigned'
@@ -48,22 +48,8 @@ resource staticWebApp 'Microsoft.Web/staticSites@2023-01-01' = {
 }
 
 // Note: Build-time environment variables (like VITE_API_URL) are passed by azd during deployment
-// Runtime configuration for Static Web Apps can be set here if needed for API functions
-resource swaAppSettings 'Microsoft.Web/staticSites/config@2023-01-01' = {
-  parent: staticWebApp
-  name: 'appsettings'
-  properties: {
-    // These are primarily for SWA API functions if used
-    // The frontend app gets environment variables during build via azd
-    KEY_VAULT_NAME: keyVaultName
-    REDIS_CONNECTION_STRING: redisConnectionString
-    AZURE_CLIENT_ID: azidentity.properties.clientId
-    APPLICATIONINSIGHTS_CONNECTION_STRING: appInsights.properties.ConnectionString
-    AZURE_OPENAI_DEPLOYMENT_NAME: openAiDeploymentName
-    API_URL: apiUrl
-    API_APP_ID_URI: apiAppIdUri
-  }
-}
+// Static Web Apps with no API functions don't need app settings configured here
+// The frontend is a static SPA that gets its config baked in at build time
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
   name: keyVaultName
