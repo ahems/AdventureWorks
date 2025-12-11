@@ -257,7 +257,7 @@ const ProductPage: React.FC = () => {
                       {subcategory.Name}
                     </span>
                   )}
-                  {(product.DiscountPct || product.salePercent) && (
+                  {product.DiscountPct && (
                     <span className="bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text rotate-[-2deg]">
                       {product.SpecialOfferDescription || 'Limited-Time Special'}
                     </span>
@@ -298,7 +298,7 @@ const ProductPage: React.FC = () => {
                       </span>
                     </div>
                     <span className="font-doodle text-sm text-doodle-green font-bold">
-                      Save {Math.round((product.DiscountPct || product.salePercent! / 100) * 100)}%
+                      Save {Math.round(product.DiscountPct * 100)}%
                     </span>
                   </div>
                 ) : (

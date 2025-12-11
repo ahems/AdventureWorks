@@ -59,7 +59,6 @@ export interface Product {
   Style?: string | null;
   Description?: string;
   ImageUrl?: string;
-  salePercent?: number; // Optional discount percentage (e.g., 20 for 20% off)
   // Discount data from SpecialOffer
   SpecialOfferID?: number;
   DiscountPct?: number; // Decimal format (e.g., 0.5 for 50% off)
@@ -84,13 +83,9 @@ export interface Product {
 }
 
 export const getSalePrice = (product: Product): number | null => {
-  // Use DiscountPct from API if available (decimal format: 0.5 = 50%)
+  // Use DiscountPct from API (decimal format: 0.5 = 50%)
   if (product.DiscountPct && product.DiscountPct > 0) {
     return product.ListPrice * (1 - product.DiscountPct);
-  }
-  // Fallback to legacy salePercent (percentage format: 20 = 20%)
-  if (product.salePercent && product.salePercent > 0) {
-    return product.ListPrice * (1 - product.salePercent / 100);
   }
   return null;
 };

@@ -94,9 +94,9 @@ const WishlistPage: React.FC = () => {
             return (
               <div key={product.ProductID} className="doodle-card p-4 relative group">
                 {/* Sale Badge */}
-                {product.salePercent && (
+                {product.DiscountPct && (
                   <div className="absolute top-6 left-6 z-10 bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text rotate-[-3deg]">
-                    {product.salePercent}% OFF
+                    {Math.round(product.DiscountPct * 100)}% OFF
                   </div>
                 )}
 

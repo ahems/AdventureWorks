@@ -1,12 +1,14 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { Product, CartItem, getSalePrice } from '@/types/product';
+import React, { createContext, useContext, useMemo, ReactNode } from 'react';
+import { Product, CartItem, getSalePrice, ShoppingCartItem } from '@/types/product';
 import { toast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
-
-const CART_STORAGE_KEY = 'adventure_cart';
+import { useAuth } from '@/context/AuthContext';
+import { useShoppingCart, useAddToCart, useUpdateCartItem, useDeleteCartItem, useClearCart } from '@/hooks/useShoppingCart';
+import { useProducts } from '@/hooks/useProducts';
 
 interface CartContextType {
   items: CartItem[];
+  isLoading: boolean;
   addToCart: (product: Product, quantity?: number, selectedSize?: string, selectedColor?: string) => void;
   removeFromCart: (productId: number, selectedSize?: string, selectedColor?: string) => void;
   updateQuantity: (productId: number, quantity: number, selectedSize?: string, selectedColor?: string) => void;
@@ -19,146 +21,177 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-// Helper to create unique cart item key
-const getCartItemKey = (productId: number, size?: string, color?: string) => {
-  return `${productId}-${size || 'none'}-${color || 'none'}`;
-};
-
-// Load cart from localStorage
-const loadCart = (): CartItem[] => {
-  try {
-    const saved = localStorage.getItem(CART_STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [];
-  } catch {
-    return [];
-  }
-};
-
-// Save cart to localStorage
-const saveCart = (items: CartItem[]) => {
-  localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
-};
-
 export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [items, setItems] = useState<CartItem[]>(() => loadCart());
-
-  // Persist cart to localStorage whenever it changes
-  useEffect(() => {
-    saveCart(items);
-  }, [items]);
-
-  const addToCart = useCallback((product: Product, quantity: number = 1, selectedSize?: string, selectedColor?: string) => {
-    setItems(prevItems => {
-      const existingItem = prevItems.find(item => 
-        item.ProductID === product.ProductID &&
-        item.selectedSize === selectedSize &&
-        item.selectedColor === selectedColor
-      );
+  const { user } = useAuth();
+  const shoppingCartId = user?.businessEntityId?.toString() || null;
+  
+  // Fetch cart items from API
+  const { data: cartItems = [], isLoading: cartLoading } = useShoppingCart(shoppingCartId);
+  const { data: allProducts = [], isLoading: productsLoading } = useProducts();
+  
+  // Mutations
+  const addToCartMutation = useAddToCart();
+  const updateCartMutation = useUpdateCartItem();
+  const deleteCartMutation = useDeleteCartItem();
+  const clearCartMutation = useClearCart();
+  
+  const isLoading = cartLoading || productsLoading;
+  
+  // Combine cart items with product details to create CartItem objects
+  const items = useMemo<CartItem[]>(() => {
+    if (!cartItems.length || !allProducts.length) return [];
+    
+    return cartItems.map(cartItem => {
+      const product = allProducts.find(p => p.ProductID === cartItem.ProductID);
+      if (!product) return null;
       
-      const displayName = selectedSize || selectedColor 
-        ? `${product.Name}${selectedSize ? ` (${selectedSize})` : ''}${selectedColor ? ` - ${selectedColor}` : ''}`
-        : product.Name;
+      return {
+        ...product,
+        quantity: cartItem.Quantity,
+        ShoppingCartItemID: cartItem.ShoppingCartItemID,
+      } as CartItem & { ShoppingCartItemID: number };
+    }).filter((item): item is CartItem & { ShoppingCartItemID: number } => item !== null);
+  }, [cartItems, allProducts]);
 
-      if (existingItem) {
-        toast({
-          title: "Cart Updated!",
-          description: `Added another ${displayName} to your cart`,
-          action: (
-            <ToastAction altText="View cart" asChild>
-              <a href="/cart">View Cart</a>
-            </ToastAction>
-          ),
-        });
-        return prevItems.map(item =>
-          item.ProductID === product.ProductID &&
-          item.selectedSize === selectedSize &&
-          item.selectedColor === selectedColor
-            ? { ...item, quantity: item.quantity + quantity }
-            : item
-        );
-      } else {
-        toast({
-          title: "Added to Cart!",
-          description: `${displayName} is now in your cart`,
-          action: (
-            <ToastAction altText="View cart" asChild>
-              <a href="/cart">View Cart</a>
-            </ToastAction>
-          ),
-        });
-        return [...prevItems, { ...product, quantity, selectedSize, selectedColor }];
-      }
-    });
-  }, []);
-
-  const removeFromCart = useCallback((productId: number, selectedSize?: string, selectedColor?: string) => {
-    setItems(prevItems => {
-      const item = prevItems.find(i => 
-        i.ProductID === productId &&
-        i.selectedSize === selectedSize &&
-        i.selectedColor === selectedColor
-      );
-      if (item) {
-        const displayName = selectedSize || selectedColor 
-          ? `${item.Name}${selectedSize ? ` (${selectedSize})` : ''}${selectedColor ? ` - ${selectedColor}` : ''}`
-          : item.Name;
-        toast({
-          title: "Removed from Cart",
-          description: `${displayName} has been removed`,
-        });
-      }
-      return prevItems.filter(item => 
-        !(item.ProductID === productId &&
-          item.selectedSize === selectedSize &&
-          item.selectedColor === selectedColor)
-      );
-    });
-  }, []);
-
-  const updateQuantity = useCallback((productId: number, quantity: number, selectedSize?: string, selectedColor?: string) => {
-    if (quantity <= 0) {
-      removeFromCart(productId, selectedSize, selectedColor);
+  const addToCart = async (product: Product, quantity: number = 1, selectedSize?: string, selectedColor?: string) => {
+    if (!shoppingCartId) {
+      toast({
+        title: "Please Sign In",
+        description: "You need to be signed in to add items to your cart",
+        variant: "destructive",
+      });
       return;
     }
-    setItems(prevItems =>
-      prevItems.map(item =>
-        item.ProductID === productId &&
-        item.selectedSize === selectedSize &&
-        item.selectedColor === selectedColor
-          ? { ...item, quantity }
-          : item
-      )
-    );
-  }, [removeFromCart]);
 
-  const clearCart = useCallback(() => {
-    setItems([]);
+    const displayName = selectedSize || selectedColor 
+      ? `${product.Name}${selectedSize ? ` (${selectedSize})` : ''}${selectedColor ? ` - ${selectedColor}` : ''}`
+      : product.Name;
+
+    // Check if item already exists in cart
+    const existingItem = items.find(item => 
+      item.ProductID === product.ProductID &&
+      item.selectedSize === selectedSize &&
+      item.selectedColor === selectedColor
+    );
+
+    if (existingItem && 'ShoppingCartItemID' in existingItem) {
+      // Update existing item quantity
+      const newQuantity = existingItem.quantity + quantity;
+      await updateCartMutation.mutateAsync({
+        shoppingCartItemId: (existingItem as CartItem & { ShoppingCartItemID: number }).ShoppingCartItemID,
+        quantity: newQuantity,
+        shoppingCartId,
+      });
+      
+      toast({
+        title: "Cart Updated!",
+        description: `Added another ${displayName} to your cart`,
+        action: (
+          <ToastAction altText="View cart" asChild>
+            <a href="/cart">View Cart</a>
+          </ToastAction>
+        ),
+      });
+    } else {
+      // Add new item to cart
+      await addToCartMutation.mutateAsync({
+        shoppingCartId,
+        productId: product.ProductID,
+        quantity,
+      });
+      
+      toast({
+        title: "Added to Cart!",
+        description: `${displayName} is now in your cart`,
+        action: (
+          <ToastAction altText="View cart" asChild>
+            <a href="/cart">View Cart</a>
+          </ToastAction>
+        ),
+      });
+    }
+  };
+
+  const removeFromCart = async (productId: number, selectedSize?: string, selectedColor?: string) => {
+    if (!shoppingCartId) return;
+
+    const item = items.find(i => 
+      i.ProductID === productId &&
+      i.selectedSize === selectedSize &&
+      i.selectedColor === selectedColor
+    );
+    
+    if (item && 'ShoppingCartItemID' in item) {
+      const displayName = selectedSize || selectedColor 
+        ? `${item.Name}${selectedSize ? ` (${selectedSize})` : ''}${selectedColor ? ` - ${selectedColor}` : ''}`
+        : item.Name;
+      
+      await deleteCartMutation.mutateAsync({
+        shoppingCartItemId: (item as CartItem & { ShoppingCartItemID: number }).ShoppingCartItemID,
+        shoppingCartId,
+      });
+      
+      toast({
+        title: "Removed from Cart",
+        description: `${displayName} has been removed`,
+      });
+    }
+  };
+
+  const updateQuantity = async (productId: number, quantity: number, selectedSize?: string, selectedColor?: string) => {
+    if (!shoppingCartId) return;
+
+    if (quantity <= 0) {
+      await removeFromCart(productId, selectedSize, selectedColor);
+      return;
+    }
+
+    const item = items.find(i => 
+      i.ProductID === productId &&
+      i.selectedSize === selectedSize &&
+      i.selectedColor === selectedColor
+    );
+
+    if (item && 'ShoppingCartItemID' in item) {
+      await updateCartMutation.mutateAsync({
+        shoppingCartItemId: (item as CartItem & { ShoppingCartItemID: number }).ShoppingCartItemID,
+        quantity,
+        shoppingCartId,
+      });
+    }
+  };
+
+  const clearCart = async () => {
+    if (!shoppingCartId) return;
+
+    await clearCartMutation.mutateAsync(shoppingCartId);
+    
     toast({
       title: "Cart Cleared",
       description: "All items have been removed from your cart",
     });
-  }, []);
+  };
 
-  const getTotalItems = useCallback(() => {
+  const getTotalItems = () => {
     return items.reduce((total, item) => total + item.quantity, 0);
-  }, [items]);
+  };
 
   // Get total price with sale prices applied
-  const getTotalPrice = useCallback(() => {
+  const getTotalPrice = () => {
     return items.reduce((total, item) => {
       const salePrice = getSalePrice(item);
       const price = salePrice !== null ? salePrice : item.ListPrice;
       return total + (price * item.quantity);
     }, 0);
-  }, [items]);
+  };
 
   // Get original price without discounts
-  const getOriginalPrice = useCallback(() => {
+  const getOriginalPrice = () => {
     return items.reduce((total, item) => total + (item.ListPrice * item.quantity), 0);
-  }, [items]);
+  };
 
   // Get total discount amount
-  const getTotalDiscount = useCallback(() => {
+  const getTotalDiscount = () => {
     return items.reduce((total, item) => {
       const salePrice = getSalePrice(item);
       if (salePrice !== null) {
@@ -166,11 +199,12 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       return total;
     }, 0);
-  }, [items]);
+  };
 
   return (
     <CartContext.Provider value={{
       items,
+      isLoading,
       addToCart,
       removeFromCart,
       updateQuantity,

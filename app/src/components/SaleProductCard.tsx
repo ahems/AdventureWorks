@@ -138,7 +138,7 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
             </span>
           </div>
           <span className="font-doodle text-xs text-doodle-green font-bold">
-            Save {Math.round((product.DiscountPct || product.salePercent! / 100) * 100)}%
+            Save {Math.round((product.DiscountPct || 0) * 100)}%
           </span>
         </div>
 

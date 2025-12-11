@@ -8,7 +8,7 @@ import { useWishlist } from '@/context/WishlistContext';
 import { getSalePrice } from '@/types/product';
 
 const CartPage: React.FC = () => {
-  const { items, updateQuantity, removeFromCart, clearCart } = useCart();
+  const { items, isLoading, updateQuantity, removeFromCart, clearCart } = useCart();
   const { addToWishlist, isInWishlist } = useWishlist();
   
   // Calculate totals with sale prices
@@ -34,6 +34,54 @@ const CartPage: React.FC = () => {
 
   const shipping = totalAfterDiscount > 50 ? 0 : 9.99;
   const grandTotal = totalAfterDiscount + shipping;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-1 container mx-auto px-4 py-12">
+          <h1 className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text mb-8">
+            Shopping Cart
+          </h1>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Cart items skeleton */}
+            <div className="lg:col-span-2 space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="doodle-card p-6">
+                  <div className="flex gap-6">
+                    <div className="w-24 h-24 bg-doodle-text/10 animate-pulse"></div>
+                    <div className="flex-1 space-y-3">
+                      <div className="h-6 w-3/4 bg-doodle-text/10 animate-pulse"></div>
+                      <div className="h-4 w-1/2 bg-doodle-text/10 animate-pulse"></div>
+                      <div className="h-8 w-32 bg-doodle-text/10 animate-pulse"></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            {/* Summary skeleton */}
+            <div className="lg:col-span-1">
+              <div className="doodle-card p-6 space-y-4">
+                <div className="h-8 w-32 bg-doodle-text/10 animate-pulse"></div>
+                <div className="space-y-3">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="flex justify-between">
+                      <div className="h-4 w-20 bg-doodle-text/10 animate-pulse"></div>
+                      <div className="h-4 w-16 bg-doodle-text/10 animate-pulse"></div>
+                    </div>
+                  ))}
+                </div>
+                <div className="h-12 w-full bg-doodle-text/10 animate-pulse"></div>
+              </div>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (
@@ -125,7 +173,7 @@ const CartPage: React.FC = () => {
                       </div>
 
                       {/* Price with discount display */}
-                      {item.salePercent ? (
+                      {item.DiscountPct ? (
                         <div className="mt-2">
                           <div className="flex items-center gap-2">
                             <span className="font-doodle text-sm text-doodle-text/50 line-through">
@@ -135,8 +183,9 @@ const CartPage: React.FC = () => {
                               ${(getSalePrice(item) || item.ListPrice).toFixed(2)}
                             </span>
                           </div>
-                          <span className="font-doodle text-xs text-doodle-green font-bold">
-                            Save {item.salePercent}%
+                          <span className="font-doodle text-xs text-doodle-green font-bold flex items-center gap-1">
+                            <Tag className="w-3 h-3" />
+                            Save {Math.round(item.DiscountPct * 100)}%
                           </span>
                         </div>
                       ) : (

@@ -66,9 +66,9 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenCh
           {/* Product Image */}
           <div className="relative bg-doodle-bg border-b-4 md:border-b-0 md:border-r-4 border-doodle-text p-8 flex items-center justify-center">
             {/* Sale Badge */}
-            {(product.DiscountPct || product.salePercent) && (
+            {product.DiscountPct && (
               <div className="absolute top-4 left-4 z-10 bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text rotate-[-3deg]">
-                {product.SpecialOfferDescription || `${Math.round((product.DiscountPct || product.salePercent! / 100) * 100)}% OFF`}
+                {product.SpecialOfferDescription || `${Math.round((product.DiscountPct || 0) * 100)}% OFF`}
               </div>
             )}
 
@@ -133,7 +133,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenCh
                     ${product.ListPrice.toFixed(2)}
                   </span>
                   <span className="font-doodle text-sm font-bold text-doodle-green">
-                    Save {Math.round((product.DiscountPct || product.salePercent! / 100) * 100)}%
+                    Save {Math.round((product.DiscountPct || 0) * 100)}%
                   </span>
                 </>
               ) : (

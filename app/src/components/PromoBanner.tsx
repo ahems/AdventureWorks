@@ -6,8 +6,8 @@ import { useSaleProducts } from '@/hooks/useProducts';
 const PromoBanner: React.FC = () => {
   const { data: saleProducts = [], isLoading } = useSaleProducts();
   const maxDiscount = Math.max(...saleProducts.map(p => {
-    // Convert DiscountPct (decimal) to percentage, or use legacy salePercent
-    return p.DiscountPct ? Math.round(p.DiscountPct * 100) : (p.salePercent || 0);
+    // Convert DiscountPct (decimal) to percentage
+    return p.DiscountPct ? Math.round(p.DiscountPct * 100) : 0;
   }), 0);
 
   if (isLoading) {
@@ -105,12 +105,12 @@ const PromoBanner: React.FC = () => {
           <div className="flex gap-8 animate-marquee whitespace-nowrap font-doodle text-xs text-white/70">
             {saleProducts.map((product) => (
               <span key={product.ProductID} className="flex items-center gap-1">
-                🏷️ {product.Name} - {Math.round((product.DiscountPct || product.salePercent! / 100) * 100)}% OFF
+                🏷️ {product.Name} - {Math.round((product.DiscountPct || 0) * 100)}% OFF
               </span>
             ))}
             {saleProducts.map((product) => (
               <span key={`dup-${product.ProductID}`} className="flex items-center gap-1">
-                🏷️ {product.Name} - {Math.round((product.DiscountPct || product.salePercent! / 100) * 100)}% OFF
+                🏷️ {product.Name} - {Math.round((product.DiscountPct || 0) * 100)}% OFF
               </span>
             ))}
           </div>

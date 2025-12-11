@@ -106,7 +106,7 @@ const SearchPage: React.FC = () => {
         });
         break;
       case 'discount':
-        result.sort((a, b) => (b.salePercent || 0) - (a.salePercent || 0));
+        result.sort((a, b) => (b.DiscountPct || 0) - (a.DiscountPct || 0));
         break;
       case 'rating':
         result.sort((a, b) => {

@@ -10,12 +10,15 @@ import { usePaymentMethods, SavedPaymentMethod } from '@/hooks/usePaymentMethods
 import { AddressCard } from '@/components/AddressCard';
 import { toast } from '@/hooks/use-toast';
 import { z } from 'zod';
+import { getSalePrice } from '@/types/product';
+import { useProfile } from '@/hooks/useProfile';
+import { formatPhoneNumber, parsePhoneNumber } from '@/lib/phoneFormatter';
 
 const shippingSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   email: z.string().email('Valid email is required'),
-  phone: z.string().min(10, 'Valid phone number is required'),
+  phone: z.string().trim().regex(/^[0-9\-\(\)\s\+]*$/, 'Invalid phone number format').max(25, 'Phone number must be less than 25 characters').optional(),
   address: z.string().min(5, 'Address is required'),
   city: z.string().min(2, 'City is required'),
   state: z.string().min(2, 'State is required'),
@@ -59,9 +62,11 @@ const CheckoutPage: React.FC = () => {
   const navigate = useNavigate();
   const { items, getTotalPrice, getOriginalPrice, getTotalDiscount, clearCart } = useCart();
   const { user } = useAuth();
+  const { data: profileData } = useProfile(user?.businessEntityId || 0);
   const { addresses, getDefaultAddress, addAddress } = useAddresses();
   const { paymentMethods, getDefaultPaymentMethod, addPaymentMethod } = usePaymentMethods();
   const [step, setStep] = useState(1);
+  const [countryCode, setCountryCode] = useState('+1');
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [useNewAddress, setUseNewAddress] = useState(false);
@@ -75,6 +80,10 @@ const CheckoutPage: React.FC = () => {
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
   const [codeError, setCodeError] = useState('');
   
+  const [title, setTitle] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [suffix, setSuffix] = useState('');
+  
   const [shippingData, setShippingData] = useState<ShippingData>({
     firstName: user?.firstName || '',
     lastName: user?.lastName || '',
@@ -86,6 +95,34 @@ const CheckoutPage: React.FC = () => {
     zipCode: '',
     country: 'United States',
   });
+
+  // Initialize profile data (phone, title, middleName, suffix)
+  useEffect(() => {
+    if (profileData) {
+      // Set title, middleName, suffix
+      if (profileData.Title) setTitle(profileData.Title);
+      if (profileData.MiddleName) setMiddleName(profileData.MiddleName);
+      if (profileData.Suffix) setSuffix(profileData.Suffix);
+      
+      // Set phone number
+      if (profileData.PhoneNumber) {
+        let parsedCountryCode = '+1';
+        let phoneNumber = profileData.PhoneNumber;
+        
+        if (phoneNumber.startsWith('+')) {
+          const match = phoneNumber.match(/^(\+\d+)\s*(.*)$/);
+          if (match) {
+            parsedCountryCode = match[1];
+            phoneNumber = match[2];
+          }
+        }
+        
+        const formattedPhone = formatPhoneNumber(phoneNumber, parsedCountryCode);
+        setCountryCode(parsedCountryCode);
+        setShippingData(prev => ({ ...prev, phone: formattedPhone }));
+      }
+    }
+  }, [profileData]);
   
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'paypal'>('card');
   const [cardData, setCardData] = useState({
@@ -411,18 +448,48 @@ const CheckoutPage: React.FC = () => {
                         </p>
                       )}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:col-span-2">
+                      <div>
+                        <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+                          Title
+                        </label>
+                        <select
+                          value={title}
+                          onChange={(e) => setTitle(e.target.value)}
+                          className="doodle-input w-full"
+                        >
+                          <option value="">None</option>
+                          <option value="Mr.">Mr.</option>
+                          <option value="Ms.">Ms.</option>
+                          <option value="Mrs.">Mrs.</option>
+                          <option value="Dr.">Dr.</option>
+                        </select>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+                          First Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={shippingData.firstName}
+                          onChange={(e) => handleShippingChange('firstName', e.target.value)}
+                          className="doodle-input w-full"
+                          placeholder="John"
+                        />
+                        {errors.firstName && <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.firstName}</p>}
+                      </div>
+                    </div>
                     <div>
                       <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                        First Name *
+                        Middle Name
                       </label>
                       <input
                         type="text"
-                        value={shippingData.firstName}
-                        onChange={(e) => handleShippingChange('firstName', e.target.value)}
+                        value={middleName}
+                        onChange={(e) => setMiddleName(e.target.value)}
                         className="doodle-input w-full"
-                        placeholder="John"
+                        placeholder="Middle name (optional)"
                       />
-                      {errors.firstName && <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.firstName}</p>}
                     </div>
                     <div>
                       <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
@@ -439,6 +506,23 @@ const CheckoutPage: React.FC = () => {
                     </div>
                     <div>
                       <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+                        Suffix
+                      </label>
+                      <select
+                        value={suffix}
+                        onChange={(e) => setSuffix(e.target.value)}
+                        className="doodle-input w-full"
+                      >
+                        <option value="">None</option>
+                        <option value="Jr.">Jr.</option>
+                        <option value="Sr.">Sr.</option>
+                        <option value="II">II</option>
+                        <option value="III">III</option>
+                        <option value="IV">IV</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
                         Email *
                       </label>
                       <input
@@ -452,15 +536,38 @@ const CheckoutPage: React.FC = () => {
                     </div>
                     <div>
                       <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                        Phone *
+                        Phone
                       </label>
-                      <input
-                        type="tel"
-                        value={shippingData.phone}
-                        onChange={(e) => handleShippingChange('phone', e.target.value)}
-                        className="doodle-input w-full"
-                        placeholder="(555) 123-4567"
-                      />
+                      <div className="flex gap-2">
+                        <select
+                          value={countryCode}
+                          onChange={(e) => setCountryCode(e.target.value)}
+                          className="doodle-input w-24 flex-shrink-0"
+                        >
+                          <option value="+1">🇺🇸 +1</option>
+                          <option value="+44">🇬🇧 +44</option>
+                          <option value="+61">🇦🇺 +61</option>
+                          <option value="+81">🇯🇵 +81</option>
+                          <option value="+86">🇨🇳 +86</option>
+                          <option value="+49">🇩🇪 +49</option>
+                          <option value="+33">🇫🇷 +33</option>
+                          <option value="+39">🇮🇹 +39</option>
+                          <option value="+34">🇪🇸 +34</option>
+                          <option value="+52">🇲🇽 +52</option>
+                          <option value="+55">🇧🇷 +55</option>
+                          <option value="+91">🇮🇳 +91</option>
+                        </select>
+                        <input
+                          type="tel"
+                          value={shippingData.phone}
+                          onChange={(e) => {
+                            const formatted = formatPhoneNumber(e.target.value, countryCode);
+                            handleShippingChange('phone', formatted);
+                          }}
+                          className="doodle-input flex-1"
+                          placeholder="555-123-4567"
+                        />
+                      </div>
                       {errors.phone && <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.phone}</p>}
                     </div>
                     <div className="md:col-span-2">
@@ -887,7 +994,7 @@ const CheckoutPage: React.FC = () => {
                 {/* Items */}
                 <div className="space-y-3 max-h-48 overflow-y-auto mb-4">
                   {items.map((item) => {
-                    const salePrice = item.salePercent ? item.ListPrice * (1 - item.salePercent / 100) : null;
+                    const salePrice = getSalePrice(item);
                     const itemPrice = salePrice || item.ListPrice;
                     return (
                       <div key={`${item.ProductID}-${item.selectedSize}-${item.selectedColor}`} className="flex gap-3">
@@ -904,7 +1011,7 @@ const CheckoutPage: React.FC = () => {
                             </p>
                             {salePrice && (
                               <span className="font-doodle text-xs text-doodle-green font-bold">
-                                Save {item.salePercent}%
+                                Save {Math.round((item.DiscountPct || 0) * 100)}%
                               </span>
                             )}
                           </div>

@@ -547,3 +547,114 @@ export let products: Product[] = [];
     console.error('Error initializing data:', error);
   }
 })();
+
+// Shopping Cart API Functions
+import {
+  GET_SHOPPING_CART_ITEMS,
+  CREATE_CART_ITEM,
+  UPDATE_CART_ITEM,
+  DELETE_CART_ITEM,
+} from '@/lib/graphql-queries';
+import { ShoppingCartItem } from '@/types/product';
+
+interface ShoppingCartItemsResponse {
+  shoppingCartItems: GraphQLResponse<ShoppingCartItem>;
+}
+
+interface CreateCartItemResponse {
+  createShoppingCartItem: ShoppingCartItem;
+}
+
+interface UpdateCartItemResponse {
+  updateShoppingCartItem: ShoppingCartItem;
+}
+
+interface DeleteCartItemResponse {
+  deleteShoppingCartItem: { ShoppingCartItemID: number };
+}
+
+// Get shopping cart items for a user
+export const getShoppingCartItems = async (shoppingCartId: string): Promise<ShoppingCartItem[]> => {
+  try {
+    const data = await graphqlClient.request<ShoppingCartItemsResponse>(
+      GET_SHOPPING_CART_ITEMS,
+      { shoppingCartId }
+    );
+    return data.shoppingCartItems.items;
+  } catch (error) {
+    console.error('Error fetching shopping cart items:', error);
+    return [];
+  }
+};
+
+// Create a new shopping cart item
+export const createCartItem = async (
+  shoppingCartId: string,
+  productId: number,
+  quantity: number
+): Promise<ShoppingCartItem | null> => {
+  try {
+    const data = await graphqlClient.request<CreateCartItemResponse>(
+      CREATE_CART_ITEM,
+      {
+        item: {
+          ShoppingCartID: shoppingCartId,
+          ProductID: productId,
+          Quantity: quantity,
+        }
+      }
+    );
+    return data.createShoppingCartItem;
+  } catch (error) {
+    console.error('Error creating cart item:', error);
+    return null;
+  }
+};
+
+// Update cart item quantity
+export const updateCartItemQuantity = async (
+  shoppingCartItemId: number,
+  quantity: number
+): Promise<ShoppingCartItem | null> => {
+  try {
+    const data = await graphqlClient.request<UpdateCartItemResponse>(
+      UPDATE_CART_ITEM,
+      {
+        shoppingCartItemId,
+        item: {
+          Quantity: quantity,
+        }
+      }
+    );
+    return data.updateShoppingCartItem;
+  } catch (error) {
+    console.error('Error updating cart item:', error);
+    return null;
+  }
+};
+
+// Delete a cart item
+export const deleteCartItem = async (shoppingCartItemId: number): Promise<boolean> => {
+  try {
+    await graphqlClient.request<DeleteCartItemResponse>(
+      DELETE_CART_ITEM,
+      { shoppingCartItemId }
+    );
+    return true;
+  } catch (error) {
+    console.error('Error deleting cart item:', error);
+    return false;
+  }
+};
+
+// Delete all cart items for a user
+export const clearShoppingCart = async (shoppingCartId: string): Promise<boolean> => {
+  try {
+    const items = await getShoppingCartItems(shoppingCartId);
+    await Promise.all(items.map(item => deleteCartItem(item.ShoppingCartItemID)));
+    return true;
+  } catch (error) {
+    console.error('Error clearing shopping cart:', error);
+    return false;
+  }
+};

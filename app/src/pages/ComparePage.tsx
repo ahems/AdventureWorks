@@ -95,7 +95,7 @@ const ComparePage: React.FC = () => {
                 ${salePrice.toFixed(2)}
               </span>
               <span className="font-doodle text-xs text-doodle-green font-bold">
-                Save {p.salePercent}%
+                Save {Math.round((p.DiscountPct || 0) * 100)}%
               </span>
             </div>
           );

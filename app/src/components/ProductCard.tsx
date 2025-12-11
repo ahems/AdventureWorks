@@ -63,9 +63,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, variant = 'default' 
         className="doodle-card block p-4 group relative"
       >
         {/* Sale Badge */}
-        {(product.DiscountPct || product.salePercent) && (
+        {product.DiscountPct && (
           <div className="absolute top-6 left-6 z-10 bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text rotate-[-3deg]">
-            {variant === 'featured' ? (product.SpecialOfferDescription || 'Limited-Time Special') : `${Math.round((product.DiscountPct || product.salePercent! / 100) * 100)}% OFF`}
+            {variant === 'featured' ? (product.SpecialOfferDescription || 'Limited-Time Special') : `${Math.round((product.DiscountPct || 0) * 100)}% OFF`}
           </div>
         )}
 
@@ -189,7 +189,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, variant = 'default' 
                     </span>
                     {variant === 'featured' && (
                       <span className="font-doodle text-xs font-bold text-doodle-green">
-                        Save {product.salePercent}%
+                        Save {Math.round((product.DiscountPct || 0) * 100)}%
                       </span>
                     )}
                   </div>
