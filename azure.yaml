@@ -32,11 +32,12 @@ services:
             remoteBuild: true
     app:
         project: ./app
-        host: containerapp
+        host: staticwebapp
         language: js
-        docker:
-            path: Dockerfile
-            remoteBuild: true
+        dist: dist
+        config:
+            buildCommand: npm run build
+            outputLocation: dist
 infra:
   provider: bicep
   path: ./infra

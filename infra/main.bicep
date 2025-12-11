@@ -209,24 +209,44 @@ module containerAppApi 'modules/aca-api.bicep' = {
   ]
 }
 
-module containerAppFrontend 'modules/aca-app.bicep' = {
-  name: 'Deploy-Container-App-Frontend'
+// Keep old container app module for reference (unused)
+// module containerAppFrontend 'modules/aca-app.bicep' = {
+//   name: 'Deploy-Container-App-Frontend'
+//   params: {
+//     keyVaultName:keyVaultName
+//     location: location
+//     appInsightsName:appInsightsName
+//     appName:'todoapp-app-${resourceToken}'
+//     openAiName:cognitiveservicesname    
+//     containerRegistryName:acrName
+//     identityName:identityName
+//     openAiDeploymentName:openAiDeploymentName
+//     minReplica:0
+//     maxReplica:3
+//     revisionSuffix:revisionSuffix
+//     redisConnectionString: redis.outputs.entraConnectionString
+//     apiAppIdUri: apiAppIdUri
+//     containerAppEnvId: containerApp.outputs.containerAppEnvId
+//     apiUrl: containerAppApi.outputs.apiUrl
+//   }
+//   dependsOn: [
+//     cognitiveservices
+//     keyvault
+//   ]
+// }
+
+module staticWebAppFrontend 'modules/swa-app.bicep' = {
+  name: 'Deploy-Static-Web-App-Frontend'
   params: {
-    keyVaultName:keyVaultName
+    swaName: 'todoapp-swa-${resourceToken}'
     location: location
-    appInsightsName:appInsightsName
-    appName:'todoapp-app-${resourceToken}'
-    openAiName:cognitiveservicesname    
-    containerRegistryName:acrName
-    identityName:identityName
-    openAiDeploymentName:openAiDeploymentName
-    minReplica:0
-    maxReplica:3
-    revisionSuffix:revisionSuffix
-    redisConnectionString: redis.outputs.entraConnectionString
-    apiAppIdUri: apiAppIdUri
-    containerAppEnvId: containerApp.outputs.containerAppEnvId
+    identityName: identityName
+    appInsightsName: appInsightsName
     apiUrl: containerAppApi.outputs.apiUrl
+    apiAppIdUri: apiAppIdUri
+    keyVaultName: keyVaultName
+    openAiDeploymentName: openAiDeploymentName
+    redisConnectionString: redis.outputs.entraConnectionString
   }
   dependsOn: [
     cognitiveservices
@@ -234,7 +254,7 @@ module containerAppFrontend 'modules/aca-app.bicep' = {
   ]
 }
 
-output APP_REDIRECT_URI string = containerAppFrontend.outputs.appRedirectUri
+output APP_REDIRECT_URI string = staticWebAppFrontend.outputs.appRedirectUri
 
 // Expose values needed for local debugging / .env population
 // Key Vault name (already determined as a param -> output for azd env injection)
@@ -263,5 +283,8 @@ output USER_MANAGED_IDENTITY_NAME string = identityName
 output SQL_SERVER_NAME string = sqlServerName
 
 // Service names for azd deploy mapping (required by azd CLI)
-output SERVICE_APP_NAME string = 'todoapp-app-${resourceToken}'
+output SERVICE_APP_NAME string = staticWebAppFrontend.outputs.staticWebAppName
 output SERVICE_API_NAME string = 'todoapp-api-${resourceToken}'
+
+// Static Web App deployment token for azd deploy
+output AZURE_STATIC_WEB_APP_DEPLOYMENT_TOKEN string = staticWebAppFrontend.outputs.deploymentToken

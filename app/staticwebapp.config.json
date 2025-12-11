@@ -1,0 +1,31 @@
+{
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": ["/images/*", "/assets/*", "/*.{css,scss,js,json,xml,txt,ico,svg,png,jpg,jpeg,gif,webp,woff,woff2,ttf,eot}"]
+  },
+  "routes": [
+    {
+      "route": "/*",
+      "allowedRoles": ["anonymous"]
+    }
+  ],
+  "responseOverrides": {
+    "404": {
+      "rewrite": "/index.html"
+    }
+  },
+  "globalHeaders": {
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin"
+  },
+  "mimeTypes": {
+    ".json": "application/json",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2"
+  },
+  "platform": {
+    "apiRuntime": "node:18"
+  }
+}

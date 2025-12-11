@@ -57,7 +57,7 @@
       "value": "${availableEmbeddingDeploymentCapacity}"
     },
     "cognitiveservicesLocation": {
-      "value": "swedencentral"
+      "value": "eastus2"
     }
   }
 }

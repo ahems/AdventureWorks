@@ -1116,3 +1116,12 @@ catch {
     Write-Error "Failed to execute T-SQL for managed identity via ADO.NET: $($_.Exception.Message)"
     exit 1
 }
+
+# Set VITE_API_URL for Static Web App build
+$apiUrl = (azd env get-value 'API_URL' 2>$null).Trim()
+if ($apiUrl) {
+    Write-Output "`nSetting VITE_API_URL for Static Web App build: $apiUrl"
+    azd env set 'VITE_API_URL' $apiUrl
+} else {
+    Write-Warning "API_URL not found in environment. VITE_API_URL will not be set."
+}
