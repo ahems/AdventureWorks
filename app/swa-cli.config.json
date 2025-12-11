@@ -4,9 +4,11 @@
     "adventure-eshop": {
       "appLocation": ".",
       "outputLocation": "dist",
-      "appBuildCommand": "npm run build",
+      "appBuildCommand": "VITE_API_URL=$VITE_API_URL npm run build",
       "run": "npm run dev",
-      "appDevserverUrl": "http://localhost:5173"
+      "appDevserverUrl": "http://localhost:5173",
+      "appName": "todoapp-swa-ewphuc52etkbc",
+      "resourceGroup": "rg-adamhems-adventureworks"
     }
   }
 }

@@ -41,7 +41,7 @@ resource staticWebApp 'Microsoft.Web/staticSites@2023-01-01' = {
       apiLocation: ''
       outputLocation: 'dist'
     }
-    stagingEnvironmentPolicy: 'Disabled'
+    stagingEnvironmentPolicy: 'Enabled'
     allowConfigFileUpdates: true
     enterpriseGradeCdnStatus: 'Disabled'
   }

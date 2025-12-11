@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run update-config && vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "update-config": "node scripts/update-config.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -65,6 +66,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@azure/static-web-apps-cli": "^2.0.7",
     "@eslint/js": "^9.32.0",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^22.16.5",
