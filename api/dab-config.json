@@ -439,14 +439,36 @@
       ]
     },
     "ShoppingCartItem": {
-      "source": "Sales.ShoppingCartItem",
+      "source": {
+        "object": "ShoppingCartItem",
+        "type": "table",
+        "key-fields": ["ShoppingCartItemID"],
+        "parameters": {
+          "schema": "Sales"
+        }
+      },
+      "graphql": {
+        "type": {
+          "singular": "ShoppingCartItem",
+          "plural": "ShoppingCartItems"
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["create", "read", "update", "delete"],
-          "fields": {
-            "include": ["*"],
-            "exclude": ["DateCreated", "ModifiedDate"]
+          "actions": {
+            "create": {
+              "fields": {
+                "exclude": ["DateCreated", "ModifiedDate"]
+              }
+            },
+            "read": true,
+            "update": {
+              "fields": {
+                "exclude": ["DateCreated"]
+              }
+            },
+            "delete": true
           }
         }
       ]
