@@ -766,13 +766,21 @@ const AccountPage: React.FC = () => {
                   <div className="mb-6 p-4 border-2 border-dashed border-doodle-accent/30 bg-doodle-accent/5">
                     <h3 className="font-doodle font-bold text-doodle-text mb-4">Add New Address</h3>
                     <AddressForm
-                      onSave={(addressData) => {
-                        addAddress(addressData);
-                        setShowAddressForm(false);
-                        toast({
-                          title: "Address Added",
-                          description: "Your new address has been saved.",
-                        });
+                      onSave={async (addressData) => {
+                        try {
+                          await addAddress(addressData);
+                          setShowAddressForm(false);
+                          toast({
+                            title: "Address Added",
+                            description: "Your new address has been saved.",
+                          });
+                        } catch (error) {
+                          toast({
+                            title: "Error",
+                            description: "Failed to add address. Please try again.",
+                            variant: "destructive",
+                          });
+                        }
                       }}
                       onCancel={() => setShowAddressForm(false)}
                     />
@@ -784,13 +792,21 @@ const AccountPage: React.FC = () => {
                     <h3 className="font-doodle font-bold text-doodle-text mb-4">Edit Address</h3>
                     <AddressForm
                       address={editingAddress}
-                      onSave={(addressData) => {
-                        updateAddress(editingAddress.id, addressData);
-                        setEditingAddress(null);
-                        toast({
-                          title: "Address Updated",
-                          description: "Your address has been updated.",
-                        });
+                      onSave={async (addressData) => {
+                        try {
+                          await updateAddress(editingAddress.id, addressData);
+                          setEditingAddress(null);
+                          toast({
+                            title: "Address Updated",
+                            description: "Your address has been updated.",
+                          });
+                        } catch (error) {
+                          toast({
+                            title: "Error",
+                            description: "Failed to update address. Please try again.",
+                            variant: "destructive",
+                          });
+                        }
                       }}
                       onCancel={() => setEditingAddress(null)}
                     />
@@ -818,19 +834,35 @@ const AccountPage: React.FC = () => {
                         key={address.id}
                         address={address}
                         onEdit={(addr) => setEditingAddress(addr)}
-                        onDelete={(id) => {
-                          deleteAddress(id);
-                          toast({
-                            title: "Address Deleted",
-                            description: "The address has been removed.",
-                          });
+                        onDelete={async (id) => {
+                          try {
+                            await deleteAddress(id);
+                            toast({
+                              title: "Address Deleted",
+                              description: "The address has been removed.",
+                            });
+                          } catch (error) {
+                            toast({
+                              title: "Error",
+                              description: "Failed to delete address. Please try again.",
+                              variant: "destructive",
+                            });
+                          }
                         }}
-                        onSetDefault={(id) => {
-                          setDefaultAddress(id);
-                          toast({
-                            title: "Default Address Updated",
-                            description: "Your default address has been changed.",
-                          });
+                        onSetDefault={async (id) => {
+                          try {
+                            await setDefaultAddress(id);
+                            toast({
+                              title: "Default Address Updated",
+                              description: "Your default address has been changed.",
+                            });
+                          } catch (error) {
+                            toast({
+                              title: "Error",
+                              description: "Failed to update default address. Please try again.",
+                              variant: "destructive",
+                            });
+                          }
                         }}
                       />
                     ))}

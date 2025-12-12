@@ -8,6 +8,7 @@ param identityName string = 'todoapp-identity-${uniqueString(resourceGroup().id)
 param containerAppEnvId string
 param openAiDeploymentName string = 'gpt-35-turbo'
 param apiUrl string
+param apiFunctionsUrl string = ''
 // Public bootstrap image to avoid ACR pull failures during initial infra provisioning
 param bootstrapImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 @minValue(0)
@@ -133,6 +134,10 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'API_URL'
               value: apiUrl
+            }
+            {
+              name: 'API_FUNCTIONS_URL'
+              value: apiFunctionsUrl
             }
             {
               name: 'API_APP_ID_URI'

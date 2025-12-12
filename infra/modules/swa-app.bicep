@@ -3,6 +3,7 @@ param location string = resourceGroup().location
 param identityName string
 param appInsightsName string
 param apiUrl string
+param apiFunctionsUrl string = ''
 param apiAppIdUri string
 param keyVaultName string
 param openAiDeploymentName string

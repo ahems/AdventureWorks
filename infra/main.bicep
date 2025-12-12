@@ -243,6 +243,7 @@ module staticWebAppFrontend 'modules/swa-app.bicep' = {
     identityName: identityName
     appInsightsName: appInsightsName
     apiUrl: containerAppApi.outputs.apiUrl
+    apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
     apiAppIdUri: apiAppIdUri
     keyVaultName: keyVaultName
     openAiDeploymentName: openAiDeploymentName
@@ -251,6 +252,7 @@ module staticWebAppFrontend 'modules/swa-app.bicep' = {
   dependsOn: [
     cognitiveservices
     keyvault
+    containerAppApiFunctions
   ]
 }
 

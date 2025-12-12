@@ -48,7 +48,8 @@ RUN printf '#!/bin/sh\n\
 set -e\n\
 echo "Starting entrypoint script..."\n\
 echo "API_URL: $API_URL"\n\
-echo "window.APP_CONFIG = { API_URL: \\"$API_URL\\" };" > /usr/share/nginx/html/config.js\n\
+echo "API_FUNCTIONS_URL: $API_FUNCTIONS_URL"\n\
+echo "window.APP_CONFIG = { API_URL: \\"$API_URL\\", API_FUNCTIONS_URL: \\"$API_FUNCTIONS_URL\\" };" > /usr/share/nginx/html/config.js\n\
 echo "Generated config.js:"\n\
 cat /usr/share/nginx/html/config.js\n\
 exec nginx -g "daemon off;"\n' > /docker-entrypoint.sh && \
