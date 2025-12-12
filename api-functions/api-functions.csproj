@@ -7,6 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>api_functions</RootNamespace>
+    <UserSecretsId>c869d2e4-83e3-44c8-a7c8-e159e560539d</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

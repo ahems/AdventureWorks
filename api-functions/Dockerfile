@@ -16,6 +16,10 @@ WORKDIR /home/site/wwwroot
 # Copy published app
 COPY --from=build /app/publish .
 
-# Azure Functions will use the host.json and function metadata
+# Azure Functions configuration
 ENV AzureWebJobsScriptRoot=/home/site/wwwroot \
-    AzureFunctionsJobHost__Logging__Console__IsEnabled=true
+    AzureFunctionsJobHost__Logging__Console__IsEnabled=true \
+    ASPNETCORE_URLS=http://+:80
+
+# Expose port 80
+EXPOSE 80
