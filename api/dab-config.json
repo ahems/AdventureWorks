@@ -445,7 +445,19 @@
           "role": "anonymous",
           "actions": ["*"]
         }
-      ]
+      ],
+      "mappings": {
+        "DateCreated": {
+          "fields": {
+            "create": "none"
+          }
+        },
+        "ModifiedDate": {
+          "fields": {
+            "create": "none"
+          }
+        }
+      }
     },
     "CountryRegionCurrency": {
       "source": "Sales.CountryRegionCurrency",
