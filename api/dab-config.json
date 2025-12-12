@@ -443,21 +443,13 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
-        }
-      ],
-      "mappings": {
-        "DateCreated": {
+          "actions": ["create", "read", "update", "delete"],
           "fields": {
-            "create": "none"
-          }
-        },
-        "ModifiedDate": {
-          "fields": {
-            "create": "none"
+            "include": ["*"],
+            "exclude": ["DateCreated", "ModifiedDate"]
           }
         }
-      }
+      ]
     },
     "CountryRegionCurrency": {
       "source": "Sales.CountryRegionCurrency",
