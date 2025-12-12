@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { X, ShoppingCart, Heart, Star, Scale, Eye, Plus, Minus } from 'lucide-react';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Product, getSalePrice, isVariantAvailable } from '@/types/product';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
@@ -61,6 +61,9 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenCh
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl p-0 overflow-hidden bg-doodle-bg border-4 border-doodle-text">
         <DialogTitle className="sr-only">{product.Name} - Quick View</DialogTitle>
+        <DialogDescription className="sr-only">
+          Quick view of {product.Name}. View product details, select options, and add to cart.
+        </DialogDescription>
         
         <div className="grid grid-cols-1 md:grid-cols-2">
           {/* Product Image */}
