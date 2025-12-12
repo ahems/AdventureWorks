@@ -1,7 +1,5 @@
 // Runtime configuration
-// This file is replaced during build process with actual environment values
-// For local development, uses localhost as default
-
+// Generated during build process
 window.APP_CONFIG = {
-  API_URL: 'http://localhost:5000/graphql'
+  API_URL: 'https://todoapp-api-ewphuc52etkbc.agreeableocean-5dff8db3.eastus2.azurecontainerapps.io/graphql/'
 };

@@ -247,10 +247,29 @@ module staticWebAppFrontend 'modules/swa-app.bicep' = {
     keyVaultName: keyVaultName
     openAiDeploymentName: openAiDeploymentName
     redisConnectionString: redis.outputs.entraConnectionString
-    sqlConnectionString: database.outputs.connectionString
   }
   dependsOn: [
     cognitiveservices
+    keyvault
+  ]
+}
+
+module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
+  name: 'Deploy-Container-App-API-Functions'
+  params: {
+    keyVaultName: keyVaultName
+    location: location
+    appInsightsName: appInsightsName
+    apiFunctionsName: 'todoapp-func-${resourceToken}'
+    containerRegistryName: acrName
+    identityName: identityName
+    sqlConnectionString: database.outputs.connectionString
+    minReplica: 0
+    maxReplica: 3
+    revisionSuffix: revisionSuffix
+    containerAppEnvId: containerApp.outputs.containerAppEnvId
+  }
+  dependsOn: [
     keyvault
     database
   ]
@@ -287,6 +306,9 @@ output SQL_SERVER_NAME string = sqlServerName
 // Service names for azd deploy mapping (required by azd CLI)
 output SERVICE_APP_NAME string = staticWebAppFrontend.outputs.staticWebAppName
 output SERVICE_API_NAME string = 'todoapp-api-${resourceToken}'
+output SERVICE_API_FUNCTIONS_NAME string = 'todoapp-func-${resourceToken}'
+
+output API_FUNCTIONS_URL string = containerAppApiFunctions.outputs.apiFunctionsUrl
 
 // Static Web App deployment token for azd deploy
 output AZURE_STATIC_WEB_APP_DEPLOYMENT_TOKEN string = staticWebAppFrontend.outputs.deploymentToken

@@ -30,6 +30,13 @@ services:
         docker:
             path: dockerfile
             remoteBuild: true
+    api-functions:
+        project: ./api-functions
+        host: containerapp
+        language: csharp
+        docker:
+            path: Dockerfile
+            remoteBuild: true
     app:
         project: ./app
         host: staticwebapp
@@ -38,7 +45,6 @@ services:
         config:
             buildCommand: VITE_API_URL=${VITE_API_URL} npm run build
             outputLocation: dist
-            apiLocation: ../api-functions
 infra:
   provider: bicep
   path: ./infra
