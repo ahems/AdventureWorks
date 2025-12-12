@@ -17,19 +17,13 @@ public class AddressService
 
     /// <summary>
     /// Creates a SQL connection with managed identity authentication
+    /// The connection string already contains "Authentication=Active Directory Default"
+    /// which automatically uses DefaultAzureCredential
     /// </summary>
     private async Task<SqlConnection> CreateConnectionAsync()
     {
         var connection = new SqlConnection(_connectionString);
-        
-        // Get access token using managed identity for SQL Database
-        var credential = new DefaultAzureCredential();
-        var token = await credential.GetTokenAsync(
-            new TokenRequestContext(new[] { "https://database.windows.net/.default" }));
-        
-        connection.AccessToken = token.Token;
         await connection.OpenAsync();
-        
         return connection;
     }
 
