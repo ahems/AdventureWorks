@@ -594,17 +594,29 @@ export const createCartItem = async (
   quantity: number
 ): Promise<ShoppingCartItem | null> => {
   try {
-    const data = await graphqlClient.request<CreateCartItemResponse>(
-      CREATE_CART_ITEM,
-      {
-        item: {
-          ShoppingCartID: shoppingCartId,
-          ProductID: productId,
-          Quantity: quantity,
-        }
-      }
-    );
-    return data.createShoppingCartItem;
+    // Use REST API instead of GraphQL to avoid DateTime default value issues
+    const apiUrl = import.meta.env.VITE_API_URL || (window as any).APP_CONFIG?.API_URL || '';
+    const baseUrl = apiUrl.replace('/graphql/', '');
+    
+    const response = await fetch(`${baseUrl}/api/ShoppingCartItem`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        ShoppingCartID: shoppingCartId,
+        ProductID: productId,
+        Quantity: quantity,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    // REST API returns { value: [...] }
+    return data.value && data.value.length > 0 ? data.value[0] : null;
   } catch (error) {
     console.error('Error creating cart item:', error);
     return null;
