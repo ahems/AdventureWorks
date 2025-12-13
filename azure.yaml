@@ -43,7 +43,7 @@ services:
         language: js
         dist: dist
         config:
-            buildCommand: VITE_API_URL=${VITE_API_URL} npm run build
+            buildCommand: VITE_API_URL=${VITE_API_URL} VITE_API_FUNCTIONS_URL=${VITE_API_FUNCTIONS_URL} npm run build
             outputLocation: dist
 infra:
   provider: bicep

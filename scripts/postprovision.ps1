@@ -1125,3 +1125,12 @@ if ($apiUrl) {
 } else {
     Write-Warning "API_URL not found in environment. VITE_API_URL will not be set."
 }
+
+# Set VITE_API_FUNCTIONS_URL for Static Web App build
+$apiFunctionsUrl = (azd env get-value 'API_FUNCTIONS_URL' 2>$null).Trim()
+if ($apiFunctionsUrl) {
+    Write-Output "`nSetting VITE_API_FUNCTIONS_URL for Static Web App build: $apiFunctionsUrl"
+    azd env set 'VITE_API_FUNCTIONS_URL' $apiFunctionsUrl
+} else {
+    Write-Warning "API_FUNCTIONS_URL not found in environment. VITE_API_FUNCTIONS_URL will not be set."
+}

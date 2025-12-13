@@ -16,6 +16,7 @@ import { AddressCard } from '@/components/AddressCard';
 import { toast } from '@/hooks/use-toast';
 import { z } from 'zod';
 import { formatPhoneNumber, parsePhoneNumber } from '@/lib/phoneFormatter';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const profileSchema = z.object({
   title: z.string().optional(),
@@ -32,7 +33,7 @@ const AccountPage: React.FC = () => {
   const { user, isAuthenticated, logout, updateProfile, isLoading } = useAuth();
   const { items: wishlistItems, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
-  const { addresses, addAddress, updateAddress, deleteAddress, setDefaultAddress } = useAddresses();
+  const { addresses, addAddress, updateAddress, deleteAddress, setDefaultAddress, isLoading: addressesLoading } = useAddresses();
   const { paymentMethods, deletePaymentMethod, setDefaultPaymentMethod } = usePaymentMethods();
   const [customerId, setCustomerId] = useState<number | null>(null);
   const { data: orders = [], isLoading: ordersLoading } = useOrders(customerId || 0);
@@ -813,7 +814,23 @@ const AccountPage: React.FC = () => {
                   </div>
                 )}
 
-                {addresses.length === 0 && !showAddressForm ? (
+                {addressesLoading ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[1, 2].map((i) => (
+                      <div key={i} className="border-2 border-dashed border-doodle-text/20 p-4">
+                        <div className="flex items-start gap-3">
+                          <Skeleton className="w-5 h-5 rounded-full" />
+                          <div className="flex-1 space-y-3">
+                            <Skeleton className="h-5 w-24" />
+                            <Skeleton className="h-4 w-full" />
+                            <Skeleton className="h-4 w-3/4" />
+                            <Skeleton className="h-4 w-1/2" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : addresses.length === 0 && !showAddressForm ? (
                   <div className="text-center py-8">
                     <MapPin className="w-16 h-16 mx-auto mb-4 text-doodle-text/30" />
                     <p className="font-doodle text-doodle-text/70 mb-4">

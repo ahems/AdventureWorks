@@ -3,15 +3,15 @@ import { useAuth } from '@/context/AuthContext';
 
 export interface Address {
   id: string;
-  label: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  address: string;
+  addressLine1: string;
+  addressLine2?: string;
   city: string;
-  state: string;
-  zipCode: string;
-  country: string;
+  stateProvinceId: number;
+  stateProvinceCode?: string; // e.g., "WA", "CA", "NY"
+  countryRegionCode?: string; // e.g., "US", "CA", "GB"
+  countryName?: string; // e.g., "United States"
+  postalCode: string;
+  addressType: string;
   isDefault: boolean;
 }
 
@@ -27,53 +27,37 @@ interface ApiAddress {
   ModifiedDate: string;
 }
 
-// User address mapping stored in localStorage
-interface UserAddressMapping {
-  addressId: number;
-  label: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  country: string;
-  isDefault: boolean;
+// BusinessEntityAddress from DAB
+interface BusinessEntityAddress {
+  BusinessEntityID: number;
+  AddressID: number;
+  AddressTypeID: number;
+  rowguid: string;
+  ModifiedDate: string;
 }
 
-const ADDRESSES_MAPPING_KEY = 'user_addresses_mapping';
-
-const getUserAddressMappings = (userId: string): UserAddressMapping[] => {
-  const data = localStorage.getItem(`${ADDRESSES_MAPPING_KEY}_${userId}`);
-  return data ? JSON.parse(data) : [];
-};
-
-const saveUserAddressMappings = (userId: string, mappings: UserAddressMapping[]) => {
-  localStorage.setItem(`${ADDRESSES_MAPPING_KEY}_${userId}`, JSON.stringify(mappings));
-};
-
-// Map API address to frontend Address type
-const mapApiAddressToFrontend = (apiAddress: ApiAddress, mapping: UserAddressMapping): Address => {
-  return {
-    id: apiAddress.AddressID.toString(),
-    label: mapping.label,
-    firstName: mapping.firstName,
-    lastName: mapping.lastName,
-    phone: mapping.phone,
-    address: apiAddress.AddressLine2 
-      ? `${apiAddress.AddressLine1}, ${apiAddress.AddressLine2}`
-      : apiAddress.AddressLine1,
-    city: apiAddress.City,
-    state: apiAddress.StateProvinceID.toString(), // TODO: Map StateProvinceID to state name
-    zipCode: apiAddress.PostalCode,
-    country: mapping.country,
-    isDefault: mapping.isDefault,
-  };
+// Address type lookup
+const ADDRESS_TYPE_MAP: Record<number, string> = {
+  1: 'Archive',
+  2: 'Home',
+  3: 'Shipping',
+  4: 'Billing',
+  5: 'Main Office',
+  6: 'Primary',
 };
 
 const getFunctionsApiUrl = (): string => {
-  // Get Functions API URL from environment or config
   const functionsUrl = (window as any).APP_CONFIG?.API_FUNCTIONS_URL || 
                        import.meta.env.VITE_API_FUNCTIONS_URL || 
                        'http://localhost:7071';
   return functionsUrl;
+};
+
+const getDabApiUrl = (): string => {
+  const apiUrl = (window as any).APP_CONFIG?.API_URL || 
+                 import.meta.env.VITE_API_URL || 
+                 'http://localhost:5000/graphql';
+  return apiUrl.replace('/graphql/', '/api').replace('/graphql', '/api');
 };
 
 export const useAddresses = () => {
@@ -81,27 +65,102 @@ export const useAddresses = () => {
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Fetch addresses from Functions API
+  // Fetch addresses from both APIs
   const fetchAddresses = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.businessEntityId) {
+      console.log('[useAddresses] No businessEntityId found for user:', user);
+      return;
+    }
     
+    console.log('[useAddresses] Fetching addresses for businessEntityId:', user.businessEntityId);
     setIsLoading(true);
     try {
-      const mappings = getUserAddressMappings(user.id);
-      if (mappings.length === 0) {
+      const dabApiUrl = getDabApiUrl();
+      
+      // Get BusinessEntityAddress links from DAB
+      const url = `${dabApiUrl}/BusinessEntityAddress?$filter=BusinessEntityID eq ${user.businessEntityId}`;
+      console.log('[useAddresses] Fetching BusinessEntityAddress from:', url);
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        console.error('[useAddresses] Failed to fetch business entity addresses, status:', response.status);
         setAddresses([]);
         return;
       }
 
-      const apiUrl = getFunctionsApiUrl();
-      const addressPromises = mappings.map(async (mapping) => {
-        const response = await fetch(`${apiUrl}/api/addresses/${mapping.addressId}`);
-        if (!response.ok) {
-          console.error(`Failed to fetch address ${mapping.addressId}`);
+      const data = await response.json();
+      console.log('[useAddresses] BusinessEntityAddress data:', data);
+      const businessEntityAddresses: BusinessEntityAddress[] = data.value || [];
+
+      if (businessEntityAddresses.length === 0) {
+        console.log('[useAddresses] No addresses found for this user');
+        setAddresses([]);
+        return;
+      }
+
+      console.log('[useAddresses] Found', businessEntityAddresses.length, 'linked addresses');
+      // Fetch each address from Functions API
+      const functionsApiUrl = getFunctionsApiUrl();
+      const addressPromises = businessEntityAddresses.map(async (bea) => {
+        try {
+          const addrResponse = await fetch(`${functionsApiUrl}/api/addresses/${bea.AddressID}`);
+          if (!addrResponse.ok) return null;
+          
+          const apiAddress: ApiAddress = await addrResponse.json();
+          
+          // Fetch StateProvince to get the code and country
+          let stateCode = apiAddress.StateProvinceID.toString();
+          let countryCode: string | undefined;
+          let countryName: string | undefined;
+          
+          try {
+            const stateResponse = await fetch(`${dabApiUrl}/StateProvince/StateProvinceID/${apiAddress.StateProvinceID}`);
+            if (stateResponse.ok) {
+              const stateData = await stateResponse.json();
+              const stateProvince = stateData.value?.[0];
+              if (stateProvince?.StateProvinceCode) {
+                stateCode = stateProvince.StateProvinceCode.trim();
+              }
+              if (stateProvince?.CountryRegionCode) {
+                countryCode = stateProvince.CountryRegionCode;
+                
+                // Fetch CountryRegion to get the name
+                try {
+                  const countryResponse = await fetch(`${dabApiUrl}/CountryRegion/CountryRegionCode/${countryCode}`);
+                  if (countryResponse.ok) {
+                    const countryData = await countryResponse.json();
+                    const country = countryData.value?.[0];
+                    if (country?.Name) {
+                      countryName = country.Name;
+                    }
+                  }
+                } catch (error) {
+                  console.error(`Failed to fetch CountryRegion ${countryCode}:`, error);
+                }
+              }
+            }
+          } catch (error) {
+            console.error(`Failed to fetch StateProvince ${apiAddress.StateProvinceID}:`, error);
+          }
+          
+          // Map to frontend format
+          return {
+            id: apiAddress.AddressID.toString(),
+            addressLine1: apiAddress.AddressLine1,
+            addressLine2: apiAddress.AddressLine2 || undefined,
+            city: apiAddress.City,
+            stateProvinceId: apiAddress.StateProvinceID,
+            stateProvinceCode: stateCode,
+            countryRegionCode: countryCode,
+            countryName: countryName,
+            postalCode: apiAddress.PostalCode,
+            addressType: ADDRESS_TYPE_MAP[bea.AddressTypeID] || 'Other',
+            isDefault: bea.AddressTypeID === 2, // Home is default
+          } as Address;
+        } catch (error) {
+          console.error(`Failed to fetch address ${bea.AddressID}:`, error);
           return null;
         }
-        const apiAddress: ApiAddress = await response.json();
-        return mapApiAddressToFrontend(apiAddress, mapping);
       });
 
       const fetchedAddresses = (await Promise.all(addressPromises)).filter((addr): addr is Address => addr !== null);
@@ -112,131 +171,111 @@ export const useAddresses = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.businessEntityId]);
 
   useEffect(() => {
     fetchAddresses();
   }, [fetchAddresses]);
 
   const addAddress = useCallback(async (address: Omit<Address, 'id'>) => {
-    if (!user?.id) return;
+    if (!user?.businessEntityId) return;
     
     setIsLoading(true);
     try {
-      const apiUrl = getFunctionsApiUrl();
+      const functionsApiUrl = getFunctionsApiUrl();
+      
+      // Parse address type from addressType
+      const addressTypeId = Object.entries(ADDRESS_TYPE_MAP).find(
+        ([_, label]) => label === address.addressType
+      )?.[0] || '2'; // Default to Home
       
       // Create address via Functions API
-      const response = await fetch(`${apiUrl}/api/addresses`, {
+      const response = await fetch(`${functionsApiUrl}/api/addresses`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          AddressLine1: address.address.split(',')[0].trim(),
-          AddressLine2: address.address.includes(',') ? address.address.split(',').slice(1).join(',').trim() : null,
+          AddressLine1: address.addressLine1,
+          AddressLine2: address.addressLine2 || null,
           City: address.city,
-          StateProvinceID: parseInt(address.state) || 79, // Default to Washington if invalid
-          PostalCode: address.zipCode,
+          StateProvinceID: address.stateProvinceId,
+          PostalCode: address.postalCode,
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to create address');
-      }
-
+      if (!response.ok) throw new Error('Failed to create address');
       const createdAddress: ApiAddress = await response.json();
       
-      // Save mapping to localStorage
-      const mappings = getUserAddressMappings(user.id);
-      const newMapping: UserAddressMapping = {
-        addressId: createdAddress.AddressID,
-        label: address.label,
-        firstName: address.firstName,
-        lastName: address.lastName,
-        phone: address.phone,
-        country: address.country,
-        isDefault: mappings.length === 0 || address.isDefault,
-      };
+      // Create BusinessEntityAddress link via DAB
+      const dabApiUrl = getDabApiUrl();
+      const linkResponse = await fetch(`${dabApiUrl}/BusinessEntityAddress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          BusinessEntityID: user.businessEntityId,
+          AddressID: createdAddress.AddressID,
+          AddressTypeID: parseInt(addressTypeId),
+        }),
+      });
 
-      // If this is default, unset others
-      const updatedMappings = newMapping.isDefault
-        ? mappings.map(m => ({ ...m, isDefault: false }))
-        : mappings;
-      
-      updatedMappings.push(newMapping);
-      saveUserAddressMappings(user.id, updatedMappings);
+      if (!linkResponse.ok) {
+        console.error('Failed to create address link');
+      }
       
       // Refresh addresses
       await fetchAddresses();
-      
-      return mapApiAddressToFrontend(createdAddress, newMapping);
     } catch (error) {
       console.error('Error adding address:', error);
       throw error;
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id, fetchAddresses]);
+  }, [user?.businessEntityId, fetchAddresses]);
 
   const updateAddress = useCallback(async (id: string, updates: Partial<Address>) => {
-    if (!user?.id) return;
+    if (!user?.businessEntityId) return;
     
     setIsLoading(true);
     try {
       const addressId = parseInt(id);
-      const apiUrl = getFunctionsApiUrl();
-      const mappings = getUserAddressMappings(user.id);
-      const mapping = mappings.find(m => m.addressId === addressId);
-      
-      if (!mapping) {
-        throw new Error('Address mapping not found');
-      }
+      const functionsApiUrl = getFunctionsApiUrl();
 
       // Update address via Functions API if address fields changed
-      if (updates.address || updates.city || updates.state || updates.zipCode) {
-        const addressParts = (updates.address || '').split(',');
-        const response = await fetch(`${apiUrl}/api/addresses/${addressId}`, {
+      if (updates.addressLine1 || updates.addressLine2 !== undefined || updates.city || updates.stateProvinceId || updates.postalCode) {
+        const updatePayload: any = {};
+        
+        if (updates.addressLine1) updatePayload.AddressLine1 = updates.addressLine1;
+        if (updates.addressLine2 !== undefined) updatePayload.AddressLine2 = updates.addressLine2 || null;
+        if (updates.city) updatePayload.City = updates.city;
+        if (updates.stateProvinceId) updatePayload.StateProvinceID = updates.stateProvinceId;
+        if (updates.postalCode) updatePayload.PostalCode = updates.postalCode;
+
+        const response = await fetch(`${functionsApiUrl}/api/addresses/${addressId}`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            AddressLine1: updates.address ? addressParts[0].trim() : undefined,
-            AddressLine2: updates.address && addressParts.length > 1 ? addressParts.slice(1).join(',').trim() : undefined,
-            City: updates.city,
-            StateProvinceID: updates.state ? parseInt(updates.state) : undefined,
-            PostalCode: updates.zipCode,
-          }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatePayload),
         });
 
-        if (!response.ok) {
-          throw new Error('Failed to update address');
-        }
+        if (!response.ok) throw new Error('Failed to update address');
       }
 
-      // Update mapping in localStorage
-      const updatedMappings = mappings.map(m => {
-        if (m.addressId === addressId) {
-          return {
-            ...m,
-            label: updates.label ?? m.label,
-            firstName: updates.firstName ?? m.firstName,
-            lastName: updates.lastName ?? m.lastName,
-            phone: updates.phone ?? m.phone,
-            country: updates.country ?? m.country,
-            isDefault: updates.isDefault !== undefined 
-              ? updates.isDefault 
-              : (updates.isDefault === true ? true : m.isDefault),
-          };
-        }
-        // If setting another address as default, unset this one
-        if (updates.isDefault === true && m.addressId !== addressId) {
-          return { ...m, isDefault: false };
-        }
-        return m;
-      });
+      // If addressType changed, update AddressTypeID via DAB
+      if (updates.addressType) {
+        const newAddressTypeId = Object.entries(ADDRESS_TYPE_MAP).find(
+          ([_, label]) => label === updates.addressType
+        )?.[0];
 
-      saveUserAddressMappings(user.id, updatedMappings);
+        if (newAddressTypeId) {
+          const dabApiUrl = getDabApiUrl();
+          await fetch(
+            `${dabApiUrl}/BusinessEntityAddress/BusinessEntityID/${user.businessEntityId}/AddressID/${addressId}/AddressTypeID/${newAddressTypeId}`,
+            {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ AddressTypeID: parseInt(newAddressTypeId) }),
+            }
+          );
+        }
+      }
       
       // Refresh addresses
       await fetchAddresses();
@@ -246,35 +285,39 @@ export const useAddresses = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id, fetchAddresses]);
+  }, [user?.businessEntityId, fetchAddresses]);
 
   const deleteAddress = useCallback(async (id: string) => {
-    if (!user?.id) return;
+    if (!user?.businessEntityId) return;
     
     setIsLoading(true);
     try {
       const addressId = parseInt(id);
-      const apiUrl = getFunctionsApiUrl();
+      const dabApiUrl = getDabApiUrl();
+      
+      // First, find the AddressTypeID for this BusinessEntityAddress
+      const beaResponse = await fetch(
+        `${dabApiUrl}/BusinessEntityAddress?$filter=BusinessEntityID eq ${user.businessEntityId} and AddressID eq ${addressId}`
+      );
+      
+      if (beaResponse.ok) {
+        const beaData = await beaResponse.json();
+        const bea = beaData.value?.[0] as BusinessEntityAddress;
+        
+        if (bea) {
+          // Delete BusinessEntityAddress link
+          await fetch(
+            `${dabApiUrl}/BusinessEntityAddress/BusinessEntityID/${user.businessEntityId}/AddressID/${addressId}/AddressTypeID/${bea.AddressTypeID}`,
+            { method: 'DELETE' }
+          );
+        }
+      }
 
-      // Delete address via Functions API
-      const response = await fetch(`${apiUrl}/api/addresses/${addressId}`, {
+      // Delete address from Functions API
+      const functionsApiUrl = getFunctionsApiUrl();
+      await fetch(`${functionsApiUrl}/api/addresses/${addressId}`, {
         method: 'DELETE',
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete address');
-      }
-
-      // Remove mapping from localStorage
-      let mappings = getUserAddressMappings(user.id);
-      mappings = mappings.filter(m => m.addressId !== addressId);
-      
-      // If we deleted the default, make the first one default
-      if (mappings.length > 0 && !mappings.some(m => m.isDefault)) {
-        mappings[0].isDefault = true;
-      }
-      
-      saveUserAddressMappings(user.id, mappings);
       
       // Refresh addresses
       await fetchAddresses();
@@ -284,29 +327,14 @@ export const useAddresses = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id, fetchAddresses]);
+  }, [user?.businessEntityId, fetchAddresses]);
 
   const setDefaultAddress = useCallback(async (id: string) => {
-    if (!user?.id) return;
-    
-    try {
-      const addressId = parseInt(id);
-      const mappings = getUserAddressMappings(user.id);
-      
-      const updatedMappings = mappings.map(m => ({
-        ...m,
-        isDefault: m.addressId === addressId,
-      }));
-      
-      saveUserAddressMappings(user.id, updatedMappings);
-      
-      // Refresh addresses
-      await fetchAddresses();
-    } catch (error) {
-      console.error('Error setting default address:', error);
-      throw error;
-    }
-  }, [user?.id, fetchAddresses]);
+    // In this implementation, we use AddressTypeID = 2 (Home) as the default
+    // To change default, we could update the AddressTypeID of the addresses
+    // For now, just refresh to re-sort
+    await fetchAddresses();
+  }, [fetchAddresses]);
 
   const getDefaultAddress = useCallback(() => {
     return addresses.find(addr => addr.isDefault) || addresses[0] || null;

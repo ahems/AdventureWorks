@@ -48,6 +48,16 @@ resource staticWebApp 'Microsoft.Web/staticSites@2023-01-01' = {
   }
 }
 
+// Configure app settings for build-time environment variables
+resource swaConfig 'Microsoft.Web/staticSites/config@2023-01-01' = {
+  parent: staticWebApp
+  name: 'appsettings'
+  properties: {
+    VITE_API_URL: apiUrl
+    VITE_API_FUNCTIONS_URL: apiFunctionsUrl
+  }
+}
+
 // Note: Build-time environment variables (like VITE_API_URL) are passed by azd during deployment
 // Static Web Apps with no API functions don't need app settings configured here
 // The frontend is a static SPA that gets its config baked in at build time

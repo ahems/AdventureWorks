@@ -154,15 +154,17 @@ const CheckoutPage: React.FC = () => {
 
   const applyAddressToShipping = (address: Address) => {
     setShippingData({
-      firstName: address.firstName,
-      lastName: address.lastName,
+      firstName: user?.firstName || '',
+      lastName: user?.lastName || '',
       email: user?.email || '',
-      phone: address.phone,
-      address: address.address,
+      phone: user?.phone || '',
+      address: address.addressLine2 
+        ? `${address.addressLine1}, ${address.addressLine2}`
+        : address.addressLine1,
       city: address.city,
-      state: address.state,
-      zipCode: address.zipCode,
-      country: address.country,
+      state: address.stateProvinceId.toString(),
+      zipCode: address.postalCode,
+      country: 'United States',
     });
   };
 

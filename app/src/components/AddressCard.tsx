@@ -1,7 +1,6 @@
 import React from 'react';
 import { MapPin, Edit2, Trash2, Star } from 'lucide-react';
 import type { Address } from '@/hooks/useAddresses';
-import { formatPhoneNumber } from '@/lib/phoneFormatter';
 
 interface AddressCardProps {
   address: Address;
@@ -45,7 +44,7 @@ export const AddressCard: React.FC<AddressCardProps> = ({
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="font-doodle font-bold text-doodle-text">
-                {address.label}
+                {address.addressType}
               </span>
               {address.isDefault && (
                 <span className="font-doodle text-xs bg-doodle-accent text-white px-2 py-0.5 rounded">
@@ -54,29 +53,21 @@ export const AddressCard: React.FC<AddressCardProps> = ({
               )}
             </div>
             <p className="font-doodle text-sm text-doodle-text/70">
-              {address.firstName} {address.lastName}
+              {address.addressLine1}
             </p>
+            {address.addressLine2 && (
+              <p className="font-doodle text-sm text-doodle-text/70">
+                {address.addressLine2}
+              </p>
+            )}
             <p className="font-doodle text-sm text-doodle-text/70">
-              {address.address}
+              {address.city}, {address.stateProvinceCode || address.stateProvinceId} {address.postalCode}
             </p>
-            <p className="font-doodle text-sm text-doodle-text/70">
-              {address.city}, {address.state} {address.zipCode}
-            </p>
-            <p className="font-doodle text-sm text-doodle-text/70">
-              {address.country}
-            </p>
-            <p className="font-doodle text-sm text-doodle-text/50 mt-1">
-              {(() => {
-                // Parse and format phone number for display
-                if (!address.phone) return '';
-                const match = address.phone.match(/^(\+\d+)\s*(.*)$/);
-                if (match) {
-                  const formatted = formatPhoneNumber(match[2], match[1]);
-                  return `${match[1]} ${formatted}`;
-                }
-                return formatPhoneNumber(address.phone, '+1');
-              })()}
-            </p>
+            {address.countryName && (
+              <p className="font-doodle text-sm text-doodle-text/70">
+                {address.countryName}
+              </p>
+            )}
           </div>
         </div>
 
@@ -107,7 +98,9 @@ export const AddressCard: React.FC<AddressCardProps> = ({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onDelete(address.id);
+                if (confirm('Are you sure you want to delete this address?')) {
+                  onDelete(address.id);
+                }
               }}
               className="p-2 hover:bg-doodle-accent/10 rounded transition-colors"
               title="Delete address"
