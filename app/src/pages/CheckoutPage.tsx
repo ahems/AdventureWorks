@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useAddresses, Address } from '@/hooks/useAddresses';
 import { usePaymentMethods, SavedPaymentMethod } from '@/hooks/usePaymentMethods';
 import { AddressCard } from '@/components/AddressCard';
+import { AddressForm } from '@/components/AddressForm';
 import { toast } from '@/hooks/use-toast';
 import { z } from 'zod';
 import { getSalePrice } from '@/types/product';
@@ -262,9 +263,28 @@ const CheckoutPage: React.FC = () => {
   };
 
   const handleContinueToPayment = () => {
-    if (validateShipping()) {
+    // If using saved address, just check that one is selected
+    if (!useNewAddress && addresses.length > 0) {
+      if (!selectedAddressId) {
+        toast({
+          title: "Address Required",
+          description: "Please select a shipping address.",
+          variant: "destructive",
+        });
+        return;
+      }
       setStep(2);
+      return;
     }
+    
+    // If using new address, AddressForm will handle validation and call its onSave
+    // which will then move to step 2
+    // So this button shouldn't be visible when entering new address
+    toast({
+      title: "Complete Address",
+      description: "Please fill out the address form.",
+      variant: "destructive",
+    });
   };
 
   const handlePlaceOrder = async () => {
@@ -449,200 +469,45 @@ const CheckoutPage: React.FC = () => {
                           Enter new address:
                         </p>
                       )}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:col-span-2">
-                      <div>
-                        <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                          Title
-                        </label>
-                        <select
-                          value={title}
-                          onChange={(e) => setTitle(e.target.value)}
-                          className="doodle-input w-full"
-                        >
-                          <option value="">None</option>
-                          <option value="Mr.">Mr.</option>
-                          <option value="Ms.">Ms.</option>
-                          <option value="Mrs.">Mrs.</option>
-                          <option value="Dr.">Dr.</option>
-                        </select>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                          First Name *
-                        </label>
-                        <input
-                          type="text"
-                          value={shippingData.firstName}
-                          onChange={(e) => handleShippingChange('firstName', e.target.value)}
-                          className="doodle-input w-full"
-                          placeholder="John"
-                        />
-                        {errors.firstName && <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.firstName}</p>}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                        Middle Name
-                      </label>
-                      <input
-                        type="text"
-                        value={middleName}
-                        onChange={(e) => setMiddleName(e.target.value)}
-                        className="doodle-input w-full"
-                        placeholder="Middle name (optional)"
+                      <AddressForm
+                        onSave={(addressData) => {
+                          // Convert AddressForm data to checkout shipping data
+                          setShippingData({
+                            firstName: user?.firstName || '',
+                            lastName: user?.lastName || '',
+                            email: user?.email || '',
+                            phone: shippingData.phone,
+                            address: addressData.addressLine1,
+                            city: addressData.city,
+                            state: String(addressData.stateProvinceId), // Will need to map this properly
+                            zipCode: addressData.postalCode,
+                            country: addressData.countryRegionCode || 'US',
+                          });
+                          
+                          // Save address if user wants to
+                          if (saveNewAddress && user) {
+                            addAddress({
+                              addressType: addressData.addressType,
+                              addressLine1: addressData.addressLine1,
+                              addressLine2: addressData.addressLine2,
+                              city: addressData.city,
+                              stateProvinceId: addressData.stateProvinceId,
+                              postalCode: addressData.postalCode,
+                              isDefault: addressData.isDefault,
+                            });
+                          }
+                          
+                          // Move to next step
+                          setStep(2);
+                        }}
+                        onCancel={() => {
+                          setUseNewAddress(false);
+                        }}
                       />
-                    </div>
-                    <div>
-                      <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                        Last Name *
-                      </label>
-                      <input
-                        type="text"
-                        value={shippingData.lastName}
-                        onChange={(e) => handleShippingChange('lastName', e.target.value)}
-                        className="doodle-input w-full"
-                        placeholder="Doe"
-                      />
-                      {errors.lastName && <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.lastName}</p>}
-                    </div>
-                    <div>
-                      <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                        Suffix
-                      </label>
-                      <select
-                        value={suffix}
-                        onChange={(e) => setSuffix(e.target.value)}
-                        className="doodle-input w-full"
-                      >
-                        <option value="">None</option>
-                        <option value="Jr.">Jr.</option>
-                        <option value="Sr.">Sr.</option>
-                        <option value="II">II</option>
-                        <option value="III">III</option>
-                        <option value="IV">IV</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                        Email *
-                      </label>
-                      <input
-                        type="email"
-                        value={shippingData.email}
-                        onChange={(e) => handleShippingChange('email', e.target.value)}
-                        className="doodle-input w-full"
-                        placeholder="john@example.com"
-                      />
-                      {errors.email && <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.email}</p>}
-                    </div>
-                    <div>
-                      <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                        Phone
-                      </label>
-                      <div className="flex gap-2">
-                        <select
-                          value={countryCode}
-                          onChange={(e) => setCountryCode(e.target.value)}
-                          className="doodle-input w-24 flex-shrink-0"
-                        >
-                          <option value="+1">🇺🇸 +1</option>
-                          <option value="+44">🇬🇧 +44</option>
-                          <option value="+61">🇦🇺 +61</option>
-                          <option value="+81">🇯🇵 +81</option>
-                          <option value="+86">🇨🇳 +86</option>
-                          <option value="+49">🇩🇪 +49</option>
-                          <option value="+33">🇫🇷 +33</option>
-                          <option value="+39">🇮🇹 +39</option>
-                          <option value="+34">🇪🇸 +34</option>
-                          <option value="+52">🇲🇽 +52</option>
-                          <option value="+55">🇧🇷 +55</option>
-                          <option value="+91">🇮🇳 +91</option>
-                        </select>
-                        <input
-                          type="tel"
-                          value={shippingData.phone}
-                          onChange={(e) => {
-                            const formatted = formatPhoneNumber(e.target.value, countryCode);
-                            handleShippingChange('phone', formatted);
-                          }}
-                          className="doodle-input flex-1"
-                          placeholder="555-123-4567"
-                        />
-                      </div>
-                      {errors.phone && <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.phone}</p>}
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                        Street Address *
-                      </label>
-                      <input
-                        type="text"
-                        value={shippingData.address}
-                        onChange={(e) => handleShippingChange('address', e.target.value)}
-                        className="doodle-input w-full"
-                        placeholder="123 Adventure Lane"
-                      />
-                      {errors.address && <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.address}</p>}
-                    </div>
-                    <div>
-                      <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                        City *
-                      </label>
-                      <input
-                        type="text"
-                        value={shippingData.city}
-                        onChange={(e) => handleShippingChange('city', e.target.value)}
-                        className="doodle-input w-full"
-                        placeholder="Seattle"
-                      />
-                      {errors.city && <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.city}</p>}
-                    </div>
-                    <div>
-                      <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                        State *
-                      </label>
-                      <input
-                        type="text"
-                        value={shippingData.state}
-                        onChange={(e) => handleShippingChange('state', e.target.value)}
-                        className="doodle-input w-full"
-                        placeholder="WA"
-                      />
-                      {errors.state && <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.state}</p>}
-                    </div>
-                    <div>
-                      <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                        ZIP Code *
-                      </label>
-                      <input
-                        type="text"
-                        value={shippingData.zipCode}
-                        onChange={(e) => handleShippingChange('zipCode', e.target.value)}
-                        className="doodle-input w-full"
-                        placeholder="98101"
-                      />
-                      {errors.zipCode && <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.zipCode}</p>}
-                    </div>
-                    <div>
-                      <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                        Country *
-                      </label>
-                      <select
-                        value={shippingData.country}
-                        onChange={(e) => handleShippingChange('country', e.target.value)}
-                        className="doodle-input w-full"
-                      >
-                        <option>United States</option>
-                        <option>Canada</option>
-                        <option>United Kingdom</option>
-                        <option>Australia</option>
-                      </select>
-                    </div>
 
                       {/* Save Address Option */}
                       {user && (
-                        <div className="md:col-span-2 mt-2">
+                        <div className="mt-4">
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input
                               type="checkbox"
@@ -650,37 +515,22 @@ const CheckoutPage: React.FC = () => {
                               onChange={(e) => setSaveNewAddress(e.target.checked)}
                               className="w-4 h-4"
                             />
-                            <span className="font-doodle text-sm text-doodle-text">
-                              Save this address for future orders
-                            </span>
+                            <span className="font-doodle text-sm text-doodle-text">Save this address for future orders</span>
                           </label>
-                          
-                          {saveNewAddress && (
-                            <div className="mt-3">
-                              <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                                Address Label
-                              </label>
-                              <input
-                                type="text"
-                                value={addressLabel}
-                                onChange={(e) => setAddressLabel(e.target.value)}
-                                className="doodle-input w-full md:w-1/2"
-                                placeholder="Home, Office, etc."
-                              />
-                            </div>
-                          )}
                         </div>
                       )}
-                      </div>
                     </>
                   )}
 
-                  <button
-                    onClick={handleContinueToPayment}
-                    className="doodle-button doodle-button-primary w-full mt-8 py-3 text-lg"
-                  >
-                    Continue to Payment
-                  </button>
+                  {/* Only show Continue button when not filling out new address form */}
+                  {!useNewAddress && addresses.length > 0 && (
+                    <button
+                      onClick={handleContinueToPayment}
+                      className="doodle-button doodle-button-primary w-full mt-8 py-3 text-lg"
+                    >
+                      Continue to Payment
+                    </button>
+                  )}
                 </div>
               )}
 
