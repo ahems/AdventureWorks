@@ -29,6 +29,8 @@ import { z } from "zod";
 import { getSalePrice } from "@/types/product";
 import { useProfile } from "@/hooks/useProfile";
 import { formatPhoneNumber, parsePhoneNumber } from "@/lib/phoneFormatter";
+import { graphqlClient } from "@/lib/graphql-client";
+import { gql } from "graphql-request";
 
 const shippingSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -63,6 +65,180 @@ const DISCOUNT_CODES: Record<
     description: "25% off your order",
   },
 };
+
+// Currency code to symbol mapping - complete list from database
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  AED: "د.إ", // Emirati Dirham
+  AFA: "؋", // Afghani (obsolete)
+  ALL: "L", // Albanian Lek
+  AMD: "֏", // Armenian Dram
+  ANG: "ƒ", // Netherlands Antillean Guilder
+  AOA: "Kz", // Angolan Kwanza
+  ARS: "$", // Argentine Peso
+  ATS: "öS", // Austrian Shilling (obsolete)
+  AUD: "A$", // Australian Dollar
+  AWG: "ƒ", // Aruban Guilder
+  AZM: "₼", // Azerbaijani Manat (obsolete)
+  BBD: "$", // Barbados Dollar
+  BDT: "৳", // Bangladeshi Taka
+  BEF: "₣", // Belgian Franc (obsolete)
+  BGN: "лв", // Bulgarian Lev
+  BHD: ".د.ب", // Bahraini Dinar
+  BND: "$", // Brunei Dollar
+  BOB: "Bs.", // Bolivian Boliviano
+  BRL: "R$", // Brazilian Real
+  BSD: "$", // Bahamian Dollar
+  BTN: "Nu.", // Bhutanese Ngultrum
+  CAD: "CA$", // Canadian Dollar
+  CHF: "CHF", // Swiss Franc
+  CLP: "$", // Chilean Peso
+  CNY: "¥", // Chinese Yuan Renminbi
+  COP: "$", // Colombian Peso
+  CRC: "₡", // Costa Rican Colon
+  CYP: "£", // Cyprus Pound (obsolete)
+  CZK: "Kč", // Czech Koruna
+  DEM: "DM", // Deutsche Mark (obsolete)
+  DKK: "kr", // Danish Krone
+  DOP: "$", // Dominican Peso
+  DZD: "د.ج", // Algerian Dinar
+  EEK: "kr", // Estonian Kroon (obsolete)
+  EGP: "£", // Egyptian Pound
+  ESP: "₧", // Spanish Peseta (obsolete)
+  EUR: "€", // Euro
+  FIM: "mk", // Finnish Markka (obsolete)
+  FJD: "$", // Fiji Dollar
+  FRF: "₣", // French Franc (obsolete)
+  GBP: "£", // British Pound
+  GHC: "₵", // Ghanaian Cedi (obsolete)
+  GRD: "₯", // Greek Drachma (obsolete)
+  GTQ: "Q", // Guatemalan Quetzal
+  HKD: "HK$", // Hong Kong Dollar
+  HRK: "kn", // Croatian Kuna
+  HUF: "Ft", // Hungarian Forint
+  IDR: "Rp", // Indonesian Rupiah
+  IEP: "£", // Irish Pound (obsolete)
+  ILS: "₪", // Israeli New Shekel
+  INR: "₹", // Indian Rupee
+  ISK: "kr", // Icelandic Krona
+  ITL: "₤", // Italian Lira (obsolete)
+  JMD: "$", // Jamaican Dollar
+  JOD: "د.ا", // Jordanian Dinar
+  JPY: "¥", // Japanese Yen
+  KES: "KSh", // Kenyan Shilling
+  KRW: "₩", // South Korean Won
+  KWD: "د.ك", // Kuwaiti Dinar
+  LBP: "ل.ل", // Lebanese Pound
+  LKR: "Rs", // Sri Lankan Rupee
+  LTL: "Lt", // Lithuanian Litas (obsolete)
+  LVL: "Ls", // Latvian Lats (obsolete)
+  MAD: "د.م.", // Moroccan Dirham
+  MTL: "₤", // Maltese Lira (obsolete)
+  MUR: "₨", // Mauritian Rupee
+  MVR: "Rf", // Maldivian Rufiyaa
+  MXN: "$", // Mexican Peso
+  MYR: "RM", // Malaysian Ringgit
+  NAD: "$", // Namibian Dollar
+  NGN: "₦", // Nigerian Naira
+  NLG: "ƒ", // Netherlands Guilder (obsolete)
+  NOK: "kr", // Norwegian Krone
+  NPR: "₨", // Nepalese Rupee
+  NZD: "NZ$", // New Zealand Dollar
+  OMR: "ر.ع.", // Omani Rial
+  PAB: "B/.", // Panamanian Balboa
+  PEN: "S/", // Peruvian Nuevo Sol
+  PHP: "₱", // Philippine Peso
+  PKR: "₨", // Pakistani Rupee
+  PLN: "zł", // Polish Zloty
+  PLZ: "zł", // Polish Zloty (old)
+  PTE: "Esc", // Portuguese Escudo (obsolete)
+  PYG: "₲", // Paraguayan Guarani
+  ROL: "lei", // Romanian Leu (old)
+  RUB: "₽", // Russian Ruble
+  RUR: "₽", // Russian Ruble (old)
+  SAR: "ر.س", // Saudi Riyal
+  SEK: "kr", // Swedish Krona
+  SGD: "S$", // Singapore Dollar
+  SIT: "SIT", // Slovenian Tolar (obsolete)
+  SKK: "Sk", // Slovak Koruna (obsolete)
+  SVC: "$", // El Salvador Colon
+  THB: "฿", // Thai Baht
+  TND: "د.ت", // Tunisian Dinar
+  TRL: "₤", // Turkish Lira (old)
+  TTD: "$", // Trinidad and Tobago Dollar
+  TWD: "NT$", // New Taiwan Dollar
+  USD: "$", // US Dollar
+  UYU: "$", // Uruguayan Peso
+};
+
+const GET_SALES_TAX_RATE = gql`
+  query GetSalesTaxRate($stateProvinceId: Int!) {
+    salesTaxRates(filter: { StateProvinceID: { eq: $stateProvinceId } }) {
+      items {
+        TaxRate
+        Name
+      }
+    }
+  }
+`;
+
+const GET_STATE_PROVINCE = gql`
+  query GetStateProvince($stateProvinceId: Int!) {
+    stateProvinces(filter: { StateProvinceID: { eq: $stateProvinceId } }) {
+      items {
+        StateProvinceID
+        CountryRegionCode
+      }
+    }
+  }
+`;
+
+const GET_COUNTRY_CURRENCY = gql`
+  query GetCountryCurrency($countryCode: String!) {
+    countryRegionCurrencies(
+      filter: { CountryRegionCode: { eq: $countryCode } }
+    ) {
+      items {
+        CurrencyCode
+      }
+    }
+  }
+`;
+
+const GET_CURRENCY_RATE = gql`
+  query GetCurrencyRate($toCurrencyCode: String!) {
+    currencyRates(
+      filter: {
+        FromCurrencyCode: { eq: "USD" }
+        ToCurrencyCode: { eq: $toCurrencyCode }
+      }
+    ) {
+      items {
+        AverageRate
+        EndOfDayRate
+      }
+    }
+  }
+`;
+
+const GET_SHIP_METHODS = gql`
+  query GetShipMethods {
+    shipMethods {
+      items {
+        ShipMethodID
+        Name
+        ShipBase
+        ShipRate
+      }
+    }
+  }
+`;
+
+interface ShipMethod {
+  ShipMethodID: number;
+  Name: string;
+  ShipBase: number;
+  ShipRate: number;
+}
 
 const isValidCardNumber = (number: string): boolean => {
   const digits = number.replace(/\s/g, "");
@@ -118,6 +294,13 @@ const CheckoutPage: React.FC = () => {
   const [discountCode, setDiscountCode] = useState("");
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
   const [codeError, setCodeError] = useState("");
+  const [taxRate, setTaxRate] = useState(0.08); // Default 8%
+  const [currencyCode, setCurrencyCode] = useState("USD");
+  const [exchangeRate, setExchangeRate] = useState(1); // Default 1 for USD
+  const [shipMethods, setShipMethods] = useState<ShipMethod[]>([]);
+  const [selectedShipMethodId, setSelectedShipMethodId] = useState<
+    number | null
+  >(null);
 
   const [title, setTitle] = useState("");
   const [middleName, setMiddleName] = useState("");
@@ -224,6 +407,102 @@ const CheckoutPage: React.FC = () => {
     useNewPayment,
   ]);
 
+  // Fetch tax rate and currency when address changes
+  useEffect(() => {
+    const fetchTaxRateAndCurrency = async () => {
+      const stateId = parseInt(shippingData.state);
+      if (!stateId || isNaN(stateId)) {
+        setTaxRate(0.08); // Default 8%
+        setCurrencyCode("USD");
+        return;
+      }
+
+      try {
+        // Get tax rate for the state
+        const taxResponse = await graphqlClient.request<{
+          salesTaxRates: { items: Array<{ TaxRate: number; Name: string }> };
+        }>(GET_SALES_TAX_RATE, { stateProvinceId: stateId });
+
+        if (taxResponse.salesTaxRates.items.length > 0) {
+          // TaxRate is stored as a whole number (e.g., 14 for 14%), convert to decimal
+          setTaxRate(taxResponse.salesTaxRates.items[0].TaxRate / 100);
+        } else {
+          setTaxRate(0.08); // Default 8% if no tax rate found
+        }
+
+        // Get state province to find country code
+        const stateResponse = await graphqlClient.request<{
+          stateProvinces: { items: Array<{ CountryRegionCode: string }> };
+        }>(GET_STATE_PROVINCE, { stateProvinceId: stateId });
+
+        if (stateResponse.stateProvinces.items.length > 0) {
+          const countryCode =
+            stateResponse.stateProvinces.items[0].CountryRegionCode;
+
+          // Get currency for the country
+          const currencyResponse = await graphqlClient.request<{
+            countryRegionCurrencies: { items: Array<{ CurrencyCode: string }> };
+          }>(GET_COUNTRY_CURRENCY, { countryCode });
+
+          if (currencyResponse.countryRegionCurrencies.items.length > 0) {
+            const newCurrencyCode =
+              currencyResponse.countryRegionCurrencies.items[0].CurrencyCode;
+            setCurrencyCode(newCurrencyCode);
+
+            // Get exchange rate for the currency (if not USD)
+            if (newCurrencyCode !== "USD") {
+              const rateResponse = await graphqlClient.request<{
+                currencyRates: {
+                  items: Array<{ AverageRate: number; EndOfDayRate: number }>;
+                };
+              }>(GET_CURRENCY_RATE, { toCurrencyCode: newCurrencyCode });
+
+              if (rateResponse.currencyRates.items.length > 0) {
+                // Use AverageRate for conversion
+                setExchangeRate(
+                  rateResponse.currencyRates.items[0].AverageRate
+                );
+              } else {
+                setExchangeRate(1); // Default to 1 if no rate found
+              }
+            } else {
+              setExchangeRate(1); // USD = 1:1
+            }
+          } else {
+            setCurrencyCode("USD"); // Default to USD
+            setExchangeRate(1);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching tax rate or currency:", error);
+        setTaxRate(0.08); // Default 8%
+        setCurrencyCode("USD");
+        setExchangeRate(1);
+      }
+    };
+
+    fetchTaxRateAndCurrency();
+  }, [shippingData.state]);
+
+  // Fetch shipping methods
+  useEffect(() => {
+    const fetchShipMethods = async () => {
+      try {
+        const response = await graphqlClient.request<{
+          shipMethods: { items: ShipMethod[] };
+        }>(GET_SHIP_METHODS);
+        setShipMethods(response.shipMethods.items);
+        // Select the first (cheapest) method by default
+        if (response.shipMethods.items.length > 0) {
+          setSelectedShipMethodId(response.shipMethods.items[0].ShipMethodID);
+        }
+      } catch (error) {
+        console.error("Error fetching shipping methods:", error);
+      }
+    };
+    fetchShipMethods();
+  }, []);
+
   const handleSelectAddress = (address: Address) => {
     setSelectedAddressId(address.id);
     setUseNewAddress(false);
@@ -234,18 +513,30 @@ const CheckoutPage: React.FC = () => {
   const originalPrice = getOriginalPrice();
   const totalDiscount = getTotalDiscount();
 
+  // Apply exchange rate to convert from USD to selected currency
+  const totalPriceConverted = totalPrice * exchangeRate;
+  const originalPriceConverted = originalPrice * exchangeRate;
+  const totalDiscountConverted = totalDiscount * exchangeRate;
+
   // Calculate discount from code
   const appliedDiscount = appliedCode && DISCOUNT_CODES[appliedCode];
   const codeDiscountAmount =
     appliedDiscount?.type === "percent"
-      ? totalPrice * (appliedDiscount.value! / 100)
+      ? totalPriceConverted * (appliedDiscount.value! / 100)
       : 0;
-  const priceAfterCodeDiscount = totalPrice - codeDiscountAmount;
+  const priceAfterCodeDiscount = totalPriceConverted - codeDiscountAmount;
   const freeShippingFromCode = appliedDiscount?.type === "freeshipping";
 
-  const baseShipping = priceAfterCodeDiscount > 50 ? 0 : 9.99;
+  // Get selected shipping method's price
+  const selectedShipMethod = shipMethods.find(
+    (method) => method.ShipMethodID === selectedShipMethodId
+  );
+  const baseShipping =
+    priceAfterCodeDiscount > 50 * exchangeRate
+      ? 0
+      : (selectedShipMethod?.ShipBase || 9.99) * exchangeRate;
   const shipping = freeShippingFromCode ? 0 : baseShipping;
-  const tax = priceAfterCodeDiscount * 0.08;
+  const tax = priceAfterCodeDiscount * taxRate;
   const grandTotal = priceAfterCodeDiscount + shipping + tax;
 
   const handleApplyCode = () => {
@@ -1047,6 +1338,8 @@ const CheckoutPage: React.FC = () => {
                   {items.map((item) => {
                     const salePrice = getSalePrice(item);
                     const itemPrice = salePrice || item.ListPrice;
+                    const itemPriceConverted = itemPrice * exchangeRate;
+                    const listPriceConverted = item.ListPrice * exchangeRate;
                     return (
                       <div
                         key={`${item.ProductID}-${item.selectedSize}-${item.selectedColor}`}
@@ -1061,7 +1354,9 @@ const CheckoutPage: React.FC = () => {
                           </p>
                           <div className="flex items-center gap-2">
                             <p className="font-doodle text-xs text-doodle-text/70">
-                              Qty: {item.quantity} × ${itemPrice.toFixed(2)}
+                              Qty: {item.quantity} ×{" "}
+                              {CURRENCY_SYMBOLS[currencyCode] || currencyCode}
+                              {itemPriceConverted.toFixed(2)}
                             </p>
                             {salePrice && (
                               <span className="font-doodle text-xs text-doodle-green font-bold">
@@ -1072,7 +1367,9 @@ const CheckoutPage: React.FC = () => {
                           </div>
                           {salePrice && (
                             <p className="font-doodle text-xs text-doodle-text/50 line-through">
-                              Was ${item.ListPrice.toFixed(2)}
+                              Was{" "}
+                              {CURRENCY_SYMBOLS[currencyCode] || currencyCode}
+                              {listPriceConverted.toFixed(2)}
                             </p>
                           )}
                         </div>
@@ -1081,72 +1378,131 @@ const CheckoutPage: React.FC = () => {
                   })}
                 </div>
 
-                <hr className="border-dashed border-doodle-text/30 my-4" />
+                {(step === 1 || appliedCode) && (
+                  <hr className="border-dashed border-doodle-text/30 my-4" />
+                )}
 
                 {/* Discount Code Input */}
-                <div className="mb-4">
-                  <label className="font-doodle text-sm font-bold text-doodle-text block mb-2">
-                    Discount Code
-                  </label>
-                  {appliedCode ? (
-                    <div className="flex items-center justify-between p-3 bg-doodle-green/10 border-2 border-doodle-green/30">
-                      <div className="flex items-center gap-2">
-                        <Tag className="w-4 h-4 text-doodle-green" />
-                        <span className="font-doodle font-bold text-doodle-green">
-                          {appliedCode}
-                        </span>
-                        <span className="font-doodle text-xs text-doodle-text/70">
-                          ({DISCOUNT_CODES[appliedCode]?.description})
-                        </span>
+                {(step === 1 || appliedCode) && (
+                  <div className="mb-4">
+                    <label className="font-doodle text-sm font-bold text-doodle-text block mb-2">
+                      Discount Code
+                    </label>
+                    {appliedCode ? (
+                      <div className="flex items-center justify-between p-3 bg-doodle-green/10 border-2 border-doodle-green/30">
+                        <div className="flex items-center gap-2">
+                          <Tag className="w-4 h-4 text-doodle-green" />
+                          <span className="font-doodle font-bold text-doodle-green">
+                            {appliedCode}
+                          </span>
+                          <span className="font-doodle text-xs text-doodle-text/70">
+                            ({DISCOUNT_CODES[appliedCode]?.description})
+                          </span>
+                        </div>
+                        {step === 1 && (
+                          <button
+                            onClick={handleRemoveCode}
+                            className="p-1 hover:bg-doodle-text/10 rounded transition-colors"
+                            aria-label="Remove discount code"
+                          >
+                            <X className="w-4 h-4 text-doodle-text/70" />
+                          </button>
+                        )}
                       </div>
-                      <button
-                        onClick={handleRemoveCode}
-                        className="p-1 hover:bg-doodle-text/10 rounded transition-colors"
-                        aria-label="Remove discount code"
-                      >
-                        <X className="w-4 h-4 text-doodle-text/70" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={discountCode}
-                        onChange={(e) => {
-                          setDiscountCode(e.target.value.toUpperCase());
-                          setCodeError("");
-                        }}
-                        className="doodle-input flex-1 uppercase"
-                        placeholder="ENTER CODE"
-                      />
-                      <button
-                        onClick={handleApplyCode}
-                        className="doodle-button px-4"
-                      >
-                        Apply
-                      </button>
-                    </div>
-                  )}
-                  {codeError && (
-                    <p className="font-doodle text-xs text-doodle-accent mt-1">
-                      {codeError}
-                    </p>
-                  )}
-                </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={discountCode}
+                          onChange={(e) => {
+                            setDiscountCode(e.target.value.toUpperCase());
+                            setCodeError("");
+                          }}
+                          className="doodle-input flex-1 uppercase"
+                          placeholder="ENTER CODE"
+                        />
+                        <button
+                          onClick={handleApplyCode}
+                          className="doodle-button px-4"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    )}
+                    {codeError && (
+                      <p className="font-doodle text-xs text-doodle-accent mt-1">
+                        {codeError}
+                      </p>
+                    )}
+                  </div>
+                )}
 
-                <hr className="border-dashed border-doodle-text/30 my-4" />
+                {(step === 1 || appliedCode) && (
+                  <hr className="border-dashed border-doodle-text/30 my-4" />
+                )}
+
+                {/* Shipping Method - Step 1 only */}
+                {step === 1 && (
+                  <div className="mb-4">
+                    <label className="font-doodle text-sm font-bold text-doodle-text block mb-2">
+                      Shipping Method
+                    </label>
+                    {shipMethods.length > 0 ? (
+                      <select
+                        value={selectedShipMethodId || ""}
+                        onChange={(e) =>
+                          setSelectedShipMethodId(Number(e.target.value))
+                        }
+                        className="doodle-input w-full text-sm"
+                      >
+                        {shipMethods.map((method) => {
+                          const methodPrice =
+                            priceAfterCodeDiscount > 50 * exchangeRate
+                              ? 0
+                              : method.ShipBase * exchangeRate;
+                          return (
+                            <option
+                              key={method.ShipMethodID}
+                              value={method.ShipMethodID}
+                            >
+                              {method.Name} -{" "}
+                              {methodPrice === 0
+                                ? "FREE"
+                                : `${
+                                    CURRENCY_SYMBOLS[currencyCode] ||
+                                    currencyCode
+                                  }${methodPrice.toFixed(2)}`}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    ) : (
+                      <p className="font-doodle text-sm text-doodle-text">
+                        Loading shipping methods...
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {step === 1 && (
+                  <hr className="border-dashed border-doodle-text/30 my-4" />
+                )}
 
                 {/* Totals */}
                 <div className="space-y-2 font-doodle text-sm">
                   <div className="flex justify-between">
                     <span className="text-doodle-text/70">Subtotal</span>
-                    <span>${originalPrice.toFixed(2)}</span>
+                    <span>
+                      {CURRENCY_SYMBOLS[currencyCode] || currencyCode}
+                      {originalPriceConverted.toFixed(2)}
+                    </span>
                   </div>
-                  {totalDiscount > 0 && (
+                  {totalDiscountConverted > 0 && (
                     <div className="flex justify-between text-doodle-green">
                       <span className="font-bold">Sale Discounts</span>
                       <span className="font-bold">
-                        -${totalDiscount.toFixed(2)}
+                        -{CURRENCY_SYMBOLS[currencyCode] || currencyCode}
+                        {totalDiscountConverted.toFixed(2)}
                       </span>
                     </div>
                   )}
@@ -1157,33 +1513,58 @@ const CheckoutPage: React.FC = () => {
                           Code: {appliedCode} (-{appliedDiscount.value}%)
                         </span>
                         <span className="font-bold">
-                          -${codeDiscountAmount.toFixed(2)}
+                          -{CURRENCY_SYMBOLS[currencyCode] || currencyCode}
+                          {codeDiscountAmount.toFixed(2)}
                         </span>
                       </div>
                     )}
+                  {step === 2 && (
+                    <div className="flex justify-between">
+                      <span className="text-doodle-text/70">Shipping</span>
+                      <span>
+                        {(() => {
+                          const selectedMethod = shipMethods.find(
+                            (m) => m.ShipMethodID === selectedShipMethodId
+                          );
+                          if (!selectedMethod) return "Loading...";
+
+                          const methodPrice =
+                            priceAfterCodeDiscount > 50 * exchangeRate
+                              ? 0
+                              : selectedMethod.ShipBase * exchangeRate;
+
+                          return `${selectedMethod.Name} - ${
+                            methodPrice === 0
+                              ? "FREE"
+                              : `${
+                                  CURRENCY_SYMBOLS[currencyCode] || currencyCode
+                                }${methodPrice.toFixed(2)}`
+                          }`;
+                        })()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <hr className="border-dashed border-doodle-text/30 my-4" />
+
+                {/* Final Totals */}
+                <div className="space-y-2 font-doodle text-sm">
                   <div className="flex justify-between">
-                    <span className="text-doodle-text/70">Shipping</span>
-                    <span
-                      className={
-                        shipping === 0 ? "text-doodle-green font-bold" : ""
-                      }
-                    >
-                      {shipping === 0
-                        ? freeShippingFromCode
-                          ? "FREE (code)"
-                          : "FREE"
-                        : `$${shipping.toFixed(2)}`}
+                    <span className="text-doodle-text/70">
+                      Tax ({(taxRate * 100).toFixed(1)}%)
                     </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-doodle-text/70">Tax (8%)</span>
-                    <span>${tax.toFixed(2)}</span>
+                    <span>
+                      {CURRENCY_SYMBOLS[currencyCode] || currencyCode}
+                      {tax.toFixed(2)}
+                    </span>
                   </div>
                   <hr className="border-dashed border-doodle-text/30" />
                   <div className="flex justify-between text-lg font-bold">
                     <span>Total</span>
                     <span className="text-doodle-green">
-                      ${grandTotal.toFixed(2)}
+                      {CURRENCY_SYMBOLS[currencyCode] || currencyCode}
+                      {grandTotal.toFixed(2)}
                     </span>
                   </div>
                 </div>
