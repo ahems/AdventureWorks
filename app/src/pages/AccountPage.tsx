@@ -86,8 +86,12 @@ const AccountPage: React.FC = () => {
     setDefaultAddress,
     isLoading: addressesLoading,
   } = useAddresses();
-  const { paymentMethods, deletePaymentMethod, setDefaultPaymentMethod } =
-    usePaymentMethods();
+  const {
+    paymentMethods,
+    removePaymentMethod,
+    setDefaultPaymentMethod,
+    isLoading: paymentMethodsLoading,
+  } = usePaymentMethods();
   const [customerId, setCustomerId] = useState<number | null>(null);
   const { data: orders = [], isLoading: ordersLoading } = useOrders(
     customerId || 0
@@ -1135,7 +1139,26 @@ const AccountPage: React.FC = () => {
                   </div>
                 </div>
 
-                {paymentMethods.length === 0 ? (
+                {paymentMethodsLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-4 p-4 border-2 border-dashed border-doodle-text/20"
+                      >
+                        <Skeleton className="w-8 h-8" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-5 w-48" />
+                          <Skeleton className="h-4 w-64" />
+                        </div>
+                        <div className="flex gap-2">
+                          <Skeleton className="w-9 h-9" />
+                          <Skeleton className="w-9 h-9" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : paymentMethods.length === 0 ? (
                   <div className="text-center py-8">
                     <CreditCard className="w-16 h-16 mx-auto mb-4 text-doodle-text/30" />
                     <p className="font-doodle text-doodle-text/70 mb-4">
@@ -1169,30 +1192,23 @@ const AccountPage: React.FC = () => {
                           </p>
                         </div>
                         <div className="flex gap-2">
-                          {!pm.isDefault && (
-                            <button
-                              onClick={() => {
-                                setDefaultPaymentMethod(pm.id);
-                                toast({
-                                  title: "Default Updated",
-                                  description:
-                                    "Your default payment method has been changed.",
-                                });
-                              }}
-                              className="p-2 hover:bg-doodle-text/5 rounded transition-colors"
-                              title="Set as default"
-                            >
-                              <Star className="w-4 h-4 text-doodle-text/70" />
-                            </button>
-                          )}
                           <button
-                            onClick={() => {
-                              deletePaymentMethod(pm.id);
-                              toast({
-                                title: "Payment Method Removed",
-                                description:
-                                  "The card has been removed from your account.",
-                              });
+                            onClick={async () => {
+                              try {
+                                await removePaymentMethod(pm.id);
+                                toast({
+                                  title: "Payment Method Removed",
+                                  description:
+                                    "The card has been removed from your account.",
+                                });
+                              } catch (error) {
+                                toast({
+                                  title: "Error",
+                                  description:
+                                    "Failed to remove payment method. Please try again.",
+                                  variant: "destructive",
+                                });
+                              }
                             }}
                             className="p-2 hover:bg-doodle-accent/10 rounded transition-colors"
                             title="Delete"

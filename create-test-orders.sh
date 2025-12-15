@@ -1,7 +1,28 @@
 #!/bin/bash
 
-API_URL="https://todoapp-api-ewphuc52etkbc.agreeableocean-5dff8db3.eastus2.azurecontainerapps.io/api"
-CUSTOMER_ID=30120
+API_URL="https://av-api-ewphuc52etkbc.purplesky-9d5d92b9.eastus2.azurecontainerapps.io/api"
+PERSON_ID=20779
+ADDRESS_ID=32523
+
+echo "Checking if Customer record exists for PersonID ${PERSON_ID}..."
+CUSTOMER_RESPONSE=$(curl -s "${API_URL}/Customer?\$filter=PersonID%20eq%20${PERSON_ID}")
+CUSTOMER_ID=$(echo $CUSTOMER_RESPONSE | jq -r '.value[0].CustomerID // empty')
+
+if [ -z "$CUSTOMER_ID" ]; then
+  echo "Creating Customer record for PersonID ${PERSON_ID}..."
+  CUSTOMER_CREATE=$(curl -s -X POST "${API_URL}/Customer" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"PersonID\": ${PERSON_ID},
+      \"StoreID\": null,
+      \"TerritoryID\": 1,
+      \"AccountNumber\": \"AW000${PERSON_ID}\"
+    }")
+  CUSTOMER_ID=$(echo $CUSTOMER_CREATE | jq -r '.value[0].CustomerID')
+  echo "✓ Created Customer with CustomerID: ${CUSTOMER_ID}"
+else
+  echo "✓ Found existing Customer with CustomerID: ${CUSTOMER_ID}"
+fi
 
 # Create Order 1: Sport-100 Helmet & Mountain Bike Socks
 echo "Creating Order 1 (Helmet & Socks)..."
@@ -16,8 +37,8 @@ ORDER_1=$(curl -s -X POST "${API_URL}/SalesOrderHeader" \
     "Status": 5,
     "OnlineOrderFlag": true,
     "CustomerID": '${CUSTOMER_ID}',
-    "BillToAddressID": 985,
-    "ShipToAddressID": 985,
+    "BillToAddressID": '${ADDRESS_ID}',
+    "ShipToAddressID": '${ADDRESS_ID}',
     "ShipMethodID": 5,
     "SubTotal": 44.49,
     "TaxAmt": 3.56,
@@ -69,8 +90,8 @@ ORDER_2=$(curl -s -X POST "${API_URL}/SalesOrderHeader" \
     "Status": 5,
     "OnlineOrderFlag": true,
     "CustomerID": '${CUSTOMER_ID}',
-    "BillToAddressID": 985,
-    "ShipToAddressID": 985,
+    "BillToAddressID": '${ADDRESS_ID}',
+    "ShipToAddressID": '${ADDRESS_ID}',
     "ShipMethodID": 5,
     "SubTotal": 1431.50,
     "TaxAmt": 114.52,
@@ -109,8 +130,8 @@ ORDER_3=$(curl -s -X POST "${API_URL}/SalesOrderHeader" \
     "Status": 1,
     "OnlineOrderFlag": true,
     "CustomerID": '${CUSTOMER_ID}',
-    "BillToAddressID": 985,
-    "ShipToAddressID": 985,
+    "BillToAddressID": '${ADDRESS_ID}',
+    "ShipToAddressID": '${ADDRESS_ID}',
     "ShipMethodID": 5,
     "SubTotal": 79.48,
     "TaxAmt": 6.36,

@@ -1,9 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/context/AuthContext';
+import { useState, useEffect, useCallback } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { graphqlClient } from "@/lib/graphql-client";
+import { gql } from "graphql-request";
+import { getRestApiUrl } from "@/lib/utils";
 
 export interface SavedPaymentMethod {
   id: string;
-  type: 'card' | 'paypal';
+  type: "card" | "paypal";
   label: string;
   // For cards - only store masked info for security
   cardLast4?: string;
@@ -15,118 +18,176 @@ export interface SavedPaymentMethod {
   isDefault: boolean;
 }
 
-const PAYMENT_METHODS_KEY = 'user_payment_methods';
-
-const getStoredPaymentMethods = (userId: string): SavedPaymentMethod[] => {
-  try {
-    const data = localStorage.getItem(`${PAYMENT_METHODS_KEY}_${userId}`);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
+const GET_PERSON_CREDIT_CARDS = gql`
+  query GetPersonCreditCards($businessEntityId: Int!) {
+    personCreditCards(filter: { BusinessEntityID: { eq: $businessEntityId } }) {
+      items {
+        BusinessEntityID
+        CreditCardID
+      }
+    }
   }
-};
+`;
 
-const savePaymentMethods = (userId: string, methods: SavedPaymentMethod[]) => {
-  localStorage.setItem(`${PAYMENT_METHODS_KEY}_${userId}`, JSON.stringify(methods));
-};
+const GET_CREDIT_CARDS = gql`
+  query GetCreditCards($cardIds: [Int!]) {
+    creditCards(filter: { CreditCardID: { in: $cardIds } }) {
+      items {
+        CreditCardID
+        CardType
+        CardNumber
+        ExpMonth
+        ExpYear
+      }
+    }
+  }
+`;
 
-// Detect card brand from number
-const getCardBrand = (cardNumber: string): string => {
-  const cleanNumber = cardNumber.replace(/\s/g, '');
-  if (/^4/.test(cleanNumber)) return 'Visa';
-  if (/^5[1-5]/.test(cleanNumber)) return 'Mastercard';
-  if (/^3[47]/.test(cleanNumber)) return 'Amex';
-  if (/^6(?:011|5)/.test(cleanNumber)) return 'Discover';
-  return 'Card';
+// Detect card brand from card type
+const getCardBrand = (cardType: string): string => {
+  if (cardType === "Vista") return "Visa";
+  if (cardType === "SuperiorCard") return "Mastercard";
+  if (cardType === "Distinguish") return "Discover";
+  if (cardType === "ColonialVoice") return "Amex";
+  return cardType;
 };
 
 export const usePaymentMethods = () => {
   const { user } = useAuth();
-  const [paymentMethods, setPaymentMethods] = useState<SavedPaymentMethod[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<SavedPaymentMethod[]>(
+    []
+  );
+  const [isLoading, setIsLoading] = useState(false);
+
+  const fetchPaymentMethods = useCallback(async () => {
+    if (!user?.businessEntityId) return;
+
+    setIsLoading(true);
+    try {
+      // Get PersonCreditCard links
+      const personCardsResponse: any = await graphqlClient.request(
+        GET_PERSON_CREDIT_CARDS,
+        { businessEntityId: user.businessEntityId }
+      );
+
+      const personCards = personCardsResponse.personCreditCards?.items || [];
+
+      if (personCards.length === 0) {
+        setPaymentMethods([]);
+        return;
+      }
+
+      // Get CreditCard details
+      const cardIds = personCards.map((pc: any) => pc.CreditCardID);
+      const cardsResponse: any = await graphqlClient.request(GET_CREDIT_CARDS, {
+        cardIds,
+      });
+
+      const cards = cardsResponse.creditCards?.items || [];
+
+      // Transform to SavedPaymentMethod format
+      const methods: SavedPaymentMethod[] = cards.map(
+        (card: any, index: number) => ({
+          id: card.CreditCardID.toString(),
+          type: "card" as const,
+          label: `${getCardBrand(card.CardType)} •••• ${card.CardNumber.slice(
+            -4
+          )}`,
+          cardLast4: card.CardNumber.slice(-4),
+          cardBrand: getCardBrand(card.CardType),
+          cardExpiry: `${String(card.ExpMonth).padStart(2, "0")}/${
+            card.ExpYear
+          }`,
+          isDefault: index === 0, // First card is default for now
+        })
+      );
+
+      setPaymentMethods(methods);
+    } catch (error) {
+      console.error(
+        "[usePaymentMethods] Error fetching payment methods:",
+        error
+      );
+      setPaymentMethods([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user?.businessEntityId]);
 
   useEffect(() => {
-    if (user?.id) {
-      setPaymentMethods(getStoredPaymentMethods(user.id));
-    }
-  }, [user?.id]);
+    fetchPaymentMethods();
+  }, [fetchPaymentMethods]);
 
-  const addPaymentMethod = useCallback((method: {
-    type: 'card' | 'paypal';
-    label?: string;
-    cardNumber?: string;
-    cardExpiry?: string;
-    cardholderName?: string;
-    paypalEmail?: string;
-    isDefault?: boolean;
-  }) => {
-    if (!user?.id) return;
+  const addPaymentMethod = useCallback(
+    (method: {
+      type: "card" | "paypal";
+      label?: string;
+      cardNumber?: string;
+      cardExpiry?: string;
+      cardholderName?: string;
+      paypalEmail?: string;
+      isDefault?: boolean;
+    }) => {
+      if (!user?.businessEntityId) return;
 
-    const newMethod: SavedPaymentMethod = {
-      id: `pm_${Date.now()}`,
-      type: method.type,
-      label: method.label || (method.type === 'card' ? 'Credit Card' : 'PayPal'),
-      isDefault: method.isDefault || paymentMethods.length === 0,
-    };
+      // TODO: Implement API call to create credit card and link to person
+      console.log(
+        "[usePaymentMethods] Add payment method not yet implemented via API",
+        method
+      );
+    },
+    [user?.businessEntityId]
+  );
 
-    if (method.type === 'card' && method.cardNumber) {
-      const cleanNumber = method.cardNumber.replace(/\s/g, '');
-      newMethod.cardLast4 = cleanNumber.slice(-4);
-      newMethod.cardBrand = getCardBrand(method.cardNumber);
-      newMethod.cardExpiry = method.cardExpiry;
-      newMethod.cardholderName = method.cardholderName;
-    } else if (method.type === 'paypal' && method.paypalEmail) {
-      newMethod.paypalEmail = method.paypalEmail;
-    }
+  const removePaymentMethod = useCallback(
+    async (methodId: string) => {
+      if (!user?.businessEntityId) return;
 
-    let updatedMethods = [...paymentMethods];
+      try {
+        const creditCardId = parseInt(methodId, 10);
 
-    // If this is the first or marked as default, unset other defaults
-    if (newMethod.isDefault) {
-      updatedMethods = updatedMethods.map(m => ({ ...m, isDefault: false }));
-    }
+        // Delete the PersonCreditCard link via REST API
+        const restUrl = getRestApiUrl();
+        const response = await fetch(
+          `${restUrl}/PersonCreditCard/BusinessEntityID/${user.businessEntityId}/CreditCardID/${creditCardId}`,
+          {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
 
-    updatedMethods.push(newMethod);
-    setPaymentMethods(updatedMethods);
-    savePaymentMethods(user.id, updatedMethods);
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to delete payment method: ${errorText}`);
+        }
 
-    return newMethod;
-  }, [user?.id, paymentMethods]);
+        console.log("[usePaymentMethods] Payment method removed successfully");
 
-  const deletePaymentMethod = useCallback((id: string) => {
-    if (!user?.id) return;
-
-    let updatedMethods = paymentMethods.filter(m => m.id !== id);
-
-    // If we deleted the default, make the first one default
-    if (updatedMethods.length > 0 && !updatedMethods.some(m => m.isDefault)) {
-      updatedMethods[0].isDefault = true;
-    }
-
-    setPaymentMethods(updatedMethods);
-    savePaymentMethods(user.id, updatedMethods);
-  }, [user?.id, paymentMethods]);
-
-  const setDefaultPaymentMethod = useCallback((id: string) => {
-    if (!user?.id) return;
-
-    const updatedMethods = paymentMethods.map(m => ({
-      ...m,
-      isDefault: m.id === id,
-    }));
-
-    setPaymentMethods(updatedMethods);
-    savePaymentMethods(user.id, updatedMethods);
-  }, [user?.id, paymentMethods]);
+        // Refetch to update the list
+        await fetchPaymentMethods();
+      } catch (error) {
+        console.error(
+          "[usePaymentMethods] Error removing payment method:",
+          error
+        );
+        throw error;
+      }
+    },
+    [user?.businessEntityId, fetchPaymentMethods]
+  );
 
   const getDefaultPaymentMethod = useCallback(() => {
-    return paymentMethods.find(m => m.isDefault) || paymentMethods[0] || null;
+    return paymentMethods.find((m) => m.isDefault) || paymentMethods[0] || null;
   }, [paymentMethods]);
 
   return {
     paymentMethods,
+    isLoading,
     addPaymentMethod,
-    deletePaymentMethod,
-    setDefaultPaymentMethod,
+    removePaymentMethod,
     getDefaultPaymentMethod,
+    refetch: fetchPaymentMethods,
   };
 };
