@@ -14,30 +14,64 @@
         "ghcr.io/azure/azure-dev/azd:latest": {},
         "ghcr.io/devcontainers/features/powershell:1": {
             "version": "latest"
+        },
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {
+            "version": "latest"
         }
     },
     "customizations": {
         "vscode": {
             "extensions": [
                 "ms-azuretools.vscode-bicep",
-                "ms-python.python",
                 "ms-vscode.powershell",
-                "redis.redis-for-vscode"
+                "ms-dotnettools.csharp",
+                "ms-dotnettools.csdevkit",
+                "ms-azuretools.vscode-azurefunctions",
+                "ms-vscode.vscode-node-azure-pack",
+                "dbaeumer.vscode-eslint",
+                "esbenp.prettier-vscode",
+                "bradlc.vscode-tailwindcss"
             ],
             "settings": {
-                // Provide a stable default PowerShell name that matches the configured additional path below
+                // PowerShell settings
                 "powershell.powerShellAdditionalExePaths": {
                     "PowerShell (x64)": "/usr/bin/pwsh"
                 },
                 "powershell.powerShellDefaultVersion": "PowerShell (x64)",
-                "powershell.enableStartUpBanner": false
+                "powershell.enableStartUpBanner": false,
+                
+                // .NET settings
+                "dotnet.defaultSolution": "api-functions/AdventureWorks.Functions.sln",
+                
+                // Format settings
+                "editor.formatOnSave": true,
+                "editor.defaultFormatter": "esbenp.prettier-vscode",
+                "[csharp]": {
+                    "editor.defaultFormatter": "ms-dotnettools.csharp"
+                }
             }
         }
     },
     "forwardPorts": [
-        50505
+        5000,
+        5173,
+        7071
     ],
-    "postCreateCommand": "az bicep install",
+    "portsAttributes": {
+        "5000": {
+            "label": "DAB API",
+            "onAutoForward": "notify"
+        },
+        "5173": {
+            "label": "Vite Dev Server",
+            "onAutoForward": "notify"
+        },
+        "7071": {
+            "label": "Azure Functions",
+            "onAutoForward": "notify"
+        }
+    },
+    "postCreateCommand": "az bicep install && dotnet restore api-functions/AdventureWorks.Functions.sln && cd app && bun install",
     "hostRequirements": {
         "memory": "8gb"
     }
