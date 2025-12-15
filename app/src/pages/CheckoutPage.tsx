@@ -24,6 +24,7 @@ import {
 } from "@/hooks/usePaymentMethods";
 import { AddressCard } from "@/components/AddressCard";
 import { AddressForm } from "@/components/AddressForm";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { getSalePrice } from "@/types/product";
@@ -31,6 +32,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { formatPhoneNumber, parsePhoneNumber } from "@/lib/phoneFormatter";
 import { graphqlClient } from "@/lib/graphql-client";
 import { gql } from "graphql-request";
+import { CURRENCY_SYMBOLS } from "@/lib/currencies";
 
 const shippingSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -67,109 +69,6 @@ const DISCOUNT_CODES: Record<
 };
 
 // Currency code to symbol mapping - complete list from database
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  AED: "د.إ", // Emirati Dirham
-  AFA: "؋", // Afghani (obsolete)
-  ALL: "L", // Albanian Lek
-  AMD: "֏", // Armenian Dram
-  ANG: "ƒ", // Netherlands Antillean Guilder
-  AOA: "Kz", // Angolan Kwanza
-  ARS: "$", // Argentine Peso
-  ATS: "öS", // Austrian Shilling (obsolete)
-  AUD: "A$", // Australian Dollar
-  AWG: "ƒ", // Aruban Guilder
-  AZM: "₼", // Azerbaijani Manat (obsolete)
-  BBD: "$", // Barbados Dollar
-  BDT: "৳", // Bangladeshi Taka
-  BEF: "₣", // Belgian Franc (obsolete)
-  BGN: "лв", // Bulgarian Lev
-  BHD: ".د.ب", // Bahraini Dinar
-  BND: "$", // Brunei Dollar
-  BOB: "Bs.", // Bolivian Boliviano
-  BRL: "R$", // Brazilian Real
-  BSD: "$", // Bahamian Dollar
-  BTN: "Nu.", // Bhutanese Ngultrum
-  CAD: "CA$", // Canadian Dollar
-  CHF: "CHF", // Swiss Franc
-  CLP: "$", // Chilean Peso
-  CNY: "¥", // Chinese Yuan Renminbi
-  COP: "$", // Colombian Peso
-  CRC: "₡", // Costa Rican Colon
-  CYP: "£", // Cyprus Pound (obsolete)
-  CZK: "Kč", // Czech Koruna
-  DEM: "DM", // Deutsche Mark (obsolete)
-  DKK: "kr", // Danish Krone
-  DOP: "$", // Dominican Peso
-  DZD: "د.ج", // Algerian Dinar
-  EEK: "kr", // Estonian Kroon (obsolete)
-  EGP: "£", // Egyptian Pound
-  ESP: "₧", // Spanish Peseta (obsolete)
-  EUR: "€", // Euro
-  FIM: "mk", // Finnish Markka (obsolete)
-  FJD: "$", // Fiji Dollar
-  FRF: "₣", // French Franc (obsolete)
-  GBP: "£", // British Pound
-  GHC: "₵", // Ghanaian Cedi (obsolete)
-  GRD: "₯", // Greek Drachma (obsolete)
-  GTQ: "Q", // Guatemalan Quetzal
-  HKD: "HK$", // Hong Kong Dollar
-  HRK: "kn", // Croatian Kuna
-  HUF: "Ft", // Hungarian Forint
-  IDR: "Rp", // Indonesian Rupiah
-  IEP: "£", // Irish Pound (obsolete)
-  ILS: "₪", // Israeli New Shekel
-  INR: "₹", // Indian Rupee
-  ISK: "kr", // Icelandic Krona
-  ITL: "₤", // Italian Lira (obsolete)
-  JMD: "$", // Jamaican Dollar
-  JOD: "د.ا", // Jordanian Dinar
-  JPY: "¥", // Japanese Yen
-  KES: "KSh", // Kenyan Shilling
-  KRW: "₩", // South Korean Won
-  KWD: "د.ك", // Kuwaiti Dinar
-  LBP: "ل.ل", // Lebanese Pound
-  LKR: "Rs", // Sri Lankan Rupee
-  LTL: "Lt", // Lithuanian Litas (obsolete)
-  LVL: "Ls", // Latvian Lats (obsolete)
-  MAD: "د.م.", // Moroccan Dirham
-  MTL: "₤", // Maltese Lira (obsolete)
-  MUR: "₨", // Mauritian Rupee
-  MVR: "Rf", // Maldivian Rufiyaa
-  MXN: "$", // Mexican Peso
-  MYR: "RM", // Malaysian Ringgit
-  NAD: "$", // Namibian Dollar
-  NGN: "₦", // Nigerian Naira
-  NLG: "ƒ", // Netherlands Guilder (obsolete)
-  NOK: "kr", // Norwegian Krone
-  NPR: "₨", // Nepalese Rupee
-  NZD: "NZ$", // New Zealand Dollar
-  OMR: "ر.ع.", // Omani Rial
-  PAB: "B/.", // Panamanian Balboa
-  PEN: "S/", // Peruvian Nuevo Sol
-  PHP: "₱", // Philippine Peso
-  PKR: "₨", // Pakistani Rupee
-  PLN: "zł", // Polish Zloty
-  PLZ: "zł", // Polish Zloty (old)
-  PTE: "Esc", // Portuguese Escudo (obsolete)
-  PYG: "₲", // Paraguayan Guarani
-  ROL: "lei", // Romanian Leu (old)
-  RUB: "₽", // Russian Ruble
-  RUR: "₽", // Russian Ruble (old)
-  SAR: "ر.س", // Saudi Riyal
-  SEK: "kr", // Swedish Krona
-  SGD: "S$", // Singapore Dollar
-  SIT: "SIT", // Slovenian Tolar (obsolete)
-  SKK: "Sk", // Slovak Koruna (obsolete)
-  SVC: "$", // El Salvador Colon
-  THB: "฿", // Thai Baht
-  TND: "د.ت", // Tunisian Dinar
-  TRL: "₤", // Turkish Lira (old)
-  TTD: "$", // Trinidad and Tobago Dollar
-  TWD: "NT$", // New Taiwan Dollar
-  USD: "$", // US Dollar
-  UYU: "$", // Uruguayan Peso
-};
-
 const GET_SALES_TAX_RATE = gql`
   query GetSalesTaxRate($stateProvinceId: Int!) {
     salesTaxRates(filter: { StateProvinceID: { eq: $stateProvinceId } }) {
@@ -391,7 +290,12 @@ const CheckoutPage: React.FC = () => {
   } = useCart();
   const { user } = useAuth();
   const { data: profileData } = useProfile(user?.businessEntityId || 0);
-  const { addresses, getDefaultAddress, addAddress } = useAddresses();
+  const {
+    addresses,
+    getDefaultAddress,
+    addAddress,
+    isLoading: isLoadingAddresses,
+  } = useAddresses();
   const { paymentMethods, getDefaultPaymentMethod, addPaymentMethod } =
     usePaymentMethods();
   const [step, setStep] = useState(1);
@@ -1055,8 +959,29 @@ const CheckoutPage: React.FC = () => {
                     </h2>
                   </div>
 
+                  {/* Loading Skeleton */}
+                  {isLoadingAddresses && (
+                    <div className="mb-6">
+                      <p className="font-doodle text-sm font-bold text-doodle-text mb-3">
+                        Loading saved addresses...
+                      </p>
+                      <div className="grid grid-cols-1 gap-3 mb-4">
+                        {[1, 2].map((i) => (
+                          <div
+                            key={i}
+                            className="p-4 border-2 border-doodle-text/20 rounded-lg"
+                          >
+                            <Skeleton className="h-4 w-32 mb-2" />
+                            <Skeleton className="h-3 w-full mb-1" />
+                            <Skeleton className="h-3 w-3/4" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Saved Addresses Selection */}
-                  {addresses.length > 0 && (
+                  {!isLoadingAddresses && addresses.length > 0 && (
                     <div className="mb-6">
                       <p className="font-doodle text-sm font-bold text-doodle-text mb-3">
                         Select a saved address:
@@ -1108,69 +1033,70 @@ const CheckoutPage: React.FC = () => {
                   )}
 
                   {/* Address Form - show if no saved addresses or using new address */}
-                  {(addresses.length === 0 || useNewAddress) && (
-                    <>
-                      {addresses.length > 0 && (
-                        <p className="font-doodle text-sm font-bold text-doodle-text mb-3">
-                          Enter new address:
-                        </p>
-                      )}
-                      <AddressForm
-                        onSave={(addressData) => {
-                          // Convert AddressForm data to checkout shipping data
-                          setShippingData({
-                            firstName: user?.firstName || "",
-                            lastName: user?.lastName || "",
-                            email: user?.email || "",
-                            phone: shippingData.phone,
-                            address: addressData.addressLine1,
-                            city: addressData.city,
-                            state: String(addressData.stateProvinceId), // Will need to map this properly
-                            zipCode: addressData.postalCode,
-                            country: addressData.countryRegionCode || "US",
-                          });
-
-                          // Save address if user wants to
-                          if (saveNewAddress && user) {
-                            addAddress({
-                              addressType: addressData.addressType,
-                              addressLine1: addressData.addressLine1,
-                              addressLine2: addressData.addressLine2,
+                  {!isLoadingAddresses &&
+                    (addresses.length === 0 || useNewAddress) && (
+                      <>
+                        {addresses.length > 0 && (
+                          <p className="font-doodle text-sm font-bold text-doodle-text mb-3">
+                            Enter new address:
+                          </p>
+                        )}
+                        <AddressForm
+                          onSave={(addressData) => {
+                            // Convert AddressForm data to checkout shipping data
+                            setShippingData({
+                              firstName: user?.firstName || "",
+                              lastName: user?.lastName || "",
+                              email: user?.email || "",
+                              phone: shippingData.phone,
+                              address: addressData.addressLine1,
                               city: addressData.city,
-                              stateProvinceId: addressData.stateProvinceId,
-                              postalCode: addressData.postalCode,
-                              isDefault: addressData.isDefault,
+                              state: String(addressData.stateProvinceId), // Will need to map this properly
+                              zipCode: addressData.postalCode,
+                              country: addressData.countryRegionCode || "US",
                             });
-                          }
 
-                          // Move to next step
-                          setStep(2);
-                        }}
-                        onCancel={() => {
-                          setUseNewAddress(false);
-                        }}
-                      />
+                            // Save address if user wants to
+                            if (saveNewAddress && user) {
+                              addAddress({
+                                addressType: addressData.addressType,
+                                addressLine1: addressData.addressLine1,
+                                addressLine2: addressData.addressLine2,
+                                city: addressData.city,
+                                stateProvinceId: addressData.stateProvinceId,
+                                postalCode: addressData.postalCode,
+                                isDefault: addressData.isDefault,
+                              });
+                            }
 
-                      {/* Save Address Option */}
-                      {user && (
-                        <div className="mt-4">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={saveNewAddress}
-                              onChange={(e) =>
-                                setSaveNewAddress(e.target.checked)
-                              }
-                              className="w-4 h-4"
-                            />
-                            <span className="font-doodle text-sm text-doodle-text">
-                              Save this address for future orders
-                            </span>
-                          </label>
-                        </div>
-                      )}
-                    </>
-                  )}
+                            // Move to next step
+                            setStep(2);
+                          }}
+                          onCancel={() => {
+                            setUseNewAddress(false);
+                          }}
+                        />
+
+                        {/* Save Address Option */}
+                        {user && (
+                          <div className="mt-4">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={saveNewAddress}
+                                onChange={(e) =>
+                                  setSaveNewAddress(e.target.checked)
+                                }
+                                className="w-4 h-4"
+                              />
+                              <span className="font-doodle text-sm text-doodle-text">
+                                Save this address for future orders
+                              </span>
+                            </label>
+                          </div>
+                        )}
+                      </>
+                    )}
 
                   {/* Only show Continue button when not filling out new address form */}
                   {!useNewAddress && addresses.length > 0 && (

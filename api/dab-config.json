@@ -430,6 +430,18 @@
           "target.entity": "SalesOrderDetail",
           "source.fields": ["SalesOrderID"],
           "target.fields": ["SalesOrderID"]
+        },
+        "shipMethod": {
+          "cardinality": "one",
+          "target.entity": "ShipMethod",
+          "source.fields": ["ShipMethodID"],
+          "target.fields": ["ShipMethodID"]
+        },
+        "currency": {
+          "cardinality": "one",
+          "target.entity": "Currency",
+          "source.fields": ["CurrencyRateID"],
+          "target.fields": ["CurrencyRateID"]
         }
       }
     },

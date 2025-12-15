@@ -41,6 +41,7 @@ import { toast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { formatPhoneNumber, parsePhoneNumber } from "@/lib/phoneFormatter";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CURRENCY_SYMBOLS } from "@/lib/currencies";
 
 const profileSchema = z.object({
   title: z.string().optional(),
@@ -353,7 +354,10 @@ const AccountPage: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-4">
                           <span className="font-doodle font-bold text-doodle-green">
-                            ${order.TotalDue.toFixed(2)}
+                            {(order.currency?.CurrencyCode &&
+                              CURRENCY_SYMBOLS[order.currency.CurrencyCode]) ||
+                              "$"}
+                            {order.TotalDue.toFixed(2)}
                           </span>
                           {expandedOrder === order.SalesOrderID ? (
                             <ChevronUp className="w-5 h-5 text-doodle-text/50" />
@@ -376,7 +380,14 @@ const AccountPage: React.FC = () => {
                                   <span className="text-doodle-text/70">
                                     {item.product.Name} × {item.OrderQty}
                                   </span>
-                                  <span>${item.LineTotal.toFixed(2)}</span>
+                                  <span>
+                                    {(order.currency?.CurrencyCode &&
+                                      CURRENCY_SYMBOLS[
+                                        order.currency.CurrencyCode
+                                      ]) ||
+                                      "$"}
+                                    {item.LineTotal.toFixed(2)}
+                                  </span>
                                 </div>
                               )
                             )}
@@ -390,22 +401,50 @@ const AccountPage: React.FC = () => {
                               <span className="text-doodle-text/70">
                                 Subtotal
                               </span>
-                              <span>${order.SubTotal.toFixed(2)}</span>
+                              <span>
+                                {(order.currency?.CurrencyCode &&
+                                  CURRENCY_SYMBOLS[
+                                    order.currency.CurrencyCode
+                                  ]) ||
+                                  "$"}
+                                {order.SubTotal.toFixed(2)}
+                              </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-doodle-text/70">
-                                Shipping
+                                Shipping{" "}
+                                {order.shipMethod?.Name &&
+                                  `(${order.shipMethod.Name})`}
                               </span>
-                              <span>${order.Freight.toFixed(2)}</span>
+                              <span>
+                                {(order.currency?.CurrencyCode &&
+                                  CURRENCY_SYMBOLS[
+                                    order.currency.CurrencyCode
+                                  ]) ||
+                                  "$"}
+                                {order.Freight.toFixed(2)}
+                              </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-doodle-text/70">Tax</span>
-                              <span>${order.TaxAmt.toFixed(2)}</span>
+                              <span>
+                                {(order.currency?.CurrencyCode &&
+                                  CURRENCY_SYMBOLS[
+                                    order.currency.CurrencyCode
+                                  ]) ||
+                                  "$"}
+                                {order.TaxAmt.toFixed(2)}
+                              </span>
                             </div>
                             <div className="flex justify-between font-bold text-base pt-2 border-t border-dashed border-doodle-text/20">
                               <span>Total</span>
                               <span className="text-doodle-green">
-                                ${order.TotalDue.toFixed(2)}
+                                {(order.currency?.CurrencyCode &&
+                                  CURRENCY_SYMBOLS[
+                                    order.currency.CurrencyCode
+                                  ]) ||
+                                  "$"}
+                                {order.TotalDue.toFixed(2)}
                               </span>
                             </div>
                           </div>
