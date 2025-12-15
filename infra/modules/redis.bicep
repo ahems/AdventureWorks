@@ -1,5 +1,5 @@
-param redisCacheName string = 'todoapp-redis-${uniqueString(resourceGroup().id)}'
-param identityName string = 'todoapp-identity-${uniqueString(resourceGroup().id)}'
+param redisCacheName string = 'av-redis-${uniqueString(resourceGroup().id)}'
+param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param location string = resourceGroup().location
 param aadAdminObjectId string
 param aadAdminLogin string
@@ -47,7 +47,7 @@ resource redisCache 'Microsoft.Cache/redis@2024-11-01' = {
 
 // Grant data-plane access to the passed-in user-assigned managed identity using Redis Data Owner policy
 resource redisUserAssignedMIDataOwnerAssignment 'Microsoft.Cache/redis/accessPolicyAssignments@2024-11-01' = {
-  name: 'todoapp-MI-DataOwner'
+  name: 'av-MI-DataOwner'
   parent: redisCache
   properties: {
     // Object ID (principalId) of the user-assigned managed identity
@@ -61,7 +61,7 @@ resource redisUserAssignedMIDataOwnerAssignment 'Microsoft.Cache/redis/accessPol
 
 // Grant data-plane access to the passed-in user identity so that debugging locally will work
 resource redisUserDataOwnerAssignment 'Microsoft.Cache/redis/accessPolicyAssignments@2024-11-01' = {
-  name: 'todoapp-User-DataOwner'
+  name: 'av-User-DataOwner'
   parent: redisCache
   properties: {
     // Object ID (principalId) of the user-assigned managed identity

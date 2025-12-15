@@ -1,10 +1,10 @@
-param keyVaultName string = 'todoapp-kv-${uniqueString(resourceGroup().id)}'
-param sqlServerName string = 'todoapp-sql-${toLower(uniqueString(resourceGroup().id))}'
+param keyVaultName string = 'av-kv-${uniqueString(resourceGroup().id)}'
+param sqlServerName string = 'av-sql-${toLower(uniqueString(resourceGroup().id))}'
 param location string = resourceGroup().location
 param aadAdminLogin string
 param aadAdminObjectId string
 param tenantId string = subscription().tenantId
-param identityName string = 'todoapp-identity-${uniqueString(resourceGroup().id)}'
+param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param useFreeLimit bool
 param sqlDatabaseName string
 

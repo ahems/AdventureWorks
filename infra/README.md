@@ -1,6 +1,6 @@
 # Infrastructure Documentation
 
-This directory contains the Infrastructure as Code (IaC) for the MyToDoApp application, implemented using Azure Bicep templates. These templates are designed to be deployed using the [Azure Developer CLI](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/), as they rely on a number of [hooks](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/azd-extensibility) implemented as a number of [PowerShell scripts](../scripts/README.md) that run before and after these templates in order to complete the configuration.
+This directory contains the Infrastructure as Code (IaC) for the AdventureWorks application, implemented using Azure Bicep templates. These templates are designed to be deployed using the [Azure Developer CLI](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/), as they rely on a number of [hooks](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/azd-extensibility) implemented as a number of [PowerShell scripts](../scripts/README.md) that run before and after these templates in order to complete the configuration.
 
 ## Prerequisites
 
@@ -44,24 +44,24 @@ This infrastructure leverages **Azure Verified Modules (AVM)** wherever possible
 
 The following infrastructure modules use Azure Verified Modules:
 
-| Module | AVM Module Path | Version | Benefits |
-|--------|----------------|---------|----------|
-| **identity.bicep** | `avm/res/managed-identity/user-assigned-identity` | 0.4.2 | Built-in role assignment support, consistent output structure |
-| **keyvault.bicep** | `avm/res/key-vault/vault` | 0.13.3 | Simplified RBAC, automatic private endpoint support, diagnostic settings |
+| Module                        | AVM Module Path                                                           | Version          | Benefits                                                                      |
+| ----------------------------- | ------------------------------------------------------------------------- | ---------------- | ----------------------------------------------------------------------------- |
+| **identity.bicep**            | `avm/res/managed-identity/user-assigned-identity`                         | 0.4.2            | Built-in role assignment support, consistent output structure                 |
+| **keyvault.bicep**            | `avm/res/key-vault/vault`                                                 | 0.13.3           | Simplified RBAC, automatic private endpoint support, diagnostic settings      |
 | **applicationinsights.bicep** | `avm/res/operational-insights/workspace` and `avm/res/insights/component` | 0.12.0 and 0.6.1 | Integrated monitoring solution with workspace management and role assignments |
-| **acr.bicep** | `avm/res/container-registry/registry` | 0.9.3 | Built-in diagnostics, RBAC configuration, support for geo-replication |
+| **acr.bicep**                 | `avm/res/container-registry/registry`                                     | 0.9.3            | Built-in diagnostics, RBAC configuration, support for geo-replication         |
 
 ### Custom Modules (Not Using AVM)
 
 Some modules remain custom-built due to specific requirements not fully supported by available AVM modules:
 
-| Module | Reason for Custom Implementation |
-|--------|----------------------------------|
-| **redis.bicep** | Uses Azure Cache for Redis API version 2024-11-01 with Entra ID authentication and access policy assignments (`accessPolicyAssignments`). AVM Redis module does not yet support these advanced Entra ID features required for passwordless authentication. |
-| **database.bicep** | Requires specific SQL Server configuration for Entra ID-only authentication mode and serverless database tier with custom auto-pause settings. Post-deployment schema creation via PowerShell script. |
-| **aiservices.bicep** | Deploys Azure AI Services (formerly Cognitive Services) with multiple AI Foundry model deployments (chat and embedding models). Requires dynamic model selection based on regional quota availability determined by pre-deployment scripts. |
+| Module                                              | Reason for Custom Implementation                                                                                                                                                                                                                                                                                                            |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **redis.bicep**                                     | Uses Azure Cache for Redis API version 2024-11-01 with Entra ID authentication and access policy assignments (`accessPolicyAssignments`). AVM Redis module does not yet support these advanced Entra ID features required for passwordless authentication.                                                                                  |
+| **database.bicep**                                  | Requires specific SQL Server configuration for Entra ID-only authentication mode and serverless database tier with custom auto-pause settings. Post-deployment schema creation via PowerShell script.                                                                                                                                       |
+| **aiservices.bicep**                                | Deploys Azure AI Services (formerly Cognitive Services) with multiple AI Foundry model deployments (chat and embedding models). Requires dynamic model selection based on regional quota availability determined by pre-deployment scripts.                                                                                                 |
 | **aca.bicep**, **aca-app.bicep**, **aca-api.bicep** | Deploy Azure Container Apps with complex custom environment variables, managed identity integration, and dynamic configuration from multiple sources. Requires tight integration with Key Vault secrets and runtime environment setup. Split into three modules for better separation of concerns (environment, frontend app, backend API). |
-| **authentication.bicep** | Simple deployment script module that stores authentication configuration in Key Vault secrets. Not a resource deployment module. |
+| **authentication.bicep**                            | Simple deployment script module that stores authentication configuration in Key Vault secrets. Not a resource deployment module.                                                                                                                                                                                                            |
 
 ### Future AVM Migration
 
@@ -97,45 +97,45 @@ This file contains all the configurable parameters used by `main.bicep`. The Azu
 
 #### Required Parameters
 
-| Parameter | Source | Description |
-|-----------|--------|-------------|
-| `environmentName` | `AZURE_ENV_NAME` | The name of your azd environment (e.g., "dev", "prod") |
-| `aadAdminLogin` | `NAME` | Your Azure AD user email/name for admin access |
-| `aadAdminObjectId` | `OBJECT_ID` | Your Azure AD user object ID for RBAC assignments |
-| `webAppClientSecret` | `CLIENT_SECRET` | Client secret for the web app registration |
-| `webAppClientId` | `CLIENT_ID` | Application ID of the web app registration |
-| `apiAppIdUri` | `API_APP_ID_URI` | Application ID URI for the API (format: `api://<guid>`) |
-| `cognitiveservicesname` | `AZURE_OPENAI_ACCOUNT_NAME` | Name for the Azure AI Foundry account |
-| `cognitiveservicesLocation` | `AZURE_LOCATION` | Azure region for deployments |
+| Parameter                   | Source                      | Description                                             |
+| --------------------------- | --------------------------- | ------------------------------------------------------- |
+| `environmentName`           | `AZURE_ENV_NAME`            | The name of your azd environment (e.g., "dev", "prod")  |
+| `aadAdminLogin`             | `NAME`                      | Your Azure AD user email/name for admin access          |
+| `aadAdminObjectId`          | `OBJECT_ID`                 | Your Azure AD user object ID for RBAC assignments       |
+| `webAppClientSecret`        | `CLIENT_SECRET`             | Client secret for the web app registration              |
+| `webAppClientId`            | `CLIENT_ID`                 | Application ID of the web app registration              |
+| `apiAppIdUri`               | `API_APP_ID_URI`            | Application ID URI for the API (format: `api://<guid>`) |
+| `cognitiveservicesname`     | `AZURE_OPENAI_ACCOUNT_NAME` | Name for the Azure AI Foundry account                   |
+| `cognitiveservicesLocation` | `AZURE_LOCATION`            | Azure region for deployments                            |
 
 #### Azure AI Foundry Chat Model Parameters
 
 These parameters are automatically discovered and set by the [`preup.ps1`](../scripts/README.md#1-preupps1) script based on available quota in the target region:
 
-| Parameter | Source | Description |
-|-----------|--------|-------------|
-| `chatGptDeploymentVersion` | `chatGptDeploymentVersion` | Model version (e.g., "0613", "1106") |
-| `chatGptSkuName` | `chatGptSkuName` | SKU tier (e.g., "Standard", "GlobalStandard") |
-| `chatGptModelName` | `chatGptModelName` | Model name (e.g., "gpt-35-turbo", "gpt-4") - prefers "mini" models |
-| `availableChatGptDeploymentCapacity` | `availableChatGptDeploymentCapacity` | Available capacity in tokens per minute (TPM) |
+| Parameter                            | Source                               | Description                                                        |
+| ------------------------------------ | ------------------------------------ | ------------------------------------------------------------------ |
+| `chatGptDeploymentVersion`           | `chatGptDeploymentVersion`           | Model version (e.g., "0613", "1106")                               |
+| `chatGptSkuName`                     | `chatGptSkuName`                     | SKU tier (e.g., "Standard", "GlobalStandard")                      |
+| `chatGptModelName`                   | `chatGptModelName`                   | Model name (e.g., "gpt-35-turbo", "gpt-4") - prefers "mini" models |
+| `availableChatGptDeploymentCapacity` | `availableChatGptDeploymentCapacity` | Available capacity in tokens per minute (TPM)                      |
 
 #### Azure AI Foundry Embedding Model Parameters
 
 These parameters are automatically discovered and set by the [`preup.ps1`](../scripts/README.md#1-preupps1) script:
 
-| Parameter | Source | Description |
-|-----------|--------|-------------|
-| `embeddingDeploymentVersion` | `embeddingDeploymentVersion` | Embedding model version |
-| `embeddingSkuName` | `embeddingDeploymentSkuName` | SKU for embeddings |
-| `embeddingModelName` | `embeddingDeploymentModelName` | Embedding model name (e.g., "text-embedding-ada-002") - prefers "small" models |
-| `availableEmbeddingDeploymentCapacity` | `availableEmbeddingDeploymentCapacity` | Available embedding capacity |
+| Parameter                              | Source                                 | Description                                                                    |
+| -------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------ |
+| `embeddingDeploymentVersion`           | `embeddingDeploymentVersion`           | Embedding model version                                                        |
+| `embeddingSkuName`                     | `embeddingDeploymentSkuName`           | SKU for embeddings                                                             |
+| `embeddingModelName`                   | `embeddingDeploymentModelName`         | Embedding model name (e.g., "text-embedding-ada-002") - prefers "small" models |
+| `availableEmbeddingDeploymentCapacity` | `availableEmbeddingDeploymentCapacity` | Available embedding capacity                                                   |
 
 #### Feature Flags
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
+| Parameter       | Default | Description                                                      |
+| --------------- | ------- | ---------------------------------------------------------------- |
 | `restoreOpenAi` | `false` | Set to `true` to restore a soft-deleted Azure AI Foundry account |
-| `useFreeLimit` | `false` | Set to `true` to use Azure SQL Database free tier |
+| `useFreeLimit`  | `false` | Set to `true` to use Azure SQL Database free tier                |
 
 **Note:** The azd CLI automatically reads these values from your `.azure/<env-name>/.env` file during deployment. The `${VARIABLE}` syntax in the JSON is replaced with actual values at deployment time.
 
@@ -542,11 +542,13 @@ Deploys the backend API container (see [API Documentation](../api/README.md)).
 The Container Apps deployment is split into three focused modules for better maintainability and separation of concerns:
 
 1. **`aca.bicep`** - Shared environment infrastructure
+
    - Container Apps managed environment
    - Log Analytics integration
    - ACR pull role assignment
 
 2. **`aca-app.bicep`** - Frontend application (see [App Documentation](../app/README.md))
+
    - Flask web application
    - User interface and authentication
    - OpenAI integration for recommendations
@@ -588,6 +590,7 @@ This modular approach allows:
 When you run `azd up` or `azd deploy`, the following happens:
 
 1. **Pre-deployment** ([`preup.ps1`](../scripts/README.md#1-preupps1)):
+
    - Creates Azure AD app registrations (web app and API)
    - Creates Azure AI Services account
    - Discovers available Azure AI Foundry models and quota
@@ -595,6 +598,7 @@ When you run `azd up` or `azd deploy`, the following happens:
    - Stores configuration in azd environment
 
 2. **Infrastructure provisioning** (`azd provision` runs `main.bicep`):
+
    - Deploys `main.bicep` with parameters from `main.parameters.json`
    - Modules are deployed in dependency order:
      1. Identity, Key Vault, Redis
@@ -604,17 +608,20 @@ When you run `azd up` or `azd deploy`, the following happens:
      5. Frontend Container (`aca-app.bicep`) - depends on API URL from previous step
 
 3. **Post-provisioning** ([`postprovision.ps1`](../scripts/README.md#2-postprovisionps1)):
+
    - Grants managed identity database roles on SQL Database
    - Creates `dbo.todo` table schema
    - Configures external user for passwordless database access
 
 4. **Application deployment** (`azd deploy`):
+
    - Builds Docker images for web app and API
    - Pushes images to ACR
    - Updates container apps with new images
    - See [App Documentation](../app/README.md) and [API Documentation](../api/README.md) for container details
 
 5. **Post-deployment** ([`postdeploy.ps1`](../scripts/README.md#3-postdeployps1)):
+
    - Updates Azure AD app redirect URIs with deployed container app URLs
    - Configures logout redirect URLs
 
@@ -679,7 +686,7 @@ This infrastructure follows Azure security best practices:
 
 ## Resource Naming Convention
 
-All resources follow this pattern: `todoapp-<service>-<resourceToken>`
+All resources follow this pattern: `av-<service>-<resourceToken>`
 
 Where `<resourceToken>` is a unique string generated from:
 
@@ -689,11 +696,11 @@ toLower(uniqueString(resourceGroup().id, environmentName, location))
 
 Example resources:
 
-- `todoapp-kv-abc123def456` (Key Vault)
-- `todoapp-redis-abc123def456` (Redis Cache)
-- `todoapp-sql-abc123def456` (SQL Server)
-- `todoapp-app-abc123def456` (Web App Container)
-- `todoapp-api-abc123def456` (API Container)
+- `av-kv-abc123def456` (Key Vault)
+- `av-redis-abc123def456` (Redis Cache)
+- `av-sql-abc123def456` (SQL Server)
+- `av-swa-abc123def456` (Static Web App)
+- `av-api-abc123def456` (API Container)
 
 This ensures:
 
@@ -740,16 +747,16 @@ This ensures:
 
 Approximate monthly costs (pay-as-you-go, US West region):
 
-| Service | SKU | Est. Monthly Cost |
-|---------|-----|-------------------|
-| Azure SQL Database | Serverless GP_S_Gen5_4 | $150 (with auto-pause) |
-| Azure Cache for Redis | Basic C0 (250MB) | $16 |
-| Azure Container Apps | 0.5 vCPU, 1GB RAM | $30 (3 replicas) |
-| Azure AI Foundry | Standard, 100K tokens | $10 |
-| Application Insights | 1GB/day | $2 |
-| Key Vault | Standard | $1 |
-| Container Registry | Basic | $5 |
-| **Total** | | **~$214/month** |
+| Service               | SKU                    | Est. Monthly Cost      |
+| --------------------- | ---------------------- | ---------------------- |
+| Azure SQL Database    | Serverless GP_S_Gen5_4 | $150 (with auto-pause) |
+| Azure Cache for Redis | Basic C0 (250MB)       | $16                    |
+| Azure Container Apps  | 0.5 vCPU, 1GB RAM      | $30 (3 replicas)       |
+| Azure AI Foundry      | Standard, 100K tokens  | $10                    |
+| Application Insights  | 1GB/day                | $2                     |
+| Key Vault             | Standard               | $1                     |
+| Container Registry    | Basic                  | $5                     |
+| **Total**             |                        | **~$214/month**        |
 
 **Cost optimization tips:**
 
@@ -765,6 +772,7 @@ Approximate monthly costs (pay-as-you-go, US West region):
 ### Project Documentation
 
 - **[Scripts Documentation](../scripts/README.md)**: Detailed information about all azd lifecycle scripts
+
   - [`preup.ps1`](../scripts/README.md#1-preupps1): Pre-deployment setup (AD apps, AI Services, model selection)
   - [`postprovision.ps1`](../scripts/README.md#2-postprovisionps1): Database configuration after provisioning
   - [`postdeploy.ps1`](../scripts/README.md#3-postdeployps1): Update redirect URIs after deployment

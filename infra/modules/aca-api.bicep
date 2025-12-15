@@ -1,9 +1,9 @@
-param keyVaultName string = 'todoapp-kv-${uniqueString(resourceGroup().id)}'
-param appInsightsName string = 'todoapp-appinsights-${toLower(uniqueString(resourceGroup().id))}'
-param apiName string = 'todoapp-api-${uniqueString(resourceGroup().id)}'
+param keyVaultName string = 'av-kv-${uniqueString(resourceGroup().id)}'
+param appInsightsName string = 'av-appinsights-${toLower(uniqueString(resourceGroup().id))}'
+param apiName string = 'av-api-${uniqueString(resourceGroup().id)}'
 param location string = resourceGroup().location
-param containerRegistryName string = 'todoappacr${toLower(uniqueString(resourceGroup().id))}'
-param identityName string = 'todoapp-identity-${uniqueString(resourceGroup().id)}'
+param containerRegistryName string = 'avacr${toLower(uniqueString(resourceGroup().id))}'
+param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param containerAppEnvId string
 // Public bootstrap image to avoid ACR pull failures during initial infra provisioning
 param bootstrapImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
@@ -19,8 +19,6 @@ param revisionSuffix string
 param sqlConnectionString string
 @secure()
 param redisConnectionString string
-param clientId string
-param apiAppIdUri string
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -107,17 +105,6 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'AZURE_CLIENT_ID'
               value: azidentity.properties.clientId
-            }
-            {name: 'CLIENT_ID'
-             value: clientId
-            }
-            {
-              name: 'API_APP_ID_URI'
-              value: apiAppIdUri
-            }
-            {
-              name: 'API_APP_ID'
-              value: split(apiAppIdUri, '/')[2]
             }
             {
               name: 'TENANT_ID'

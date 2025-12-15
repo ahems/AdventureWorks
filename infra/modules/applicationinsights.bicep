@@ -1,6 +1,6 @@
-param appName string = 'todoapp-appinsights-${toLower(uniqueString(resourceGroup().id))}'
-param workspaceName string = 'todoapp-workspace-${toLower(uniqueString(resourceGroup().id))}'
-param identityName string = 'todoapp-identity-${uniqueString(resourceGroup().id)}'
+param appName string = 'av-appinsights-${toLower(uniqueString(resourceGroup().id))}'
+param workspaceName string = 'av-workspace-${toLower(uniqueString(resourceGroup().id))}'
+param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param location string = resourceGroup().location
 param aadAdminObjectId string
 

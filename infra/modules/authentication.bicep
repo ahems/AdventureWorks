@@ -1,4 +1,4 @@
-param keyVaultName string = 'todoapp-kv-${uniqueString(resourceGroup().id)}'
+param keyVaultName string = 'av-kv-${uniqueString(resourceGroup().id)}'
 param tenantId string = subscription().tenantId
 @description('The client ID of the web app registration, usedin the code to authenticate users.')
 param clientId string

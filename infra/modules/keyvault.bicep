@@ -1,6 +1,6 @@
-param keyVaultName string = 'todoapp-kv-${uniqueString(resourceGroup().id)}'
+param keyVaultName string = 'av-kv-${uniqueString(resourceGroup().id)}'
 param location string = resourceGroup().location
-param identityName string = 'todoapp-identity-${uniqueString(resourceGroup().id)}'
+param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param aadAdminObjectId string
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {

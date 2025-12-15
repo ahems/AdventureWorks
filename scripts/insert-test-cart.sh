@@ -6,7 +6,7 @@
 set -e
 
 # API endpoint
-API_URL="${API_URL:-https://todoapp-api-ewphuc52etkbc.agreeableocean-5dff8db3.eastus2.azurecontainerapps.io}"
+API_URL="${API_URL:-https://av-api-ewphuc52etkbc.agreeableocean-5dff8db3.eastus2.azurecontainerapps.io}"
 
 echo "=========================================="
 echo "Inserting Test Shopping Cart Items via API"

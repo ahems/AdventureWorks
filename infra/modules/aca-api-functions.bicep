@@ -1,9 +1,8 @@
-param keyVaultName string = 'todoapp-kv-${uniqueString(resourceGroup().id)}'
-param appInsightsName string = 'todoapp-appinsights-${toLower(uniqueString(resourceGroup().id))}'
-param apiFunctionsName string = 'todoapp-func-${uniqueString(resourceGroup().id)}'
+param appInsightsName string = 'av-appinsights-${toLower(uniqueString(resourceGroup().id))}'
+param apiFunctionsName string = 'av-func-${uniqueString(resourceGroup().id)}'
 param location string = resourceGroup().location
-param containerRegistryName string = 'todoappacr${toLower(uniqueString(resourceGroup().id))}'
-param identityName string = 'todoapp-identity-${uniqueString(resourceGroup().id)}'
+param containerRegistryName string = 'avacr${toLower(uniqueString(resourceGroup().id))}'
+param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param containerAppEnvId string
 param bootstrapImage string = 'mcr.microsoft.com/azure-functions/dotnet-isolated:4-dotnet-isolated8.0'
 @minValue(0)

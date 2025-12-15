@@ -2,27 +2,22 @@ targetScope = 'resourceGroup'
 param resourceToken string = toLower(uniqueString(resourceGroup().id, environmentName, location))
 param environmentName string
 param cognitiveservicesname string
-param keyVaultName string = 'todoapp-kv-${resourceToken}'
-param identityName string = 'todoapp-identity-${resourceToken}'
-param appInsightsName string = 'todoapp-appinsights-${toLower(resourceToken)}'
-param workspaceName string = 'todoapp-workspace-${toLower(resourceToken)}'
-param acrName string = 'todoappacr${toLower(resourceToken)}'
-param sqlServerName string = 'todoapp-sql-${toLower(resourceToken)}'
+param keyVaultName string = 'av-kv-${resourceToken}'
+param identityName string = 'av-identity-${resourceToken}'
+param appInsightsName string = 'av-appinsights-${toLower(resourceToken)}'
+param workspaceName string = 'av-workspace-${toLower(resourceToken)}'
+param acrName string = 'avacr${toLower(resourceToken)}'
+param sqlServerName string = 'av-sql-${toLower(resourceToken)}'
 param diagnosticsName string = 'acr-diagnostics-${toLower(resourceToken)}'
 param cognitiveservicesLocation string = resourceGroup().location
-param redisCacheName string = 'todoapp-redis-${resourceToken}'
+param redisCacheName string = 'av-redis-${resourceToken}'
 param location string = resourceGroup().location
 param adminUserEnabled bool = true
 param aadAdminLogin string
 param aadAdminObjectId string
 @description('Wether to restore the OpenAI service or not. If set to true, the OpenAI service will be restored from a soft-deleted backup. Use this only if you have previously deleted the OpenAI service created with this script, as you will need to restore it.')
 param restoreOpenAi bool
-param tenantId string = subscription().tenantId
 param useFreeLimit bool
-param webAppClientId string
-@secure()
-param webAppClientSecret string
-param apiAppIdUri string
 param openAiDeploymentName string = 'chat'
 param chatGptModelName string
 param chatGptDeploymentName string = 'chat'
@@ -75,19 +70,6 @@ module keyvault 'modules/keyvault.bicep' = {
   }
   dependsOn: [
     identity
-  ]
-}
-
-module authentication 'modules/authentication.bicep' = {
-  name: 'Deploy-Authentication'
-  params: {
-    keyVaultName: keyVaultName
-    tenantId: tenantId
-    clientId: webAppClientId
-    clientSecret: webAppClientSecret
-  }
-  dependsOn: [
-    keyvault
   ]
 }
 
@@ -174,7 +156,7 @@ module containerApp 'modules/aca.bicep' = {
   params: {
     location: location
     appInsightsName:appInsightsName
-    containerAppEnvName:'todoapp-env-${resourceToken}'
+    containerAppEnvName:'av-env-${resourceToken}'
     workspaceName:workspaceName
     containerRegistryName:acrName
     identityName:identityName
@@ -191,14 +173,12 @@ module containerAppApi 'modules/aca-api.bicep' = {
   params: {
     location: location
     appInsightsName:appInsightsName
-    apiName:'todoapp-api-${resourceToken}'
+    apiName:'av-api-${resourceToken}'
     containerRegistryName:acrName
     identityName:identityName
     sqlConnectionString: database.outputs.connectionString
     revisionSuffix:revisionSuffix
     redisConnectionString: redis.outputs.entraConnectionString
-    clientId: webAppClientId
-    apiAppIdUri: apiAppIdUri
     keyVaultName:keyVaultName
     containerAppEnvId: containerApp.outputs.containerAppEnvId
     minReplica:0
@@ -216,7 +196,7 @@ module containerAppApi 'modules/aca-api.bicep' = {
 //     keyVaultName:keyVaultName
 //     location: location
 //     appInsightsName:appInsightsName
-//     appName:'todoapp-app-${resourceToken}'
+//     appName:'av-app-${resourceToken}'
 //     openAiName:cognitiveservicesname    
 //     containerRegistryName:acrName
 //     identityName:identityName
@@ -238,31 +218,25 @@ module containerAppApi 'modules/aca-api.bicep' = {
 module staticWebAppFrontend 'modules/swa-app.bicep' = {
   name: 'Deploy-Static-Web-App-Frontend'
   params: {
-    swaName: 'todoapp-swa-${resourceToken}'
+    swaName: 'av-swa-${resourceToken}'
     location: location
     identityName: identityName
-    appInsightsName: appInsightsName
     apiUrl: containerAppApi.outputs.apiUrl
     apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
-    apiAppIdUri: apiAppIdUri
     keyVaultName: keyVaultName
-    openAiDeploymentName: openAiDeploymentName
-    redisConnectionString: redis.outputs.entraConnectionString
   }
   dependsOn: [
     cognitiveservices
     keyvault
-    containerAppApiFunctions
   ]
 }
 
 module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
   name: 'Deploy-Container-App-API-Functions'
   params: {
-    keyVaultName: keyVaultName
     location: location
     appInsightsName: appInsightsName
-    apiFunctionsName: 'todoapp-func-${resourceToken}'
+    apiFunctionsName: 'av-func-${resourceToken}'
     containerRegistryName: acrName
     identityName: identityName
     sqlConnectionString: database.outputs.connectionString
@@ -273,7 +247,6 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
   }
   dependsOn: [
     keyvault
-    database
   ]
 }
 
@@ -293,7 +266,7 @@ output APPLICATIONINSIGHTS_CONNECTION_STRING string = containerApp.outputs.appli
 
 // API URL (GraphQL endpoint) - constructed similarly to what aca module sets inside env values
 // The middle tier container app FQDN is not surfaced directly; derive using known naming convention from aca module parameters
-// We add an output in aca module instead would be cleaner, but for now replicate pattern: apiName = 'todoapp-api-${resourceToken}'
+// We add an output in aca module instead would be cleaner, but for now replicate pattern: apiName = 'av-api-${resourceToken}'
 // Since containerApp module internal resource name uses apiName param, we cannot access its properties here without an output. TODO: add output in aca module.
 // Placeholder output (empty) until module is updated; avoids breaking template. Next change will add actual output from aca module.
 output API_URL string = containerAppApi.outputs.apiUrl
@@ -307,8 +280,8 @@ output SQL_SERVER_NAME string = sqlServerName
 
 // Service names for azd deploy mapping (required by azd CLI)
 output SERVICE_APP_NAME string = staticWebAppFrontend.outputs.staticWebAppName
-output SERVICE_API_NAME string = 'todoapp-api-${resourceToken}'
-output SERVICE_API_FUNCTIONS_NAME string = 'todoapp-func-${resourceToken}'
+output SERVICE_API_NAME string = 'av-api-${resourceToken}'
+output SERVICE_API_FUNCTIONS_NAME string = 'av-func-${resourceToken}'
 
 output API_FUNCTIONS_URL string = containerAppApiFunctions.outputs.apiFunctionsUrl
 

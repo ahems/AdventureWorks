@@ -1,9 +1,9 @@
-param appInsightsName string = 'todoapp-appinsights-${toLower(uniqueString(resourceGroup().id))}'
-param containerAppEnvName string = 'todoapp-env-${uniqueString(resourceGroup().id)}'
+param appInsightsName string = 'av-appinsights-${toLower(uniqueString(resourceGroup().id))}'
+param containerAppEnvName string = 'av-env-${uniqueString(resourceGroup().id)}'
 param location string = resourceGroup().location
-param containerRegistryName string = 'todoappacr${toLower(uniqueString(resourceGroup().id))}'
-param identityName string = 'todoapp-identity-${uniqueString(resourceGroup().id)}'
-param workspaceName string = 'todoapp-workspace-${toLower(uniqueString(resourceGroup().id))}'
+param containerRegistryName string = 'avacr${toLower(uniqueString(resourceGroup().id))}'
+param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
+param workspaceName string = 'av-workspace-${toLower(uniqueString(resourceGroup().id))}'
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspaceName

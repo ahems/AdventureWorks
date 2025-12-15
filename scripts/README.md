@@ -1,6 +1,6 @@
 # Scripts Documentation
 
-This directory contains PowerShell scripts that automate Azure deployment workflows for the MyToDoApp application. These scripts are executed automatically by `azd` (Azure Developer CLI) at various stages of the deployment lifecycle.
+This directory contains PowerShell scripts that automate Azure deployment workflows for the AdventureWorks application. These scripts are executed automatically by `azd` (Azure Developer CLI) at various stages of the deployment lifecycle.
 
 ## Execution Order
 
@@ -24,11 +24,11 @@ When you run `azd up` or other `azd` commands, these scripts execute in the foll
 
 **Azure AD App Registrations:**
 
-- Creates the **web application** registration (`MyToDoApp`)
+- Creates the **web application** registration (`AdventureWorks`)
   - Generates OAuth client ID and client secret
   - Creates service principal for the app
   - Stores credentials in `azd` environment variables
-- Creates the **API application** registration (`MyToDoApp-Api`)
+- Creates the **API application** registration (`AdventureWorks-Api`)
   - Configures Application ID URI (format: `api://<guid>`)
   - Defines an `Api.Access` app role for application permissions
   - Assigns the web app service principal to the API app role
@@ -56,7 +56,7 @@ When you run `azd up` or other `azd` commands, these scripts execute in the foll
   - Account type: `AIServices` (includes Azure AI Foundry and other AI services)
   - SKU: `S0` (Standard tier)
   - Custom subdomain configured for API access
-  - Derives unique account name if not specified (format: `todoapp-openai-<hash>`)
+  - Derives unique account name if not specified (format: `av-openai-<hash>`)
 - **Note**: The script creates the account but does NOT deploy models
   - Model deployments are handled by Bicep infrastructure (see [Infrastructure Documentation](../infra/README.md#5-aiservicesbicep))
   - The script sets environment variables that the Bicep templates use to deploy the selected models
@@ -78,28 +78,28 @@ When you run `azd up` or other `azd` commands, these scripts execute in the foll
 
 ### Environment Variables Set
 
-| Variable | Description |
-|----------|-------------|
-| `CLIENT_ID` | Web app OAuth client ID |
-| `CLIENT_SECRET` | Web app OAuth client secret |
-| `API_APP_ID` | API app client ID (GUID only) |
-| `API_APP_OBJECT_ID` | API app Azure AD object ID |
-| `API_APP_ROLE_ID` | App role ID for `Api.Access` permission |
-| `API_APP_ID_URI` | Full API identifier URI (e.g., `api://guid`) |
-| `chatGptDeploymentVersion` | Selected chat model version |
-| `chatGptSkuName` | Selected chat model SKU |
-| `chatGptModelName` | Selected chat model name |
-| `availableChatGptDeploymentCapacity` | Available quota for chat model |
-| `embeddingDeploymentVersion` | Selected embedding model version |
-| `embeddingDeploymentSkuName` | Selected embedding model SKU |
-| `embeddingDeploymentModelName` | Selected embedding model name |
-| `availableEmbeddingDeploymentCapacity` | Available quota for embedding model |
-| `AZURE_LOCATION` | Deployment region (default: eastus2) |
-| `AZURE_RESOURCE_GROUP` | Resource group name (derived if missing) |
-| `AZURE_OPENAI_ACCOUNT_NAME` | Azure AI Foundry account name |
-| `NAME` | Current user email/account |
-| `OBJECT_ID` | Current user principal ID |
-| `SQL_DATABASE_NAME` | Name of the Database (default: todo) |
+| Variable                               | Description                                  |
+| -------------------------------------- | -------------------------------------------- |
+| `CLIENT_ID`                            | Web app OAuth client ID                      |
+| `CLIENT_SECRET`                        | Web app OAuth client secret                  |
+| `API_APP_ID`                           | API app client ID (GUID only)                |
+| `API_APP_OBJECT_ID`                    | API app Azure AD object ID                   |
+| `API_APP_ROLE_ID`                      | App role ID for `Api.Access` permission      |
+| `API_APP_ID_URI`                       | Full API identifier URI (e.g., `api://guid`) |
+| `chatGptDeploymentVersion`             | Selected chat model version                  |
+| `chatGptSkuName`                       | Selected chat model SKU                      |
+| `chatGptModelName`                     | Selected chat model name                     |
+| `availableChatGptDeploymentCapacity`   | Available quota for chat model               |
+| `embeddingDeploymentVersion`           | Selected embedding model version             |
+| `embeddingDeploymentSkuName`           | Selected embedding model SKU                 |
+| `embeddingDeploymentModelName`         | Selected embedding model name                |
+| `availableEmbeddingDeploymentCapacity` | Available quota for embedding model          |
+| `AZURE_LOCATION`                       | Deployment region (default: eastus2)         |
+| `AZURE_RESOURCE_GROUP`                 | Resource group name (derived if missing)     |
+| `AZURE_OPENAI_ACCOUNT_NAME`            | Azure AI Foundry account name                |
+| `NAME`                                 | Current user email/account                   |
+| `OBJECT_ID`                            | Current user principal ID                    |
+| `SQL_DATABASE_NAME`                    | Name of the Database (default: todo)         |
 
 ### Model Selection Strategy
 
@@ -199,20 +199,20 @@ CREATE TABLE dbo.todo (
 
 ### External SQL Files
 
-| File | Purpose |
-|------|---------|
+| File                        | Purpose                                                             |
+| --------------------------- | ------------------------------------------------------------------- |
 | `assign-database-roles.sql` | Creates external user and grants database roles to managed identity |
-| `create-tables.sql` | Creates the `dbo.todo` table schema |
+| `create-tables.sql`         | Creates the `dbo.todo` table schema                                 |
 
 ### Environment Variables Used
 
-| Variable | Description | Source | Default |
-|----------|-------------|--------|---------|
-| `TENANT_ID` | Azure AD tenant ID | azd environment | None |
-| `AZURE_RESOURCE_GROUP` | Resource group name | azd environment | None |
+| Variable                     | Description           | Source                                       | Default           |
+| ---------------------------- | --------------------- | -------------------------------------------- | ----------------- |
+| `TENANT_ID`                  | Azure AD tenant ID    | azd environment                              | None              |
+| `AZURE_RESOURCE_GROUP`       | Resource group name   | azd environment                              | None              |
 | `USER_MANAGED_IDENTITY_NAME` | Managed identity name | azd environment (auto-discovered if missing) | First found in RG |
-| `SQL_SERVER_NAME` | SQL server name | azd environment (auto-discovered if missing) | First found in RG |
-| `SQL_DATABASE_NAME` | SQL database name | azd environment | `todo` |
+| `SQL_SERVER_NAME`            | SQL server name       | azd environment (auto-discovered if missing) | First found in RG |
+| `SQL_DATABASE_NAME`          | SQL database name     | azd environment                              | `todo`            |
 
 ### Why This Runs Automatically
 
@@ -267,9 +267,9 @@ Uses **Azure AD token-based authentication** instead of SQL username/password:
 
 **URIs Configured:**
 
-- Production redirect: `https://todoapp-app-xyz.azurecontainerapps.io/getAToken`
+- Production redirect: `https://av-swa-xyz.azurestaticapps.net/getAToken`
 - Local development: `http://localhost:5000/getAToken`
-- Logout redirect: `https://todoapp-app-xyz.azurecontainerapps.io` (base URL)
+- Logout redirect: `https://av-swa-xyz.azurestaticapps.net` (base URL)
 
 ### Why This Script Exists
 
@@ -286,7 +286,7 @@ The redirect URIs depend on the deployed container app's URL, which isn't known 
 
 ### Key Operations
 
-- Retrieves `MyToDoApp` app registration by display name
+- Retrieves `AdventureWorks` app registration by display name
 - Updates `ReplyUrls` (redirect URIs) using `Set-AzADApplication`
 - Updates `LogoutUrl` using `Update-AzADApplication`
 - Validates `APP_REDIRECT_URI` environment variable exists
@@ -353,8 +353,8 @@ IS_LOCALHOST=true
 APPLICATIONINSIGHTS_CONNECTION_STRING='InstrumentationKey=abc...'
 REDIS_CONNECTION_STRING='rediss://identity-name@hostname:6380/0'
 AZURE_CLIENT_ID=12345678-1234-1234-1234-123456789abc
-KEY_VAULT_NAME=todoapp-kv-abc123def456
-API_URL=https://todoapp-api-abc123.azurecontainerapps.io/graphql
+KEY_VAULT_NAME=av-kv-abc123def456
+API_URL=https://av-api-abc123.azurecontainerapps.io/graphql
 REDIS_LOCAL_PRINCIPAL_ID=87654321-4321-4321-4321-cba987654321
 ```
 
@@ -370,10 +370,10 @@ REDIS_LOCAL_PRINCIPAL_ID=87654321-4321-4321-4321-cba987654321
 
 **Azure AD Cleanup:**
 
-- Removes the **web application** registration (`MyToDoApp`)
+- Removes the **web application** registration (`AdventureWorks`)
   - Deletes service principal first (to avoid orphaned SPs)
   - Deletes app registration and all associated credentials
-- Removes the **API application** registration (`MyToDoApp-Api`)
+- Removes the **API application** registration (`AdventureWorks-Api`)
   - Deletes app roles and permissions
   - Deletes service principal and app registration
 
@@ -494,8 +494,8 @@ If app registrations already exist with different configuration:
 
 ```powershell
 # Manually delete conflicting apps
-Remove-AzADApplication -DisplayName "MyToDoApp"
-Remove-AzADApplication -DisplayName "MyToDoApp-Api"
+Remove-AzADApplication -DisplayName "AdventureWorks"
+Remove-AzADApplication -DisplayName "AdventureWorks-Api"
 
 # Re-run preup.ps1
 ./scripts/preup.ps1
@@ -533,10 +533,10 @@ To change model selection criteria in `preup.ps1`:
 ```powershell
 # Modify the sorting logic (line ~750)
 $sorted = $allQuota | Sort-Object -Property @{
-    Expression={ [int]$_.AvailableCapacity }; 
+    Expression={ [int]$_.AvailableCapacity };
     Descending=$true
 }, @{
-    Expression={$_.ModelVersion}; 
+    Expression={$_.ModelVersion};
     Descending=$true
 }
 

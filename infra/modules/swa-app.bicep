@@ -1,20 +1,12 @@
 param swaName string
 param location string = resourceGroup().location
 param identityName string
-param appInsightsName string
 param apiUrl string
 param apiFunctionsUrl string = ''
-param apiAppIdUri string
 param keyVaultName string
-param openAiDeploymentName string
-param redisConnectionString string
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
-}
-
-resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
-  name: appInsightsName
 }
 
 resource staticWebApp 'Microsoft.Web/staticSites@2023-01-01' = {

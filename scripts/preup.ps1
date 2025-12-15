@@ -486,16 +486,6 @@ if (-not $nameVal -or -not $objectIdVal) {
 	Write-Host "Persisted NAME and OBJECT_ID to azd env." -ForegroundColor Green
 }
 
-# 1. App Registration
-$appDisplayName = 'MyToDoApp'
-Ensure-AppRegistration -AppDisplayName $appDisplayName
-
-# 1a. API App Registration
-$apiAppDisplayName = 'MyToDoApp-Api'
-$webClientId = Get-AzdValue -Name 'CLIENT_ID'
-if (-not $webClientId) { throw 'CLIENT_ID is missing after web app registration; cannot configure API registration.' }
-Ensure-ApiAppRegistration -ApiAppDisplayName $apiAppDisplayName -WebAppClientId $webClientId
-
 # 2. Azure AI Foundry provisioning + model selection (skip if already fully selected)
 $existingChatComplete = (Get-AzdValue -Name 'chatGptDeploymentVersion') -and (Get-AzdValue -Name 'chatGptSkuName') -and (Get-AzdValue -Name 'chatGptModelName') -and (Get-AzdValue -Name 'availableChatGptDeploymentCapacity')
 $existingEmbComplete  = (Get-AzdValue -Name 'embeddingDeploymentVersion') -and (Get-AzdValue -Name 'embeddingDeploymentSkuName') -and (Get-AzdValue -Name 'embeddingDeploymentModelName') -and (Get-AzdValue -Name 'availableEmbeddingDeploymentCapacity')
@@ -552,7 +542,7 @@ if (-not $subscriptionId) {
 $accountName = Get-AzdValue -Name 'AZURE_OPENAI_ACCOUNT_NAME'
 if (-not $accountName) {
 	$hash = ([System.BitConverter]::ToString((New-Guid).ToByteArray()) -replace '-','').Substring(0,8).ToLower()
-	$accountName = "todoapp-openai-$hash"
+	$accountName = "av-openai-$hash"
 	Set-AzdValue -Name 'AZURE_OPENAI_ACCOUNT_NAME' -Value $accountName
 	Write-Host "Derived Azure AI Foundry account name: $accountName" -ForegroundColor Cyan
 }
