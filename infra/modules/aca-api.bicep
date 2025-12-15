@@ -19,6 +19,7 @@ param revisionSuffix string
 param sqlConnectionString string
 @secure()
 param redisConnectionString string
+param appUrl string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -109,6 +110,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'TENANT_ID'
               value: subscription().tenantId
+            }
+            {
+              name: 'APP_URL'
+              value: appUrl
             }
           ]
         }
