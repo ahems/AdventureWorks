@@ -233,6 +233,124 @@ const GET_SHIP_METHODS = gql`
   }
 `;
 
+const GET_CUSTOMER = gql`
+  query GetCustomer($personId: Int!) {
+    customers(filter: { PersonID: { eq: $personId } }) {
+      items {
+        CustomerID
+        PersonID
+        AccountNumber
+      }
+    }
+  }
+`;
+
+const CREATE_CUSTOMER = gql`
+  mutation CreateCustomer($personId: Int!) {
+    createCustomer(
+      item: { PersonID: $personId, TerritoryID: 1, AccountNumber: "" }
+    ) {
+      CustomerID
+      PersonID
+      AccountNumber
+    }
+  }
+`;
+
+const CREATE_SALES_ORDER_HEADER = gql`
+  mutation CreateSalesOrderHeader(
+    $orderDate: DateTime!
+    $dueDate: DateTime!
+    $customerId: Int!
+    $billToAddressId: Int!
+    $shipToAddressId: Int!
+    $shipMethodId: Int!
+    $subTotal: Decimal!
+    $taxAmt: Decimal!
+    $freight: Decimal!
+  ) {
+    createSalesOrderHeader(
+      item: {
+        RevisionNumber: 1
+        OrderDate: $orderDate
+        DueDate: $dueDate
+        Status: 1
+        OnlineOrderFlag: true
+        CustomerID: $customerId
+        BillToAddressID: $billToAddressId
+        ShipToAddressID: $shipToAddressId
+        ShipMethodID: $shipMethodId
+        SubTotal: $subTotal
+        TaxAmt: $taxAmt
+        Freight: $freight
+      }
+    ) {
+      SalesOrderID
+      OrderDate
+      SubTotal
+      TaxAmt
+      Freight
+    }
+  }
+`;
+
+const CREATE_SALES_ORDER_DETAIL = gql`
+  mutation CreateSalesOrderDetail(
+    $salesOrderId: Int!
+    $productId: Int!
+    $orderQty: Short!
+    $unitPrice: Decimal!
+    $unitPriceDiscount: Decimal!
+  ) {
+    createSalesOrderDetail(
+      item: {
+        SalesOrderID: $salesOrderId
+        SpecialOfferID: 1
+        OrderQty: $orderQty
+        ProductID: $productId
+        UnitPrice: $unitPrice
+        UnitPriceDiscount: $unitPriceDiscount
+      }
+    ) {
+      SalesOrderDetailID
+      ProductID
+      OrderQty
+      UnitPrice
+    }
+  }
+`;
+
+const UPDATE_PRODUCT_STOCK = gql`
+  mutation UpdateProductStock($productId: Int!, $newStock: Short!) {
+    updateProduct(
+      ProductID: $productId
+      item: { SafetyStockLevel: $newStock }
+    ) {
+      ProductID
+      SafetyStockLevel
+    }
+  }
+`;
+
+const DELETE_CART_ITEM = gql`
+  mutation DeleteCartItem($shoppingCartItemId: Int!) {
+    deleteShoppingCartItem(ShoppingCartItemID: $shoppingCartItemId) {
+      ShoppingCartItemID
+    }
+  }
+`;
+
+const GET_PRODUCT_STOCK = gql`
+  query GetProductStock($productId: Int!) {
+    products(filter: { ProductID: { eq: $productId } }) {
+      items {
+        ProductID
+        SafetyStockLevel
+      }
+    }
+  }
+`;
+
 interface ShipMethod {
   ShipMethodID: number;
   Name: string;
@@ -642,84 +760,221 @@ const CheckoutPage: React.FC = () => {
   const handlePlaceOrder = async () => {
     setIsProcessing(true);
 
-    // Save address if user opted in and entering a new address (either explicitly or when no saved addresses exist)
-    const isEnteringNewAddress = useNewAddress || addresses.length === 0;
-    if (isEnteringNewAddress && saveNewAddress && user) {
-      await addAddress({
-        addressLine1: shippingData.address.split(",")[0],
-        addressLine2: shippingData.address.split(",")[1]?.trim() || "",
-        city: shippingData.city,
-        stateProvinceId: parseInt(shippingData.state),
-        postalCode: shippingData.zipCode,
-        addressType: addressLabel || "Shipping Address",
-        isDefault: addresses.length === 0,
+    try {
+      // Save address if user opted in and entering a new address (either explicitly or when no saved addresses exist)
+      const isEnteringNewAddress = useNewAddress || addresses.length === 0;
+      if (isEnteringNewAddress && saveNewAddress && user) {
+        await addAddress({
+          addressLine1: shippingData.address.split(",")[0],
+          addressLine2: shippingData.address.split(",")[1]?.trim() || "",
+          city: shippingData.city,
+          stateProvinceId: parseInt(shippingData.state),
+          postalCode: shippingData.zipCode,
+          addressType: addressLabel || "Shipping Address",
+          isDefault: addresses.length === 0,
+        });
+        toast({
+          title: "Address Saved",
+          description: "Your address has been saved for future orders.",
+        });
+      }
+
+      // Save payment method if user opted in and entering new payment
+      const isEnteringNewPayment = useNewPayment || paymentMethods.length === 0;
+      if (
+        isEnteringNewPayment &&
+        saveNewPayment &&
+        user &&
+        paymentMethod === "card"
+      ) {
+        addPaymentMethod({
+          type: "card",
+          label: paymentLabel || "Credit Card",
+          cardNumber: cardData.number,
+          cardExpiry: cardData.expiry,
+          cardholderName: cardData.name,
+          isDefault: paymentMethods.length === 0,
+        });
+        toast({
+          title: "Payment Method Saved",
+          description: "Your card has been saved for future orders.",
+        });
+      }
+
+      if (!user?.businessEntityId) {
+        throw new Error("User not authenticated");
+      }
+
+      // Step 1: Get or create Customer record
+      const customerResponse = await graphqlClient.request<{
+        customers: { items: { CustomerID: number; PersonID: number }[] };
+      }>(GET_CUSTOMER, { personId: user.businessEntityId });
+
+      let customerId: number;
+      if (customerResponse.customers.items.length > 0) {
+        customerId = customerResponse.customers.items[0].CustomerID;
+      } else {
+        // Create customer if doesn't exist
+        const createCustomerResponse = await graphqlClient.request<{
+          createCustomer: { CustomerID: number };
+        }>(CREATE_CUSTOMER, { personId: user.businessEntityId });
+        customerId = createCustomerResponse.createCustomer.CustomerID;
+      }
+
+      // Step 2: Get address ID (use selected or default)
+      const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
+      const addressIdString = selectedAddress?.id || addresses[0]?.id;
+
+      if (!addressIdString) {
+        throw new Error("No address available");
+      }
+
+      // Convert address ID from string to number for GraphQL
+      const addressId = parseInt(addressIdString, 10);
+
+      // Step 3: Create SalesOrderHeader
+      const orderDate = new Date().toISOString();
+      const dueDate = new Date(
+        Date.now() + 7 * 24 * 60 * 60 * 1000
+      ).toISOString(); // 7 days from now
+
+      const orderHeaderResponse = await graphqlClient.request<{
+        createSalesOrderHeader: { SalesOrderID: number };
+      }>(CREATE_SALES_ORDER_HEADER, {
+        orderDate,
+        dueDate,
+        customerId,
+        billToAddressId: addressId,
+        shipToAddressId: addressId,
+        shipMethodId: selectedShipMethodId || 5,
+        subTotal: parseFloat(totalPrice.toFixed(2)),
+        taxAmt: parseFloat(tax.toFixed(2)),
+        freight: parseFloat(shipping.toFixed(2)),
       });
+
+      const salesOrderId =
+        orderHeaderResponse.createSalesOrderHeader.SalesOrderID;
+
+      // Step 4: Create SalesOrderDetail for each cart item
+      for (const item of items) {
+        const salePrice = getSalePrice(item);
+        const itemPrice = salePrice || item.ListPrice;
+        const discount = salePrice
+          ? (item.ListPrice - salePrice) / item.ListPrice
+          : 0;
+
+        await graphqlClient.request(CREATE_SALES_ORDER_DETAIL, {
+          salesOrderId,
+          productId: item.ProductID,
+          orderQty: item.quantity,
+          unitPrice: parseFloat(itemPrice.toFixed(2)),
+          unitPriceDiscount: parseFloat(discount.toFixed(4)),
+        });
+
+        // Step 5: Update product stock (decrement SafetyStockLevel)
+        try {
+          const stockResponse = await graphqlClient.request<{
+            products: { items: { SafetyStockLevel: number }[] };
+          }>(GET_PRODUCT_STOCK, { productId: item.ProductID });
+
+          if (stockResponse.products.items.length > 0) {
+            const currentStock =
+              stockResponse.products.items[0].SafetyStockLevel;
+            const newStock = Math.max(0, currentStock - item.quantity);
+
+            await graphqlClient.request(UPDATE_PRODUCT_STOCK, {
+              productId: item.ProductID,
+              newStock,
+            });
+          }
+        } catch (stockError) {
+          console.error(
+            "Error updating stock for product",
+            item.ProductID,
+            stockError
+          );
+          // Continue even if stock update fails
+        }
+      }
+
+      // Step 6: Clear cart by deleting all cart items
+      for (const item of items) {
+        if ("ShoppingCartItemID" in item && item.ShoppingCartItemID) {
+          try {
+            await graphqlClient.request(DELETE_CART_ITEM, {
+              shoppingCartItemId: item.ShoppingCartItemID,
+            });
+          } catch (deleteError) {
+            console.error(
+              "Error deleting cart item",
+              item.ShoppingCartItemID,
+              deleteError
+            );
+            // Continue even if delete fails
+          }
+        }
+      }
+
+      // Generate order number
+      const orderId = `SO-${salesOrderId}`;
+
+      // Get shipping method name
+      const selectedShipMethod = shipMethods.find(
+        (m) => m.ShipMethodID === selectedShipMethodId
+      );
+      const shippingMethodName =
+        selectedShipMethod?.Name || "Standard Shipping";
+
+      // Store order in localStorage for confirmation page
+      const order = {
+        id: orderId,
+        salesOrderId,
+        items: items,
+        shipping: shippingData,
+        paymentMethod,
+        shippingMethodName,
+        subtotal: totalPrice,
+        shippingCost: shipping,
+        tax,
+        total: grandTotal,
+        currencyCode,
+        currencySymbol: CURRENCY_SYMBOLS[currencyCode] || currencyCode,
+        date: orderDate,
+      };
+
+      localStorage.setItem("lastOrder", JSON.stringify(order));
+
+      // Also save to order history
+      const existingOrders = JSON.parse(
+        localStorage.getItem("orderHistory") || "[]"
+      );
+      localStorage.setItem(
+        "orderHistory",
+        JSON.stringify([order, ...existingOrders])
+      );
+
+      // Manually clear cart from UI
+      clearCart();
+
       toast({
-        title: "Address Saved",
-        description: "Your address has been saved for future orders.",
+        title: "Order Placed!",
+        description: `Your order ${orderId} has been confirmed`,
       });
-    }
 
-    // Save payment method if user opted in and entering new payment
-    const isEnteringNewPayment = useNewPayment || paymentMethods.length === 0;
-    if (
-      isEnteringNewPayment &&
-      saveNewPayment &&
-      user &&
-      paymentMethod === "card"
-    ) {
-      addPaymentMethod({
-        type: "card",
-        label: paymentLabel || "Credit Card",
-        cardNumber: cardData.number,
-        cardExpiry: cardData.expiry,
-        cardholderName: cardData.name,
-        isDefault: paymentMethods.length === 0,
-      });
+      navigate("/order-confirmation");
+    } catch (error) {
+      console.error("Order creation error:", error);
       toast({
-        title: "Payment Method Saved",
-        description: "Your card has been saved for future orders.",
+        title: "Order Failed",
+        description:
+          error instanceof Error
+            ? error.message
+            : "There was an error processing your order. Please try again.",
+        variant: "destructive",
       });
+    } finally {
+      setIsProcessing(false);
     }
-
-    // Simulate payment processing
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // Generate mock order ID
-    const orderId = `AW-${Date.now().toString(36).toUpperCase()}`;
-
-    // Store order in localStorage for confirmation page
-    const order = {
-      id: orderId,
-      items: items,
-      shipping: shippingData,
-      paymentMethod,
-      subtotal: totalPrice,
-      shippingCost: shipping,
-      tax,
-      total: grandTotal,
-      date: new Date().toISOString(),
-    };
-
-    localStorage.setItem("lastOrder", JSON.stringify(order));
-
-    // Also save to order history
-    const existingOrders = JSON.parse(
-      localStorage.getItem("orderHistory") || "[]"
-    );
-    localStorage.setItem(
-      "orderHistory",
-      JSON.stringify([order, ...existingOrders])
-    );
-
-    clearCart();
-
-    toast({
-      title: "Order Placed!",
-      description: `Your order ${orderId} has been confirmed`,
-    });
-
-    navigate("/order-confirmation");
   };
 
   return (
@@ -1313,7 +1568,9 @@ const CheckoutPage: React.FC = () => {
                         >
                           {isProcessing
                             ? "Processing..."
-                            : `Pay $${grandTotal.toFixed(2)}`}
+                            : `Pay ${
+                                CURRENCY_SYMBOLS[currencyCode] || currencyCode
+                              }${grandTotal.toFixed(2)}`}
                         </button>
                       );
                     })()}
