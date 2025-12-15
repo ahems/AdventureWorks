@@ -1,100 +1,138 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CreditCard, Truck, Check, Package, MapPin, Plus, Star, Trash2, Tag, X } from 'lucide-react';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
-import { useCart } from '@/context/CartContext';
-import { useAuth } from '@/context/AuthContext';
-import { useAddresses, Address } from '@/hooks/useAddresses';
-import { usePaymentMethods, SavedPaymentMethod } from '@/hooks/usePaymentMethods';
-import { AddressCard } from '@/components/AddressCard';
-import { AddressForm } from '@/components/AddressForm';
-import { toast } from '@/hooks/use-toast';
-import { z } from 'zod';
-import { getSalePrice } from '@/types/product';
-import { useProfile } from '@/hooks/useProfile';
-import { formatPhoneNumber, parsePhoneNumber } from '@/lib/phoneFormatter';
+import React, { useState, useEffect, useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  ArrowLeft,
+  CreditCard,
+  Truck,
+  Check,
+  Package,
+  MapPin,
+  Plus,
+  Star,
+  Trash2,
+  Tag,
+  X,
+} from "lucide-react";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/context/AuthContext";
+import { useAddresses, Address } from "@/hooks/useAddresses";
+import {
+  usePaymentMethods,
+  SavedPaymentMethod,
+} from "@/hooks/usePaymentMethods";
+import { AddressCard } from "@/components/AddressCard";
+import { AddressForm } from "@/components/AddressForm";
+import { toast } from "@/hooks/use-toast";
+import { z } from "zod";
+import { getSalePrice } from "@/types/product";
+import { useProfile } from "@/hooks/useProfile";
+import { formatPhoneNumber, parsePhoneNumber } from "@/lib/phoneFormatter";
 
 const shippingSchema = z.object({
-  firstName: z.string().min(1, 'First name is required'),
-  lastName: z.string().min(1, 'Last name is required'),
-  email: z.string().email('Valid email is required'),
-  phone: z.string().trim().regex(/^[0-9\-\(\)\s\+]*$/, 'Invalid phone number format').max(25, 'Phone number must be less than 25 characters').optional(),
-  address: z.string().min(5, 'Address is required'),
-  city: z.string().min(2, 'City is required'),
-  state: z.string().min(2, 'State is required'),
-  zipCode: z.string().min(5, 'ZIP code is required'),
-  country: z.string().min(2, 'Country is required'),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  email: z.string().email("Valid email is required"),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^[0-9\-()\s+]*$/, "Invalid phone number format")
+    .max(25, "Phone number must be less than 25 characters")
+    .optional(),
+  address: z.string().min(5, "Address is required"),
+  city: z.string().min(2, "City is required"),
+  state: z.string().min(2, "State is required"),
+  zipCode: z.string().min(5, "ZIP code is required"),
+  country: z.string().min(2, "Country is required"),
 });
 
 type ShippingData = z.infer<typeof shippingSchema>;
 
 // Mock discount codes
-const DISCOUNT_CODES: Record<string, { type: 'percent' | 'freeshipping'; value?: number; description: string }> = {
-  'SAVE10': { type: 'percent', value: 10, description: '10% off your order' },
-  'SAVE20': { type: 'percent', value: 20, description: '20% off your order' },
-  'FREESHIP': { type: 'freeshipping', description: 'Free shipping' },
-  'ADVENTURE25': { type: 'percent', value: 25, description: '25% off your order' },
+const DISCOUNT_CODES: Record<
+  string,
+  { type: "percent" | "freeshipping"; value?: number; description: string }
+> = {
+  SAVE10: { type: "percent", value: 10, description: "10% off your order" },
+  SAVE20: { type: "percent", value: 20, description: "20% off your order" },
+  FREESHIP: { type: "freeshipping", description: "Free shipping" },
+  ADVENTURE25: {
+    type: "percent",
+    value: 25,
+    description: "25% off your order",
+  },
 };
 
 const isValidCardNumber = (number: string): boolean => {
-  const digits = number.replace(/\s/g, '');
+  const digits = number.replace(/\s/g, "");
   if (!/^\d{13,19}$/.test(digits)) return false;
-  
+
   let sum = 0;
   let isEven = false;
-  
+
   for (let i = digits.length - 1; i >= 0; i--) {
     let digit = parseInt(digits[i], 10);
-    
+
     if (isEven) {
       digit *= 2;
       if (digit > 9) digit -= 9;
     }
-    
+
     sum += digit;
     isEven = !isEven;
   }
-  
+
   return sum % 10 === 0;
 };
 
 const CheckoutPage: React.FC = () => {
   const navigate = useNavigate();
-  const { items, getTotalPrice, getOriginalPrice, getTotalDiscount, clearCart } = useCart();
+  const {
+    items,
+    getTotalPrice,
+    getOriginalPrice,
+    getTotalDiscount,
+    clearCart,
+  } = useCart();
   const { user } = useAuth();
   const { data: profileData } = useProfile(user?.businessEntityId || 0);
   const { addresses, getDefaultAddress, addAddress } = useAddresses();
-  const { paymentMethods, getDefaultPaymentMethod, addPaymentMethod } = usePaymentMethods();
+  const { paymentMethods, getDefaultPaymentMethod, addPaymentMethod } =
+    usePaymentMethods();
   const [step, setStep] = useState(1);
-  const [countryCode, setCountryCode] = useState('+1');
+  const [countryCode, setCountryCode] = useState("+1");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(
+    null
+  );
   const [useNewAddress, setUseNewAddress] = useState(false);
   const [saveNewAddress, setSaveNewAddress] = useState(false);
-  const [addressLabel, setAddressLabel] = useState('');
-  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
+  const [addressLabel, setAddressLabel] = useState("");
+  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(
+    null
+  );
   const [useNewPayment, setUseNewPayment] = useState(false);
   const [saveNewPayment, setSaveNewPayment] = useState(false);
-  const [paymentLabel, setPaymentLabel] = useState('');
-  const [discountCode, setDiscountCode] = useState('');
+  const [paymentLabel, setPaymentLabel] = useState("");
+  const [discountCode, setDiscountCode] = useState("");
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
-  const [codeError, setCodeError] = useState('');
-  
-  const [title, setTitle] = useState('');
-  const [middleName, setMiddleName] = useState('');
-  const [suffix, setSuffix] = useState('');
-  
+  const [codeError, setCodeError] = useState("");
+
+  const [title, setTitle] = useState("");
+  const [middleName, setMiddleName] = useState("");
+  const [suffix, setSuffix] = useState("");
+
   const [shippingData, setShippingData] = useState<ShippingData>({
-    firstName: user?.firstName || '',
-    lastName: user?.lastName || '',
-    email: user?.email || '',
-    phone: '',
-    address: '',
-    city: '',
-    state: '',
-    zipCode: '',
-    country: 'United States',
+    firstName: user?.firstName || "",
+    lastName: user?.lastName || "",
+    email: user?.email || "",
+    phone: "",
+    address: "",
+    city: "",
+    state: "",
+    zipCode: "",
+    country: "United States",
   });
 
   // Initialize profile data (phone, title, middleName, suffix)
@@ -104,36 +142,58 @@ const CheckoutPage: React.FC = () => {
       if (profileData.Title) setTitle(profileData.Title);
       if (profileData.MiddleName) setMiddleName(profileData.MiddleName);
       if (profileData.Suffix) setSuffix(profileData.Suffix);
-      
+
       // Set phone number
       if (profileData.PhoneNumber) {
-        let parsedCountryCode = '+1';
+        let parsedCountryCode = "+1";
         let phoneNumber = profileData.PhoneNumber;
-        
-        if (phoneNumber.startsWith('+')) {
+
+        if (phoneNumber.startsWith("+")) {
           const match = phoneNumber.match(/^(\+\d+)\s*(.*)$/);
           if (match) {
             parsedCountryCode = match[1];
             phoneNumber = match[2];
           }
         }
-        
-        const formattedPhone = formatPhoneNumber(phoneNumber, parsedCountryCode);
+
+        const formattedPhone = formatPhoneNumber(
+          phoneNumber,
+          parsedCountryCode
+        );
         setCountryCode(parsedCountryCode);
-        setShippingData(prev => ({ ...prev, phone: formattedPhone }));
+        setShippingData((prev) => ({ ...prev, phone: formattedPhone }));
       }
     }
   }, [profileData]);
-  
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'paypal'>('card');
+
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "paypal">("card");
   const [cardData, setCardData] = useState({
-    number: '',
-    name: '',
-    expiry: '',
-    cvv: '',
+    number: "",
+    name: "",
+    expiry: "",
+    cvv: "",
   });
-  
+
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const applyAddressToShipping = useCallback(
+    (address: Address) => {
+      setShippingData({
+        firstName: user?.firstName || "",
+        lastName: user?.lastName || "",
+        email: user?.email || "",
+        phone: "",
+        address: address.addressLine2
+          ? `${address.addressLine1}, ${address.addressLine2}`
+          : address.addressLine1,
+        city: address.city,
+        state: address.stateProvinceId.toString(),
+        zipCode: address.postalCode,
+        country: "United States",
+      });
+    },
+    [user]
+  );
 
   // Initialize with default address if available
   useEffect(() => {
@@ -142,7 +202,13 @@ const CheckoutPage: React.FC = () => {
       setSelectedAddressId(defaultAddress.id);
       applyAddressToShipping(defaultAddress);
     }
-  }, [addresses]);
+  }, [
+    addresses,
+    getDefaultAddress,
+    selectedAddressId,
+    useNewAddress,
+    applyAddressToShipping,
+  ]);
 
   // Initialize with default payment method if available
   useEffect(() => {
@@ -151,23 +217,12 @@ const CheckoutPage: React.FC = () => {
       setSelectedPaymentId(defaultPayment.id);
       setPaymentMethod(defaultPayment.type);
     }
-  }, [paymentMethods]);
-
-  const applyAddressToShipping = (address: Address) => {
-    setShippingData({
-      firstName: user?.firstName || '',
-      lastName: user?.lastName || '',
-      email: user?.email || '',
-      phone: user?.phone || '',
-      address: address.addressLine2 
-        ? `${address.addressLine1}, ${address.addressLine2}`
-        : address.addressLine1,
-      city: address.city,
-      state: address.stateProvinceId.toString(),
-      zipCode: address.postalCode,
-      country: 'United States',
-    });
-  };
+  }, [
+    paymentMethods,
+    getDefaultPaymentMethod,
+    selectedPaymentId,
+    useNewPayment,
+  ]);
 
   const handleSelectAddress = (address: Address) => {
     setSelectedAddressId(address.id);
@@ -178,13 +233,16 @@ const CheckoutPage: React.FC = () => {
   const totalPrice = getTotalPrice();
   const originalPrice = getOriginalPrice();
   const totalDiscount = getTotalDiscount();
-  
+
   // Calculate discount from code
   const appliedDiscount = appliedCode && DISCOUNT_CODES[appliedCode];
-  const codeDiscountAmount = appliedDiscount?.type === 'percent' ? totalPrice * (appliedDiscount.value! / 100) : 0;
+  const codeDiscountAmount =
+    appliedDiscount?.type === "percent"
+      ? totalPrice * (appliedDiscount.value! / 100)
+      : 0;
   const priceAfterCodeDiscount = totalPrice - codeDiscountAmount;
-  const freeShippingFromCode = appliedDiscount?.type === 'freeshipping';
-  
+  const freeShippingFromCode = appliedDiscount?.type === "freeshipping";
+
   const baseShipping = priceAfterCodeDiscount > 50 ? 0 : 9.99;
   const shipping = freeShippingFromCode ? 0 : baseShipping;
   const tax = priceAfterCodeDiscount * 0.08;
@@ -193,21 +251,21 @@ const CheckoutPage: React.FC = () => {
   const handleApplyCode = () => {
     const code = discountCode.toUpperCase().trim();
     if (!code) {
-      setCodeError('Please enter a code');
+      setCodeError("Please enter a code");
       return;
     }
     if (DISCOUNT_CODES[code]) {
       setAppliedCode(code);
-      setDiscountCode('');
-      setCodeError('');
+      setDiscountCode("");
+      setCodeError("");
     } else {
-      setCodeError('Invalid discount code');
+      setCodeError("Invalid discount code");
     }
   };
 
   const handleRemoveCode = () => {
     setAppliedCode(null);
-    setCodeError('');
+    setCodeError("");
   };
 
   if (items.length === 0) {
@@ -224,7 +282,10 @@ const CheckoutPage: React.FC = () => {
               <p className="font-doodle text-doodle-text/70 mb-8">
                 Add some gear to your cart first!
               </p>
-              <Link to="/" className="doodle-button doodle-button-primary inline-flex items-center gap-2">
+              <Link
+                to="/"
+                className="doodle-button doodle-button-primary inline-flex items-center gap-2"
+              >
                 <ArrowLeft className="w-4 h-4" />
                 Start Shopping
               </Link>
@@ -237,9 +298,9 @@ const CheckoutPage: React.FC = () => {
   }
 
   const handleShippingChange = (field: keyof ShippingData, value: string) => {
-    setShippingData(prev => ({ ...prev, [field]: value }));
+    setShippingData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
+      setErrors((prev) => ({ ...prev, [field]: "" }));
     }
   };
 
@@ -251,7 +312,7 @@ const CheckoutPage: React.FC = () => {
     } catch (error) {
       if (error instanceof z.ZodError) {
         const newErrors: Record<string, string> = {};
-        error.errors.forEach(err => {
+        error.errors.forEach((err) => {
           if (err.path[0]) {
             newErrors[err.path[0] as string] = err.message;
           }
@@ -276,7 +337,7 @@ const CheckoutPage: React.FC = () => {
       setStep(2);
       return;
     }
-    
+
     // If using new address, AddressForm will handle validation and call its onSave
     // which will then move to step 2
     // So this button shouldn't be visible when entering new address
@@ -289,20 +350,17 @@ const CheckoutPage: React.FC = () => {
 
   const handlePlaceOrder = async () => {
     setIsProcessing(true);
-    
+
     // Save address if user opted in and entering a new address (either explicitly or when no saved addresses exist)
     const isEnteringNewAddress = useNewAddress || addresses.length === 0;
     if (isEnteringNewAddress && saveNewAddress && user) {
-      addAddress({
-        label: addressLabel || 'Shipping Address',
-        firstName: shippingData.firstName,
-        lastName: shippingData.lastName,
-        phone: shippingData.phone,
-        address: shippingData.address,
+      await addAddress({
+        addressLine1: shippingData.address.split(",")[0],
+        addressLine2: shippingData.address.split(",")[1]?.trim() || "",
         city: shippingData.city,
-        state: shippingData.state,
-        zipCode: shippingData.zipCode,
-        country: shippingData.country,
+        stateProvinceId: parseInt(shippingData.state),
+        postalCode: shippingData.zipCode,
+        addressType: addressLabel || "Shipping Address",
         isDefault: addresses.length === 0,
       });
       toast({
@@ -313,10 +371,15 @@ const CheckoutPage: React.FC = () => {
 
     // Save payment method if user opted in and entering new payment
     const isEnteringNewPayment = useNewPayment || paymentMethods.length === 0;
-    if (isEnteringNewPayment && saveNewPayment && user && paymentMethod === 'card') {
+    if (
+      isEnteringNewPayment &&
+      saveNewPayment &&
+      user &&
+      paymentMethod === "card"
+    ) {
       addPaymentMethod({
-        type: 'card',
-        label: paymentLabel || 'Credit Card',
+        type: "card",
+        label: paymentLabel || "Credit Card",
         cardNumber: cardData.number,
         cardExpiry: cardData.expiry,
         cardholderName: cardData.name,
@@ -327,13 +390,13 @@ const CheckoutPage: React.FC = () => {
         description: "Your card has been saved for future orders.",
       });
     }
-    
+
     // Simulate payment processing
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
     // Generate mock order ID
     const orderId = `AW-${Date.now().toString(36).toUpperCase()}`;
-    
+
     // Store order in localStorage for confirmation page
     const order = {
       id: orderId,
@@ -346,21 +409,26 @@ const CheckoutPage: React.FC = () => {
       total: grandTotal,
       date: new Date().toISOString(),
     };
-    
-    localStorage.setItem('lastOrder', JSON.stringify(order));
-    
+
+    localStorage.setItem("lastOrder", JSON.stringify(order));
+
     // Also save to order history
-    const existingOrders = JSON.parse(localStorage.getItem('orderHistory') || '[]');
-    localStorage.setItem('orderHistory', JSON.stringify([order, ...existingOrders]));
-    
+    const existingOrders = JSON.parse(
+      localStorage.getItem("orderHistory") || "[]"
+    );
+    localStorage.setItem(
+      "orderHistory",
+      JSON.stringify([order, ...existingOrders])
+    );
+
     clearCart();
-    
+
     toast({
       title: "Order Placed!",
       description: `Your order ${orderId} has been confirmed`,
     });
-    
-    navigate('/order-confirmation');
+
+    navigate("/order-confirmation");
   };
 
   return (
@@ -369,8 +437,8 @@ const CheckoutPage: React.FC = () => {
       <main className="flex-1">
         {/* Breadcrumb */}
         <div className="container mx-auto px-4 py-4">
-          <Link 
-            to="/cart" 
+          <Link
+            to="/cart"
             className="inline-flex items-center gap-2 font-doodle text-doodle-text/70 hover:text-doodle-accent transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -385,18 +453,46 @@ const CheckoutPage: React.FC = () => {
 
           {/* Progress Steps */}
           <div className="flex items-center justify-center gap-4 mb-10">
-            <div className={`flex items-center gap-2 ${step >= 1 ? 'text-doodle-accent' : 'text-doodle-text/40'}`}>
-              <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-doodle font-bold ${step >= 1 ? 'border-doodle-accent bg-doodle-accent text-white' : 'border-doodle-text/40'}`}>
-                {step > 1 ? <Check className="w-4 h-4" /> : '1'}
+            <div
+              className={`flex items-center gap-2 ${
+                step >= 1 ? "text-doodle-accent" : "text-doodle-text/40"
+              }`}
+            >
+              <div
+                className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-doodle font-bold ${
+                  step >= 1
+                    ? "border-doodle-accent bg-doodle-accent text-white"
+                    : "border-doodle-text/40"
+                }`}
+              >
+                {step > 1 ? <Check className="w-4 h-4" /> : "1"}
               </div>
-              <span className="font-doodle font-bold hidden sm:inline">Shipping</span>
+              <span className="font-doodle font-bold hidden sm:inline">
+                Shipping
+              </span>
             </div>
-            <div className={`w-12 h-0.5 ${step >= 2 ? 'bg-doodle-accent' : 'bg-doodle-text/20'}`} />
-            <div className={`flex items-center gap-2 ${step >= 2 ? 'text-doodle-accent' : 'text-doodle-text/40'}`}>
-              <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-doodle font-bold ${step >= 2 ? 'border-doodle-accent bg-doodle-accent text-white' : 'border-doodle-text/40'}`}>
-                {step > 2 ? <Check className="w-4 h-4" /> : '2'}
+            <div
+              className={`w-12 h-0.5 ${
+                step >= 2 ? "bg-doodle-accent" : "bg-doodle-text/20"
+              }`}
+            />
+            <div
+              className={`flex items-center gap-2 ${
+                step >= 2 ? "text-doodle-accent" : "text-doodle-text/40"
+              }`}
+            >
+              <div
+                className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-doodle font-bold ${
+                  step >= 2
+                    ? "border-doodle-accent bg-doodle-accent text-white"
+                    : "border-doodle-text/40"
+                }`}
+              >
+                {step > 2 ? <Check className="w-4 h-4" /> : "2"}
               </div>
-              <span className="font-doodle font-bold hidden sm:inline">Payment</span>
+              <span className="font-doodle font-bold hidden sm:inline">
+                Payment
+              </span>
             </div>
           </div>
 
@@ -425,7 +521,9 @@ const CheckoutPage: React.FC = () => {
                             key={address.id}
                             address={address}
                             selectable
-                            selected={selectedAddressId === address.id && !useNewAddress}
+                            selected={
+                              selectedAddressId === address.id && !useNewAddress
+                            }
                             onSelect={handleSelectAddress}
                             onEdit={() => {}}
                             onDelete={() => {}}
@@ -438,25 +536,27 @@ const CheckoutPage: React.FC = () => {
                           setUseNewAddress(true);
                           setSelectedAddressId(null);
                           setShippingData({
-                            firstName: user?.firstName || '',
-                            lastName: user?.lastName || '',
-                            email: user?.email || '',
-                            phone: '',
-                            address: '',
-                            city: '',
-                            state: '',
-                            zipCode: '',
-                            country: 'United States',
+                            firstName: user?.firstName || "",
+                            lastName: user?.lastName || "",
+                            email: user?.email || "",
+                            phone: "",
+                            address: "",
+                            city: "",
+                            state: "",
+                            zipCode: "",
+                            country: "United States",
                           });
                         }}
                         className={`w-full p-4 border-2 transition-all flex items-center justify-center gap-2 ${
-                          useNewAddress 
-                            ? 'border-doodle-accent bg-doodle-accent/5' 
-                            : 'border-dashed border-doodle-text/20 hover:border-doodle-accent'
+                          useNewAddress
+                            ? "border-doodle-accent bg-doodle-accent/5"
+                            : "border-dashed border-doodle-text/20 hover:border-doodle-accent"
                         }`}
                       >
                         <Plus className="w-4 h-4" />
-                        <span className="font-doodle font-bold">Use a different address</span>
+                        <span className="font-doodle font-bold">
+                          Use a different address
+                        </span>
                       </button>
                     </div>
                   )}
@@ -473,17 +573,17 @@ const CheckoutPage: React.FC = () => {
                         onSave={(addressData) => {
                           // Convert AddressForm data to checkout shipping data
                           setShippingData({
-                            firstName: user?.firstName || '',
-                            lastName: user?.lastName || '',
-                            email: user?.email || '',
+                            firstName: user?.firstName || "",
+                            lastName: user?.lastName || "",
+                            email: user?.email || "",
                             phone: shippingData.phone,
                             address: addressData.addressLine1,
                             city: addressData.city,
                             state: String(addressData.stateProvinceId), // Will need to map this properly
                             zipCode: addressData.postalCode,
-                            country: addressData.countryRegionCode || 'US',
+                            country: addressData.countryRegionCode || "US",
                           });
-                          
+
                           // Save address if user wants to
                           if (saveNewAddress && user) {
                             addAddress({
@@ -496,7 +596,7 @@ const CheckoutPage: React.FC = () => {
                               isDefault: addressData.isDefault,
                             });
                           }
-                          
+
                           // Move to next step
                           setStep(2);
                         }}
@@ -512,10 +612,14 @@ const CheckoutPage: React.FC = () => {
                             <input
                               type="checkbox"
                               checked={saveNewAddress}
-                              onChange={(e) => setSaveNewAddress(e.target.checked)}
+                              onChange={(e) =>
+                                setSaveNewAddress(e.target.checked)
+                              }
                               className="w-4 h-4"
                             />
-                            <span className="font-doodle text-sm text-doodle-text">Save this address for future orders</span>
+                            <span className="font-doodle text-sm text-doodle-text">
+                              Save this address for future orders
+                            </span>
                           </label>
                         </div>
                       )}
@@ -561,16 +665,21 @@ const CheckoutPage: React.FC = () => {
                             }}
                             className={`flex items-center gap-4 p-4 border-2 cursor-pointer transition-colors ${
                               selectedPaymentId === pm.id && !useNewPayment
-                                ? 'border-doodle-accent bg-doodle-accent/5'
-                                : 'border-dashed border-doodle-text/20 hover:border-doodle-accent'
+                                ? "border-doodle-accent bg-doodle-accent/5"
+                                : "border-dashed border-doodle-text/20 hover:border-doodle-accent"
                             }`}
                           >
-                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                              selectedPaymentId === pm.id && !useNewPayment ? 'border-doodle-accent' : 'border-doodle-text/40'
-                            }`}>
-                              {selectedPaymentId === pm.id && !useNewPayment && (
-                                <div className="w-3 h-3 rounded-full bg-doodle-accent" />
-                              )}
+                            <div
+                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                                selectedPaymentId === pm.id && !useNewPayment
+                                  ? "border-doodle-accent"
+                                  : "border-doodle-text/40"
+                              }`}
+                            >
+                              {selectedPaymentId === pm.id &&
+                                !useNewPayment && (
+                                  <div className="w-3 h-3 rounded-full bg-doodle-accent" />
+                                )}
                             </div>
                             <CreditCard className="w-6 h-6 text-doodle-text/70" />
                             <div className="flex-1">
@@ -598,12 +707,14 @@ const CheckoutPage: React.FC = () => {
                         }}
                         className={`w-full p-4 border-2 transition-all flex items-center justify-center gap-2 ${
                           useNewPayment
-                            ? 'border-doodle-accent bg-doodle-accent/5'
-                            : 'border-dashed border-doodle-text/20 hover:border-doodle-accent'
+                            ? "border-doodle-accent bg-doodle-accent/5"
+                            : "border-dashed border-doodle-text/20 hover:border-doodle-accent"
                         }`}
                       >
                         <Plus className="w-4 h-4" />
-                        <span className="font-doodle font-bold">Use a different payment method</span>
+                        <span className="font-doodle font-bold">
+                          Use a different payment method
+                        </span>
                       </button>
                     </div>
                   )}
@@ -613,31 +724,61 @@ const CheckoutPage: React.FC = () => {
                     <>
                       {/* Payment Method Selection */}
                       <div className="space-y-3 mb-6">
-                        <label className={`flex items-center gap-4 p-4 border-2 cursor-pointer transition-colors ${paymentMethod === 'card' ? 'border-doodle-accent bg-doodle-accent/5' : 'border-dashed border-doodle-text/30 hover:border-doodle-text/50'}`}>
+                        <label
+                          className={`flex items-center gap-4 p-4 border-2 cursor-pointer transition-colors ${
+                            paymentMethod === "card"
+                              ? "border-doodle-accent bg-doodle-accent/5"
+                              : "border-dashed border-doodle-text/30 hover:border-doodle-text/50"
+                          }`}
+                        >
                           <input
                             type="radio"
                             name="payment"
-                            checked={paymentMethod === 'card'}
-                            onChange={() => setPaymentMethod('card')}
+                            checked={paymentMethod === "card"}
+                            onChange={() => setPaymentMethod("card")}
                             className="sr-only"
                           />
-                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${paymentMethod === 'card' ? 'border-doodle-accent' : 'border-doodle-text/40'}`}>
-                            {paymentMethod === 'card' && <div className="w-3 h-3 rounded-full bg-doodle-accent" />}
+                          <div
+                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                              paymentMethod === "card"
+                                ? "border-doodle-accent"
+                                : "border-doodle-text/40"
+                            }`}
+                          >
+                            {paymentMethod === "card" && (
+                              <div className="w-3 h-3 rounded-full bg-doodle-accent" />
+                            )}
                           </div>
                           <CreditCard className="w-6 h-6" />
-                          <span className="font-doodle font-bold">Credit / Debit Card</span>
+                          <span className="font-doodle font-bold">
+                            Credit / Debit Card
+                          </span>
                         </label>
 
-                        <label className={`flex items-center gap-4 p-4 border-2 cursor-pointer transition-colors ${paymentMethod === 'paypal' ? 'border-doodle-accent bg-doodle-accent/5' : 'border-dashed border-doodle-text/30 hover:border-doodle-text/50'}`}>
+                        <label
+                          className={`flex items-center gap-4 p-4 border-2 cursor-pointer transition-colors ${
+                            paymentMethod === "paypal"
+                              ? "border-doodle-accent bg-doodle-accent/5"
+                              : "border-dashed border-doodle-text/30 hover:border-doodle-text/50"
+                          }`}
+                        >
                           <input
                             type="radio"
                             name="payment"
-                            checked={paymentMethod === 'paypal'}
-                            onChange={() => setPaymentMethod('paypal')}
+                            checked={paymentMethod === "paypal"}
+                            onChange={() => setPaymentMethod("paypal")}
                             className="sr-only"
                           />
-                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${paymentMethod === 'paypal' ? 'border-doodle-accent' : 'border-doodle-text/40'}`}>
-                            {paymentMethod === 'paypal' && <div className="w-3 h-3 rounded-full bg-doodle-accent" />}
+                          <div
+                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                              paymentMethod === "paypal"
+                                ? "border-doodle-accent"
+                                : "border-doodle-text/40"
+                            }`}
+                          >
+                            {paymentMethod === "paypal" && (
+                              <div className="w-3 h-3 rounded-full bg-doodle-accent" />
+                            )}
                           </div>
                           <span className="text-xl">💳</span>
                           <span className="font-doodle font-bold">PayPal</span>
@@ -645,7 +786,7 @@ const CheckoutPage: React.FC = () => {
                       </div>
 
                       {/* Card Details */}
-                      {paymentMethod === 'card' && (
+                      {paymentMethod === "card" && (
                         <div className="space-y-4 mb-6">
                           <div>
                             <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
@@ -656,42 +797,60 @@ const CheckoutPage: React.FC = () => {
                                 type="text"
                                 value={cardData.number}
                                 onChange={(e) => {
-                                  const value = e.target.value.replace(/\s/g, '').replace(/\D/g, '');
-                                  const formatted = value.match(/.{1,4}/g)?.join(' ') || '';
-                                  setCardData(prev => ({ ...prev, number: formatted }));
+                                  const value = e.target.value
+                                    .replace(/\s/g, "")
+                                    .replace(/\D/g, "");
+                                  const formatted =
+                                    value.match(/.{1,4}/g)?.join(" ") || "";
+                                  setCardData((prev) => ({
+                                    ...prev,
+                                    number: formatted,
+                                  }));
                                 }}
                                 className="doodle-input w-full pr-16"
                                 placeholder="4242 4242 4242 4242"
                                 maxLength={19}
                               />
                               {(() => {
-                                const num = cardData.number.replace(/\s/g, '');
-                                let cardType = '';
-                                let cardColor = '';
+                                const num = cardData.number.replace(/\s/g, "");
+                                let cardType = "";
+                                let cardColor = "";
                                 if (/^4/.test(num)) {
-                                  cardType = 'VISA';
-                                  cardColor = 'bg-blue-600';
-                                } else if (/^5[1-5]/.test(num) || /^2[2-7]/.test(num)) {
-                                  cardType = 'MC';
-                                  cardColor = 'bg-orange-500';
+                                  cardType = "VISA";
+                                  cardColor = "bg-blue-600";
+                                } else if (
+                                  /^5[1-5]/.test(num) ||
+                                  /^2[2-7]/.test(num)
+                                ) {
+                                  cardType = "MC";
+                                  cardColor = "bg-orange-500";
                                 } else if (/^3[47]/.test(num)) {
-                                  cardType = 'AMEX';
-                                  cardColor = 'bg-green-600';
+                                  cardType = "AMEX";
+                                  cardColor = "bg-green-600";
                                 } else if (/^6(?:011|5)/.test(num)) {
-                                  cardType = 'DISC';
-                                  cardColor = 'bg-amber-500';
+                                  cardType = "DISC";
+                                  cardColor = "bg-amber-500";
                                 }
                                 return cardType ? (
-                                  <span className={`absolute right-3 top-1/2 -translate-y-1/2 ${cardColor} text-white text-xs font-bold px-2 py-1 rounded`}>
+                                  <span
+                                    className={`absolute right-3 top-1/2 -translate-y-1/2 ${cardColor} text-white text-xs font-bold px-2 py-1 rounded`}
+                                  >
                                     {cardType}
                                   </span>
                                 ) : null;
                               })()}
                             </div>
                             {(() => {
-                              const digits = cardData.number.replace(/\s/g, '');
-                              if (digits.length >= 13 && !isValidCardNumber(cardData.number)) {
-                                return <p className="font-doodle text-xs text-doodle-accent mt-1">Invalid card number</p>;
+                              const digits = cardData.number.replace(/\s/g, "");
+                              if (
+                                digits.length >= 13 &&
+                                !isValidCardNumber(cardData.number)
+                              ) {
+                                return (
+                                  <p className="font-doodle text-xs text-doodle-accent mt-1">
+                                    Invalid card number
+                                  </p>
+                                );
                               }
                               return null;
                             })()}
@@ -703,7 +862,12 @@ const CheckoutPage: React.FC = () => {
                             <input
                               type="text"
                               value={cardData.name}
-                              onChange={(e) => setCardData(prev => ({ ...prev, name: e.target.value }))}
+                              onChange={(e) =>
+                                setCardData((prev) => ({
+                                  ...prev,
+                                  name: e.target.value,
+                                }))
+                              }
                               className="doodle-input w-full"
                               placeholder="John Doe"
                             />
@@ -717,32 +881,51 @@ const CheckoutPage: React.FC = () => {
                                 type="text"
                                 value={cardData.expiry}
                                 onChange={(e) => {
-                                  let value = e.target.value.replace(/\D/g, '');
+                                  let value = e.target.value.replace(/\D/g, "");
                                   // Validate month (01-12)
                                   if (value.length >= 2) {
-                                    const month = parseInt(value.slice(0, 2), 10);
-                                    if (month > 12) value = '12' + value.slice(2);
-                                    if (month === 0) value = '01' + value.slice(2);
+                                    const month = parseInt(
+                                      value.slice(0, 2),
+                                      10
+                                    );
+                                    if (month > 12)
+                                      value = "12" + value.slice(2);
+                                    if (month === 0)
+                                      value = "01" + value.slice(2);
                                   }
                                   if (value.length >= 2) {
-                                    value = value.slice(0, 2) + '/' + value.slice(2, 4);
+                                    value =
+                                      value.slice(0, 2) +
+                                      "/" +
+                                      value.slice(2, 4);
                                   }
-                                  setCardData(prev => ({ ...prev, expiry: value }));
+                                  setCardData((prev) => ({
+                                    ...prev,
+                                    expiry: value,
+                                  }));
                                 }}
                                 className="doodle-input w-full"
                                 placeholder="MM/YY"
                                 maxLength={5}
                               />
-                              {cardData.expiry.length === 5 && (() => {
-                                const [month, year] = cardData.expiry.split('/').map(Number);
-                                const now = new Date();
-                                const currentYear = now.getFullYear() % 100;
-                                const currentMonth = now.getMonth() + 1;
-                                const isExpired = year < currentYear || (year === currentYear && month < currentMonth);
-                                return isExpired ? (
-                                  <p className="font-doodle text-xs text-doodle-accent mt-1">Card has expired</p>
-                                ) : null;
-                              })()}
+                              {cardData.expiry.length === 5 &&
+                                (() => {
+                                  const [month, year] = cardData.expiry
+                                    .split("/")
+                                    .map(Number);
+                                  const now = new Date();
+                                  const currentYear = now.getFullYear() % 100;
+                                  const currentMonth = now.getMonth() + 1;
+                                  const isExpired =
+                                    year < currentYear ||
+                                    (year === currentYear &&
+                                      month < currentMonth);
+                                  return isExpired ? (
+                                    <p className="font-doodle text-xs text-doodle-accent mt-1">
+                                      Card has expired
+                                    </p>
+                                  ) : null;
+                                })()}
                             </div>
                             <div>
                               <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
@@ -753,8 +936,13 @@ const CheckoutPage: React.FC = () => {
                                 inputMode="numeric"
                                 value={cardData.cvv}
                                 onChange={(e) => {
-                                  const value = e.target.value.replace(/\D/g, '').slice(0, 4);
-                                  setCardData(prev => ({ ...prev, cvv: value }));
+                                  const value = e.target.value
+                                    .replace(/\D/g, "")
+                                    .slice(0, 4);
+                                  setCardData((prev) => ({
+                                    ...prev,
+                                    cvv: value,
+                                  }));
                                 }}
                                 className="doodle-input w-full"
                                 placeholder="123"
@@ -770,7 +958,9 @@ const CheckoutPage: React.FC = () => {
                                 <input
                                   type="checkbox"
                                   checked={saveNewPayment}
-                                  onChange={(e) => setSaveNewPayment(e.target.checked)}
+                                  onChange={(e) =>
+                                    setSaveNewPayment(e.target.checked)
+                                  }
                                   className="w-4 h-4"
                                 />
                                 <span className="font-doodle text-sm text-doodle-text">
@@ -786,7 +976,9 @@ const CheckoutPage: React.FC = () => {
                                   <input
                                     type="text"
                                     value={paymentLabel}
-                                    onChange={(e) => setPaymentLabel(e.target.value)}
+                                    onChange={(e) =>
+                                      setPaymentLabel(e.target.value)
+                                    }
                                     className="doodle-input w-full md:w-1/2"
                                     placeholder="Personal, Business, etc."
                                   />
@@ -799,10 +991,11 @@ const CheckoutPage: React.FC = () => {
                     </>
                   )}
 
-                  {paymentMethod === 'paypal' && (
+                  {paymentMethod === "paypal" && (
                     <div className="p-6 border-2 border-dashed border-doodle-text/30 text-center mb-6">
                       <p className="font-doodle text-doodle-text/70">
-                        You will be redirected to PayPal to complete your payment (mock)
+                        You will be redirected to PayPal to complete your
+                        payment (mock)
                       </p>
                     </div>
                   )}
@@ -815,15 +1008,21 @@ const CheckoutPage: React.FC = () => {
                       Back
                     </button>
                     {(() => {
-                      const isNewPaymentMethod = useNewPayment || paymentMethods.length === 0;
-                      const cardInvalid = isNewPaymentMethod && paymentMethod === 'card' && !isValidCardNumber(cardData.number);
+                      const isNewPaymentMethod =
+                        useNewPayment || paymentMethods.length === 0;
+                      const cardInvalid =
+                        isNewPaymentMethod &&
+                        paymentMethod === "card" &&
+                        !isValidCardNumber(cardData.number);
                       return (
                         <button
                           onClick={handlePlaceOrder}
                           disabled={isProcessing || cardInvalid}
                           className="doodle-button doodle-button-primary flex-1 py-3 text-lg disabled:opacity-50"
                         >
-                          {isProcessing ? 'Processing...' : `Pay $${grandTotal.toFixed(2)}`}
+                          {isProcessing
+                            ? "Processing..."
+                            : `Pay $${grandTotal.toFixed(2)}`}
                         </button>
                       );
                     })()}
@@ -849,7 +1048,10 @@ const CheckoutPage: React.FC = () => {
                     const salePrice = getSalePrice(item);
                     const itemPrice = salePrice || item.ListPrice;
                     return (
-                      <div key={`${item.ProductID}-${item.selectedSize}-${item.selectedColor}`} className="flex gap-3">
+                      <div
+                        key={`${item.ProductID}-${item.selectedSize}-${item.selectedColor}`}
+                        className="flex gap-3"
+                      >
                         <div className="w-12 h-12 flex-shrink-0 bg-doodle-bg border border-dashed border-doodle-text/50 flex items-center justify-center text-lg">
                           🚴
                         </div>
@@ -863,7 +1065,8 @@ const CheckoutPage: React.FC = () => {
                             </p>
                             {salePrice && (
                               <span className="font-doodle text-xs text-doodle-green font-bold">
-                                Save {Math.round((item.DiscountPct || 0) * 100)}%
+                                Save {Math.round((item.DiscountPct || 0) * 100)}
+                                %
                               </span>
                             )}
                           </div>
@@ -889,7 +1092,9 @@ const CheckoutPage: React.FC = () => {
                     <div className="flex items-center justify-between p-3 bg-doodle-green/10 border-2 border-doodle-green/30">
                       <div className="flex items-center gap-2">
                         <Tag className="w-4 h-4 text-doodle-green" />
-                        <span className="font-doodle font-bold text-doodle-green">{appliedCode}</span>
+                        <span className="font-doodle font-bold text-doodle-green">
+                          {appliedCode}
+                        </span>
                         <span className="font-doodle text-xs text-doodle-text/70">
                           ({DISCOUNT_CODES[appliedCode]?.description})
                         </span>
@@ -909,7 +1114,7 @@ const CheckoutPage: React.FC = () => {
                         value={discountCode}
                         onChange={(e) => {
                           setDiscountCode(e.target.value.toUpperCase());
-                          setCodeError('');
+                          setCodeError("");
                         }}
                         className="doodle-input flex-1 uppercase"
                         placeholder="ENTER CODE"
@@ -923,7 +1128,9 @@ const CheckoutPage: React.FC = () => {
                     </div>
                   )}
                   {codeError && (
-                    <p className="font-doodle text-xs text-doodle-accent mt-1">{codeError}</p>
+                    <p className="font-doodle text-xs text-doodle-accent mt-1">
+                      {codeError}
+                    </p>
                   )}
                 </div>
 
@@ -938,19 +1145,34 @@ const CheckoutPage: React.FC = () => {
                   {totalDiscount > 0 && (
                     <div className="flex justify-between text-doodle-green">
                       <span className="font-bold">Sale Discounts</span>
-                      <span className="font-bold">-${totalDiscount.toFixed(2)}</span>
+                      <span className="font-bold">
+                        -${totalDiscount.toFixed(2)}
+                      </span>
                     </div>
                   )}
-                  {appliedDiscount?.type === 'percent' && codeDiscountAmount > 0 && (
-                    <div className="flex justify-between text-doodle-green">
-                      <span className="font-bold">Code: {appliedCode} (-{appliedDiscount.value}%)</span>
-                      <span className="font-bold">-${codeDiscountAmount.toFixed(2)}</span>
-                    </div>
-                  )}
+                  {appliedDiscount?.type === "percent" &&
+                    codeDiscountAmount > 0 && (
+                      <div className="flex justify-between text-doodle-green">
+                        <span className="font-bold">
+                          Code: {appliedCode} (-{appliedDiscount.value}%)
+                        </span>
+                        <span className="font-bold">
+                          -${codeDiscountAmount.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
                   <div className="flex justify-between">
                     <span className="text-doodle-text/70">Shipping</span>
-                    <span className={shipping === 0 ? 'text-doodle-green font-bold' : ''}>
-                      {shipping === 0 ? (freeShippingFromCode ? 'FREE (code)' : 'FREE') : `$${shipping.toFixed(2)}`}
+                    <span
+                      className={
+                        shipping === 0 ? "text-doodle-green font-bold" : ""
+                      }
+                    >
+                      {shipping === 0
+                        ? freeShippingFromCode
+                          ? "FREE (code)"
+                          : "FREE"
+                        : `$${shipping.toFixed(2)}`}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -960,7 +1182,9 @@ const CheckoutPage: React.FC = () => {
                   <hr className="border-dashed border-doodle-text/30" />
                   <div className="flex justify-between text-lg font-bold">
                     <span>Total</span>
-                    <span className="text-doodle-green">${grandTotal.toFixed(2)}</span>
+                    <span className="text-doodle-green">
+                      ${grandTotal.toFixed(2)}
+                    </span>
                   </div>
                 </div>
               </div>

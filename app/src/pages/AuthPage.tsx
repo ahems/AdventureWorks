@@ -1,46 +1,53 @@
-import React, { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Loader2, Eye, EyeOff, Bike } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
-import { z } from 'zod';
+import React, { useState } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { ArrowLeft, Loader2, Eye, EyeOff, Bike } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { z } from "zod";
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email" }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
+  password: z
+    .string()
+    .min(6, { message: "Password must be at least 6 characters" }),
 });
 
-const signupSchema = z.object({
-  firstName: z.string().min(1, { message: "First name is required" }).max(50),
-  lastName: z.string().min(1, { message: "Last name is required" }).max(50),
-  email: z.string().email({ message: "Please enter a valid email" }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"],
-});
+const signupSchema = z
+  .object({
+    firstName: z.string().min(1, { message: "First name is required" }).max(50),
+    lastName: z.string().min(1, { message: "Last name is required" }).max(50),
+    email: z.string().email({ message: "Please enter a valid email" }),
+    password: z
+      .string()
+      .min(6, { message: "Password must be at least 6 characters" }),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
 
 const AuthPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+
   const { login, signup, isLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  
-  const from = (location.state as any)?.from?.pathname || '/';
+
+  const from =
+    (location.state as { from?: { pathname: string } })?.from?.pathname || "/";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
-    
+
     if (isLogin) {
       const result = loginSchema.safeParse({ email, password });
       if (!result.success) {
@@ -53,13 +60,19 @@ const AuthPage: React.FC = () => {
         setErrors(fieldErrors);
         return;
       }
-      
+
       const success = await login(email, password);
       if (success) {
         navigate(from, { replace: true });
       }
     } else {
-      const result = signupSchema.safeParse({ firstName, lastName, email, password, confirmPassword });
+      const result = signupSchema.safeParse({
+        firstName,
+        lastName,
+        email,
+        password,
+        confirmPassword,
+      });
       if (!result.success) {
         const fieldErrors: Record<string, string> = {};
         result.error.errors.forEach((err) => {
@@ -70,7 +83,7 @@ const AuthPage: React.FC = () => {
         setErrors(fieldErrors);
         return;
       }
-      
+
       const success = await signup(email, password, firstName, lastName);
       if (success) {
         navigate(from, { replace: true });
@@ -81,8 +94,8 @@ const AuthPage: React.FC = () => {
   const toggleMode = () => {
     setIsLogin(!isLogin);
     setErrors({});
-    setPassword('');
-    setConfirmPassword('');
+    setPassword("");
+    setConfirmPassword("");
   };
 
   return (
@@ -107,8 +120,8 @@ const AuthPage: React.FC = () => {
       <main className="flex-1 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
           {/* Back Link */}
-          <Link 
-            to="/" 
+          <Link
+            to="/"
             className="inline-flex items-center gap-2 font-doodle text-doodle-text/70 hover:text-doodle-accent transition-colors mb-6"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -118,14 +131,16 @@ const AuthPage: React.FC = () => {
           {/* Auth Card */}
           <div className="doodle-card p-6 md:p-8">
             <div className="text-center mb-6">
-              <span className="text-5xl block mb-3">{isLogin ? '👋' : '🎉'}</span>
+              <span className="text-5xl block mb-3">
+                {isLogin ? "👋" : "🎉"}
+              </span>
               <h1 className="font-doodle text-2xl md:text-3xl font-bold text-doodle-text">
-                {isLogin ? 'Welcome Back!' : 'Join the Adventure!'}
+                {isLogin ? "Welcome Back!" : "Join the Adventure!"}
               </h1>
               <p className="font-doodle text-doodle-text/70 mt-2">
-                {isLogin 
-                  ? 'Sign in to your account' 
-                  : 'Create your free account'}
+                {isLogin
+                  ? "Sign in to your account"
+                  : "Create your free account"}
               </p>
             </div>
 
@@ -141,11 +156,15 @@ const AuthPage: React.FC = () => {
                       type="text"
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
-                      className={`doodle-input w-full ${errors.firstName ? 'border-doodle-accent' : ''}`}
+                      className={`doodle-input w-full ${
+                        errors.firstName ? "border-doodle-accent" : ""
+                      }`}
                       placeholder="John"
                     />
                     {errors.firstName && (
-                      <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.firstName}</p>
+                      <p className="font-doodle text-xs text-doodle-accent mt-1">
+                        {errors.firstName}
+                      </p>
                     )}
                   </div>
                   <div>
@@ -156,11 +175,15 @@ const AuthPage: React.FC = () => {
                       type="text"
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
-                      className={`doodle-input w-full ${errors.lastName ? 'border-doodle-accent' : ''}`}
+                      className={`doodle-input w-full ${
+                        errors.lastName ? "border-doodle-accent" : ""
+                      }`}
                       placeholder="Doe"
                     />
                     {errors.lastName && (
-                      <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.lastName}</p>
+                      <p className="font-doodle text-xs text-doodle-accent mt-1">
+                        {errors.lastName}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -175,11 +198,15 @@ const AuthPage: React.FC = () => {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className={`doodle-input w-full ${errors.email ? 'border-doodle-accent' : ''}`}
+                  className={`doodle-input w-full ${
+                    errors.email ? "border-doodle-accent" : ""
+                  }`}
                   placeholder="you@example.com"
                 />
                 {errors.email && (
-                  <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.email}</p>
+                  <p className="font-doodle text-xs text-doodle-accent mt-1">
+                    {errors.email}
+                  </p>
                 )}
               </div>
 
@@ -190,10 +217,12 @@ const AuthPage: React.FC = () => {
                 </label>
                 <div className="relative">
                   <input
-                    type={showPassword ? 'text' : 'password'}
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className={`doodle-input w-full pr-10 ${errors.password ? 'border-doodle-accent' : ''}`}
+                    className={`doodle-input w-full pr-10 ${
+                      errors.password ? "border-doodle-accent" : ""
+                    }`}
                     placeholder="••••••••"
                   />
                   <button
@@ -201,11 +230,17 @@ const AuthPage: React.FC = () => {
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-doodle-text/50 hover:text-doodle-text"
                   >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
                   </button>
                 </div>
                 {errors.password && (
-                  <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.password}</p>
+                  <p className="font-doodle text-xs text-doodle-accent mt-1">
+                    {errors.password}
+                  </p>
                 )}
               </div>
 
@@ -216,14 +251,18 @@ const AuthPage: React.FC = () => {
                     Confirm Password
                   </label>
                   <input
-                    type={showPassword ? 'text' : 'password'}
+                    type={showPassword ? "text" : "password"}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className={`doodle-input w-full ${errors.confirmPassword ? 'border-doodle-accent' : ''}`}
+                    className={`doodle-input w-full ${
+                      errors.confirmPassword ? "border-doodle-accent" : ""
+                    }`}
                     placeholder="••••••••"
                   />
                   {errors.confirmPassword && (
-                    <p className="font-doodle text-xs text-doodle-accent mt-1">{errors.confirmPassword}</p>
+                    <p className="font-doodle text-xs text-doodle-accent mt-1">
+                      {errors.confirmPassword}
+                    </p>
                   )}
                 </div>
               )}
@@ -237,10 +276,12 @@ const AuthPage: React.FC = () => {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    {isLogin ? 'Signing in...' : 'Creating account...'}
+                    {isLogin ? "Signing in..." : "Creating account..."}
                   </>
+                ) : isLogin ? (
+                  "Sign In"
                 ) : (
-                  isLogin ? 'Sign In' : 'Create Account'
+                  "Create Account"
                 )}
               </button>
             </form>
@@ -248,13 +289,15 @@ const AuthPage: React.FC = () => {
             {/* Toggle Mode */}
             <div className="mt-6 text-center">
               <p className="font-doodle text-doodle-text/70">
-                {isLogin ? "Don't have an account?" : "Already have an account?"}
+                {isLogin
+                  ? "Don't have an account?"
+                  : "Already have an account?"}
               </p>
               <button
                 onClick={toggleMode}
                 className="font-doodle text-doodle-accent hover:text-doodle-green transition-colors font-bold mt-1"
               >
-                {isLogin ? 'Create one here!' : 'Sign in instead'}
+                {isLogin ? "Create one here!" : "Sign in instead"}
               </button>
             </div>
 
