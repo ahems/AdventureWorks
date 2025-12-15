@@ -18,6 +18,7 @@ export interface AuthResult {
 // GraphQL response types
 interface EmailAddressItem {
   EmailAddressID: number;
+  BusinessEntityID: number;
   EmailAddress: string;
 }
 
@@ -31,13 +32,25 @@ interface PersonItem {
 }
 
 interface CheckUserLoginResponse {
+  emailAddresses: {
+    items: EmailAddressItem[];
+  };
+}
+
+interface GetPersonByIdResponse {
   people: {
     items: PersonItem[];
   };
 }
 
+interface CreateBusinessEntityResponse {
+  createBusinessEntity: {
+    BusinessEntityID: number;
+  };
+}
+
 interface CreatePersonResponse {
-  createperson: {
+  createPerson: {
     BusinessEntityID: number;
     FirstName: string;
     LastName: string;
@@ -45,7 +58,7 @@ interface CreatePersonResponse {
 }
 
 interface CreateEmailAddressResponse {
-  createemailAddress: {
+  createEmailAddress: {
     EmailAddressID: number;
     BusinessEntityID: number;
     EmailAddress: string;
@@ -63,7 +76,19 @@ interface UpdatePersonResponse {
 // GraphQL queries and mutations
 const CHECK_USER_LOGIN = gql`
   query CheckUserLogin($email: String!) {
-    people(filter: { emailAddresses: { emailAddress: { eq: $email } } }) {
+    emailAddresses(filter: { EmailAddress: { eq: $email } }) {
+      items {
+        EmailAddressID
+        BusinessEntityID
+        EmailAddress
+      }
+    }
+  }
+`;
+
+const GET_PERSON_BY_ID = gql`
+  query GetPersonById($businessEntityId: Int!) {
+    people(filter: { BusinessEntityID: { eq: $businessEntityId } }) {
       items {
         BusinessEntityID
         FirstName
@@ -79,10 +104,27 @@ const CHECK_USER_LOGIN = gql`
   }
 `;
 
+const CREATE_BUSINESS_ENTITY = gql`
+  mutation CreateBusinessEntity {
+    createBusinessEntity(item: {}) {
+      BusinessEntityID
+    }
+  }
+`;
+
 const CREATE_PERSON = gql`
-  mutation CreatePerson($firstName: String!, $lastName: String!) {
-    createperson(
-      item: { FirstName: $firstName, LastName: $lastName, PersonType: "IN" }
+  mutation CreatePerson(
+    $businessEntityId: Int!
+    $firstName: String!
+    $lastName: String!
+  ) {
+    createPerson(
+      item: {
+        BusinessEntityID: $businessEntityId
+        FirstName: $firstName
+        LastName: $lastName
+        PersonType: "IN"
+      }
     ) {
       BusinessEntityID
       FirstName
@@ -93,7 +135,7 @@ const CREATE_PERSON = gql`
 
 const CREATE_EMAIL_ADDRESS = gql`
   mutation CreateEmailAddress($businessEntityId: Int!, $emailAddress: String!) {
-    createemailAddress(
+    createEmailAddress(
       item: { BusinessEntityID: $businessEntityId, EmailAddress: $emailAddress }
     ) {
       EmailAddressID
@@ -109,7 +151,7 @@ const UPDATE_PERSON = gql`
     $firstName: String!
     $lastName: String!
   ) {
-    updateperson(
+    updatePerson(
       BusinessEntityID: $businessEntityId
       item: { FirstName: $firstName, LastName: $lastName }
     ) {
@@ -122,7 +164,7 @@ const UPDATE_PERSON = gql`
 
 const UPDATE_EMAIL_ADDRESS = gql`
   mutation UpdateEmailAddress($emailAddressId: Int!, $emailAddress: String!) {
-    updateemailAddress(
+    updateEmailAddress(
       EmailAddressID: $emailAddressId
       item: { EmailAddress: $emailAddress }
     ) {
@@ -150,18 +192,33 @@ export async function loginUser(
       }
     );
 
-    const people = response.people?.items || [];
+    const emailAddresses = response.emailAddresses?.items || [];
 
-    if (people.length === 0) {
+    if (emailAddresses.length === 0) {
       return {
         success: false,
         error: "No account found with this email address.",
       };
     }
 
-    const person = people[0];
-    const emailAddresses = person.emailAddresses?.items || [];
-    const emailAddress = emailAddresses.find((ea) => ea.EmailAddress === email);
+    const emailAddress = emailAddresses[0];
+
+    // Get person details
+    const personResponse = await graphqlClient.request<GetPersonByIdResponse>(
+      GET_PERSON_BY_ID,
+      {
+        businessEntityId: emailAddress.BusinessEntityID,
+      }
+    );
+
+    const person = personResponse.people?.items?.[0];
+
+    if (!person) {
+      return {
+        success: false,
+        error: "Account data not found.",
+      };
+    }
 
     return {
       success: true,
@@ -170,7 +227,7 @@ export async function loginUser(
         email: email,
         firstName: person.FirstName,
         lastName: person.LastName,
-        emailAddressId: emailAddress?.EmailAddressID,
+        emailAddressId: emailAddress.EmailAddressID,
       },
     };
   } catch (error) {
@@ -199,25 +256,35 @@ export async function signupUser(
         email,
       }
     );
-    const existingPeople = checkResponse.people?.items || [];
+    const existingEmails = checkResponse.emailAddresses?.items || [];
 
-    if (existingPeople.length > 0) {
+    if (existingEmails.length > 0) {
       return {
         success: false,
         error: "An account with this email already exists.",
       };
     }
 
+    // Create business entity first (required by Person table)
+    const businessEntityResponse =
+      await graphqlClient.request<CreateBusinessEntityResponse>(
+        CREATE_BUSINESS_ENTITY
+      );
+
+    const businessEntityId =
+      businessEntityResponse.createBusinessEntity.BusinessEntityID;
+
     // Create person record
     const personResponse = await graphqlClient.request<CreatePersonResponse>(
       CREATE_PERSON,
       {
+        businessEntityId,
         firstName,
         lastName,
       }
     );
 
-    const newPerson = personResponse.createperson;
+    const newPerson = personResponse.createPerson;
 
     if (!newPerson) {
       return {
@@ -236,7 +303,7 @@ export async function signupUser(
         }
       );
 
-    const newEmailAddress = emailResponse.createemailAddress;
+    const newEmailAddress = emailResponse.createEmailAddress;
 
     return {
       success: true,

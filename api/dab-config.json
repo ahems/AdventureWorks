@@ -179,9 +179,36 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            {
+              "action": "create",
+              "fields": {
+                "exclude": ["rowguid", "ModifiedDate"]
+              }
+            },
+            {
+              "action": "read"
+            },
+            {
+              "action": "update",
+              "fields": {
+                "exclude": ["BusinessEntityID", "rowguid", "ModifiedDate"]
+              }
+            },
+            {
+              "action": "delete"
+            }
+          ]
         }
-      ]
+      ],
+      "relationships": {
+        "emailAddresses": {
+          "cardinality": "many",
+          "target.entity": "EmailAddress",
+          "source.fields": ["BusinessEntityID"],
+          "target.fields": ["BusinessEntityID"]
+        }
+      }
     },
     "Password": {
       "source": "Person.Password",

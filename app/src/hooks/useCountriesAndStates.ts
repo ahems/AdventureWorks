@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
+import { getRestApiUrl } from "@/lib/utils";
 
 interface CountryRegion {
   CountryRegionCode: string;
@@ -12,13 +13,6 @@ interface StateProvince {
   CountryRegionCode: string;
 }
 
-const getDabApiUrl = (): string => {
-  const apiUrl = (window as any).APP_CONFIG?.API_URL || 
-                 import.meta.env.VITE_API_URL || 
-                 'http://localhost:5000/graphql';
-  return apiUrl.replace('/graphql/', '/api').replace('/graphql', '/api');
-};
-
 export const useCountriesAndStates = (countryCode?: string) => {
   const [countries, setCountries] = useState<CountryRegion[]>([]);
   const [states, setStates] = useState<StateProvince[]>([]);
@@ -29,10 +23,10 @@ export const useCountriesAndStates = (countryCode?: string) => {
     const fetchCountries = async () => {
       setIsLoading(true);
       try {
-        const dabApiUrl = getDabApiUrl();
+        const dabApiUrl = getRestApiUrl();
         let allCountries: CountryRegion[] = [];
         let nextLink = `${dabApiUrl}/CountryRegion`;
-        
+
         // Fetch all pages
         while (nextLink) {
           const response = await fetch(nextLink);
@@ -44,12 +38,12 @@ export const useCountriesAndStates = (countryCode?: string) => {
             break;
           }
         }
-        
+
         // Sort countries alphabetically by name
         allCountries.sort((a, b) => a.Name.localeCompare(b.Name));
         setCountries(allCountries);
       } catch (error) {
-        console.error('Failed to fetch countries:', error);
+        console.error("Failed to fetch countries:", error);
       } finally {
         setIsLoading(false);
       }
@@ -67,7 +61,7 @@ export const useCountriesAndStates = (countryCode?: string) => {
     const fetchStates = async () => {
       setIsLoading(true);
       try {
-        const dabApiUrl = getDabApiUrl();
+        const dabApiUrl = getRestApiUrl();
         const response = await fetch(
           `${dabApiUrl}/StateProvince?$filter=CountryRegionCode eq '${countryCode}'`
         );
@@ -75,11 +69,13 @@ export const useCountriesAndStates = (countryCode?: string) => {
           const data = await response.json();
           const stateList = data.value || [];
           // Sort states alphabetically by name
-          stateList.sort((a: StateProvince, b: StateProvince) => a.Name.localeCompare(b.Name));
+          stateList.sort((a: StateProvince, b: StateProvince) =>
+            a.Name.localeCompare(b.Name)
+          );
           setStates(stateList);
         }
       } catch (error) {
-        console.error('Failed to fetch states:', error);
+        console.error("Failed to fetch states:", error);
       } finally {
         setIsLoading(false);
       }

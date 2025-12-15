@@ -1,7 +1,8 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { graphqlClient } from '@/lib/graphql-client';
-import { gql } from 'graphql-request';
-import { toast } from './use-toast';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { graphqlClient } from "@/lib/graphql-client";
+import { getRestApiUrl } from "@/lib/utils";
+import { gql } from "graphql-request";
+import { toast } from "./use-toast";
 
 export interface ProfileData {
   BusinessEntityID: number;
@@ -89,14 +90,16 @@ const UPDATE_EMAIL_ADDRESS = gql`
 
 export const useProfile = (businessEntityId: number) => {
   return useQuery<ProfileData>({
-    queryKey: ['profile', businessEntityId],
+    queryKey: ["profile", businessEntityId],
     queryFn: async () => {
-      const data: any = await graphqlClient.request(GET_PROFILE, { businessEntityId });
-      
+      const data: any = await graphqlClient.request(GET_PROFILE, {
+        businessEntityId,
+      });
+
       const person = data.person_by_pk;
       const email = data.emailAddresses.items[0];
       const phone = data.personPhones.items[0];
-      
+
       return {
         BusinessEntityID: person.BusinessEntityID,
         Title: person.Title,
@@ -104,7 +107,7 @@ export const useProfile = (businessEntityId: number) => {
         MiddleName: person.MiddleName,
         LastName: person.LastName,
         Suffix: person.Suffix,
-        EmailAddress: email?.EmailAddress || '',
+        EmailAddress: email?.EmailAddress || "",
         EmailAddressID: email?.EmailAddressID,
         PhoneNumber: phone?.PhoneNumber,
         PhoneNumberTypeID: phone?.PhoneNumberTypeID,
@@ -116,15 +119,11 @@ export const useProfile = (businessEntityId: number) => {
 
 export const useUpdateProfile = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (profile: ProfileData) => {
-      // Get REST API URL and ensure no trailing slash
-      let restApiUrl = window.APP_CONFIG?.API_URL?.replace('/graphql', '/api') || 
-                       import.meta.env.VITE_API_URL?.replace('/graphql', '/api') || 
-                       'http://localhost:5000/api';
-      // Remove trailing slash if present
-      restApiUrl = restApiUrl.replace(/\/$/, '');
+      // Get REST API URL (automatically handles trailing slashes)
+      const restApiUrl = getRestApiUrl().replace(/\/$/, "");
 
       // Update Person
       await graphqlClient.request(UPDATE_PERSON, {
@@ -148,29 +147,35 @@ export const useUpdateProfile = () => {
       // Update or create phone number
       if (profile.PhoneNumber) {
         const phoneNumberTypeId = profile.PhoneNumberTypeID || 1; // Default to Cell
-        
+
         // Check if phone exists
         const checkUrl = `${restApiUrl}/PersonPhone?$filter=BusinessEntityID eq ${profile.BusinessEntityID}`;
-        const existingPhones = await fetch(checkUrl).then(r => r.json());
-        
+        const existingPhones = await fetch(checkUrl).then((r) => r.json());
+
         if (existingPhones.value && existingPhones.value.length > 0) {
           // PersonPhone has a composite primary key (BusinessEntityID, PhoneNumber, PhoneNumberTypeID)
           // Since PhoneNumber is part of the primary key, we can't update it directly
           // Instead, delete the old record and create a new one
-          
+
           for (const existingPhone of existingPhones.value) {
-            const deleteUrl = `${restApiUrl}/PersonPhone/BusinessEntityID/${profile.BusinessEntityID}/PhoneNumber/${encodeURIComponent(existingPhone.PhoneNumber)}/PhoneNumberTypeID/${existingPhone.PhoneNumberTypeID}`;
-            
+            const deleteUrl = `${restApiUrl}/PersonPhone/BusinessEntityID/${
+              profile.BusinessEntityID
+            }/PhoneNumber/${encodeURIComponent(
+              existingPhone.PhoneNumber
+            )}/PhoneNumberTypeID/${existingPhone.PhoneNumberTypeID}`;
+
             const deleteResponse = await fetch(deleteUrl, {
-              method: 'DELETE',
+              method: "DELETE",
             });
-            
+
             if (!deleteResponse.ok) {
               const errorText = await deleteResponse.text();
-              throw new Error(`Phone deletion failed: ${deleteResponse.status} ${errorText}`);
+              throw new Error(
+                `Phone deletion failed: ${deleteResponse.status} ${errorText}`
+              );
             }
           }
-          
+
           // Now create the new phone record
           const createUrl = `${restApiUrl}/PersonPhone`;
           const createPayload = {
@@ -178,16 +183,18 @@ export const useUpdateProfile = () => {
             PhoneNumber: profile.PhoneNumber,
             PhoneNumberTypeID: phoneNumberTypeId,
           };
-          
+
           const createResponse = await fetch(createUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(createPayload),
           });
-          
+
           if (!createResponse.ok) {
             const errorText = await createResponse.text();
-            throw new Error(`Phone creation failed: ${createResponse.status} ${errorText}`);
+            throw new Error(
+              `Phone creation failed: ${createResponse.status} ${errorText}`
+            );
           }
         } else {
           // Create new phone
@@ -197,35 +204,40 @@ export const useUpdateProfile = () => {
             PhoneNumber: profile.PhoneNumber,
             PhoneNumberTypeID: phoneNumberTypeId,
           };
-          
+
           const response = await fetch(createUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(createPayload),
           });
-          
+
           if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Phone creation failed: ${response.status} ${errorText}`);
+            throw new Error(
+              `Phone creation failed: ${response.status} ${errorText}`
+            );
           }
-          console.log('[useProfile] Phone created successfully');
+          console.log("[useProfile] Phone created successfully");
         }
       }
 
       return profile;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['profile', data.BusinessEntityID] });
+      queryClient.invalidateQueries({
+        queryKey: ["profile", data.BusinessEntityID],
+      });
       toast({
-        title: 'Profile Updated',
-        description: 'Your profile has been updated successfully.',
+        title: "Profile Updated",
+        description: "Your profile has been updated successfully.",
       });
     },
     onError: (error: any) => {
       toast({
-        title: 'Update Failed',
-        description: error.message || 'Failed to update profile. Please try again.',
-        variant: 'destructive',
+        title: "Update Failed",
+        description:
+          error.message || "Failed to update profile. Please try again.",
+        variant: "destructive",
       });
     },
   });
