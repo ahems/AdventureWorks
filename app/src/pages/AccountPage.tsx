@@ -1,31 +1,76 @@
-import React, { useState, useEffect } from 'react';
-import { Link, Navigate } from 'react-router-dom';
-import { ArrowLeft, User, Package, Heart, Settings, LogOut, ChevronDown, ChevronUp, ShoppingCart, X, Edit2, Save, Truck, MapPin, Plus, CreditCard, Star, Trash2, Phone } from 'lucide-react';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
-import { useAuth } from '@/context/AuthContext';
-import { useWishlist } from '@/context/WishlistContext';
-import { useCart } from '@/context/CartContext';
-import { useAddresses, Address } from '@/hooks/useAddresses';
-import { usePaymentMethods } from '@/hooks/usePaymentMethods';
-import { useOrders, getOrderStatusText, getOrderStatusColor } from '@/hooks/useOrders';
-import { useProfile, useUpdateProfile } from '@/hooks/useProfile';
-import { getCustomerByPersonId } from '@/lib/customerService';
-import { AddressForm } from '@/components/AddressForm';
-import { AddressCard } from '@/components/AddressCard';
-import { toast } from '@/hooks/use-toast';
-import { z } from 'zod';
-import { formatPhoneNumber, parsePhoneNumber } from '@/lib/phoneFormatter';
-import { Skeleton } from '@/components/ui/skeleton';
+import React, { useState, useEffect } from "react";
+import { Link, Navigate } from "react-router-dom";
+import {
+  ArrowLeft,
+  User,
+  Package,
+  Heart,
+  Settings,
+  LogOut,
+  ChevronDown,
+  ChevronUp,
+  ShoppingCart,
+  X,
+  Edit2,
+  Save,
+  Truck,
+  MapPin,
+  Plus,
+  CreditCard,
+  Star,
+  Trash2,
+  Phone,
+} from "lucide-react";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import { useAuth } from "@/context/AuthContext";
+import { useWishlist } from "@/context/WishlistContext";
+import { useCart } from "@/context/CartContext";
+import { useAddresses, Address } from "@/hooks/useAddresses";
+import { usePaymentMethods } from "@/hooks/usePaymentMethods";
+import {
+  useOrders,
+  getOrderStatusText,
+  getOrderStatusColor,
+} from "@/hooks/useOrders";
+import { useProfile, useUpdateProfile } from "@/hooks/useProfile";
+import { getCustomerByPersonId } from "@/lib/customerService";
+import { AddressForm } from "@/components/AddressForm";
+import { AddressCard } from "@/components/AddressCard";
+import { toast } from "@/hooks/use-toast";
+import { z } from "zod";
+import { formatPhoneNumber, parsePhoneNumber } from "@/lib/phoneFormatter";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const profileSchema = z.object({
   title: z.string().optional(),
-  firstName: z.string().trim().min(1, 'First name is required').max(50, 'First name must be less than 50 characters'),
-  middleName: z.string().trim().max(50, 'Middle name must be less than 50 characters').optional(),
-  lastName: z.string().trim().min(1, 'Last name is required').max(50, 'Last name must be less than 50 characters'),
+  firstName: z
+    .string()
+    .trim()
+    .min(1, "First name is required")
+    .max(50, "First name must be less than 50 characters"),
+  middleName: z
+    .string()
+    .trim()
+    .max(50, "Middle name must be less than 50 characters")
+    .optional(),
+  lastName: z
+    .string()
+    .trim()
+    .min(1, "Last name is required")
+    .max(50, "Last name must be less than 50 characters"),
   suffix: z.string().optional(),
-  email: z.string().trim().email('Valid email is required').max(255, 'Email must be less than 255 characters'),
-  phoneNumber: z.string().trim().regex(/^[0-9\-\(\)\s\+]*$/, 'Invalid phone number format').max(25, 'Phone number must be less than 25 characters').optional(),
+  email: z
+    .string()
+    .trim()
+    .email("Valid email is required")
+    .max(255, "Email must be less than 255 characters"),
+  phoneNumber: z
+    .string()
+    .trim()
+    .regex(/^[0-9\-() +]*$/, "Invalid phone number format")
+    .max(25, "Phone number must be less than 25 characters")
+    .optional(),
   phoneNumberTypeId: z.number().optional(),
 });
 
@@ -33,36 +78,50 @@ const AccountPage: React.FC = () => {
   const { user, isAuthenticated, logout, updateProfile, isLoading } = useAuth();
   const { items: wishlistItems, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
-  const { addresses, addAddress, updateAddress, deleteAddress, setDefaultAddress, isLoading: addressesLoading } = useAddresses();
-  const { paymentMethods, deletePaymentMethod, setDefaultPaymentMethod } = usePaymentMethods();
+  const {
+    addresses,
+    addAddress,
+    updateAddress,
+    deleteAddress,
+    setDefaultAddress,
+    isLoading: addressesLoading,
+  } = useAddresses();
+  const { paymentMethods, deletePaymentMethod, setDefaultPaymentMethod } =
+    usePaymentMethods();
   const [customerId, setCustomerId] = useState<number | null>(null);
-  const { data: orders = [], isLoading: ordersLoading } = useOrders(customerId || 0);
-  const { data: profileData, isLoading: profileLoading } = useProfile(user?.businessEntityId || 0);
+  const { data: orders = [], isLoading: ordersLoading } = useOrders(
+    customerId || 0
+  );
+  const { data: profileData, isLoading: profileLoading } = useProfile(
+    user?.businessEntityId || 0
+  );
   const updateProfileMutation = useUpdateProfile();
   const [expandedOrder, setExpandedOrder] = useState<number | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editProfileData, setEditProfileData] = useState({
-    title: '',
-    firstName: '',
-    middleName: '',
-    lastName: '',
-    suffix: '',
-    email: '',
-    countryCode: '+1',
-    phoneNumber: '',
+    title: "",
+    firstName: "",
+    middleName: "",
+    lastName: "",
+    suffix: "",
+    email: "",
+    countryCode: "+1",
+    phoneNumber: "",
     phoneNumberTypeId: 1,
   });
-  const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
+  const [profileErrors, setProfileErrors] = useState<Record<string, string>>(
+    {}
+  );
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [editingAddress, setEditingAddress] = useState<Address | null>(null);
 
-  const [memberSinceDate, setMemberSinceDate] = useState<string>('Recently');
+  const [memberSinceDate, setMemberSinceDate] = useState<string>("Recently");
 
   useEffect(() => {
     if (user) {
       // Fetch customer ID for orders
       if (user.businessEntityId) {
-        getCustomerByPersonId(user.businessEntityId).then(customer => {
+        getCustomerByPersonId(user.businessEntityId).then((customer) => {
           if (customer) {
             setCustomerId(customer.CustomerID);
           }
@@ -73,31 +132,36 @@ const AccountPage: React.FC = () => {
       if (!user.createdAt && user.businessEntityId) {
         const fetchCreatedDate = async () => {
           try {
-            const apiUrl = window.APP_CONFIG?.API_URL?.replace('/graphql', '/api') || 
-                          import.meta.env.VITE_API_URL?.replace('/graphql', '/api') || 
-                          'http://localhost:5000/api';
-            
-            const response = await fetch(`${apiUrl}/Person/BusinessEntityID/${user.businessEntityId}`);
+            const apiUrl =
+              window.APP_CONFIG?.API_URL?.replace("/graphql", "/api") ||
+              import.meta.env.VITE_API_URL?.replace("/graphql", "/api") ||
+              "http://localhost:5000/api";
+
+            const response = await fetch(
+              `${apiUrl}/Person/BusinessEntityID/${user.businessEntityId}`
+            );
             if (response.ok) {
               const result = await response.json();
               const personData = result.value?.[0];
               if (personData?.ModifiedDate) {
-                const date = new Date(personData.ModifiedDate).toLocaleDateString('en-US', {
-                  month: 'long',
-                  year: 'numeric'
+                const date = new Date(
+                  personData.ModifiedDate
+                ).toLocaleDateString("en-US", {
+                  month: "long",
+                  year: "numeric",
                 });
                 setMemberSinceDate(date);
               }
             }
           } catch (error) {
-            console.error('[AccountPage] Error fetching creation date:', error);
+            console.error("[AccountPage] Error fetching creation date:", error);
           }
         };
         fetchCreatedDate();
       } else if (user.createdAt) {
-        const date = new Date(user.createdAt).toLocaleDateString('en-US', {
-          month: 'long',
-          year: 'numeric'
+        const date = new Date(user.createdAt).toLocaleDateString("en-US", {
+          month: "long",
+          year: "numeric",
         });
         setMemberSinceDate(date);
       }
@@ -108,26 +172,28 @@ const AccountPage: React.FC = () => {
   useEffect(() => {
     if (profileData) {
       // Parse country code from phone number if it exists
-      let countryCode = '+1';
-      let phoneNumber = profileData.PhoneNumber || '';
-      
-      if (phoneNumber.startsWith('+')) {
+      let countryCode = "+1";
+      let phoneNumber = profileData.PhoneNumber || "";
+
+      if (phoneNumber.startsWith("+")) {
         const match = phoneNumber.match(/^(\+\d+)\s*(.*)$/);
         if (match) {
           countryCode = match[1];
           phoneNumber = match[2];
         }
       }
-      
+
       // Format the phone number for display
-      const formattedPhone = phoneNumber ? formatPhoneNumber(phoneNumber, countryCode) : '';
-      
+      const formattedPhone = phoneNumber
+        ? formatPhoneNumber(phoneNumber, countryCode)
+        : "";
+
       setEditProfileData({
-        title: profileData.Title || '',
+        title: profileData.Title || "",
         firstName: profileData.FirstName,
-        middleName: profileData.MiddleName || '',
+        middleName: profileData.MiddleName || "",
         lastName: profileData.LastName,
-        suffix: profileData.Suffix || '',
+        suffix: profileData.Suffix || "",
         email: profileData.EmailAddress,
         countryCode: countryCode,
         phoneNumber: formattedPhone,
@@ -148,7 +214,9 @@ const AccountPage: React.FC = () => {
   }
 
   if (!isAuthenticated || !user) {
-    return <Navigate to="/auth" state={{ from: { pathname: '/account' } }} replace />;
+    return (
+      <Navigate to="/auth" state={{ from: { pathname: "/account" } }} replace />
+    );
   }
 
   return (
@@ -157,8 +225,8 @@ const AccountPage: React.FC = () => {
       <main className="flex-1">
         {/* Breadcrumb */}
         <div className="container mx-auto px-4 py-4">
-          <Link 
-            to="/" 
+          <Link
+            to="/"
             className="inline-flex items-center gap-2 font-doodle text-doodle-text/70 hover:text-doodle-accent transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -173,14 +241,17 @@ const AccountPage: React.FC = () => {
               <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
                 <div className="w-20 h-20 rounded-full bg-doodle-accent flex items-center justify-center border-4 border-doodle-text">
                   <span className="text-white text-2xl font-bold font-doodle">
-                    {user.firstName[0]}{user.lastName[0]}
+                    {user.firstName[0]}
+                    {user.lastName[0]}
                   </span>
                 </div>
                 <div className="text-center sm:text-left">
                   <h1 className="font-doodle text-2xl md:text-3xl font-bold text-doodle-text">
                     {user.firstName} {user.lastName}
                   </h1>
-                  <p className="font-doodle text-doodle-text/70">{user.email}</p>
+                  <p className="font-doodle text-doodle-text/70">
+                    {user.email}
+                  </p>
                   <p className="font-doodle text-sm text-doodle-text/50 mt-1">
                     Member since {memberSinceDate}
                   </p>
@@ -197,15 +268,32 @@ const AccountPage: React.FC = () => {
                 </h2>
                 {!ordersLoading && (
                   <span className="font-doodle text-sm text-doodle-text/50">
-                    ({orders.length} {orders.length === 1 ? 'order' : 'orders'})
+                    ({orders.length} {orders.length === 1 ? "order" : "orders"})
                   </span>
                 )}
               </div>
 
               {ordersLoading ? (
-                <div className="text-center py-8">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-doodle-accent"></div>
-                  <p className="font-doodle text-doodle-text/70 mt-4">Loading orders...</p>
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="border-2 border-dashed border-doodle-text/20 p-4"
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-4 flex-1">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Skeleton className="h-5 w-32" />
+                              <Skeleton className="h-6 w-20 rounded-full" />
+                            </div>
+                            <Skeleton className="h-4 w-40" />
+                          </div>
+                        </div>
+                        <Skeleton className="h-5 w-20" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : orders.length === 0 ? (
                 <div className="text-center py-8">
@@ -220,9 +308,18 @@ const AccountPage: React.FC = () => {
               ) : (
                 <div className="space-y-4">
                   {orders.map((order) => (
-                    <div key={order.SalesOrderID} className="border-2 border-dashed border-doodle-text/20 p-4">
+                    <div
+                      key={order.SalesOrderID}
+                      className="border-2 border-dashed border-doodle-text/20 p-4"
+                    >
                       <button
-                        onClick={() => setExpandedOrder(expandedOrder === order.SalesOrderID ? null : order.SalesOrderID)}
+                        onClick={() =>
+                          setExpandedOrder(
+                            expandedOrder === order.SalesOrderID
+                              ? null
+                              : order.SalesOrderID
+                          )
+                        }
                         className="w-full flex items-center justify-between"
                       >
                         <div className="flex items-center gap-4">
@@ -231,16 +328,23 @@ const AccountPage: React.FC = () => {
                               <p className="font-doodle font-bold text-doodle-accent">
                                 {order.SalesOrderNumber}
                               </p>
-                              <span className={`text-xs px-2 py-1 rounded-full border ${getOrderStatusColor(order.Status)}`}>
+                              <span
+                                className={`text-xs px-2 py-1 rounded-full border ${getOrderStatusColor(
+                                  order.Status
+                                )}`}
+                              >
                                 {getOrderStatusText(order.Status)}
                               </span>
                             </div>
                             <p className="font-doodle text-sm text-doodle-text/70">
-                              {new Date(order.OrderDate).toLocaleDateString('en-US', {
-                                month: 'long',
-                                day: 'numeric',
-                                year: 'numeric'
-                              })}
+                              {new Date(order.OrderDate).toLocaleDateString(
+                                "en-US",
+                                {
+                                  month: "long",
+                                  day: "numeric",
+                                  year: "numeric",
+                                }
+                              )}
                             </p>
                           </div>
                         </div>
@@ -260,14 +364,19 @@ const AccountPage: React.FC = () => {
                         <div className="mt-4 pt-4 border-t border-dashed border-doodle-text/20">
                           {/* Order Items */}
                           <div className="space-y-2 mb-4">
-                            {order.salesOrderDetails.items.map((item, index) => (
-                              <div key={`${item.ProductID}-${index}`} className="flex justify-between font-doodle text-sm">
-                                <span className="text-doodle-text/70">
-                                  {item.product.Name} × {item.OrderQty}
-                                </span>
-                                <span>${item.LineTotal.toFixed(2)}</span>
-                              </div>
-                            ))}
+                            {order.salesOrderDetails.items.map(
+                              (item, index) => (
+                                <div
+                                  key={`${item.ProductID}-${index}`}
+                                  className="flex justify-between font-doodle text-sm"
+                                >
+                                  <span className="text-doodle-text/70">
+                                    {item.product.Name} × {item.OrderQty}
+                                  </span>
+                                  <span>${item.LineTotal.toFixed(2)}</span>
+                                </div>
+                              )
+                            )}
                           </div>
 
                           <hr className="border-dashed border-doodle-text/20 my-3" />
@@ -275,11 +384,15 @@ const AccountPage: React.FC = () => {
                           {/* Order Summary */}
                           <div className="space-y-1 font-doodle text-sm">
                             <div className="flex justify-between">
-                              <span className="text-doodle-text/70">Subtotal</span>
+                              <span className="text-doodle-text/70">
+                                Subtotal
+                              </span>
                               <span>${order.SubTotal.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-doodle-text/70">Shipping</span>
+                              <span className="text-doodle-text/70">
+                                Shipping
+                              </span>
                               <span>${order.Freight.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between">
@@ -288,7 +401,9 @@ const AccountPage: React.FC = () => {
                             </div>
                             <div className="flex justify-between font-bold text-base pt-2 border-t border-dashed border-doodle-text/20">
                               <span>Total</span>
-                              <span className="text-doodle-green">${order.TotalDue.toFixed(2)}</span>
+                              <span className="text-doodle-green">
+                                ${order.TotalDue.toFixed(2)}
+                              </span>
                             </div>
                           </div>
 
@@ -296,8 +411,12 @@ const AccountPage: React.FC = () => {
                             <>
                               <hr className="border-dashed border-doodle-text/20 my-3" />
                               <div className="font-doodle text-sm">
-                                <p className="font-bold text-doodle-text mb-1">Order Notes:</p>
-                                <p className="text-doodle-text/70">{order.Comment}</p>
+                                <p className="font-bold text-doodle-text mb-1">
+                                  Order Notes:
+                                </p>
+                                <p className="text-doodle-text/70">
+                                  {order.Comment}
+                                </p>
                               </div>
                             </>
                           )}
@@ -317,7 +436,8 @@ const AccountPage: React.FC = () => {
                   My Wishlist
                 </h2>
                 <span className="font-doodle text-sm text-doodle-text/50">
-                  ({wishlistItems.length} {wishlistItems.length === 1 ? 'item' : 'items'})
+                  ({wishlistItems.length}{" "}
+                  {wishlistItems.length === 1 ? "item" : "items"})
                 </span>
               </div>
 
@@ -334,12 +454,15 @@ const AccountPage: React.FC = () => {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {wishlistItems.map((item) => (
-                    <div key={item.ProductID} className="border-2 border-dashed border-doodle-text/20 p-4 flex gap-4">
+                    <div
+                      key={item.ProductID}
+                      className="border-2 border-dashed border-doodle-text/20 p-4 flex gap-4"
+                    >
                       <div className="w-20 h-20 bg-doodle-bg border-2 border-doodle-text border-dashed flex items-center justify-center flex-shrink-0">
                         <span className="font-doodle text-2xl">🚴</span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <Link 
+                        <Link
                           to={`/product/${item.ProductID}`}
                           className="font-doodle font-bold text-doodle-text hover:text-doodle-accent transition-colors line-clamp-2"
                         >
@@ -399,7 +522,9 @@ const AccountPage: React.FC = () => {
                 {profileLoading ? (
                   <div className="text-center py-8">
                     <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-doodle-accent"></div>
-                    <p className="font-doodle text-doodle-text/70 mt-4">Loading profile...</p>
+                    <p className="font-doodle text-doodle-text/70 mt-4">
+                      Loading profile...
+                    </p>
                   </div>
                 ) : isEditingProfile ? (
                   <div className="space-y-4">
@@ -411,9 +536,15 @@ const AccountPage: React.FC = () => {
                         <select
                           value={editProfileData.title}
                           onChange={(e) => {
-                            setEditProfileData(prev => ({ ...prev, title: e.target.value }));
+                            setEditProfileData((prev) => ({
+                              ...prev,
+                              title: e.target.value,
+                            }));
                             if (profileErrors.title) {
-                              setProfileErrors(prev => ({ ...prev, title: '' }));
+                              setProfileErrors((prev) => ({
+                                ...prev,
+                                title: "",
+                              }));
                             }
                           }}
                           className="doodle-input w-full"
@@ -425,7 +556,9 @@ const AccountPage: React.FC = () => {
                           <option value="Dr.">Dr.</option>
                         </select>
                         {profileErrors.title && (
-                          <p className="font-doodle text-xs text-doodle-accent mt-1">{profileErrors.title}</p>
+                          <p className="font-doodle text-xs text-doodle-accent mt-1">
+                            {profileErrors.title}
+                          </p>
                         )}
                       </div>
                       <div className="sm:col-span-2">
@@ -436,16 +569,24 @@ const AccountPage: React.FC = () => {
                           type="text"
                           value={editProfileData.firstName}
                           onChange={(e) => {
-                            setEditProfileData(prev => ({ ...prev, firstName: e.target.value }));
+                            setEditProfileData((prev) => ({
+                              ...prev,
+                              firstName: e.target.value,
+                            }));
                             if (profileErrors.firstName) {
-                              setProfileErrors(prev => ({ ...prev, firstName: '' }));
+                              setProfileErrors((prev) => ({
+                                ...prev,
+                                firstName: "",
+                              }));
                             }
                           }}
                           className="doodle-input w-full"
                           placeholder="John"
                         />
                         {profileErrors.firstName && (
-                          <p className="font-doodle text-xs text-doodle-accent mt-1">{profileErrors.firstName}</p>
+                          <p className="font-doodle text-xs text-doodle-accent mt-1">
+                            {profileErrors.firstName}
+                          </p>
                         )}
                       </div>
                     </div>
@@ -458,16 +599,24 @@ const AccountPage: React.FC = () => {
                           type="text"
                           value={editProfileData.middleName}
                           onChange={(e) => {
-                            setEditProfileData(prev => ({ ...prev, middleName: e.target.value }));
+                            setEditProfileData((prev) => ({
+                              ...prev,
+                              middleName: e.target.value,
+                            }));
                             if (profileErrors.middleName) {
-                              setProfileErrors(prev => ({ ...prev, middleName: '' }));
+                              setProfileErrors((prev) => ({
+                                ...prev,
+                                middleName: "",
+                              }));
                             }
                           }}
                           className="doodle-input w-full"
                           placeholder="Middle name (optional)"
                         />
                         {profileErrors.middleName && (
-                          <p className="font-doodle text-xs text-doodle-accent mt-1">{profileErrors.middleName}</p>
+                          <p className="font-doodle text-xs text-doodle-accent mt-1">
+                            {profileErrors.middleName}
+                          </p>
                         )}
                       </div>
                       <div>
@@ -478,16 +627,24 @@ const AccountPage: React.FC = () => {
                           type="text"
                           value={editProfileData.lastName}
                           onChange={(e) => {
-                            setEditProfileData(prev => ({ ...prev, lastName: e.target.value }));
+                            setEditProfileData((prev) => ({
+                              ...prev,
+                              lastName: e.target.value,
+                            }));
                             if (profileErrors.lastName) {
-                              setProfileErrors(prev => ({ ...prev, lastName: '' }));
+                              setProfileErrors((prev) => ({
+                                ...prev,
+                                lastName: "",
+                              }));
                             }
                           }}
                           className="doodle-input w-full"
                           placeholder="Doe"
                         />
                         {profileErrors.lastName && (
-                          <p className="font-doodle text-xs text-doodle-accent mt-1">{profileErrors.lastName}</p>
+                          <p className="font-doodle text-xs text-doodle-accent mt-1">
+                            {profileErrors.lastName}
+                          </p>
                         )}
                       </div>
                     </div>
@@ -498,9 +655,15 @@ const AccountPage: React.FC = () => {
                       <select
                         value={editProfileData.suffix}
                         onChange={(e) => {
-                          setEditProfileData(prev => ({ ...prev, suffix: e.target.value }));
+                          setEditProfileData((prev) => ({
+                            ...prev,
+                            suffix: e.target.value,
+                          }));
                           if (profileErrors.suffix) {
-                            setProfileErrors(prev => ({ ...prev, suffix: '' }));
+                            setProfileErrors((prev) => ({
+                              ...prev,
+                              suffix: "",
+                            }));
                           }
                         }}
                         className="doodle-input w-full"
@@ -513,7 +676,9 @@ const AccountPage: React.FC = () => {
                         <option value="IV">IV</option>
                       </select>
                       {profileErrors.suffix && (
-                        <p className="font-doodle text-xs text-doodle-accent mt-1">{profileErrors.suffix}</p>
+                        <p className="font-doodle text-xs text-doodle-accent mt-1">
+                          {profileErrors.suffix}
+                        </p>
                       )}
                     </div>
                     <div>
@@ -524,16 +689,24 @@ const AccountPage: React.FC = () => {
                         type="email"
                         value={editProfileData.email}
                         onChange={(e) => {
-                          setEditProfileData(prev => ({ ...prev, email: e.target.value }));
+                          setEditProfileData((prev) => ({
+                            ...prev,
+                            email: e.target.value,
+                          }));
                           if (profileErrors.email) {
-                            setProfileErrors(prev => ({ ...prev, email: '' }));
+                            setProfileErrors((prev) => ({
+                              ...prev,
+                              email: "",
+                            }));
                           }
                         }}
                         className="doodle-input w-full"
                         placeholder="john@example.com"
                       />
                       {profileErrors.email && (
-                        <p className="font-doodle text-xs text-doodle-accent mt-1">{profileErrors.email}</p>
+                        <p className="font-doodle text-xs text-doodle-accent mt-1">
+                          {profileErrors.email}
+                        </p>
                       )}
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -545,7 +718,10 @@ const AccountPage: React.FC = () => {
                           <select
                             value={editProfileData.countryCode}
                             onChange={(e) => {
-                              setEditProfileData(prev => ({ ...prev, countryCode: e.target.value }));
+                              setEditProfileData((prev) => ({
+                                ...prev,
+                                countryCode: e.target.value,
+                              }));
                             }}
                             className="doodle-input w-24 flex-shrink-0"
                           >
@@ -566,10 +742,19 @@ const AccountPage: React.FC = () => {
                             type="tel"
                             value={editProfileData.phoneNumber}
                             onChange={(e) => {
-                              const formatted = formatPhoneNumber(e.target.value, editProfileData.countryCode);
-                              setEditProfileData(prev => ({ ...prev, phoneNumber: formatted }));
+                              const formatted = formatPhoneNumber(
+                                e.target.value,
+                                editProfileData.countryCode
+                              );
+                              setEditProfileData((prev) => ({
+                                ...prev,
+                                phoneNumber: formatted,
+                              }));
                               if (profileErrors.phoneNumber) {
-                                setProfileErrors(prev => ({ ...prev, phoneNumber: '' }));
+                                setProfileErrors((prev) => ({
+                                  ...prev,
+                                  phoneNumber: "",
+                                }));
                               }
                             }}
                             className="doodle-input flex-1"
@@ -577,7 +762,9 @@ const AccountPage: React.FC = () => {
                           />
                         </div>
                         {profileErrors.phoneNumber && (
-                          <p className="font-doodle text-xs text-doodle-accent mt-1">{profileErrors.phoneNumber}</p>
+                          <p className="font-doodle text-xs text-doodle-accent mt-1">
+                            {profileErrors.phoneNumber}
+                          </p>
                         )}
                       </div>
                       <div>
@@ -587,7 +774,10 @@ const AccountPage: React.FC = () => {
                         <select
                           value={editProfileData.phoneNumberTypeId}
                           onChange={(e) => {
-                            setEditProfileData(prev => ({ ...prev, phoneNumberTypeId: parseInt(e.target.value) }));
+                            setEditProfileData((prev) => ({
+                              ...prev,
+                              phoneNumberTypeId: parseInt(e.target.value),
+                            }));
                           }}
                           className="doodle-input w-full"
                         >
@@ -603,42 +793,47 @@ const AccountPage: React.FC = () => {
                           try {
                             profileSchema.parse(editProfileData);
                             setProfileErrors({});
-                            
+
                             if (profileData) {
                               // Strip formatting from phone number before saving
-                              const cleanPhoneNumber = parsePhoneNumber(editProfileData.phoneNumber);
-                              const fullPhoneNumber = cleanPhoneNumber 
+                              const cleanPhoneNumber = parsePhoneNumber(
+                                editProfileData.phoneNumber
+                              );
+                              const fullPhoneNumber = cleanPhoneNumber
                                 ? `${editProfileData.countryCode} ${cleanPhoneNumber}`
                                 : null;
-                              
+
                               await updateProfileMutation.mutateAsync({
                                 BusinessEntityID: profileData.BusinessEntityID,
                                 Title: editProfileData.title || null,
                                 FirstName: editProfileData.firstName.trim(),
-                                MiddleName: editProfileData.middleName.trim() || null,
+                                MiddleName:
+                                  editProfileData.middleName.trim() || null,
                                 LastName: editProfileData.lastName.trim(),
                                 Suffix: editProfileData.suffix || null,
                                 EmailAddress: editProfileData.email.trim(),
                                 EmailAddressID: profileData.EmailAddressID,
                                 PhoneNumber: fullPhoneNumber,
-                                PhoneNumberTypeID: editProfileData.phoneNumberTypeId,
+                                PhoneNumberTypeID:
+                                  editProfileData.phoneNumberTypeId,
                               });
-                              
+
                               // Update auth context with new name/email
                               await updateProfile(
                                 editProfileData.firstName.trim(),
                                 editProfileData.lastName.trim(),
                                 editProfileData.email.trim()
                               );
-                              
+
                               setIsEditingProfile(false);
                             }
                           } catch (error) {
                             if (error instanceof z.ZodError) {
                               const newErrors: Record<string, string> = {};
-                              error.errors.forEach(err => {
+                              error.errors.forEach((err) => {
                                 if (err.path[0]) {
-                                  newErrors[err.path[0] as string] = err.message;
+                                  newErrors[err.path[0] as string] =
+                                    err.message;
                                 }
                               });
                               setProfileErrors(newErrors);
@@ -649,7 +844,9 @@ const AccountPage: React.FC = () => {
                         className="doodle-button doodle-button-primary py-2 px-4 flex items-center gap-2"
                       >
                         <Save className="w-4 h-4" />
-                        {updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
+                        {updateProfileMutation.isPending
+                          ? "Saving..."
+                          : "Save Changes"}
                       </button>
                       <button
                         onClick={() => {
@@ -657,30 +854,34 @@ const AccountPage: React.FC = () => {
                           setProfileErrors({});
                           if (profileData) {
                             // Parse country code from phone number
-                            let countryCode = '+1';
-                            let phoneNumber = profileData.PhoneNumber || '';
-                            
-                            if (phoneNumber.startsWith('+')) {
-                              const match = phoneNumber.match(/^(\+\d+)\s*(.*)$/);
+                            let countryCode = "+1";
+                            let phoneNumber = profileData.PhoneNumber || "";
+
+                            if (phoneNumber.startsWith("+")) {
+                              const match =
+                                phoneNumber.match(/^(\+\d+)\s*(.*)$/);
                               if (match) {
                                 countryCode = match[1];
                                 phoneNumber = match[2];
                               }
                             }
-                            
+
                             // Format the phone number for display
-                            const formattedPhone = phoneNumber ? formatPhoneNumber(phoneNumber, countryCode) : '';
-                            
+                            const formattedPhone = phoneNumber
+                              ? formatPhoneNumber(phoneNumber, countryCode)
+                              : "";
+
                             setEditProfileData({
-                              title: profileData.Title || '',
+                              title: profileData.Title || "",
                               firstName: profileData.FirstName,
-                              middleName: profileData.MiddleName || '',
+                              middleName: profileData.MiddleName || "",
                               lastName: profileData.LastName,
-                              suffix: profileData.Suffix || '',
+                              suffix: profileData.Suffix || "",
                               email: profileData.EmailAddress,
                               countryCode: countryCode,
                               phoneNumber: formattedPhone,
-                              phoneNumberTypeId: profileData.PhoneNumberTypeID || 1,
+                              phoneNumberTypeId:
+                                profileData.PhoneNumberTypeID || 1,
                             });
                           }
                         }}
@@ -693,7 +894,9 @@ const AccountPage: React.FC = () => {
                 ) : profileData ? (
                   <div className="space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
-                      <span className="font-doodle text-sm text-doodle-text/70 sm:w-24">Name:</span>
+                      <span className="font-doodle text-sm text-doodle-text/70 sm:w-24">
+                        Name:
+                      </span>
                       <span className="font-doodle font-bold text-doodle-text">
                         {profileData.Title && `${profileData.Title} `}
                         {profileData.FirstName}
@@ -703,31 +906,47 @@ const AccountPage: React.FC = () => {
                       </span>
                     </div>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
-                      <span className="font-doodle text-sm text-doodle-text/70 sm:w-24">Email:</span>
-                      <span className="font-doodle font-bold text-doodle-text">{profileData.EmailAddress}</span>
+                      <span className="font-doodle text-sm text-doodle-text/70 sm:w-24">
+                        Email:
+                      </span>
+                      <span className="font-doodle font-bold text-doodle-text">
+                        {profileData.EmailAddress}
+                      </span>
                     </div>
                     {profileData.PhoneNumber && (
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
-                        <span className="font-doodle text-sm text-doodle-text/70 sm:w-24">Phone:</span>
+                        <span className="font-doodle text-sm text-doodle-text/70 sm:w-24">
+                          Phone:
+                        </span>
                         <span className="font-doodle font-bold text-doodle-text">
                           {(() => {
                             // Parse and format the phone number for display
-                            let countryCode = '+1';
+                            let countryCode = "+1";
                             let phoneNumber = profileData.PhoneNumber;
-                            
-                            if (phoneNumber.startsWith('+')) {
-                              const match = phoneNumber.match(/^(\+\d+)\s*(.*)$/);
+
+                            if (phoneNumber.startsWith("+")) {
+                              const match =
+                                phoneNumber.match(/^(\+\d+)\s*(.*)$/);
                               if (match) {
                                 countryCode = match[1];
                                 phoneNumber = match[2];
                               }
                             }
-                            
-                            const formatted = formatPhoneNumber(phoneNumber, countryCode);
+
+                            const formatted = formatPhoneNumber(
+                              phoneNumber,
+                              countryCode
+                            );
                             return `${countryCode} ${formatted}`;
                           })()}
                           <span className="text-sm text-doodle-text/50 ml-2">
-                            ({profileData.PhoneNumberTypeID === 1 ? 'Cell' : profileData.PhoneNumberTypeID === 2 ? 'Home' : 'Work'})
+                            (
+                            {profileData.PhoneNumberTypeID === 1
+                              ? "Cell"
+                              : profileData.PhoneNumberTypeID === 2
+                              ? "Home"
+                              : "Work"}
+                            )
                           </span>
                         </span>
                       </div>
@@ -735,7 +954,9 @@ const AccountPage: React.FC = () => {
                   </div>
                 ) : (
                   <div className="text-center py-8">
-                    <p className="font-doodle text-doodle-text/70">Unable to load profile data.</p>
+                    <p className="font-doodle text-doodle-text/70">
+                      Unable to load profile data.
+                    </p>
                   </div>
                 )}
               </div>
@@ -749,7 +970,8 @@ const AccountPage: React.FC = () => {
                       Saved Addresses
                     </h2>
                     <span className="font-doodle text-sm text-doodle-text/50">
-                      ({addresses.length} {addresses.length === 1 ? 'address' : 'addresses'})
+                      ({addresses.length}{" "}
+                      {addresses.length === 1 ? "address" : "addresses"})
                     </span>
                   </div>
                   {!showAddressForm && !editingAddress && (
@@ -765,7 +987,9 @@ const AccountPage: React.FC = () => {
 
                 {showAddressForm && (
                   <div className="mb-6 p-4 border-2 border-dashed border-doodle-accent/30 bg-doodle-accent/5">
-                    <h3 className="font-doodle font-bold text-doodle-text mb-4">Add New Address</h3>
+                    <h3 className="font-doodle font-bold text-doodle-text mb-4">
+                      Add New Address
+                    </h3>
                     <AddressForm
                       onSave={async (addressData) => {
                         try {
@@ -778,7 +1002,8 @@ const AccountPage: React.FC = () => {
                         } catch (error) {
                           toast({
                             title: "Error",
-                            description: "Failed to add address. Please try again.",
+                            description:
+                              "Failed to add address. Please try again.",
                             variant: "destructive",
                           });
                         }
@@ -790,7 +1015,9 @@ const AccountPage: React.FC = () => {
 
                 {editingAddress && (
                   <div className="mb-6 p-4 border-2 border-dashed border-doodle-accent/30 bg-doodle-accent/5">
-                    <h3 className="font-doodle font-bold text-doodle-text mb-4">Edit Address</h3>
+                    <h3 className="font-doodle font-bold text-doodle-text mb-4">
+                      Edit Address
+                    </h3>
                     <AddressForm
                       address={editingAddress}
                       onSave={async (addressData) => {
@@ -804,7 +1031,8 @@ const AccountPage: React.FC = () => {
                         } catch (error) {
                           toast({
                             title: "Error",
-                            description: "Failed to update address. Please try again.",
+                            description:
+                              "Failed to update address. Please try again.",
                             variant: "destructive",
                           });
                         }
@@ -817,7 +1045,10 @@ const AccountPage: React.FC = () => {
                 {addressesLoading ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {[1, 2].map((i) => (
-                      <div key={i} className="border-2 border-dashed border-doodle-text/20 p-4">
+                      <div
+                        key={i}
+                        className="border-2 border-dashed border-doodle-text/20 p-4"
+                      >
                         <div className="flex items-start gap-3">
                           <Skeleton className="w-5 h-5 rounded-full" />
                           <div className="flex-1 space-y-3">
@@ -861,7 +1092,8 @@ const AccountPage: React.FC = () => {
                           } catch (error) {
                             toast({
                               title: "Error",
-                              description: "Failed to delete address. Please try again.",
+                              description:
+                                "Failed to delete address. Please try again.",
                               variant: "destructive",
                             });
                           }
@@ -871,12 +1103,14 @@ const AccountPage: React.FC = () => {
                             await setDefaultAddress(id);
                             toast({
                               title: "Default Address Updated",
-                              description: "Your default address has been changed.",
+                              description:
+                                "Your default address has been changed.",
                             });
                           } catch (error) {
                             toast({
                               title: "Error",
-                              description: "Failed to update default address. Please try again.",
+                              description:
+                                "Failed to update default address. Please try again.",
                               variant: "destructive",
                             });
                           }
@@ -941,7 +1175,8 @@ const AccountPage: React.FC = () => {
                                 setDefaultPaymentMethod(pm.id);
                                 toast({
                                   title: "Default Updated",
-                                  description: "Your default payment method has been changed.",
+                                  description:
+                                    "Your default payment method has been changed.",
                                 });
                               }}
                               className="p-2 hover:bg-doodle-text/5 rounded transition-colors"
@@ -955,7 +1190,8 @@ const AccountPage: React.FC = () => {
                               deletePaymentMethod(pm.id);
                               toast({
                                 title: "Payment Method Removed",
-                                description: "The card has been removed from your account.",
+                                description:
+                                  "The card has been removed from your account.",
                               });
                             }}
                             className="p-2 hover:bg-doodle-accent/10 rounded transition-colors"

@@ -14,7 +14,10 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# Exclude Python lib directories but not TypeScript/JavaScript lib folders
+**/lib/
+!app/src/lib/
+!**/src/lib/
 lib64/
 parts/
 sdist/
