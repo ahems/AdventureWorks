@@ -14,6 +14,10 @@ hooks:
     shell: pwsh
     run: ./scripts/postprovision.ps1
     interactive: true
+  predeploy:
+    shell: sh
+    run: ./scripts/predeploy.sh
+    interactive: false
   postdeploy:
     shell: pwsh
     run: ./scripts/postdeploy.ps1
@@ -23,28 +27,28 @@ hooks:
     run: ./scripts/postdown.ps1
     interactive: true
 services:
-    api:
-        project: ./api
-        host: containerapp
-        language: python
-        docker:
-            path: dockerfile
-            remoteBuild: true
-    api-functions:
-        project: ./api-functions
-        host: containerapp
-        language: csharp
-        docker:
-            path: Dockerfile
-            remoteBuild: true
-    app:
-        project: ./app
-        host: staticwebapp
-        language: js
-        dist: dist
-        config:
-            buildCommand: VITE_API_URL=${VITE_API_URL} VITE_API_FUNCTIONS_URL=${VITE_API_FUNCTIONS_URL} npm run build
-            outputLocation: dist
+  api:
+    project: ./api
+    host: containerapp
+    language: python
+    docker:
+      path: dockerfile
+      remoteBuild: true
+  api-functions:
+    project: ./api-functions
+    host: containerapp
+    language: csharp
+    docker:
+      path: Dockerfile
+      remoteBuild: true
+  app:
+    project: ./app
+    host: staticwebapp
+    language: js
+    dist: dist
+    config:
+      buildCommand: bash scripts/build-with-env.sh
+      outputLocation: dist
 infra:
   provider: bicep
   path: ./infra

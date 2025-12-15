@@ -1,0 +1,32 @@
+#!/bin/bash
+set -e
+
+# Set environment variables for the SWA build process
+# This ensures that when npm run build is called, the VITE_* variables are available
+
+API_URL=$(azd env get-value API_URL)
+API_FUNC_URL=$(azd env get-value API_FUNCTIONS_URL)
+
+echo "[PreDeploy] Setting environment variables for SWA build"
+echo "  VITE_API_URL: $API_URL"
+echo "  VITE_API_FUNCTIONS_URL: $API_FUNC_URL"
+
+# Export for any subsequent commands (though azd may not pass these to SWA CLI)
+export VITE_API_URL="$API_URL"
+export VITE_API_FUNCTIONS_URL="$API_FUNC_URL"
+
+# Write to .env file that Vite will pick up during build
+cat > app/.env.production << EOF
+VITE_API_URL=$API_URL
+VITE_API_FUNCTIONS_URL=$API_FUNC_URL
+EOF
+
+echo "[PreDeploy] Created app/.env.production with Azure URLs"
+
+# Clean dist to force fresh build
+if [ -d "app/dist" ]; then
+  echo "[PreDeploy] Cleaning dist folder to force fresh build"
+  rm -rf app/dist
+fi
+
+echo "[PreDeploy] Configuration completed"

@@ -1,7 +1,11 @@
 {
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/images/*", "/assets/*", "/*.{css,scss,js,json,xml,txt,ico,svg,png,jpg,jpeg,gif,webp,woff,woff2,ttf,eot}"]
+    "exclude": [
+      "/images/*",
+      "/assets/*",
+      "/*.{css,scss,js,json,xml,txt,ico,svg,png,jpg,jpeg,gif,webp,woff,woff2,ttf,eot}"
+    ]
   },
   "routes": [
     {
@@ -27,5 +31,9 @@
   },
   "platform": {
     "apiRuntime": "node:18"
+  },
+  "env": {
+    "API_URL": "",
+    "API_FUNCTIONS_URL": ""
   }
 }

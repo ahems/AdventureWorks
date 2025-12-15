@@ -189,32 +189,6 @@ module containerAppApi 'modules/aca-api.bicep' = {
   ]
 }
 
-// Keep old container app module for reference (unused)
-// module containerAppFrontend 'modules/aca-app.bicep' = {
-//   name: 'Deploy-Container-App-Frontend'
-//   params: {
-//     keyVaultName:keyVaultName
-//     location: location
-//     appInsightsName:appInsightsName
-//     appName:'av-app-${resourceToken}'
-//     openAiName:cognitiveservicesname    
-//     containerRegistryName:acrName
-//     identityName:identityName
-//     openAiDeploymentName:openAiDeploymentName
-//     minReplica:0
-//     maxReplica:3
-//     revisionSuffix:revisionSuffix
-//     redisConnectionString: redis.outputs.entraConnectionString
-//     apiAppIdUri: apiAppIdUri
-//     containerAppEnvId: containerApp.outputs.containerAppEnvId
-//     apiUrl: containerAppApi.outputs.apiUrl
-//   }
-//   dependsOn: [
-//     cognitiveservices
-//     keyvault
-//   ]
-// }
-
 module staticWebAppFrontend 'modules/swa-app.bicep' = {
   name: 'Deploy-Static-Web-App-Frontend'
   params: {

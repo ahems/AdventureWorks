@@ -45,4 +45,9 @@ if ($LASTEXITCODE -eq 0) {
     exit 1
 }
 
+Write-Output ""
 Write-Output "Post-deployment configuration completed successfully."
+Write-Output "NOTE: Static Web App config.js was updated during the predeploy hook."
+Write-Output "The frontend is configured with:"
+Write-Output "  API URL: $(azd env get-value 'API_URL' 2>$null)"
+Write-Output "  API Functions URL: $(azd env get-value 'API_FUNCTIONS_URL' 2>$null)"

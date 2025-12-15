@@ -40,19 +40,16 @@ resource staticWebApp 'Microsoft.Web/staticSites@2023-01-01' = {
   }
 }
 
-// Configure app settings for build-time environment variables
+// Configure environment variables for runtime injection into config.js
+// These are injected after deployment via staticwebapp.config.json
 resource swaConfig 'Microsoft.Web/staticSites/config@2023-01-01' = {
   parent: staticWebApp
-  name: 'appsettings'
+  name: 'functionappsettings'
   properties: {
-    VITE_API_URL: apiUrl
-    VITE_API_FUNCTIONS_URL: apiFunctionsUrl
+    API_URL: apiUrl
+    API_FUNCTIONS_URL: apiFunctionsUrl
   }
 }
-
-// Note: Build-time environment variables (like VITE_API_URL) are passed by azd during deployment
-// Static Web Apps with no API functions don't need app settings configured here
-// The frontend is a static SPA that gets its config baked in at build time
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
   name: keyVaultName

@@ -15,6 +15,51 @@ export interface AuthResult {
   user?: AuthUser;
 }
 
+// GraphQL response types
+interface EmailAddressItem {
+  EmailAddressID: number;
+  EmailAddress: string;
+}
+
+interface PersonItem {
+  BusinessEntityID: number;
+  FirstName: string;
+  LastName: string;
+  emailAddresses?: {
+    items: EmailAddressItem[];
+  };
+}
+
+interface CheckUserLoginResponse {
+  people: {
+    items: PersonItem[];
+  };
+}
+
+interface CreatePersonResponse {
+  createperson: {
+    BusinessEntityID: number;
+    FirstName: string;
+    LastName: string;
+  };
+}
+
+interface CreateEmailAddressResponse {
+  createemailAddress: {
+    EmailAddressID: number;
+    BusinessEntityID: number;
+    EmailAddress: string;
+  };
+}
+
+interface UpdatePersonResponse {
+  updateperson: {
+    BusinessEntityID: number;
+    FirstName: string;
+    LastName: string;
+  };
+}
+
 // GraphQL queries and mutations
 const CHECK_USER_LOGIN = gql`
   query CheckUserLogin($email: String!) {
@@ -98,9 +143,12 @@ export async function loginUser(
   try {
     // For demo purposes, we're just checking if the user exists
     // In production, you'd verify password hash
-    const response: any = await graphqlClient.request(CHECK_USER_LOGIN, {
-      email,
-    });
+    const response = await graphqlClient.request<CheckUserLoginResponse>(
+      CHECK_USER_LOGIN,
+      {
+        email,
+      }
+    );
 
     const people = response.people?.items || [];
 
@@ -113,9 +161,7 @@ export async function loginUser(
 
     const person = people[0];
     const emailAddresses = person.emailAddresses?.items || [];
-    const emailAddress = emailAddresses.find(
-      (ea: any) => ea.EmailAddress === email
-    );
+    const emailAddress = emailAddresses.find((ea) => ea.EmailAddress === email);
 
     return {
       success: true,
@@ -147,9 +193,12 @@ export async function signupUser(
 ): Promise<AuthResult> {
   try {
     // Check if user already exists
-    const checkResponse: any = await graphqlClient.request(CHECK_USER_LOGIN, {
-      email,
-    });
+    const checkResponse = await graphqlClient.request<CheckUserLoginResponse>(
+      CHECK_USER_LOGIN,
+      {
+        email,
+      }
+    );
     const existingPeople = checkResponse.people?.items || [];
 
     if (existingPeople.length > 0) {
@@ -160,10 +209,13 @@ export async function signupUser(
     }
 
     // Create person record
-    const personResponse: any = await graphqlClient.request(CREATE_PERSON, {
-      firstName,
-      lastName,
-    });
+    const personResponse = await graphqlClient.request<CreatePersonResponse>(
+      CREATE_PERSON,
+      {
+        firstName,
+        lastName,
+      }
+    );
 
     const newPerson = personResponse.createperson;
 
@@ -175,13 +227,14 @@ export async function signupUser(
     }
 
     // Create email address record
-    const emailResponse: any = await graphqlClient.request(
-      CREATE_EMAIL_ADDRESS,
-      {
-        businessEntityId: newPerson.BusinessEntityID,
-        emailAddress: email,
-      }
-    );
+    const emailResponse =
+      await graphqlClient.request<CreateEmailAddressResponse>(
+        CREATE_EMAIL_ADDRESS,
+        {
+          businessEntityId: newPerson.BusinessEntityID,
+          emailAddress: email,
+        }
+      );
 
     const newEmailAddress = emailResponse.createemailAddress;
 
@@ -217,7 +270,7 @@ export async function updateUserProfile(
 ): Promise<AuthResult> {
   try {
     // Update person record
-    const personResponse: any = await graphqlClient.request(UPDATE_PERSON, {
+    await graphqlClient.request<UpdatePersonResponse>(UPDATE_PERSON, {
       businessEntityId,
       firstName,
       lastName,

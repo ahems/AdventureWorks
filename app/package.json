@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run update-config && vite build",
+    "build": "npm run update-config && vite build && npm run post-build-config",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "update-config": "node scripts/update-config.js"
+    "update-config": "node scripts/update-config.js",
+    "post-build-config": "node scripts/update-config.js && cp public/config.js dist/config.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

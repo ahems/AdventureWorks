@@ -35,7 +35,7 @@ resource avDeploymentScriptCustomRoleDefinition 'Microsoft.Authorization/roleDef
 }
 
 resource managedIdentityOperatorRoleIdAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid('managedIdentityOperatorRoleIdAssignment-${uniqueString(resourceGroup().id)}')
+  name: guid(subscription().id, resourceGroup().id, identityName, managedIdentityOperatorRoleId)
   scope: resourceGroup()
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', managedIdentityOperatorRoleId) // Managed Identity Operator role for deploying scripts
@@ -45,7 +45,7 @@ resource managedIdentityOperatorRoleIdAssignment 'Microsoft.Authorization/roleAs
 }
 
 resource avDeploymentScriptCustomRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid('avDeploymentScriptCustomRoleAssignment-${uniqueString(resourceGroup().id)}')
+  name: guid(subscription().id, resourceGroup().id, identityName, roleDefName)
   scope: resourceGroup()
   properties: {
     roleDefinitionId: avDeploymentScriptCustomRoleDefinition.id

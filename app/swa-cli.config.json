@@ -4,7 +4,7 @@
     "adventure-eshop": {
       "appLocation": ".",
       "outputLocation": "dist",
-      "appBuildCommand": "VITE_API_URL=$VITE_API_URL npm run build",
+      "appBuildCommand": "bash scripts/build-with-env.sh",
       "run": "npm run dev",
       "appDevserverUrl": "http://localhost:5173",
       "appName": "todoapp-swa-ewphuc52etkbc",
