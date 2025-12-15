@@ -18,6 +18,31 @@ export interface SavedPaymentMethod {
   isDefault: boolean;
 }
 
+interface PersonCreditCard {
+  BusinessEntityID: number;
+  CreditCardID: number;
+}
+
+interface CreditCard {
+  CreditCardID: number;
+  CardType: string;
+  CardNumber: string;
+  ExpMonth: number;
+  ExpYear: number;
+}
+
+interface PersonCreditCardsResponse {
+  personCreditCards: {
+    items: PersonCreditCard[];
+  };
+}
+
+interface CreditCardsResponse {
+  creditCards: {
+    items: CreditCard[];
+  };
+}
+
 const GET_PERSON_CREDIT_CARDS = gql`
   query GetPersonCreditCards($businessEntityId: Int!) {
     personCreditCards(filter: { BusinessEntityID: { eq: $businessEntityId } }) {
@@ -65,10 +90,11 @@ export const usePaymentMethods = () => {
     setIsLoading(true);
     try {
       // Get PersonCreditCard links
-      const personCardsResponse: any = await graphqlClient.request(
-        GET_PERSON_CREDIT_CARDS,
-        { businessEntityId: user.businessEntityId }
-      );
+      const personCardsResponse =
+        await graphqlClient.request<PersonCreditCardsResponse>(
+          GET_PERSON_CREDIT_CARDS,
+          { businessEntityId: user.businessEntityId }
+        );
 
       const personCards = personCardsResponse.personCreditCards?.items || [];
 
@@ -78,29 +104,28 @@ export const usePaymentMethods = () => {
       }
 
       // Get CreditCard details
-      const cardIds = personCards.map((pc: any) => pc.CreditCardID);
-      const cardsResponse: any = await graphqlClient.request(GET_CREDIT_CARDS, {
-        cardIds,
-      });
+      const cardIds = personCards.map((pc) => pc.CreditCardID);
+      const cardsResponse = await graphqlClient.request<CreditCardsResponse>(
+        GET_CREDIT_CARDS,
+        {
+          cardIds,
+        }
+      );
 
       const cards = cardsResponse.creditCards?.items || [];
 
       // Transform to SavedPaymentMethod format
-      const methods: SavedPaymentMethod[] = cards.map(
-        (card: any, index: number) => ({
-          id: card.CreditCardID.toString(),
-          type: "card" as const,
-          label: `${getCardBrand(card.CardType)} •••• ${card.CardNumber.slice(
-            -4
-          )}`,
-          cardLast4: card.CardNumber.slice(-4),
-          cardBrand: getCardBrand(card.CardType),
-          cardExpiry: `${String(card.ExpMonth).padStart(2, "0")}/${
-            card.ExpYear
-          }`,
-          isDefault: index === 0, // First card is default for now
-        })
-      );
+      const methods: SavedPaymentMethod[] = cards.map((card, index) => ({
+        id: card.CreditCardID.toString(),
+        type: "card" as const,
+        label: `${getCardBrand(card.CardType)} •••• ${card.CardNumber.slice(
+          -4
+        )}`,
+        cardLast4: card.CardNumber.slice(-4),
+        cardBrand: getCardBrand(card.CardType),
+        cardExpiry: `${String(card.ExpMonth).padStart(2, "0")}/${card.ExpYear}`,
+        isDefault: index === 0, // First card is default for now
+      }));
 
       setPaymentMethods(methods);
     } catch (error) {

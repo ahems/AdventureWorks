@@ -89,7 +89,6 @@ const AccountPage: React.FC = () => {
   const {
     paymentMethods,
     removePaymentMethod,
-    setDefaultPaymentMethod,
     isLoading: paymentMethodsLoading,
   } = usePaymentMethods();
   const [customerId, setCustomerId] = useState<number | null>(null);
