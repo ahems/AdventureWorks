@@ -1,15 +1,131 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"type": "func",
-			"label": "func: host start",
-			"command": "host start",
-			"problemMatcher": "$func-python-watch",
-			"isBackground": true,
-			"options": {
-				"cwd": "${workspaceFolder}/function"
-			}
-		}
-	]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "func",
+      "label": "func: host start",
+      "command": "host start",
+      "problemMatcher": "$func-dotnet-watch",
+      "isBackground": true,
+      "options": {
+        "cwd": "${workspaceFolder}/api-functions"
+      },
+      "dependsOn": "build (functions)"
+    },
+    {
+      "label": "build (functions)",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/api-functions"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "clean (functions)",
+      "type": "shell",
+      "command": "dotnet",
+      "args": ["clean", "/consoleloggerparameters:NoSummary"],
+      "options": {
+        "cwd": "${workspaceFolder}/api-functions"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "start frontend",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "dev"],
+      "options": {
+        "cwd": "${workspaceFolder}/app"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^.*$",
+          "file": 1,
+          "location": 2,
+          "message": 3
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITE.*ready",
+          "endsPattern": "Local:.*http"
+        }
+      }
+    },
+    {
+      "label": "start api (DAB)",
+      "type": "shell",
+      "command": "dab",
+      "args": ["start"],
+      "options": {
+        "cwd": "${workspaceFolder}/api"
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "build frontend",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "options": {
+        "cwd": "${workspaceFolder}/app"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "lint frontend",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "lint"],
+      "options": {
+        "cwd": "${workspaceFolder}/app"
+      },
+      "problemMatcher": ["$eslint-stylish"]
+    },
+    {
+      "label": "watch (functions)",
+      "type": "shell",
+      "command": "dotnet",
+      "args": ["watch", "run"],
+      "options": {
+        "cwd": "${workspaceFolder}/api-functions"
+      },
+      "isBackground": true,
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "restore (functions)",
+      "type": "shell",
+      "command": "dotnet",
+      "args": ["restore"],
+      "options": {
+        "cwd": "${workspaceFolder}/api-functions"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "build all",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/api-functions/api-functions.csproj",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
 }

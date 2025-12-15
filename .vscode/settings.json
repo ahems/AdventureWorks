@@ -1,11 +1,34 @@
 {
-    "python.analysis.autoImportCompletions": true,
-    "azureFunctions.deploySubpath": "function",
-    "azureFunctions.scmDoBuildDuringDeployment": true,
-    "azureFunctions.projectLanguage": "Python",
-    "azureFunctions.projectRuntime": "~4",
-    "debug.internalConsoleOptions": "neverOpen",
-    "azureFunctions.projectLanguageModel": 2,
-    "files.autoSave": "afterDelay",
-    "files.autoSaveDelay": 500
+  // Azure Functions settings
+  "azureFunctions.deploySubpath": "api-functions",
+  "azureFunctions.scmDoBuildDuringDeployment": true,
+  "azureFunctions.projectLanguage": "C#",
+  "azureFunctions.projectRuntime": "~4",
+  "azureFunctions.preDeployTask": "build (functions)",
+
+  // .NET settings
+
+  // Exclude patterns for cleaner workspace
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/node_modules": true
+  },
+  "search.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/node_modules": true,
+    "**/bun.lockb": true
+  },
+
+  // TypeScript/JavaScript settings for frontend
+  "typescript.tsdk": "app/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "eslint.workingDirectories": ["app"],
+
+  // File associations
+  "files.associations": {
+    "*.bicep": "bicep",
+    "dab-config*.json": "jsonc"
+  }
 }
