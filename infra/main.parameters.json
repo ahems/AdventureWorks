@@ -28,7 +28,7 @@
     },
     "sqlDatabaseName": {
       "value": "${SQL_DATABASE_NAME}"
-    },    
+    },
     "cognitiveservicesname": {
       "value": "${AZURE_OPENAI_ACCOUNT_NAME}"
     },
@@ -56,8 +56,23 @@
     "availableEmbeddingDeploymentCapacity": {
       "value": "${availableEmbeddingDeploymentCapacity}"
     },
+    "imageModelName": {
+      "value": "${imageDeploymentModelName}"
+    },
+    "imageDeploymentVersion": {
+      "value": "${imageDeploymentVersion}"
+    },
+    "imageSkuName": {
+      "value": "${imageDeploymentSkuName}"
+    },
+    "imageModelFormat": {
+      "value": "${imageModelFormat}"
+    },
+    "availableImageDeploymentCapacity": {
+      "value": "${availableImageDeploymentCapacity}"
+    },
     "cognitiveservicesLocation": {
-      "value": "eastus2"
+      "value": "swedencentral"
     }
   }
 }

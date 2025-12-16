@@ -42,8 +42,13 @@ interface SubcategoriesResponse {
   productSubcategories: GraphQLResponse<ProductSubcategory>;
 }
 
+// Extended Product type for GraphQL response with nested relationships
+interface ProductWithPhotosRelationship extends Product {
+  productProductPhotos?: GraphQLResponse<ProductProductPhoto>;
+}
+
 interface ProductsResponse {
-  products: GraphQLResponse<Product>;
+  products: GraphQLResponse<ProductWithPhotosRelationship>;
 }
 
 interface ProductPhotosResponse {
@@ -463,20 +468,48 @@ export const getProductById = async (
     const product = data.products.items[0];
     if (!product) return undefined;
 
-    // Fetch description, discount, inventory, and photo for single product
+    // Extract multiple photos from the relationship
+    const productPhotos: ProductPhoto[] = [];
+    if (product.productProductPhotos?.items) {
+      // Sort by Primary flag (primary first), then by ProductPhotoID
+      const sortedPhotoMappings = [...product.productProductPhotos.items].sort(
+        (a, b) => {
+          if (a.Primary && !b.Primary) return -1;
+          if (!a.Primary && b.Primary) return 1;
+          return a.ProductPhotoID - b.ProductPhotoID;
+        }
+      );
+
+      // Extract photo data from nested relationship
+      for (const mapping of sortedPhotoMappings) {
+        if (mapping.productPhoto) {
+          productPhotos.push(mapping.productPhoto);
+        }
+      }
+    }
+
+    // Set primary photo (first photo) as legacy single photo fields for backward compatibility
+    const primaryPhoto = productPhotos[0];
+    const productWithPhotos = {
+      ...product,
+      productPhotos: productPhotos.length > 0 ? productPhotos : undefined,
+      ThumbNailPhoto: primaryPhoto?.ThumbNailPhoto,
+      LargePhoto: primaryPhoto?.LargePhoto,
+      ThumbnailPhotoFileName: primaryPhoto?.ThumbnailPhotoFileName,
+      LargePhotoFileName: primaryPhoto?.LargePhotoFileName,
+    };
+
+    // Fetch description, discount, and inventory for single product
     let productsWithDescriptions = await attachDescriptionsToProducts([
-      product,
+      productWithPhotos,
     ]);
     productsWithDescriptions = await attachDiscountsToProducts(
       productsWithDescriptions
     );
-    productsWithDescriptions = await attachInventoryToProducts(
+    const productsWithInventory = await attachInventoryToProducts(
       productsWithDescriptions
     );
-    const productsWithPhotos = await attachPhotosToProducts(
-      productsWithDescriptions
-    );
-    return productsWithPhotos[0];
+    return productsWithInventory[0];
   } catch (error) {
     console.error("Error fetching product by ID:", error);
     return undefined;

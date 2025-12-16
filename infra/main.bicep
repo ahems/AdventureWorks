@@ -29,6 +29,12 @@ param embeddingDeploymentName string = 'embedding'
 param embeddingDeploymentVersion string
 param embeddingSkuName string
 param availableEmbeddingDeploymentCapacity int
+param imageModelName string = ''
+param imageDeploymentName string = 'image'
+param imageDeploymentVersion string = ''
+param imageSkuName string = ''
+param availableImageDeploymentCapacity int = 0
+param imageModelFormat string = 'OpenAI'
 // Generate a short, unique revision suffix per deployment to avoid conflicts
 param revisionSuffix string = toLower(substring(replace(newGuid(),'-',''), 0, 8))
 param AIServicesKind string = 'AIServices'
@@ -37,6 +43,7 @@ param sqlDatabaseName string
 
 var chatGptDeploymentCapacity = availableChatGptDeploymentCapacity / 10
 var embeddingDeploymentCapacity = availableEmbeddingDeploymentCapacity / 10
+var imageDeploymentCapacity = availableImageDeploymentCapacity > 0 ? availableImageDeploymentCapacity / 10 : 0
 
 module identity 'modules/identity.bicep' = {
   name: 'Deploy-User-Managed-Identity'
@@ -92,6 +99,12 @@ module cognitiveservices 'modules/aiservices.bicep' = {
     embeddingDeploymentVersion: embeddingDeploymentVersion
     embeddingDeploymentCapacity: embeddingDeploymentCapacity
     embeddingSkuName: embeddingSkuName
+    imageModelName: imageModelName
+    imageDeploymentName: imageDeploymentName
+    imageDeploymentVersion: imageDeploymentVersion
+    imageDeploymentCapacity: imageDeploymentCapacity
+    imageSkuName: imageSkuName
+    imageModelFormat: imageModelFormat
     openAiDeploymentName: openAiDeploymentName
     kind: AIServicesKind
     publicNetworkAccess: publicNetworkAccess

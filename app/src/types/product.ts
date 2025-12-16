@@ -16,6 +16,7 @@ export interface ProductProductPhoto {
   ProductID: number;
   ProductPhotoID: number;
   Primary: boolean;
+  productPhoto?: ProductPhoto; // Nested photo data from relationship
 }
 
 export interface SpecialOffer {
@@ -63,11 +64,13 @@ export interface Product {
   SpecialOfferID?: number;
   DiscountPct?: number; // Decimal format (e.g., 0.5 for 50% off)
   SpecialOfferDescription?: string;
-  // Photo data
+  // Photo data (single photo - legacy support)
   ThumbNailPhoto?: string | null;
   LargePhoto?: string | null;
   ThumbnailPhotoFileName?: string | null;
   LargePhotoFileName?: string | null;
+  // Multiple photos support
+  productPhotos?: ProductPhoto[]; // Array of all photos for this product
   // Clothing variant options
   availableSizes?: string[];
   availableColors?: string[];
@@ -96,11 +99,14 @@ export const isVariantAvailable = (
   selectedSize?: string,
   selectedColor?: string
 ): boolean => {
-  if (!product.unavailableVariants || product.unavailableVariants.length === 0) {
+  if (
+    !product.unavailableVariants ||
+    product.unavailableVariants.length === 0
+  ) {
     return true;
   }
 
-  return !product.unavailableVariants.some(variant => {
+  return !product.unavailableVariants.some((variant) => {
     const sizeMatch = !variant.size || variant.size === selectedSize;
     const colorMatch = !variant.color || variant.color === selectedColor;
     return sizeMatch && colorMatch;

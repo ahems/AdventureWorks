@@ -28,12 +28,26 @@ param embeddingDeploymentName string = ''
 param embeddingDeploymentVersion string = ''
 param embeddingDeploymentCapacity int = 0
 param embeddingSkuName string = ''
+param imageModelName string = ''
+param imageDeploymentName string = 'image'
+param imageDeploymentVersion string = ''
+param imageDeploymentCapacity int = 0
+param imageSkuName string = ''
+param imageModelFormat string = 'OpenAI'
 var embedding = {
   modelName: !empty(embeddingModelName) ? embeddingModelName : 'text-embedding-ada-002'
   deploymentName: !empty(embeddingDeploymentName) ? embeddingDeploymentName : 'embedding'
   deploymentVersion: !empty(embeddingDeploymentVersion) ? embeddingDeploymentVersion : '2'
   deploymentCapacity: embeddingDeploymentCapacity != 0 ? embeddingDeploymentCapacity : 30
   embeddingSkuName: !empty(embeddingSkuName) ? embeddingSkuName : 'Standard'
+}
+var imageModel = {
+  modelName: !empty(imageModelName) ? imageModelName : ''
+  deploymentName: !empty(imageDeploymentName) ? imageDeploymentName : 'image'
+  deploymentVersion: !empty(imageDeploymentVersion) ? string(imageDeploymentVersion) : ''
+  deploymentCapacity: imageDeploymentCapacity != 0 ? imageDeploymentCapacity : 1
+  imageSkuName: !empty(imageSkuName) ? imageSkuName : 'Standard'
+  format: !empty(imageModelFormat) ? imageModelFormat : 'OpenAI'
 }
 param openAiHost string = 'azure'
 param chatGptModelName string = ''
@@ -70,11 +84,28 @@ var deployments = [
       version: embedding.deploymentVersion
     }
     sku: {
-      name: 'Standard'
+      name: embedding.embeddingSkuName
       capacity: embedding.deploymentCapacity
     }
   }
 ]
+
+var imageDeployment = !empty(imageModel.modelName) && !empty(imageModel.deploymentVersion) ? [
+  {
+    name: imageModel.deploymentName
+    model: {
+      format: imageModel.format
+      name: imageModel.modelName
+      version: imageModel.deploymentVersion
+    }
+    sku: {
+      name: imageModel.imageSkuName
+      capacity: imageModel.deploymentCapacity
+    }
+  }
+] : []
+
+var allDeployments = concat(deployments, imageDeployment)
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -131,7 +162,7 @@ resource openAiUserLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@
 }
 
 @batchSize(1)
-resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = [for deployment in deployments: {
+resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = [for deployment in allDeployments: {
   parent: account
   name: deployment.name
   properties: {

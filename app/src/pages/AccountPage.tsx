@@ -354,8 +354,10 @@ const AccountPage: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-4">
                           <span className="font-doodle font-bold text-doodle-green">
-                            {(order.currency?.CurrencyCode &&
-                              CURRENCY_SYMBOLS[order.currency.CurrencyCode]) ||
+                            {(order.currencyRate?.currency?.CurrencyCode &&
+                              CURRENCY_SYMBOLS[
+                                order.currencyRate.currency.CurrencyCode
+                              ]) ||
                               "$"}
                             {order.TotalDue.toFixed(2)}
                           </span>
@@ -381,9 +383,10 @@ const AccountPage: React.FC = () => {
                                     {item.product.Name} × {item.OrderQty}
                                   </span>
                                   <span>
-                                    {(order.currency?.CurrencyCode &&
+                                    {(order.currencyRate?.currency
+                                      ?.CurrencyCode &&
                                       CURRENCY_SYMBOLS[
-                                        order.currency.CurrencyCode
+                                        order.currencyRate.currency.CurrencyCode
                                       ]) ||
                                       "$"}
                                     {item.LineTotal.toFixed(2)}
@@ -402,9 +405,9 @@ const AccountPage: React.FC = () => {
                                 Subtotal
                               </span>
                               <span>
-                                {(order.currency?.CurrencyCode &&
+                                {(order.currencyRate?.currency?.CurrencyCode &&
                                   CURRENCY_SYMBOLS[
-                                    order.currency.CurrencyCode
+                                    order.currencyRate.currency.CurrencyCode
                                   ]) ||
                                   "$"}
                                 {order.SubTotal.toFixed(2)}
@@ -419,7 +422,7 @@ const AccountPage: React.FC = () => {
                               <span>
                                 {(order.currency?.CurrencyCode &&
                                   CURRENCY_SYMBOLS[
-                                    order.currency.CurrencyCode
+                                    order.currencyRate?.currency?.CurrencyCode
                                   ]) ||
                                   "$"}
                                 {order.Freight.toFixed(2)}
@@ -428,9 +431,9 @@ const AccountPage: React.FC = () => {
                             <div className="flex justify-between">
                               <span className="text-doodle-text/70">Tax</span>
                               <span>
-                                {(order.currency?.CurrencyCode &&
+                                {(order.currencyRate?.currency?.CurrencyCode &&
                                   CURRENCY_SYMBOLS[
-                                    order.currency.CurrencyCode
+                                    order.currencyRate.currency.CurrencyCode
                                   ]) ||
                                   "$"}
                                 {order.TaxAmt.toFixed(2)}
@@ -441,7 +444,7 @@ const AccountPage: React.FC = () => {
                               <span className="text-doodle-green">
                                 {(order.currency?.CurrencyCode &&
                                   CURRENCY_SYMBOLS[
-                                    order.currency.CurrencyCode
+                                    order.currencyRate?.currency?.CurrencyCode
                                   ]) ||
                                   "$"}
                                 {order.TotalDue.toFixed(2)}

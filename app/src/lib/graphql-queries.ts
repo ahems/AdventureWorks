@@ -1,4 +1,4 @@
-import { gql } from 'graphql-request';
+import { gql } from "graphql-request";
 
 // Query to get product reviews by product ID
 export const GET_PRODUCT_REVIEWS = gql`
@@ -147,6 +147,19 @@ export const GET_PRODUCT_BY_ID = gql`
         SellStartDate
         SellEndDate
         DiscontinuedDate
+        productProductPhotos {
+          items {
+            ProductPhotoID
+            Primary
+            productPhoto {
+              ProductPhotoID
+              ThumbNailPhoto
+              ThumbnailPhotoFileName
+              LargePhoto
+              LargePhotoFileName
+            }
+          }
+        }
       }
     }
   }
@@ -156,7 +169,10 @@ export const GET_PRODUCT_BY_ID = gql`
 export const GET_PRODUCT_DESCRIPTION = gql`
   query GetProductDescription($productModelId: Int!) {
     productModelProductDescriptionCultures(
-      filter: { ProductModelID: { eq: $productModelId }, CultureID: { eq: "en    " } }
+      filter: {
+        ProductModelID: { eq: $productModelId }
+        CultureID: { eq: "en    " }
+      }
     ) {
       items {
         ProductDescriptionID
@@ -168,7 +184,9 @@ export const GET_PRODUCT_DESCRIPTION = gql`
 // Query to get description text by ProductDescriptionID
 export const GET_DESCRIPTION_TEXT = gql`
   query GetDescriptionText($descriptionId: Int!) {
-    productDescriptions(filter: { ProductDescriptionID: { eq: $descriptionId } }) {
+    productDescriptions(
+      filter: { ProductDescriptionID: { eq: $descriptionId } }
+    ) {
       items {
         Description
       }
@@ -179,11 +197,7 @@ export const GET_DESCRIPTION_TEXT = gql`
 // Query to get products by category ID (not directly used, handled in apiService)
 export const GET_PRODUCTS_BY_CATEGORY = gql`
   query GetProductsByCategory($categoryId: Int!) {
-    products(
-      filter: {
-        ProductSubcategoryID: { neq: null }
-      }
-    ) {
+    products(filter: { ProductSubcategoryID: { neq: null } }) {
       items {
         ProductID
         Name
@@ -211,9 +225,9 @@ export const GET_PRODUCTS_BY_SUBCATEGORY_IDS = gql`
   query GetProductsBySubcategoryIds($subcategoryIds: [Int!]!) {
     products(
       filter: {
-        ProductSubcategoryID: { in: $subcategoryIds },
+        ProductSubcategoryID: { in: $subcategoryIds }
         FinishedGoodsFlag: { eq: true }
-      },
+      }
       first: 1000
     ) {
       items {
@@ -256,7 +270,9 @@ export const GET_PHOTO_DATA = gql`
 // Query to get product photos by product IDs (batch fetch)
 export const GET_PRODUCT_PHOTOS_BATCH = gql`
   query GetProductPhotosBatch($productIds: [Int!]!) {
-    productProductPhotos(filter: { ProductID: { in: $productIds }, Primary: { eq: true } }) {
+    productProductPhotos(
+      filter: { ProductID: { in: $productIds }, Primary: { eq: true } }
+    ) {
       items {
         ProductID
         ProductPhotoID
@@ -283,7 +299,13 @@ export const GET_PHOTOS_BY_IDS = gql`
 // Query to get products by subcategory ID (only finished goods)
 export const GET_PRODUCTS_BY_SUBCATEGORY = gql`
   query GetProductsBySubcategory($subcategoryId: Int!) {
-    products(filter: { ProductSubcategoryID: { eq: $subcategoryId }, FinishedGoodsFlag: { eq: true } }, first: 1000) {
+    products(
+      filter: {
+        ProductSubcategoryID: { eq: $subcategoryId }
+        FinishedGoodsFlag: { eq: true }
+      }
+      first: 1000
+    ) {
       items {
         ProductID
         Name
@@ -349,7 +371,10 @@ export const GET_PRODUCT_INVENTORY = gql`
 // Query to get inventory for multiple products
 export const GET_PRODUCTS_INVENTORY = gql`
   query GetProductsInventory($productIds: [Int!]!) {
-    productInventories(filter: { ProductID: { in: $productIds } }, first: 10000) {
+    productInventories(
+      filter: { ProductID: { in: $productIds } }
+      first: 10000
+    ) {
       items {
         ProductID
         LocationID
@@ -466,8 +491,16 @@ export const UPDATE_PERSON = gql`
 
 // Mutation to update email address
 export const UPDATE_EMAIL_ADDRESS = gql`
-  mutation UpdateEmailAddress($businessEntityId: Int!, $emailAddressId: Int!, $item: UpdateEmailAddressInput!) {
-    updateEmailAddress(BusinessEntityID: $businessEntityId, EmailAddressID: $emailAddressId, item: $item) {
+  mutation UpdateEmailAddress(
+    $businessEntityId: Int!
+    $emailAddressId: Int!
+    $item: UpdateEmailAddressInput!
+  ) {
+    updateEmailAddress(
+      BusinessEntityID: $businessEntityId
+      EmailAddressID: $emailAddressId
+      item: $item
+    ) {
       BusinessEntityID
       EmailAddress
       EmailAddressID
@@ -477,7 +510,10 @@ export const UPDATE_EMAIL_ADDRESS = gql`
 
 // Mutation to update password
 export const UPDATE_PASSWORD = gql`
-  mutation UpdatePassword($businessEntityId: Int!, $item: UpdatePasswordInput!) {
+  mutation UpdatePassword(
+    $businessEntityId: Int!
+    $item: UpdatePasswordInput!
+  ) {
     updatePassword(BusinessEntityID: $businessEntityId, item: $item) {
       BusinessEntityID
       PasswordHash
@@ -514,8 +550,14 @@ export const CREATE_CART_ITEM = gql`
 `;
 
 export const UPDATE_CART_ITEM = gql`
-  mutation UpdateCartItem($shoppingCartItemId: Int!, $item: UpdateShoppingCartItemInput!) {
-    updateShoppingCartItem(ShoppingCartItemID: $shoppingCartItemId, item: $item) {
+  mutation UpdateCartItem(
+    $shoppingCartItemId: Int!
+    $item: UpdateShoppingCartItemInput!
+  ) {
+    updateShoppingCartItem(
+      ShoppingCartItemID: $shoppingCartItemId
+      item: $item
+    ) {
       ShoppingCartItemID
       ShoppingCartID
       ProductID

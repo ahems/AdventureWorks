@@ -118,7 +118,15 @@
           "role": "anonymous",
           "actions": ["*"]
         }
-      ]
+      ],
+      "relationships": {
+        "currency": {
+          "cardinality": "one",
+          "target.entity": "Currency",
+          "source.fields": ["ToCurrencyCode"],
+          "target.fields": ["CurrencyCode"]
+        }
+      }
     },
     "CountryRegion": {
       "source": "Person.CountryRegion",
@@ -369,7 +377,15 @@
           "role": "anonymous",
           "actions": ["*"]
         }
-      ]
+      ],
+      "relationships": {
+        "productProductPhotos": {
+          "cardinality": "many",
+          "target.entity": "ProductProductPhoto",
+          "source.fields": ["ProductID"],
+          "target.fields": ["ProductID"]
+        }
+      }
     },
     "ProductCostHistory": {
       "source": "Production.ProductCostHistory",
@@ -437,9 +453,9 @@
           "source.fields": ["ShipMethodID"],
           "target.fields": ["ShipMethodID"]
         },
-        "currency": {
+        "currencyRate": {
           "cardinality": "one",
-          "target.entity": "Currency",
+          "target.entity": "CurrencyRate",
           "source.fields": ["CurrencyRateID"],
           "target.fields": ["CurrencyRateID"]
         }
@@ -610,7 +626,15 @@
           "role": "anonymous",
           "actions": ["*"]
         }
-      ]
+      ],
+      "relationships": {
+        "productPhoto": {
+          "cardinality": "one",
+          "target.entity": "ProductPhoto",
+          "source.fields": ["ProductPhotoID"],
+          "target.fields": ["ProductPhotoID"]
+        }
+      }
     },
     "TransactionHistory": {
       "source": "Production.TransactionHistory",

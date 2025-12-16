@@ -29,8 +29,10 @@ export interface Order {
   shipMethod?: {
     Name: string;
   };
-  currency?: {
-    CurrencyCode: string;
+  currencyRate?: {
+    currency?: {
+      CurrencyCode: string;
+    };
   };
 }
 
@@ -54,8 +56,10 @@ const GET_CUSTOMER_ORDERS = gql`
         shipMethod {
           Name
         }
-        currency {
-          CurrencyCode
+        currencyRate {
+          currency {
+            CurrencyCode
+          }
         }
         salesOrderDetails {
           items {

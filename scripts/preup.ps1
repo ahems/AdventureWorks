@@ -384,7 +384,7 @@ function Get-AccountModelsMultiVersion {
 		return $models
 	}
 
-	$excludePattern = '(?i)(realtime|transcribe|image|audio)'
+	$excludePattern = '(?i)(realtime|transcribe|audio)'
 	foreach ($m in $modelItems) {
 		# Be tolerant if expected properties are missing
 		if (-not ($m | Get-Member -Name name -ErrorAction SilentlyContinue)) { continue }
@@ -489,14 +489,23 @@ if (-not $nameVal -or -not $objectIdVal) {
 # 2. Azure AI Foundry provisioning + model selection (skip if already fully selected)
 $existingChatComplete = (Get-AzdValue -Name 'chatGptDeploymentVersion') -and (Get-AzdValue -Name 'chatGptSkuName') -and (Get-AzdValue -Name 'chatGptModelName') -and (Get-AzdValue -Name 'availableChatGptDeploymentCapacity')
 $existingEmbComplete  = (Get-AzdValue -Name 'embeddingDeploymentVersion') -and (Get-AzdValue -Name 'embeddingDeploymentSkuName') -and (Get-AzdValue -Name 'embeddingDeploymentModelName') -and (Get-AzdValue -Name 'availableEmbeddingDeploymentCapacity')
+$existingImageComplete = (Get-AzdValue -Name 'imageDeploymentVersion') -and (Get-AzdValue -Name 'imageDeploymentSkuName') -and (Get-AzdValue -Name 'imageDeploymentModelName') -and (Get-AzdValue -Name 'imageModelFormat') -and (Get-AzdValue -Name 'availableImageDeploymentCapacity')
 
-if ($existingChatComplete -and $existingEmbComplete) {
+if ($existingChatComplete -and $existingEmbComplete -and $existingImageComplete) {
 	Write-Host "Model selections already present. Skipping model discovery." -ForegroundColor Yellow
 	return
 }
 
-$location = Get-AzdValue -Name 'AZURE_LOCATION' -Default 'eastus2'
-# Persist default location if it was not previously set
+# Get cognitive services location (AI Foundry region), with fallback to main Azure location
+$cognitiveServicesLocation = Get-AzdValue -Name 'cognitiveservicesLocation'
+if (-not $cognitiveServicesLocation) {
+	$cognitiveServicesLocation = Get-AzdValue -Name 'AZURE_LOCATION' -Default 'eastus2'
+	Set-AzdValue -Name 'cognitiveservicesLocation' -Value $cognitiveServicesLocation
+	Write-Host "Set cognitiveservicesLocation = $cognitiveServicesLocation (from AZURE_LOCATION)" -ForegroundColor Cyan
+}
+$location = $cognitiveServicesLocation
+
+# Persist default Azure location if it was not previously set
 if (-not (Get-AzdValue -Name 'AZURE_LOCATION')) {
 	Set-AzdValue -Name 'AZURE_LOCATION' -Value $location
 	Write-Host "Set default AZURE_LOCATION = $location" -ForegroundColor Cyan
@@ -554,11 +563,15 @@ $null = if (-not $subscriptionId) { throw 'Subscription id is missing; cannot en
 $models = Get-AccountModelsMultiVersion -SubId $subscriptionId -Rg $resourceGroup -Acct $accountName
 if (-not $models -or $models.Count -eq 0) { throw 'No models returned from Azure AI Foundry account; aborting preup hook.' }
 
-# Filter to OpenAI models only (other provider models cause quota retrieval warnings due to ValidateSet('OpenAI'))
+# Filter to OpenAI models only (includes DALL-E for image generation)
 $originalModelCount = $models.Count
-$models = $models | Where-Object { [string]::IsNullOrWhiteSpace($_.format) -or $_.format -ieq 'OpenAI' }
+$models = $models | Where-Object { 
+	[string]::IsNullOrWhiteSpace($_.format) -or 
+	$_.format -ieq 'OpenAI'
+}
 if ($models.Count -lt $originalModelCount) {
-	Write-Host ("Filtered models: using {0} OpenAI models out of {1} total (skipped {2} non-OpenAI)." -f $models.Count, $originalModelCount, ($originalModelCount - $models.Count)) -ForegroundColor DarkGray
+	$skippedCount = $originalModelCount - $models.Count
+	Write-Host ("Filtered models: using {0} OpenAI models out of {1} total (skipped {2} non-OpenAI)." -f $models.Count, $originalModelCount, $skippedCount) -ForegroundColor DarkGray
 }
 
 # Get quota for each model (parallel when possible)
@@ -615,7 +628,9 @@ if ($pwshSupportsParallel) {
 			Write-Host "  [$i/$total] Getting available quota for Model '$($m.name)', version '$($m.version)'..." -ForegroundColor DarkCyan
 			$quota = Get-AoaiModelAvailableQuota -ResourceGroupName $resourceGroup -AccountName $accountName -ModelName $m.name -ModelVersion $m.version -ModelFormat $fmt -ErrorAction Stop
 			if ($quota) { $allQuota += $quota }
-		} catch { Write-Warning "Failed quota retrieval for Model $($m.name), version $($m.version): $($_.Exception.Message)" }
+		} catch {
+			Write-Warning "Failed quota retrieval for Model $($m.name), version $($m.version): $($_.Exception.Message)"
+		}
 	}
 }
 
@@ -653,6 +668,21 @@ if ($embeddingPick) {
 	Set-AzdValue -Name 'availableEmbeddingDeploymentCapacity' -Value ($embeddingPick.AvailableCapacity.ToString())
 	Write-Host "Selected Embeddings model: $($embeddingPick.ModelName) $($embeddingPick.ModelVersion) SKU $($embeddingPick.SkuName) Capacity $($embeddingPick.AvailableCapacity)" -ForegroundColor Green
 } else { Write-Warning 'No embeddings model selected.' }
+
+# Select image generation model (GPT-image preferred, then DALL-E)
+$imageCandidates = $sorted | Where-Object { $_.ModelName -match '(?i)(gpt-?image|dall-?e)' }
+$imagePick = $imageCandidates | Where-Object { $_.ModelName -match '(?i)gpt-?image' } | Select-Object -First 1
+if (-not $imagePick) {
+	$imagePick = $imageCandidates | Select-Object -First 1
+}
+if ($imagePick) {
+	Set-AzdValue -Name 'imageDeploymentVersion' -Value $imagePick.ModelVersion
+	Set-AzdValue -Name 'imageDeploymentSkuName' -Value $imagePick.SkuName
+	Set-AzdValue -Name 'imageDeploymentModelName' -Value $imagePick.ModelName
+	Set-AzdValue -Name 'imageModelFormat' -Value $imagePick.ModelFormat
+	Set-AzdValue -Name 'availableImageDeploymentCapacity' -Value ($imagePick.AvailableCapacity.ToString())
+	Write-Host "Selected Image model: $($imagePick.ModelName) $($imagePick.ModelVersion) SKU $($imagePick.SkuName) Format $($imagePick.ModelFormat) Capacity $($imagePick.AvailableCapacity)" -ForegroundColor Green
+} else { Write-Warning 'No image generation model selected.' }
 
 Write-Host "preup.ps1 completed." -ForegroundColor Cyan
 

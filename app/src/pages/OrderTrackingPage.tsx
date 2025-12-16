@@ -1,39 +1,32 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useParams, Navigate } from 'react-router-dom';
-import { ArrowLeft, Package, CheckCircle, Truck, MapPin, Clock, Search } from 'lucide-react';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
-import { useAuth } from '@/context/AuthContext';
+import React, { useState, useEffect } from "react";
+import { Link, useParams, Navigate } from "react-router-dom";
+import {
+  ArrowLeft,
+  Package,
+  CheckCircle,
+  Truck,
+  MapPin,
+  Clock,
+  Search,
+} from "lucide-react";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import { useAuth } from "@/context/AuthContext";
+import {
+  useOrders,
+  Order,
+  getOrderStatusText,
+  getOrderStatusColor,
+} from "@/hooks/useOrders";
+import { getCustomerByPersonId } from "@/lib/customerService";
+import { CURRENCY_SYMBOLS } from "@/lib/currencies";
 
-interface OrderItem {
-  ProductID: number;
-  Name: string;
-  ListPrice: number;
-  quantity: number;
-}
-
-interface Order {
-  id: string;
-  items: OrderItem[];
-  shipping: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    address: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    country: string;
-  };
-  paymentMethod: string;
-  subtotal: number;
-  shippingCost: number;
-  tax: number;
-  total: number;
-  date: string;
-}
-
-type OrderStatus = 'confirmed' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered';
+type OrderStatus =
+  | "confirmed"
+  | "processing"
+  | "shipped"
+  | "out_for_delivery"
+  | "delivered";
 
 interface TrackingStep {
   status: OrderStatus;
@@ -43,75 +36,86 @@ interface TrackingStep {
   date?: string;
 }
 
-const getOrderStatus = (orderDate: string): { currentStatus: OrderStatus; steps: TrackingStep[] } => {
-  const orderTime = new Date(orderDate).getTime();
+const getOrderStatus = (
+  order: Order
+): { currentStatus: OrderStatus; steps: TrackingStep[] } => {
+  const orderTime = new Date(order.OrderDate).getTime();
   const now = Date.now();
   const daysSinceOrder = Math.floor((now - orderTime) / (1000 * 60 * 60 * 24));
 
   const baseSteps: TrackingStep[] = [
     {
-      status: 'confirmed',
-      label: 'Order Confirmed',
-      description: 'Your order has been placed successfully',
+      status: "confirmed",
+      label: "Order Confirmed",
+      description: "Your order has been placed successfully",
       icon: <CheckCircle className="w-6 h-6" />,
     },
     {
-      status: 'processing',
-      label: 'Processing',
-      description: 'We\'re preparing your items for shipment',
+      status: "processing",
+      label: "Processing",
+      description: "We're preparing your items for shipment",
       icon: <Package className="w-6 h-6" />,
     },
     {
-      status: 'shipped',
-      label: 'Shipped',
-      description: 'Your order is on its way',
+      status: "shipped",
+      label: "Shipped",
+      description: "Your order is on its way",
       icon: <Truck className="w-6 h-6" />,
     },
     {
-      status: 'out_for_delivery',
-      label: 'Out for Delivery',
-      description: 'Your package is out for delivery today',
+      status: "out_for_delivery",
+      label: "Out for Delivery",
+      description: "Your package is out for delivery today",
       icon: <MapPin className="w-6 h-6" />,
     },
     {
-      status: 'delivered',
-      label: 'Delivered',
-      description: 'Your order has been delivered',
+      status: "delivered",
+      label: "Delivered",
+      description: "Your order has been delivered",
       icon: <CheckCircle className="w-6 h-6" />,
     },
   ];
 
   // Simulate progress based on days since order
-  let currentStatus: OrderStatus = 'confirmed';
-  const orderDateObj = new Date(orderDate);
+  let currentStatus: OrderStatus = "confirmed";
+  const orderDateObj = new Date(order.OrderDate);
 
   if (daysSinceOrder >= 5) {
-    currentStatus = 'delivered';
+    currentStatus = "delivered";
   } else if (daysSinceOrder >= 4) {
-    currentStatus = 'out_for_delivery';
+    currentStatus = "out_for_delivery";
   } else if (daysSinceOrder >= 2) {
-    currentStatus = 'shipped';
+    currentStatus = "shipped";
   } else if (daysSinceOrder >= 1) {
-    currentStatus = 'processing';
+    currentStatus = "processing";
   }
 
   // Add dates to completed steps
   const steps = baseSteps.map((step, index) => {
     const stepDate = new Date(orderDateObj);
     stepDate.setDate(stepDate.getDate() + index);
-    
-    const statusOrder: OrderStatus[] = ['confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered'];
+
+    const statusOrder: OrderStatus[] = [
+      "confirmed",
+      "processing",
+      "shipped",
+      "out_for_delivery",
+      "delivered",
+    ];
     const currentIndex = statusOrder.indexOf(currentStatus);
     const stepIndex = statusOrder.indexOf(step.status);
 
     return {
       ...step,
-      date: stepIndex <= currentIndex ? stepDate.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      }) : undefined,
+      date:
+        stepIndex <= currentIndex
+          ? stepDate.toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })
+          : undefined,
     };
   });
 
@@ -120,42 +124,55 @@ const getOrderStatus = (orderDate: string): { currentStatus: OrderStatus; steps:
 
 const OrderTrackingPage: React.FC = () => {
   const { orderId } = useParams<{ orderId?: string }>();
-  const { isAuthenticated, isLoading } = useAuth();
-  const [orders, setOrders] = useState<Order[]>([]);
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const [customerId, setCustomerId] = useState<number | null>(null);
+  const { data: orders = [], isLoading: ordersLoading } = useOrders(
+    customerId || 0
+  );
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [searchInput, setSearchInput] = useState('');
-  const [searchError, setSearchError] = useState('');
+  const [searchInput, setSearchInput] = useState("");
+  const [searchError, setSearchError] = useState("");
 
+  // Fetch customer ID
   useEffect(() => {
-    const savedOrders = localStorage.getItem('orderHistory');
-    if (savedOrders) {
-      const parsedOrders = JSON.parse(savedOrders);
-      setOrders(parsedOrders);
-
-      // If orderId is provided in URL, find and select that order
-      if (orderId) {
-        const found = parsedOrders.find((o: Order) => o.id === orderId);
-        if (found) {
-          setSelectedOrder(found);
+    if (user?.businessEntityId) {
+      getCustomerByPersonId(user.businessEntityId).then((customer) => {
+        if (customer) {
+          setCustomerId(customer.CustomerID);
         }
+      });
+    }
+  }, [user]);
+
+  // Select order by ID from URL parameter
+  useEffect(() => {
+    if (orderId && orders.length > 0) {
+      const found = orders.find((o) => o.SalesOrderNumber === orderId);
+      if (found) {
+        setSelectedOrder(found);
       }
     }
-  }, [orderId]);
+  }, [orderId, orders]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setSearchError('');
-    
-    const found = orders.find(o => o.id.toLowerCase() === searchInput.toLowerCase().trim());
+    setSearchError("");
+
+    const found = orders.find(
+      (o) =>
+        o.SalesOrderNumber.toLowerCase() === searchInput.toLowerCase().trim()
+    );
     if (found) {
       setSelectedOrder(found);
-      setSearchInput('');
+      setSearchInput("");
     } else {
-      setSearchError('Order not found. Please check the order number and try again.');
+      setSearchError(
+        "Order not found. Please check the order number and try again."
+      );
     }
   };
 
-  if (isLoading) {
+  if (isLoading || ordersLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-doodle-bg">
         <div className="text-center">
@@ -167,19 +184,31 @@ const OrderTrackingPage: React.FC = () => {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/auth" state={{ from: { pathname: '/order-tracking' } }} replace />;
+    return (
+      <Navigate
+        to="/auth"
+        state={{ from: { pathname: "/order-tracking" } }}
+        replace
+      />
+    );
   }
 
-  const { currentStatus, steps } = selectedOrder 
-    ? getOrderStatus(selectedOrder.date) 
-    : { currentStatus: 'confirmed' as OrderStatus, steps: [] };
+  const { currentStatus, steps } = selectedOrder
+    ? getOrderStatus(selectedOrder)
+    : { currentStatus: "confirmed" as OrderStatus, steps: [] };
 
-  const statusOrder: OrderStatus[] = ['confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered'];
+  const statusOrder: OrderStatus[] = [
+    "confirmed",
+    "processing",
+    "shipped",
+    "out_for_delivery",
+    "delivered",
+  ];
   const currentIndex = statusOrder.indexOf(currentStatus);
 
   // Calculate estimated delivery
   const getEstimatedDelivery = (order: Order) => {
-    const orderDate = new Date(order.date);
+    const orderDate = new Date(order.OrderDate);
     orderDate.setDate(orderDate.getDate() + 5);
     return orderDate;
   };
@@ -190,8 +219,8 @@ const OrderTrackingPage: React.FC = () => {
       <main className="flex-1">
         {/* Breadcrumb */}
         <div className="container mx-auto px-4 py-4">
-          <Link 
-            to="/account" 
+          <Link
+            to="/account"
             className="inline-flex items-center gap-2 font-doodle text-doodle-text/70 hover:text-doodle-accent transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -207,7 +236,10 @@ const OrderTrackingPage: React.FC = () => {
 
             {/* Order Search */}
             <div className="doodle-card p-6 mb-8">
-              <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
+              <form
+                onSubmit={handleSearch}
+                className="flex flex-col sm:flex-row gap-3"
+              >
                 <div className="flex-1">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-text/40" />
@@ -216,32 +248,39 @@ const OrderTrackingPage: React.FC = () => {
                       value={searchInput}
                       onChange={(e) => {
                         setSearchInput(e.target.value);
-                        setSearchError('');
+                        setSearchError("");
                       }}
                       placeholder="Enter order number (e.g., AW-ABC123)"
                       className="doodle-input w-full pl-10"
                     />
                   </div>
                   {searchError && (
-                    <p className="font-doodle text-sm text-doodle-accent mt-2">{searchError}</p>
+                    <p className="font-doodle text-sm text-doodle-accent mt-2">
+                      {searchError}
+                    </p>
                   )}
                 </div>
-                <button type="submit" className="doodle-button doodle-button-primary">
+                <button
+                  type="submit"
+                  className="doodle-button doodle-button-primary"
+                >
                   Track Order
                 </button>
               </form>
 
               {orders.length > 0 && !selectedOrder && (
                 <div className="mt-6 pt-6 border-t-2 border-dashed border-doodle-text/20">
-                  <p className="font-doodle text-sm text-doodle-text/70 mb-3">Or select from your recent orders:</p>
+                  <p className="font-doodle text-sm text-doodle-text/70 mb-3">
+                    Or select from your recent orders:
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {orders.slice(0, 5).map((order) => (
                       <button
-                        key={order.id}
+                        key={order.SalesOrderID}
                         onClick={() => setSelectedOrder(order)}
                         className="doodle-button text-sm py-1 px-3"
                       >
-                        {order.id}
+                        {order.SalesOrderNumber}
                       </button>
                     ))}
                   </div>
@@ -256,17 +295,27 @@ const OrderTrackingPage: React.FC = () => {
                 <div className="doodle-card p-6">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
-                      <p className="font-doodle text-sm text-doodle-text/70">Order Number</p>
-                      <p className="font-doodle text-xl font-bold text-doodle-accent">{selectedOrder.id}</p>
+                      <p className="font-doodle text-sm text-doodle-text/70">
+                        Order Number
+                      </p>
+                      <p className="font-doodle text-xl font-bold text-doodle-accent">
+                        {selectedOrder.SalesOrderNumber}
+                      </p>
                     </div>
                     <div className="text-left sm:text-right">
-                      <p className="font-doodle text-sm text-doodle-text/70">Estimated Delivery</p>
+                      <p className="font-doodle text-sm text-doodle-text/70">
+                        Estimated Delivery
+                      </p>
                       <p className="font-doodle text-xl font-bold text-doodle-green">
-                        {currentStatus === 'delivered' ? 'Delivered!' : getEstimatedDelivery(selectedOrder).toLocaleDateString('en-US', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric',
-                        })}
+                        {currentStatus === "delivered"
+                          ? "Delivered!"
+                          : getEstimatedDelivery(
+                              selectedOrder
+                            ).toLocaleDateString("en-US", {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                            })}
                       </p>
                     </div>
                   </div>
@@ -281,9 +330,11 @@ const OrderTrackingPage: React.FC = () => {
                   <div className="relative">
                     {/* Progress Line */}
                     <div className="absolute left-[27px] top-0 bottom-0 w-1 bg-doodle-text/20" />
-                    <div 
+                    <div
                       className="absolute left-[27px] top-0 w-1 bg-doodle-green transition-all duration-500"
-                      style={{ height: `${(currentIndex / (steps.length - 1)) * 100}%` }}
+                      style={{
+                        height: `${(currentIndex / (steps.length - 1)) * 100}%`,
+                      }}
                     />
 
                     {/* Steps */}
@@ -293,23 +344,39 @@ const OrderTrackingPage: React.FC = () => {
                         const isCurrent = index === currentIndex;
 
                         return (
-                          <div key={step.status} className="relative flex gap-4">
+                          <div
+                            key={step.status}
+                            className="relative flex gap-4"
+                          >
                             {/* Icon */}
-                            <div className={`
+                            <div
+                              className={`
                               relative z-10 w-14 h-14 rounded-full border-4 flex items-center justify-center transition-all
-                              ${isCompleted 
-                                ? 'bg-doodle-green border-doodle-green text-white' 
-                                : 'bg-doodle-bg border-doodle-text/20 text-doodle-text/40'
+                              ${
+                                isCompleted
+                                  ? "bg-doodle-green border-doodle-green text-white"
+                                  : "bg-doodle-bg border-doodle-text/20 text-doodle-text/40"
                               }
-                              ${isCurrent ? 'ring-4 ring-doodle-green/30 animate-pulse' : ''}
-                            `}>
+                              ${
+                                isCurrent
+                                  ? "ring-4 ring-doodle-green/30 animate-pulse"
+                                  : ""
+                              }
+                            `}
+                            >
                               {step.icon}
                             </div>
 
                             {/* Content */}
                             <div className="flex-1 pt-2">
                               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                                <h3 className={`font-doodle font-bold ${isCompleted ? 'text-doodle-text' : 'text-doodle-text/50'}`}>
+                                <h3
+                                  className={`font-doodle font-bold ${
+                                    isCompleted
+                                      ? "text-doodle-text"
+                                      : "text-doodle-text/50"
+                                  }`}
+                                >
                                   {step.label}
                                 </h3>
                                 {step.date && (
@@ -319,7 +386,13 @@ const OrderTrackingPage: React.FC = () => {
                                   </span>
                                 )}
                               </div>
-                              <p className={`font-doodle text-sm mt-1 ${isCompleted ? 'text-doodle-text/70' : 'text-doodle-text/40'}`}>
+                              <p
+                                className={`font-doodle text-sm mt-1 ${
+                                  isCompleted
+                                    ? "text-doodle-text/70"
+                                    : "text-doodle-text/40"
+                                }`}
+                              >
                                 {step.description}
                               </p>
                             </div>
@@ -336,39 +409,103 @@ const OrderTrackingPage: React.FC = () => {
                     Items in this Order
                   </h2>
                   <div className="space-y-3">
-                    {selectedOrder.items.map((item) => (
-                      <div key={item.ProductID} className="flex items-center gap-4 p-3 border-2 border-dashed border-doodle-text/20">
-                        <div className="w-12 h-12 bg-doodle-bg border-2 border-doodle-text border-dashed flex items-center justify-center flex-shrink-0">
-                          <span className="font-doodle text-lg">🚴</span>
+                    {selectedOrder.salesOrderDetails.items.map(
+                      (item, index) => (
+                        <div
+                          key={`${item.ProductID}-${index}`}
+                          className="flex items-center gap-4 p-3 border-2 border-dashed border-doodle-text/20"
+                        >
+                          <div className="w-12 h-12 bg-doodle-bg border-2 border-doodle-text border-dashed flex items-center justify-center flex-shrink-0">
+                            <span className="font-doodle text-lg">🚴</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-doodle font-bold text-doodle-text truncate">
+                              {item.product.Name}
+                            </p>
+                            <p className="font-doodle text-sm text-doodle-text/70">
+                              Qty: {item.OrderQty}
+                            </p>
+                          </div>
+                          <p className="font-doodle font-bold text-doodle-green">
+                            {(selectedOrder.currency?.CurrencyCode &&
+                              CURRENCY_SYMBOLS[
+                                selectedOrder.currencyRate?.currency?.CurrencyCode
+                              ]) ||
+                              "$"}
+                            {item.LineTotal.toFixed(2)}
+                          </p>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-doodle font-bold text-doodle-text truncate">{item.Name}</p>
-                          <p className="font-doodle text-sm text-doodle-text/70">Qty: {item.quantity}</p>
-                        </div>
-                        <p className="font-doodle font-bold text-doodle-green">
-                          ${(item.ListPrice * item.quantity).toFixed(2)}
-                        </p>
+                      )
+                    )}
+                  </div>
+
+                  {/* Order Summary */}
+                  <div className="mt-4 pt-4 border-t-2 border-dashed border-doodle-text/20">
+                    <div className="space-y-1 font-doodle text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-doodle-text/70">Subtotal</span>
+                        <span>
+                          {(selectedOrder.currency?.CurrencyCode &&
+                            CURRENCY_SYMBOLS[
+                              selectedOrder.currencyRate?.currency?.CurrencyCode
+                            ]) ||
+                            "$"}
+                          {selectedOrder.SubTotal.toFixed(2)}
+                        </span>
                       </div>
-                    ))}
+                      <div className="flex justify-between">
+                        <span className="text-doodle-text/70">Tax</span>
+                        <span>
+                          {(selectedOrder.currency?.CurrencyCode &&
+                            CURRENCY_SYMBOLS[
+                              selectedOrder.currencyRate?.currency?.CurrencyCode
+                            ]) ||
+                            "$"}
+                          {selectedOrder.TaxAmt.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-doodle-text/70">
+                          Shipping
+                          {selectedOrder.shipMethod?.Name
+                            ? ` (${selectedOrder.shipMethod.Name})`
+                            : ""}
+                        </span>
+                        <span>
+                          {(selectedOrder.currency?.CurrencyCode &&
+                            CURRENCY_SYMBOLS[
+                              selectedOrder.currencyRate?.currency?.CurrencyCode
+                            ]) ||
+                            "$"}
+                          {selectedOrder.Freight.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between pt-2 border-t border-dashed border-doodle-text/20 font-bold text-base">
+                        <span>Total</span>
+                        <span className="text-doodle-green">
+                          {(selectedOrder.currency?.CurrencyCode &&
+                            CURRENCY_SYMBOLS[
+                              selectedOrder.currencyRate?.currency?.CurrencyCode
+                            ]) ||
+                            "$"}
+                          {selectedOrder.TotalDue.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Shipping Address */}
-                <div className="doodle-card p-6">
-                  <h2 className="font-doodle text-xl font-bold text-doodle-text mb-4">
-                    Shipping Address
-                  </h2>
-                  <div className="font-doodle text-doodle-text/70">
-                    <p className="font-bold text-doodle-text">
-                      {selectedOrder.shipping.firstName} {selectedOrder.shipping.lastName}
+                {/* Order Info */}
+                {selectedOrder.Comment && (
+                  <div className="doodle-card p-6">
+                    <h2 className="font-doodle text-xl font-bold text-doodle-text mb-4">
+                      Order Notes
+                    </h2>
+                    <p className="font-doodle text-doodle-text/70">
+                      {selectedOrder.Comment}
                     </p>
-                    <p>{selectedOrder.shipping.address}</p>
-                    <p>
-                      {selectedOrder.shipping.city}, {selectedOrder.shipping.state} {selectedOrder.shipping.zipCode}
-                    </p>
-                    <p>{selectedOrder.shipping.country}</p>
                   </div>
-                </div>
+                )}
 
                 {/* Back Button */}
                 <div className="text-center">
@@ -391,7 +528,10 @@ const OrderTrackingPage: React.FC = () => {
                   <p className="font-doodle text-doodle-text/70 mb-6">
                     Once you place an order, you can track it here.
                   </p>
-                  <Link to="/" className="doodle-button doodle-button-primary inline-block">
+                  <Link
+                    to="/"
+                    className="doodle-button doodle-button-primary inline-block"
+                  >
                     Start Shopping
                   </Link>
                 </div>
