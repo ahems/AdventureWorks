@@ -37,3 +37,18 @@ public class EnhancedProductData
     public decimal? Weight { get; set; }
     public string? WeightUnitMeasureCode { get; set; }
 }
+
+public class ProductDescriptionData
+{
+    public int ProductDescriptionID { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public string CultureID { get; set; } = string.Empty;
+    public int? ProductModelID { get; set; }
+}
+
+public class ProductDescriptionEmbedding
+{
+    public int ProductDescriptionID { get; set; }
+    public byte[] Embedding { get; set; } = Array.Empty<byte>();
+    public int? ProductModelID { get; set; }
+}

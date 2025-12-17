@@ -1145,6 +1145,48 @@ catch {
     exit 1
 }
 
+# Set WEBSITE_HOSTNAME for Azure Functions Durable Functions
+Write-Output "`nConfiguring WEBSITE_HOSTNAME for Azure Functions..."
+$functionsAppName = (azd env get-value 'SERVICE_API_FUNCTIONS_NAME' 2>$null).Trim()
+
+if ($functionsAppName -and $functionsAppName -ne "ERROR: key 'SERVICE_API_FUNCTIONS_NAME' not found in the environment values") {
+    try {
+        Write-Output "Retrieving FQDN for Functions container app: $functionsAppName"
+        
+        # Get the container app FQDN using Azure CLI
+        $fqdn = az containerapp show `
+            --name $functionsAppName `
+            --resource-group $resourceGroupName `
+            --query "properties.configuration.ingress.fqdn" `
+            --output tsv 2>$null
+        
+        if ($fqdn -and $fqdn -ne '') {
+            $websiteHostname = "https://$fqdn"
+            Write-Output "Setting WEBSITE_HOSTNAME to: $websiteHostname"
+            
+            # Update the container app environment variables
+            az containerapp update `
+                --name $functionsAppName `
+                --resource-group $resourceGroupName `
+                --set-env-vars "WEBSITE_HOSTNAME=$websiteHostname" `
+                --output none 2>$null
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-Output "Successfully set WEBSITE_HOSTNAME for $functionsAppName"
+            } else {
+                Write-Warning "Failed to set WEBSITE_HOSTNAME. Exit code: $LASTEXITCODE"
+            }
+        } else {
+            Write-Warning "Could not retrieve FQDN for Functions container app $functionsAppName"
+        }
+    }
+    catch {
+        Write-Warning "Error configuring WEBSITE_HOSTNAME: $($_.Exception.Message)"
+    }
+} else {
+    Write-Warning "SERVICE_API_FUNCTIONS_NAME not found in environment. Skipping WEBSITE_HOSTNAME configuration."
+}
+
 # Set VITE_API_URL for Static Web App build
 $apiUrl = (azd env get-value 'API_URL' 2>$null).Trim()
 if ($apiUrl) {

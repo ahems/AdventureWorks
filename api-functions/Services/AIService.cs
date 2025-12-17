@@ -3,6 +3,7 @@ using Azure.Identity;
 using api_functions.Models;
 using Microsoft.Extensions.Logging;
 using OpenAI.Chat;
+using OpenAI.Embeddings;
 using System.Text.Json;
 
 namespace api_functions.Services;
@@ -17,6 +18,7 @@ public class AIService
 {
     private readonly string _endpoint;
     private readonly string _deploymentName = "chat";
+    private readonly string _embeddingDeploymentName = "embedding";
     private readonly ILogger<AIService> _logger;
 
     public AIService(string endpoint, ILogger<AIService> logger)
@@ -283,5 +285,61 @@ Translate the description into each target language. Return ONLY a valid JSON ob
         }
 
         return translatedDescriptions ?? new List<TranslatedDescription>();
+    }
+
+    public async Task<List<ProductDescriptionEmbedding>> GenerateEmbeddingsAsync(List<ProductDescriptionData> descriptions)
+    {
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var embeddingClient = client.GetEmbeddingClient(_embeddingDeploymentName);
+
+        var embeddings = new List<ProductDescriptionEmbedding>();
+
+        foreach (var description in descriptions)
+        {
+            _logger.LogInformation(
+                "Generating embedding for ProductDescriptionID {id} (Culture: {culture}, Length: {length} chars)",
+                description.ProductDescriptionID,
+                description.CultureID,
+                description.Description.Length
+            );
+
+            try
+            {
+                // Generate embedding for the description text
+                var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(description.Description);
+                var embeddingVector = embeddingResponse.Value.ToFloats();
+
+                // Convert ReadOnlyMemory<float> to byte array for VARBINARY storage
+                var floatArray = embeddingVector.ToArray();
+                var embeddingBytes = new byte[floatArray.Length * sizeof(float)];
+                Buffer.BlockCopy(floatArray, 0, embeddingBytes, 0, embeddingBytes.Length);
+
+                embeddings.Add(new ProductDescriptionEmbedding
+                {
+                    ProductDescriptionID = description.ProductDescriptionID,
+                    Embedding = embeddingBytes,
+                    ProductModelID = description.ProductModelID
+                });
+
+                _logger.LogInformation(
+                    "Generated embedding for ProductDescriptionID {id}: {dimensions} dimensions, {bytes} bytes",
+                    description.ProductDescriptionID,
+                    floatArray.Length,
+                    embeddingBytes.Length
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to generate embedding for ProductDescriptionID {id}",
+                    description.ProductDescriptionID
+                );
+                throw;
+            }
+        }
+
+        return embeddings;
     }
 }

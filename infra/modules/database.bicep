@@ -71,9 +71,9 @@ module sqlServerModule 'br/public:avm/res/sql/server:0.14.0' = {
   }
 }
 
-// Connection string mirrors previous format (Active Directory Default). This uses the Managed Identity assigned to the SQL server.
+// Connection string without Authentication parameter (Functions handle auth via Managed Identity using AZURE_CLIENT_ID)
 // This requires the application to also run with an identity that has been granted access to the database
-var connectionString = 'Server=tcp:${sqlServerFqdn},1433;Initial Catalog=${sqlDatabaseName};Authentication=Active Directory Default;'
+var connectionString = 'Server=tcp:${sqlServerFqdn};Database=${sqlDatabaseName};'
 
 // Secrets (depend on module to ensure ordering)
 resource server 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {

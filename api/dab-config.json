@@ -361,6 +361,19 @@
         }
       ]
     },
+    "ProductSearch": {
+      "source": {
+        "object": "Production.vProductSearch",
+        "type": "view",
+        "key-fields": ["ProductID", "ProductDescriptionID"]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["read"]
+        }
+      ]
+    },
     "ProductModelIllustration": {
       "source": "Production.ProductModelIllustration",
       "permissions": [

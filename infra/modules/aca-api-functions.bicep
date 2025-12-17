@@ -113,6 +113,10 @@ resource apiFunctions 'Microsoft.App/containerApps@2024-03-01' = {
               value: 'managedidentity'
             }
             {
+              name: 'AzureWebJobsStorage__clientId'
+              value: azidentity.properties.clientId
+            }
+            {
               name: 'AzureWebJobsStorage__blobServiceUri'
               value: 'https://${storageAccountName}.blob.${environment().suffixes.storage}'
             }
@@ -127,6 +131,10 @@ resource apiFunctions 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'FUNCTIONS_WORKER_RUNTIME'
               value: 'dotnet-isolated'
+            }
+            {
+              name: 'WEBSITE_HOSTNAME'
+              value: '${apiFunctionsName}.${replace(replace(containerAppEnvId, '/subscriptions/', ''), '/resourceGroups/', '')}.azurecontainerapps.io'
             }
           ]
         }

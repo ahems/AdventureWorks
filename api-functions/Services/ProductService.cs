@@ -233,4 +233,45 @@ public class ProductService
             }
         }
     }
+
+    public async Task<List<ProductDescriptionData>> GetProductDescriptionsForEmbeddingAsync()
+    {
+        using var connection = await GetConnectionAsync();
+
+        // Get all product descriptions (all languages) that don't have embeddings yet
+        var sql = @"
+            SELECT 
+                pd.ProductDescriptionID,
+                pd.Description,
+                pmx.CultureID,
+                pmx.ProductModelID
+            FROM Production.ProductDescription pd
+            INNER JOIN Production.ProductModelProductDescriptionCulture pmx
+                ON pd.ProductDescriptionID = pmx.ProductDescriptionID
+            WHERE pd.DescriptionEmbedding IS NULL
+            ORDER BY pmx.ProductModelID, pmx.CultureID";
+
+        var descriptions = await connection.QueryAsync<ProductDescriptionData>(sql);
+        return descriptions.ToList();
+    }
+
+    public async Task SaveEmbeddingAsync(ProductDescriptionEmbedding embedding)
+    {
+        using var connection = await GetConnectionAsync();
+
+        // Save embedding to ProductDescription table
+        // Embeddings stored per language for multi-language semantic search
+        var updateDescriptionSql = @"
+            UPDATE Production.ProductDescription
+            SET 
+                DescriptionEmbedding = @Embedding,
+                ModifiedDate = GETDATE()
+            WHERE ProductDescriptionID = @ProductDescriptionID";
+
+        await connection.ExecuteAsync(updateDescriptionSql, new
+        {
+            embedding.ProductDescriptionID,
+            embedding.Embedding
+        });
+    }
 }
