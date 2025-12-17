@@ -67,6 +67,15 @@ module redis 'modules/redis.bicep' = {
   ]
 }
 
+module storage 'modules/storage.bicep' = {
+  name: 'Deploy-Storage-Account'
+  params: {
+    location: location
+    identityId: identity.outputs.principalId
+    aadAdminObjectId: aadAdminObjectId
+  }
+}
+
 module keyvault 'modules/keyvault.bicep' = {
   name: 'Deploy-KeyVault'
   params: {
@@ -227,6 +236,8 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
     containerRegistryName: acrName
     identityName: identityName
     sqlConnectionString: database.outputs.connectionString
+    aiFoundryEndpoint: cognitiveservices.outputs.endpoint
+    storageAccountName: storage.outputs.storageAccountName
     minReplica: 0
     maxReplica: 3
     revisionSuffix: revisionSuffix
@@ -234,6 +245,7 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
   }
   dependsOn: [
     keyvault
+    storage
   ]
 }
 
@@ -264,6 +276,8 @@ output AZURE_CLIENT_ID string = identity.outputs.clientId
 output USER_MANAGED_IDENTITY_NAME string = identityName
 
 output SQL_SERVER_NAME string = sqlServerName
+
+output STORAGE_ACCOUNT_NAME string = storage.outputs.storageAccountName
 
 // Service names for azd deploy mapping (required by azd CLI)
 output SERVICE_APP_NAME string = staticWebAppFrontend.outputs.staticWebAppName

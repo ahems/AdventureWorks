@@ -410,7 +410,7 @@ try {
     # ---------------------------------------------------------------------
     # Load and execute SQL to create table(s)
     # ---------------------------------------------------------------------
-    $createTableSqlPath = Join-Path $PSScriptRoot 'sql\instawdb.sql'
+    $createTableSqlPath = Join-Path $PSScriptRoot 'sql\AdventureWorks.sql'
     if (-not (Test-Path $createTableSqlPath)) {
         Write-Error "SQL script not found: $createTableSqlPath"
         $conn.Close()
@@ -500,6 +500,34 @@ try {
     Write-Output "  - $successCount batches succeeded"
     Write-Output "  - $failCount batches failed (may be expected)"
     Write-Output "  - $skipCount batches skipped (unsupported operations)"
+    
+    # ---------------------------------------------------------------------
+    # Apply AI enhancements to schema
+    # ---------------------------------------------------------------------
+    $aiEnhancementsSqlPath = Join-Path $PSScriptRoot 'sql\AdventureWorks-AI.sql'
+    if (Test-Path $aiEnhancementsSqlPath) {
+        Write-Output "`nApplying AI schema enhancements from $aiEnhancementsSqlPath..."
+        $aiSql = Get-Content -Path $aiEnhancementsSqlPath -Raw
+        
+        # Split on GO statements
+        $aiBatches = $aiSql -split '(?mi)^\s*GO\s*$'
+        
+        foreach ($batch in $aiBatches) {
+            $trimmedBatch = $batch.Trim()
+            if ($trimmedBatch.Length -eq 0) { continue }
+            
+            try {
+                $cmd.CommandText = $trimmedBatch
+                $null = $cmd.ExecuteNonQuery()
+                Write-Output "  AI enhancement applied successfully"
+            }
+            catch {
+                Write-Warning "AI enhancement batch failed: $($_.Exception.Message)"
+            }
+        }
+    } else {
+        Write-Output "`nAI enhancements SQL file not found, skipping..."
+    }
     
     # ---------------------------------------------------------------------
     # Load CSV data into tables using SqlBulkCopy

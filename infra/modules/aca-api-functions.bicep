@@ -15,6 +15,8 @@ param maxReplica int = 3
 param revisionSuffix string
 @secure()
 param sqlConnectionString string
+param aiFoundryEndpoint string = ''
+param storageAccountName string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -99,8 +101,28 @@ resource apiFunctions 'Microsoft.App/containerApps@2024-03-01' = {
               value: azidentity.properties.clientId
             }
             {
+              name: 'AZURE_OPENAI_ENDPOINT'
+              value: aiFoundryEndpoint
+            }
+            {
               name: 'AzureWebJobsStorage__accountName'
-              value: ''
+              value: storageAccountName
+            }
+            {
+              name: 'AzureWebJobsStorage__credential'
+              value: 'managedidentity'
+            }
+            {
+              name: 'AzureWebJobsStorage__blobServiceUri'
+              value: 'https://${storageAccountName}.blob.${environment().suffixes.storage}'
+            }
+            {
+              name: 'AzureWebJobsStorage__queueServiceUri'
+              value: 'https://${storageAccountName}.queue.${environment().suffixes.storage}'
+            }
+            {
+              name: 'AzureWebJobsStorage__tableServiceUri'
+              value: 'https://${storageAccountName}.table.${environment().suffixes.storage}'
             }
             {
               name: 'FUNCTIONS_WORKER_RUNTIME'

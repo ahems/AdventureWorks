@@ -168,3 +168,9 @@ deploy-acr-build-task.parameters.json
 
 .terraform/
 .azure
+# Azurite (Azure Storage Emulator)
+__azurite_db_*.json
+__blobstorage__/
+__queuestorage__/
+__tablestorage__/
+.azurite/

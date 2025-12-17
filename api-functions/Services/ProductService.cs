@@ -1,0 +1,235 @@
+using System.Data;
+using Azure.Identity;
+using Dapper;
+using Microsoft.Data.SqlClient;
+using api_functions.Models;
+
+namespace api_functions.Services;
+
+public class ProductService
+{
+    private readonly string _connectionString;
+
+    public ProductService(string connectionString)
+    {
+        _connectionString = connectionString;
+    }
+
+    private async Task<IDbConnection> GetConnectionAsync()
+    {
+        var connection = new SqlConnection(_connectionString);
+        var credential = new DefaultAzureCredential();
+        var token = await credential.GetTokenAsync(new Azure.Core.TokenRequestContext(new[] { "https://database.windows.net/.default" }));
+        connection.AccessToken = token.Token;
+        await connection.OpenAsync();
+        return connection;
+    }
+
+    public async Task<List<ProductData>> GetFinishedGoodsProductsAsync(List<int>? productIds = null)
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = @"
+            SELECT 
+                p.ProductID,
+                p.Name,
+                p.ProductNumber,
+                p.Color,
+                p.StandardCost,
+                p.ListPrice,
+                p.Size,
+                p.SizeUnitMeasureCode,
+                p.Weight,
+                p.WeightUnitMeasureCode,
+                p.Class,
+                p.Style,
+                p.ProductSubcategoryID,
+                ps.Name AS ProductSubcategoryName,
+                pc.ProductCategoryID,
+                pc.Name AS ProductCategoryName,
+                p.ProductModelID,
+                pm.Name AS ProductModelName,
+                pm.CatalogDescription,
+                pd.ProductDescriptionID,
+                pd.Description,
+                p.ModifiedDate
+            FROM Production.Product p
+            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID
+            LEFT JOIN Production.ProductModel pm ON p.ProductModelID = pm.ProductModelID
+            LEFT JOIN Production.ProductModelProductDescriptionCulture pmpdc ON pm.ProductModelID = pmpdc.ProductModelID AND pmpdc.CultureID = 'en'
+            LEFT JOIN Production.ProductDescription pd ON pmpdc.ProductDescriptionID = pd.ProductDescriptionID
+            WHERE p.FinishedGoodsFlag = 1";
+
+        if (productIds != null && productIds.Count > 0)
+        {
+            sql += " AND p.ProductID IN @ProductIds";
+        }
+
+        sql += " ORDER BY p.ProductID";
+
+        var products = await connection.QueryAsync<ProductData>(sql, new { ProductIds = productIds });
+        return products.ToList();
+    }
+
+    public async Task UpdateProductAsync(EnhancedProductData enhancedProduct)
+    {
+        using var connection = await GetConnectionAsync();
+
+        // Update Product table with new color, size, weight if they were missing
+        var updateProductSql = @"
+            UPDATE Production.Product
+            SET 
+                Color = COALESCE(@Color, Color),
+                Size = COALESCE(@Size, Size),
+                SizeUnitMeasureCode = COALESCE(@SizeUnitMeasureCode, SizeUnitMeasureCode),
+                Weight = COALESCE(@Weight, Weight),
+                WeightUnitMeasureCode = COALESCE(@WeightUnitMeasureCode, WeightUnitMeasureCode),
+                ModifiedDate = GETDATE()
+            WHERE ProductID = @ProductID";
+
+        await connection.ExecuteAsync(updateProductSql, new
+        {
+            enhancedProduct.ProductID,
+            enhancedProduct.Color,
+            enhancedProduct.Size,
+            enhancedProduct.SizeUnitMeasureCode,
+            enhancedProduct.Weight,
+            enhancedProduct.WeightUnitMeasureCode
+        });
+
+        // Update ProductDescription table with enhanced description
+        if (enhancedProduct.ProductDescriptionID.HasValue)
+        {
+            var updateDescriptionSql = @"
+                UPDATE Production.ProductDescription
+                SET 
+                    Description = @EnhancedDescription,
+                    ModifiedDate = GETDATE()
+                WHERE ProductDescriptionID = @ProductDescriptionID";
+
+            await connection.ExecuteAsync(updateDescriptionSql, new
+            {
+                enhancedProduct.ProductDescriptionID,
+                enhancedProduct.EnhancedDescription
+            });
+        }
+    }
+
+    public async Task<List<CultureInfo>> GetSupportedCulturesAsync()
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = "SELECT CultureID, Name FROM Production.Culture WHERE CultureID != 'en'";
+        var cultures = await connection.QueryAsync<CultureInfo>(sql);
+        return cultures.ToList();
+    }
+
+    public async Task<List<TranslationRequest>> GetProductsByModelIdsAsync(List<int> productModelIds)
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = @"
+            SELECT DISTINCT
+                pm.ProductModelID,
+                pd.ProductDescriptionID AS EnglishDescriptionID,
+                pd.Description AS EnglishDescription,
+                pm.Name AS ProductName
+            FROM Production.ProductDescription pd
+            INNER JOIN Production.ProductModelProductDescriptionCulture pmpdc 
+                ON pd.ProductDescriptionID = pmpdc.ProductDescriptionID
+            INNER JOIN Production.ProductModel pm 
+                ON pmpdc.ProductModelID = pm.ProductModelID
+            WHERE pmpdc.CultureID = 'en'
+            AND pm.ProductModelID IN @ProductModelIds
+            ORDER BY pm.ProductModelID";
+
+        var products = await connection.QueryAsync<TranslationRequest>(sql, new { ProductModelIds = productModelIds });
+        return products.ToList();
+    }
+
+    public async Task<List<TranslationRequest>> GetRecentlyEnhancedProductsAsync()
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = @"
+            SELECT DISTINCT
+                pm.ProductModelID,
+                pd.ProductDescriptionID AS EnglishDescriptionID,
+                pd.Description AS EnglishDescription,
+                pm.Name AS ProductName
+            FROM Production.ProductDescription pd
+            INNER JOIN Production.ProductModelProductDescriptionCulture pmpdc 
+                ON pd.ProductDescriptionID = pmpdc.ProductDescriptionID
+            INNER JOIN Production.ProductModel pm 
+                ON pmpdc.ProductModelID = pm.ProductModelID
+            WHERE pmpdc.CultureID = 'en'
+            AND pd.ModifiedDate > DATEADD(MINUTE, -5, GETDATE())
+            ORDER BY pm.ProductModelID";
+
+        var products = await connection.QueryAsync<TranslationRequest>(sql);
+        return products.ToList();
+    }
+
+    public async Task SaveTranslationsAsync(List<TranslatedDescription> translations)
+    {
+        using var connection = await GetConnectionAsync();
+
+        foreach (var translation in translations)
+        {
+            // Check if a description already exists for this ProductModel + Culture
+            var existingDescriptionSql = @"
+                SELECT pd.ProductDescriptionID
+                FROM Production.ProductDescription pd
+                INNER JOIN Production.ProductModelProductDescriptionCulture pmpdc
+                    ON pd.ProductDescriptionID = pmpdc.ProductDescriptionID
+                WHERE pmpdc.ProductModelID = @ProductModelID
+                AND pmpdc.CultureID = @CultureID";
+
+            var existingDescriptionId = await connection.QueryFirstOrDefaultAsync<int?>(
+                existingDescriptionSql,
+                new { translation.ProductModelID, translation.CultureID });
+
+            if (existingDescriptionId.HasValue)
+            {
+                // Update existing description
+                var updateSql = @"
+                    UPDATE Production.ProductDescription
+                    SET Description = @TranslatedText,
+                        ModifiedDate = GETDATE()
+                    WHERE ProductDescriptionID = @ProductDescriptionID";
+
+                await connection.ExecuteAsync(updateSql, new
+                {
+                    ProductDescriptionID = existingDescriptionId.Value,
+                    translation.TranslatedText
+                });
+            }
+            else
+            {
+                // Create new description and link it
+                var insertDescriptionSql = @"
+                    INSERT INTO Production.ProductDescription (Description, ModifiedDate)
+                    VALUES (@TranslatedText, GETDATE());
+                    SELECT CAST(SCOPE_IDENTITY() as int)";
+
+                var newDescriptionId = await connection.QuerySingleAsync<int>(
+                    insertDescriptionSql,
+                    new { translation.TranslatedText });
+
+                // Link the new description to the ProductModel and Culture
+                var insertLinkSql = @"
+                    INSERT INTO Production.ProductModelProductDescriptionCulture 
+                    (ProductModelID, ProductDescriptionID, CultureID, ModifiedDate)
+                    VALUES (@ProductModelID, @ProductDescriptionID, @CultureID, GETDATE())";
+
+                await connection.ExecuteAsync(insertLinkSql, new
+                {
+                    translation.ProductModelID,
+                    ProductDescriptionID = newDescriptionId,
+                    translation.CultureID
+                });
+            }
+        }
+    }
+}
