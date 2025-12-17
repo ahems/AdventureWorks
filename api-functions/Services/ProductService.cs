@@ -59,7 +59,8 @@ public class ProductService
             LEFT JOIN Production.ProductModel pm ON p.ProductModelID = pm.ProductModelID
             LEFT JOIN Production.ProductModelProductDescriptionCulture pmpdc ON pm.ProductModelID = pmpdc.ProductModelID AND pmpdc.CultureID = 'en'
             LEFT JOIN Production.ProductDescription pd ON pmpdc.ProductDescriptionID = pd.ProductDescriptionID
-            WHERE p.FinishedGoodsFlag = 1";
+            WHERE p.FinishedGoodsFlag = 1
+            AND (pd.ModifiedDate IS NULL OR pd.ModifiedDate < DATEADD(MONTH, -1, GETDATE()))";
 
         if (productIds != null && productIds.Count > 0)
         {

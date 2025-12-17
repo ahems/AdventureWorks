@@ -49,3 +49,18 @@ CREATE UNIQUE CLUSTERED INDEX [IX_vProductAndDescription] ON [Production].[vProd
 GO
 
 PRINT 'Successfully recreated view Production.vProductAndDescription with clustered index';
+
+GO
+
+-- Step 5: Expand Product.Color column to support creative AI-generated color names
+-- Original: nvarchar(15) - Too restrictive for descriptive color names (e.g., "Glossy Carbon Fiber")
+-- Updated: nvarchar(256) - Allows for detailed AI-generated color descriptions
+
+ALTER TABLE [Production].[Product]
+ALTER COLUMN [Color] [nvarchar](256) NULL;
+
+PRINT 'Product.Color column updated to nvarchar(256)';
+
+GO
+
+PRINT 'AI enhancements applied successfully';

@@ -68,7 +68,10 @@ Return ONLY a valid JSON array with this exact structure for each product:
   }
 ]
 
-Important: Weight must be a number, not a string. If a value already exists in the input, keep it. Only fill in missing (null) values.";
+Important constraints:
+- Weight must be a number, not a string
+- Size maximum length: 5 characters
+- If a value already exists in the input, keep it. Only fill in missing (null) values.";
 
         var productJson = JsonSerializer.Serialize(products.Select(p => new
         {

@@ -88,37 +88,56 @@ public class EmbellishProductsUsingAI
                 return "No finished goods products found to enhance";
             }
 
-            // Step 2: Enhance products using AI
-            logger.LogInformation("Enhancing products with AI");
-            var enhancedProducts = await context.CallActivityAsync<List<EnhancedProductData>>(
-                nameof(EnhanceProductsWithAIActivity),
-                products);
+            // Step 2 & 3: Enhance and save each batch of products
+            logger.LogInformation("Enhancing and saving products in batches of 10");
+            var allProductModelIds = new List<int>();
+            int totalEnhanced = 0;
 
-            logger.LogInformation("Enhanced {count} products", enhancedProducts.Count);
+            // Process in batches of 10 (AI service batches)
+            for (int i = 0; i < products.Count; i += 10)
+            {
+                var batch = products.Skip(i).Take(10).ToList();
+                logger.LogInformation("Processing batch {batch} ({count} products)", (i / 10) + 1, batch.Count);
 
-            // Step 3: Update database with enhanced data
-            logger.LogInformation("Updating database with enhanced products");
-            await context.CallActivityAsync(
-                nameof(UpdateProductsActivity),
-                enhancedProducts);
+                // Enhance this batch
+                var enhancedBatch = await context.CallActivityAsync<List<EnhancedProductData>>(
+                    nameof(EnhanceProductsWithAIActivity),
+                    batch);
+
+                logger.LogInformation("Enhanced {count} products in batch", enhancedBatch.Count);
+
+                // Save this batch immediately
+                await context.CallActivityAsync(
+                    nameof(UpdateProductsActivity),
+                    enhancedBatch);
+
+                logger.LogInformation("Saved {count} enhanced products", enhancedBatch.Count);
+
+                // Collect ProductModelIDs for translation
+                var batchModelIds = batch
+                    .Where(p => p.ProductModelID.HasValue)
+                    .Select(p => p.ProductModelID!.Value)
+                    .Distinct();
+                allProductModelIds.AddRange(batchModelIds);
+
+                totalEnhanced += enhancedBatch.Count;
+            }
+
+            logger.LogInformation("Enhanced and saved {total} products total", totalEnhanced);
 
             // Step 4: Trigger translation of enhanced products
-            logger.LogInformation("Triggering translation for {count} enhanced products", enhancedProducts.Count);
-            var productModelIds = products
-                .Where(p => p.ProductModelID.HasValue)
-                .Select(p => p.ProductModelID!.Value)
-                .Distinct()
-                .ToList();
+            logger.LogInformation("Triggering translation for {count} product models", allProductModelIds.Distinct().Count());
+            var distinctModelIds = allProductModelIds.Distinct().ToList();
 
-            if (productModelIds.Count > 0)
+            if (distinctModelIds.Count > 0)
             {
                 await context.CallSubOrchestratorAsync(
                     "TranslateProductDescriptions_Orchestrator",
-                    productModelIds);
+                    distinctModelIds);
             }
 
             logger.LogInformation("Orchestration completed successfully");
-            return $"Successfully enhanced and translated {enhancedProducts.Count} products";
+            return $"Successfully enhanced and translated {totalEnhanced} products";
         }
         catch (Exception ex)
         {
