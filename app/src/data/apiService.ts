@@ -85,10 +85,14 @@ interface ProductInventoriesResponse {
 
 // Helper function to fetch and attach descriptions to products
 const attachDescriptionsToProducts = async (
-  products: Product[]
+  products: Product[],
+  cultureId: string = "en"
 ): Promise<Product[]> => {
   try {
     if (products.length === 0) return products;
+
+    // Pad culture ID to match database format (6 chars with spaces)
+    const paddedCultureId = cultureId.padEnd(6, " ");
 
     // Get unique ProductModelIDs
     const modelIds = [
@@ -104,7 +108,7 @@ const attachDescriptionsToProducts = async (
           const data =
             await graphqlClient.request<ProductDescriptionMappingResponse>(
               GET_PRODUCT_DESCRIPTION,
-              { productModelId: modelId }
+              { productModelId: modelId, cultureId: paddedCultureId }
             );
           const descId =
             data.productModelProductDescriptionCultures.items[0]
@@ -458,7 +462,8 @@ export const getProducts = async (
 
 // Fetch product by ID
 export const getProductById = async (
-  productId: number
+  productId: number,
+  cultureId: string = "en"
 ): Promise<Product | undefined> => {
   try {
     const data = await graphqlClient.request<ProductsResponse>(
@@ -500,9 +505,10 @@ export const getProductById = async (
     };
 
     // Fetch description, discount, and inventory for single product
-    let productsWithDescriptions = await attachDescriptionsToProducts([
-      productWithPhotos,
-    ]);
+    let productsWithDescriptions = await attachDescriptionsToProducts(
+      [productWithPhotos],
+      cultureId
+    );
     productsWithDescriptions = await attachDiscountsToProducts(
       productsWithDescriptions
     );

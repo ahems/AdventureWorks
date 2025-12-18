@@ -1,9 +1,11 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Bike, Mail, MapPin, Phone } from 'lucide-react';
-import { useCategories } from '@/hooks/useProducts';
+import React from "react";
+import { Link } from "react-router-dom";
+import { Bike, Mail, MapPin, Phone } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { useCategories } from "@/hooks/useProducts";
 
 const Footer: React.FC = () => {
+  const { t } = useTranslation("footer");
   const { data: categories = [] } = useCategories();
 
   return (
@@ -20,14 +22,14 @@ const Footer: React.FC = () => {
                 Adventure<span className="text-doodle-accent">Works</span>
               </span>
             </Link>
-            <p className="font-doodle text-sm opacity-80">
-              Your one-stop shop for outdoor adventure gear. Quality bikes, components, and accessories since 2001.
-            </p>
+            <p className="font-doodle text-sm opacity-80">{t("tagline")}</p>
           </div>
 
           {/* Categories */}
           <div>
-            <h3 className="font-doodle text-lg font-bold mb-4 text-doodle-accent">Shop</h3>
+            <h3 className="font-doodle text-lg font-bold mb-4 text-doodle-accent">
+              {t("shop")}
+            </h3>
             <ul className="space-y-2">
               {categories.map((category) => (
                 <li key={category.ProductCategoryID}>
@@ -44,26 +46,40 @@ const Footer: React.FC = () => {
 
           {/* Quick Links */}
           <div>
-            <h3 className="font-doodle text-lg font-bold mb-4 text-doodle-accent">Quick Links</h3>
+            <h3 className="font-doodle text-lg font-bold mb-4 text-doodle-accent">
+              {t("quickLinks")}
+            </h3>
             <ul className="space-y-2">
               <li>
-                <Link to="/cart" className="font-doodle text-sm opacity-80 hover:opacity-100 transition-colors">
-                  * Shopping Cart
+                <Link
+                  to="/cart"
+                  className="font-doodle text-sm opacity-80 hover:opacity-100 transition-colors"
+                >
+                  * {t("shoppingCart")}
                 </Link>
               </li>
               <li>
-                <Link to="/order-tracking" className="font-doodle text-sm opacity-80 hover:opacity-100 transition-colors">
-                  * Track Order
+                <Link
+                  to="/order-tracking"
+                  className="font-doodle text-sm opacity-80 hover:opacity-100 transition-colors"
+                >
+                  * {t("trackOrder")}
                 </Link>
               </li>
               <li>
-                <Link to="/returns" className="font-doodle text-sm opacity-80 hover:opacity-100 transition-colors">
-                  * Returns Policy
+                <Link
+                  to="/returns"
+                  className="font-doodle text-sm opacity-80 hover:opacity-100 transition-colors"
+                >
+                  * {t("returnsPolicy")}
                 </Link>
               </li>
               <li>
-                <Link to="/faq" className="font-doodle text-sm opacity-80 hover:opacity-100 transition-colors">
-                  * FAQ
+                <Link
+                  to="/faq"
+                  className="font-doodle text-sm opacity-80 hover:opacity-100 transition-colors"
+                >
+                  * {t("faq")}
                 </Link>
               </li>
             </ul>
@@ -71,25 +87,26 @@ const Footer: React.FC = () => {
 
           {/* Contact */}
           <div>
-            <h3 className="font-doodle text-lg font-bold mb-4 text-doodle-accent">Contact Us</h3>
+            <h3 className="font-doodle text-lg font-bold mb-4 text-doodle-accent">
+              {t("contactUs")}
+            </h3>
             <ul className="space-y-3">
               <li className="flex items-start gap-2">
                 <MapPin className="w-4 h-4 mt-1 flex-shrink-0" />
                 <span className="font-doodle text-sm opacity-80">
-                  1 Adventure Way<br />
-                  Bothell, WA 98011
+                  {t("address")}
                 </span>
               </li>
               <li className="flex items-center gap-2">
                 <Phone className="w-4 h-4 flex-shrink-0" />
                 <span className="font-doodle text-sm opacity-80">
-                  (555) 123-4567
+                  {t("phone")}
                 </span>
               </li>
               <li className="flex items-center gap-2">
                 <Mail className="w-4 h-4 flex-shrink-0" />
                 <span className="font-doodle text-sm opacity-80">
-                  hello@adventureworks.com
+                  {t("email")}
                 </span>
               </li>
             </ul>
@@ -100,11 +117,9 @@ const Footer: React.FC = () => {
         <div className="mt-12 pt-6 border-t-2 border-dashed border-doodle-bg/30">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="font-doodle text-sm opacity-60">
-              © {new Date().getFullYear()} Adventure Works. All rights reserved. (Demo Store)
+              {t("copyright", { year: new Date().getFullYear() })}
             </p>
-            <p className="font-doodle text-sm opacity-60">
-              Built with ♥ and DoodleCSS vibes
-            </p>
+            <p className="font-doodle text-sm opacity-60">{t("builtWith")}</p>
           </div>
         </div>
       </div>

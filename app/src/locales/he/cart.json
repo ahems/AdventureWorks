@@ -1,0 +1,40 @@
+{
+  "cart": {
+    "title": "עגלת קניות",
+    "empty": "העגלה שלך ריקה",
+    "continueShopping": "המשך בקניות",
+    "checkout": "המשך לתשלום",
+    "subtotal": "סכום ביניים",
+    "total": "סה\"כ",
+    "items": "{{count}} פריטים",
+    "item": "{{count}} פריט",
+    "remove": "הסר",
+    "update": "עדכן",
+    "quantity": "כמות",
+    "price": "מחיר",
+    "discount": "הנחה",
+    "shipping": "משלוח",
+    "tax": "מס",
+    "freeShipping": "משלוח חינם בהזמנות מעל $50"
+  },
+  "checkout": {
+    "title": "תשלום",
+    "step": "שלב {{current}} מתוך {{total}}",
+    "shipping": "פרטי משלוח",
+    "payment": "פרטי תשלום",
+    "firstName": "שם פרטי",
+    "lastName": "שם משפחה",
+    "email": "אימייל",
+    "phone": "טלפון",
+    "address": "כתובת",
+    "city": "עיר",
+    "state": "מדינה / מחוז",
+    "zipCode": "מיקוד",
+    "country": "מדינה",
+    "continueToPayment": "המשך לתשלום",
+    "backToCart": "חזרה לעגלה",
+    "placeOrder": "בצע הזמנה",
+    "orderSummary": "סיכום הזמנה",
+    "requiredField": "שדה חובה"
+  }
+}

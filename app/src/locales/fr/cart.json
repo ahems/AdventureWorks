@@ -1,0 +1,43 @@
+{
+  "cart": {
+    "title": "Panier",
+    "empty": "Votre panier est vide",
+    "continueShopping": "Continuer vos Achats",
+    "checkout": "Procéder au Paiement",
+    "subtotal": "Sous-total",
+    "total": "Total",
+    "items": "{{count}} articles",
+    "item": "{{count}} article",
+    "remove": "Supprimer",
+    "update": "Mettre à Jour",
+    "quantity": "Qté",
+    "price": "Prix",
+    "itemTotal": "Total Article",
+    "applyCoupon": "Appliquer un Coupon",
+    "discount": "Remise",
+    "shipping": "Livraison",
+    "tax": "Taxe",
+    "freeShipping": "Livraison gratuite sur les commandes de plus de 50 $"
+  },
+  "checkout": {
+    "title": "Paiement",
+    "step": "Étape {{current}} sur {{total}}",
+    "shipping": "Informations de Livraison",
+    "payment": "Informations de Paiement",
+    "firstName": "Prénom",
+    "lastName": "Nom",
+    "email": "E-mail",
+    "phone": "Téléphone",
+    "address": "Adresse",
+    "city": "Ville",
+    "state": "État / Province",
+    "zipCode": "Code Postal",
+    "country": "Pays",
+    "continueToPayment": "Continuer vers le Paiement",
+    "backToCart": "Retour au Panier",
+    "placeOrder": "Passer la Commande",
+    "orderSummary": "Résumé de la Commande",
+    "cardNumber": "Numéro de Carte",
+    "requiredField": "Ce champ est obligatoire"
+  }
+}

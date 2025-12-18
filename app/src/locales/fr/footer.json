@@ -1,0 +1,33 @@
+{
+  "footer": {
+    "aboutUs": "À Propos",
+    "tagline": "Votre guichet unique pour l'équipement d'aventure en plein air. Vélos, composants et accessoires de qualité depuis 2001.",
+    "shop": "Boutique",
+    "quickLinks": "Liens Rapides",
+    "shoppingCart": "Panier",
+    "trackOrder": "Suivre la Commande",
+    "returnsPolicy": "Politique de Retours",
+    "contactUs": "Nous Contacter",
+    "copyright": "© {{year}} AdventureWorks. Tous droits réservés."
+  },
+  "pages": {
+    "home": "Accueil",
+    "sale": "Promotions",
+    "search": "Rechercher",
+    "notFound": "Page Non Trouvée",
+    "loading": "Chargement..."
+  },
+  "general": {
+    "yes": "Oui",
+    "no": "Non",
+    "ok": "OK",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "close": "Fermer",
+    "back": "Retour",
+    "next": "Suivant",
+    "submit": "Soumettre"
+  }
+}

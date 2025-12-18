@@ -1,0 +1,34 @@
+{
+  "auth": {
+    "signIn": "Iniciar Sesión",
+    "signUp": "Crear Cuenta",
+    "email": "Correo Electrónico",
+    "password": "Contraseña",
+    "confirmPassword": "Confirmar Contraseña",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "alreadyHaveAccount": "¿Ya tienes una cuenta?",
+    "dontHaveAccount": "¿No tienes una cuenta?",
+    "signUpHere": "Regístrate aquí",
+    "signInHere": "Inicia sesión aquí",
+    "accountCreated": "¡Cuenta creada con éxito!"
+  },
+  "account": {
+    "title": "Mi Cuenta",
+    "profile": "Perfil",
+    "orders": "Pedidos",
+    "orderHistory": "Historial de Pedidos",
+    "noOrders": "Aún no has realizado ningún pedido",
+    "viewOrder": "Ver Pedido",
+    "orderDate": "Fecha del Pedido",
+    "orderStatus": "Estado",
+    "orderTotal": "Total",
+    "editProfile": "Editar Perfil",
+    "saveChanges": "Guardar Cambios",
+    "cancel": "Cancelar"
+  },
+  "tracking": {
+    "title": "Rastrear tu Pedido",
+    "orderNumber": "Número de Pedido",
+    "trackOrder": "Rastrear Pedido"
+  }
+}

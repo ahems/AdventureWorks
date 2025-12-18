@@ -1,0 +1,27 @@
+{
+  "auth": {
+    "signIn": "登入",
+    "signUp": "建立帳戶",
+    "email": "電子郵件",
+    "password": "密碼",
+    "confirmPassword": "確認密碼",
+    "forgotPassword": "忘記密碼？",
+    "alreadyHaveAccount": "已經有帳戶了？",
+    "dontHaveAccount": "還沒有帳戶？",
+    "accountCreated": "帳戶建立成功！"
+  },
+  "account": {
+    "title": "我的帳戶",
+    "profile": "個人資料",
+    "orders": "訂單",
+    "orderHistory": "訂單歷史記錄",
+    "noOrders": "您還沒有下過任何訂單",
+    "saveChanges": "儲存變更",
+    "cancel": "取消"
+  },
+  "tracking": {
+    "title": "追蹤您的訂單",
+    "orderNumber": "訂單號碼",
+    "trackOrder": "追蹤訂單"
+  }
+}

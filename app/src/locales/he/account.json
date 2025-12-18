@@ -1,0 +1,27 @@
+{
+  "auth": {
+    "signIn": "התחבר",
+    "signUp": "צור חשבון",
+    "email": "אימייל",
+    "password": "סיסמה",
+    "confirmPassword": "אימות סיסמה",
+    "forgotPassword": "שכחת סיסמה?",
+    "alreadyHaveAccount": "יש לך כבר חשבון?",
+    "dontHaveAccount": "אין לך חשבון?",
+    "accountCreated": "החשבון נוצר בהצלחה!"
+  },
+  "account": {
+    "title": "החשבון שלי",
+    "profile": "פרופיל",
+    "orders": "הזמנות",
+    "orderHistory": "היסטוריית הזמנות",
+    "noOrders": "עדיין לא ביצעת הזמנות",
+    "saveChanges": "שמור שינויים",
+    "cancel": "ביטול"
+  },
+  "tracking": {
+    "title": "עקוב אחר ההזמנה",
+    "orderNumber": "מספר הזמנה",
+    "trackOrder": "עקוב אחר הזמנה"
+  }
+}

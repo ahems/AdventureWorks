@@ -1,0 +1,17 @@
+{
+  "header": {
+    "signIn": "Se Connecter",
+    "signOut": "Se Déconnecter",
+    "cart": "Panier",
+    "myAccount": "Mon Compte",
+    "search": "Rechercher",
+    "searchPlaceholder": "Rechercher des vélos, équipements, vêtements...",
+    "selectLanguage": "Sélectionner la Langue"
+  },
+  "buttons": {
+    "addToCart": "Ajouter au Panier",
+    "buyNow": "Acheter Maintenant",
+    "viewDetails": "Voir les Détails",
+    "search": "Rechercher"
+  }
+}

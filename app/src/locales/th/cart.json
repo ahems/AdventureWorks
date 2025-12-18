@@ -1,0 +1,40 @@
+{
+  "cart": {
+    "title": "ตะกร้าสินค้า",
+    "empty": "ตะกร้าของคุณว่างเปล่า",
+    "continueShopping": "เลือกซื้อต่อ",
+    "checkout": "ดำเนินการชำระเงิน",
+    "subtotal": "ยอดรวมย่อย",
+    "total": "ยอดรวม",
+    "items": "{{count}} รายการ",
+    "item": "{{count}} รายการ",
+    "remove": "ลบ",
+    "update": "อัพเดต",
+    "quantity": "จำนวน",
+    "price": "ราคา",
+    "discount": "ส่วนลด",
+    "shipping": "การจัดส่ง",
+    "tax": "ภาษี",
+    "freeShipping": "จัดส่งฟรีสำหรับคำสั่งซื้อมากกว่า $50"
+  },
+  "checkout": {
+    "title": "ชำระเงิน",
+    "step": "ขั้นตอนที่ {{current}} จาก {{total}}",
+    "shipping": "ข้อมูลการจัดส่ง",
+    "payment": "ข้อมูลการชำระเงิน",
+    "firstName": "ชื่อ",
+    "lastName": "นามสกุล",
+    "email": "อีเมล",
+    "phone": "เบอร์โทรศัพท์",
+    "address": "ที่อยู่",
+    "city": "เมือง",
+    "state": "รัฐ / จังหวัด",
+    "zipCode": "รหัสไปรษณีย์",
+    "country": "ประเทศ",
+    "continueToPayment": "ไปที่การชำระเงิน",
+    "backToCart": "กลับไปที่ตะกร้า",
+    "placeOrder": "สั่งซื้อ",
+    "orderSummary": "สรุปคำสั่งซื้อ",
+    "requiredField": "ช่องนี้จำเป็น"
+  }
+}

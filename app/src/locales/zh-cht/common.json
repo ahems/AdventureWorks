@@ -1,0 +1,17 @@
+{
+  "header": {
+    "signIn": "登入",
+    "signOut": "登出",
+    "cart": "購物車",
+    "myAccount": "我的帳戶",
+    "search": "搜尋",
+    "searchPlaceholder": "搜尋自行車、裝備、服裝...",
+    "selectLanguage": "選擇語言"
+  },
+  "buttons": {
+    "addToCart": "加入購物車",
+    "buyNow": "立即購買",
+    "viewDetails": "查看詳情",
+    "search": "搜尋"
+  }
+}

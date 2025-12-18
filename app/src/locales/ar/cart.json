@@ -1,0 +1,40 @@
+{
+  "cart": {
+    "title": "عربة التسوق",
+    "empty": "عربتك فارغة",
+    "continueShopping": "متابعة التسوق",
+    "checkout": "إتمام الدفع",
+    "subtotal": "المجموع الفرعي",
+    "total": "المجموع",
+    "items": "{{count}} عناصر",
+    "item": "{{count}} عنصر",
+    "remove": "إزالة",
+    "update": "تحديث",
+    "quantity": "الكمية",
+    "price": "السعر",
+    "discount": "خصم",
+    "shipping": "الشحن",
+    "tax": "الضريبة",
+    "freeShipping": "شحن مجاني للطلبات فوق 50 دولار"
+  },
+  "checkout": {
+    "title": "الدفع",
+    "step": "الخطوة {{current}} من {{total}}",
+    "shipping": "معلومات الشحن",
+    "payment": "معلومات الدفع",
+    "firstName": "الاسم الأول",
+    "lastName": "اسم العائلة",
+    "email": "البريد الإلكتروني",
+    "phone": "رقم الهاتف",
+    "address": "العنوان",
+    "city": "المدينة",
+    "state": "الولاية / المحافظة",
+    "zipCode": "الرمز البريدي",
+    "country": "البلد",
+    "continueToPayment": "متابعة إلى الدفع",
+    "backToCart": "العودة إلى العربة",
+    "placeOrder": "تقديم الطلب",
+    "orderSummary": "ملخص الطلب",
+    "requiredField": "هذا الحقل مطلوب"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "header": {
+    "signIn": "Iniciar Sesión",
+    "signOut": "Cerrar Sesión",
+    "cart": "Carrito",
+    "myAccount": "Mi Cuenta",
+    "search": "Buscar",
+    "searchPlaceholder": "Buscar bicicletas, equipo, ropa...",
+    "selectLanguage": "Seleccionar Idioma"
+  },
+  "buttons": {
+    "addToCart": "Añadir al Carrito",
+    "buyNow": "Comprar Ahora",
+    "viewDetails": "Ver Detalles",
+    "search": "Buscar"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "header": {
+    "signIn": "התחבר",
+    "signOut": "התנתק",
+    "cart": "עגלה",
+    "myAccount": "החשבון שלי",
+    "search": "חיפוש",
+    "searchPlaceholder": "חפש אופניים, ציוד, ביגוד...",
+    "selectLanguage": "בחר שפה"
+  },
+  "buttons": {
+    "addToCart": "הוסף לעגלה",
+    "buyNow": "קנה עכשיו",
+    "viewDetails": "צפה בפרטים",
+    "search": "חיפוש"
+  }
+}

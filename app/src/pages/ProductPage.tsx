@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
   ShoppingCart,
@@ -21,6 +22,7 @@ import NotifyWhenAvailable from "@/components/NotifyWhenAvailable";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { useRecentlyViewed } from "@/context/RecentlyViewedContext";
+import { useLanguage } from "@/context/LanguageContext";
 import { useProduct, useSubcategory, useCategory } from "@/hooks/useProducts";
 import { getSalePrice, isVariantAvailable } from "@/types/product";
 import { useReviews } from "@/hooks/useReviews";
@@ -34,10 +36,12 @@ import {
 } from "@/components/ui/select";
 
 const ProductPage: React.FC = () => {
+  const { t } = useTranslation(["product", "common"]);
   const { productId } = useParams<{ productId: string }>();
   const { addToCart } = useCart();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const { addToRecentlyViewed } = useRecentlyViewed();
+  const { selectedLanguage } = useLanguage();
   const [quantity, setQuantity] = React.useState(1);
   const [selectedSize, setSelectedSize] = React.useState<string | undefined>(
     undefined
@@ -47,7 +51,8 @@ const ProductPage: React.FC = () => {
   );
 
   const { data: product, isLoading: productLoading } = useProduct(
-    productId ? parseInt(productId) : 0
+    productId ? parseInt(productId) : 0,
+    selectedLanguage
   );
   const { data: subcategory } = useSubcategory(
     product?.ProductSubcategoryID || 0
@@ -179,10 +184,10 @@ const ProductPage: React.FC = () => {
           <div className="text-center">
             <span className="text-6xl mb-4 block">🔍</span>
             <h1 className="font-doodle text-3xl font-bold text-doodle-text mb-4">
-              Product Not Found
+              {t("product:productPage.notFound")}
             </h1>
             <Link to="/" className="doodle-button doodle-button-primary">
-              Back to Home
+              {t("common:buttons.backToHome")}
             </Link>
           </div>
         </main>
@@ -196,16 +201,16 @@ const ProductPage: React.FC = () => {
     if (hasVariants) {
       if (product.availableSizes && !selectedSize) {
         toast({
-          title: "Please select a size",
-          description: "Choose a size before adding to cart",
+          title: t("product:productPage.selectSize"),
+          description: t("product:productPage.selectSizeDesc"),
           variant: "destructive",
         });
         return;
       }
       if (product.availableColors && !selectedColor) {
         toast({
-          title: "Please select a color",
-          description: "Choose a color before adding to cart",
+          title: t("product:productPage.selectColor"),
+          description: t("product:productPage.selectColorDesc"),
           variant: "destructive",
         });
         return;
@@ -213,8 +218,8 @@ const ProductPage: React.FC = () => {
       // Check if the selected combination is available
       if (!isVariantAvailable(product, selectedSize, selectedColor)) {
         toast({
-          title: "Currently Unavailable",
-          description: "This size/color combination is out of stock",
+          title: t("product:productPage.unavailable"),
+          description: t("product:productPage.unavailableDesc"),
           variant: "destructive",
         });
         return;
@@ -240,7 +245,7 @@ const ProductPage: React.FC = () => {
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-wrap items-center gap-2 font-doodle text-sm text-doodle-text/70">
             <Link to="/" className="hover:text-doodle-accent transition-colors">
-              Home
+              {t("common:navigation.home")}
             </Link>
             <span>/</span>
             {category && (
@@ -283,7 +288,7 @@ const ProductPage: React.FC = () => {
                   {product.DiscountPct && (
                     <span className="bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text rotate-[-2deg]">
                       {product.SpecialOfferDescription ||
-                        "Limited-Time Special"}
+                        t("product:productPage.limitedOffer")}
                     </span>
                   )}
                 </div>
@@ -305,8 +310,11 @@ const ProductPage: React.FC = () => {
                   </div>
                   <span className="font-doodle text-sm text-doodle-text/60">
                     {averageRating > 0
-                      ? `${averageRating.toFixed(1)} (${reviewCount} reviews)`
-                      : "No reviews yet"}
+                      ? t("product:reviews.ratingCount", {
+                          rating: averageRating.toFixed(1),
+                          count: reviewCount,
+                        })
+                      : t("product:reviews.noReviews")}
                   </span>
                 </div>
               </div>
@@ -324,7 +332,9 @@ const ProductPage: React.FC = () => {
                       </span>
                     </div>
                     <span className="font-doodle text-sm text-doodle-green font-bold">
-                      Save {Math.round(product.DiscountPct * 100)}%
+                      {t("product:productPage.save", {
+                        percent: Math.round(product.DiscountPct * 100),
+                      })}
                     </span>
                   </div>
                 ) : (
@@ -336,8 +346,7 @@ const ProductPage: React.FC = () => {
 
               {/* Description */}
               <p className="font-doodle text-lg text-doodle-text/80 leading-relaxed">
-                {product.Description ||
-                  "Premium quality gear designed for outdoor enthusiasts who demand the best. Built to last and engineered for performance."}
+                {product.Description || t("product:productPage.defaultDesc")}
               </p>
 
               {/* Specs */}
@@ -363,13 +372,17 @@ const ProductPage: React.FC = () => {
                         product.inStock ? "text-green-700" : "text-red-700"
                       }`}
                     >
-                      {product.inStock ? "In Stock" : "Out of Stock"}
+                      {product.inStock
+                        ? t("product:productPage.inStock")
+                        : t("product:productPage.outOfStock")}
                     </h3>
                     {product.quantityAvailable !== undefined && (
                       <p className="font-doodle text-sm text-doodle-text/70">
                         {product.inStock
-                          ? `${product.quantityAvailable} units available`
-                          : "Currently unavailable"}
+                          ? t("product:productPage.unitsAvailable", {
+                              count: product.quantityAvailable,
+                            })
+                          : t("product:productPage.currentlyUnavailable")}
                       </p>
                     )}
                   </div>
@@ -378,29 +391,37 @@ const ProductPage: React.FC = () => {
 
               <div className="doodle-card p-4 space-y-2">
                 <h3 className="font-doodle font-bold text-doodle-text">
-                  Specifications:
+                  {t("product:specifications.title")}
                 </h3>
                 <div className="grid grid-cols-2 gap-2 font-doodle text-sm">
-                  <span className="text-doodle-text/60">SKU:</span>
+                  <span className="text-doodle-text/60">
+                    {t("product:specifications.sku")}
+                  </span>
                   <span className="text-doodle-text">
                     {product.ProductNumber}
                   </span>
 
                   {product.Color && !hasVariants && (
                     <>
-                      <span className="text-doodle-text/60">Color:</span>
+                      <span className="text-doodle-text/60">
+                        {t("product:specifications.color")}
+                      </span>
                       <span className="text-doodle-text">{product.Color}</span>
                     </>
                   )}
                   {product.Size && !hasVariants && (
                     <>
-                      <span className="text-doodle-text/60">Size:</span>
+                      <span className="text-doodle-text/60">
+                        {t("product:specifications.size")}
+                      </span>
                       <span className="text-doodle-text">{product.Size}</span>
                     </>
                   )}
                   {product.Weight && (
                     <>
-                      <span className="text-doodle-text/60">Weight:</span>
+                      <span className="text-doodle-text/60">
+                        {t("product:specifications.weight")}
+                      </span>
                       <span className="text-doodle-text">
                         {product.Weight} lbs
                       </span>
@@ -458,11 +479,16 @@ const ProductPage: React.FC = () => {
               {product.availableSizes && (
                 <div className="space-y-3">
                   <h3 className="font-doodle font-bold text-doodle-text">
-                    Size <span className="text-doodle-accent">*</span>
+                    {t("product:productPage.size")}{" "}
+                    <span className="text-doodle-accent">*</span>
                   </h3>
                   <Select value={selectedSize} onValueChange={setSelectedSize}>
                     <SelectTrigger className="w-full max-w-xs font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent">
-                      <SelectValue placeholder="Select a size" />
+                      <SelectValue
+                        placeholder={t(
+                          "product:productPage.selectSizePlaceholder"
+                        )}
+                      />
                     </SelectTrigger>
                     <SelectContent className="bg-white border-2 border-doodle-text">
                       {product.availableSizes.map((size) => (
@@ -483,7 +509,8 @@ const ProductPage: React.FC = () => {
               {product.availableColors && (
                 <div className="space-y-3">
                   <h3 className="font-doodle font-bold text-doodle-text">
-                    Color <span className="text-doodle-accent">*</span>
+                    {t("product:productPage.color")}{" "}
+                    <span className="text-doodle-accent">*</span>
                   </h3>
                   <div className="flex flex-wrap gap-2">
                     {product.availableColors.map((color) => (
@@ -511,10 +538,10 @@ const ProductPage: React.FC = () => {
                   <div className="bg-doodle-accent/10 border-2 border-dashed border-doodle-accent p-4 space-y-3">
                     <div>
                       <p className="font-doodle text-doodle-accent font-bold flex items-center gap-2">
-                        ⚠️ Currently Unavailable
+                        ⚠️ {t("product:productPage.currentlyUnavailableTitle")}
                       </p>
                       <p className="font-doodle text-sm text-doodle-text/70 mt-1">
-                        This size and color combination is out of stock.
+                        {t("product:productPage.variantUnavailableDesc")}
                       </p>
                     </div>
                     <NotifyWhenAvailable
@@ -524,7 +551,7 @@ const ProductPage: React.FC = () => {
                       trigger={
                         <button className="doodle-button flex items-center gap-2 text-sm">
                           <Bell className="w-4 h-4" />
-                          Notify me when available
+                          {t("product:productPage.notifyMe")}
                         </button>
                       }
                     />
@@ -574,13 +601,13 @@ const ProductPage: React.FC = () => {
                 >
                   <ShoppingCart className="w-5 h-5" />
                   {!product.inStock
-                    ? "Out of Stock"
+                    ? t("product:productPage.outOfStock")
                     : hasVariants &&
                       selectedSize &&
                       selectedColor &&
                       !currentVariantAvailable
-                    ? "Unavailable"
-                    : "Add to Cart"}
+                    ? t("product:productPage.unavailable")
+                    : t("product:productPage.addToCart")}
                 </button>
 
                 <button
@@ -591,7 +618,9 @@ const ProductPage: React.FC = () => {
                       : "border-doodle-text hover:border-doodle-accent hover:text-doodle-accent"
                   }`}
                   aria-label={
-                    inWishlist ? "Remove from wishlist" : "Add to wishlist"
+                    inWishlist
+                      ? t("product:productPage.removeFromWishlist")
+                      : t("product:productPage.addToWishlist")
                   }
                 >
                   <Heart
@@ -605,19 +634,19 @@ const ProductPage: React.FC = () => {
                 <div className="text-center">
                   <Truck className="w-6 h-6 mx-auto mb-2 text-doodle-green" />
                   <span className="font-doodle text-xs text-doodle-text/70">
-                    Free Shipping
+                    {t("product:productPage.freeShipping")}
                   </span>
                 </div>
                 <div className="text-center">
                   <Shield className="w-6 h-6 mx-auto mb-2 text-doodle-green" />
                   <span className="font-doodle text-xs text-doodle-text/70">
-                    2 Year Warranty
+                    {t("product:productPage.warranty")}
                   </span>
                 </div>
                 <div className="text-center">
                   <RotateCcw className="w-6 h-6 mx-auto mb-2 text-doodle-green" />
                   <span className="font-doodle text-xs text-doodle-text/70">
-                    30 Day Returns
+                    {t("product:productPage.returns")}
                   </span>
                 </div>
               </div>

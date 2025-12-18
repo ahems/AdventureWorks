@@ -1,0 +1,27 @@
+{
+  "auth": {
+    "signIn": "เข้าสู่ระบบ",
+    "signUp": "สร้างบัญชี",
+    "email": "อีเมล",
+    "password": "รหัสผ่าน",
+    "confirmPassword": "ยืนยันรหัสผ่าน",
+    "forgotPassword": "ลืมรหัสผ่าน?",
+    "alreadyHaveAccount": "มีบัญชีอยู่แล้ว?",
+    "dontHaveAccount": "ยังไม่มีบัญชี?",
+    "accountCreated": "สร้างบัญชีสำเร็จ!"
+  },
+  "account": {
+    "title": "บัญชีของฉัน",
+    "profile": "โปรไฟล์",
+    "orders": "คำสั่งซื้อ",
+    "orderHistory": "ประวัติคำสั่งซื้อ",
+    "noOrders": "คุณยังไม่ได้สั่งซื้อสินค้า",
+    "saveChanges": "บันทึกการเปลี่ยนแปลง",
+    "cancel": "ยกเลิก"
+  },
+  "tracking": {
+    "title": "ติดตามคำสั่งซื้อของคุณ",
+    "orderNumber": "หมายเลขคำสั่งซื้อ",
+    "trackOrder": "ติดตามคำสั่งซื้อ"
+  }
+}

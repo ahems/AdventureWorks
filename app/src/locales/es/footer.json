@@ -1,0 +1,34 @@
+{
+  "footer": {
+    "aboutUs": "Sobre Nosotros",
+    "tagline": "Tu tienda única para equipo de aventuras al aire libre. Bicicletas, componentes y accesorios de calidad desde 2001.",
+    "shop": "Tienda",
+    "quickLinks": "Enlaces Rápidos",
+    "shoppingCart": "Carrito de Compras",
+    "trackOrder": "Rastrear Pedido",
+    "returnsPolicy": "Política de Devoluciones",
+    "faq": "Preguntas Frecuentes",
+    "contactUs": "Contáctanos",
+    "copyright": "© {{year}} AdventureWorks. Todos los derechos reservados."
+  },
+  "pages": {
+    "home": "Inicio",
+    "sale": "Ofertas",
+    "search": "Buscar",
+    "notFound": "Página No Encontrada",
+    "loading": "Cargando..."
+  },
+  "general": {
+    "yes": "Sí",
+    "no": "No",
+    "ok": "OK",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "close": "Cerrar",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "submit": "Enviar"
+  }
+}

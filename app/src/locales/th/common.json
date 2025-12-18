@@ -1,0 +1,17 @@
+{
+  "header": {
+    "signIn": "เข้าสู่ระบบ",
+    "signOut": "ออกจากระบบ",
+    "cart": "ตะกร้า",
+    "myAccount": "บัญชีของฉัน",
+    "search": "ค้นหา",
+    "searchPlaceholder": "ค้นหาจักรยาน อุปกรณ์ เสื้อผ้า...",
+    "selectLanguage": "เลือกภาษา"
+  },
+  "buttons": {
+    "addToCart": "เพิ่มลงในตะกร้า",
+    "buyNow": "ซื้อเลย",
+    "viewDetails": "ดูรายละเอียด",
+    "search": "ค้นหา"
+  }
+}

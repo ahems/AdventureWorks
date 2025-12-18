@@ -1,0 +1,17 @@
+{
+  "header": {
+    "signIn": "تسجيل الدخول",
+    "signOut": "تسجيل الخروج",
+    "cart": "عربة التسوق",
+    "myAccount": "حسابي",
+    "search": "بحث",
+    "searchPlaceholder": "ابحث عن الدراجات والمعدات والملابس...",
+    "selectLanguage": "اختر اللغة"
+  },
+  "buttons": {
+    "addToCart": "أضف إلى السلة",
+    "buyNow": "اشتري الآن",
+    "viewDetails": "عرض التفاصيل",
+    "search": "بحث"
+  }
+}

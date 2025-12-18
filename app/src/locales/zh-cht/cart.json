@@ -1,0 +1,40 @@
+{
+  "cart": {
+    "title": "購物車",
+    "empty": "您的購物車是空的",
+    "continueShopping": "繼續購物",
+    "checkout": "進行結帳",
+    "subtotal": "小計",
+    "total": "總計",
+    "items": "{{count}} 項商品",
+    "item": "{{count}} 項商品",
+    "remove": "移除",
+    "update": "更新",
+    "quantity": "數量",
+    "price": "價格",
+    "discount": "折扣",
+    "shipping": "運費",
+    "tax": "稅金",
+    "freeShipping": "訂單滿 $50 免運費"
+  },
+  "checkout": {
+    "title": "結帳",
+    "step": "步驟 {{current}} / {{total}}",
+    "shipping": "運送資訊",
+    "payment": "付款資訊",
+    "firstName": "名字",
+    "lastName": "姓氏",
+    "email": "電子郵件",
+    "phone": "電話號碼",
+    "address": "地址",
+    "city": "城市",
+    "state": "州 / 省",
+    "zipCode": "郵遞區號",
+    "country": "國家",
+    "continueToPayment": "繼續付款",
+    "backToCart": "返回購物車",
+    "placeOrder": "下訂單",
+    "orderSummary": "訂單摘要",
+    "requiredField": "此欄位為必填"
+  }
+}

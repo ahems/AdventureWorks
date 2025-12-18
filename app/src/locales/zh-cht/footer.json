@@ -1,0 +1,33 @@
+{
+  "footer": {
+    "aboutUs": "關於我們",
+    "tagline": "您的戶外冒險裝備一站式商店。自2001年以來提供優質自行車、零件和配件。",
+    "shop": "商店",
+    "quickLinks": "快速連結",
+    "shoppingCart": "購物車",
+    "trackOrder": "追蹤訂單",
+    "returnsPolicy": "退貨政策",
+    "contactUs": "聯絡我們",
+    "copyright": "© {{year}} AdventureWorks. 版權所有。"
+  },
+  "pages": {
+    "home": "首頁",
+    "sale": "特價",
+    "search": "搜尋",
+    "notFound": "找不到頁面",
+    "loading": "載入中..."
+  },
+  "general": {
+    "yes": "是",
+    "no": "否",
+    "ok": "確定",
+    "cancel": "取消",
+    "save": "儲存",
+    "delete": "刪除",
+    "edit": "編輯",
+    "close": "關閉",
+    "back": "返回",
+    "next": "下一步",
+    "submit": "提交"
+  }
+}

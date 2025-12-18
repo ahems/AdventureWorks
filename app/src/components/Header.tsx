@@ -11,26 +11,19 @@ import {
   Search,
   Globe,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { useCategories } from "@/hooks/useProducts";
-
-// Language configuration with flag emojis
-const LANGUAGES = [
-  { code: "ar", name: "Arabic", flag: "🇸🇦" },
-  { code: "en", name: "English", flag: "🇺🇸" },
-  { code: "es", name: "Spanish", flag: "🇪🇸" },
-  { code: "fr", name: "French", flag: "🇫🇷" },
-  { code: "he", name: "Hebrew", flag: "🇮🇱" },
-  { code: "th", name: "Thai", flag: "🇹🇭" },
-  { code: "zh-cht", name: "Chinese", flag: "🇨🇳" },
-];
+import { useLanguage } from "@/context/LanguageContext";
 
 const Header: React.FC = () => {
+  const { t } = useTranslation("common");
   const { getTotalItems } = useCart();
   const { user, isAuthenticated, logout } = useAuth();
   const { data: categories = [], isLoading: categoriesLoading } =
     useCategories();
+  const { selectedLanguage, setSelectedLanguage, languages } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -38,7 +31,6 @@ const Header: React.FC = () => {
   const [languageMenuOpen, setLanguageMenuOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [showSearch, setShowSearch] = React.useState(false);
-  const [selectedLanguage, setSelectedLanguage] = React.useState("en");
   const totalItems = getTotalItems();
 
   const userMenuRef = React.useRef<HTMLDivElement>(null);
@@ -180,7 +172,7 @@ const Header: React.FC = () => {
                       className="flex items-center gap-2 px-3 py-2 font-doodle text-doodle-text hover:bg-doodle-text/10 transition-colors"
                     >
                       <User className="w-4 h-4" />
-                      My Account
+                      {t("header.myAccount")}
                     </Link>
                     <button
                       onClick={() => {
@@ -190,7 +182,7 @@ const Header: React.FC = () => {
                       className="w-full flex items-center gap-2 px-3 py-2 font-doodle text-doodle-accent hover:bg-doodle-text/10 transition-colors"
                     >
                       <LogOut className="w-4 h-4" />
-                      Sign Out
+                      {t("header.signOut")}
                     </button>
                   </div>
                 )}
@@ -201,7 +193,9 @@ const Header: React.FC = () => {
                 className="doodle-button flex items-center gap-2 py-2 px-3"
               >
                 <User className="w-5 h-5" />
-                <span className="hidden sm:inline font-doodle">Sign In</span>
+                <span className="hidden sm:inline font-doodle">
+                  {t("header.signIn")}
+                </span>
               </Link>
             )}
 
@@ -215,7 +209,7 @@ const Header: React.FC = () => {
                 <Globe className="w-5 h-5" />
                 <span className="text-xl">
                   {
-                    LANGUAGES.find((lang) => lang.code === selectedLanguage)
+                    languages.find((lang) => lang.code === selectedLanguage)
                       ?.flag
                   }
                 </span>
@@ -231,10 +225,10 @@ const Header: React.FC = () => {
                 <div className="absolute right-0 top-full mt-2 w-56 doodle-card p-2 z-50">
                   <div className="px-3 py-2 border-b-2 border-dashed border-doodle-text/20 mb-2">
                     <p className="font-doodle font-bold text-doodle-text text-sm">
-                      Select Language
+                      {t("header.selectLanguage")}
                     </p>
                   </div>
-                  {LANGUAGES.map((language) => (
+                  {languages.map((language) => (
                     <button
                       key={language.code}
                       onClick={() => {
@@ -264,7 +258,9 @@ const Header: React.FC = () => {
               className="doodle-button relative flex items-center gap-2 py-2 px-3"
             >
               <ShoppingCart className="w-5 h-5" />
-              <span className="hidden sm:inline font-doodle">Cart</span>
+              <span className="hidden sm:inline font-doodle">
+                {t("header.cart")}
+              </span>
               {totalItems > 0 && (
                 <span className="absolute -top-2 -right-2 bg-doodle-accent text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-doodle-text">
                   {totalItems}
@@ -346,7 +342,7 @@ const Header: React.FC = () => {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search for bikes, gear, clothing..."
+                  placeholder={t("header.searchPlaceholder")}
                   className="w-full pl-10 pr-4 py-2 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
                   autoFocus
                 />
@@ -355,7 +351,7 @@ const Header: React.FC = () => {
                 type="submit"
                 className="doodle-button doodle-button-primary px-4"
               >
-                Search
+                {t("buttons.search")}
               </button>
               <button
                 type="button"

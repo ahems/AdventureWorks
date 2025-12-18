@@ -1,36 +1,50 @@
-import React, { useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Trash2, Minus, Plus, ShoppingBag, Tag, Heart } from 'lucide-react';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
-import { useCart } from '@/context/CartContext';
-import { useWishlist } from '@/context/WishlistContext';
-import { getSalePrice } from '@/types/product';
+import React, { useMemo } from "react";
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import {
+  ArrowLeft,
+  Trash2,
+  Minus,
+  Plus,
+  ShoppingBag,
+  Tag,
+  Heart,
+} from "lucide-react";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import { useCart } from "@/context/CartContext";
+import { useWishlist } from "@/context/WishlistContext";
+import { getSalePrice } from "@/types/product";
 
 const CartPage: React.FC = () => {
-  const { items, isLoading, updateQuantity, removeFromCart, clearCart } = useCart();
+  const { t } = useTranslation(["cart", "common"]);
+  const { items, isLoading, updateQuantity, removeFromCart, clearCart } =
+    useCart();
   const { addToWishlist, isInWishlist } = useWishlist();
-  
+
   // Calculate totals with sale prices
-  const { subtotalBeforeDiscount, totalAfterDiscount, totalDiscount } = useMemo(() => {
-    let beforeDiscount = 0;
-    let afterDiscount = 0;
-    
-    items.forEach(item => {
-      const originalTotal = item.ListPrice * item.quantity;
-      const salePrice = getSalePrice(item);
-      const discountedTotal = salePrice ? salePrice * item.quantity : originalTotal;
-      
-      beforeDiscount += originalTotal;
-      afterDiscount += discountedTotal;
-    });
-    
-    return {
-      subtotalBeforeDiscount: beforeDiscount,
-      totalAfterDiscount: afterDiscount,
-      totalDiscount: beforeDiscount - afterDiscount
-    };
-  }, [items]);
+  const { subtotalBeforeDiscount, totalAfterDiscount, totalDiscount } =
+    useMemo(() => {
+      let beforeDiscount = 0;
+      let afterDiscount = 0;
+
+      items.forEach((item) => {
+        const originalTotal = item.ListPrice * item.quantity;
+        const salePrice = getSalePrice(item);
+        const discountedTotal = salePrice
+          ? salePrice * item.quantity
+          : originalTotal;
+
+        beforeDiscount += originalTotal;
+        afterDiscount += discountedTotal;
+      });
+
+      return {
+        subtotalBeforeDiscount: beforeDiscount,
+        totalAfterDiscount: afterDiscount,
+        totalDiscount: beforeDiscount - afterDiscount,
+      };
+    }, [items]);
 
   const shipping = totalAfterDiscount > 50 ? 0 : 9.99;
   const grandTotal = totalAfterDiscount + shipping;
@@ -41,9 +55,9 @@ const CartPage: React.FC = () => {
         <Header />
         <main className="flex-1 container mx-auto px-4 py-12">
           <h1 className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text mb-8">
-            Shopping Cart
+            {t("cart:cart.title")}
           </h1>
-          
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Cart items skeleton */}
             <div className="lg:col-span-2 space-y-4">
@@ -60,7 +74,7 @@ const CartPage: React.FC = () => {
                 </div>
               ))}
             </div>
-            
+
             {/* Summary skeleton */}
             <div className="lg:col-span-1">
               <div className="doodle-card p-6 space-y-4">
@@ -92,14 +106,17 @@ const CartPage: React.FC = () => {
             <div className="doodle-card p-12">
               <ShoppingBag className="w-20 h-20 mx-auto mb-6 text-doodle-text/40" />
               <h1 className="font-doodle text-3xl font-bold text-doodle-text mb-4">
-                Your Cart is Empty
+                {t("cart:cart.empty")}
               </h1>
               <p className="font-doodle text-doodle-text/70 mb-8">
-                Looks like you haven't added any gear yet. Let's fix that!
+                {t("cart:cart.emptyDesc")}
               </p>
-              <Link to="/" className="doodle-button doodle-button-primary inline-flex items-center gap-2">
+              <Link
+                to="/"
+                className="doodle-button doodle-button-primary inline-flex items-center gap-2"
+              >
                 <ArrowLeft className="w-4 h-4" />
-                Start Shopping
+                {t("cart:cart.startShopping")}
               </Link>
             </div>
           </div>
@@ -115,25 +132,28 @@ const CartPage: React.FC = () => {
       <main className="flex-1">
         {/* Breadcrumb */}
         <div className="container mx-auto px-4 py-4">
-          <Link 
-            to="/" 
+          <Link
+            to="/"
             className="inline-flex items-center gap-2 font-doodle text-doodle-text/70 hover:text-doodle-accent transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            Continue Shopping
+            {t("cart:cart.continueShopping")}
           </Link>
         </div>
 
         <section className="container mx-auto px-4 pb-12">
           <h1 className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text mb-8">
-            Shopping Cart
+            {t("cart:cart.title")}
           </h1>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Cart Items */}
             <div className="lg:col-span-2 space-y-4">
               {items.map((item, index) => (
-                <div key={`${item.ProductID}-${item.selectedSize}-${item.selectedColor}-${index}`} className="doodle-card p-4 md:p-6">
+                <div
+                  key={`${item.ProductID}-${item.selectedSize}-${item.selectedColor}-${index}`}
+                  className="doodle-card p-4 md:p-6"
+                >
                   <div className="flex gap-4">
                     {/* Product Image */}
                     <div className="w-24 h-24 flex-shrink-0 bg-doodle-bg border-2 border-dashed border-doodle-text flex items-center justify-center">
@@ -142,13 +162,13 @@ const CartPage: React.FC = () => {
 
                     {/* Product Details */}
                     <div className="flex-1 min-w-0">
-                      <Link 
+                      <Link
                         to={`/product/${item.ProductID}`}
                         className="font-doodle font-bold text-lg text-doodle-text hover:text-doodle-accent transition-colors line-clamp-1"
                       >
                         {item.Name}
                       </Link>
-                      
+
                       <div className="flex flex-wrap gap-2 mt-1">
                         {item.selectedColor && (
                           <span className="font-doodle text-xs px-2 py-0.5 bg-doodle-accent/20 border border-doodle-accent/50">
@@ -157,7 +177,7 @@ const CartPage: React.FC = () => {
                         )}
                         {item.selectedSize && (
                           <span className="font-doodle text-xs px-2 py-0.5 bg-doodle-accent/20 border border-doodle-accent/50">
-                            Size: {item.selectedSize}
+                            {t("cart:cart.size")}: {item.selectedSize}
                           </span>
                         )}
                         {item.Color && !item.selectedColor && (
@@ -167,7 +187,7 @@ const CartPage: React.FC = () => {
                         )}
                         {item.Size && !item.selectedSize && (
                           <span className="font-doodle text-xs px-2 py-0.5 bg-doodle-text/10 border border-doodle-text/30">
-                            Size: {item.Size}
+                            {t("cart:cart.size")}: {item.Size}
                           </span>
                         )}
                       </div>
@@ -180,12 +200,17 @@ const CartPage: React.FC = () => {
                               ${item.ListPrice.toFixed(2)}
                             </span>
                             <span className="font-doodle text-lg font-bold text-doodle-accent">
-                              ${(getSalePrice(item) || item.ListPrice).toFixed(2)}
+                              $
+                              {(getSalePrice(item) || item.ListPrice).toFixed(
+                                2
+                              )}
                             </span>
                           </div>
                           <span className="font-doodle text-xs text-doodle-green font-bold flex items-center gap-1">
                             <Tag className="w-3 h-3" />
-                            Save {Math.round(item.DiscountPct * 100)}%
+                            {t("cart:cart.save", {
+                              percent: Math.round(item.DiscountPct * 100),
+                            })}
                           </span>
                         </div>
                       ) : (
@@ -204,16 +229,26 @@ const CartPage: React.FC = () => {
                             if (!isInWishlist(item.ProductID)) {
                               addToWishlist(item);
                             }
-                            removeFromCart(item.ProductID, item.selectedSize, item.selectedColor);
+                            removeFromCart(
+                              item.ProductID,
+                              item.selectedSize,
+                              item.selectedColor
+                            );
                           }}
                           className="text-doodle-text/50 hover:text-doodle-accent transition-colors p-1"
-                          aria-label="Move to wishlist"
-                          title="Save for later"
+                          aria-label={t("cart:cart.moveToWishlist")}
+                          title={t("cart:cart.saveLater")}
                         >
                           <Heart className="w-5 h-5" />
                         </button>
                         <button
-                          onClick={() => removeFromCart(item.ProductID, item.selectedSize, item.selectedColor)}
+                          onClick={() =>
+                            removeFromCart(
+                              item.ProductID,
+                              item.selectedSize,
+                              item.selectedColor
+                            )
+                          }
                           className="text-doodle-text/50 hover:text-doodle-accent transition-colors p-1"
                           aria-label="Remove item"
                         >
@@ -223,7 +258,14 @@ const CartPage: React.FC = () => {
 
                       <div className="flex items-center doodle-border-light">
                         <button
-                          onClick={() => updateQuantity(item.ProductID, item.quantity - 1, item.selectedSize, item.selectedColor)}
+                          onClick={() =>
+                            updateQuantity(
+                              item.ProductID,
+                              item.quantity - 1,
+                              item.selectedSize,
+                              item.selectedColor
+                            )
+                          }
                           className="p-1.5 hover:bg-doodle-text/10 transition-colors"
                           aria-label="Decrease quantity"
                         >
@@ -233,7 +275,14 @@ const CartPage: React.FC = () => {
                           {item.quantity}
                         </span>
                         <button
-                          onClick={() => updateQuantity(item.ProductID, item.quantity + 1, item.selectedSize, item.selectedColor)}
+                          onClick={() =>
+                            updateQuantity(
+                              item.ProductID,
+                              item.quantity + 1,
+                              item.selectedSize,
+                              item.selectedColor
+                            )
+                          }
                           className="p-1.5 hover:bg-doodle-text/10 transition-colors"
                           aria-label="Increase quantity"
                         >
@@ -242,8 +291,13 @@ const CartPage: React.FC = () => {
                       </div>
 
                       <p className="font-doodle text-sm text-doodle-text/70">
-                        Subtotal: <span className="font-bold">
-                          ${((getSalePrice(item) || item.ListPrice) * item.quantity).toFixed(2)}
+                        Subtotal:{" "}
+                        <span className="font-bold">
+                          $
+                          {(
+                            (getSalePrice(item) || item.ListPrice) *
+                            item.quantity
+                          ).toFixed(2)}
                         </span>
                       </p>
                     </div>
@@ -255,7 +309,7 @@ const CartPage: React.FC = () => {
               <div className="flex flex-wrap gap-4">
                 <button
                   onClick={() => {
-                    items.forEach(item => {
+                    items.forEach((item) => {
                       if (!isInWishlist(item.ProductID)) {
                         addToWishlist(item);
                       }
@@ -265,13 +319,13 @@ const CartPage: React.FC = () => {
                   className="font-doodle text-sm text-doodle-text/70 hover:text-doodle-accent transition-colors inline-flex items-center gap-1"
                 >
                   <Heart className="w-4 h-4" />
-                  Move all to Wishlist
+                  {t("cart:cart.moveAllToWishlist")}
                 </button>
                 <button
                   onClick={clearCart}
                   className="font-doodle text-sm text-doodle-accent hover:text-doodle-text transition-colors"
                 >
-                  Clear entire cart
+                  {t("cart:cart.clearCart")}
                 </button>
               </div>
             </div>
@@ -280,15 +334,17 @@ const CartPage: React.FC = () => {
             <div className="lg:col-span-1">
               <div className="doodle-card p-6 sticky top-24">
                 <h2 className="font-doodle text-xl font-bold text-doodle-text mb-6">
-                  Order Summary
+                  {t("cart:checkout.orderSummary")}
                 </h2>
 
                 <div className="space-y-4 font-doodle">
                   <div className="flex justify-between">
                     <span className="text-doodle-text/70">Subtotal</span>
-                    <span className="font-bold">${subtotalBeforeDiscount.toFixed(2)}</span>
+                    <span className="font-bold">
+                      ${subtotalBeforeDiscount.toFixed(2)}
+                    </span>
                   </div>
-                  
+
                   {/* Discount Line */}
                   {totalDiscount > 0 && (
                     <div className="flex justify-between text-doodle-green">
@@ -296,37 +352,50 @@ const CartPage: React.FC = () => {
                         <Tag className="w-4 h-4" />
                         Discounts
                       </span>
-                      <span className="font-bold">-${totalDiscount.toFixed(2)}</span>
+                      <span className="font-bold">
+                        -${totalDiscount.toFixed(2)}
+                      </span>
                     </div>
                   )}
-                  
+
                   <div className="flex justify-between">
                     <span className="text-doodle-text/70">Shipping</span>
-                    <span className={shipping === 0 ? 'text-doodle-green font-bold' : ''}>
-                      {shipping === 0 ? 'FREE' : `$${shipping.toFixed(2)}`}
+                    <span
+                      className={
+                        shipping === 0 ? "text-doodle-green font-bold" : ""
+                      }
+                    >
+                      {shipping === 0 ? "FREE" : `$${shipping.toFixed(2)}`}
                     </span>
                   </div>
                   {shipping > 0 && (
                     <p className="text-xs text-doodle-accent">
-                      Add ${(50 - totalAfterDiscount).toFixed(2)} more for FREE shipping!
+                      Add ${(50 - totalAfterDiscount).toFixed(2)} more for FREE
+                      shipping!
                     </p>
                   )}
-                  
+
                   <hr className="border-dashed border-doodle-text/30" />
-                  
+
                   <div className="flex justify-between text-xl">
                     <span className="font-bold">Total</span>
-                    <span className="font-bold text-doodle-green">${grandTotal.toFixed(2)}</span>
+                    <span className="font-bold text-doodle-green">
+                      ${grandTotal.toFixed(2)}
+                    </span>
                   </div>
-                  
+
                   {totalDiscount > 0 && (
                     <p className="text-xs text-doodle-green text-center font-bold bg-doodle-green/10 py-2 border border-dashed border-doodle-green/30">
-                      🎉 You're saving ${totalDiscount.toFixed(2)} on this order!
+                      🎉 You're saving ${totalDiscount.toFixed(2)} on this
+                      order!
                     </p>
                   )}
                 </div>
 
-                <Link to="/checkout" className="doodle-button doodle-button-primary w-full mt-6 py-3 text-lg block text-center">
+                <Link
+                  to="/checkout"
+                  className="doodle-button doodle-button-primary w-full mt-6 py-3 text-lg block text-center"
+                >
                   Proceed to Checkout
                 </Link>
 

@@ -1,0 +1,17 @@
+{
+  "header": {
+    "signIn": "Sign In",
+    "signOut": "Sign Out",
+    "cart": "Cart",
+    "myAccount": "My Account",
+    "search": "Search",
+    "searchPlaceholder": "Search for bikes, gear, clothing...",
+    "selectLanguage": "Select Language"
+  },
+  "buttons": {
+    "addToCart": "Add to Cart",
+    "buyNow": "Buy Now",
+    "viewDetails": "View Details",
+    "search": "Search"
+  }
+}

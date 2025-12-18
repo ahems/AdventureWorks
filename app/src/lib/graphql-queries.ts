@@ -165,17 +165,18 @@ export const GET_PRODUCT_BY_ID = gql`
   }
 `;
 
-// Query to get product description by ProductModelID
+// Query to get product description by ProductModelID and Culture
 export const GET_PRODUCT_DESCRIPTION = gql`
-  query GetProductDescription($productModelId: Int!) {
+  query GetProductDescription($productModelId: Int!, $cultureId: String!) {
     productModelProductDescriptionCultures(
       filter: {
         ProductModelID: { eq: $productModelId }
-        CultureID: { eq: "en    " }
+        CultureID: { eq: $cultureId }
       }
     ) {
       items {
         ProductDescriptionID
+        CultureID
       }
     }
   }
