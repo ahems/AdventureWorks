@@ -274,4 +274,67 @@ public class ProductService
             embedding.Embedding
         });
     }
+
+    public async Task<List<ProductImageData>> GetProductsForImageGenerationAsync()
+    {
+        using var connection = await GetConnectionAsync();
+
+        // Get products with less than 4 photos (idempotent)
+        // Using English descriptions for image generation
+        var sql = @"
+            SELECT 
+                p.ProductID,
+                p.Name,
+                pc.Name AS ProductCategoryName,
+                pd.Description,
+                COUNT(DISTINCT ppp.ProductPhotoID) AS ExistingPhotoCount
+            FROM Production.Product p
+            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID
+            LEFT JOIN Production.ProductModel pm ON p.ProductModelID = pm.ProductModelID
+            LEFT JOIN Production.ProductModelProductDescriptionCulture pmx 
+                ON pm.ProductModelID = pmx.ProductModelID AND pmx.CultureID = 'en'
+            LEFT JOIN Production.ProductDescription pd ON pmx.ProductDescriptionID = pd.ProductDescriptionID
+            LEFT JOIN Production.ProductProductPhoto ppp ON p.ProductID = ppp.ProductID
+            WHERE p.FinishedGoodsFlag = 1
+            GROUP BY p.ProductID, p.Name, pc.Name, pd.Description
+            HAVING COUNT(DISTINCT ppp.ProductPhotoID) < 4
+            ORDER BY p.ProductID";
+
+        var products = await connection.QueryAsync<ProductImageData>(sql);
+        return products.ToList();
+    }
+
+    public async Task SaveProductPhotoAsync(ProductPhotoData photo)
+    {
+        using var connection = await GetConnectionAsync();
+
+        // Insert into ProductPhoto table
+        var insertPhotoSql = @"
+            INSERT INTO Production.ProductPhoto 
+                (LargePhoto, LargePhotoFileName, ModifiedDate)
+            OUTPUT INSERTED.ProductPhotoID
+            VALUES 
+                (@ImageData, @FileName, GETDATE())";
+
+        var productPhotoId = await connection.ExecuteScalarAsync<int>(insertPhotoSql, new
+        {
+            photo.ImageData,
+            photo.FileName
+        });
+
+        // Link photo to product in ProductProductPhoto table
+        var insertLinkSql = @"
+            INSERT INTO Production.ProductProductPhoto 
+                (ProductID, ProductPhotoID, [Primary], ModifiedDate)
+            VALUES 
+                (@ProductID, @ProductPhotoID, @IsPrimary, GETDATE())";
+
+        await connection.ExecuteAsync(insertLinkSql, new
+        {
+            photo.ProductID,
+            ProductPhotoID = productPhotoId,
+            IsPrimary = photo.IsPrimary
+        });
+    }
 }

@@ -4,6 +4,7 @@ using api_functions.Models;
 using Microsoft.Extensions.Logging;
 using OpenAI.Chat;
 using OpenAI.Embeddings;
+using OpenAI.Images;
 using System.Text.Json;
 
 namespace api_functions.Services;
@@ -19,6 +20,7 @@ public class AIService
     private readonly string _endpoint;
     private readonly string _deploymentName = "chat";
     private readonly string _embeddingDeploymentName = "embedding";
+    private readonly string _imageDeploymentName = "image";
     private readonly ILogger<AIService> _logger;
 
     public AIService(string endpoint, ILogger<AIService> logger)
@@ -341,5 +343,118 @@ Translate the description into each target language. Return ONLY a valid JSON ob
         }
 
         return embeddings;
+    }
+
+    public async Task<List<ProductPhotoData>> GenerateProductImagesAsync(List<ProductImageData> products)
+    {
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var imageClient = client.GetImageClient(_imageDeploymentName);
+
+        var photos = new List<ProductPhotoData>();
+
+        foreach (var product in products)
+        {
+            // Only generate images if the product doesn't already have 4 or more photos
+            if (product.ExistingPhotoCount >= 4)
+            {
+                _logger.LogInformation(
+                    "Skipping ProductID {productId} - already has {count} photos",
+                    product.ProductID,
+                    product.ExistingPhotoCount
+                );
+                continue;
+            }
+
+            var imagesToGenerate = 4 - product.ExistingPhotoCount;
+            _logger.LogInformation(
+                "Generating {count} images for ProductID {productId} ({name})",
+                imagesToGenerate,
+                product.ProductID,
+                product.Name
+            );
+
+            // Create prompts for different perspectives
+            var prompts = new List<string>();
+            var basePrompt = $"Professional product photography of {product.Name}";
+
+            if (!string.IsNullOrEmpty(product.Description))
+            {
+                basePrompt += $". {product.Description}";
+            }
+
+            if (!string.IsNullOrEmpty(product.ProductCategoryName))
+            {
+                basePrompt += $" Category: {product.ProductCategoryName}.";
+            }
+
+            var perspectives = new[]
+            {
+                " Product in use by an outdoor enthusiast, action shot, dynamic composition.",
+                " Close-up detail shot showing product features and quality, studio lighting.",
+                " Three-quarter view on white background, professional e-commerce style.",
+                " Lifestyle shot in natural outdoor environment, contextual setting."
+            };
+
+            for (int i = 0; i < imagesToGenerate; i++)
+            {
+                prompts.Add(basePrompt + perspectives[i]);
+            }
+
+            // Generate images
+            for (int i = 0; i < prompts.Count; i++)
+            {
+                try
+                {
+                    _logger.LogInformation(
+                        "Generating image {index} for ProductID {productId}: {prompt}",
+                        i + 1,
+                        product.ProductID,
+                        prompts[i].Substring(0, Math.Min(100, prompts[i].Length))
+                    );
+
+                    var imageOptions = new ImageGenerationOptions
+                    {
+                        Quality = GeneratedImageQuality.High,
+                        Size = GeneratedImageSize.W1024xH1024,
+                        ResponseFormat = GeneratedImageFormat.Bytes
+                    };
+
+                    var imageResult = await imageClient.GenerateImageAsync(prompts[i], imageOptions);
+                    var imageBytes = imageResult.Value.ImageBytes.ToArray();
+
+                    var photoNumber = product.ExistingPhotoCount + i + 1;
+                    var fileName = $"product_{product.ProductID}_photo_{photoNumber}.png";
+
+                    photos.Add(new ProductPhotoData
+                    {
+                        ProductID = product.ProductID,
+                        ImageData = imageBytes,
+                        FileName = fileName,
+                        IsPrimary = photoNumber == 1 // First photo is primary
+                    });
+
+                    _logger.LogInformation(
+                        "Generated image {index} for ProductID {productId}: {size} bytes, {fileName}",
+                        i + 1,
+                        product.ProductID,
+                        imageBytes.Length,
+                        fileName
+                    );
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Failed to generate image {index} for ProductID {productId}",
+                        i + 1,
+                        product.ProductID
+                    );
+                    // Continue with next image even if one fails
+                }
+            }
+        }
+
+        return photos;
     }
 }

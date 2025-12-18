@@ -52,3 +52,20 @@ public class ProductDescriptionEmbedding
     public byte[] Embedding { get; set; } = Array.Empty<byte>();
     public int? ProductModelID { get; set; }
 }
+
+public class ProductImageData
+{
+    public int ProductID { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? ProductCategoryName { get; set; }
+    public string? Description { get; set; }
+    public int ExistingPhotoCount { get; set; }
+}
+
+public class ProductPhotoData
+{
+    public int ProductID { get; set; }
+    public byte[] ImageData { get; set; } = Array.Empty<byte>();
+    public string FileName { get; set; } = string.Empty;
+    public bool IsPrimary { get; set; }
+}
