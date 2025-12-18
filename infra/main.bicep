@@ -30,7 +30,7 @@ param embeddingDeploymentVersion string
 param embeddingSkuName string
 param availableEmbeddingDeploymentCapacity int
 param imageModelName string = ''
-param imageDeploymentName string = 'image'
+param imageDeploymentName string = 'gpt-image-1'
 param imageDeploymentVersion string = ''
 param imageSkuName string = ''
 param availableImageDeploymentCapacity int = 0

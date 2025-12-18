@@ -69,7 +69,7 @@ public class GenerateProductImages
                     batch.Count
                 );
 
-                // Generate images for this batch
+                // Generate images for this batch - will throw and halt if error occurs
                 var photos = await context.CallActivityAsync<List<ProductPhotoData>>(
                     nameof(GenerateProductImagesActivity),
                     batch);
@@ -78,7 +78,7 @@ public class GenerateProductImages
                 {
                     logger.LogInformation("Generated {count} images for batch", photos.Count);
 
-                    // Step 3: Save images to database
+                    // Step 3: Save images to database - will throw and halt if error occurs
                     await context.CallActivityAsync(
                         nameof(SaveProductImagesActivity),
                         photos);
@@ -89,7 +89,10 @@ public class GenerateProductImages
                 }
                 else
                 {
-                    logger.LogWarning("No images generated for batch");
+                    // Halt execution if no images were generated
+                    var errorMsg = $"Failed to generate images for batch {(i / batchSize) + 1}";
+                    logger.LogError(errorMsg);
+                    throw new InvalidOperationException(errorMsg);
                 }
             }
 

@@ -20,7 +20,7 @@ public class AIService
     private readonly string _endpoint;
     private readonly string _deploymentName = "chat";
     private readonly string _embeddingDeploymentName = "embedding";
-    private readonly string _imageDeploymentName = "image";
+    private readonly string _imageDeploymentName = "gpt-image-1";
     private readonly ILogger<AIService> _logger;
 
     public AIService(string endpoint, ILogger<AIService> logger)
@@ -415,9 +415,9 @@ Translate the description into each target language. Return ONLY a valid JSON ob
 
                     var imageOptions = new ImageGenerationOptions
                     {
-                        Quality = GeneratedImageQuality.High,
-                        Size = GeneratedImageSize.W1024xH1024,
-                        ResponseFormat = GeneratedImageFormat.Bytes
+                        Quality = "high",
+                        Size = GeneratedImageSize.W1024xH1024
+                        // ResponseFormat not supported by Azure OpenAI DALL-E models
                     };
 
                     var imageResult = await imageClient.GenerateImageAsync(prompts[i], imageOptions);
@@ -450,7 +450,8 @@ Translate the description into each target language. Return ONLY a valid JSON ob
                         i + 1,
                         product.ProductID
                     );
-                    // Continue with next image even if one fails
+                    // Re-throw to halt the entire orchestration
+                    throw;
                 }
             }
         }

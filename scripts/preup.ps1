@@ -669,20 +669,18 @@ if ($embeddingPick) {
 	Write-Host "Selected Embeddings model: $($embeddingPick.ModelName) $($embeddingPick.ModelVersion) SKU $($embeddingPick.SkuName) Capacity $($embeddingPick.AvailableCapacity)" -ForegroundColor Green
 } else { Write-Warning 'No embeddings model selected.' }
 
-# Select image generation model (GPT-image preferred, then DALL-E)
-$imageCandidates = $sorted | Where-Object { $_.ModelName -match '(?i)(gpt-?image|dall-?e)' }
-$imagePick = $imageCandidates | Where-Object { $_.ModelName -match '(?i)gpt-?image' } | Select-Object -First 1
-if (-not $imagePick) {
-	$imagePick = $imageCandidates | Select-Object -First 1
-}
+# Select image generation model (specifically filter for gpt-image-1)
+$imageCandidates = $sorted | Where-Object { $_.ModelName -match '(?i)^gpt-?image-?1$' }
+$imagePick = $imageCandidates | Select-Object -First 1
+
 if ($imagePick) {
 	Set-AzdValue -Name 'imageDeploymentVersion' -Value $imagePick.ModelVersion
 	Set-AzdValue -Name 'imageDeploymentSkuName' -Value $imagePick.SkuName
-	Set-AzdValue -Name 'imageDeploymentModelName' -Value $imagePick.ModelName
+	Set-AzdValue -Name 'imageDeploymentModelName' -Value 'gpt-image-1'
 	Set-AzdValue -Name 'imageModelFormat' -Value $imagePick.ModelFormat
 	Set-AzdValue -Name 'availableImageDeploymentCapacity' -Value ($imagePick.AvailableCapacity.ToString())
-	Write-Host "Selected Image model: $($imagePick.ModelName) $($imagePick.ModelVersion) SKU $($imagePick.SkuName) Format $($imagePick.ModelFormat) Capacity $($imagePick.AvailableCapacity)" -ForegroundColor Green
-} else { Write-Warning 'No image generation model selected.' }
+	Write-Host "Selected Image model: gpt-image-1 $($imagePick.ModelVersion) SKU $($imagePick.SkuName) Format $($imagePick.ModelFormat) Capacity $($imagePick.AvailableCapacity)" -ForegroundColor Green
+} else { Write-Warning 'No gpt-image-1 model available in Azure catalog for this region. Bicep will skip image model deployment.' }
 
 Write-Host "preup.ps1 completed." -ForegroundColor Cyan
 
