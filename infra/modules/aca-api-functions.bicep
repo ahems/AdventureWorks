@@ -90,8 +90,8 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
           name: apiFunctionsName
           image: bootstrapImage
           resources: {
-            cpu: json('.25')
-            memory: '.5Gi'
+            cpu: json('1.0')
+            memory: '2Gi'
           }
           env: [
             {

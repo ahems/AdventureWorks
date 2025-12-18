@@ -69,3 +69,10 @@ public class ProductPhotoData
     public string FileName { get; set; } = string.Empty;
     public bool IsPrimary { get; set; }
 }
+
+public class ProductPhotoThumbnailData
+{
+    public int ProductPhotoID { get; set; }
+    public byte[] LargePhoto { get; set; } = Array.Empty<byte>();
+    public string LargePhotoFileName { get; set; } = string.Empty;
+}

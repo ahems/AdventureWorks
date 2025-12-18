@@ -55,28 +55,39 @@ public class GenerateProductImages
 
             logger.LogInformation("Found {count} products that need images", products.Count);
 
-            // Step 2: Generate images in batches of 10 products
-            const int batchSize = 10;
+            // Process only 1 product per orchestration run to avoid timeouts and memory issues
+            const int batchSize = 1;
+            var productsToProcess = products.Take(batchSize).ToList();
+            var remainingCount = products.Count - batchSize;
+
+            logger.LogInformation(
+                "Processing batch of {batchSize} product(s). Remaining: {remaining}",
+                productsToProcess.Count,
+                Math.Max(0, remainingCount)
+            );
+
+            // Step 2: Process products one at a time to avoid activity timeouts
             var totalPhotos = 0;
 
-            for (int i = 0; i < products.Count; i += batchSize)
+            for (int i = 0; i < productsToProcess.Count; i++)
             {
-                var batch = products.Skip(i).Take(batchSize).ToList();
+                var product = productsToProcess[i];
                 logger.LogInformation(
-                    "Processing batch {batchNum} of {totalBatches} ({count} products)",
-                    (i / batchSize) + 1,
-                    (products.Count + batchSize - 1) / batchSize,
-                    batch.Count
+                    "Processing product {current} of {total}: {name} (ID: {id})",
+                    i + 1,
+                    productsToProcess.Count,
+                    product.Name,
+                    product.ProductID
                 );
 
-                // Generate images for this batch - will throw and halt if error occurs
+                // Generate images for this single product - will throw and halt if error occurs
                 var photos = await context.CallActivityAsync<List<ProductPhotoData>>(
                     nameof(GenerateProductImagesActivity),
-                    batch);
+                    product);
 
                 if (photos != null && photos.Count > 0)
                 {
-                    logger.LogInformation("Generated {count} images for batch", photos.Count);
+                    logger.LogInformation("Generated {count} images for product {id}", photos.Count, product.ProductID);
 
                     // Step 3: Save images to database - will throw and halt if error occurs
                     await context.CallActivityAsync(
@@ -84,19 +95,19 @@ public class GenerateProductImages
                         photos);
 
                     totalPhotos += photos.Count;
-                    logger.LogInformation("Saved {count} images to database (total: {total})",
-                        photos.Count, totalPhotos);
+                    logger.LogInformation("Saved {count} images for product {id} (total: {total})",
+                        photos.Count, product.ProductID, totalPhotos);
                 }
                 else
                 {
                     // Halt execution if no images were generated
-                    var errorMsg = $"Failed to generate images for batch {(i / batchSize) + 1}";
+                    var errorMsg = $"Failed to generate images for product {product.ProductID} ({product.Name})";
                     logger.LogError(errorMsg);
                     throw new InvalidOperationException(errorMsg);
                 }
             }
 
-            var message = $"Successfully generated {totalPhotos} product images for {products.Count} products";
+            var message = $"Successfully generated {totalPhotos} product images for {productsToProcess.Count} product(s). {Math.Max(0, remainingCount)} products still need images.";
             logger.LogInformation(message);
             return message;
         }
@@ -132,11 +143,11 @@ public class GenerateProductImages
 
     [Function(nameof(GenerateProductImagesActivity))]
     public async Task<List<ProductPhotoData>> GenerateProductImagesActivity(
-        [ActivityTrigger] List<ProductImageData> products,
+        [ActivityTrigger] ProductImageData product,
         FunctionContext executionContext)
     {
         var logger = executionContext.GetLogger(nameof(GenerateProductImagesActivity));
-        logger.LogInformation("Generating images for {count} products", products.Count);
+        logger.LogInformation("Generating images for product: {name} (ID: {id})", product.Name, product.ProductID);
 
         var configuration = executionContext.InstanceServices
             .GetService(typeof(Microsoft.Extensions.Configuration.IConfiguration))
@@ -149,9 +160,9 @@ public class GenerateProductImages
         var aiLogger = executionContext.GetLogger<AIService>();
         var aiService = new AIService(endpoint, aiLogger);
 
-        var photos = await aiService.GenerateProductImagesAsync(products);
+        var photos = await aiService.GenerateProductImagesAsync(new List<ProductImageData> { product });
 
-        logger.LogInformation("Generated {count} images", photos.Count);
+        logger.LogInformation("Generated {count} images for product {id}", photos.Count, product.ProductID);
         return photos;
     }
 

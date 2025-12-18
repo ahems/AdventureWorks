@@ -337,4 +337,39 @@ public class ProductService
             IsPrimary = photo.IsPrimary
         });
     }
+
+    public async Task<List<ProductPhotoThumbnailData>> GetPhotosNeedingThumbnailsAsync()
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = @"
+            SELECT 
+                ProductPhotoID,
+                LargePhoto,
+                LargePhotoFileName
+            FROM Production.ProductPhoto
+            WHERE LargePhoto IS NOT NULL 
+            AND (ThumbNailPhoto IS NULL OR DATALENGTH(ThumbNailPhoto) = 0)
+            ORDER BY ProductPhotoID";
+
+        var photos = await connection.QueryAsync<ProductPhotoThumbnailData>(sql);
+        return photos.ToList();
+    }
+
+    public async Task SaveProductThumbnailAsync(int productPhotoId, byte[] thumbnailData)
+    {
+        using var connection = await GetConnectionAsync();
+
+        // Update only the thumbnail field without touching ModifiedDate
+        var updateSql = @"
+            UPDATE Production.ProductPhoto
+            SET ThumbNailPhoto = @ThumbnailData
+            WHERE ProductPhotoID = @ProductPhotoID";
+
+        await connection.ExecuteAsync(updateSql, new
+        {
+            ProductPhotoID = productPhotoId,
+            ThumbnailData = thumbnailData
+        });
+    }
 }
