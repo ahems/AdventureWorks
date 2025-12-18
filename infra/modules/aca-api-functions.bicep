@@ -30,7 +30,7 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
   name: appInsightsName
 }
 
-resource apiFunctions 'Microsoft.App/containerApps@2024-03-01' = {
+resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
   name: apiFunctionsName
   location: location
   identity: {
@@ -44,6 +44,7 @@ resource apiFunctions 'Microsoft.App/containerApps@2024-03-01' = {
   }
   properties: {
     managedEnvironmentId: containerAppEnvId
+    workloadProfileName: 'Consumption'
     configuration: {
       secrets: [
         {
@@ -51,6 +52,11 @@ resource apiFunctions 'Microsoft.App/containerApps@2024-03-01' = {
           value: sqlConnectionString
         }
       ]
+      runtime: {
+        dotnet: {
+          autoConfigureDataProtection: true
+        }
+      }
       ingress: {
         external: true
         targetPort: 80
@@ -131,6 +137,10 @@ resource apiFunctions 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'FUNCTIONS_WORKER_RUNTIME'
               value: 'dotnet-isolated'
+            }
+            {
+              name: 'FUNCTIONS_EXTENSION_VERSION'
+              value: '~4'
             }
             {
               name: 'WEBSITE_HOSTNAME'
