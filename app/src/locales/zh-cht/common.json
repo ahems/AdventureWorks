@@ -12,6 +12,103 @@
     "addToCart": "加入購物車",
     "buyNow": "立即購買",
     "viewDetails": "查看詳情",
-    "search": "搜尋"
+    "search": "搜索",
+    "backToHome": "返回首頁"
+  },
+  "navigation": {
+    "home": "首頁"
+  },
+  "newsletter": {
+    "title": "加入冒險俱樂部！",
+    "description": "獲取獨家優惠、路線提示和裝備指南，直接發送到您的收件箱。",
+    "emailPlaceholder": "your@email.com",
+    "subscribe": "訂閱",
+    "disclaimer": "沒有垃圾郵件，只有好氛圍。隨時取消訂閱！"
+  },
+  "hero": {
+    "badge": "冒險等著你！",
+    "title": "為你的",
+    "titleHighlight": "冒險",
+    "subtitle": "為戶外愛好者提供高級自行車、組件、服裝和配件。為每條小徑、道路和旅程精心挑選的裝備。",
+    "shopBikes": "購買自行車",
+    "browseAccessories": "瀏覽配件",
+    "products": "產品",
+    "freeShipping": "免費",
+    "shippingThreshold": "運送 $50+",
+    "returns": "30天",
+    "returnsLabel": "退貨",
+    "support": "24/7",
+    "supportLabel": "支援"
+  },
+  "promo": {
+    "limitedSale": "限時特賣！",
+    "saveUpTo": "節省高達",
+    "offText": "折扣",
+    "onSelectGear": "精選裝備",
+    "itemsOnSale": "特價商品",
+    "shopSaleNow": "立即購買"
+  },
+  "category": {
+    "title": "按類別購物",
+    "subtitle": "為您的下一次冒險找到您需要的一切",
+    "browse": "瀏覽"
+  },
+  "featured": {
+    "title": "精選裝備",
+    "subtitle": "我們系列中的最佳選擇",
+    "viewAll": "查看所有產品"
+  },
+  "notFound": {
+    "title": "找不到路徑！",
+    "description": "看來你偏離了常走的道路。別擔心，即使是最好的冒險家有時也會迷路！",
+    "backToCamp": "回到營地"
+  },
+  "search": {
+    "title": "搜尋結果",
+    "searchFor": "搜尋",
+    "searchPlaceholder": "搜尋產品...",
+    "searchButton": "搜尋",
+    "filters": "篩選",
+    "clearAll": "清除全部",
+    "category": "類別",
+    "allCategories": "所有類別",
+    "priceRange": "價格範圍",
+    "min": "最低",
+    "max": "最高",
+    "applyFilters": "套用篩選",
+    "show": "顯示：",
+    "perPage": "每頁",
+    "sortBy": "排序：",
+    "sortRelevance": "相關性",
+    "sortPriceAsc": "價格：低至高",
+    "sortPriceDesc": "價格：高至低",
+    "sortDiscount": "最大折扣",
+    "sortRating": "最高評分",
+    "results": "{{count}} 個結果",
+    "noResults": "找不到產品",
+    "noResultsDesc": "請嘗試調整篩選條件或搜尋詞",
+    "toggleFilters": "篩選",
+    "showingResults": "顯示 {{start}}-{{end}} 共 {{total}} 個結果"
+  },
+  "category": {
+    "backToHome": "回到首頁",
+    "notFound": "找不到類別",
+    "productsAvailable": "{{count}} 個產品可用",
+    "productsAvailable_plural": "{{count}} 個產品可用",
+    "subcategories": "子類別",
+    "allProducts": "所有 {{name}}",
+    "sortNameAsc": "名稱 (A-Z)",
+    "sortNameDesc": "名稱 (Z-A)",
+    "sortNewest": "最新產品",
+    "noProductsFound": "找不到產品",
+    "tryDifferentSubcategory": "請嘗試選擇其他子類別"
+  },
+  "sale": {
+    "title": "特價商品",
+    "subtitle": "不要錯過這些驚人的優惠！限時優惠頂級裝備。",
+    "sortDiscountDesc": "折扣 (高至低)",
+    "sortDiscountAsc": "折扣 (低至高)",
+    "noSaleItems": "目前沒有特價商品",
+    "checkBackSoon": "請稍後再來查看超值優惠！"
   }
 }

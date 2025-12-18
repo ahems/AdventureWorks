@@ -12,6 +12,103 @@
     "addToCart": "הוסף לעגלה",
     "buyNow": "קנה עכשיו",
     "viewDetails": "צפה בפרטים",
-    "search": "חיפוש"
+    "search": "חיפוש",
+    "backToHome": "חזור לעמוד הבית"
+  },
+  "navigation": {
+    "home": "בית"
+  },
+  "newsletter": {
+    "title": "הצטרף למועדון ההרפתקאות!",
+    "description": "קבל הצעות בלעדיות, טיפים למסלולים ומדריכי ציוד ישירות לתיבת הדואר שלך.",
+    "emailPlaceholder": "your@email.com",
+    "subscribe": "הירשם",
+    "disclaimer": "ללא ספאם, רק אווירה טובה. בטל את המנוי בכל עת!"
+  },
+  "hero": {
+    "badge": "הרפתקאה מחכה לך!",
+    "title": "התכונן ל",
+    "titleHighlight": "הרפתקה שלך",
+    "subtitle": "אופניים, רכיבים, ביגוד ואביזרים פרימיום לחובבי טבע. ציוד נבחר בקפידה לכל שביל, כביש ומסע.",
+    "shopBikes": "קנה אופניים",
+    "browseAccessories": "עיין באביזרים",
+    "products": "מוצרים",
+    "freeShipping": "חינם",
+    "shippingThreshold": "משלוח $50+",
+    "returns": "30 יום",
+    "returnsLabel": "החזרות",
+    "support": "24/7",
+    "supportLabel": "תמיכה"
+  },
+  "promo": {
+    "limitedSale": "מבצע לזמן מוגבל!",
+    "saveUpTo": "חסוך עד",
+    "offText": "הנחה",
+    "onSelectGear": "על ציוד נבחר",
+    "itemsOnSale": "פריטים במבצע",
+    "shopSaleNow": "קנה במבצע עכשיו"
+  },
+  "category": {
+    "title": "קנה לפי קטגוריה",
+    "subtitle": "מצא בדיוק מה שאתה צריך להרפתקה הבאה שלך",
+    "browse": "עיין"
+  },
+  "featured": {
+    "title": "ציוד מומלץ",
+    "subtitle": "הבחירות המובילות שלנו מהאוסף",
+    "viewAll": "הצג את כל המוצרים"
+  },
+  "notFound": {
+    "title": "השביל לא נמצא!",
+    "description": "נראה שסטית מהדרך. אל דאגה, גם להרפתקנים הטובים ביותר קורה שהם מתעים!",
+    "backToCamp": "חזרה למחנה"
+  },
+  "search": {
+    "title": "תוצאות חיפוש",
+    "searchFor": "חפש",
+    "searchPlaceholder": "חפש מוצרים...",
+    "searchButton": "חיפוש",
+    "filters": "מסננים",
+    "clearAll": "נקה הכל",
+    "category": "קטגוריה",
+    "allCategories": "כל הקטגוריות",
+    "priceRange": "טווח מחירים",
+    "min": "מינימום",
+    "max": "מקסימום",
+    "applyFilters": "החל מסננים",
+    "show": "הצג:",
+    "perPage": "לעמוד",
+    "sortBy": "מיין לפי:",
+    "sortRelevance": "רלוונטיות",
+    "sortPriceAsc": "מחיר: נמוך לגבוה",
+    "sortPriceDesc": "מחיר: גבוה לנמוך",
+    "sortDiscount": "הנחה הגדולה ביותר",
+    "sortRating": "דירוג הגבוה ביותר",
+    "results": "{{count}} תוצאות",
+    "noResults": "לא נמצאו מוצרים",
+    "noResultsDesc": "נסה לשנות את המסננים או את מונחי החיפוש",
+    "toggleFilters": "מסננים",
+    "showingResults": "מציג {{start}}-{{end}} מתוך {{total}} תוצאות"
+  },
+  "category": {
+    "backToHome": "חזרה לדף הבית",
+    "notFound": "הקטגוריה לא נמצאה",
+    "productsAvailable": "מוצר {{count}} זמין",
+    "productsAvailable_plural": "{{count}} מוצרים זמינים",
+    "subcategories": "תת-קטגוריות",
+    "allProducts": "כל {{name}}",
+    "sortNameAsc": "שם (א-ת)",
+    "sortNameDesc": "שם (ת-א)",
+    "sortNewest": "החדשים ביותר",
+    "noProductsFound": "לא נמצאו מוצרים",
+    "tryDifferentSubcategory": "נסה לבחור תת-קטגוריה אחרת"
+  },
+  "sale": {
+    "title": "מוצרים במבצע",
+    "subtitle": "אל תפספסו את ההצעות המדהימות האלה! הצעות לזמן מוגבל על ציוד איכותי.",
+    "sortDiscountDesc": "הנחה (גבוהה לנמוכה)",
+    "sortDiscountAsc": "הנחה (נמוכה לגבוהה)",
+    "noSaleItems": "אין מוצרים במבצע כרגע",
+    "checkBackSoon": "בקרו שוב בקרוב להצעות מדהימות!"
   }
 }

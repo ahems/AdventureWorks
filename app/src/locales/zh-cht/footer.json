@@ -7,8 +7,13 @@
     "shoppingCart": "購物車",
     "trackOrder": "追蹤訂單",
     "returnsPolicy": "退貨政策",
+    "faq": "常見問題",
     "contactUs": "聯絡我們",
-    "copyright": "© {{year}} AdventureWorks. 版權所有。"
+    "address": "1 Adventure Way, Bothell, WA 98011",
+    "phone": "(555) 123-4567",
+    "email": "hello@adventureworks.com",
+    "copyright": "© {{year}} AdventureWorks. 保留所有權利。",
+    "builtWith": "使用 Azure 和 React 用 ❤️ 構建"
   },
   "pages": {
     "home": "首頁",

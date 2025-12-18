@@ -429,7 +429,9 @@ const ProductPage: React.FC = () => {
                   )}
                   {product.ProductLine && (
                     <>
-                      <span className="text-doodle-text/60">Product Line:</span>
+                      <span className="text-doodle-text/60">
+                        {t("product:specifications.productLine")}
+                      </span>
                       <span className="text-doodle-text">
                         {product.ProductLine}
                       </span>
@@ -437,19 +439,25 @@ const ProductPage: React.FC = () => {
                   )}
                   {product.Class && (
                     <>
-                      <span className="text-doodle-text/60">Class:</span>
+                      <span className="text-doodle-text/60">
+                        {t("product:specifications.class")}
+                      </span>
                       <span className="text-doodle-text">{product.Class}</span>
                     </>
                   )}
                   {product.Style && (
                     <>
-                      <span className="text-doodle-text/60">Style:</span>
+                      <span className="text-doodle-text/60">
+                        {t("product:specifications.style")}
+                      </span>
                       <span className="text-doodle-text">{product.Style}</span>
                     </>
                   )}
                   {product.StandardCost && (
                     <>
-                      <span className="text-doodle-text/60">Cost:</span>
+                      <span className="text-doodle-text/60">
+                        {t("product:specifications.cost")}
+                      </span>
                       <span className="text-doodle-text">
                         ${product.StandardCost.toFixed(2)}
                       </span>
@@ -458,7 +466,7 @@ const ProductPage: React.FC = () => {
                   {product.SellStartDate && (
                     <>
                       <span className="text-doodle-text/60">
-                        Date First Available:
+                        {t("product:specifications.dateFirstAvailable")}
                       </span>
                       <span className="text-doodle-text">
                         {new Date(product.SellStartDate).toLocaleDateString(
@@ -667,7 +675,8 @@ const ProductPage: React.FC = () => {
             className="doodle-button inline-flex items-center gap-2"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to {category?.Name || "Shop"}
+            {t("product:productPage.backTo")}{" "}
+            {category?.Name || t("common:navigation.home")}
           </Link>
         </section>
       </main>

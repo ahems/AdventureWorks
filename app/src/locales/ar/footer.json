@@ -7,8 +7,13 @@
     "shoppingCart": "عربة التسوق",
     "trackOrder": "تتبع الطلب",
     "returnsPolicy": "سياسة الإرجاع",
+    "faq": "الأسئلة الشائعة",
     "contactUs": "اتصل بنا",
-    "copyright": "© {{year}} AdventureWorks. جميع الحقوق محفوظة."
+    "address": "1 Adventure Way, Bothell, WA 98011",
+    "phone": "(555) 123-4567",
+    "email": "hello@adventureworks.com",
+    "copyright": "© {{year}} AdventureWorks. جميع الحقوق محفوظة.",
+    "builtWith": "تم البناء بـ ❤️ باستخدام Azure و React"
   },
   "pages": {
     "home": "الرئيسية",

@@ -12,6 +12,103 @@
     "addToCart": "Ajouter au Panier",
     "buyNow": "Acheter Maintenant",
     "viewDetails": "Voir les Détails",
-    "search": "Rechercher"
+    "search": "Rechercher",
+    "backToHome": "Retour à l'accueil"
+  },
+  "navigation": {
+    "home": "Accueil"
+  },
+  "newsletter": {
+    "title": "Rejoignez le Club Aventure !",
+    "description": "Recevez des offres exclusives, des conseils de sentiers et des guides d'équipement dans votre boîte de réception.",
+    "emailPlaceholder": "votre@email.com",
+    "subscribe": "S'abonner",
+    "disclaimer": "Pas de spam, que de bonnes vibrations. Désabonnez-vous à tout moment !"
+  },
+  "hero": {
+    "badge": "L'aventure vous attend !",
+    "title": "Équipez-vous pour votre",
+    "titleHighlight": "Aventure",
+    "subtitle": "Vélos, composants, vêtements et accessoires premium pour les passionnés de plein air. Équipement sélectionné pour chaque sentier, route et voyage à venir.",
+    "shopBikes": "Acheter des Vélos",
+    "browseAccessories": "Parcourir les Accessoires",
+    "products": "Produits",
+    "freeShipping": "Gratuit",
+    "shippingThreshold": "Livraison $50+",
+    "returns": "30 Jours",
+    "returnsLabel": "Retours",
+    "support": "24/7",
+    "supportLabel": "Support"
+  },
+  "promo": {
+    "limitedSale": "Vente à Durée Limitée !",
+    "saveUpTo": "Économisez jusqu'à",
+    "offText": "DE RÉDUCTION",
+    "onSelectGear": "sur une sélection d'équipements",
+    "itemsOnSale": "articles en promotion",
+    "shopSaleNow": "Acheter Maintenant"
+  },
+  "category": {
+    "title": "Acheter par Catégorie",
+    "subtitle": "Trouvez exactement ce dont vous avez besoin pour votre prochaine aventure",
+    "browse": "Parcourir"
+  },
+  "featured": {
+    "title": "Équipement en Vedette",
+    "subtitle": "Nos meilleurs choix de la collection",
+    "viewAll": "Voir Tous les Produits"
+  },
+  "notFound": {
+    "title": "Sentier Non Trouvé !",
+    "description": "Il semble que vous vous soyez écarté du chemin. Ne vous inquiétez pas, même les meilleurs aventuriers se perdent parfois !",
+    "backToCamp": "Retour au Camp"
+  },
+  "search": {
+    "title": "Résultats de Recherche",
+    "searchFor": "Rechercher",
+    "searchPlaceholder": "Rechercher des produits...",
+    "searchButton": "Rechercher",
+    "filters": "Filtres",
+    "clearAll": "Tout effacer",
+    "category": "Catégorie",
+    "allCategories": "Toutes les Catégories",
+    "priceRange": "Gamme de Prix",
+    "min": "Min",
+    "max": "Max",
+    "applyFilters": "Appliquer les Filtres",
+    "show": "Afficher :",
+    "perPage": "par page",
+    "sortBy": "Trier par :",
+    "sortRelevance": "Pertinence",
+    "sortPriceAsc": "Prix : Croissant",
+    "sortPriceDesc": "Prix : Décroissant",
+    "sortDiscount": "Plus Grande Réduction",
+    "sortRating": "Mieux Noté",
+    "results": "{{count}} Résultats",
+    "noResults": "Aucun produit trouvé",
+    "noResultsDesc": "Essayez d'ajuster vos filtres ou vos termes de recherche",
+    "toggleFilters": "Filtres",
+    "showingResults": "Affichage de {{start}}-{{end}} sur {{total}} résultats"
+  },
+  "category": {
+    "backToHome": "Retour à l'Accueil",
+    "notFound": "Catégorie Non Trouvée",
+    "productsAvailable": "{{count}} produit disponible",
+    "productsAvailable_plural": "{{count}} produits disponibles",
+    "subcategories": "Sous-catégories",
+    "allProducts": "Tous {{name}}",
+    "sortNameAsc": "Nom (A-Z)",
+    "sortNameDesc": "Nom (Z-A)",
+    "sortNewest": "Plus Récents",
+    "noProductsFound": "Aucun produit trouvé",
+    "tryDifferentSubcategory": "Essayez de sélectionner une autre sous-catégorie"
+  },
+  "sale": {
+    "title": "Articles en Solde",
+    "subtitle": "Ne manquez pas ces offres incroyables ! Offres à durée limitée sur des équipements de haute qualité.",
+    "sortDiscountDesc": "Réduction (Élevée à Faible)",
+    "sortDiscountAsc": "Réduction (Faible à Élevée)",
+    "noSaleItems": "Pas d'Articles en Solde pour le Moment",
+    "checkBackSoon": "Revenez bientôt pour des offres incroyables !"
   }
 }

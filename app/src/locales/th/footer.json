@@ -7,8 +7,13 @@
     "shoppingCart": "ตะกร้าสินค้า",
     "trackOrder": "ติดตามคำสั่งซื้อ",
     "returnsPolicy": "นโยบายการคืนสินค้า",
+    "faq": "คำถามที่พบบ่อย",
     "contactUs": "ติดต่อเรา",
-    "copyright": "© {{year}} AdventureWorks สงวนลิขสิทธิ์"
+    "address": "1 Adventure Way, Bothell, WA 98011",
+    "phone": "(555) 123-4567",
+    "email": "hello@adventureworks.com",
+    "copyright": "© {{year}} AdventureWorks. สงวนลิขสิทธิ์.",
+    "builtWith": "สร้างด้วย ❤️ โดยใช้ Azure และ React"
   },
   "pages": {
     "home": "หน้าแรก",

@@ -12,6 +12,103 @@
     "addToCart": "Add to Cart",
     "buyNow": "Buy Now",
     "viewDetails": "View Details",
-    "search": "Search"
+    "search": "Search",
+    "backToHome": "Back to Home"
+  },
+  "navigation": {
+    "home": "Home"
+  },
+  "newsletter": {
+    "title": "Join the Adventure Club!",
+    "description": "Get exclusive deals, trail tips, and gear guides delivered to your inbox.",
+    "emailPlaceholder": "your@email.com",
+    "subscribe": "Subscribe",
+    "disclaimer": "No spam, just good vibes. Unsubscribe anytime!"
+  },
+  "hero": {
+    "badge": "Adventure Awaits!",
+    "title": "Gear Up for Your",
+    "titleHighlight": "Adventure",
+    "subtitle": "Premium bikes, components, clothing & accessories for outdoor enthusiasts. Hand-picked gear for every trail, road, and journey ahead.",
+    "shopBikes": "Shop Bikes",
+    "browseAccessories": "Browse Accessories",
+    "products": "Products",
+    "freeShipping": "Free",
+    "shippingThreshold": "Shipping $50+",
+    "returns": "30-Day",
+    "returnsLabel": "Returns",
+    "support": "24/7",
+    "supportLabel": "Support"
+  },
+  "promo": {
+    "limitedSale": "Limited-Time Sale!",
+    "saveUpTo": "Save up to",
+    "offText": "OFF",
+    "onSelectGear": "on select gear",
+    "itemsOnSale": "items on sale",
+    "shopSaleNow": "Shop Sale Now"
+  },
+  "category": {
+    "title": "Shop by Category",
+    "subtitle": "Find exactly what you need for your next adventure",
+    "browse": "Browse"
+  },
+  "featured": {
+    "title": "Featured Gear",
+    "subtitle": "Top picks from our collection",
+    "viewAll": "View All Products"
+  },
+  "notFound": {
+    "title": "Trail Not Found!",
+    "description": "Looks like you've wandered off the beaten path. Don't worry, even the best adventurers get lost sometimes!",
+    "backToCamp": "Back to Camp"
+  },
+  "search": {
+    "title": "Search Results",
+    "searchFor": "Search for",
+    "searchPlaceholder": "Search products...",
+    "searchButton": "Search",
+    "filters": "Filters",
+    "clearAll": "Clear all",
+    "category": "Category",
+    "allCategories": "All Categories",
+    "priceRange": "Price Range",
+    "min": "Min",
+    "max": "Max",
+    "applyFilters": "Apply Filters",
+    "show": "Show:",
+    "perPage": "per page",
+    "sortBy": "Sort by:",
+    "sortRelevance": "Relevance",
+    "sortPriceAsc": "Price: Low to High",
+    "sortPriceDesc": "Price: High to Low",
+    "sortDiscount": "Biggest Discount",
+    "sortRating": "Highest Rated",
+    "results": "{{count}} Results",
+    "noResults": "No products found",
+    "noResultsDesc": "Try adjusting your filters or search terms",
+    "toggleFilters": "Filters",
+    "showingResults": "Showing {{start}}-{{end}} of {{total}} results"
+  },
+  "category": {
+    "backToHome": "Back to Home",
+    "notFound": "Category Not Found",
+    "productsAvailable": "{{count}} product available",
+    "productsAvailable_plural": "{{count}} products available",
+    "subcategories": "Subcategories",
+    "allProducts": "All {{name}}",
+    "sortNameAsc": "Name (A-Z)",
+    "sortNameDesc": "Name (Z-A)",
+    "sortNewest": "Newest First",
+    "noProductsFound": "No products found",
+    "tryDifferentSubcategory": "Try selecting a different subcategory"
+  },
+  "sale": {
+    "title": "Sale Items",
+    "subtitle": "Don't miss out on these amazing deals! Limited time offers on top-quality gear.",
+    "sortDiscountDesc": "Discount (High to Low)",
+    "sortDiscountAsc": "Discount (Low to High)",
+    "noSaleItems": "No Sale Items Right Now",
+    "checkBackSoon": "Check back soon for amazing deals!"
   }
 }

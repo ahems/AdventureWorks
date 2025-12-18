@@ -9,7 +9,11 @@
     "returnsPolicy": "Política de Devoluciones",
     "faq": "Preguntas Frecuentes",
     "contactUs": "Contáctanos",
-    "copyright": "© {{year}} AdventureWorks. Todos los derechos reservados."
+    "address": "1 Adventure Way, Bothell, WA 98011",
+    "phone": "(555) 123-4567",
+    "email": "hello@adventureworks.com",
+    "copyright": "© {{year}} AdventureWorks. Todos los derechos reservados.",
+    "builtWith": "Construido con ❤️ usando Azure y React"
   },
   "pages": {
     "home": "Inicio",

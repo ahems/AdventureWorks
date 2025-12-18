@@ -13,6 +13,7 @@
     "phone": "(555) 123-4567",
     "email": "hello@adventureworks.com",
     "copyright": "© {{year}} AdventureWorks. All rights reserved.",
+    "builtWith": "Built with ❤️ using Azure and React",
     "privacyPolicy": "Privacy Policy",
     "termsOfService": "Terms of Service"
   },

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Loader2, Eye, EyeOff, Bike } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import { z } from "zod";
 
@@ -27,6 +28,7 @@ const signupSchema = z
   });
 
 const AuthPage: React.FC = () => {
+  const { t } = useTranslation("account");
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -125,7 +127,7 @@ const AuthPage: React.FC = () => {
             className="inline-flex items-center gap-2 font-doodle text-doodle-text/70 hover:text-doodle-accent transition-colors mb-6"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Shop
+            {t("auth.backToShop")}
           </Link>
 
           {/* Auth Card */}
@@ -135,12 +137,12 @@ const AuthPage: React.FC = () => {
                 {isLogin ? "👋" : "🎉"}
               </span>
               <h1 className="font-doodle text-2xl md:text-3xl font-bold text-doodle-text">
-                {isLogin ? "Welcome Back!" : "Join the Adventure!"}
+                {isLogin ? t("auth.welcomeBack") : t("auth.joinAdventure")}
               </h1>
               <p className="font-doodle text-doodle-text/70 mt-2">
                 {isLogin
-                  ? "Sign in to your account"
-                  : "Create your free account"}
+                  ? t("auth.signInToAccount")
+                  : t("auth.createFreeAccount")}
               </p>
             </div>
 
@@ -150,7 +152,7 @@ const AuthPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="font-doodle text-sm text-doodle-text block mb-1">
-                      First Name
+                      {t("auth.firstName")}
                     </label>
                     <input
                       type="text"
@@ -159,7 +161,7 @@ const AuthPage: React.FC = () => {
                       className={`doodle-input w-full ${
                         errors.firstName ? "border-doodle-accent" : ""
                       }`}
-                      placeholder="John"
+                      placeholder={t("auth.firstNamePlaceholder")}
                     />
                     {errors.firstName && (
                       <p className="font-doodle text-xs text-doodle-accent mt-1">
@@ -169,7 +171,7 @@ const AuthPage: React.FC = () => {
                   </div>
                   <div>
                     <label className="font-doodle text-sm text-doodle-text block mb-1">
-                      Last Name
+                      {t("auth.lastName")}
                     </label>
                     <input
                       type="text"
@@ -178,7 +180,7 @@ const AuthPage: React.FC = () => {
                       className={`doodle-input w-full ${
                         errors.lastName ? "border-doodle-accent" : ""
                       }`}
-                      placeholder="Doe"
+                      placeholder={t("auth.lastNamePlaceholder")}
                     />
                     {errors.lastName && (
                       <p className="font-doodle text-xs text-doodle-accent mt-1">
@@ -192,7 +194,7 @@ const AuthPage: React.FC = () => {
               {/* Email */}
               <div>
                 <label className="font-doodle text-sm text-doodle-text block mb-1">
-                  Email Address
+                  {t("auth.emailAddress")}
                 </label>
                 <input
                   type="email"
@@ -201,7 +203,7 @@ const AuthPage: React.FC = () => {
                   className={`doodle-input w-full ${
                     errors.email ? "border-doodle-accent" : ""
                   }`}
-                  placeholder="you@example.com"
+                  placeholder={t("auth.emailPlaceholder")}
                 />
                 {errors.email && (
                   <p className="font-doodle text-xs text-doodle-accent mt-1">
@@ -213,7 +215,7 @@ const AuthPage: React.FC = () => {
               {/* Password */}
               <div>
                 <label className="font-doodle text-sm text-doodle-text block mb-1">
-                  Password
+                  {t("auth.password")}
                 </label>
                 <div className="relative">
                   <input
@@ -223,7 +225,7 @@ const AuthPage: React.FC = () => {
                     className={`doodle-input w-full pr-10 ${
                       errors.password ? "border-doodle-accent" : ""
                     }`}
-                    placeholder="••••••••"
+                    placeholder={t("auth.passwordPlaceholder")}
                   />
                   <button
                     type="button"
@@ -248,7 +250,7 @@ const AuthPage: React.FC = () => {
               {!isLogin && (
                 <div>
                   <label className="font-doodle text-sm text-doodle-text block mb-1">
-                    Confirm Password
+                    {t("auth.confirmPassword")}
                   </label>
                   <input
                     type={showPassword ? "text" : "password"}
@@ -257,7 +259,7 @@ const AuthPage: React.FC = () => {
                     className={`doodle-input w-full ${
                       errors.confirmPassword ? "border-doodle-accent" : ""
                     }`}
-                    placeholder="••••••••"
+                    placeholder={t("auth.passwordPlaceholder")}
                   />
                   {errors.confirmPassword && (
                     <p className="font-doodle text-xs text-doodle-accent mt-1">
@@ -276,12 +278,12 @@ const AuthPage: React.FC = () => {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    {isLogin ? "Signing in..." : "Creating account..."}
+                    {isLogin ? t("auth.signingIn") : t("auth.creatingAccount")}
                   </>
                 ) : isLogin ? (
-                  "Sign In"
+                  t("auth.signIn")
                 ) : (
-                  "Create Account"
+                  t("auth.signUp")
                 )}
               </button>
             </form>
@@ -290,21 +292,21 @@ const AuthPage: React.FC = () => {
             <div className="mt-6 text-center">
               <p className="font-doodle text-doodle-text/70">
                 {isLogin
-                  ? "Don't have an account?"
-                  : "Already have an account?"}
+                  ? t("auth.dontHaveAccount")
+                  : t("auth.alreadyHaveAccount")}
               </p>
               <button
                 onClick={toggleMode}
                 className="font-doodle text-doodle-accent hover:text-doodle-green transition-colors font-bold mt-1"
               >
-                {isLogin ? "Create one here!" : "Sign in instead"}
+                {isLogin ? t("auth.createOneHere") : t("auth.signInInstead")}
               </button>
             </div>
 
             {/* Demo Hint */}
             <div className="mt-6 pt-4 border-t-2 border-dashed border-doodle-text/20">
               <p className="font-doodle text-xs text-center text-doodle-text/50">
-                🎭 This is a demo. Your data is stored in a demo database.
+                {t("auth.demoHint")}
               </p>
             </div>
           </div>

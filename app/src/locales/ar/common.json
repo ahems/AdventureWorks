@@ -12,6 +12,103 @@
     "addToCart": "أضف إلى السلة",
     "buyNow": "اشتري الآن",
     "viewDetails": "عرض التفاصيل",
-    "search": "بحث"
+    "search": "بحث",
+    "backToHome": "العودة إلى الصفحة الرئيسية"
+  },
+  "navigation": {
+    "home": "الصفحة الرئيسية"
+  },
+  "newsletter": {
+    "title": "انضم إلى نادي المغامرة!",
+    "description": "احصل على عروض حصرية ونصائح المسارات وأدلة المعدات التي يتم تسليمها إلى صندوق الوارد الخاص بك.",
+    "emailPlaceholder": "بريدك@الإلكتروني.com",
+    "subscribe": "اشتراك",
+    "disclaimer": "لا توجد رسائل غير مرغوب فيها، فقط أجواء جيدة. إلغاء الاشتراك في أي وقت!"
+  },
+  "hero": {
+    "badge": "المغامرة في انتظارك!",
+    "title": "جهز نفسك لـ",
+    "titleHighlight": "مغامرتك",
+    "subtitle": "دراجات ومكونات وملابس وإكسسوارات متميزة لعشاق الهواء الطلق. معدات منتقاة بعناية لكل مسار وطريق ورحلة قادمة.",
+    "shopBikes": "تسوق الدراجات",
+    "browseAccessories": "تصفح الإكسسوارات",
+    "products": "منتجات",
+    "freeShipping": "مجاني",
+    "shippingThreshold": "الشحن $50+",
+    "returns": "30 يوم",
+    "returnsLabel": "إرجاع",
+    "support": "24/7",
+    "supportLabel": "دعم"
+  },
+  "promo": {
+    "limitedSale": "تخفيضات لفترة محدودة!",
+    "saveUpTo": "وفر حتى",
+    "offText": "خصم",
+    "onSelectGear": "على معدات مختارة",
+    "itemsOnSale": "عناصر معروضة",
+    "shopSaleNow": "تسوق التخفيضات الآن"
+  },
+  "category": {
+    "title": "تسوق حسب الفئة",
+    "subtitle": "اعثر على ما تحتاجه بالضبط لمغامرتك القادمة",
+    "browse": "تصفح"
+  },
+  "featured": {
+    "title": "معدات مميزة",
+    "subtitle": "أفضل اختياراتنا من المجموعة",
+    "viewAll": "عرض جميع المنتجات"
+  },
+  "notFound": {
+    "title": "المسار غير موجود!",
+    "description": "يبدو أنك تجولت بعيداً عن الطريق المعتاد. لا تقلق، حتى أفضل المغامرين يضيعون أحياناً!",
+    "backToCamp": "العودة إلى المخيم"
+  },
+  "search": {
+    "title": "نتائج البحث",
+    "searchFor": "البحث عن",
+    "searchPlaceholder": "البحث عن المنتجات...",
+    "searchButton": "بحث",
+    "filters": "الفلاتر",
+    "clearAll": "مسح الكل",
+    "category": "الفئة",
+    "allCategories": "جميع الفئات",
+    "priceRange": "نطاق السعر",
+    "min": "الحد الأدنى",
+    "max": "الحد الأقصى",
+    "applyFilters": "تطبيق الفلاتر",
+    "show": "عرض:",
+    "perPage": "في الصفحة",
+    "sortBy": "الترتيب حسب:",
+    "sortRelevance": "الصلة",
+    "sortPriceAsc": "السعر: من الأقل إلى الأعلى",
+    "sortPriceDesc": "السعر: من الأعلى إلى الأقل",
+    "sortDiscount": "أكبر خصم",
+    "sortRating": "الأعلى تقييماً",
+    "results": "{{count}} نتيجة",
+    "noResults": "لم يتم العثور على منتجات",
+    "noResultsDesc": "جرب تعديل الفلاتر أو مصطلحات البحث",
+    "toggleFilters": "الفلاتر",
+    "showingResults": "عرض {{start}}-{{end}} من {{total}} نتيجة"
+  },
+  "category": {
+    "backToHome": "العودة إلى الرئيسية",
+    "notFound": "الفئة غير موجودة",
+    "productsAvailable": "{{count}} منتج متاح",
+    "productsAvailable_plural": "{{count}} منتج متاح",
+    "subcategories": "الفئات الفرعية",
+    "allProducts": "جميع {{name}}",
+    "sortNameAsc": "الاسم (أ-ي)",
+    "sortNameDesc": "الاسم (ي-أ)",
+    "sortNewest": "الأحدث أولاً",
+    "noProductsFound": "لم يتم العثور على منتجات",
+    "tryDifferentSubcategory": "جرب تحديد فئة فرعية مختلفة"
+  },
+  "sale": {
+    "title": "عروض البيع",
+    "subtitle": "لا تفوت هذه العروض المذهلة! عروض لفترة محدودة على معدات عالية الجودة.",
+    "sortDiscountDesc": "الخصم (من الأعلى إلى الأقل)",
+    "sortDiscountAsc": "الخصم (من الأقل إلى الأعلى)",
+    "noSaleItems": "لا توجد عروض حالياً",
+    "checkBackSoon": "تحقق مرة أخرى قريباً للحصول على عروض مذهلة!"
   }
 }

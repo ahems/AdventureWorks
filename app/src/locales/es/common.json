@@ -12,6 +12,103 @@
     "addToCart": "Añadir al Carrito",
     "buyNow": "Comprar Ahora",
     "viewDetails": "Ver Detalles",
-    "search": "Buscar"
+    "search": "Buscar",
+    "backToHome": "Volver a inicio"
+  },
+  "navigation": {
+    "home": "Inicio"
+  },
+  "newsletter": {
+    "title": "¡Únete al Club de Aventura!",
+    "description": "Recibe ofertas exclusivas, consejos de senderos y guías de equipo directamente en tu bandeja de entrada.",
+    "emailPlaceholder": "tu@correo.com",
+    "subscribe": "Suscribirse",
+    "disclaimer": "Sin spam, solo buenas vibras. ¡Cancela cuando quieras!"
+  },
+  "hero": {
+    "badge": "¡La aventura te espera!",
+    "title": "Prepárate para tu",
+    "titleHighlight": "Aventura",
+    "subtitle": "Bicicletas, componentes, ropa y accesorios premium para entusiastas del aire libre. Equipo seleccionado a mano para cada sendero, carretera y viaje.",
+    "shopBikes": "Comprar Bicicletas",
+    "browseAccessories": "Ver Accesorios",
+    "products": "Productos",
+    "freeShipping": "Gratis",
+    "shippingThreshold": "Envío $50+",
+    "returns": "30 Días",
+    "returnsLabel": "Devoluciones",
+    "support": "24/7",
+    "supportLabel": "Soporte"
+  },
+  "promo": {
+    "limitedSale": "¡Oferta por Tiempo Limitado!",
+    "saveUpTo": "Ahorra hasta",
+    "offText": "DE DESCUENTO",
+    "onSelectGear": "en equipo seleccionado",
+    "itemsOnSale": "artículos en oferta",
+    "shopSaleNow": "Comprar Ofertas Ahora"
+  },
+  "category": {
+    "title": "Comprar por Categoría",
+    "subtitle": "Encuentra exactamente lo que necesitas para tu próxima aventura",
+    "browse": "Explorar"
+  },
+  "featured": {
+    "title": "Equipo Destacado",
+    "subtitle": "Las mejores selecciones de nuestra colección",
+    "viewAll": "Ver Todos los Productos"
+  },
+  "notFound": {
+    "title": "¡Sendero No Encontrado!",
+    "description": "Parece que te has desviado del camino. ¡No te preocupes, hasta los mejores aventureros se pierden a veces!",
+    "backToCamp": "Volver al Campamento"
+  },
+  "search": {
+    "title": "Resultados de Búsqueda",
+    "searchFor": "Buscar",
+    "searchPlaceholder": "Buscar productos...",
+    "searchButton": "Buscar",
+    "filters": "Filtros",
+    "clearAll": "Limpiar todo",
+    "category": "Categoría",
+    "allCategories": "Todas las Categorías",
+    "priceRange": "Rango de Precio",
+    "min": "Mín",
+    "max": "Máx",
+    "applyFilters": "Aplicar Filtros",
+    "show": "Mostrar:",
+    "perPage": "por página",
+    "sortBy": "Ordenar por:",
+    "sortRelevance": "Relevancia",
+    "sortPriceAsc": "Precio: Menor a Mayor",
+    "sortPriceDesc": "Precio: Mayor a Menor",
+    "sortDiscount": "Mayor Descuento",
+    "sortRating": "Mejor Calificación",
+    "results": "{{count}} Resultados",
+    "noResults": "No se encontraron productos",
+    "noResultsDesc": "Intenta ajustar tus filtros o términos de búsqueda",
+    "toggleFilters": "Filtros",
+    "showingResults": "Mostrando {{start}}-{{end}} de {{total}} resultados"
+  },
+  "category": {
+    "backToHome": "Volver al Inicio",
+    "notFound": "Categoría No Encontrada",
+    "productsAvailable": "{{count}} producto disponible",
+    "productsAvailable_plural": "{{count}} productos disponibles",
+    "subcategories": "Subcategorías",
+    "allProducts": "Todos {{name}}",
+    "sortNameAsc": "Nombre (A-Z)",
+    "sortNameDesc": "Nombre (Z-A)",
+    "sortNewest": "Más Recientes",
+    "noProductsFound": "No se encontraron productos",
+    "tryDifferentSubcategory": "Intenta seleccionar una subcategoría diferente"
+  },
+  "sale": {
+    "title": "Artículos en Oferta",
+    "subtitle": "¡No te pierdas estas increíbles ofertas! Ofertas por tiempo limitado en equipos de alta calidad.",
+    "sortDiscountDesc": "Descuento (Mayor a Menor)",
+    "sortDiscountAsc": "Descuento (Menor a Mayor)",
+    "noSaleItems": "No Hay Artículos en Oferta Ahora",
+    "checkBackSoon": "¡Vuelve pronto para ver ofertas increíbles!"
   }
 }

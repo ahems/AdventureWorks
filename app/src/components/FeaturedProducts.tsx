@@ -1,10 +1,12 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
-import ProductCard from './ProductCard';
-import { useFeaturedProducts } from '@/hooks/useProducts';
+import React from "react";
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { ArrowRight } from "lucide-react";
+import ProductCard from "./ProductCard";
+import { useFeaturedProducts } from "@/hooks/useProducts";
 
 const FeaturedProducts: React.FC = () => {
+  const { t } = useTranslation("common");
   const { data: featuredProducts = [], isLoading } = useFeaturedProducts();
 
   if (isLoading) {
@@ -43,24 +45,28 @@ const FeaturedProducts: React.FC = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
             <h2 className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">
-              Featured Gear
+              {t("featured.title")}
             </h2>
             <p className="font-doodle text-doodle-text/70 mt-1">
-              Top picks from our collection
+              {t("featured.subtitle")}
             </p>
           </div>
-          <Link 
+          <Link
             to="/category/1"
             className="doodle-button inline-flex items-center gap-2"
           >
-            View All Products
+            {t("featured.viewAll")}
             <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {featuredProducts.map((product) => (
-            <ProductCard key={product.ProductID} product={product} variant="featured" />
+            <ProductCard
+              key={product.ProductID}
+              product={product}
+              variant="featured"
+            />
           ))}
         </div>
       </div>
