@@ -75,4 +75,5 @@ public class ProductPhotoThumbnailData
     public int ProductPhotoID { get; set; }
     public byte[] LargePhoto { get; set; } = Array.Empty<byte>();
     public string LargePhotoFileName { get; set; } = string.Empty;
+    public byte[]? ThumbNailPhoto { get; set; }
 }

@@ -1,200 +1,250 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
-using Microsoft.DurableTask;
-using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 using api_functions.Models;
 using api_functions.Services;
 using System.Net;
+using System.Text.Json;
+using Azure.Storage.Queues;
+using Azure.Identity;
 
 namespace api_functions.Functions;
 
 public class GenerateProductImages
 {
     private readonly ILogger<GenerateProductImages> _logger;
+    private readonly ProductService _productService;
+    private readonly AIService _aiService;
+    private const string QUEUE_NAME = "product-image-generation";
+    private const string THUMBNAIL_QUEUE_NAME = "product-thumbnail-generation";
 
-    public GenerateProductImages(ILogger<GenerateProductImages> logger)
+    public GenerateProductImages(
+        ILogger<GenerateProductImages> logger,
+        ProductService productService,
+        AIService aiService)
     {
         _logger = logger;
+        _productService = productService;
+        _aiService = aiService;
     }
 
     [Function(nameof(GenerateProductImages_HttpStart))]
     public async Task<HttpResponseData> GenerateProductImages_HttpStart(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
-        [DurableClient] DurableTaskClient client)
+        FunctionContext executionContext)
     {
-        _logger.LogInformation("HTTP trigger received request to start product image generation");
-
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(GenerateProductImages_Orchestrator));
-
-        _logger.LogInformation("Started orchestration with ID = '{instanceId}'", instanceId);
-
-        return await client.CreateCheckStatusResponseAsync(req, instanceId);
-    }
-
-    [Function(nameof(GenerateProductImages_Orchestrator))]
-    public async Task<string> GenerateProductImages_Orchestrator(
-        [OrchestrationTrigger] TaskOrchestrationContext context)
-    {
-        var logger = context.CreateReplaySafeLogger<GenerateProductImages>();
-        logger.LogInformation("Starting product image generation orchestration");
+        _logger.LogInformation("HTTP trigger received request to enqueue product image generation jobs");
 
         try
         {
-            // Step 1: Fetch all products that need images (less than 4 photos)
-            logger.LogInformation("Step 1: Fetching products that need images");
-            var products = await context.CallActivityAsync<List<ProductImageData>>(
-                nameof(FetchProductsForImagesActivity));
+            // Get queue service URI from environment variables
+            var queueServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
+            if (string.IsNullOrEmpty(queueServiceUri))
+            {
+                var storageAccountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
+                    ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
+                queueServiceUri = $"https://{storageAccountName}.queue.core.windows.net";
+            }
+
+            // Create queue client with managed identity
+            var queueServiceClient = new QueueServiceClient(
+                new Uri(queueServiceUri),
+                new DefaultAzureCredential(),
+                new QueueClientOptions
+                {
+                    MessageEncoding = QueueMessageEncoding.Base64
+                }
+            );
+
+            var queueClient = queueServiceClient.GetQueueClient(QUEUE_NAME);
+            await queueClient.CreateIfNotExistsAsync();
+
+            // Clear existing messages from the queue and poison queue
+            _logger.LogInformation("Clearing existing messages from queue: {queueName}", QUEUE_NAME);
+            await queueClient.ClearMessagesAsync();
+
+            var poisonQueueClient = queueServiceClient.GetQueueClient($"{QUEUE_NAME}-poison");
+            if (await poisonQueueClient.ExistsAsync())
+            {
+                _logger.LogInformation("Clearing poison queue: {queueName}", $"{QUEUE_NAME}-poison");
+                await poisonQueueClient.ClearMessagesAsync();
+            }
+
+            // Also clear thumbnail queues
+            var thumbnailQueueClient = queueServiceClient.GetQueueClient(THUMBNAIL_QUEUE_NAME);
+            if (await thumbnailQueueClient.ExistsAsync())
+            {
+                _logger.LogInformation("Clearing existing messages from queue: {queueName}", THUMBNAIL_QUEUE_NAME);
+                await thumbnailQueueClient.ClearMessagesAsync();
+            }
+
+            var thumbnailPoisonQueueClient = queueServiceClient.GetQueueClient($"{THUMBNAIL_QUEUE_NAME}-poison");
+            if (await thumbnailPoisonQueueClient.ExistsAsync())
+            {
+                _logger.LogInformation("Clearing poison queue: {queueName}", $"{THUMBNAIL_QUEUE_NAME}-poison");
+                await thumbnailPoisonQueueClient.ClearMessagesAsync();
+            }
+
+            // Fetch all products that need images
+            var products = await _productService.GetProductsForImageGenerationAsync();
 
             if (products == null || products.Count == 0)
             {
-                logger.LogInformation("No products need images - all products already have 4 photos");
-                return "No products need images - all products already have 4 photos";
+                _logger.LogInformation("No products need images");
+                var response = req.CreateResponse(HttpStatusCode.OK);
+                await response.WriteStringAsync("No products need images - all products already have 4 photos");
+                return response;
             }
 
-            logger.LogInformation("Found {count} products that need images", products.Count);
-
-            // Process only 1 product per orchestration run to avoid timeouts and memory issues
-            const int batchSize = 1;
-            var productsToProcess = products.Take(batchSize).ToList();
-            var remainingCount = products.Count - batchSize;
-
-            logger.LogInformation(
-                "Processing batch of {batchSize} product(s). Remaining: {remaining}",
-                productsToProcess.Count,
-                Math.Max(0, remainingCount)
-            );
-
-            // Step 2: Process products one at a time to avoid activity timeouts
-            var totalPhotos = 0;
-
-            for (int i = 0; i < productsToProcess.Count; i++)
+            // Enqueue one message per product
+            int enqueued = 0;
+            foreach (var product in products)
             {
-                var product = productsToProcess[i];
-                logger.LogInformation(
-                    "Processing product {current} of {total}: {name} (ID: {id})",
-                    i + 1,
-                    productsToProcess.Count,
-                    product.Name,
-                    product.ProductID
-                );
-
-                // Generate images for this single product - will throw and halt if error occurs
-                var photos = await context.CallActivityAsync<List<ProductPhotoData>>(
-                    nameof(GenerateProductImagesActivity),
-                    product);
-
-                if (photos != null && photos.Count > 0)
+                var message = JsonSerializer.Serialize(new
                 {
-                    logger.LogInformation("Generated {count} images for product {id}", photos.Count, product.ProductID);
+                    ProductID = product.ProductID,
+                    ProductName = product.Name
+                });
 
-                    // Step 3: Save images to database - will throw and halt if error occurs
-                    await context.CallActivityAsync(
-                        nameof(SaveProductImagesActivity),
-                        photos);
-
-                    totalPhotos += photos.Count;
-                    logger.LogInformation("Saved {count} images for product {id} (total: {total})",
-                        photos.Count, product.ProductID, totalPhotos);
-                }
-                else
-                {
-                    // Halt execution if no images were generated
-                    var errorMsg = $"Failed to generate images for product {product.ProductID} ({product.Name})";
-                    logger.LogError(errorMsg);
-                    throw new InvalidOperationException(errorMsg);
-                }
+                await queueClient.SendMessageAsync(message);
+                enqueued++;
             }
 
-            var message = $"Successfully generated {totalPhotos} product images for {productsToProcess.Count} product(s). {Math.Max(0, remainingCount)} products still need images.";
-            logger.LogInformation(message);
-            return message;
+            _logger.LogInformation("Enqueued {count} product image generation jobs", enqueued);
+
+            var successResponse = req.CreateResponse(HttpStatusCode.OK);
+            await successResponse.WriteStringAsync(
+                $"Enqueued {enqueued} product image generation jobs. Each product will be processed sequentially."
+            );
+            return successResponse;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error in orchestration");
-            throw;
+            _logger.LogError(ex, "Error enqueueing product image generation jobs");
+            var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await errorResponse.WriteStringAsync($"Error: {ex.Message}");
+            return errorResponse;
         }
     }
 
-    [Function(nameof(FetchProductsForImagesActivity))]
-    public async Task<List<ProductImageData>> FetchProductsForImagesActivity(
-        [ActivityTrigger] object input,
+    [Function(nameof(GenerateProductImages_QueueTrigger))]
+    public async Task GenerateProductImages_QueueTrigger(
+        [QueueTrigger(QUEUE_NAME, Connection = "AzureWebJobsStorage")] BinaryData queueMessage,
         FunctionContext executionContext)
     {
-        var logger = executionContext.GetLogger(nameof(FetchProductsForImagesActivity));
-        logger.LogInformation("Fetching products that need images");
-
-        var configuration = executionContext.InstanceServices
-            .GetService(typeof(Microsoft.Extensions.Configuration.IConfiguration))
-            as Microsoft.Extensions.Configuration.IConfiguration
-            ?? throw new InvalidOperationException("Configuration not found");
-
-        var connectionString = configuration["SQL_CONNECTION_STRING"]
-            ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not found");
-
-        var productService = new ProductService(connectionString);
-        var products = await productService.GetProductsForImageGenerationAsync();
-
-        logger.LogInformation("Found {count} products needing images", products.Count);
-        return products;
-    }
-
-    [Function(nameof(GenerateProductImagesActivity))]
-    public async Task<List<ProductPhotoData>> GenerateProductImagesActivity(
-        [ActivityTrigger] ProductImageData product,
-        FunctionContext executionContext)
-    {
-        var logger = executionContext.GetLogger(nameof(GenerateProductImagesActivity));
-        logger.LogInformation("Generating images for product: {name} (ID: {id})", product.Name, product.ProductID);
-
-        var configuration = executionContext.InstanceServices
-            .GetService(typeof(Microsoft.Extensions.Configuration.IConfiguration))
-            as Microsoft.Extensions.Configuration.IConfiguration
-            ?? throw new InvalidOperationException("Configuration not found");
-
-        var endpoint = configuration["AZURE_OPENAI_ENDPOINT"]
-            ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not found");
-
-        var aiLogger = executionContext.GetLogger<AIService>();
-        var aiService = new AIService(endpoint, aiLogger);
-
-        var photos = await aiService.GenerateProductImagesAsync(new List<ProductImageData> { product });
-
-        logger.LogInformation("Generated {count} images for product {id}", photos.Count, product.ProductID);
-        return photos;
-    }
-
-    [Function(nameof(SaveProductImagesActivity))]
-    public async Task SaveProductImagesActivity(
-        [ActivityTrigger] List<ProductPhotoData> photos,
-        FunctionContext executionContext)
-    {
-        var logger = executionContext.GetLogger(nameof(SaveProductImagesActivity));
-        logger.LogInformation("Saving {count} images to database", photos.Count);
-
-        var configuration = executionContext.InstanceServices
-            .GetService(typeof(Microsoft.Extensions.Configuration.IConfiguration))
-            as Microsoft.Extensions.Configuration.IConfiguration
-            ?? throw new InvalidOperationException("Configuration not found");
-
-        var connectionString = configuration["SQL_CONNECTION_STRING"]
-            ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not found");
-
-        var productService = new ProductService(connectionString);
-
-        foreach (var photo in photos)
+        try
         {
-            await productService.SaveProductPhotoAsync(photo);
-            logger.LogInformation(
-                "Saved image for ProductID {productId}: {fileName} ({size} bytes)",
-                photo.ProductID,
-                photo.FileName,
-                photo.ImageData.Length
-            );
-        }
+            // Parse queue message
+            var messageData = JsonSerializer.Deserialize<JsonElement>(queueMessage.ToString());
+            var productId = messageData.GetProperty("ProductID").GetInt32();
+            var productName = messageData.GetProperty("ProductName").GetString();
 
-        logger.LogInformation("Successfully saved {count} images", photos.Count);
+            _logger.LogInformation("Processing product {id}: {name}", productId, productName);
+
+            // Fetch current product data to verify it still needs images
+            var products = await _productService.GetProductsForImageGenerationAsync();
+
+            var product = products.FirstOrDefault(p => p.ProductID == productId);
+
+            if (product == null)
+            {
+                _logger.LogInformation("Product {id} no longer needs images - skipping", productId);
+                return;
+            }
+
+            _logger.LogInformation("Product {id} needs {count} images. Generating...",
+                productId, 4 - product.ExistingPhotoCount);
+
+            // Generate images for this product with retry logic for rate limiting
+            List<ProductPhotoData>? photos = null;
+            int maxRetries = 5;
+            int retryCount = 0;
+
+            while (retryCount < maxRetries)
+            {
+                try
+                {
+                    photos = await _aiService.GenerateProductImagesAsync(new List<ProductImageData> { product });
+                    break; // Success, exit retry loop
+                }
+                catch (Exception ex) when (ex.Message.Contains("429") || ex.Message.Contains("RateLimitReached"))
+                {
+                    retryCount++;
+                    if (retryCount >= maxRetries)
+                    {
+                        _logger.LogError("Rate limit exceeded after {retries} retries for product {id}", maxRetries, productId);
+                        throw; // Let it go to poison queue after max retries
+                    }
+
+                    // Exponential backoff: 60s, 120s, 240s, 480s
+                    int delaySeconds = 60 * (int)Math.Pow(2, retryCount - 1);
+                    _logger.LogWarning(
+                        "Rate limit hit for product {id}. Retry {retry}/{max} after {delay}s delay",
+                        productId, retryCount, maxRetries, delaySeconds
+                    );
+                    await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
+                }
+            }
+
+            if (photos != null && photos.Count > 0)
+            {
+                // Get storage account connection for thumbnail queue using Environment variables
+                var queueServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
+                if (string.IsNullOrEmpty(queueServiceUri))
+                {
+                    var storageAccountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
+                        ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
+                    queueServiceUri = $"https://{storageAccountName}.queue.core.windows.net";
+                }
+
+                var queueServiceClient = new QueueServiceClient(
+                    new Uri(queueServiceUri),
+                    new DefaultAzureCredential(),
+                    new QueueClientOptions
+                    {
+                        MessageEncoding = QueueMessageEncoding.Base64
+                    }
+                );
+
+                var thumbnailQueueClient = queueServiceClient.GetQueueClient(THUMBNAIL_QUEUE_NAME);
+                await thumbnailQueueClient.CreateIfNotExistsAsync();
+
+                // Save images to database and enqueue thumbnail generation
+                foreach (var photo in photos)
+                {
+                    var photoId = await _productService.SaveProductPhotoAsync(photo);
+                    _logger.LogInformation(
+                        "Saved image for ProductID {productId}: {fileName} ({size} bytes), ProductPhotoID: {photoId}",
+                        photo.ProductID,
+                        photo.FileName,
+                        photo.ImageData.Length,
+                        photoId
+                    );
+
+                    // Enqueue thumbnail generation for this photo
+                    var thumbnailMessage = JsonSerializer.Serialize(new
+                    {
+                        ProductPhotoID = photoId,
+                        LargePhotoFileName = photo.FileName
+                    });
+
+                    await thumbnailQueueClient.SendMessageAsync(thumbnailMessage);
+                }
+
+                _logger.LogInformation(
+                    "Successfully processed product {id} - saved {imageCount} images and enqueued {thumbnailCount} thumbnail jobs",
+                    productId, photos.Count, photos.Count);
+            }
+            else
+            {
+                _logger.LogWarning("No images generated for product {id}", productId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing product image generation from queue. Message: {message}, StackTrace: {stackTrace}",
+                ex.Message, ex.StackTrace);
+            throw; // Re-throw to trigger poison queue handling
+        }
     }
 }

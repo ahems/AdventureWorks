@@ -1,155 +1,74 @@
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Azure.Functions.Worker.Http;
-using Microsoft.DurableTask;
-using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
-using api_functions.Models;
 using api_functions.Services;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Formats.Png;
+using System.Text.Json;
+using Microsoft.Azure.Functions.Worker.Http;
+using System.Net;
+using Azure.Identity;
+using Azure.Storage.Queues;
+using Azure.Storage.Queues.Models;
 
 namespace api_functions.Functions;
 
 public class GenerateProductThumbnails
 {
     private readonly ILogger<GenerateProductThumbnails> _logger;
+    private readonly ProductService _productService;
+    private const string QUEUE_NAME = "product-thumbnail-generation";
 
-    public GenerateProductThumbnails(ILogger<GenerateProductThumbnails> logger)
+    public GenerateProductThumbnails(
+        ILogger<GenerateProductThumbnails> logger,
+        ProductService productService)
     {
         _logger = logger;
+        _productService = productService;
     }
 
-    [Function(nameof(GenerateProductThumbnails_HttpStart))]
-    public async Task<HttpResponseData> GenerateProductThumbnails_HttpStart(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
-        [DurableClient] DurableTaskClient client)
+    [Function(nameof(GenerateProductThumbnails_QueueTrigger))]
+    public async Task GenerateProductThumbnails_QueueTrigger(
+        [QueueTrigger(QUEUE_NAME, Connection = "AzureWebJobsStorage")] BinaryData queueMessage,
+        FunctionContext executionContext)
     {
-        _logger.LogInformation("HTTP trigger received request to start product thumbnail generation");
-
-        string instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(GenerateProductThumbnails_Orchestrator));
-
-        _logger.LogInformation("Started orchestration with ID = '{instanceId}'", instanceId);
-
-        return await client.CreateCheckStatusResponseAsync(req, instanceId);
-    }
-
-    [Function(nameof(GenerateProductThumbnails_Orchestrator))]
-    public async Task<string> GenerateProductThumbnails_Orchestrator(
-        [OrchestrationTrigger] TaskOrchestrationContext context)
-    {
-        var logger = context.CreateReplaySafeLogger<GenerateProductThumbnails>();
-        logger.LogInformation("Starting product thumbnail generation orchestration");
+        _logger.LogInformation("Queue trigger processing thumbnail generation");
 
         try
         {
-            // Step 1: Fetch all photos that need thumbnails
-            logger.LogInformation("Step 1: Fetching photos that need thumbnails");
-            var photos = await context.CallActivityAsync<List<ProductPhotoThumbnailData>>(
-                nameof(FetchPhotosForThumbnailsActivity));
+            // Parse queue message to get ProductPhotoID and LargePhotoFileName
+            var messageData = JsonSerializer.Deserialize<JsonElement>(queueMessage.ToString());
+            var productPhotoId = messageData.GetProperty("ProductPhotoID").GetInt32();
+            var largePhotoFileName = messageData.GetProperty("LargePhotoFileName").GetString();
 
-            if (photos == null || photos.Count == 0)
+            _logger.LogInformation(
+                "Generating thumbnail for ProductPhotoID {photoId}: {fileName}",
+                productPhotoId,
+                largePhotoFileName
+            );
+
+            // Fetch the photo data from database
+            var photo = await _productService.GetProductPhotoAsync(productPhotoId);
+
+            if (photo == null)
             {
-                logger.LogInformation("No photos need thumbnails - all photos already have thumbnails");
-                return "No photos need thumbnails - all photos already have thumbnails";
-            }
-
-            logger.LogInformation("Found {count} photos that need thumbnails", photos.Count);
-
-            // Step 2: Process thumbnails in parallel batches
-            const int batchSize = 20; // Process 20 photos at a time
-            var totalThumbnails = 0;
-
-            for (int i = 0; i < photos.Count; i += batchSize)
-            {
-                var batch = photos.Skip(i).Take(batchSize).ToList();
-                logger.LogInformation(
-                    "Processing batch {batchNum} of {totalBatches} ({count} photos)",
-                    (i / batchSize) + 1,
-                    (photos.Count + batchSize - 1) / batchSize,
-                    batch.Count
+                _logger.LogWarning(
+                    "ProductPhotoID {photoId} not found - skipping",
+                    productPhotoId
                 );
-
-                // Create parallel tasks for thumbnail generation
-                var tasks = batch.Select(photo =>
-                    context.CallActivityAsync<bool>(
-                        nameof(GenerateThumbnailActivity),
-                        photo)
-                ).ToList();
-
-                // Wait for all thumbnails in batch to complete
-                var results = await Task.WhenAll(tasks);
-                var successCount = results.Count(r => r);
-
-                if (successCount > 0)
-                {
-                    totalThumbnails += successCount;
-                    logger.LogInformation(
-                        "Batch complete: {success}/{total} thumbnails generated (total: {overall})",
-                        successCount,
-                        batch.Count,
-                        totalThumbnails
-                    );
-                }
-
-                if (successCount < batch.Count)
-                {
-                    logger.LogWarning(
-                        "{failed} thumbnails failed in batch",
-                        batch.Count - successCount
-                    );
-                }
+                return;
             }
 
-            var message = $"Successfully generated {totalThumbnails} thumbnails from {photos.Count} photos";
-            logger.LogInformation(message);
-            return message;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error in orchestration");
-            throw;
-        }
-    }
+            // Check if thumbnail already exists
+            if (photo.ThumbNailPhoto != null && photo.ThumbNailPhoto.Length > 0)
+            {
+                _logger.LogInformation(
+                    "ProductPhotoID {photoId} already has thumbnail - skipping",
+                    productPhotoId
+                );
+                return;
+            }
 
-    [Function(nameof(FetchPhotosForThumbnailsActivity))]
-    public async Task<List<ProductPhotoThumbnailData>> FetchPhotosForThumbnailsActivity(
-        [ActivityTrigger] object input,
-        FunctionContext executionContext)
-    {
-        var logger = executionContext.GetLogger(nameof(FetchPhotosForThumbnailsActivity));
-        logger.LogInformation("Fetching photos that need thumbnails");
-
-        var configuration = executionContext.InstanceServices
-            .GetService(typeof(Microsoft.Extensions.Configuration.IConfiguration))
-            as Microsoft.Extensions.Configuration.IConfiguration
-            ?? throw new InvalidOperationException("Configuration not found");
-
-        var connectionString = configuration["SQL_CONNECTION_STRING"]
-            ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not found");
-
-        var productService = new ProductService(connectionString);
-        var photos = await productService.GetPhotosNeedingThumbnailsAsync();
-
-        logger.LogInformation("Found {count} photos needing thumbnails", photos.Count);
-        return photos;
-    }
-
-    [Function(nameof(GenerateThumbnailActivity))]
-    public async Task<bool> GenerateThumbnailActivity(
-        [ActivityTrigger] ProductPhotoThumbnailData photo,
-        FunctionContext executionContext)
-    {
-        var logger = executionContext.GetLogger(nameof(GenerateThumbnailActivity));
-        logger.LogInformation(
-            "Generating thumbnail for ProductPhotoID {photoId}: {fileName}",
-            photo.ProductPhotoID,
-            photo.LargePhotoFileName
-        );
-
-        try
-        {
             // Load the image from byte array
             using var imageStream = new MemoryStream(photo.LargePhoto);
             using var image = await Image.LoadAsync(imageStream);
@@ -170,40 +89,112 @@ public class GenerateProductThumbnails
             await image.SaveAsync(outputStream, encoder);
             var thumbnailData = outputStream.ToArray();
 
-            logger.LogInformation(
+            _logger.LogInformation(
                 "Generated thumbnail for ProductPhotoID {photoId}: {size} bytes",
-                photo.ProductPhotoID,
+                productPhotoId,
                 thumbnailData.Length
             );
 
             // Save to database
-            var configuration = executionContext.InstanceServices
-                .GetService(typeof(Microsoft.Extensions.Configuration.IConfiguration))
-                as Microsoft.Extensions.Configuration.IConfiguration
-                ?? throw new InvalidOperationException("Configuration not found");
+            await _productService.SaveProductThumbnailAsync(productPhotoId, thumbnailData);
 
-            var connectionString = configuration["SQL_CONNECTION_STRING"]
-                ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not found");
-
-            var productService = new ProductService(connectionString);
-            await productService.SaveProductThumbnailAsync(photo.ProductPhotoID, thumbnailData);
-
-            logger.LogInformation(
+            _logger.LogInformation(
                 "Saved thumbnail for ProductPhotoID {photoId}",
-                photo.ProductPhotoID
+                productPhotoId
             );
-
-            return true;
         }
         catch (Exception ex)
         {
-            logger.LogError(
+            _logger.LogError(
                 ex,
-                "Failed to generate thumbnail for ProductPhotoID {photoId}",
-                photo.ProductPhotoID
+                "Failed to generate thumbnail from queue message"
             );
-            // Return false instead of throwing to allow other thumbnails to continue
-            return false;
+            throw; // Re-throw to trigger poison queue handling
+        }
+    }
+
+    [Function(nameof(RepairMissingThumbnails_HttpStart))]
+    public async Task<HttpResponseData> RepairMissingThumbnails_HttpStart(
+        [HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequestData req,
+        FunctionContext executionContext)
+    {
+        _logger.LogInformation("Starting repair of missing thumbnails");
+
+        try
+        {
+            // Get all photos without thumbnails from database
+            var photosNeedingThumbnails = await _productService.GetProductPhotosWithoutThumbnailsAsync();
+
+            _logger.LogInformation(
+                "Found {count} photos without thumbnails",
+                photosNeedingThumbnails.Count
+            );
+
+            if (photosNeedingThumbnails.Count == 0)
+            {
+                var noWorkResponse = req.CreateResponse(HttpStatusCode.OK);
+                await noWorkResponse.WriteStringAsync(
+                    JsonSerializer.Serialize(new { message = "No photos need thumbnails" })
+                );
+                return noWorkResponse;
+            }
+
+            // Get storage account connection for thumbnail queue
+            var queueServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
+            if (string.IsNullOrEmpty(queueServiceUri))
+            {
+                var storageAccountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
+                    ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
+                queueServiceUri = $"https://{storageAccountName}.queue.core.windows.net";
+            }
+
+            var queueServiceClient = new QueueServiceClient(
+                new Uri(queueServiceUri),
+                new DefaultAzureCredential(),
+                new QueueClientOptions
+                {
+                    MessageEncoding = QueueMessageEncoding.Base64
+                }
+            );
+
+            var thumbnailQueueClient = queueServiceClient.GetQueueClient(QUEUE_NAME);
+            await thumbnailQueueClient.CreateIfNotExistsAsync();
+
+            // Enqueue a message for each photo that needs a thumbnail
+            int enqueuedCount = 0;
+            foreach (var photo in photosNeedingThumbnails)
+            {
+                var thumbnailMessage = JsonSerializer.Serialize(new
+                {
+                    ProductPhotoID = photo.ProductPhotoID,
+                    LargePhotoFileName = photo.LargePhotoFileName ?? $"product_photo_{photo.ProductPhotoID}.png"
+                });
+
+                await thumbnailQueueClient.SendMessageAsync(thumbnailMessage);
+                enqueuedCount++;
+            }
+
+            _logger.LogInformation(
+                "Enqueued {count} thumbnail generation messages",
+                enqueuedCount
+            );
+
+            var response = req.CreateResponse(HttpStatusCode.OK);
+            await response.WriteStringAsync(
+                JsonSerializer.Serialize(new
+                {
+                    message = $"Enqueued {enqueuedCount} photos for thumbnail generation",
+                    count = enqueuedCount
+                })
+            );
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to repair missing thumbnails");
+            var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await errorResponse.WriteStringAsync($"Error: {ex.Message}");
+            return errorResponse;
         }
     }
 }

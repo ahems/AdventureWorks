@@ -1,42 +1,74 @@
-import React from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { ShoppingCart, Menu, X, Bike, User, LogOut, ChevronDown, Search, Heart } from 'lucide-react';
-import { useCart } from '@/context/CartContext';
-import { useWishlist } from '@/context/WishlistContext';
-import { useAuth } from '@/context/AuthContext';
-import { useCategories } from '@/hooks/useProducts';
+import React from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import {
+  ShoppingCart,
+  Menu,
+  X,
+  Bike,
+  User,
+  LogOut,
+  ChevronDown,
+  Search,
+  Globe,
+} from "lucide-react";
+import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/context/AuthContext";
+import { useCategories } from "@/hooks/useProducts";
+
+// Language configuration with flag emojis
+const LANGUAGES = [
+  { code: "ar", name: "Arabic", flag: "🇸🇦" },
+  { code: "en", name: "English", flag: "🇺🇸" },
+  { code: "es", name: "Spanish", flag: "🇪🇸" },
+  { code: "fr", name: "French", flag: "🇫🇷" },
+  { code: "he", name: "Hebrew", flag: "🇮🇱" },
+  { code: "th", name: "Thai", flag: "🇹🇭" },
+  { code: "zh-cht", name: "Chinese", flag: "🇨🇳" },
+];
 
 const Header: React.FC = () => {
   const { getTotalItems } = useCart();
-  const { items: wishlistItems } = useWishlist();
   const { user, isAuthenticated, logout } = useAuth();
-  const { data: categories = [], isLoading: categoriesLoading } = useCategories();
+  const { data: categories = [], isLoading: categoriesLoading } =
+    useCategories();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [userMenuOpen, setUserMenuOpen] = React.useState(false);
-  const [searchQuery, setSearchQuery] = React.useState('');
+  const [languageMenuOpen, setLanguageMenuOpen] = React.useState(false);
+  const [searchQuery, setSearchQuery] = React.useState("");
   const [showSearch, setShowSearch] = React.useState(false);
+  const [selectedLanguage, setSelectedLanguage] = React.useState("en");
   const totalItems = getTotalItems();
 
   const userMenuRef = React.useRef<HTMLDivElement>(null);
+  const languageMenuRef = React.useRef<HTMLDivElement>(null);
 
   // Close user menu when clicking outside
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+      if (
+        userMenuRef.current &&
+        !userMenuRef.current.contains(event.target as Node)
+      ) {
         setUserMenuOpen(false);
       }
+      if (
+        languageMenuRef.current &&
+        !languageMenuRef.current.contains(event.target as Node)
+      ) {
+        setLanguageMenuOpen(false);
+      }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-      setSearchQuery('');
+      setSearchQuery("");
       setShowSearch(false);
     }
   };
@@ -61,7 +93,10 @@ const Header: React.FC = () => {
               // Loading skeleton for categories
               <>
                 {[...Array(4)].map((_, i) => (
-                  <div key={i} className="h-4 w-20 bg-doodle-text/10 animate-pulse"></div>
+                  <div
+                    key={i}
+                    className="h-4 w-20 bg-doodle-text/10 animate-pulse"
+                  ></div>
                 ))}
                 <div className="h-4 w-16 bg-doodle-accent/20 animate-pulse"></div>
               </>
@@ -71,14 +106,21 @@ const Header: React.FC = () => {
                   <Link
                     key={category.ProductCategoryID}
                     to={`/category/${category.ProductCategoryID}`}
-                    className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors ${location.pathname === `/category/${category.ProductCategoryID}` ? 'squiggle' : ''}`}
+                    className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors ${
+                      location.pathname ===
+                      `/category/${category.ProductCategoryID}`
+                        ? "squiggle"
+                        : ""
+                    }`}
                   >
                     {category.Name}
                   </Link>
                 ))}
-                <Link 
-                  to="/sale" 
-                  className={`font-doodle text-doodle-accent font-bold hover:text-doodle-green transition-colors ${location.pathname === '/sale' ? 'squiggle' : ''}`}
+                <Link
+                  to="/sale"
+                  className={`font-doodle text-doodle-accent font-bold hover:text-doodle-green transition-colors ${
+                    location.pathname === "/sale" ? "squiggle" : ""
+                  }`}
                 >
                   🏷️ Sale
                 </Link>
@@ -107,13 +149,18 @@ const Header: React.FC = () => {
                 >
                   <div className="w-6 h-6 rounded-full bg-doodle-accent flex items-center justify-center">
                     <span className="text-white text-xs font-bold">
-                      {user.firstName[0]}{user.lastName[0]}
+                      {user.firstName[0]}
+                      {user.lastName[0]}
                     </span>
                   </div>
                   <span className="hidden sm:inline font-doodle text-sm">
                     {user.firstName}
                   </span>
-                  <ChevronDown className={`w-4 h-4 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform ${
+                      userMenuOpen ? "rotate-180" : ""
+                    }`}
+                  />
                 </button>
 
                 {/* Dropdown Menu */}
@@ -149,8 +196,8 @@ const Header: React.FC = () => {
                 )}
               </div>
             ) : (
-              <Link 
-                to="/auth" 
+              <Link
+                to="/auth"
                 className="doodle-button flex items-center gap-2 py-2 px-3"
               >
                 <User className="w-5 h-5" />
@@ -158,22 +205,62 @@ const Header: React.FC = () => {
               </Link>
             )}
 
-            {/* Wishlist */}
-            <Link 
-              to="/wishlist" 
-              className="doodle-button relative flex items-center gap-2 py-2 px-3"
-            >
-              <Heart className="w-5 h-5" />
-              {wishlistItems.length > 0 && (
-                <span className="absolute -top-2 -right-2 bg-doodle-accent text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-doodle-text">
-                  {wishlistItems.length}
+            {/* Language Selector */}
+            <div className="relative" ref={languageMenuRef}>
+              <button
+                onClick={() => setLanguageMenuOpen(!languageMenuOpen)}
+                className="doodle-button flex items-center gap-2 py-2 px-3"
+                aria-label="Select language"
+              >
+                <Globe className="w-5 h-5" />
+                <span className="text-xl">
+                  {
+                    LANGUAGES.find((lang) => lang.code === selectedLanguage)
+                      ?.flag
+                  }
                 </span>
+                <ChevronDown
+                  className={`w-4 h-4 transition-transform ${
+                    languageMenuOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              {/* Language Dropdown Menu */}
+              {languageMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-56 doodle-card p-2 z-50">
+                  <div className="px-3 py-2 border-b-2 border-dashed border-doodle-text/20 mb-2">
+                    <p className="font-doodle font-bold text-doodle-text text-sm">
+                      Select Language
+                    </p>
+                  </div>
+                  {LANGUAGES.map((language) => (
+                    <button
+                      key={language.code}
+                      onClick={() => {
+                        setSelectedLanguage(language.code);
+                        setLanguageMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2 font-doodle text-doodle-text hover:bg-doodle-text/10 transition-colors ${
+                        selectedLanguage === language.code
+                          ? "bg-doodle-accent/10"
+                          : ""
+                      }`}
+                    >
+                      <span className="text-2xl">{language.flag}</span>
+                      <span>{language.name}</span>
+                      {selectedLanguage === language.code && (
+                        <span className="ml-auto text-doodle-accent">✓</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
               )}
-            </Link>
+            </div>
 
             {/* Cart */}
-            <Link 
-              to="/cart" 
+            <Link
+              to="/cart"
               className="doodle-button relative flex items-center gap-2 py-2 px-3"
             >
               <ShoppingCart className="w-5 h-5" />
@@ -191,7 +278,11 @@ const Header: React.FC = () => {
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label="Toggle menu"
             >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {mobileMenuOpen ? (
+                <X className="w-5 h-5" />
+              ) : (
+                <Menu className="w-5 h-5" />
+              )}
             </button>
           </div>
         </div>
@@ -204,7 +295,10 @@ const Header: React.FC = () => {
                 // Loading skeleton for mobile menu
                 <>
                   {[...Array(4)].map((_, i) => (
-                    <div key={i} className="h-6 w-32 bg-doodle-text/10 animate-pulse"></div>
+                    <div
+                      key={i}
+                      className="h-6 w-32 bg-doodle-text/10 animate-pulse"
+                    ></div>
                   ))}
                   <div className="h-6 w-24 bg-doodle-accent/20 animate-pulse"></div>
                 </>

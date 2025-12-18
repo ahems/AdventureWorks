@@ -305,7 +305,7 @@ public class ProductService
         return products.ToList();
     }
 
-    public async Task SaveProductPhotoAsync(ProductPhotoData photo)
+    public async Task<int> SaveProductPhotoAsync(ProductPhotoData photo)
     {
         using var connection = await GetConnectionAsync();
 
@@ -336,9 +336,50 @@ public class ProductService
             ProductPhotoID = productPhotoId,
             IsPrimary = photo.IsPrimary
         });
+
+        return productPhotoId;
+    }
+
+    public async Task<ProductPhotoThumbnailData?> GetProductPhotoAsync(int productPhotoId)
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = @"
+            SELECT 
+                ProductPhotoID,
+                LargePhoto,
+                LargePhotoFileName,
+                ThumbNailPhoto
+            FROM Production.ProductPhoto
+            WHERE ProductPhotoID = @ProductPhotoID";
+
+        var photo = await connection.QueryFirstOrDefaultAsync<ProductPhotoThumbnailData>(sql, new
+        {
+            ProductPhotoID = productPhotoId
+        });
+
+        return photo;
     }
 
     public async Task<List<ProductPhotoThumbnailData>> GetPhotosNeedingThumbnailsAsync()
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = @"
+            SELECT 
+                ProductPhotoID,
+                LargePhoto,
+                LargePhotoFileName
+            FROM Production.ProductPhoto
+            WHERE LargePhoto IS NOT NULL 
+            AND (ThumbNailPhoto IS NULL OR DATALENGTH(ThumbNailPhoto) = 0)
+            ORDER BY ProductPhotoID";
+
+        var photos = await connection.QueryAsync<ProductPhotoThumbnailData>(sql);
+        return photos.ToList();
+    }
+
+    public async Task<List<ProductPhotoThumbnailData>> GetProductPhotosWithoutThumbnailsAsync()
     {
         using var connection = await GetConnectionAsync();
 
