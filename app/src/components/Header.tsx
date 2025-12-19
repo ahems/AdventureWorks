@@ -16,6 +16,7 @@ import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { useCategories } from "@/hooks/useProducts";
 import { useLanguage } from "@/context/LanguageContext";
+import { Twemoji } from "@/components/Twemoji";
 
 const Header: React.FC = () => {
   const { t } = useTranslation("common");
@@ -207,12 +208,14 @@ const Header: React.FC = () => {
                 aria-label={t("headerAria.selectLanguage")}
               >
                 <Globe className="w-5 h-5" />
-                <span className="text-xl">
-                  {
+                <Twemoji
+                  emoji={
                     languages.find((lang) => lang.code === selectedLanguage)
-                      ?.flag
+                      ?.flag || "🌐"
                   }
-                </span>
+                  size="1.25rem"
+                  className="inline-flex items-center"
+                />
                 <ChevronDown
                   className={`w-4 h-4 transition-transform ${
                     languageMenuOpen ? "rotate-180" : ""
@@ -222,7 +225,7 @@ const Header: React.FC = () => {
 
               {/* Language Dropdown Menu */}
               {languageMenuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-56 doodle-card p-2 z-50">
+                <div className="absolute right-0 top-full mt-2 w-auto min-w-[4rem] doodle-card p-2 z-50 max-h-96 overflow-y-auto">
                   <div className="px-3 py-2 border-b-2 border-dashed border-doodle-text/20 mb-2">
                     <p className="font-doodle font-bold text-doodle-text text-sm">
                       {t("header.selectLanguage")}
@@ -235,17 +238,18 @@ const Header: React.FC = () => {
                         setSelectedLanguage(language.code);
                         setLanguageMenuOpen(false);
                       }}
-                      className={`w-full flex items-center gap-3 px-3 py-2 font-doodle text-doodle-text hover:bg-doodle-text/10 transition-colors ${
+                      title={language.name}
+                      className={`w-full flex items-center justify-center px-3 py-2 font-doodle text-doodle-text hover:bg-doodle-text/10 transition-colors ${
                         selectedLanguage === language.code
-                          ? "bg-doodle-accent/10"
+                          ? "bg-doodle-accent/10 ring-2 ring-doodle-accent"
                           : ""
                       }`}
                     >
-                      <span className="text-2xl">{language.flag}</span>
-                      <span>{language.name}</span>
-                      {selectedLanguage === language.code && (
-                        <span className="ml-auto text-doodle-accent">✓</span>
-                      )}
+                      <Twemoji
+                        emoji={language.flag}
+                        size="2rem"
+                        className="inline-flex items-center"
+                      />
                     </button>
                   ))}
                 </div>

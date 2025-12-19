@@ -458,4 +458,269 @@ Translate the description into each target language. Return ONLY a valid JSON ob
 
         return photos;
     }
+
+    public async Task<JsonElement> TranslateLanguageFileAsync(
+        JsonElement languageData,
+        string languageCode,
+        string languageName)
+    {
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var chatClient = client.GetChatClient(_deploymentName);
+
+        // Get region-specific email suffix and example cities
+        var regionalInfo = GetRegionalInfo(languageCode);
+
+        // Check if this is an English regional variant
+        var isEnglishVariant = languageCode.ToLowerInvariant().StartsWith("en-");
+
+        var systemPrompt = isEnglishVariant
+            ? $@"You are a professional localizer for the AdventureWorks e-commerce demo application.
+You are adapting a language file (i18n JSON) from American English to {languageName}.
+
+CRITICAL INSTRUCTIONS:
+1. Adapt ALL values for {languageName} while maintaining the fun, adventurous vibe
+2. Keep ALL keys exactly as they are - ONLY modify the values
+3. Preserve the JSON structure perfectly, including nested objects and arrays
+4. Keep HTML tags, placeholders like {{{{count}}}}, {{{{percent}}}}, {{{{name}}}}, etc. exactly as they appear
+5. Apply regional spelling conventions (e.g., 'colour' vs 'color', 'favourite' vs 'favorite')
+6. Use regional vocabulary and phrases where appropriate (e.g., 'post code' vs 'zip code', 'lorry' vs 'truck')
+7. For email addresses:
+   - Use regional names common in {languageName}-speaking regions
+   - Use regional email suffix: {regionalInfo.EmailSuffix}
+   - Example: '{regionalInfo.EmailExample}'
+8. For street addresses and cities:
+   - Use realistic city names: {string.Join(", ", regionalInfo.ExampleCities)}
+   - Adapt street address format to regional conventions
+   - Keep fun, creative street names but make them sound natural for the region
+9. Adapt idioms and expressions to sound natural in {languageName}
+10. Preserve all special characters, punctuation, and formatting
+11. Keep the enthusiastic, friendly, marketing tone
+12. Return ONLY valid JSON - the exact same structure as input but with adapted values
+
+Regional context: You are localizing for {languageName} customers, so ensure the language sounds natural and familiar to them while maintaining the outdoor adventure theme.
+
+IMPORTANT: Return ONLY the complete localized JSON object. Do not wrap it in markdown code blocks or add any explanatory text."
+            : $@"You are a professional translator for the AdventureWorks e-commerce demo application.
+You are translating a language file (i18n JSON) from English to {languageName}.
+
+CRITICAL INSTRUCTIONS:
+1. Translate ALL values while maintaining the fun, adventurous vibe of the original English text
+2. Keep ALL keys exactly as they are in the original - ONLY translate the values
+3. Preserve the JSON structure perfectly, including nested objects and arrays
+4. Keep HTML tags, placeholders like {{{{count}}}}, {{{{percent}}}}, {{{{name}}}}, etc. exactly as they appear
+5. Keep technical terms like 'GraphQL', 'API', brand names, and product codes in English
+6. For email addresses (like example emails): 
+   - Use common regional names appropriate for {languageName}
+   - Use regional email suffix: {regionalInfo.EmailSuffix}
+   - Example: instead of 'your@email.com' use something like '{regionalInfo.EmailExample}'
+7. For street addresses and cities:
+   - Create fun, made-up street addresses appropriate for {languageName}-speaking regions
+   - Use realistic city names for {languageName}-speaking countries
+   - Examples of cities to use: {string.Join(", ", regionalInfo.ExampleCities)}
+   - Make street names fun and creative (like 'Adventure Lane' → fun equivalent in {languageName})
+8. Preserve all special characters, punctuation, and formatting
+9. Keep the enthusiastic, friendly, marketing tone
+10. Return ONLY valid JSON - the exact same structure as input but with translated values
+
+Regional context: You are translating for {languageName}-speaking customers, so ensure cultural appropriateness while maintaining the outdoor adventure theme.
+
+IMPORTANT: Return ONLY the complete translated JSON object. Do not wrap it in markdown code blocks or add any explanatory text.";
+
+        var userPrompt = $@"Here is the English language file to translate to {languageName}:
+
+{JsonSerializer.Serialize(languageData, new JsonSerializerOptions { WriteIndented = true })}
+
+Return the complete translated version with all values translated to {languageName}, keeping all keys in English.";
+
+        var messages = new List<ChatMessage>
+        {
+            new SystemChatMessage(systemPrompt),
+            new UserChatMessage(userPrompt)
+        };
+
+        _logger.LogInformation("Sending translation request for {Language}", languageName);
+
+        var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+        {
+            Temperature = 0.7f, // Moderate creativity for natural translations with fun vibe
+            MaxOutputTokenCount = 16000,
+            ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat() // Ensure valid JSON
+        });
+
+        var content = response.Value.Content[0].Text;
+
+        _logger.LogInformation("Received translation response for {Language}: {Length} characters",
+            languageName, content?.Length ?? 0);
+
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            throw new InvalidOperationException($"Empty response from AI for {languageName} translation");
+        }
+
+        // Parse the JSON response
+        try
+        {
+            var translatedJson = JsonSerializer.Deserialize<JsonElement>(content);
+            return translatedJson;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse AI translation response for {Language}", languageName);
+            _logger.LogError("Response content: {Content}", content.Length > 2000 ? content.Substring(0, 2000) + "..." : content);
+            throw new InvalidOperationException($"AI returned invalid JSON for {languageName} translation", ex);
+        }
+    }
+
+    private RegionalInfo GetRegionalInfo(string languageCode)
+    {
+        return languageCode.ToLowerInvariant() switch
+        {
+            "es" => new RegionalInfo
+            {
+                EmailSuffix = ".es",
+                EmailExample = "juan@email.es",
+                ExampleCities = new[] { "Madrid", "Barcelona", "Valencia", "Sevilla", "Bilbao" }
+            },
+            "fr" => new RegionalInfo
+            {
+                EmailSuffix = ".fr",
+                EmailExample = "marie@email.fr",
+                ExampleCities = new[] { "Paris", "Lyon", "Marseille", "Toulouse", "Nice" }
+            },
+            "de" => new RegionalInfo
+            {
+                EmailSuffix = ".de",
+                EmailExample = "hans@email.de",
+                ExampleCities = new[] { "Berlin", "Munich", "Hamburg", "Frankfurt", "Cologne" }
+            },
+            "pt" => new RegionalInfo
+            {
+                EmailSuffix = ".pt",
+                EmailExample = "joao@email.pt",
+                ExampleCities = new[] { "Lisbon", "Porto", "Braga", "Coimbra", "Faro" }
+            },
+            "it" => new RegionalInfo
+            {
+                EmailSuffix = ".it",
+                EmailExample = "marco@email.it",
+                ExampleCities = new[] { "Rome", "Milan", "Naples", "Turin", "Florence" }
+            },
+            "nl" => new RegionalInfo
+            {
+                EmailSuffix = ".nl",
+                EmailExample = "jan@email.nl",
+                ExampleCities = new[] { "Amsterdam", "Rotterdam", "Utrecht", "The Hague", "Eindhoven" }
+            },
+            "ru" => new RegionalInfo
+            {
+                EmailSuffix = ".ru",
+                EmailExample = "ivan@email.ru",
+                ExampleCities = new[] { "Moscow", "Saint Petersburg", "Novosibirsk", "Yekaterinburg", "Kazan" }
+            },
+            "zh" => new RegionalInfo
+            {
+                EmailSuffix = ".cn",
+                EmailExample = "wei@email.cn",
+                ExampleCities = new[] { "Beijing", "Shanghai", "Guangzhou", "Shenzhen", "Chengdu" }
+            },
+            "zh-cht" => new RegionalInfo
+            {
+                EmailSuffix = ".tw",
+                EmailExample = "chen@email.tw",
+                ExampleCities = new[] { "Taipei", "Kaohsiung", "Taichung", "Tainan", "Hsinchu" }
+            },
+            "ja" => new RegionalInfo
+            {
+                EmailSuffix = ".jp",
+                EmailExample = "tanaka@email.jp",
+                ExampleCities = new[] { "Tokyo", "Osaka", "Kyoto", "Yokohama", "Sapporo" }
+            },
+            "ko" => new RegionalInfo
+            {
+                EmailSuffix = ".kr",
+                EmailExample = "kim@email.kr",
+                ExampleCities = new[] { "Seoul", "Busan", "Incheon", "Daegu", "Daejeon" }
+            },
+            "ar" => new RegionalInfo
+            {
+                EmailSuffix = ".sa",
+                EmailExample = "ahmed@email.sa",
+                ExampleCities = new[] { "Riyadh", "Dubai", "Cairo", "Jeddah", "Abu Dhabi" }
+            },
+            "he" => new RegionalInfo
+            {
+                EmailSuffix = ".il",
+                EmailExample = "david@email.il",
+                ExampleCities = new[] { "Tel Aviv", "Jerusalem", "Haifa", "Rishon LeZion", "Petah Tikva" }
+            },
+            "tr" => new RegionalInfo
+            {
+                EmailSuffix = ".tr",
+                EmailExample = "mehmet@email.tr",
+                ExampleCities = new[] { "Istanbul", "Ankara", "Izmir", "Bursa", "Antalya" }
+            },
+            "vi" => new RegionalInfo
+            {
+                EmailSuffix = ".vn",
+                EmailExample = "nguyen@email.vn",
+                ExampleCities = new[] { "Hanoi", "Ho Chi Minh City", "Da Nang", "Hai Phong", "Can Tho" }
+            },
+            "th" => new RegionalInfo
+            {
+                EmailSuffix = ".th",
+                EmailExample = "somchai@email.th",
+                ExampleCities = new[] { "Bangkok", "Chiang Mai", "Phuket", "Pattaya", "Krabi" }
+            },
+            "id" => new RegionalInfo
+            {
+                EmailSuffix = ".id",
+                EmailExample = "budi@email.id",
+                ExampleCities = new[] { "Jakarta", "Surabaya", "Bandung", "Bali", "Yogyakarta" }
+            },
+            "en-gb" => new RegionalInfo
+            {
+                EmailSuffix = ".co.uk",
+                EmailExample = "james@email.co.uk",
+                ExampleCities = new[] { "London", "Manchester", "Edinburgh", "Birmingham", "Liverpool" }
+            },
+            "en-ca" => new RegionalInfo
+            {
+                EmailSuffix = ".ca",
+                EmailExample = "sarah@email.ca",
+                ExampleCities = new[] { "Toronto", "Vancouver", "Montreal", "Calgary", "Ottawa" }
+            },
+            "en-au" => new RegionalInfo
+            {
+                EmailSuffix = ".com.au",
+                EmailExample = "jack@email.com.au",
+                ExampleCities = new[] { "Sydney", "Melbourne", "Brisbane", "Perth", "Adelaide" }
+            },
+            "en-nz" => new RegionalInfo
+            {
+                EmailSuffix = ".co.nz",
+                EmailExample = "emma@email.co.nz",
+                ExampleCities = new[] { "Auckland", "Wellington", "Christchurch", "Hamilton", "Dunedin" }
+            },
+            "en-ie" => new RegionalInfo
+            {
+                EmailSuffix = ".ie",
+                EmailExample = "sean@email.ie",
+                ExampleCities = new[] { "Dublin", "Cork", "Galway", "Limerick", "Waterford" }
+            },
+            _ => new RegionalInfo
+            {
+                EmailSuffix = ".com",
+                EmailExample = "user@email.com",
+                ExampleCities = new[] { "New York", "Los Angeles", "Chicago", "Houston", "Phoenix" }
+            }
+        };
+    }
+}
+
+public class RegionalInfo
+{
+    public string EmailSuffix { get; set; } = ".com";
+    public string EmailExample { get; set; } = "user@email.com";
+    public string[] ExampleCities { get; set; } = Array.Empty<string>();
 }

@@ -8,17 +8,25 @@
   "returnsPolicy": "Política de Devoluciones",
   "faq": "Preguntas Frecuentes",
   "contactUs": "Contáctanos",
-  "address": "1 Adventure Way, Bothell, WA 98011",
+  "address": "1 Calle Aventura, Madrid, 28013",
   "phone": "(555) 123-4567",
-  "email": "hello@adventureworks.com",
-  "copyright": "© {{year}} AdventureWorks. Todos los derechos reservados.",
-  "builtWith": "Construido con ❤️ usando Azure y React",
+  "email": "hola@aventuratrabajos.es",
+  "copyright": "\u0000A9 {{year}} AdventureWorks. Todos los derechos reservados.",
+  "builtWith": "Construido con \u0000A9 usando Azure y React",
+  "privacyPolicy": "Política de Privacidad",
+  "termsOfService": "Términos de Servicio",
   "pages": {
     "home": "Inicio",
     "sale": "Ofertas",
+    "categories": "Categorías",
     "search": "Buscar",
+    "compare": "Comparar Productos",
     "notFound": "Página No Encontrada",
-    "loading": "Cargando..."
+    "notFoundMessage": "Lo sentimos, la página que buscas no existe.",
+    "goHome": "Ir a la Página Principal",
+    "loading": "Cargando...",
+    "error": "Ocurrió un error",
+    "tryAgain": "Intentar de Nuevo"
   },
   "general": {
     "yes": "Sí",
@@ -31,6 +39,18 @@
     "close": "Cerrar",
     "back": "Atrás",
     "next": "Siguiente",
-    "submit": "Enviar"
+    "previous": "Anterior",
+    "submit": "Enviar",
+    "confirm": "Confirmar",
+    "apply": "Aplicar",
+    "reset": "Restablecer",
+    "filter": "Filtrar",
+    "sort": "Ordenar",
+    "sortBy": "Ordenar Por",
+    "priceHighToLow": "Precio: De Mayor a Menor",
+    "priceLowToHigh": "Precio: De Menor a Mayor",
+    "newest": "Más Recientes",
+    "rating": "Calificación",
+    "popular": "Popular"
   }
 }

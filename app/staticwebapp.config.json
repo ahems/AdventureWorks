@@ -1,11 +1,7 @@
 {
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": [
-      "/images/*",
-      "/assets/*",
-      "/*.{css,scss,js,json,xml,txt,ico,svg,png,jpg,jpeg,gif,webp,woff,woff2,ttf,eot}"
-    ]
+    "exclude": ["/images/*.{png,jpg,jpeg,gif,ico,svg,webp}", "/*.{css,js,map}"]
   },
   "routes": [
     {
@@ -15,7 +11,8 @@
   ],
   "responseOverrides": {
     "404": {
-      "rewrite": "/index.html"
+      "rewrite": "/index.html",
+      "statusCode": 200
     }
   },
   "globalHeaders": {
