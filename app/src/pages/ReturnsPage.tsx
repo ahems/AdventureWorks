@@ -1,30 +1,41 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, RotateCcw, Clock, Package, CheckCircle, AlertCircle, Mail } from 'lucide-react';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
+import React from "react";
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import {
+  ArrowLeft,
+  RotateCcw,
+  Clock,
+  Package,
+  CheckCircle,
+  AlertCircle,
+  Mail,
+} from "lucide-react";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 
 const ReturnsPage: React.FC = () => {
+  const { t } = useTranslation("common");
+
   const returnSteps = [
     {
       icon: <Mail className="w-6 h-6" />,
-      title: 'Contact Us',
-      description: 'Email us at returns@adventureworks.com or call (555) 123-4567 to initiate your return.',
+      title: t("returns.contactUs"),
+      description: t("returns.contactUsDescription"),
     },
     {
       icon: <Package className="w-6 h-6" />,
-      title: 'Pack It Up',
-      description: 'Securely pack the item in its original packaging with all tags and accessories.',
+      title: t("returns.packItUp"),
+      description: t("returns.packItUpDescription"),
     },
     {
       icon: <RotateCcw className="w-6 h-6" />,
-      title: 'Ship It Back',
-      description: 'Use the prepaid shipping label we provide or ship via your preferred carrier.',
+      title: t("returns.shipItBack"),
+      description: t("returns.shipItBackDescription"),
     },
     {
       icon: <CheckCircle className="w-6 h-6" />,
-      title: 'Get Refunded',
-      description: 'Once inspected, refunds are processed within 5-7 business days to your original payment method.',
+      title: t("returns.getRefunded"),
+      description: t("returns.getRefundedDescription"),
     },
   ];
 
@@ -34,12 +45,12 @@ const ReturnsPage: React.FC = () => {
       <main className="flex-1">
         {/* Breadcrumb */}
         <div className="container mx-auto px-4 py-4">
-          <Link 
-            to="/" 
+          <Link
+            to="/"
             className="inline-flex items-center gap-2 font-doodle text-doodle-text/70 hover:text-doodle-accent transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Shop
+            {t("returns.backToShop")}
           </Link>
         </div>
 
@@ -49,10 +60,10 @@ const ReturnsPage: React.FC = () => {
             <div className="text-center mb-12">
               <span className="text-5xl mb-4 block">🔄</span>
               <h1 className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text mb-4">
-                Returns & Exchanges
+                {t("returns.returnsAndExchanges")}
               </h1>
               <p className="font-doodle text-lg text-doodle-text/70">
-                Not satisfied? No problem! We make returns easy.
+                {t("returns.notSatisfiedNoProblem")}
               </p>
             </div>
 
@@ -60,23 +71,29 @@ const ReturnsPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
               <div className="doodle-card p-6 text-center">
                 <Clock className="w-10 h-10 mx-auto mb-3 text-doodle-accent" />
-                <h3 className="font-doodle font-bold text-doodle-text mb-1">30-Day Returns</h3>
+                <h3 className="font-doodle font-bold text-doodle-text mb-1">
+                  {t("returns.thirtyDayReturns")}
+                </h3>
                 <p className="font-doodle text-sm text-doodle-text/70">
-                  Return within 30 days of delivery
+                  {t("returns.returnWithin30Days")}
                 </p>
               </div>
               <div className="doodle-card p-6 text-center">
                 <Package className="w-10 h-10 mx-auto mb-3 text-doodle-accent" />
-                <h3 className="font-doodle font-bold text-doodle-text mb-1">Free Returns</h3>
+                <h3 className="font-doodle font-bold text-doodle-text mb-1">
+                  {t("returns.freeReturns")}
+                </h3>
                 <p className="font-doodle text-sm text-doodle-text/70">
-                  Prepaid labels for US orders
+                  {t("returns.prepaidLabelsUS")}
                 </p>
               </div>
               <div className="doodle-card p-6 text-center">
                 <RotateCcw className="w-10 h-10 mx-auto mb-3 text-doodle-accent" />
-                <h3 className="font-doodle font-bold text-doodle-text mb-1">Easy Exchanges</h3>
+                <h3 className="font-doodle font-bold text-doodle-text mb-1">
+                  {t("returns.easyExchanges")}
+                </h3>
                 <p className="font-doodle text-sm text-doodle-text/70">
-                  Swap for a different size or color
+                  {t("returns.swapForDifferentSizeOrColor")}
                 </p>
               </div>
             </div>
@@ -84,7 +101,7 @@ const ReturnsPage: React.FC = () => {
             {/* How to Return */}
             <div className="doodle-card p-6 md:p-8 mb-8">
               <h2 className="font-doodle text-2xl font-bold text-doodle-text mb-6">
-                How to Return an Item
+                {t("returns.howToReturnAnItem")}
               </h2>
               <div className="space-y-6">
                 {returnSteps.map((step, index) => (
@@ -94,7 +111,7 @@ const ReturnsPage: React.FC = () => {
                     </div>
                     <div className="flex-1 pt-1">
                       <h3 className="font-doodle font-bold text-doodle-text">
-                        Step {index + 1}: {step.title}
+                        {t("returns.step")} {index + 1}: {step.title}
                       </h3>
                       <p className="font-doodle text-doodle-text/70 mt-1">
                         {step.description}
@@ -108,41 +125,40 @@ const ReturnsPage: React.FC = () => {
             {/* Policy Details */}
             <div className="doodle-card p-6 md:p-8 mb-8">
               <h2 className="font-doodle text-2xl font-bold text-doodle-text mb-6">
-                Return Policy Details
+                {t("returns.returnPolicyDetails")}
               </h2>
-              
+
               <div className="space-y-6">
                 <div>
                   <h3 className="font-doodle font-bold text-doodle-text mb-2">
-                    ✓ Eligible for Return
+                    {t("returns.eligibleForReturn")}
                   </h3>
                   <ul className="font-doodle text-doodle-text/70 space-y-1 ml-4">
-                    <li>• Unused items in original packaging</li>
-                    <li>• Items with all tags attached</li>
-                    <li>• Items returned within 30 days of delivery</li>
-                    <li>• Defective or damaged items (any time)</li>
+                    <li>{t("returns.unusedItemsInOriginalPackaging")}</li>
+                    <li>{t("returns.itemsWithAllTagsAttached")}</li>
+                    <li>{t("returns.itemsReturnedWithin30Days")}</li>
+                    <li>{t("returns.defectiveOrDamagedItems")}</li>
                   </ul>
                 </div>
 
                 <div>
                   <h3 className="font-doodle font-bold text-doodle-text mb-2">
-                    ✗ Not Eligible for Return
+                    {t("returns.notEligibleForReturn")}
                   </h3>
                   <ul className="font-doodle text-doodle-text/70 space-y-1 ml-4">
-                    <li>• Used or worn items</li>
-                    <li>• Items without original packaging</li>
-                    <li>• Custom or personalized items</li>
-                    <li>• Items marked as final sale</li>
+                    <li>{t("returns.usedOrWornItems")}</li>
+                    <li>{t("returns.itemsWithoutOriginalPackaging")}</li>
+                    <li>{t("returns.customOrPersonalizedItems")}</li>
+                    <li>{t("returns.itemsMarkedAsFinalSale")}</li>
                   </ul>
                 </div>
 
                 <div>
                   <h3 className="font-doodle font-bold text-doodle-text mb-2">
-                    Bike Returns
+                    {t("returns.bikeReturns")}
                   </h3>
                   <p className="font-doodle text-doodle-text/70">
-                    Bikes may be returned within 14 days of delivery if unassembled and in original packaging. 
-                    Assembled bikes are subject to a 15% restocking fee. Please contact us for special arrangements.
+                    {t("returns.bikeReturnsDescription")}
                   </p>
                 </div>
               </div>
@@ -151,15 +167,13 @@ const ReturnsPage: React.FC = () => {
             {/* Exchange Info */}
             <div className="doodle-card p-6 md:p-8 mb-8 bg-doodle-accent/5">
               <h2 className="font-doodle text-2xl font-bold text-doodle-text mb-4">
-                Prefer an Exchange?
+                {t("returns.preferAnExchange")}
               </h2>
               <p className="font-doodle text-doodle-text/70 mb-4">
-                Need a different size or color? Exchanges are free and easy! Just mention "exchange" when you 
-                contact us and we'll ship your new item as soon as we receive your return.
+                {t("returns.exchangeDescription")}
               </p>
               <p className="font-doodle text-sm text-doodle-text/50">
-                Note: Exchanges are subject to availability. If your preferred item is out of stock, 
-                we'll process a full refund instead.
+                {t("returns.exchangeNote")}
               </p>
             </div>
 
@@ -169,23 +183,25 @@ const ReturnsPage: React.FC = () => {
                 <AlertCircle className="w-8 h-8 text-doodle-accent flex-shrink-0 mt-1" />
                 <div>
                   <h2 className="font-doodle text-xl font-bold text-doodle-text mb-2">
-                    Questions About Your Return?
+                    {t("returns.questionsAboutYourReturn")}
                   </h2>
                   <p className="font-doodle text-doodle-text/70 mb-4">
-                    Our customer support team is here to help! Reach out to us and we'll get back to you 
-                    within 24 hours.
+                    {t("returns.supportDescription")}
                   </p>
                   <div className="flex flex-wrap gap-3">
-                    <a 
-                      href="mailto:returns@adventureworks.com" 
+                    <a
+                      href="mailto:returns@adventureworks.com"
                       className="doodle-button doodle-button-primary inline-flex items-center gap-2"
                     >
                       <Mail className="w-4 h-4" />
-                      Email Support
+                      {t("returns.emailSupport")}
                     </a>
-                    <Link to="/order-tracking" className="doodle-button inline-flex items-center gap-2">
+                    <Link
+                      to="/order-tracking"
+                      className="doodle-button inline-flex items-center gap-2"
+                    >
                       <Package className="w-4 h-4" />
-                      Track Your Order
+                      {t("returns.trackYourOrder")}
                     </Link>
                   </div>
                 </div>

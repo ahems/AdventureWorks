@@ -1,19 +1,21 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Heart, Trash2, ShoppingCart } from 'lucide-react';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
-import { useWishlist } from '@/context/WishlistContext';
-import { useCart } from '@/context/CartContext';
-import { useAuth } from '@/context/AuthContext';
-import { getSalePrice } from '@/types/product';
+import React from "react";
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { Heart, Trash2, ShoppingCart } from "lucide-react";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import { useWishlist } from "@/context/WishlistContext";
+import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/context/AuthContext";
+import { getSalePrice } from "@/types/product";
 
 const WishlistPage: React.FC = () => {
+  const { t } = useTranslation("common");
   const { items, removeFromWishlist, clearWishlist } = useWishlist();
   const { addToCart } = useCart();
   const { user } = useAuth();
 
-  const handleAddToCart = (product: typeof items[0]) => {
+  const handleAddToCart = (product: (typeof items)[0]) => {
     addToCart(product);
   };
 
@@ -25,13 +27,13 @@ const WishlistPage: React.FC = () => {
           <div className="text-center max-w-md mx-auto">
             <span className="text-6xl mb-4 block">💝</span>
             <h1 className="font-doodle text-3xl font-bold text-doodle-text mb-4">
-              Sign In to View Wishlist
+              {t("wishlist.signInToViewWishlist")}
             </h1>
             <p className="font-doodle text-doodle-text/70 mb-6">
-              Create an account or sign in to save your favorite products.
+              {t("wishlist.createAccountOrSignIn")}
             </p>
             <Link to="/auth" className="doodle-button doodle-button-primary">
-              Sign In
+              {t("wishlist.signIn")}
             </Link>
           </div>
         </main>
@@ -48,13 +50,13 @@ const WishlistPage: React.FC = () => {
           <div className="text-center max-w-md mx-auto">
             <span className="text-6xl mb-4 block">💝</span>
             <h1 className="font-doodle text-3xl font-bold text-doodle-text mb-4">
-              Your Wishlist is Empty
+              {t("wishlist.yourWishlistIsEmpty")}
             </h1>
             <p className="font-doodle text-doodle-text/70 mb-6">
-              Start adding products you love to your wishlist!
+              {t("wishlist.startAddingProducts")}
             </p>
             <Link to="/" className="doodle-button doodle-button-primary">
-              Start Shopping
+              {t("wishlist.startShopping")}
             </Link>
           </div>
         </main>
@@ -71,10 +73,11 @@ const WishlistPage: React.FC = () => {
           <div className="flex items-center gap-3">
             <Heart className="w-8 h-8 text-doodle-accent" />
             <h1 className="font-doodle text-3xl font-bold text-doodle-text">
-              My Wishlist
+              {t("wishlist.myWishlist")}
             </h1>
             <span className="font-doodle text-sm text-doodle-text/60">
-              ({items.length} {items.length === 1 ? 'item' : 'items'})
+              ({items.length}{" "}
+              {items.length === 1 ? t("wishlist.item") : t("wishlist.items")})
             </span>
           </div>
           {items.length > 0 && (
@@ -83,7 +86,7 @@ const WishlistPage: React.FC = () => {
               className="doodle-button text-sm flex items-center gap-2"
             >
               <Trash2 className="w-4 h-4" />
-              Clear All
+              {t("wishlist.clearAll")}
             </button>
           )}
         </div>
@@ -92,11 +95,14 @@ const WishlistPage: React.FC = () => {
           {items.map((product) => {
             const salePrice = getSalePrice(product);
             return (
-              <div key={product.ProductID} className="doodle-card p-4 relative group">
+              <div
+                key={product.ProductID}
+                className="doodle-card p-4 relative group"
+              >
                 {/* Sale Badge */}
                 {product.DiscountPct && (
                   <div className="absolute top-6 left-6 z-10 bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text rotate-[-3deg]">
-                    {Math.round(product.DiscountPct * 100)}% OFF
+                    {Math.round(product.DiscountPct * 100)}% {t("wishlist.off")}
                   </div>
                 )}
 
@@ -104,7 +110,7 @@ const WishlistPage: React.FC = () => {
                 <button
                   onClick={() => removeFromWishlist(product.ProductID)}
                   className="absolute top-6 right-6 z-10 p-2 border-2 bg-doodle-accent border-doodle-accent text-white hover:bg-doodle-text hover:border-doodle-text transition-all"
-                  aria-label="Remove from wishlist"
+                  aria-label={t("wishlist.removeFromWishlist")}
                 >
                   <Heart className="w-4 h-4 fill-current" />
                 </button>
@@ -115,7 +121,7 @@ const WishlistPage: React.FC = () => {
                     <div className="text-center p-4">
                       <span className="font-doodle text-4xl">🚴</span>
                       <p className="font-doodle text-xs text-doodle-text/60 mt-2">
-                        {product.Color || 'Product Image'}
+                        {product.Color || t("wishlist.productImage")}
                       </p>
                     </div>
                   </div>
@@ -137,7 +143,7 @@ const WishlistPage: React.FC = () => {
                     )}
                     {product.Size && (
                       <span className="font-doodle text-xs px-2 py-0.5 bg-doodle-text/10 border border-doodle-text/30">
-                        Size: {product.Size}
+                        {t("wishlist.size")}: {product.Size}
                       </span>
                     )}
                   </div>
@@ -163,10 +169,12 @@ const WishlistPage: React.FC = () => {
                     <button
                       onClick={() => handleAddToCart(product)}
                       className="doodle-button doodle-button-primary p-2 text-sm flex items-center gap-1"
-                      aria-label="Add to cart"
+                      aria-label={t("wishlist.addToCart")}
                     >
                       <ShoppingCart className="w-4 h-4" />
-                      <span className="hidden sm:inline">Add</span>
+                      <span className="hidden sm:inline">
+                        {t("wishlist.add")}
+                      </span>
                     </button>
                   </div>
                 </div>
