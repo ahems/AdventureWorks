@@ -27,6 +27,7 @@ LANGUAGES=(
   "ja:Japanese"
   "ko:Korean"
   "ar:Arabic"
+  "he:Hebrew"
   "tr:Turkish"
   "vi:Vietnamese"
   "th:Thai"
