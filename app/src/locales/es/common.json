@@ -96,7 +96,10 @@
     "noResults": "No products found",
     "noResultsDesc": "Try adjusting your filters or search terms",
     "toggleFilters": "Filters",
-    "showingResults": "Showing {{start}}-{{end}} of {{total}} results"
+    "showingResults": "Showing {{start}}-{{end}} of {{total}} results",
+    "placeholder": "Buscar bicicletas, equipo, ropa...",
+    "previousPage": "Página anterior",
+    "nextPage": "Página siguiente"
   },
   "sale": {
     "title": "Sale Items",
@@ -230,7 +233,13 @@
     "passwordAndSecurity": "Contraseña y seguridad",
     "comingSoon": "¡Próximamente!",
     "signOut": "Cerrar sesión",
-    "orderNotes": "Notas del pedido:"
+    "orderNotes": "Notas del pedido:",
+    "placeholders": {
+      "firstName": "Juan",
+      "lastName": "García",
+      "email": "juan@ejemplo.com",
+      "phone": "555-123-4567"
+    }
   },
   "checkout": {
     "backToCart": "Volver al carrito",
@@ -298,7 +307,11 @@
     "paymentMethodSavedDesc": "Su tarjeta ha sido guardada para pedidos futuros.",
     "loading": "Cargando...",
     "cardholderPlaceholder": "Juan Pérez",
-    "expiryPlaceholder": "MM/AA"
+    "expiryPlaceholder": "MM/AA",
+    "placeholders": {
+      "cardNumber": "4242 4242 4242 4242",
+      "cvv": "123"
+    }
   },
   "compare": {
     "bestRated": "Mejor Calificado",
@@ -622,5 +635,10 @@
     "goToPreviousPage": "Ir a la página anterior",
     "goToNextPage": "Ir a la página siguiente",
     "breadcrumb": "ruta de navegación"
+  },
+  "cart": {
+    "removeItem": "Eliminar artículo",
+    "decreaseQuantity": "Disminuir cantidad",
+    "increaseQuantity": "Aumentar cantidad"
   }
 }

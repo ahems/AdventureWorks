@@ -96,7 +96,10 @@
     "noResults": "No products found",
     "noResultsDesc": "Try adjusting your filters or search terms",
     "toggleFilters": "Filters",
-    "showingResults": "Showing {{start}}-{{end}} of {{total}} results"
+    "showingResults": "Showing {{start}}-{{end}} of {{total}} results",
+    "placeholder": "ค้นหาจักรยาน อุปกรณ์ เสื้อผ้า...",
+    "previousPage": "หน้าก่อนหน้า",
+    "nextPage": "หน้าถัดไป"
   },
   "sale": {
     "title": "Sale Items",
@@ -230,7 +233,13 @@
     "passwordAndSecurity": "Password & security",
     "comingSoon": "Coming soon!",
     "signOut": "Sign Out",
-    "orderNotes": "Order Notes:"
+    "orderNotes": "Order Notes:",
+    "placeholders": {
+      "firstName": "สมชาย",
+      "lastName": "ใจดี",
+      "email": "somchai@example.com",
+      "phone": "555-123-4567"
+    }
   },
   "checkout": {
     "backToCart": "Back to Cart",
@@ -298,7 +307,11 @@
     "paymentMethodSavedDesc": "Your card has been saved for future orders.",
     "loading": "Loading...",
     "cardholderPlaceholder": "John Doe",
-    "expiryPlaceholder": "MM/YY"
+    "expiryPlaceholder": "MM/YY",
+    "placeholders": {
+      "cardNumber": "4242 4242 4242 4242",
+      "cvv": "123"
+    }
   },
   "compare": {
     "bestRated": "Best Rated",
@@ -621,5 +634,10 @@
     "goToPreviousPage": "ไปยังหน้าก่อนหน้า",
     "goToNextPage": "ไปยังหน้าถัดไป",
     "breadcrumb": "เส้นทางการนำทาง"
+  },
+  "cart": {
+    "removeItem": "ลบรายการ",
+    "decreaseQuantity": "ลดจำนวน",
+    "increaseQuantity": "เพิ่มจำนวน"
   }
 }

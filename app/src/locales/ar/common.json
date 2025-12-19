@@ -96,7 +96,10 @@
     "noResults": "لم يتم العثور على منتجات",
     "noResultsDesc": "جرب تعديل الفلاتر أو مصطلحات البحث",
     "toggleFilters": "الفلاتر",
-    "showingResults": "عرض {{start}}-{{end}} من {{total}} نتيجة"
+    "showingResults": "عرض {{start}}-{{end}} من {{total}} نتيجة",
+    "placeholder": "البحث عن الدراجات والمعدات والملابس...",
+    "previousPage": "الصفحة السابقة",
+    "nextPage": "الصفحة التالية"
   },
   "sale": {
     "title": "عروض البيع",
@@ -230,7 +233,13 @@
     "passwordAndSecurity": "كلمة المرور والأمان",
     "comingSoon": "قريباً!",
     "signOut": "تسجيل الخروج",
-    "orderNotes": "ملاحظات الطلب:"
+    "orderNotes": "ملاحظات الطلب:",
+    "placeholders": {
+      "firstName": "أحمد",
+      "lastName": "محمد",
+      "email": "ahmad@example.com",
+      "phone": "555-123-4567"
+    }
   },
   "checkout": {
     "backToCart": "Back to Cart",
@@ -298,7 +307,11 @@
     "paymentMethodSavedDesc": "Your card has been saved for future orders.",
     "loading": "Loading...",
     "cardholderPlaceholder": "John Doe",
-    "expiryPlaceholder": "MM/YY"
+    "expiryPlaceholder": "MM/YY",
+    "placeholders": {
+      "cardNumber": "4242 4242 4242 4242",
+      "cvv": "123"
+    }
   },
   "compare": {
     "bestRated": "Best Rated",
@@ -621,5 +634,10 @@
     "goToPreviousPage": "الانتقال إلى الصفحة السابقة",
     "goToNextPage": "الانتقال إلى الصفحة التالية",
     "breadcrumb": "مسار التنقل"
+  },
+  "cart": {
+    "removeItem": "إزالة العنصر",
+    "decreaseQuantity": "تقليل الكمية",
+    "increaseQuantity": "زيادة الكمية"
   }
 }

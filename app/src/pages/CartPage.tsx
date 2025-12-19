@@ -250,7 +250,7 @@ const CartPage: React.FC = () => {
                             )
                           }
                           className="text-doodle-text/50 hover:text-doodle-accent transition-colors p-1"
-                          aria-label="Remove item"
+                          aria-label={t("cart.removeItem")}
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
@@ -267,7 +267,7 @@ const CartPage: React.FC = () => {
                             )
                           }
                           className="p-1.5 hover:bg-doodle-text/10 transition-colors"
-                          aria-label="Decrease quantity"
+                          aria-label={t("cart.decreaseQuantity")}
                         >
                           <Minus className="w-4 h-4" />
                         </button>
@@ -284,7 +284,7 @@ const CartPage: React.FC = () => {
                             )
                           }
                           className="p-1.5 hover:bg-doodle-text/10 transition-colors"
-                          aria-label="Increase quantity"
+                          aria-label={t("cart.increaseQuantity")}
                         >
                           <Plus className="w-4 h-4" />
                         </button>

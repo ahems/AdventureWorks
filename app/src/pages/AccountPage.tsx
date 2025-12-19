@@ -639,7 +639,7 @@ const AccountPage: React.FC = () => {
                             }
                           }}
                           className="doodle-input w-full"
-                          placeholder="John"
+                          placeholder={t("account.placeholders.firstName")}
                         />
                         {profileErrors.firstName && (
                           <p className="font-doodle text-xs text-doodle-accent mt-1">
@@ -697,7 +697,7 @@ const AccountPage: React.FC = () => {
                             }
                           }}
                           className="doodle-input w-full"
-                          placeholder="Doe"
+                          placeholder={t("account.placeholders.lastName")}
                         />
                         {profileErrors.lastName && (
                           <p className="font-doodle text-xs text-doodle-accent mt-1">
@@ -759,7 +759,7 @@ const AccountPage: React.FC = () => {
                           }
                         }}
                         className="doodle-input w-full"
-                        placeholder="john@example.com"
+                        placeholder={t("account.placeholders.email")}
                       />
                       {profileErrors.email && (
                         <p className="font-doodle text-xs text-doodle-accent mt-1">
@@ -816,7 +816,7 @@ const AccountPage: React.FC = () => {
                               }
                             }}
                             className="doodle-input flex-1"
-                            placeholder="555-123-4567"
+                            placeholder={t("account.placeholders.phone")}
                           />
                         </div>
                         {profileErrors.phoneNumber && (

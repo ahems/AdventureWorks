@@ -96,7 +96,10 @@
     "noResults": "No products found",
     "noResultsDesc": "Try adjusting your filters or search terms",
     "toggleFilters": "Filters",
-    "showingResults": "Showing {{start}}-{{end}} of {{total}} results"
+    "showingResults": "Showing {{start}}-{{end}} of {{total}} results",
+    "placeholder": "搜尋自行車、裝備、服裝...",
+    "previousPage": "上一頁",
+    "nextPage": "下一頁"
   },
   "sale": {
     "title": "Sale Items",
@@ -230,7 +233,13 @@
     "passwordAndSecurity": "Password & security",
     "comingSoon": "Coming soon!",
     "signOut": "Sign Out",
-    "orderNotes": "Order Notes:"
+    "orderNotes": "Order Notes:",
+    "placeholders": {
+      "firstName": "小明",
+      "lastName": "王",
+      "email": "xiaoming@example.com",
+      "phone": "555-123-4567"
+    }
   },
   "checkout": {
     "backToCart": "Back to Cart",
@@ -298,7 +307,11 @@
     "paymentMethodSavedDesc": "Your card has been saved for future orders.",
     "loading": "Loading...",
     "cardholderPlaceholder": "John Doe",
-    "expiryPlaceholder": "MM/YY"
+    "expiryPlaceholder": "MM/YY",
+    "placeholders": {
+      "cardNumber": "4242 4242 4242 4242",
+      "cvv": "123"
+    }
   },
   "compare": {
     "bestRated": "Best Rated",
@@ -621,5 +634,10 @@
     "goToPreviousPage": "前往上一頁",
     "goToNextPage": "前往下一頁",
     "breadcrumb": "麵包屑導航"
+  },
+  "cart": {
+    "removeItem": "移除項目",
+    "decreaseQuantity": "減少數量",
+    "increaseQuantity": "增加數量"
   }
 }

@@ -1285,7 +1285,9 @@ const CheckoutPage: React.FC = () => {
                                   }));
                                 }}
                                 className="doodle-input w-full pr-16"
-                                placeholder="4242 4242 4242 4242"
+                                placeholder={t(
+                                  "checkout.placeholders.cardNumber"
+                                )}
                                 maxLength={19}
                               />
                               {(() => {
@@ -1422,7 +1424,7 @@ const CheckoutPage: React.FC = () => {
                                   }));
                                 }}
                                 className="doodle-input w-full"
-                                placeholder="123"
+                                placeholder={t("checkout.placeholders.cvv")}
                                 maxLength={4}
                               />
                             </div>

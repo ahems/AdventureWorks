@@ -362,7 +362,7 @@ const SearchPage: React.FC = () => {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search for bikes, gear, clothing..."
+                  placeholder={t("search.placeholder")}
                   className="w-full pl-10 pr-4 py-3 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
                 />
               </div>
@@ -606,7 +606,7 @@ const SearchPage: React.FC = () => {
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1}
                         className="doodle-button p-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        aria-label="Previous page"
+                        aria-label={t("search.previousPage")}
                       >
                         <ChevronLeft className="w-5 h-5" />
                       </button>
@@ -638,7 +638,7 @@ const SearchPage: React.FC = () => {
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage === totalPages}
                         className="doodle-button p-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        aria-label="Next page"
+                        aria-label={t("search.nextPage")}
                       >
                         <ChevronRight className="w-5 h-5" />
                       </button>
