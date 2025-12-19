@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
   CreditCard,
@@ -280,6 +281,7 @@ const isValidCardNumber = (number: string): boolean => {
 };
 
 const CheckoutPage: React.FC = () => {
+  const { t } = useTranslation("common");
   const navigate = useNavigate();
   const {
     items,
@@ -572,7 +574,7 @@ const CheckoutPage: React.FC = () => {
       setDiscountCode("");
       setCodeError("");
     } else {
-      setCodeError("Invalid discount code");
+      setCodeError(t("checkout.invalidCode"));
     }
   };
 
@@ -641,8 +643,8 @@ const CheckoutPage: React.FC = () => {
     if (!useNewAddress && addresses.length > 0) {
       if (!selectedAddressId) {
         toast({
-          title: "Address Required",
-          description: "Please select a shipping address.",
+          title: t("checkout.addressRequired"),
+          description: t("checkout.addressRequiredDesc"),
           variant: "destructive",
         });
         return;
@@ -655,8 +657,8 @@ const CheckoutPage: React.FC = () => {
     // which will then move to step 2
     // So this button shouldn't be visible when entering new address
     toast({
-      title: "Complete Address",
-      description: "Please fill out the address form.",
+      title: t("checkout.completeAddress"),
+      description: t("checkout.completeAddressDesc"),
       variant: "destructive",
     });
   };
@@ -678,8 +680,8 @@ const CheckoutPage: React.FC = () => {
           isDefault: addresses.length === 0,
         });
         toast({
-          title: "Address Saved",
-          description: "Your address has been saved for future orders.",
+          title: t("checkout.addressSaved"),
+          description: t("checkout.addressSavedDesc"),
         });
       }
 
@@ -700,8 +702,8 @@ const CheckoutPage: React.FC = () => {
           isDefault: paymentMethods.length === 0,
         });
         toast({
-          title: "Payment Method Saved",
-          description: "Your card has been saved for future orders.",
+          title: t("checkout.paymentMethodSaved"),
+          description: t("checkout.paymentMethodSavedDesc"),
         });
       }
 
@@ -861,19 +863,19 @@ const CheckoutPage: React.FC = () => {
       clearCart();
 
       toast({
-        title: "Order Placed!",
-        description: `Your order ${orderId} has been confirmed`,
+        title: t("checkout.orderPlaced"),
+        description: t("checkout.orderConfirmed", { orderId }),
       });
 
       navigate("/order-confirmation");
     } catch (error) {
       console.error("Order creation error:", error);
       toast({
-        title: "Order Failed",
+        title: t("checkout.orderFailed"),
         description:
           error instanceof Error
             ? error.message
-            : "There was an error processing your order. Please try again.",
+            : t("checkout.orderFailedDesc"),
         variant: "destructive",
       });
     } finally {
@@ -892,13 +894,13 @@ const CheckoutPage: React.FC = () => {
             className="inline-flex items-center gap-2 font-doodle text-doodle-text/70 hover:text-doodle-accent transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Cart
+            {t("checkout.backToCart")}
           </Link>
         </div>
 
         <section className="container mx-auto px-4 pb-12">
           <h1 className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text mb-8">
-            Checkout
+            {t("checkout.checkout")}
           </h1>
 
           {/* Progress Steps */}
@@ -918,7 +920,7 @@ const CheckoutPage: React.FC = () => {
                 {step > 1 ? <Check className="w-4 h-4" /> : "1"}
               </div>
               <span className="font-doodle font-bold hidden sm:inline">
-                Shipping
+                {t("checkout.shipping")}
               </span>
             </div>
             <div
@@ -941,7 +943,7 @@ const CheckoutPage: React.FC = () => {
                 {step > 2 ? <Check className="w-4 h-4" /> : "2"}
               </div>
               <span className="font-doodle font-bold hidden sm:inline">
-                Payment
+                {t("checkout.payment")}
               </span>
             </div>
           </div>
@@ -955,7 +957,7 @@ const CheckoutPage: React.FC = () => {
                   <div className="flex items-center gap-3 mb-6">
                     <Truck className="w-6 h-6 text-doodle-accent" />
                     <h2 className="font-doodle text-2xl font-bold text-doodle-text">
-                      Shipping Address
+                      {t("checkout.shippingAddress")}
                     </h2>
                   </div>
 
@@ -963,7 +965,7 @@ const CheckoutPage: React.FC = () => {
                   {isLoadingAddresses && (
                     <div className="mb-6">
                       <p className="font-doodle text-sm font-bold text-doodle-text mb-3">
-                        Loading saved addresses...
+                        {t("checkout.loadingSavedAddresses")}
                       </p>
                       <div className="grid grid-cols-1 gap-3 mb-4">
                         {[1, 2].map((i) => (
@@ -984,7 +986,7 @@ const CheckoutPage: React.FC = () => {
                   {!isLoadingAddresses && addresses.length > 0 && (
                     <div className="mb-6">
                       <p className="font-doodle text-sm font-bold text-doodle-text mb-3">
-                        Select a saved address:
+                        {t("checkout.selectSavedAddress")}
                       </p>
                       <div className="grid grid-cols-1 gap-3 mb-4">
                         {addresses.map((address) => (
@@ -1026,7 +1028,7 @@ const CheckoutPage: React.FC = () => {
                       >
                         <Plus className="w-4 h-4" />
                         <span className="font-doodle font-bold">
-                          Use a different address
+                          {t("checkout.useDifferentAddress")}
                         </span>
                       </button>
                     </div>
@@ -1038,7 +1040,7 @@ const CheckoutPage: React.FC = () => {
                       <>
                         {addresses.length > 0 && (
                           <p className="font-doodle text-sm font-bold text-doodle-text mb-3">
-                            Enter new address:
+                            {t("checkout.enterNewAddress")}
                           </p>
                         )}
                         <AddressForm
@@ -1090,7 +1092,7 @@ const CheckoutPage: React.FC = () => {
                                 className="w-4 h-4"
                               />
                               <span className="font-doodle text-sm text-doodle-text">
-                                Save this address for future orders
+                                {t("checkout.saveAddressForFuture")}
                               </span>
                             </label>
                           </div>
@@ -1104,7 +1106,7 @@ const CheckoutPage: React.FC = () => {
                       onClick={handleContinueToPayment}
                       className="doodle-button doodle-button-primary w-full mt-8 py-3 text-lg"
                     >
-                      Continue to Payment
+                      {t("checkout.continueToPayment")}
                     </button>
                   )}
                 </div>
@@ -1116,7 +1118,7 @@ const CheckoutPage: React.FC = () => {
                   <div className="flex items-center gap-3 mb-6">
                     <CreditCard className="w-6 h-6 text-doodle-accent" />
                     <h2 className="font-doodle text-2xl font-bold text-doodle-text">
-                      Payment Method
+                      {t("checkout.paymentMethod")}
                     </h2>
                   </div>
 
@@ -1124,7 +1126,7 @@ const CheckoutPage: React.FC = () => {
                   {paymentMethods.length > 0 && !useNewPayment && (
                     <div className="mb-6">
                       <p className="font-doodle text-sm font-bold text-doodle-text mb-3">
-                        Select a saved payment method:
+                        {t("checkout.selectSavedPayment")}
                       </p>
                       <div className="space-y-3 mb-4">
                         {paymentMethods.map((pm) => (
@@ -1161,12 +1163,13 @@ const CheckoutPage: React.FC = () => {
                                 </span>
                                 {pm.isDefault && (
                                   <span className="font-doodle text-xs bg-doodle-accent text-white px-2 py-0.5 rounded">
-                                    Default
+                                    {t("checkout.default")}
                                   </span>
                                 )}
                               </div>
                               <p className="font-doodle text-sm text-doodle-text/70">
-                                {pm.cardholderName} • Expires {pm.cardExpiry}
+                                {pm.cardholderName} • {t("checkout.expires")}{" "}
+                                {pm.cardExpiry}
                               </p>
                             </div>
                           </div>
@@ -1185,7 +1188,7 @@ const CheckoutPage: React.FC = () => {
                       >
                         <Plus className="w-4 h-4" />
                         <span className="font-doodle font-bold">
-                          Use a different payment method
+                          {t("checkout.useDifferentPayment")}
                         </span>
                       </button>
                     </div>
@@ -1223,7 +1226,7 @@ const CheckoutPage: React.FC = () => {
                           </div>
                           <CreditCard className="w-6 h-6" />
                           <span className="font-doodle font-bold">
-                            Credit / Debit Card
+                            {t("checkout.creditDebitCard")}
                           </span>
                         </label>
 
@@ -1253,7 +1256,9 @@ const CheckoutPage: React.FC = () => {
                             )}
                           </div>
                           <span className="text-xl">💳</span>
-                          <span className="font-doodle font-bold">PayPal</span>
+                          <span className="font-doodle font-bold">
+                            {t("checkout.paypal")}
+                          </span>
                         </label>
                       </div>
 
@@ -1262,7 +1267,7 @@ const CheckoutPage: React.FC = () => {
                         <div className="space-y-4 mb-6">
                           <div>
                             <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                              Card Number
+                              {t("checkout.cardNumber")}
                             </label>
                             <div className="relative">
                               <input
@@ -1320,7 +1325,7 @@ const CheckoutPage: React.FC = () => {
                               ) {
                                 return (
                                   <p className="font-doodle text-xs text-doodle-accent mt-1">
-                                    Invalid card number
+                                    {t("checkout.invalidCardNumber")}
                                   </p>
                                 );
                               }
@@ -1329,7 +1334,7 @@ const CheckoutPage: React.FC = () => {
                           </div>
                           <div>
                             <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                              Cardholder Name
+                              {t("checkout.cardholderName")}
                             </label>
                             <input
                               type="text"
@@ -1341,13 +1346,13 @@ const CheckoutPage: React.FC = () => {
                                 }))
                               }
                               className="doodle-input w-full"
-                              placeholder="John Doe"
+                              placeholder={t("checkout.cardholderPlaceholder")}
                             />
                           </div>
                           <div className="grid grid-cols-2 gap-4">
                             <div>
                               <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                                Expiry Date
+                                {t("checkout.expiryDate")}
                               </label>
                               <input
                                 type="text"
@@ -1377,7 +1382,7 @@ const CheckoutPage: React.FC = () => {
                                   }));
                                 }}
                                 className="doodle-input w-full"
-                                placeholder="MM/YY"
+                                placeholder={t("checkout.expiryPlaceholder")}
                                 maxLength={5}
                               />
                               {cardData.expiry.length === 5 &&
@@ -1394,14 +1399,14 @@ const CheckoutPage: React.FC = () => {
                                       month < currentMonth);
                                   return isExpired ? (
                                     <p className="font-doodle text-xs text-doodle-accent mt-1">
-                                      Card has expired
+                                      {t("checkout.cardExpired")}
                                     </p>
                                   ) : null;
                                 })()}
                             </div>
                             <div>
                               <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                                CVV
+                                {t("checkout.cvv")}
                               </label>
                               <input
                                 type="text"
@@ -1436,14 +1441,14 @@ const CheckoutPage: React.FC = () => {
                                   className="w-4 h-4"
                                 />
                                 <span className="font-doodle text-sm text-doodle-text">
-                                  Save this card for future orders
+                                  {t("checkout.saveCardForFuture")}
                                 </span>
                               </label>
 
                               {saveNewPayment && (
                                 <div className="mt-3">
                                   <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                                    Card Label (optional)
+                                    {t("checkout.cardLabel")}
                                   </label>
                                   <input
                                     type="text"
@@ -1452,7 +1457,9 @@ const CheckoutPage: React.FC = () => {
                                       setPaymentLabel(e.target.value)
                                     }
                                     className="doodle-input w-full md:w-1/2"
-                                    placeholder="Personal, Business, etc."
+                                    placeholder={t(
+                                      "checkout.cardLabelPlaceholder"
+                                    )}
                                   />
                                 </div>
                               )}
@@ -1466,8 +1473,7 @@ const CheckoutPage: React.FC = () => {
                   {paymentMethod === "paypal" && (
                     <div className="p-6 border-2 border-dashed border-doodle-text/30 text-center mb-6">
                       <p className="font-doodle text-doodle-text/70">
-                        You will be redirected to PayPal to complete your
-                        payment (mock)
+                        {t("checkout.paypalRedirect")}
                       </p>
                     </div>
                   )}
@@ -1477,7 +1483,7 @@ const CheckoutPage: React.FC = () => {
                       onClick={() => setStep(1)}
                       className="doodle-button flex-1 py-3"
                     >
-                      Back
+                      {t("checkout.back")}
                     </button>
                     {(() => {
                       const isNewPaymentMethod =
@@ -1493,8 +1499,8 @@ const CheckoutPage: React.FC = () => {
                           className="doodle-button doodle-button-primary flex-1 py-3 text-lg disabled:opacity-50"
                         >
                           {isProcessing
-                            ? "Processing..."
-                            : `Pay ${
+                            ? t("checkout.processing")
+                            : `${t("checkout.pay")} ${
                                 CURRENCY_SYMBOLS[currencyCode] || currencyCode
                               }${grandTotal.toFixed(2)}`}
                         </button>
@@ -1503,7 +1509,7 @@ const CheckoutPage: React.FC = () => {
                   </div>
 
                   <p className="font-doodle text-center text-xs text-doodle-text/50 mt-4">
-                    🔒 Your payment information is secure (mock checkout)
+                    🔒 {t("checkout.securePayment")}
                   </p>
                 </div>
               )}
@@ -1513,7 +1519,7 @@ const CheckoutPage: React.FC = () => {
             <div className="lg:col-span-1">
               <div className="doodle-card p-6 sticky top-24">
                 <h3 className="font-doodle text-xl font-bold text-doodle-text mb-4">
-                  Order Summary
+                  {t("checkout.orderSummary")}
                 </h3>
 
                 {/* Items */}
@@ -1537,20 +1543,20 @@ const CheckoutPage: React.FC = () => {
                           </p>
                           <div className="flex items-center gap-2">
                             <p className="font-doodle text-xs text-doodle-text/70">
-                              Qty: {item.quantity} ×{" "}
+                              {t("checkout.qty")}: {item.quantity} ×{" "}
                               {CURRENCY_SYMBOLS[currencyCode] || currencyCode}
                               {itemPriceConverted.toFixed(2)}
                             </p>
                             {salePrice && (
                               <span className="font-doodle text-xs text-doodle-green font-bold">
-                                Save {Math.round((item.DiscountPct || 0) * 100)}
-                                %
+                                {t("checkout.save")}{" "}
+                                {Math.round((item.DiscountPct || 0) * 100)}%
                               </span>
                             )}
                           </div>
                           {salePrice && (
                             <p className="font-doodle text-xs text-doodle-text/50 line-through">
-                              Was{" "}
+                              {t("checkout.was")}{" "}
                               {CURRENCY_SYMBOLS[currencyCode] || currencyCode}
                               {listPriceConverted.toFixed(2)}
                             </p>
@@ -1569,7 +1575,7 @@ const CheckoutPage: React.FC = () => {
                 {(step === 1 || appliedCode) && (
                   <div className="mb-4">
                     <label className="font-doodle text-sm font-bold text-doodle-text block mb-2">
-                      Discount Code
+                      {t("checkout.discountCode")}
                     </label>
                     {appliedCode ? (
                       <div className="flex items-center justify-between p-3 bg-doodle-green/10 border-2 border-doodle-green/30">
@@ -1602,13 +1608,13 @@ const CheckoutPage: React.FC = () => {
                             setCodeError("");
                           }}
                           className="doodle-input flex-1 uppercase"
-                          placeholder="ENTER CODE"
+                          placeholder={t("checkout.enterCode")}
                         />
                         <button
                           onClick={handleApplyCode}
                           className="doodle-button px-4"
                         >
-                          Apply
+                          {t("checkout.apply")}
                         </button>
                       </div>
                     )}
@@ -1628,7 +1634,7 @@ const CheckoutPage: React.FC = () => {
                 {step === 1 && (
                   <div className="mb-4">
                     <label className="font-doodle text-sm font-bold text-doodle-text block mb-2">
-                      Shipping Method
+                      {t("checkout.shippingMethod")}
                     </label>
                     {shipMethods.length > 0 ? (
                       <select
@@ -1650,7 +1656,7 @@ const CheckoutPage: React.FC = () => {
                             >
                               {method.Name} -{" "}
                               {methodPrice === 0
-                                ? "FREE"
+                                ? t("checkout.free")
                                 : `${
                                     CURRENCY_SYMBOLS[currencyCode] ||
                                     currencyCode
@@ -1661,7 +1667,7 @@ const CheckoutPage: React.FC = () => {
                       </select>
                     ) : (
                       <p className="font-doodle text-sm text-doodle-text">
-                        Loading shipping methods...
+                        {t("checkout.loadingShippingMethods")}
                       </p>
                     )}
                   </div>
@@ -1674,7 +1680,9 @@ const CheckoutPage: React.FC = () => {
                 {/* Totals */}
                 <div className="space-y-2 font-doodle text-sm">
                   <div className="flex justify-between">
-                    <span className="text-doodle-text/70">Subtotal</span>
+                    <span className="text-doodle-text/70">
+                      {t("checkout.subtotal")}
+                    </span>
                     <span>
                       {CURRENCY_SYMBOLS[currencyCode] || currencyCode}
                       {originalPriceConverted.toFixed(2)}
@@ -1682,7 +1690,9 @@ const CheckoutPage: React.FC = () => {
                   </div>
                   {totalDiscountConverted > 0 && (
                     <div className="flex justify-between text-doodle-green">
-                      <span className="font-bold">Sale Discounts</span>
+                      <span className="font-bold">
+                        {t("checkout.saleDiscounts")}
+                      </span>
                       <span className="font-bold">
                         -{CURRENCY_SYMBOLS[currencyCode] || currencyCode}
                         {totalDiscountConverted.toFixed(2)}
@@ -1693,7 +1703,8 @@ const CheckoutPage: React.FC = () => {
                     codeDiscountAmount > 0 && (
                       <div className="flex justify-between text-doodle-green">
                         <span className="font-bold">
-                          Code: {appliedCode} (-{appliedDiscount.value}%)
+                          {t("checkout.code")}: {appliedCode} (-
+                          {appliedDiscount.value}%)
                         </span>
                         <span className="font-bold">
                           -{CURRENCY_SYMBOLS[currencyCode] || currencyCode}
@@ -1703,13 +1714,15 @@ const CheckoutPage: React.FC = () => {
                     )}
                   {step === 2 && (
                     <div className="flex justify-between">
-                      <span className="text-doodle-text/70">Shipping</span>
+                      <span className="text-doodle-text/70">
+                        {t("checkout.shipping")}
+                      </span>
                       <span>
                         {(() => {
                           const selectedMethod = shipMethods.find(
                             (m) => m.ShipMethodID === selectedShipMethodId
                           );
-                          if (!selectedMethod) return "Loading...";
+                          if (!selectedMethod) return t("checkout.loading");
 
                           const methodPrice =
                             priceAfterCodeDiscount > 50 * exchangeRate
@@ -1718,7 +1731,7 @@ const CheckoutPage: React.FC = () => {
 
                           return `${selectedMethod.Name} - ${
                             methodPrice === 0
-                              ? "FREE"
+                              ? t("checkout.free")
                               : `${
                                   CURRENCY_SYMBOLS[currencyCode] || currencyCode
                                 }${methodPrice.toFixed(2)}`
@@ -1735,7 +1748,7 @@ const CheckoutPage: React.FC = () => {
                 <div className="space-y-2 font-doodle text-sm">
                   <div className="flex justify-between">
                     <span className="text-doodle-text/70">
-                      Tax ({(taxRate * 100).toFixed(1)}%)
+                      {t("checkout.tax")} ({(taxRate * 100).toFixed(1)}%)
                     </span>
                     <span>
                       {CURRENCY_SYMBOLS[currencyCode] || currencyCode}
@@ -1744,7 +1757,7 @@ const CheckoutPage: React.FC = () => {
                   </div>
                   <hr className="border-dashed border-doodle-text/30" />
                   <div className="flex justify-between text-lg font-bold">
-                    <span>Total</span>
+                    <span>{t("checkout.total")}</span>
                     <span className="text-doodle-green">
                       {CURRENCY_SYMBOLS[currencyCode] || currencyCode}
                       {grandTotal.toFixed(2)}
