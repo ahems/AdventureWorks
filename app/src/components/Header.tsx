@@ -126,7 +126,7 @@ const Header: React.FC = () => {
             <button
               onClick={() => setShowSearch(!showSearch)}
               className="doodle-button p-2"
-              aria-label="Search"
+              aria-label={t("headerAria.search")}
             >
               <Search className="w-5 h-5" />
             </button>
@@ -204,7 +204,7 @@ const Header: React.FC = () => {
               <button
                 onClick={() => setLanguageMenuOpen(!languageMenuOpen)}
                 className="doodle-button flex items-center gap-2 py-2 px-3"
-                aria-label="Select language"
+                aria-label={t("headerAria.selectLanguage")}
               >
                 <Globe className="w-5 h-5" />
                 <span className="text-xl">
@@ -272,7 +272,7 @@ const Header: React.FC = () => {
             <button
               className="md:hidden doodle-button p-2"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              aria-label="Toggle menu"
+              aria-label={t("headerAria.toggleMenu")}
             >
               {mobileMenuOpen ? (
                 <X className="w-5 h-5" />

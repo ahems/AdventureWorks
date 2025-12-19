@@ -570,5 +570,56 @@
     "addToComparison": "加入比較",
     "removeFromComparison": "從比較移除",
     "viewFullDetails": "查看完整詳情"
+  },
+  "notifyWhenAvailable": {
+    "getNotified": "接收通知",
+    "emailWhenBackInStock": "當此商品重新上架時，我們會發送電子郵件給您。",
+    "youreAllSet": "全部完成！",
+    "notifyWhenAvailable": "我們會在商品可用時通知您。",
+    "emailAddress": "電子郵件地址",
+    "emailPlaceholder": "您的@電子郵件.com",
+    "submitting": "提交中...",
+    "notifyMe": "通知我",
+    "onlyUseEmailForProduct": "我們只會使用您的電子郵件來通知您有關此產品的信息。",
+    "invalidEmail": "無效的電子郵件",
+    "pleaseEnterValidEmail": "請輸入有效的電子郵件地址",
+    "youreOnTheList": "您已在列表中！",
+    "emailWhenInStock": "當此商品有貨時，我們會發送電子郵件給您"
+  },
+  "reviewCard": {
+    "person": "人",
+    "people": "人",
+    "foundThisHelpful": "認為有幫助",
+    "beFirstToFindHelpful": "成為第一個認為有幫助的人",
+    "markAsHelpful": "標記為有幫助",
+    "markedHelpful": "已標記有幫助"
+  },
+  "addressCard": {
+    "default": "預設",
+    "editAddress": "編輯地址",
+    "setAsDefault": "設為預設",
+    "deleteAddress": "刪除地址",
+    "confirmDeleteAddress": "您確定要刪除此地址嗎？"
+  },
+  "productImageGallery": {
+    "previousImage": "上一張圖片",
+    "nextImage": "下一張圖片"
+  },
+  "headerAria": {
+    "search": "搜尋",
+    "selectLanguage": "選擇語言",
+    "toggleMenu": "切換選單"
+  },
+  "ui": {
+    "close": "關閉",
+    "morePages": "更多頁面",
+    "more": "更多",
+    "toggleSidebar": "切換側邊欄",
+    "previousSlide": "上一張幻燈片",
+    "nextSlide": "下一張幻燈片",
+    "pagination": "分頁",
+    "goToPreviousPage": "前往上一頁",
+    "goToNextPage": "前往下一頁",
+    "breadcrumb": "麵包屑導航"
   }
 }

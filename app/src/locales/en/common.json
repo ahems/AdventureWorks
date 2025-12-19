@@ -570,5 +570,56 @@
     "addToComparison": "Add to comparison",
     "removeFromComparison": "Remove from comparison",
     "viewFullDetails": "View Full Details"
+  },
+  "notifyWhenAvailable": {
+    "getNotified": "Get Notified",
+    "emailWhenBackInStock": "We'll send you an email when this item is back in stock.",
+    "youreAllSet": "You're all set!",
+    "notifyWhenAvailable": "We'll notify you when it's available.",
+    "emailAddress": "Email Address",
+    "emailPlaceholder": "your@email.com",
+    "submitting": "Submitting...",
+    "notifyMe": "Notify Me",
+    "onlyUseEmailForProduct": "We'll only use your email to notify you about this product.",
+    "invalidEmail": "Invalid email",
+    "pleaseEnterValidEmail": "Please enter a valid email address",
+    "youreOnTheList": "You're on the list!",
+    "emailWhenInStock": "We'll email you when this item is back in stock"
+  },
+  "reviewCard": {
+    "person": "person",
+    "people": "people",
+    "foundThisHelpful": "found this helpful",
+    "beFirstToFindHelpful": "Be the first to find this helpful",
+    "markAsHelpful": "Mark as Helpful",
+    "markedHelpful": "Marked Helpful"
+  },
+  "addressCard": {
+    "default": "Default",
+    "editAddress": "Edit address",
+    "setAsDefault": "Set as default",
+    "deleteAddress": "Delete address",
+    "confirmDeleteAddress": "Are you sure you want to delete this address?"
+  },
+  "productImageGallery": {
+    "previousImage": "Previous image",
+    "nextImage": "Next image"
+  },
+  "headerAria": {
+    "search": "Search",
+    "selectLanguage": "Select language",
+    "toggleMenu": "Toggle menu"
+  },
+  "ui": {
+    "close": "Close",
+    "morePages": "More pages",
+    "more": "More",
+    "toggleSidebar": "Toggle Sidebar",
+    "previousSlide": "Previous slide",
+    "nextSlide": "Next slide",
+    "pagination": "pagination",
+    "goToPreviousPage": "Go to previous page",
+    "goToNextPage": "Go to next page",
+    "breadcrumb": "breadcrumb"
   }
 }

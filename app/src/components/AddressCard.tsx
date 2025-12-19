@@ -1,6 +1,7 @@
-import React from 'react';
-import { MapPin, Edit2, Trash2, Star } from 'lucide-react';
-import type { Address } from '@/hooks/useAddresses';
+import React from "react";
+import { MapPin, Edit2, Trash2, Star } from "lucide-react";
+import type { Address } from "@/hooks/useAddresses";
+import { useTranslation } from "react-i18next";
 
 interface AddressCardProps {
   address: Address;
@@ -21,6 +22,7 @@ export const AddressCard: React.FC<AddressCardProps> = ({
   selected = false,
   onSelect,
 }) => {
+  const { t } = useTranslation("common");
   const handleClick = () => {
     if (selectable && onSelect) {
       onSelect(address);
@@ -31,11 +33,11 @@ export const AddressCard: React.FC<AddressCardProps> = ({
     <div
       onClick={handleClick}
       className={`border-2 p-4 transition-all ${
-        selectable ? 'cursor-pointer hover:border-doodle-accent' : ''
+        selectable ? "cursor-pointer hover:border-doodle-accent" : ""
       } ${
-        selected 
-          ? 'border-doodle-accent bg-doodle-accent/5' 
-          : 'border-dashed border-doodle-text/20'
+        selected
+          ? "border-doodle-accent bg-doodle-accent/5"
+          : "border-dashed border-doodle-text/20"
       }`}
     >
       <div className="flex items-start justify-between gap-4">
@@ -48,7 +50,7 @@ export const AddressCard: React.FC<AddressCardProps> = ({
               </span>
               {address.isDefault && (
                 <span className="font-doodle text-xs bg-doodle-accent text-white px-2 py-0.5 rounded">
-                  Default
+                  {t("addressCard.default")}
                 </span>
               )}
             </div>
@@ -61,7 +63,9 @@ export const AddressCard: React.FC<AddressCardProps> = ({
               </p>
             )}
             <p className="font-doodle text-sm text-doodle-text/70">
-              {address.city}, {address.stateProvinceCode || address.stateProvinceId} {address.postalCode}
+              {address.city},{" "}
+              {address.stateProvinceCode || address.stateProvinceId}{" "}
+              {address.postalCode}
             </p>
             {address.countryName && (
               <p className="font-doodle text-sm text-doodle-text/70">
@@ -79,7 +83,7 @@ export const AddressCard: React.FC<AddressCardProps> = ({
                 onEdit(address);
               }}
               className="p-2 hover:bg-doodle-text/5 rounded transition-colors"
-              title="Edit address"
+              title={t("addressCard.editAddress")}
             >
               <Edit2 className="w-4 h-4 text-doodle-text/70" />
             </button>
@@ -90,7 +94,7 @@ export const AddressCard: React.FC<AddressCardProps> = ({
                   onSetDefault(address.id);
                 }}
                 className="p-2 hover:bg-doodle-text/5 rounded transition-colors"
-                title="Set as default"
+                title={t("addressCard.setAsDefault")}
               >
                 <Star className="w-4 h-4 text-doodle-text/70" />
               </button>
@@ -98,12 +102,12 @@ export const AddressCard: React.FC<AddressCardProps> = ({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                if (confirm('Are you sure you want to delete this address?')) {
+                if (confirm(t("addressCard.confirmDeleteAddress"))) {
                   onDelete(address.id);
                 }
               }}
               className="p-2 hover:bg-doodle-accent/10 rounded transition-colors"
-              title="Delete address"
+              title={t("addressCard.deleteAddress")}
             >
               <Trash2 className="w-4 h-4 text-doodle-accent" />
             </button>

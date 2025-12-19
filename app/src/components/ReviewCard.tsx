@@ -1,7 +1,8 @@
-import React from 'react';
-import { Star, ThumbsUp } from 'lucide-react';
-import { Review } from '@/types/review';
-import { useAuth } from '@/context/AuthContext';
+import React from "react";
+import { Star, ThumbsUp } from "lucide-react";
+import { Review } from "@/types/review";
+import { useAuth } from "@/context/AuthContext";
+import { useTranslation } from "react-i18next";
 
 interface ReviewCardProps {
   review: Review;
@@ -9,13 +10,18 @@ interface ReviewCardProps {
   isMarkedByUser?: boolean;
 }
 
-const ReviewCard: React.FC<ReviewCardProps> = ({ review, onMarkUseful, isMarkedByUser }) => {
+const ReviewCard: React.FC<ReviewCardProps> = ({
+  review,
+  onMarkUseful,
+  isMarkedByUser,
+}) => {
   const { isAuthenticated } = useAuth();
-  
-  const formattedDate = new Date(review.createdAt).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
+  const { t } = useTranslation("common");
+
+  const formattedDate = new Date(review.createdAt).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
   });
 
   return (
@@ -31,8 +37,8 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ review, onMarkUseful, isMarkedB
                   key={i}
                   className={`w-4 h-4 ${
                     i < review.rating
-                      ? 'text-doodle-accent fill-current'
-                      : 'text-doodle-text/20'
+                      ? "text-doodle-accent fill-current"
+                      : "text-doodle-text/20"
                   }`}
                 />
               ))}
@@ -60,24 +66,31 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ review, onMarkUseful, isMarkedB
         <div className="flex items-center gap-1 text-doodle-text/50">
           <ThumbsUp className="w-3 h-3" />
           <span className="font-doodle text-xs">
-            {review.helpful > 0 
-              ? `${review.helpful} ${review.helpful === 1 ? 'person' : 'people'} found this helpful`
-              : 'Be the first to find this helpful'
-            }
+            {review.helpful > 0
+              ? `${review.helpful} ${
+                  review.helpful === 1
+                    ? t("reviewCard.person")
+                    : t("reviewCard.people")
+                } ${t("reviewCard.foundThisHelpful")}`
+              : t("reviewCard.beFirstToFindHelpful")}
           </span>
         </div>
-        
+
         {isAuthenticated && onMarkUseful && (
           <button
             onClick={() => onMarkUseful(review.id)}
             className={`flex items-center gap-1.5 px-3 py-1.5 font-doodle text-xs border-2 transition-all ${
               isMarkedByUser
-                ? 'border-doodle-accent bg-doodle-accent text-white'
-                : 'border-doodle-text/30 hover:border-doodle-accent hover:text-doodle-accent'
+                ? "border-doodle-accent bg-doodle-accent text-white"
+                : "border-doodle-text/30 hover:border-doodle-accent hover:text-doodle-accent"
             }`}
           >
-            <ThumbsUp className={`w-3 h-3 ${isMarkedByUser ? 'fill-current' : ''}`} />
-            {isMarkedByUser ? 'Marked Helpful' : 'Mark as Helpful'}
+            <ThumbsUp
+              className={`w-3 h-3 ${isMarkedByUser ? "fill-current" : ""}`}
+            />
+            {isMarkedByUser
+              ? t("reviewCard.markedHelpful")
+              : t("reviewCard.markAsHelpful")}
           </button>
         )}
       </div>

@@ -570,5 +570,56 @@
     "addToComparison": "Ajouter à la comparaison",
     "removeFromComparison": "Retirer de la comparaison",
     "viewFullDetails": "Voir Tous les Détails"
+  },
+  "notifyWhenAvailable": {
+    "getNotified": "Être Notifié",
+    "emailWhenBackInStock": "Nous vous enverrons un email lorsque cet article sera de nouveau en stock.",
+    "youreAllSet": "Tout est prêt!",
+    "notifyWhenAvailable": "Nous vous préviendrons quand il sera disponible.",
+    "emailAddress": "Adresse Email",
+    "emailPlaceholder": "votre@email.com",
+    "submitting": "Envoi en cours...",
+    "notifyMe": "Me Notifier",
+    "onlyUseEmailForProduct": "Nous utiliserons votre email uniquement pour vous notifier à propos de ce produit.",
+    "invalidEmail": "Email invalide",
+    "pleaseEnterValidEmail": "Veuillez entrer une adresse email valide",
+    "youreOnTheList": "Vous êtes sur la liste!",
+    "emailWhenInStock": "Nous vous enverrons un email lorsque cet article sera en stock"
+  },
+  "reviewCard": {
+    "person": "personne",
+    "people": "personnes",
+    "foundThisHelpful": "ont trouvé cela utile",
+    "beFirstToFindHelpful": "Soyez le premier à trouver cela utile",
+    "markAsHelpful": "Marquer comme Utile",
+    "markedHelpful": "Marqué Utile"
+  },
+  "addressCard": {
+    "default": "Par Défaut",
+    "editAddress": "Modifier l'adresse",
+    "setAsDefault": "Définir par défaut",
+    "deleteAddress": "Supprimer l'adresse",
+    "confirmDeleteAddress": "Êtes-vous sûr de vouloir supprimer cette adresse?"
+  },
+  "productImageGallery": {
+    "previousImage": "Image précédente",
+    "nextImage": "Image suivante"
+  },
+  "headerAria": {
+    "search": "Rechercher",
+    "selectLanguage": "Sélectionner la langue",
+    "toggleMenu": "Basculer le menu"
+  },
+  "ui": {
+    "close": "Fermer",
+    "morePages": "Plus de pages",
+    "more": "Plus",
+    "toggleSidebar": "Basculer la barre latérale",
+    "previousSlide": "Diapositive précédente",
+    "nextSlide": "Diapositive suivante",
+    "pagination": "pagination",
+    "goToPreviousPage": "Aller à la page précédente",
+    "goToNextPage": "Aller à la page suivante",
+    "breadcrumb": "fil d'ariane"
   }
 }

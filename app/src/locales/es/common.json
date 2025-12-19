@@ -571,5 +571,56 @@
     "addToComparison": "Agregar a comparación",
     "removeFromComparison": "Quitar de comparación",
     "viewFullDetails": "Ver Detalles Completos"
+  },
+  "notifyWhenAvailable": {
+    "getNotified": "Recibir Notificación",
+    "emailWhenBackInStock": "Te enviaremos un correo cuando este artículo vuelva a estar disponible.",
+    "youreAllSet": "¡Todo listo!",
+    "notifyWhenAvailable": "Te notificaremos cuando esté disponible.",
+    "emailAddress": "Correo Electrónico",
+    "emailPlaceholder": "tu@correo.com",
+    "submitting": "Enviando...",
+    "notifyMe": "Notificarme",
+    "onlyUseEmailForProduct": "Solo usaremos tu correo para notificarte sobre este producto.",
+    "invalidEmail": "Correo inválido",
+    "pleaseEnterValidEmail": "Por favor ingresa un correo electrónico válido",
+    "youreOnTheList": "¡Estás en la lista!",
+    "emailWhenInStock": "Te enviaremos un correo cuando este artículo esté en stock"
+  },
+  "reviewCard": {
+    "person": "persona",
+    "people": "personas",
+    "foundThisHelpful": "encontraron esto útil",
+    "beFirstToFindHelpful": "Sé el primero en encontrar esto útil",
+    "markAsHelpful": "Marcar como Útil",
+    "markedHelpful": "Marcado como Útil"
+  },
+  "addressCard": {
+    "default": "Predeterminada",
+    "editAddress": "Editar dirección",
+    "setAsDefault": "Establecer como predeterminada",
+    "deleteAddress": "Eliminar dirección",
+    "confirmDeleteAddress": "¿Estás seguro de que quieres eliminar esta dirección?"
+  },
+  "productImageGallery": {
+    "previousImage": "Imagen anterior",
+    "nextImage": "Imagen siguiente"
+  },
+  "headerAria": {
+    "search": "Buscar",
+    "selectLanguage": "Seleccionar idioma",
+    "toggleMenu": "Alternar menú"
+  },
+  "ui": {
+    "close": "Cerrar",
+    "morePages": "Más páginas",
+    "more": "Más",
+    "toggleSidebar": "Alternar barra lateral",
+    "previousSlide": "Diapositiva anterior",
+    "nextSlide": "Siguiente diapositiva",
+    "pagination": "paginación",
+    "goToPreviousPage": "Ir a la página anterior",
+    "goToNextPage": "Ir a la página siguiente",
+    "breadcrumb": "ruta de navegación"
   }
 }

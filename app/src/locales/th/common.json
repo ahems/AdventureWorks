@@ -570,5 +570,56 @@
     "addToComparison": "เพิ่มไปยังการเปรียบเทียบ",
     "removeFromComparison": "ลบออกจากการเปรียบเทียบ",
     "viewFullDetails": "ดูรายละเอียดทั้งหมด"
+  },
+  "notifyWhenAvailable": {
+    "getNotified": "รับการแจ้งเตือน",
+    "emailWhenBackInStock": "เราจะส่งอีเมลให้คุณเมื่อสินค้านี้กลับมามีในสต็อก",
+    "youreAllSet": "เรียบร้อยแล้ว!",
+    "notifyWhenAvailable": "เราจะแจ้งเตือนคุณเมื่อมีสินค้า",
+    "emailAddress": "ที่อยู่อีเมล",
+    "emailPlaceholder": "อีเมล@ของคุณ.com",
+    "submitting": "กำลังส่ง...",
+    "notifyMe": "แจ้งเตือนฉัน",
+    "onlyUseEmailForProduct": "เราจะใช้อีเมลของคุณเพื่อแจ้งเตือนเกี่ยวกับผลิตภัณฑ์นี้เท่านั้น",
+    "invalidEmail": "อีเมลไม่ถูกต้อง",
+    "pleaseEnterValidEmail": "กรุณาใส่ที่อยู่อีเมลที่ถูกต้อง",
+    "youreOnTheList": "คุณอยู่ในรายการแล้ว!",
+    "emailWhenInStock": "เราจะส่งอีเมลให้คุณเมื่อสินค้านี้มีในสต็อก"
+  },
+  "reviewCard": {
+    "person": "คน",
+    "people": "คน",
+    "foundThisHelpful": "พบว่ามีประโยชน์",
+    "beFirstToFindHelpful": "เป็นคนแรกที่พบว่ามีประโยชน์",
+    "markAsHelpful": "ทำเครื่องหมายว่ามีประโยชน์",
+    "markedHelpful": "ทำเครื่องหมายแล้ว"
+  },
+  "addressCard": {
+    "default": "ค่าเริ่มต้น",
+    "editAddress": "แก้ไขที่อยู่",
+    "setAsDefault": "ตั้งเป็นค่าเริ่มต้น",
+    "deleteAddress": "ลบที่อยู่",
+    "confirmDeleteAddress": "คุณแน่ใจหรือว่าต้องการลบที่อยู่นี้?"
+  },
+  "productImageGallery": {
+    "previousImage": "รูปก่อนหน้า",
+    "nextImage": "รูปถัดไป"
+  },
+  "headerAria": {
+    "search": "ค้นหา",
+    "selectLanguage": "เลือกภาษา",
+    "toggleMenu": "สลับเมนู"
+  },
+  "ui": {
+    "close": "ปิด",
+    "morePages": "หน้าเพิ่มเติม",
+    "more": "เพิ่มเติม",
+    "toggleSidebar": "สลับแถบด้านข้าง",
+    "previousSlide": "สไลด์ก่อนหน้า",
+    "nextSlide": "สไลด์ถัดไป",
+    "pagination": "การแบ่งหน้า",
+    "goToPreviousPage": "ไปยังหน้าก่อนหน้า",
+    "goToNextPage": "ไปยังหน้าถัดไป",
+    "breadcrumb": "เส้นทางการนำทาง"
   }
 }

@@ -570,5 +570,56 @@
     "addToComparison": "إضافة للمقارنة",
     "removeFromComparison": "إزالة من المقارنة",
     "viewFullDetails": "عرض التفاصيل الكاملة"
+  },
+  "notifyWhenAvailable": {
+    "getNotified": "احصل على إشعار",
+    "emailWhenBackInStock": "سنرسل لك بريداً إلكترونياً عندما يتوفر هذا المنتج مرة أخرى.",
+    "youreAllSet": "كل شيء جاهز!",
+    "notifyWhenAvailable": "سنخطرك عندما يكون متاحاً.",
+    "emailAddress": "البريد الإلكتروني",
+    "emailPlaceholder": "بريدك@الإلكتروني.com",
+    "submitting": "جاري الإرسال...",
+    "notifyMe": "أخطرني",
+    "onlyUseEmailForProduct": "سنستخدم بريدك الإلكتروني فقط لإخطارك بشأن هذا المنتج.",
+    "invalidEmail": "بريد إلكتروني غير صالح",
+    "pleaseEnterValidEmail": "يرجى إدخال عنوان بريد إلكتروني صالح",
+    "youreOnTheList": "أنت في القائمة!",
+    "emailWhenInStock": "سنرسل لك بريداً إلكترونياً عندما يتوفر هذا المنتج"
+  },
+  "reviewCard": {
+    "person": "شخص",
+    "people": "أشخاص",
+    "foundThisHelpful": "وجدوا هذا مفيداً",
+    "beFirstToFindHelpful": "كن أول من يجد هذا مفيداً",
+    "markAsHelpful": "وضع علامة كمفيد",
+    "markedHelpful": "تم وضع علامة كمفيد"
+  },
+  "addressCard": {
+    "default": "افتراضي",
+    "editAddress": "تعديل العنوان",
+    "setAsDefault": "تعيين كافتراضي",
+    "deleteAddress": "حذف العنوان",
+    "confirmDeleteAddress": "هل أنت متأكد من أنك تريد حذف هذا العنوان؟"
+  },
+  "productImageGallery": {
+    "previousImage": "الصورة السابقة",
+    "nextImage": "الصورة التالية"
+  },
+  "headerAria": {
+    "search": "بحث",
+    "selectLanguage": "اختر اللغة",
+    "toggleMenu": "تبديل القائمة"
+  },
+  "ui": {
+    "close": "إغلاق",
+    "morePages": "المزيد من الصفحات",
+    "more": "المزيد",
+    "toggleSidebar": "تبديل الشريط الجانبي",
+    "previousSlide": "الشريحة السابقة",
+    "nextSlide": "الشريحة التالية",
+    "pagination": "ترقيم الصفحات",
+    "goToPreviousPage": "الانتقال إلى الصفحة السابقة",
+    "goToNextPage": "الانتقال إلى الصفحة التالية",
+    "breadcrumb": "مسار التنقل"
   }
 }

@@ -570,5 +570,56 @@
     "addToComparison": "הוסף להשוואה",
     "removeFromComparison": "הסר מהשוואה",
     "viewFullDetails": "הצג פרטים מלאים"
+  },
+  "notifyWhenAvailable": {
+    "getNotified": "קבל התראה",
+    "emailWhenBackInStock": "נשלח לך אימייל כאשר הפריט יחזור למלאי.",
+    "youreAllSet": "הכל מוכן!",
+    "notifyWhenAvailable": "נודיע לך כשהוא יהיה זמין.",
+    "emailAddress": "כתובת אימייל",
+    "emailPlaceholder": "האימייל@שלך.com",
+    "submitting": "שולח...",
+    "notifyMe": "הודע לי",
+    "onlyUseEmailForProduct": "נשתמש באימייל שלך רק כדי להודיע לך על מוצר זה.",
+    "invalidEmail": "אימייל לא תקין",
+    "pleaseEnterValidEmail": "אנא הזן כתובת אימייל תקינה",
+    "youreOnTheList": "אתה ברשימה!",
+    "emailWhenInStock": "נשלח לך אימייל כאשר הפריט יהיה במלאי"
+  },
+  "reviewCard": {
+    "person": "אדם",
+    "people": "אנשים",
+    "foundThisHelpful": "מצאו את זה מועיל",
+    "beFirstToFindHelpful": "היה הראשון למצוא את זה מועיל",
+    "markAsHelpful": "סמן כמועיל",
+    "markedHelpful": "סומן כמועיל"
+  },
+  "addressCard": {
+    "default": "ברירת מחדל",
+    "editAddress": "ערוך כתובת",
+    "setAsDefault": "הגדר כברירת מחדל",
+    "deleteAddress": "מחק כתובת",
+    "confirmDeleteAddress": "האם אתה בטוח שברצונך למחוק כתובת זו?"
+  },
+  "productImageGallery": {
+    "previousImage": "תמונה קודמת",
+    "nextImage": "תמונה הבאה"
+  },
+  "headerAria": {
+    "search": "חיפוש",
+    "selectLanguage": "בחר שפה",
+    "toggleMenu": "החלף תפריט"
+  },
+  "ui": {
+    "close": "סגור",
+    "morePages": "עוד דפים",
+    "more": "עוד",
+    "toggleSidebar": "החלף סרגל צד",
+    "previousSlide": "שקופית קודמת",
+    "nextSlide": "שקופית הבאה",
+    "pagination": "עימוד",
+    "goToPreviousPage": "עבור לדף הקודם",
+    "goToNextPage": "עבור לדף הבא",
+    "breadcrumb": "נתיב ניווט"
   }
 }
