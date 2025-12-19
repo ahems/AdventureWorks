@@ -1,66 +1,77 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ShoppingCart, Star, Bell } from 'lucide-react';
-import { Product, getSalePrice, isVariantAvailable } from '@/types/product';
-import { useCart } from '@/context/CartContext';
-import { useReviews } from '@/hooks/useReviews';
-import { toast } from '@/hooks/use-toast';
-import NotifyWhenAvailable from '@/components/NotifyWhenAvailable';
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { ShoppingCart, Star, Bell } from "lucide-react";
+import { Product, getSalePrice, isVariantAvailable } from "@/types/product";
+import { useCart } from "@/context/CartContext";
+import { useReviews } from "@/hooks/useReviews";
+import { toast } from "@/hooks/use-toast";
+import NotifyWhenAvailable from "@/components/NotifyWhenAvailable";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 
 interface SaleProductCardProps {
   product: Product;
 }
 
 const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
+  const { t } = useTranslation("common");
   const { addToCart } = useCart();
   const { averageRating } = useReviews(product.ProductID);
-  const [selectedSize, setSelectedSize] = useState<string | undefined>(undefined);
-  const [selectedColor, setSelectedColor] = useState<string | undefined>(undefined);
-  
+  const [selectedSize, setSelectedSize] = useState<string | undefined>(
+    undefined
+  );
+  const [selectedColor, setSelectedColor] = useState<string | undefined>(
+    undefined
+  );
+
   const salePrice = getSalePrice(product);
   const hasVariants = product.availableSizes || product.availableColors;
 
   // Check if current selection is available
-  const currentVariantAvailable = isVariantAvailable(product, selectedSize, selectedColor);
-  const showUnavailable = hasVariants && selectedSize && selectedColor && !currentVariantAvailable;
+  const currentVariantAvailable = isVariantAvailable(
+    product,
+    selectedSize,
+    selectedColor
+  );
+  const showUnavailable =
+    hasVariants && selectedSize && selectedColor && !currentVariantAvailable;
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (product.availableSizes && !selectedSize) {
       toast({
-        title: "Please select a size",
-        description: "Choose a size before adding to cart",
-        variant: "destructive"
+        title: t("saleProductCard.pleasSelectSize"),
+        description: t("saleProductCard.chooseASizeBeforeAddingToCart"),
+        variant: "destructive",
       });
       return;
     }
     if (product.availableColors && !selectedColor) {
       toast({
-        title: "Please select a color",
-        description: "Choose a color before adding to cart",
-        variant: "destructive"
+        title: t("saleProductCard.pleaseSelectColor"),
+        description: t("saleProductCard.chooseAColorBeforeAddingToCart"),
+        variant: "destructive",
       });
       return;
     }
 
     if (!currentVariantAvailable) {
       toast({
-        title: "Currently Unavailable",
-        description: "This size/color combination is out of stock",
-        variant: "destructive"
+        title: t("saleProductCard.currentlyUnavailable"),
+        description: t("saleProductCard.thisSizeColorCombinationIsOutOfStock"),
+        variant: "destructive",
       });
       return;
     }
-    
+
     addToCart(product, 1, selectedSize, selectedColor);
   };
 
@@ -70,7 +81,7 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
       <Link to={`/product/${product.ProductID}`} className="block relative">
         <div className="aspect-square bg-doodle-bg border-b-2 border-dashed border-doodle-text flex items-center justify-center overflow-hidden">
           {product.ThumbNailPhoto ? (
-            <img 
+            <img
               src={`data:image/gif;base64,${product.ThumbNailPhoto}`}
               alt={product.Name}
               className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300"
@@ -81,11 +92,12 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
             </span>
           )}
         </div>
-        
+
         {/* Sale Badge */}
         <div className="absolute top-2 left-2">
           <span className="bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text rotate-[-3deg] inline-block">
-            {product.SpecialOfferDescription || 'Limited-Time Special'}
+            {product.SpecialOfferDescription ||
+              t("saleProductCard.limitedTimeSpecial")}
           </span>
         </div>
 
@@ -93,7 +105,7 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
         {!product.inStock && (
           <div className="absolute bottom-2 left-2">
             <span className="bg-red-500 text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text inline-block">
-              OUT OF STOCK
+              {t("saleProductCard.outOfStock")}
             </span>
           </div>
         )}
@@ -107,7 +119,7 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
             {product.Name}
           </h3>
         </Link>
-        
+
         {/* Star Rating */}
         {averageRating > 0 && (
           <div className="flex items-center gap-1 mb-2">
@@ -116,8 +128,8 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
                 key={i}
                 className={`w-3 h-3 ${
                   i < Math.round(averageRating)
-                    ? 'text-doodle-accent fill-current'
-                    : 'text-doodle-text/20'
+                    ? "text-doodle-accent fill-current"
+                    : "text-doodle-text/20"
                 }`}
               />
             ))}
@@ -138,7 +150,9 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
             </span>
           </div>
           <span className="font-doodle text-xs text-doodle-green font-bold">
-            Save {Math.round((product.DiscountPct || 0) * 100)}%
+            {t("saleProductCard.save", {
+              percent: Math.round((product.DiscountPct || 0) * 100),
+            })}
           </span>
         </div>
 
@@ -147,16 +161,16 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
           <div className="space-y-2 mb-3">
             {product.availableSizes && (
               <Select value={selectedSize} onValueChange={setSelectedSize}>
-                <SelectTrigger 
+                <SelectTrigger
                   className="w-full font-doodle text-sm border-2 border-doodle-text/50 bg-white focus:border-doodle-accent h-9"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <SelectValue placeholder="Select Size" />
+                  <SelectValue placeholder={t("saleProductCard.selectSize")} />
                 </SelectTrigger>
                 <SelectContent className="bg-white border-2 border-doodle-text z-50">
                   {product.availableSizes.map((size) => (
-                    <SelectItem 
-                      key={size} 
+                    <SelectItem
+                      key={size}
                       value={size}
                       className="font-doodle cursor-pointer hover:bg-doodle-accent/10"
                     >
@@ -166,19 +180,19 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
                 </SelectContent>
               </Select>
             )}
-            
+
             {product.availableColors && (
               <Select value={selectedColor} onValueChange={setSelectedColor}>
-                <SelectTrigger 
+                <SelectTrigger
                   className="w-full font-doodle text-sm border-2 border-doodle-text/50 bg-white focus:border-doodle-accent h-9"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <SelectValue placeholder="Select Color" />
+                  <SelectValue placeholder={t("saleProductCard.selectColor")} />
                 </SelectTrigger>
                 <SelectContent className="bg-white border-2 border-doodle-text z-50">
                   {product.availableColors.map((color) => (
-                    <SelectItem 
-                      key={color} 
+                    <SelectItem
+                      key={color}
                       value={color}
                       className="font-doodle cursor-pointer hover:bg-doodle-accent/10"
                     >
@@ -195,19 +209,19 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
         {showUnavailable && (
           <div className="bg-doodle-accent/10 border border-dashed border-doodle-accent p-2 mb-2 space-y-2">
             <p className="font-doodle text-xs text-doodle-accent font-bold">
-              ⚠️ Currently Unavailable
+              {t("saleProductCard.currentlyUnavailableWarning")}
             </p>
             <NotifyWhenAvailable
               productName={product.Name}
               size={selectedSize}
               color={selectedColor}
               trigger={
-                <button 
+                <button
                   onClick={(e) => e.preventDefault()}
                   className="w-full doodle-button flex items-center justify-center gap-1 text-xs py-1"
                 >
                   <Bell className="w-3 h-3" />
-                  Notify me
+                  {t("saleProductCard.notifyMe")}
                 </button>
               }
             />
@@ -221,12 +235,16 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
             disabled={!product.inStock || showUnavailable}
             className={`w-full flex items-center justify-center gap-2 py-2 ${
               !product.inStock || showUnavailable
-                ? 'doodle-button bg-doodle-text/20 text-doodle-text/50 cursor-not-allowed border-doodle-text/30'
-                : 'doodle-button doodle-button-primary'
+                ? "doodle-button bg-doodle-text/20 text-doodle-text/50 cursor-not-allowed border-doodle-text/30"
+                : "doodle-button doodle-button-primary"
             }`}
           >
             <ShoppingCart className="w-4 h-4" />
-            {!product.inStock ? 'Out of Stock' : (showUnavailable ? 'Unavailable' : 'Add to Cart')}
+            {!product.inStock
+              ? t("saleProductCard.outOfStock")
+              : showUnavailable
+              ? t("saleProductCard.unavailable")
+              : t("saleProductCard.addToCart")}
           </button>
         </div>
       </div>

@@ -1,29 +1,49 @@
-import React, { useState } from 'react';
-import { Star } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
-import { Link } from 'react-router-dom';
-import { useToast } from '@/hooks/use-toast';
-import { z } from 'zod';
-
-const reviewSchema = z.object({
-  rating: z.number().min(1, 'Please select a rating').max(5),
-  title: z.string().trim().min(1, 'Title is required').max(100, 'Title must be less than 100 characters'),
-  comment: z.string().trim().min(10, 'Review must be at least 10 characters').max(500, 'Review must be less than 500 characters')
-});
+import React, { useState } from "react";
+import { Star } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { Link } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
+import { z } from "zod";
+import { useTranslation } from "react-i18next";
 
 interface ReviewFormProps {
   productId: number;
-  onSubmit: (review: { productId: number; userName: string; rating: number; title: string; comment: string }) => void;
+  onSubmit: (review: {
+    productId: number;
+    userName: string;
+    rating: number;
+    title: string;
+    comment: string;
+  }) => void;
 }
 
 const ReviewForm: React.FC<ReviewFormProps> = ({ productId, onSubmit }) => {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
+  const { t } = useTranslation("common");
+
+  const reviewSchema = z.object({
+    rating: z.number().min(1, t("reviewForm.pleaseSelectRating")).max(5),
+    title: z
+      .string()
+      .trim()
+      .min(1, t("reviewForm.titleRequired"))
+      .max(100, t("reviewForm.titleMustBeLessThan100Characters")),
+    comment: z
+      .string()
+      .trim()
+      .min(10, t("reviewForm.reviewMustBeAtLeast10Characters"))
+      .max(500, t("reviewForm.reviewMustBeLessThan500Characters")),
+  });
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
-  const [title, setTitle] = useState('');
-  const [comment, setComment] = useState('');
-  const [errors, setErrors] = useState<{ rating?: string; title?: string; comment?: string }>({});
+  const [title, setTitle] = useState("");
+  const [comment, setComment] = useState("");
+  const [errors, setErrors] = useState<{
+    rating?: string;
+    title?: string;
+    comment?: string;
+  }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isAuthenticated) {
@@ -31,13 +51,16 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ productId, onSubmit }) => {
       <div className="doodle-card p-6 text-center">
         <span className="text-4xl mb-2 block">✍️</span>
         <h3 className="font-doodle text-lg font-bold text-doodle-text mb-2">
-          Want to write a review?
+          {t("reviewForm.wantToWriteReview")}
         </h3>
         <p className="font-doodle text-doodle-text/70 mb-4">
-          Sign in to share your thoughts about this product.
+          {t("reviewForm.signInToShareThoughts")}
         </p>
-        <Link to="/auth" className="doodle-button doodle-button-primary inline-block">
-          Sign In to Review
+        <Link
+          to="/auth"
+          className="doodle-button doodle-button-primary inline-block"
+        >
+          {t("reviewForm.signInToReview")}
         </Link>
       </div>
     );
@@ -48,11 +71,12 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ productId, onSubmit }) => {
     setErrors({});
 
     const result = reviewSchema.safeParse({ rating, title, comment });
-    
+
     if (!result.success) {
-      const fieldErrors: { rating?: string; title?: string; comment?: string } = {};
-      result.error.errors.forEach(err => {
-        const field = err.path[0] as 'rating' | 'title' | 'comment';
+      const fieldErrors: { rating?: string; title?: string; comment?: string } =
+        {};
+      result.error.errors.forEach((err) => {
+        const field = err.path[0] as "rating" | "title" | "comment";
         fieldErrors[field] = err.message;
       });
       setErrors(fieldErrors);
@@ -66,32 +90,32 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ productId, onSubmit }) => {
       userName: `${user!.firstName} ${user!.lastName[0]}.`,
       rating: result.data.rating,
       title: result.data.title,
-      comment: result.data.comment
+      comment: result.data.comment,
     });
 
     // Reset form
     setRating(0);
-    setTitle('');
-    setComment('');
+    setTitle("");
+    setComment("");
     setIsSubmitting(false);
 
     toast({
-      title: "Review submitted!",
-      description: "Thanks for sharing your feedback.",
+      title: t("reviewForm.reviewSubmitted"),
+      description: t("reviewForm.thanksForFeedback"),
     });
   };
 
   return (
     <div className="doodle-card p-6">
       <h3 className="font-doodle text-xl font-bold text-doodle-text mb-4">
-        Write a Review
+        {t("reviewForm.writeAReview")}
       </h3>
-      
+
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Rating */}
         <div>
           <label className="font-doodle text-sm text-doodle-text/70 block mb-2">
-            Your Rating *
+            {t("reviewForm.yourRating")} *
           </label>
           <div className="flex items-center gap-1">
             {[1, 2, 3, 4, 5].map((star) => (
@@ -106,63 +130,75 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ productId, onSubmit }) => {
                 <Star
                   className={`w-8 h-8 ${
                     star <= (hoverRating || rating)
-                      ? 'text-doodle-accent fill-current'
-                      : 'text-doodle-text/20'
+                      ? "text-doodle-accent fill-current"
+                      : "text-doodle-text/20"
                   }`}
                 />
               </button>
             ))}
             {rating > 0 && (
               <span className="font-doodle text-sm text-doodle-text/60 ml-2">
-                {rating === 1 && 'Poor'}
-                {rating === 2 && 'Fair'}
-                {rating === 3 && 'Good'}
-                {rating === 4 && 'Very Good'}
-                {rating === 5 && 'Excellent'}
+                {rating === 1 && t("reviewForm.poor")}
+                {rating === 2 && t("reviewForm.fair")}
+                {rating === 3 && t("reviewForm.good")}
+                {rating === 4 && t("reviewForm.veryGood")}
+                {rating === 5 && t("reviewForm.excellent")}
               </span>
             )}
           </div>
           {errors.rating && (
-            <p className="font-doodle text-sm text-doodle-accent mt-1">{errors.rating}</p>
+            <p className="font-doodle text-sm text-doodle-accent mt-1">
+              {errors.rating}
+            </p>
           )}
         </div>
 
         {/* Title */}
         <div>
-          <label htmlFor="review-title" className="font-doodle text-sm text-doodle-text/70 block mb-2">
-            Review Title *
+          <label
+            htmlFor="review-title"
+            className="font-doodle text-sm text-doodle-text/70 block mb-2"
+          >
+            {t("reviewForm.reviewTitle")} *
           </label>
           <input
             id="review-title"
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Summarize your experience"
+            placeholder={t("reviewForm.summarizeYourExperience")}
             className="w-full doodle-border-light px-4 py-2 font-doodle bg-doodle-bg focus:outline-none focus:border-doodle-accent"
             maxLength={100}
           />
           {errors.title && (
-            <p className="font-doodle text-sm text-doodle-accent mt-1">{errors.title}</p>
+            <p className="font-doodle text-sm text-doodle-accent mt-1">
+              {errors.title}
+            </p>
           )}
         </div>
 
         {/* Comment */}
         <div>
-          <label htmlFor="review-comment" className="font-doodle text-sm text-doodle-text/70 block mb-2">
-            Your Review *
+          <label
+            htmlFor="review-comment"
+            className="font-doodle text-sm text-doodle-text/70 block mb-2"
+          >
+            {t("reviewForm.yourReview")} *
           </label>
           <textarea
             id="review-comment"
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="Tell others about your experience with this product..."
+            placeholder={t("reviewForm.tellOthersAboutExperience")}
             rows={4}
             className="w-full doodle-border-light px-4 py-2 font-doodle bg-doodle-bg focus:outline-none focus:border-doodle-accent resize-none"
             maxLength={500}
           />
           <div className="flex justify-between items-center mt-1">
             {errors.comment ? (
-              <p className="font-doodle text-sm text-doodle-accent">{errors.comment}</p>
+              <p className="font-doodle text-sm text-doodle-accent">
+                {errors.comment}
+              </p>
             ) : (
               <span />
             )}
@@ -178,7 +214,9 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ productId, onSubmit }) => {
           disabled={isSubmitting}
           className="doodle-button doodle-button-primary w-full py-3"
         >
-          {isSubmitting ? 'Submitting...' : 'Submit Review'}
+          {isSubmitting
+            ? t("reviewForm.submitting")
+            : t("reviewForm.submitReview")}
         </button>
       </form>
     </div>

@@ -1,12 +1,27 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { X, ShoppingCart, Heart, Star, Scale, Eye, Plus, Minus } from 'lucide-react';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Product, getSalePrice, isVariantAvailable } from '@/types/product';
-import { useCart } from '@/context/CartContext';
-import { useWishlist } from '@/context/WishlistContext';
-import { useCompare } from '@/context/CompareContext';
-import { useReviews } from '@/hooks/useReviews';
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  X,
+  ShoppingCart,
+  Heart,
+  Star,
+  Scale,
+  Eye,
+  Plus,
+  Minus,
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Product, getSalePrice, isVariantAvailable } from "@/types/product";
+import { useCart } from "@/context/CartContext";
+import { useWishlist } from "@/context/WishlistContext";
+import { useCompare } from "@/context/CompareContext";
+import { useReviews } from "@/hooks/useReviews";
+import { useTranslation } from "react-i18next";
 
 interface QuickViewModalProps {
   product: Product;
@@ -14,12 +29,17 @@ interface QuickViewModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenChange }) => {
+const QuickViewModal: React.FC<QuickViewModalProps> = ({
+  product,
+  open,
+  onOpenChange,
+}) => {
   const { addToCart } = useCart();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const { addToCompare, removeFromCompare, isInCompare } = useCompare();
   const { averageRating, reviewCount } = useReviews(product.ProductID);
-  
+  const { t } = useTranslation("common");
+
   const [selectedSize, setSelectedSize] = useState<string | undefined>(
     product.availableSizes?.[0]
   );
@@ -32,8 +52,12 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenCh
   const inCompare = isInCompare(product.ProductID);
   const salePrice = getSalePrice(product);
   const currentPrice = salePrice || product.ListPrice;
-  
-  const variantAvailable = isVariantAvailable(product, selectedSize, selectedColor);
+
+  const variantAvailable = isVariantAvailable(
+    product,
+    selectedSize,
+    selectedColor
+  );
 
   const handleAddToCart = () => {
     if (!product.inStock || !variantAvailable) return;
@@ -60,31 +84,38 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenCh
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl p-0 overflow-hidden bg-doodle-bg border-4 border-doodle-text">
-        <DialogTitle className="sr-only">{product.Name} - Quick View</DialogTitle>
+        <DialogTitle className="sr-only">
+          {product.Name} - {t("quickViewModal.quickView")}
+        </DialogTitle>
         <DialogDescription className="sr-only">
-          Quick view of {product.Name}. View product details, select options, and add to cart.
+          {t("quickViewModal.viewProductDetails")}
         </DialogDescription>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2">
           {/* Product Image */}
           <div className="relative bg-doodle-bg border-b-4 md:border-b-0 md:border-r-4 border-doodle-text p-8 flex items-center justify-center">
             {/* Sale Badge */}
             {product.DiscountPct && (
               <div className="absolute top-4 left-4 z-10 bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text rotate-[-3deg]">
-                {product.SpecialOfferDescription || `${Math.round((product.DiscountPct || 0) * 100)}% OFF`}
+                {product.SpecialOfferDescription ||
+                  `${Math.round((product.DiscountPct || 0) * 100)}${t(
+                    "quickViewModal.percentOff"
+                  )}`}
               </div>
             )}
 
             {/* Stock Badge */}
             {!product.inStock && (
               <div className="absolute bottom-4 left-4 z-10 bg-red-500 text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text">
-                OUT OF STOCK
+                {t("quickViewModal.outOfStock")}
               </div>
             )}
-            
+
             {product.LargePhoto || product.ThumbNailPhoto ? (
-              <img 
-                src={`data:image/gif;base64,${product.LargePhoto || product.ThumbNailPhoto}`}
+              <img
+                src={`data:image/gif;base64,${
+                  product.LargePhoto || product.ThumbNailPhoto
+                }`}
                 alt={product.Name}
                 className="max-w-full max-h-96 object-contain"
               />
@@ -92,7 +123,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenCh
               <div className="text-center">
                 <span className="font-doodle text-8xl">🚴</span>
                 <p className="font-doodle text-sm text-doodle-text/60 mt-4">
-                  {product.Color || 'Product Image'}
+                  {product.Color || t("quickViewModal.productImage")}
                 </p>
               </div>
             )}
@@ -104,7 +135,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenCh
               <h2 className="font-doodle text-2xl font-bold text-doodle-text mb-2">
                 {product.Name}
               </h2>
-              
+
               {/* Star Rating */}
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-0.5">
@@ -113,14 +144,15 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenCh
                       key={i}
                       className={`w-4 h-4 ${
                         i < Math.round(averageRating)
-                          ? 'text-doodle-accent fill-current'
-                          : 'text-doodle-text/20'
+                          ? "text-doodle-accent fill-current"
+                          : "text-doodle-text/20"
                       }`}
                     />
                   ))}
                 </div>
                 <span className="font-doodle text-sm text-doodle-text/70">
-                  {averageRating.toFixed(1)} ({reviewCount} reviews)
+                  {averageRating.toFixed(1)} ({reviewCount}{" "}
+                  {t("quickViewModal.reviews")})
                 </span>
               </div>
             </div>
@@ -136,7 +168,8 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenCh
                     ${product.ListPrice.toFixed(2)}
                   </span>
                   <span className="font-doodle text-sm font-bold text-doodle-green">
-                    Save {Math.round((product.DiscountPct || 0) * 100)}%
+                    {t("quickViewModal.save")}{" "}
+                    {Math.round((product.DiscountPct || 0) * 100)}%
                   </span>
                 </>
               ) : (
@@ -147,18 +180,32 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenCh
             </div>
 
             {/* Stock Status */}
-            <div className={`p-2 border-2 ${product.inStock ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}`}>
+            <div
+              className={`p-2 border-2 ${
+                product.inStock
+                  ? "bg-green-50 border-green-300"
+                  : "bg-red-50 border-red-300"
+              }`}
+            >
               <div className="flex items-center gap-2">
-                <span className="text-lg">{product.inStock ? '✅' : '❌'}</span>
+                <span className="text-lg">{product.inStock ? "✅" : "❌"}</span>
                 <div>
-                  <span className={`font-doodle text-sm font-bold ${product.inStock ? 'text-green-700' : 'text-red-700'}`}>
-                    {product.inStock ? 'In Stock' : 'Out of Stock'}
+                  <span
+                    className={`font-doodle text-sm font-bold ${
+                      product.inStock ? "text-green-700" : "text-red-700"
+                    }`}
+                  >
+                    {product.inStock
+                      ? t("quickViewModal.inStock")
+                      : t("quickViewModal.outOfStock")}
                   </span>
-                  {product.quantityAvailable !== undefined && product.inStock && (
-                    <span className="font-doodle text-xs text-doodle-text/70 ml-2">
-                      ({product.quantityAvailable} available)
-                    </span>
-                  )}
+                  {product.quantityAvailable !== undefined &&
+                    product.inStock && (
+                      <span className="font-doodle text-xs text-doodle-text/70 ml-2">
+                        ({product.quantityAvailable}{" "}
+                        {t("quickViewModal.available")})
+                      </span>
+                    )}
                 </div>
               </div>
             </div>
@@ -174,7 +221,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenCh
             {product.availableSizes && product.availableSizes.length > 0 && (
               <div>
                 <label className="font-doodle text-sm font-bold text-doodle-text block mb-2">
-                  Size
+                  {t("quickViewModal.size")}
                 </label>
                 <select
                   value={selectedSize}
@@ -194,7 +241,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenCh
             {product.availableColors && product.availableColors.length > 0 && (
               <div>
                 <label className="font-doodle text-sm font-bold text-doodle-text block mb-2">
-                  Color
+                  {t("quickViewModal.color")}
                 </label>
                 <select
                   value={selectedColor}
@@ -214,7 +261,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenCh
             {!variantAvailable && (
               <div className="p-3 bg-doodle-accent/10 border-2 border-dashed border-doodle-accent">
                 <p className="font-doodle text-sm text-doodle-accent font-bold">
-                  This combination is currently unavailable
+                  {t("quickViewModal.combinationUnavailable")}
                 </p>
               </div>
             )}
@@ -222,7 +269,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenCh
             {/* Quantity */}
             <div>
               <label className="font-doodle text-sm font-bold text-doodle-text block mb-2">
-                Quantity
+                {t("quickViewModal.quantity")}
               </label>
               <div className="flex items-center gap-3">
                 <button
@@ -252,23 +299,41 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenCh
                 className="doodle-button doodle-button-primary flex-1 py-3 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ShoppingCart className="w-5 h-5" />
-                {!product.inStock ? 'Out of Stock' : (variantAvailable ? 'Add to Cart' : 'Unavailable')}
+                {!product.inStock
+                  ? t("quickViewModal.outOfStock")
+                  : variantAvailable
+                  ? t("quickViewModal.addToCart")
+                  : t("quickViewModal.unavailable")}
               </button>
               <button
                 onClick={handleToggleWishlist}
                 className={`doodle-button p-3 ${
-                  inWishlist ? 'bg-doodle-accent text-white border-doodle-accent' : ''
+                  inWishlist
+                    ? "bg-doodle-accent text-white border-doodle-accent"
+                    : ""
                 }`}
-                aria-label={inWishlist ? "Remove from wishlist" : "Add to wishlist"}
+                aria-label={
+                  inWishlist
+                    ? t("quickViewModal.removeFromWishlist")
+                    : t("quickViewModal.addToWishlist")
+                }
               >
-                <Heart className={`w-5 h-5 ${inWishlist ? 'fill-current' : ''}`} />
+                <Heart
+                  className={`w-5 h-5 ${inWishlist ? "fill-current" : ""}`}
+                />
               </button>
               <button
                 onClick={handleToggleCompare}
                 className={`doodle-button p-3 ${
-                  inCompare ? 'bg-doodle-green text-white border-doodle-green' : ''
+                  inCompare
+                    ? "bg-doodle-green text-white border-doodle-green"
+                    : ""
                 }`}
-                aria-label={inCompare ? "Remove from comparison" : "Add to comparison"}
+                aria-label={
+                  inCompare
+                    ? t("quickViewModal.removeFromComparison")
+                    : t("quickViewModal.addToComparison")
+                }
               >
                 <Scale className="w-5 h-5" />
               </button>
@@ -281,7 +346,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, open, onOpenCh
               onClick={() => onOpenChange(false)}
             >
               <Eye className="w-4 h-4" />
-              View Full Details
+              {t("quickViewModal.viewFullDetails")}
             </Link>
           </div>
         </div>

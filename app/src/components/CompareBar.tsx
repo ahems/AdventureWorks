@@ -1,9 +1,11 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { X, ArrowRight, Scale } from 'lucide-react';
-import { useCompare } from '@/context/CompareContext';
+import React from "react";
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { X, ArrowRight, Scale } from "lucide-react";
+import { useCompare } from "@/context/CompareContext";
 
 const CompareBar: React.FC = () => {
+  const { t } = useTranslation("common");
   const { items, removeFromCompare, clearCompare } = useCompare();
 
   if (items.length === 0) return null;
@@ -15,7 +17,7 @@ const CompareBar: React.FC = () => {
           <div className="flex items-center gap-2">
             <Scale className="w-5 h-5 text-doodle-accent" />
             <span className="font-doodle font-bold text-doodle-text">
-              Compare ({items.length}/3)
+              {t("compareBar.compareCount", { count: items.length })}
             </span>
           </div>
 
@@ -31,13 +33,15 @@ const CompareBar: React.FC = () => {
                 <button
                   onClick={() => removeFromCompare(product.ProductID)}
                   className="p-1 hover:bg-doodle-accent/10 rounded transition-colors"
-                  aria-label={`Remove ${product.Name} from comparison`}
+                  aria-label={t("compareBar.removeFromComparison", {
+                    name: product.Name,
+                  })}
                 >
                   <X className="w-4 h-4 text-doodle-accent" />
                 </button>
               </div>
             ))}
-            
+
             {/* Empty slots */}
             {Array.from({ length: 3 - items.length }).map((_, i) => (
               <div
@@ -45,7 +49,7 @@ const CompareBar: React.FC = () => {
                 className="flex items-center gap-2 border-2 border-dashed border-doodle-text/10 px-3 py-2"
               >
                 <span className="font-doodle text-sm text-doodle-text/30">
-                  Add product
+                  {t("compareBar.addProduct")}
                 </span>
               </div>
             ))}
@@ -56,13 +60,13 @@ const CompareBar: React.FC = () => {
               onClick={clearCompare}
               className="font-doodle text-sm text-doodle-text/70 hover:text-doodle-accent transition-colors"
             >
-              Clear all
+              {t("compareBar.clearAll")}
             </button>
             <Link
               to="/compare"
               className="doodle-button doodle-button-primary flex items-center gap-2"
             >
-              Compare
+              {t("compareBar.compare")}
               <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
