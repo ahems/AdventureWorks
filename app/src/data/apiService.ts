@@ -305,9 +305,7 @@ const attachPhotosToProducts = async (
         return {
           ...product,
           ThumbNailPhoto: photo.ThumbNailPhoto,
-          LargePhoto: photo.LargePhoto,
           ThumbnailPhotoFileName: photo.ThumbnailPhotoFileName,
-          LargePhotoFileName: photo.LargePhotoFileName,
         };
       }
       return product;
@@ -499,9 +497,7 @@ export const getProductById = async (
       ...product,
       productPhotos: productPhotos.length > 0 ? productPhotos : undefined,
       ThumbNailPhoto: primaryPhoto?.ThumbNailPhoto,
-      LargePhoto: primaryPhoto?.LargePhoto,
       ThumbnailPhotoFileName: primaryPhoto?.ThumbnailPhotoFileName,
-      LargePhotoFileName: primaryPhoto?.LargePhotoFileName,
     };
 
     // Fetch description, discount, and inventory for single product

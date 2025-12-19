@@ -428,9 +428,9 @@ const AccountPage: React.FC = () => {
                                   `(${order.shipMethod.Name})`}
                               </span>
                               <span>
-                                {(order.currency?.CurrencyCode &&
+                                {(order.currencyRate?.currency?.CurrencyCode &&
                                   CURRENCY_SYMBOLS[
-                                    order.currencyRate?.currency?.CurrencyCode
+                                    order.currencyRate.currency.CurrencyCode
                                   ]) ||
                                   "$"}
                                 {order.Freight.toFixed(2)}
@@ -452,9 +452,9 @@ const AccountPage: React.FC = () => {
                             <div className="flex justify-between font-bold text-base pt-2 border-t border-dashed border-doodle-text/20">
                               <span>{t("orderTracking.total")}</span>
                               <span className="text-doodle-green">
-                                {(order.currency?.CurrencyCode &&
+                                {(order.currencyRate?.currency?.CurrencyCode &&
                                   CURRENCY_SYMBOLS[
-                                    order.currencyRate?.currency?.CurrencyCode
+                                    order.currencyRate.currency.CurrencyCode
                                   ]) ||
                                   "$"}
                                 {order.TotalDue.toFixed(2)}

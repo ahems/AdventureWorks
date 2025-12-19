@@ -155,8 +155,6 @@ export const GET_PRODUCT_BY_ID = gql`
               ProductPhotoID
               ThumbNailPhoto
               ThumbnailPhotoFileName
-              LargePhoto
-              LargePhotoFileName
             }
           }
         }
@@ -260,9 +258,7 @@ export const GET_PHOTO_DATA = gql`
       items {
         ProductPhotoID
         ThumbNailPhoto
-        LargePhoto
         ThumbnailPhotoFileName
-        LargePhotoFileName
       }
     }
   }
@@ -289,9 +285,7 @@ export const GET_PHOTOS_BY_IDS = gql`
       items {
         ProductPhotoID
         ThumbNailPhoto
-        LargePhoto
         ThumbnailPhotoFileName
-        LargePhotoFileName
       }
     }
   }

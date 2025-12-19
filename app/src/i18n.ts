@@ -107,6 +107,11 @@ i18n.use(initReactI18next).init({
   interpolation: {
     escapeValue: false, // React already escapes
   },
+  react: {
+    useSuspense: false, // Disable suspense to avoid hydration issues
+    bindI18n: "languageChanged", // Bind to language change events
+    bindI18nStore: "", // Don't bind to store events
+  },
 });
 
 export default i18n;

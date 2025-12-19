@@ -59,7 +59,10 @@
     "sortNameDesc": "Name (Z-A)",
     "sortNewest": "Newest First",
     "noProductsFound": "No products found",
-    "tryDifferentSubcategory": "Try selecting a different subcategory"
+    "tryDifferentSubcategory": "Try selecting a different subcategory",
+    "title": "Shop by Category",
+    "subtitle": "Find exactly what you need for your next adventure",
+    "browse": "Browse"
   },
   "featured": {
     "title": "Featured Gear",

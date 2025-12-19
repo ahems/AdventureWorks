@@ -37,10 +37,19 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({
     return saved || "en";
   });
 
+  // Initialize i18n language on mount
+  useEffect(() => {
+    if (i18n.language !== selectedLanguage) {
+      i18n.changeLanguage(selectedLanguage);
+    }
+  }, []);
+
   // Save to localStorage and sync with i18next whenever language changes
   useEffect(() => {
     localStorage.setItem("selectedLanguage", selectedLanguage);
-    i18n.changeLanguage(selectedLanguage);
+    if (i18n.language !== selectedLanguage) {
+      i18n.changeLanguage(selectedLanguage);
+    }
   }, [selectedLanguage, i18n]);
 
   const setSelectedLanguage = (language: string) => {
