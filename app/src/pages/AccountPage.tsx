@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, Navigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
   User,
@@ -77,6 +78,7 @@ const profileSchema = z.object({
 
 const AccountPage: React.FC = () => {
   const { user, isAuthenticated, logout, updateProfile, isLoading } = useAuth();
+  const { t } = useTranslation("common");
   const { items: wishlistItems, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
   const {
@@ -211,7 +213,9 @@ const AccountPage: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-doodle-bg">
         <div className="text-center">
           <span className="text-6xl block mb-4 animate-bounce">🚴</span>
-          <p className="font-doodle text-doodle-text">Loading...</p>
+          <p className="font-doodle text-doodle-text">
+            {t("orderTracking.loading")}
+          </p>
         </div>
       </div>
     );
@@ -234,7 +238,7 @@ const AccountPage: React.FC = () => {
             className="inline-flex items-center gap-2 font-doodle text-doodle-text/70 hover:text-doodle-accent transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Shop
+            {t("account.backToShop")}
           </Link>
         </div>
 
@@ -257,7 +261,7 @@ const AccountPage: React.FC = () => {
                     {user.email}
                   </p>
                   <p className="font-doodle text-sm text-doodle-text/50 mt-1">
-                    Member since {memberSinceDate}
+                    {t("account.memberSince")} {memberSinceDate}
                   </p>
                 </div>
               </div>
@@ -268,11 +272,15 @@ const AccountPage: React.FC = () => {
               <div className="flex items-center gap-3 mb-6">
                 <Package className="w-6 h-6 text-doodle-accent" />
                 <h2 className="font-doodle text-xl font-bold text-doodle-text">
-                  Order History
+                  {t("account.orderHistory")}
                 </h2>
                 {!ordersLoading && (
                   <span className="font-doodle text-sm text-doodle-text/50">
-                    ({orders.length} {orders.length === 1 ? "order" : "orders"})
+                    ({orders.length}{" "}
+                    {orders.length === 1
+                      ? t("account.order")
+                      : t("account.orders")}
+                    )
                   </span>
                 )}
               </div>
@@ -303,10 +311,10 @@ const AccountPage: React.FC = () => {
                 <div className="text-center py-8">
                   <Package className="w-16 h-16 mx-auto mb-4 text-doodle-text/30" />
                   <p className="font-doodle text-doodle-text/70 mb-4">
-                    You haven't placed any orders yet.
+                    {t("account.noOrdersYet")}
                   </p>
                   <Link to="/" className="doodle-button inline-block">
-                    Start Shopping
+                    {t("orderTracking.startShopping")}
                   </Link>
                 </div>
               ) : (
@@ -402,7 +410,7 @@ const AccountPage: React.FC = () => {
                           <div className="space-y-1 font-doodle text-sm">
                             <div className="flex justify-between">
                               <span className="text-doodle-text/70">
-                                Subtotal
+                                {t("orderTracking.subtotal")}
                               </span>
                               <span>
                                 {(order.currencyRate?.currency?.CurrencyCode &&
@@ -415,7 +423,7 @@ const AccountPage: React.FC = () => {
                             </div>
                             <div className="flex justify-between">
                               <span className="text-doodle-text/70">
-                                Shipping{" "}
+                                {t("orderTracking.shipping")}{" "}
                                 {order.shipMethod?.Name &&
                                   `(${order.shipMethod.Name})`}
                               </span>
@@ -429,7 +437,9 @@ const AccountPage: React.FC = () => {
                               </span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-doodle-text/70">Tax</span>
+                              <span className="text-doodle-text/70">
+                                {t("orderTracking.tax")}
+                              </span>
                               <span>
                                 {(order.currencyRate?.currency?.CurrencyCode &&
                                   CURRENCY_SYMBOLS[
@@ -440,7 +450,7 @@ const AccountPage: React.FC = () => {
                               </span>
                             </div>
                             <div className="flex justify-between font-bold text-base pt-2 border-t border-dashed border-doodle-text/20">
-                              <span>Total</span>
+                              <span>{t("orderTracking.total")}</span>
                               <span className="text-doodle-green">
                                 {(order.currency?.CurrencyCode &&
                                   CURRENCY_SYMBOLS[
@@ -457,7 +467,7 @@ const AccountPage: React.FC = () => {
                               <hr className="border-dashed border-doodle-text/20 my-3" />
                               <div className="font-doodle text-sm">
                                 <p className="font-bold text-doodle-text mb-1">
-                                  Order Notes:
+                                  {t("account.orderNotes")}
                                 </p>
                                 <p className="text-doodle-text/70">
                                   {order.Comment}
@@ -478,11 +488,14 @@ const AccountPage: React.FC = () => {
               <div className="flex items-center gap-3 mb-6">
                 <Heart className="w-6 h-6 text-doodle-accent" />
                 <h2 className="font-doodle text-xl font-bold text-doodle-text">
-                  My Wishlist
+                  {t("account.myWishlist")}
                 </h2>
                 <span className="font-doodle text-sm text-doodle-text/50">
                   ({wishlistItems.length}{" "}
-                  {wishlistItems.length === 1 ? "item" : "items"})
+                  {wishlistItems.length === 1
+                    ? t("account.item")
+                    : t("account.items")}
+                  )
                 </span>
               </div>
 
@@ -490,10 +503,10 @@ const AccountPage: React.FC = () => {
                 <div className="text-center py-8">
                   <Heart className="w-16 h-16 mx-auto mb-4 text-doodle-text/30" />
                   <p className="font-doodle text-doodle-text/70 mb-4">
-                    Your wishlist is empty.
+                    {t("account.wishlistEmpty")}
                   </p>
                   <Link to="/" className="doodle-button inline-block">
-                    Browse Products
+                    {t("account.browseProducts")}
                   </Link>
                 </div>
               ) : (
@@ -525,14 +538,14 @@ const AccountPage: React.FC = () => {
                             className="doodle-button doodle-button-primary text-xs py-1 px-2 flex items-center gap-1"
                           >
                             <ShoppingCart className="w-3 h-3" />
-                            Add to Cart
+                            {t("account.addToCart")}
                           </button>
                           <button
                             onClick={() => removeFromWishlist(item.ProductID)}
                             className="doodle-button text-xs py-1 px-2 flex items-center gap-1"
                           >
                             <X className="w-3 h-3" />
-                            Remove
+                            {t("account.remove")}
                           </button>
                         </div>
                       </div>
@@ -550,7 +563,7 @@ const AccountPage: React.FC = () => {
                   <div className="flex items-center gap-3">
                     <User className="w-6 h-6 text-doodle-accent" />
                     <h2 className="font-doodle text-xl font-bold text-doodle-text">
-                      Profile Settings
+                      {t("account.profileSettings")}
                     </h2>
                   </div>
                   {!isEditingProfile && !profileLoading && (
@@ -559,7 +572,7 @@ const AccountPage: React.FC = () => {
                       className="doodle-button text-sm py-1 px-3 flex items-center gap-2"
                     >
                       <Edit2 className="w-4 h-4" />
-                      Edit
+                      {t("account.edit")}
                     </button>
                   )}
                 </div>
@@ -568,7 +581,7 @@ const AccountPage: React.FC = () => {
                   <div className="text-center py-8">
                     <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-doodle-accent"></div>
                     <p className="font-doodle text-doodle-text/70 mt-4">
-                      Loading profile...
+                      {t("account.loadingProfile")}
                     </p>
                   </div>
                 ) : isEditingProfile ? (
@@ -576,7 +589,7 @@ const AccountPage: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div>
                         <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                          Title
+                          {t("account.title")}
                         </label>
                         <select
                           value={editProfileData.title}
@@ -594,7 +607,7 @@ const AccountPage: React.FC = () => {
                           }}
                           className="doodle-input w-full"
                         >
-                          <option value="">None</option>
+                          <option value="">{t("account.none")}</option>
                           <option value="Mr.">Mr.</option>
                           <option value="Ms.">Ms.</option>
                           <option value="Mrs.">Mrs.</option>
@@ -608,7 +621,7 @@ const AccountPage: React.FC = () => {
                       </div>
                       <div className="sm:col-span-2">
                         <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                          First Name *
+                          {t("account.firstName")} *
                         </label>
                         <input
                           type="text"
@@ -638,7 +651,7 @@ const AccountPage: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                          Middle Name
+                          {t("account.middleName")}
                         </label>
                         <input
                           type="text"
@@ -656,7 +669,7 @@ const AccountPage: React.FC = () => {
                             }
                           }}
                           className="doodle-input w-full"
-                          placeholder="Middle name (optional)"
+                          placeholder={t("account.middleNamePlaceholder")}
                         />
                         {profileErrors.middleName && (
                           <p className="font-doodle text-xs text-doodle-accent mt-1">
@@ -666,7 +679,7 @@ const AccountPage: React.FC = () => {
                       </div>
                       <div>
                         <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                          Last Name *
+                          {t("account.lastName")} *
                         </label>
                         <input
                           type="text"
@@ -695,7 +708,7 @@ const AccountPage: React.FC = () => {
                     </div>
                     <div>
                       <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                        Suffix
+                        {t("account.suffix")}
                       </label>
                       <select
                         value={editProfileData.suffix}
@@ -713,7 +726,7 @@ const AccountPage: React.FC = () => {
                         }}
                         className="doodle-input w-full"
                       >
-                        <option value="">None</option>
+                        <option value="">{t("account.none")}</option>
                         <option value="Jr.">Jr.</option>
                         <option value="Sr.">Sr.</option>
                         <option value="II">II</option>
@@ -728,7 +741,7 @@ const AccountPage: React.FC = () => {
                     </div>
                     <div>
                       <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                        Email *
+                        {t("account.email")} *
                       </label>
                       <input
                         type="email"
@@ -757,7 +770,7 @@ const AccountPage: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                          Phone Number
+                          {t("account.phoneNumber")}
                         </label>
                         <div className="flex gap-2">
                           <select
@@ -814,7 +827,7 @@ const AccountPage: React.FC = () => {
                       </div>
                       <div>
                         <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
-                          Phone Type
+                          {t("account.phoneType")}
                         </label>
                         <select
                           value={editProfileData.phoneNumberTypeId}
@@ -826,9 +839,9 @@ const AccountPage: React.FC = () => {
                           }}
                           className="doodle-input w-full"
                         >
-                          <option value="1">Cell</option>
-                          <option value="2">Home</option>
-                          <option value="3">Work</option>
+                          <option value="1">{t("account.cell")}</option>
+                          <option value="2">{t("account.home")}</option>
+                          <option value="3">{t("account.work")}</option>
                         </select>
                       </div>
                     </div>
@@ -890,8 +903,8 @@ const AccountPage: React.FC = () => {
                       >
                         <Save className="w-4 h-4" />
                         {updateProfileMutation.isPending
-                          ? "Saving..."
-                          : "Save Changes"}
+                          ? t("account.saving")
+                          : t("account.saveChanges")}
                       </button>
                       <button
                         onClick={() => {
@@ -932,7 +945,7 @@ const AccountPage: React.FC = () => {
                         }}
                         className="doodle-button py-2 px-4"
                       >
-                        Cancel
+                        {t("account.cancel")}
                       </button>
                     </div>
                   </div>
@@ -940,7 +953,7 @@ const AccountPage: React.FC = () => {
                   <div className="space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
                       <span className="font-doodle text-sm text-doodle-text/70 sm:w-24">
-                        Name:
+                        {t("account.name")}:
                       </span>
                       <span className="font-doodle font-bold text-doodle-text">
                         {profileData.Title && `${profileData.Title} `}
@@ -952,7 +965,7 @@ const AccountPage: React.FC = () => {
                     </div>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
                       <span className="font-doodle text-sm text-doodle-text/70 sm:w-24">
-                        Email:
+                        {t("account.email")}:
                       </span>
                       <span className="font-doodle font-bold text-doodle-text">
                         {profileData.EmailAddress}
@@ -961,7 +974,7 @@ const AccountPage: React.FC = () => {
                     {profileData.PhoneNumber && (
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
                         <span className="font-doodle text-sm text-doodle-text/70 sm:w-24">
-                          Phone:
+                          {t("account.phone")}:
                         </span>
                         <span className="font-doodle font-bold text-doodle-text">
                           {(() => {
@@ -987,10 +1000,10 @@ const AccountPage: React.FC = () => {
                           <span className="text-sm text-doodle-text/50 ml-2">
                             (
                             {profileData.PhoneNumberTypeID === 1
-                              ? "Cell"
+                              ? t("account.cell")
                               : profileData.PhoneNumberTypeID === 2
-                              ? "Home"
-                              : "Work"}
+                              ? t("account.home")
+                              : t("account.work")}
                             )
                           </span>
                         </span>
@@ -1000,7 +1013,7 @@ const AccountPage: React.FC = () => {
                 ) : (
                   <div className="text-center py-8">
                     <p className="font-doodle text-doodle-text/70">
-                      Unable to load profile data.
+                      {t("account.unableToLoad")}
                     </p>
                   </div>
                 )}
@@ -1012,11 +1025,14 @@ const AccountPage: React.FC = () => {
                   <div className="flex items-center gap-3">
                     <MapPin className="w-6 h-6 text-doodle-accent" />
                     <h2 className="font-doodle text-xl font-bold text-doodle-text">
-                      Saved Addresses
+                      {t("account.savedAddresses")}
                     </h2>
                     <span className="font-doodle text-sm text-doodle-text/50">
                       ({addresses.length}{" "}
-                      {addresses.length === 1 ? "address" : "addresses"})
+                      {addresses.length === 1
+                        ? t("account.address")
+                        : t("account.addresses")}
+                      )
                     </span>
                   </div>
                   {!showAddressForm && !editingAddress && (
@@ -1025,7 +1041,7 @@ const AccountPage: React.FC = () => {
                       className="doodle-button text-sm py-1 px-3 flex items-center gap-2"
                     >
                       <Plus className="w-4 h-4" />
-                      Add New
+                      {t("account.addNew")}
                     </button>
                   )}
                 </div>
@@ -1033,7 +1049,7 @@ const AccountPage: React.FC = () => {
                 {showAddressForm && (
                   <div className="mb-6 p-4 border-2 border-dashed border-doodle-accent/30 bg-doodle-accent/5">
                     <h3 className="font-doodle font-bold text-doodle-text mb-4">
-                      Add New Address
+                      {t("account.addNewAddress")}
                     </h3>
                     <AddressForm
                       onSave={async (addressData) => {
@@ -1041,14 +1057,13 @@ const AccountPage: React.FC = () => {
                           await addAddress(addressData);
                           setShowAddressForm(false);
                           toast({
-                            title: "Address Added",
-                            description: "Your new address has been saved.",
+                            title: t("account.addressAdded"),
+                            description: t("account.addressAddedDesc"),
                           });
                         } catch (error) {
                           toast({
-                            title: "Error",
-                            description:
-                              "Failed to add address. Please try again.",
+                            title: t("account.error"),
+                            description: t("account.errorAddAddress"),
                             variant: "destructive",
                           });
                         }
@@ -1061,7 +1076,7 @@ const AccountPage: React.FC = () => {
                 {editingAddress && (
                   <div className="mb-6 p-4 border-2 border-dashed border-doodle-accent/30 bg-doodle-accent/5">
                     <h3 className="font-doodle font-bold text-doodle-text mb-4">
-                      Edit Address
+                      {t("account.editAddress")}
                     </h3>
                     <AddressForm
                       address={editingAddress}
@@ -1070,14 +1085,13 @@ const AccountPage: React.FC = () => {
                           await updateAddress(editingAddress.id, addressData);
                           setEditingAddress(null);
                           toast({
-                            title: "Address Updated",
-                            description: "Your address has been updated.",
+                            title: t("account.addressUpdated"),
+                            description: t("account.addressUpdatedDesc"),
                           });
                         } catch (error) {
                           toast({
-                            title: "Error",
-                            description:
-                              "Failed to update address. Please try again.",
+                            title: t("account.error"),
+                            description: t("account.errorUpdateAddress"),
                             variant: "destructive",
                           });
                         }
@@ -1110,14 +1124,14 @@ const AccountPage: React.FC = () => {
                   <div className="text-center py-8">
                     <MapPin className="w-16 h-16 mx-auto mb-4 text-doodle-text/30" />
                     <p className="font-doodle text-doodle-text/70 mb-4">
-                      No saved addresses yet.
+                      {t("account.noAddressesYet")}
                     </p>
                     <button
                       onClick={() => setShowAddressForm(true)}
                       className="doodle-button doodle-button-primary inline-flex items-center gap-2"
                     >
                       <Plus className="w-4 h-4" />
-                      Add Your First Address
+                      {t("account.addFirstAddress")}
                     </button>
                   </div>
                 ) : (
@@ -1131,14 +1145,13 @@ const AccountPage: React.FC = () => {
                           try {
                             await deleteAddress(id);
                             toast({
-                              title: "Address Deleted",
-                              description: "The address has been removed.",
+                              title: t("account.addressDeleted"),
+                              description: t("account.addressDeletedDesc"),
                             });
                           } catch (error) {
                             toast({
-                              title: "Error",
-                              description:
-                                "Failed to delete address. Please try again.",
+                              title: t("account.error"),
+                              description: t("account.errorDeleteAddress"),
                               variant: "destructive",
                             });
                           }
@@ -1147,15 +1160,15 @@ const AccountPage: React.FC = () => {
                           try {
                             await setDefaultAddress(id);
                             toast({
-                              title: "Default Address Updated",
-                              description:
-                                "Your default address has been changed.",
+                              title: t("account.defaultAddressUpdated"),
+                              description: t(
+                                "account.defaultAddressUpdatedDesc"
+                              ),
                             });
                           } catch (error) {
                             toast({
-                              title: "Error",
-                              description:
-                                "Failed to update default address. Please try again.",
+                              title: t("account.error"),
+                              description: t("account.errorSetDefaultAddress"),
                               variant: "destructive",
                             });
                           }
@@ -1172,10 +1185,10 @@ const AccountPage: React.FC = () => {
                   <div className="flex items-center gap-3">
                     <CreditCard className="w-6 h-6 text-doodle-accent" />
                     <h2 className="font-doodle text-xl font-bold text-doodle-text">
-                      Payment Methods
+                      {t("account.paymentMethods")}
                     </h2>
                     <span className="font-doodle text-sm text-doodle-text/50">
-                      ({paymentMethods.length} saved)
+                      ({paymentMethods.length} {t("account.saved")})
                     </span>
                   </div>
                 </div>
@@ -1203,10 +1216,10 @@ const AccountPage: React.FC = () => {
                   <div className="text-center py-8">
                     <CreditCard className="w-16 h-16 mx-auto mb-4 text-doodle-text/30" />
                     <p className="font-doodle text-doodle-text/70 mb-4">
-                      No saved payment methods yet.
+                      {t("account.noPaymentMethods")}
                     </p>
                     <p className="font-doodle text-sm text-doodle-text/50">
-                      Save a card during checkout to see it here.
+                      {t("account.saveCardDuringCheckout")}
                     </p>
                   </div>
                 ) : (
@@ -1224,12 +1237,13 @@ const AccountPage: React.FC = () => {
                             </span>
                             {pm.isDefault && (
                               <span className="font-doodle text-xs bg-doodle-accent text-white px-2 py-0.5 rounded">
-                                Default
+                                {t("account.default")}
                               </span>
                             )}
                           </div>
                           <p className="font-doodle text-sm text-doodle-text/70">
-                            {pm.cardholderName} • Expires {pm.cardExpiry}
+                            {pm.cardholderName} • {t("account.expires")}{" "}
+                            {pm.cardExpiry}
                           </p>
                         </div>
                         <div className="flex gap-2">
@@ -1238,21 +1252,21 @@ const AccountPage: React.FC = () => {
                               try {
                                 await removePaymentMethod(pm.id);
                                 toast({
-                                  title: "Payment Method Removed",
-                                  description:
-                                    "The card has been removed from your account.",
+                                  title: t("account.paymentMethodRemoved"),
+                                  description: t(
+                                    "account.paymentMethodRemovedDesc"
+                                  ),
                                 });
                               } catch (error) {
                                 toast({
-                                  title: "Error",
-                                  description:
-                                    "Failed to remove payment method. Please try again.",
+                                  title: t("account.error"),
+                                  description: t("account.errorRemovePayment"),
                                   variant: "destructive",
                                 });
                               }
                             }}
                             className="p-2 hover:bg-doodle-accent/10 rounded transition-colors"
-                            title="Delete"
+                            title={t("account.delete")}
                           >
                             <Trash2 className="w-4 h-4 text-doodle-accent" />
                           </button>
@@ -1271,13 +1285,13 @@ const AccountPage: React.FC = () => {
                   </div>
                   <div>
                     <h2 className="font-doodle text-xl font-bold text-doodle-text group-hover:text-doodle-accent transition-colors">
-                      Account Settings
+                      {t("account.accountSettings")}
                     </h2>
                     <p className="font-doodle text-sm text-doodle-text/70 mt-1">
-                      Password & security
+                      {t("account.passwordAndSecurity")}
                     </p>
                     <span className="font-doodle text-xs text-doodle-accent mt-2 inline-block">
-                      Coming soon!
+                      {t("account.comingSoon")}
                     </span>
                   </div>
                 </div>
@@ -1291,7 +1305,7 @@ const AccountPage: React.FC = () => {
                 className="doodle-button inline-flex items-center gap-2"
               >
                 <LogOut className="w-4 h-4" />
-                Sign Out
+                {t("account.signOut")}
               </button>
             </div>
           </div>

@@ -9,6 +9,7 @@ import {
   Clock,
   Search,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/context/AuthContext";
@@ -37,7 +38,8 @@ interface TrackingStep {
 }
 
 const getOrderStatus = (
-  order: Order
+  order: Order,
+  t: (key: string) => string
 ): { currentStatus: OrderStatus; steps: TrackingStep[] } => {
   const orderTime = new Date(order.OrderDate).getTime();
   const now = Date.now();
@@ -46,32 +48,32 @@ const getOrderStatus = (
   const baseSteps: TrackingStep[] = [
     {
       status: "confirmed",
-      label: "Order Confirmed",
-      description: "Your order has been placed successfully",
+      label: t("orderTracking.orderConfirmed"),
+      description: t("orderTracking.orderConfirmedDesc"),
       icon: <CheckCircle className="w-6 h-6" />,
     },
     {
       status: "processing",
-      label: "Processing",
-      description: "We're preparing your items for shipment",
+      label: t("orderTracking.processing"),
+      description: t("orderTracking.processingDesc"),
       icon: <Package className="w-6 h-6" />,
     },
     {
       status: "shipped",
-      label: "Shipped",
-      description: "Your order is on its way",
+      label: t("orderTracking.shipped"),
+      description: t("orderTracking.shippedDesc"),
       icon: <Truck className="w-6 h-6" />,
     },
     {
       status: "out_for_delivery",
-      label: "Out for Delivery",
-      description: "Your package is out for delivery today",
+      label: t("orderTracking.outForDelivery"),
+      description: t("orderTracking.outForDeliveryDesc"),
       icon: <MapPin className="w-6 h-6" />,
     },
     {
       status: "delivered",
-      label: "Delivered",
-      description: "Your order has been delivered",
+      label: t("orderTracking.delivered"),
+      description: t("orderTracking.deliveredDesc"),
       icon: <CheckCircle className="w-6 h-6" />,
     },
   ];
@@ -123,6 +125,7 @@ const getOrderStatus = (
 };
 
 const OrderTrackingPage: React.FC = () => {
+  const { t } = useTranslation("common");
   const { orderId } = useParams<{ orderId?: string }>();
   const { user, isAuthenticated, isLoading } = useAuth();
   const [customerId, setCustomerId] = useState<number | null>(null);
@@ -166,9 +169,7 @@ const OrderTrackingPage: React.FC = () => {
       setSelectedOrder(found);
       setSearchInput("");
     } else {
-      setSearchError(
-        "Order not found. Please check the order number and try again."
-      );
+      setSearchError(t("orderTracking.orderNotFound"));
     }
   };
 
@@ -177,7 +178,9 @@ const OrderTrackingPage: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-doodle-bg">
         <div className="text-center">
           <span className="text-6xl block mb-4 animate-bounce">📦</span>
-          <p className="font-doodle text-doodle-text">Loading...</p>
+          <p className="font-doodle text-doodle-text">
+            {t("orderTracking.loading")}
+          </p>
         </div>
       </div>
     );
@@ -194,7 +197,7 @@ const OrderTrackingPage: React.FC = () => {
   }
 
   const { currentStatus, steps } = selectedOrder
-    ? getOrderStatus(selectedOrder)
+    ? getOrderStatus(selectedOrder, t)
     : { currentStatus: "confirmed" as OrderStatus, steps: [] };
 
   const statusOrder: OrderStatus[] = [
@@ -224,14 +227,14 @@ const OrderTrackingPage: React.FC = () => {
             className="inline-flex items-center gap-2 font-doodle text-doodle-text/70 hover:text-doodle-accent transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Account
+            {t("orderTracking.backToAccount")}
           </Link>
         </div>
 
         <section className="container mx-auto px-4 pb-12">
           <div className="max-w-3xl mx-auto">
             <h1 className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text mb-8 text-center">
-              📦 Track Your Order
+              📦 {t("orderTracking.title")}
             </h1>
 
             {/* Order Search */}
@@ -250,7 +253,7 @@ const OrderTrackingPage: React.FC = () => {
                         setSearchInput(e.target.value);
                         setSearchError("");
                       }}
-                      placeholder="Enter order number (e.g., AW-ABC123)"
+                      placeholder={t("orderTracking.searchPlaceholder")}
                       className="doodle-input w-full pl-10"
                     />
                   </div>
@@ -264,14 +267,14 @@ const OrderTrackingPage: React.FC = () => {
                   type="submit"
                   className="doodle-button doodle-button-primary"
                 >
-                  Track Order
+                  {t("orderTracking.trackOrder")}
                 </button>
               </form>
 
               {orders.length > 0 && !selectedOrder && (
                 <div className="mt-6 pt-6 border-t-2 border-dashed border-doodle-text/20">
                   <p className="font-doodle text-sm text-doodle-text/70 mb-3">
-                    Or select from your recent orders:
+                    {t("orderTracking.selectRecent")}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {orders.slice(0, 5).map((order) => (
@@ -296,7 +299,7 @@ const OrderTrackingPage: React.FC = () => {
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
                       <p className="font-doodle text-sm text-doodle-text/70">
-                        Order Number
+                        {t("orderTracking.orderNumber")}
                       </p>
                       <p className="font-doodle text-xl font-bold text-doodle-accent">
                         {selectedOrder.SalesOrderNumber}
@@ -304,11 +307,11 @@ const OrderTrackingPage: React.FC = () => {
                     </div>
                     <div className="text-left sm:text-right">
                       <p className="font-doodle text-sm text-doodle-text/70">
-                        Estimated Delivery
+                        {t("orderTracking.estimatedDelivery")}
                       </p>
                       <p className="font-doodle text-xl font-bold text-doodle-green">
                         {currentStatus === "delivered"
-                          ? "Delivered!"
+                          ? t("orderTracking.delivered")
                           : getEstimatedDelivery(
                               selectedOrder
                             ).toLocaleDateString("en-US", {
@@ -324,7 +327,7 @@ const OrderTrackingPage: React.FC = () => {
                 {/* Progress Timeline */}
                 <div className="doodle-card p-6 md:p-8">
                   <h2 className="font-doodle text-xl font-bold text-doodle-text mb-8">
-                    Shipment Progress
+                    {t("orderTracking.shipmentProgress")}
                   </h2>
 
                   <div className="relative">
@@ -406,7 +409,7 @@ const OrderTrackingPage: React.FC = () => {
                 {/* Order Items */}
                 <div className="doodle-card p-6">
                   <h2 className="font-doodle text-xl font-bold text-doodle-text mb-4">
-                    Items in this Order
+                    {t("orderTracking.itemsInOrder")}
                   </h2>
                   <div className="space-y-3">
                     {selectedOrder.salesOrderDetails.items.map(
@@ -423,13 +426,14 @@ const OrderTrackingPage: React.FC = () => {
                               {item.product.Name}
                             </p>
                             <p className="font-doodle text-sm text-doodle-text/70">
-                              Qty: {item.OrderQty}
+                              {t("orderTracking.qty")}: {item.OrderQty}
                             </p>
                           </div>
                           <p className="font-doodle font-bold text-doodle-green">
                             {(selectedOrder.currency?.CurrencyCode &&
                               CURRENCY_SYMBOLS[
-                                selectedOrder.currencyRate?.currency?.CurrencyCode
+                                selectedOrder.currencyRate?.currency
+                                  ?.CurrencyCode
                               ]) ||
                               "$"}
                             {item.LineTotal.toFixed(2)}
@@ -443,7 +447,9 @@ const OrderTrackingPage: React.FC = () => {
                   <div className="mt-4 pt-4 border-t-2 border-dashed border-doodle-text/20">
                     <div className="space-y-1 font-doodle text-sm">
                       <div className="flex justify-between">
-                        <span className="text-doodle-text/70">Subtotal</span>
+                        <span className="text-doodle-text/70">
+                          {t("orderTracking.subtotal")}
+                        </span>
                         <span>
                           {(selectedOrder.currency?.CurrencyCode &&
                             CURRENCY_SYMBOLS[
@@ -454,7 +460,9 @@ const OrderTrackingPage: React.FC = () => {
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-doodle-text/70">Tax</span>
+                        <span className="text-doodle-text/70">
+                          {t("orderTracking.tax")}
+                        </span>
                         <span>
                           {(selectedOrder.currency?.CurrencyCode &&
                             CURRENCY_SYMBOLS[
@@ -466,7 +474,7 @@ const OrderTrackingPage: React.FC = () => {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-doodle-text/70">
-                          Shipping
+                          {t("orderTracking.shipping")}
                           {selectedOrder.shipMethod?.Name
                             ? ` (${selectedOrder.shipMethod.Name})`
                             : ""}
@@ -481,7 +489,7 @@ const OrderTrackingPage: React.FC = () => {
                         </span>
                       </div>
                       <div className="flex justify-between pt-2 border-t border-dashed border-doodle-text/20 font-bold text-base">
-                        <span>Total</span>
+                        <span>{t("orderTracking.total")}</span>
                         <span className="text-doodle-green">
                           {(selectedOrder.currency?.CurrencyCode &&
                             CURRENCY_SYMBOLS[
@@ -499,7 +507,7 @@ const OrderTrackingPage: React.FC = () => {
                 {selectedOrder.Comment && (
                   <div className="doodle-card p-6">
                     <h2 className="font-doodle text-xl font-bold text-doodle-text mb-4">
-                      Order Notes
+                      {t("orderTracking.orderNotes")}
                     </h2>
                     <p className="font-doodle text-doodle-text/70">
                       {selectedOrder.Comment}
@@ -514,7 +522,7 @@ const OrderTrackingPage: React.FC = () => {
                     className="doodle-button inline-flex items-center gap-2"
                   >
                     <Search className="w-4 h-4" />
-                    Track Another Order
+                    {t("orderTracking.trackAnotherOrder")}
                   </button>
                 </div>
               </div>
@@ -523,16 +531,16 @@ const OrderTrackingPage: React.FC = () => {
                 <div className="doodle-card p-12 text-center">
                   <Package className="w-20 h-20 mx-auto mb-6 text-doodle-text/30" />
                   <h2 className="font-doodle text-2xl font-bold text-doodle-text mb-2">
-                    No Orders Yet
+                    {t("orderTracking.noOrdersYet")}
                   </h2>
                   <p className="font-doodle text-doodle-text/70 mb-6">
-                    Once you place an order, you can track it here.
+                    {t("orderTracking.noOrdersMessage")}
                   </p>
                   <Link
                     to="/"
                     className="doodle-button doodle-button-primary inline-block"
                   >
-                    Start Shopping
+                    {t("orderTracking.startShopping")}
                   </Link>
                 </div>
               )

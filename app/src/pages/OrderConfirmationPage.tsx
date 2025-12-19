@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle, Package, Truck, MapPin, Mail } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 
@@ -37,6 +38,7 @@ interface Order {
 
 const OrderConfirmationPage: React.FC = () => {
   const [order, setOrder] = useState<Order | null>(null);
+  const { t } = useTranslation("common");
 
   useEffect(() => {
     const savedOrder = localStorage.getItem("lastOrder");
@@ -54,16 +56,16 @@ const OrderConfirmationPage: React.FC = () => {
             <div className="doodle-card p-12">
               <Package className="w-20 h-20 mx-auto mb-6 text-doodle-text/40" />
               <h1 className="font-doodle text-3xl font-bold text-doodle-text mb-4">
-                No Order Found
+                {t("orderConfirmation.noOrderFound")}
               </h1>
               <p className="font-doodle text-doodle-text/70 mb-8">
-                Looks like you haven't placed an order yet.
+                {t("orderConfirmation.noOrderMessage")}
               </p>
               <Link
                 to="/"
                 className="doodle-button doodle-button-primary inline-block"
               >
-                Start Shopping
+                {t("orderTracking.startShopping")}
               </Link>
             </div>
           </div>
@@ -87,10 +89,10 @@ const OrderConfirmationPage: React.FC = () => {
               <CheckCircle className="w-12 h-12 text-doodle-green" />
             </div>
             <h1 className="font-doodle text-4xl md:text-5xl font-bold text-doodle-text mb-4">
-              Order Confirmed!
+              {t("orderConfirmation.title")}
             </h1>
             <p className="font-doodle text-lg text-doodle-text/70">
-              Thank you for your order. We've sent a confirmation email to{" "}
+              {t("orderConfirmation.thankYou")}{" "}
               <span className="font-bold text-doodle-text">
                 {order.shipping.email}
               </span>
@@ -103,23 +105,29 @@ const OrderConfirmationPage: React.FC = () => {
               <div className="flex items-center gap-3 mb-6">
                 <Package className="w-6 h-6 text-doodle-accent" />
                 <h2 className="font-doodle text-xl font-bold text-doodle-text">
-                  Order Details
+                  {t("orderConfirmation.orderDetails")}
                 </h2>
               </div>
 
               <div className="space-y-4">
                 <div className="flex justify-between font-doodle">
-                  <span className="text-doodle-text/70">Order Number</span>
+                  <span className="text-doodle-text/70">
+                    {t("orderTracking.orderNumber")}
+                  </span>
                   <span className="font-bold text-doodle-accent">
                     {order.id}
                   </span>
                 </div>
                 <div className="flex justify-between font-doodle">
-                  <span className="text-doodle-text/70">Order Date</span>
+                  <span className="text-doodle-text/70">
+                    {t("orderConfirmation.orderDate")}
+                  </span>
                   <span>{new Date(order.date).toLocaleDateString()}</span>
                 </div>
                 <div className="flex justify-between font-doodle">
-                  <span className="text-doodle-text/70">Payment Method</span>
+                  <span className="text-doodle-text/70">
+                    {t("orderConfirmation.paymentMethod")}
+                  </span>
                   <span className="capitalize">{order.paymentMethod}</span>
                 </div>
 
@@ -147,7 +155,9 @@ const OrderConfirmationPage: React.FC = () => {
 
                 <div className="space-y-2 font-doodle text-sm">
                   <div className="flex justify-between">
-                    <span className="text-doodle-text/70">Subtotal</span>
+                    <span className="text-doodle-text/70">
+                      {t("orderTracking.subtotal")}
+                    </span>
                     <span>
                       {order.currencySymbol}
                       {order.subtotal.toFixed(2)}
@@ -155,18 +165,20 @@ const OrderConfirmationPage: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-doodle-text/70">
-                      Shipping ({order.shippingMethodName})
+                      {t("orderTracking.shipping")} ({order.shippingMethodName})
                     </span>
                     <span>
                       {order.shippingCost === 0
-                        ? "FREE"
+                        ? t("orderConfirmation.free")
                         : `${order.currencySymbol}${order.shippingCost.toFixed(
                             2
                           )}`}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-doodle-text/70">Tax</span>
+                    <span className="text-doodle-text/70">
+                      {t("orderTracking.tax")}
+                    </span>
                     <span>
                       {order.currencySymbol}
                       {order.tax.toFixed(2)}
@@ -174,7 +186,7 @@ const OrderConfirmationPage: React.FC = () => {
                   </div>
                   <hr className="border-dashed border-doodle-text/30" />
                   <div className="flex justify-between text-lg font-bold">
-                    <span>Total</span>
+                    <span>{t("orderTracking.total")}</span>
                     <span className="text-doodle-green">
                       {order.currencySymbol}
                       {order.total.toFixed(2)}
@@ -191,7 +203,7 @@ const OrderConfirmationPage: React.FC = () => {
                 <div className="flex items-center gap-3 mb-4">
                   <MapPin className="w-6 h-6 text-doodle-accent" />
                   <h2 className="font-doodle text-xl font-bold text-doodle-text">
-                    Shipping Address
+                    {t("orderConfirmation.shippingAddress")}
                   </h2>
                 </div>
                 <div className="font-doodle text-doodle-text/70 space-y-1">
@@ -212,7 +224,7 @@ const OrderConfirmationPage: React.FC = () => {
                 <div className="flex items-center gap-3 mb-4">
                   <Truck className="w-6 h-6 text-doodle-accent" />
                   <h2 className="font-doodle text-xl font-bold text-doodle-text">
-                    Estimated Delivery
+                    {t("orderConfirmation.estimatedDelivery")}
                   </h2>
                 </div>
                 <p className="font-doodle text-2xl font-bold text-doodle-green">
@@ -223,8 +235,7 @@ const OrderConfirmationPage: React.FC = () => {
                   })}
                 </p>
                 <p className="font-doodle text-sm text-doodle-text/70 mt-2">
-                  You'll receive tracking information via email once your order
-                  ships.
+                  {t("orderConfirmation.trackingEmail")}
                 </p>
               </div>
 
@@ -234,10 +245,10 @@ const OrderConfirmationPage: React.FC = () => {
                   <Mail className="w-6 h-6 text-doodle-accent" />
                   <div>
                     <p className="font-doodle font-bold text-doodle-text">
-                      Confirmation Sent
+                      {t("orderConfirmation.confirmationSent")}
                     </p>
                     <p className="font-doodle text-sm text-doodle-text/70">
-                      Check your email for order details
+                      {t("orderConfirmation.checkEmail")}
                     </p>
                   </div>
                 </div>
@@ -251,7 +262,7 @@ const OrderConfirmationPage: React.FC = () => {
               to="/"
               className="doodle-button doodle-button-primary inline-block px-8 py-3 text-lg"
             >
-              Continue Shopping
+              {t("orderConfirmation.continueShopping")}
             </Link>
           </div>
         </section>
