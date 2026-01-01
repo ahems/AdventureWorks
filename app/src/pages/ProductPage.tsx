@@ -30,6 +30,7 @@ import { useWishlist } from "@/context/WishlistContext";
 import { useRecentlyViewed } from "@/context/RecentlyViewedContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { useCurrency } from "@/context/CurrencyContext";
+import { useUnitMeasure } from "@/context/UnitMeasureContext";
 import { useProduct, useSubcategory, useCategory } from "@/hooks/useProducts";
 import { getSalePrice, isVariantAvailable } from "@/types/product";
 import { useReviews } from "@/hooks/useReviews";
@@ -50,6 +51,7 @@ const ProductPage: React.FC = () => {
   const { addToRecentlyViewed } = useRecentlyViewed();
   const { selectedLanguage } = useLanguage();
   const { formatPrice } = useCurrency();
+  const { formatWeight, formatSize } = useUnitMeasure();
   const [quantity, setQuantity] = React.useState(1);
   const [selectedSize, setSelectedSize] = React.useState<string | undefined>(
     undefined
@@ -477,7 +479,9 @@ const ProductPage: React.FC = () => {
                       <span className="text-doodle-text/60">
                         {t("product:specifications.size")}
                       </span>
-                      <span className="text-doodle-text">{product.Size}</span>
+                      <span className="text-doodle-text">
+                        {formatSize(product.Size, product.SizeUnitMeasureCode)}
+                      </span>
                     </>
                   )}
                   {product.Weight && (
@@ -486,7 +490,10 @@ const ProductPage: React.FC = () => {
                         {t("product:specifications.weight")}
                       </span>
                       <span className="text-doodle-text">
-                        {product.Weight} lbs
+                        {formatWeight(
+                          product.Weight,
+                          product.WeightUnitMeasureCode
+                        )}
                       </span>
                     </>
                   )}

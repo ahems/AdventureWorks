@@ -9,6 +9,7 @@ import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { getSalePrice } from "@/types/product";
 import { useCurrency } from "@/context/CurrencyContext";
+import { useUnitMeasure } from "@/context/UnitMeasureContext";
 
 const WishlistPage: React.FC = () => {
   const { t } = useTranslation("common");
@@ -16,6 +17,7 @@ const WishlistPage: React.FC = () => {
   const { addToCart } = useCart();
   const { user } = useAuth();
   const { formatPrice } = useCurrency();
+  const { formatSize } = useUnitMeasure();
 
   const handleAddToCart = (product: (typeof items)[0]) => {
     addToCart(product);
@@ -145,7 +147,8 @@ const WishlistPage: React.FC = () => {
                     )}
                     {product.Size && (
                       <span className="font-doodle text-xs px-2 py-0.5 bg-doodle-text/10 border border-doodle-text/30">
-                        {t("wishlist.size")}: {product.Size}
+                        {t("wishlist.size")}:{" "}
+                        {formatSize(product.Size, product.SizeUnitMeasureCode)}
                       </span>
                     )}
                   </div>

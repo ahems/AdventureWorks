@@ -52,7 +52,9 @@ export interface Product {
   ListPrice: number;
   StandardCost?: number;
   Size: string | null;
+  SizeUnitMeasureCode: string | null;
   Weight: number | null;
+  WeightUnitMeasureCode: string | null;
   ProductSubcategoryID: number | null;
   ProductModelID: number | null;
   ProductLine?: string | null;

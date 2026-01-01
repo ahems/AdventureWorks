@@ -9,6 +9,7 @@ import { useWishlist } from "@/context/WishlistContext";
 import { useCompare } from "@/context/CompareContext";
 import { useReviews } from "@/hooks/useReviews";
 import { useCurrency } from "@/context/CurrencyContext";
+import { useUnitMeasure } from "@/context/UnitMeasureContext";
 import QuickViewModal from "./QuickViewModal";
 
 interface ProductCardProps {
@@ -26,6 +27,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
   const { addToCompare, removeFromCompare, isInCompare } = useCompare();
   const { averageRating, reviewCount } = useReviews(product.ProductID);
   const { formatPrice } = useCurrency();
+  const { formatSize } = useUnitMeasure();
   const [quickViewOpen, setQuickViewOpen] = useState(false);
 
   const inWishlist = isInWishlist(product.ProductID);
@@ -175,7 +177,9 @@ const ProductCard: React.FC<ProductCardProps> = ({
             )}
             {product.Size && (
               <span className="font-doodle text-xs px-2 py-0.5 bg-doodle-text/10 border border-doodle-text/30">
-                {t("productCard.size", { size: product.Size })}
+                {t("productCard.size", {
+                  size: formatSize(product.Size, product.SizeUnitMeasureCode),
+                })}
               </span>
             )}
           </div>

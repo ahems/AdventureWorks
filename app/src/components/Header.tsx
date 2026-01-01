@@ -17,6 +17,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useCategories } from "@/hooks/useProducts";
 import { useLanguage } from "@/context/LanguageContext";
 import { useCurrency } from "@/context/CurrencyContext";
+import { useUnitMeasure } from "@/context/UnitMeasureContext";
+import { getUnitSystemForLanguage } from "@/lib/unitMeasureUtils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +35,7 @@ const Header: React.FC = () => {
     useCategories();
   const { selectedLanguage, setSelectedLanguage, languages } = useLanguage();
   const { setSelectedCurrency, getCurrencyForLanguage } = useCurrency();
+  const { setUnitSystem } = useUnitMeasure();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -51,6 +54,9 @@ const Header: React.FC = () => {
     // Automatically change currency based on language
     const newCurrency = getCurrencyForLanguage(code);
     setSelectedCurrency(newCurrency);
+    // Automatically change unit system based on language
+    const newUnitSystem = getUnitSystemForLanguage(code);
+    setUnitSystem(newUnitSystem);
   };
 
   // Close user menu when clicking outside

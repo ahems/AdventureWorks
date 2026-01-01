@@ -112,7 +112,9 @@ export const GET_PRODUCTS = gql`
         ListPrice
         StandardCost
         Size
+        SizeUnitMeasureCode
         Weight
+        WeightUnitMeasureCode
         ProductLine
         Class
         Style
@@ -138,7 +140,9 @@ export const GET_PRODUCT_BY_ID = gql`
         ListPrice
         StandardCost
         Size
+        SizeUnitMeasureCode
         Weight
+        WeightUnitMeasureCode
         ProductLine
         Class
         Style
@@ -237,7 +241,9 @@ export const GET_PRODUCTS_BY_SUBCATEGORY_IDS = gql`
         ListPrice
         StandardCost
         Size
+        SizeUnitMeasureCode
         Weight
+        WeightUnitMeasureCode
         ProductLine
         Class
         Style
@@ -309,7 +315,9 @@ export const GET_PRODUCTS_BY_SUBCATEGORY = gql`
         ListPrice
         StandardCost
         Size
+        SizeUnitMeasureCode
         Weight
+        WeightUnitMeasureCode
         ProductLine
         Class
         Style
