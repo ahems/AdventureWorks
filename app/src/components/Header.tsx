@@ -22,6 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Twemoji } from "@/components/Twemoji";
 
 const Header: React.FC = () => {
   const { t, i18n } = useTranslation("common");
@@ -207,7 +208,11 @@ const Header: React.FC = () => {
             {/* Language Selector */}
             <DropdownMenu>
               <DropdownMenuTrigger className="doodle-button flex items-center gap-2 py-2 px-3">
-                <span className="text-lg">{currentLanguage.flag}</span>
+                <Twemoji
+                  emoji={currentLanguage.flag}
+                  size="1.25rem"
+                  className="inline-flex items-center"
+                />
                 <Globe className="w-4 h-4 hidden sm:block" />
               </DropdownMenuTrigger>
               <DropdownMenuContent
@@ -224,7 +229,11 @@ const Header: React.FC = () => {
                         : ""
                     }`}
                   >
-                    <span className="text-lg">{lang.flag}</span>
+                    <Twemoji
+                      emoji={lang.flag}
+                      size="1.25rem"
+                      className="inline-flex items-center flex-shrink-0"
+                    />
                     <span>{lang.name}</span>
                   </DropdownMenuItem>
                 ))}
