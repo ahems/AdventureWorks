@@ -5,6 +5,10 @@ using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 using api_functions.Models;
 using api_functions.Services;
+using System.Net;
+using System.Text.Json;
+using Azure.Storage.Queues;
+using Azure.Identity;
 
 namespace api_functions.Functions;
 
@@ -12,6 +16,7 @@ public class GenerateProductReviewsUsingAI
 {
     private readonly ILogger<GenerateProductReviewsUsingAI> _logger;
     private readonly ILoggerFactory _loggerFactory;
+    private const string QUEUE_NAME = "product-review-generation";
 
     public GenerateProductReviewsUsingAI(ILogger<GenerateProductReviewsUsingAI> logger, ILoggerFactory loggerFactory)
     {
@@ -24,129 +29,186 @@ public class GenerateProductReviewsUsingAI
         [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
         [DurableClient] DurableTaskClient client)
     {
-        _logger.LogInformation("Starting product review generation orchestration");
-
-        var instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(GenerateProductReviewsUsingAI_Orchestrator));
-
-        _logger.LogInformation("Started review generation orchestration with ID = '{instanceId}'", instanceId);
-
-        return client.CreateCheckStatusResponse(req, instanceId);
-    }
-
-    [Function(nameof(GenerateProductReviewsUsingAI_Orchestrator))]
-    public async Task<string> GenerateProductReviewsUsingAI_Orchestrator(
-        [OrchestrationTrigger] TaskOrchestrationContext context)
-    {
-        var logger = context.CreateReplaySafeLogger<GenerateProductReviewsUsingAI>();
-
-        logger.LogInformation("Review generation orchestration started for all products");
+        _logger.LogInformation("HTTP trigger received request to enqueue product review generation jobs");
 
         try
         {
-            // Step 1: Fetch all finished goods products
-            logger.LogInformation("Fetching products from database");
-            var products = await context.CallActivityAsync<List<ProductForReviewGeneration>>(
-                nameof(FetchProductsForReviewsActivity));
-
-            logger.LogInformation("Fetched {count} products", products.Count);
-
-            if (products.Count == 0)
+            // Get queue service URI from environment variables
+            var queueServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
+            if (string.IsNullOrEmpty(queueServiceUri))
             {
-                return "No finished goods products found to generate reviews";
+                var storageAccountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
+                    ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
+                queueServiceUri = $"https://{storageAccountName}.queue.core.windows.net";
             }
 
-            // Step 2 & 3: Generate and save reviews in batches
-            logger.LogInformation("Generating and saving reviews in batches of 5 products");
-            int totalReviewsGenerated = 0;
-            int productsProcessed = 0;
+            // Create queue client with managed identity
+            var queueServiceClient = new QueueServiceClient(
+                new Uri(queueServiceUri),
+                new DefaultAzureCredential(),
+                new QueueClientOptions
+                {
+                    MessageEncoding = QueueMessageEncoding.Base64
+                }
+            );
 
-            // Process in smaller batches of 5 products (since we're generating multiple reviews per product)
+            var queueClient = queueServiceClient.GetQueueClient(QUEUE_NAME);
+            await queueClient.CreateIfNotExistsAsync();
+
+            // Clear existing messages from the queue and poison queue
+            _logger.LogInformation("Clearing existing messages from queue: {queueName}", QUEUE_NAME);
+            await queueClient.ClearMessagesAsync();
+
+            var poisonQueueClient = queueServiceClient.GetQueueClient($"{QUEUE_NAME}-poison");
+            if (await poisonQueueClient.ExistsAsync())
+            {
+                _logger.LogInformation("Clearing poison queue: {queueName}", $"{QUEUE_NAME}-poison");
+                await poisonQueueClient.ClearMessagesAsync();
+            }
+
+            // Fetch all products that need reviews
+            var connectionString = Environment.GetEnvironmentVariable("SQL_CONNECTION_STRING")
+                ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not configured");
+
+            var reviewService = new ReviewService(connectionString);
+            var products = await reviewService.GetProductsForReviewGenerationAsync();
+
+            if (products == null || products.Count == 0)
+            {
+                _logger.LogInformation("No products found for review generation");
+                var response = req.CreateResponse(HttpStatusCode.OK);
+                await response.WriteStringAsync("No products found for review generation");
+                return response;
+            }
+
+            // Enqueue one message per product batch (5 products per batch)
+            int enqueued = 0;
             for (int i = 0; i < products.Count; i += 5)
             {
                 var batch = products.Skip(i).Take(5).ToList();
-                logger.LogInformation("Processing batch {batch} ({count} products)", (i / 5) + 1, batch.Count);
-
-                // Generate reviews for this batch
-                var generatedReviews = await context.CallActivityAsync<List<GeneratedReview>>(
-                    nameof(GenerateReviewsWithAIActivity),
-                    batch);
-
-                logger.LogInformation("Generated {count} reviews in batch", generatedReviews.Count);
-
-                // Save this batch immediately
-                if (generatedReviews.Count > 0)
+                var message = JsonSerializer.Serialize(new
                 {
-                    await context.CallActivityAsync(
-                        nameof(SaveReviewsActivity),
-                        generatedReviews);
+                    Products = batch,
+                    BatchNumber = (i / 5) + 1
+                });
 
-                    logger.LogInformation("Saved {count} reviews to database", generatedReviews.Count);
-                }
-
-                totalReviewsGenerated += generatedReviews.Count;
-                productsProcessed += batch.Count;
+                await queueClient.SendMessageAsync(message);
+                enqueued++;
             }
 
-            logger.LogInformation("Orchestration completed successfully");
-            return $"Successfully generated and saved {totalReviewsGenerated} reviews across {productsProcessed} products";
+            _logger.LogInformation("Enqueued {count} review generation batches for {productCount} products", enqueued, products.Count);
+
+            var successResponse = req.CreateResponse(HttpStatusCode.OK);
+            await successResponse.WriteStringAsync(
+                $"Enqueued {enqueued} review generation batches covering {products.Count} products. Reviews will be generated and then embeddings will be automatically created."
+            );
+            return successResponse;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error during review generation orchestration");
-            throw;
+            _logger.LogError(ex, "Error enqueueing product review generation jobs");
+            var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await errorResponse.WriteStringAsync($"Error: {ex.Message}");
+            return errorResponse;
         }
     }
 
-    [Function(nameof(FetchProductsForReviewsActivity))]
-    public async Task<List<ProductForReviewGeneration>> FetchProductsForReviewsActivity(
-        [ActivityTrigger] FunctionContext context)
+    [Function(nameof(GenerateProductReviewsUsingAI_QueueTrigger))]
+    public async Task GenerateProductReviewsUsingAI_QueueTrigger(
+        [QueueTrigger(QUEUE_NAME, Connection = "AzureWebJobsStorage")] BinaryData queueMessage,
+        FunctionContext executionContext)
     {
-        _logger.LogInformation("Fetching products from database");
-
-        var connectionString = Environment.GetEnvironmentVariable("SQL_CONNECTION_STRING")
-            ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not configured");
-
-        var reviewService = new ReviewService(connectionString);
-        var products = await reviewService.GetProductsForReviewGenerationAsync();
-
-        _logger.LogInformation("Fetched {count} products", products.Count);
-        return products;
-    }
-
-    [Function(nameof(GenerateReviewsWithAIActivity))]
-    public async Task<List<GeneratedReview>> GenerateReviewsWithAIActivity(
-        [ActivityTrigger] List<ProductForReviewGeneration> products)
-    {
-        _logger.LogInformation("Generating reviews for {count} products with AI", products.Count);
-
-        var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")
-            ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
-
-        var aiServiceLogger = _loggerFactory.CreateLogger<AIService>();
-        var aiService = new AIService(endpoint, aiServiceLogger);
-        var generatedReviews = await aiService.GenerateProductReviewsAsync(products);
-
-        _logger.LogInformation("AI generated {count} total reviews", generatedReviews.Count);
-        return generatedReviews;
-    }
-
-    [Function(nameof(SaveReviewsActivity))]
-    public async Task SaveReviewsActivity(
-        [ActivityTrigger] List<GeneratedReview> reviews)
-    {
-        _logger.LogInformation("Saving {count} reviews to database", reviews.Count);
-
-        var connectionString = Environment.GetEnvironmentVariable("SQL_CONNECTION_STRING")
-            ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not configured");
-
-        var reviewService = new ReviewService(connectionString);
-
-        foreach (var review in reviews)
+        try
         {
-            await reviewService.SaveGeneratedReviewAsync(review);
-        }
+            // Parse queue message
+            var messageData = JsonSerializer.Deserialize<JsonElement>(queueMessage.ToString());
+            var batchNumber = messageData.GetProperty("BatchNumber").GetInt32();
+            var productsJson = messageData.GetProperty("Products").GetRawText();
+            var products = JsonSerializer.Deserialize<List<ProductForReviewGeneration>>(productsJson);
 
-        _logger.LogInformation("Saved {count} reviews to database", reviews.Count);
+            if (products == null || products.Count == 0)
+            {
+                _logger.LogWarning("Batch {batch}: No products in message", batchNumber);
+                return;
+            }
+
+            _logger.LogInformation("Batch {batch}: Processing {count} products", batchNumber, products.Count);
+
+            // Generate reviews with AI
+            var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")
+                ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
+
+            var aiServiceLogger = _loggerFactory.CreateLogger<AIService>();
+            var aiService = new AIService(endpoint, aiServiceLogger);
+            var generatedReviews = await aiService.GenerateProductReviewsAsync(products);
+
+            _logger.LogInformation("Batch {batch}: AI generated {count} total reviews", batchNumber, generatedReviews.Count);
+
+            // Save reviews to database
+            if (generatedReviews.Count > 0)
+            {
+                var connectionString = Environment.GetEnvironmentVariable("SQL_CONNECTION_STRING")
+                    ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not configured");
+
+                var reviewService = new ReviewService(connectionString);
+
+                foreach (var review in generatedReviews)
+                {
+                    await reviewService.SaveGeneratedReviewAsync(review);
+                }
+
+                _logger.LogInformation("Batch {batch}: Saved {count} reviews to database", batchNumber, generatedReviews.Count);
+            }
+
+            // Check if this is the last batch by checking queue
+            var queueServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
+            if (string.IsNullOrEmpty(queueServiceUri))
+            {
+                var storageAccountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
+                    ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
+                queueServiceUri = $"https://{storageAccountName}.queue.core.windows.net";
+            }
+
+            var queueServiceClient = new QueueServiceClient(
+                new Uri(queueServiceUri),
+                new DefaultAzureCredential()
+            );
+
+            var queueClient = queueServiceClient.GetQueueClient(QUEUE_NAME);
+            var properties = await queueClient.GetPropertiesAsync();
+
+            // If no more messages in queue, trigger embedding generation
+            if (properties.Value.ApproximateMessagesCount == 0)
+            {
+                _logger.LogInformation("All review batches processed. Triggering embedding generation...");
+
+                // Trigger the embedding generation HTTP endpoint
+                using var httpClient = new HttpClient();
+                var embeddingEndpoint = Environment.GetEnvironmentVariable("EMBEDDING_GENERATION_ENDPOINT")
+                    ?? "http://localhost:7071/api/GenerateProductReviewEmbeddings_HttpStart";
+
+                try
+                {
+                    var response = await httpClient.PostAsync(embeddingEndpoint, null);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        _logger.LogInformation("Successfully triggered embedding generation");
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Failed to trigger embedding generation. Status: {status}", response.StatusCode);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not trigger embedding generation automatically");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process review generation from queue");
+            throw; // Re-throw to trigger poison queue handling
+        }
     }
 }

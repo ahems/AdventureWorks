@@ -111,6 +111,10 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
               value: aiFoundryEndpoint
             }
             {
+              name: 'EMBEDDING_GENERATION_ENDPOINT'
+              value: 'https://${apiFunctionsName}.${replace(replace(containerAppEnvId, '/subscriptions/', ''), '/resourceGroups/', '')}.azurecontainerapps.io/api/GenerateProductReviewEmbeddings_HttpStart'
+            }
+            {
               name: 'AzureWebJobsStorage__accountName'
               value: storageAccountName
             }

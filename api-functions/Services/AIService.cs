@@ -559,10 +559,19 @@ Return the reviews as a JSON array.";
 
             if (generatedReviews != null)
             {
-                // Set the ProductID for all reviews
+                // Calculate date range for random review dates
+                var sellStartDate = product.SellStartDate;
+                var currentDate = DateTime.UtcNow;
+                var daysBetween = (currentDate - sellStartDate).TotalDays;
+
+                // Set the ProductID and random ReviewDate for all reviews
                 foreach (var review in generatedReviews)
                 {
                     review.ProductID = product.ProductID;
+
+                    // Generate random date between product sell start and now
+                    var randomDays = random.Next(0, (int)daysBetween + 1);
+                    review.ReviewDate = sellStartDate.AddDays(randomDays);
                 }
 
                 _logger.LogInformation(

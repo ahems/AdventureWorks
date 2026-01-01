@@ -77,7 +77,8 @@ public class ReviewService
                 p.ProductID,
                 p.Name,
                 pd.Description,
-                COUNT(pr.ProductReviewID) AS ExistingReviewCount
+                COUNT(pr.ProductReviewID) AS ExistingReviewCount,
+                p.SellStartDate
             FROM Production.Product p
             LEFT JOIN Production.ProductModel pm ON p.ProductModelID = pm.ProductModelID
             LEFT JOIN Production.ProductModelProductDescriptionCulture pmx 
@@ -85,7 +86,7 @@ public class ReviewService
             LEFT JOIN Production.ProductDescription pd ON pmx.ProductDescriptionID = pd.ProductDescriptionID
             LEFT JOIN Production.ProductReview pr ON p.ProductID = pr.ProductID
             WHERE p.FinishedGoodsFlag = 1
-            GROUP BY p.ProductID, p.Name, pd.Description
+            GROUP BY p.ProductID, p.Name, pd.Description, p.SellStartDate
             ORDER BY p.ProductID";
 
         var products = await connection.QueryAsync<ProductForReviewGeneration>(sql);
@@ -101,12 +102,13 @@ public class ReviewService
             INSERT INTO Production.ProductReview 
             (ProductID, ReviewerName, ReviewDate, EmailAddress, Rating, Comments, ModifiedDate)
             VALUES 
-            (@ProductID, @ReviewerName, GETDATE(), @EmailAddress, @Rating, @Comments, GETDATE())";
+            (@ProductID, @ReviewerName, @ReviewDate, @EmailAddress, @Rating, @Comments, GETDATE())";
 
         await connection.ExecuteAsync(insertSql, new
         {
             review.ProductID,
             review.ReviewerName,
+            review.ReviewDate,
             review.EmailAddress,
             review.Rating,
             review.Comments
