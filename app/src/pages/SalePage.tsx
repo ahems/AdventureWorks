@@ -1,6 +1,7 @@
 import React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Twemoji } from "@/components/Twemoji";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SaleProductCard from "@/components/SaleProductCard";
@@ -186,7 +187,7 @@ const SalePage: React.FC = () => {
         <section className="bg-doodle-accent/10 border-b-4 border-doodle-text py-8 md:py-12">
           <div className="container mx-auto px-4 text-center">
             <div className="inline-block rotate-[-2deg] mb-4">
-              <span className="font-doodle text-6xl">🏷️</span>
+              <Twemoji emoji="🏷️" size="6rem" className="font-doodle" />
             </div>
             <h1 className="font-doodle text-4xl md:text-5xl font-bold text-doodle-text mb-2">
               {t("sale.title")}

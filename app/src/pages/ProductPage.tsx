@@ -13,6 +13,7 @@ import {
   Bell,
   Heart,
 } from "lucide-react";
+import { Twemoji } from "@/components/Twemoji";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductReviews from "@/components/ProductReviews";
@@ -360,13 +361,17 @@ const ProductPage: React.FC = () => {
               >
                 <div className="flex items-center gap-3">
                   <div
-                    className={`text-2xl ${
+                    className={`${
                       product.inStock ? "" : "grayscale opacity-50"
                     }`}
                   >
-                    {product.inStock ? "✅" : "❌"}
+                    <Twemoji
+                      emoji={product.inStock ? "✅" : "❌"}
+                      size="2rem"
+                    />
                   </div>
                   <div className="flex-1">
+                    \n{" "}
                     <h3
                       className={`font-doodle font-bold ${
                         product.inStock ? "text-green-700" : "text-red-700"

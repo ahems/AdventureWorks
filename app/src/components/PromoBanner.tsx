@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { useSaleProducts } from "@/hooks/useProducts";
+import { Twemoji } from "@/components/Twemoji";
 
 const PromoBanner: React.FC = () => {
   const { t } = useTranslation("common");
@@ -65,22 +66,22 @@ const PromoBanner: React.FC = () => {
 
       {/* Decorative elements */}
       <div
-        className="absolute top-2 left-[10%] text-white/20 text-4xl animate-bounce"
+        className="absolute top-2 left-[10%] text-white/20 animate-bounce"
         style={{ animationDelay: "0s" }}
       >
-        🏷️
+        <Twemoji emoji="🏷️" size="2.5rem" className="opacity-20" />
       </div>
       <div
-        className="absolute bottom-2 right-[15%] text-white/20 text-3xl animate-bounce"
+        className="absolute bottom-2 right-[15%] text-white/20 animate-bounce"
         style={{ animationDelay: "0.5s" }}
       >
-        ⭐
+        <Twemoji emoji="⭐" size="2rem" className="opacity-20" />
       </div>
       <div
-        className="absolute top-4 right-[25%] text-white/20 text-2xl animate-bounce"
+        className="absolute top-4 right-[25%] text-white/20 animate-bounce"
         style={{ animationDelay: "1s" }}
       >
-        🎉
+        <Twemoji emoji="🎉" size="1.5rem" className="opacity-20" />
       </div>
 
       <div className="container mx-auto px-4 py-6 md:py-8 relative">

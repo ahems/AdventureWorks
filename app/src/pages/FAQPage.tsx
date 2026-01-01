@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, HelpCircle, Mail, Phone } from "lucide-react";
+import { Twemoji } from "@/components/Twemoji";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import {
@@ -144,7 +145,7 @@ const FAQPage: React.FC = () => {
               {faqData.map((category, categoryIndex) => (
                 <div key={categoryIndex} className="doodle-card p-6 md:p-8">
                   <h2 className="font-doodle text-xl font-bold text-doodle-text mb-4 flex items-center gap-2">
-                    <span>{category.icon}</span>
+                    <Twemoji emoji={category.icon} size="1.5rem" />
                     {category.title}
                   </h2>
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useParams, Navigate } from "react-router-dom";
+import { Twemoji } from "@/components/Twemoji";
 import {
   ArrowLeft,
   Package,
@@ -177,7 +178,9 @@ const OrderTrackingPage: React.FC = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-doodle-bg">
         <div className="text-center">
-          <span className="text-6xl block mb-4 animate-bounce">📦</span>
+          <div className="block mb-4 animate-bounce inline-block">
+            <Twemoji emoji="📦" size="4rem" />
+          </div>
           <p className="font-doodle text-doodle-text">
             {t("orderTracking.loading")}
           </p>
@@ -233,8 +236,8 @@ const OrderTrackingPage: React.FC = () => {
 
         <section className="container mx-auto px-4 pb-12">
           <div className="max-w-3xl mx-auto">
-            <h1 className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text mb-8 text-center">
-              📦 {t("orderTracking.title")}
+            <h1 className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text mb-2 flex items-center justify-center gap-2">
+              <Twemoji emoji="📦" size="2rem" /> {t("orderTracking.title")}
             </h1>
 
             {/* Order Search */}

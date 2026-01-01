@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { Twemoji } from "@/components/Twemoji";
 import {
   ArrowLeft,
   Trash2,
@@ -385,9 +386,9 @@ const CartPage: React.FC = () => {
                   </div>
 
                   {totalDiscount > 0 && (
-                    <p className="text-xs text-doodle-green text-center font-bold bg-doodle-green/10 py-2 border border-dashed border-doodle-green/30">
-                      🎉 You're saving ${totalDiscount.toFixed(2)} on this
-                      order!
+                    <p className="text-xs text-doodle-green text-center font-bold bg-doodle-green/10 py-2 border border-dashed border-doodle-green/30 flex items-center justify-center gap-1">
+                      <Twemoji emoji="🎉" size="1rem" /> You're saving $
+                      {totalDiscount.toFixed(2)} on this order!
                     </p>
                   )}
                 </div>

@@ -2,6 +2,7 @@ import React from "react";
 import { useParams, Link } from "react-router-dom";
 import { ArrowLeft, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Twemoji } from "@/components/Twemoji";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
@@ -47,7 +48,7 @@ const CategoryPage: React.FC = () => {
     : categoryProductsLoading;
 
   const products = React.useMemo(() => {
-    let productList = selectedSubcategory
+    const productList = selectedSubcategory
       ? subcategoryProducts
       : allCategoryProducts;
 
@@ -490,7 +491,9 @@ const CategoryPage: React.FC = () => {
                 </>
               ) : (
                 <div className="doodle-card p-12 text-center">
-                  <span className="text-6xl mb-4 block">📦</span>
+                  <div className="mb-4 inline-block">
+                    <Twemoji emoji="📦" size="4rem" />
+                  </div>
                   <h2 className="font-doodle text-xl font-bold text-doodle-text mb-2">
                     {t("category.noProductsFound")}
                   </h2>

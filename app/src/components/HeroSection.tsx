@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { useProducts } from "@/hooks/useProducts";
+import { Twemoji } from "@/components/Twemoji";
 
 const HeroSection: React.FC = () => {
   const { t } = useTranslation("common");
@@ -18,20 +19,20 @@ const HeroSection: React.FC = () => {
   return (
     <section className="relative overflow-hidden py-12 md:py-20">
       {/* Decorative Elements */}
-      <div className="absolute top-10 left-10 text-6xl opacity-20 animate-float">
-        ✨
+      <div className="absolute top-10 left-10 opacity-20 animate-float">
+        <Twemoji emoji="✨" size="4rem" />
       </div>
       <div
-        className="absolute bottom-10 right-10 text-6xl opacity-20 animate-float"
+        className="absolute bottom-10 right-10 opacity-20 animate-float"
         style={{ animationDelay: "1s" }}
       >
-        🚴
+        <Twemoji emoji="🚴" size="4rem" />
       </div>
       <div
-        className="absolute top-1/2 left-1/4 text-4xl opacity-10 animate-float"
+        className="absolute top-1/2 left-1/4 opacity-10 animate-float"
         style={{ animationDelay: "0.5s" }}
       >
-        ⭐
+        <Twemoji emoji="⭐" size="2.5rem" />
       </div>
       <div
         className="absolute top-1/3 right-1/4 text-4xl opacity-10 animate-float"

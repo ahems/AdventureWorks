@@ -116,11 +116,11 @@ const Header: React.FC = () => {
                 ))}
                 <Link
                   to="/sale"
-                  className={`font-doodle text-doodle-accent font-bold hover:text-doodle-green transition-colors ${
+                  className={`font-doodle text-doodle-accent font-bold hover:text-doodle-green transition-colors flex items-center gap-1 ${
                     location.pathname === "/sale" ? "squiggle" : ""
                   }`}
                 >
-                  🏷️ Sale
+                  <Twemoji emoji="🏷️" size="1rem" /> Sale
                 </Link>
               </>
             )}
@@ -300,10 +300,10 @@ const Header: React.FC = () => {
                   ))}
                   <Link
                     to="/sale"
-                    className="font-doodle text-lg text-doodle-accent font-bold hover:text-doodle-green py-2"
+                    className="font-doodle text-lg text-doodle-accent font-bold hover:text-doodle-green py-2 flex items-center gap-2"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    * 🏷️ Sale
+                    * <Twemoji emoji="🏷️" size="1.25rem" /> Sale
                   </Link>
                 </>
               )}

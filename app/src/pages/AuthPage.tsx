@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2, Eye, EyeOff, Bike } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import { z } from "zod";
+import { Twemoji } from "@/components/Twemoji";
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email" }),
@@ -133,9 +134,9 @@ const AuthPage: React.FC = () => {
           {/* Auth Card */}
           <div className="doodle-card p-6 md:p-8">
             <div className="text-center mb-6">
-              <span className="text-5xl block mb-3">
-                {isLogin ? "👋" : "🎉"}
-              </span>
+              <div className="block mb-3">
+                <Twemoji emoji={isLogin ? "👋" : "🎉"} size="5rem" />
+              </div>
               <h1 className="font-doodle text-2xl md:text-3xl font-bold text-doodle-text">
                 {isLogin ? t("auth.welcomeBack") : t("auth.joinAdventure")}
               </h1>

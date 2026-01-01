@@ -10,6 +10,7 @@ import {
   Plus,
   Minus,
 } from "lucide-react";
+import { Twemoji } from "@/components/Twemoji";
 import {
   Dialog,
   DialogContent,
@@ -188,7 +189,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
               }`}
             >
               <div className="flex items-center gap-2">
-                <span className="text-lg">{product.inStock ? "✅" : "❌"}</span>
+                <Twemoji emoji={product.inStock ? "✅" : "❌"} size="1.25rem" />
                 <div>
                   <span
                     className={`font-doodle text-sm font-bold ${
