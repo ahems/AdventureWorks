@@ -243,8 +243,8 @@ const attachPhotosToProducts = async (
 
     const productIds = products.map((p) => p.ProductID);
 
-    // Split into chunks of 100 to avoid API limit
-    const chunkSize = 100;
+    // Split into chunks of 20 to avoid memory issues with binary photo data
+    const chunkSize = 20;
     const chunks: number[][] = [];
     for (let i = 0; i < productIds.length; i += chunkSize) {
       chunks.push(productIds.slice(i, i + chunkSize));
@@ -325,8 +325,8 @@ const attachInventoryToProducts = async (
 
     const productIds = products.map((p) => p.ProductID);
 
-    // Split into chunks of 100 to avoid API limit
-    const chunkSize = 100;
+    // Split into chunks of 20 to avoid API limit
+    const chunkSize = 20;
     const chunks: number[][] = [];
     for (let i = 0; i < productIds.length; i += chunkSize) {
       chunks.push(productIds.slice(i, i + chunkSize));
@@ -603,7 +603,8 @@ export const getSubcategoryById = async (
 // Get featured products (first 6 products with photos)
 export const getFeaturedProducts = async (): Promise<Product[]> => {
   try {
-    const products = await getProducts(true); // Include photos
+    // Load products WITHOUT photos first for better performance
+    const products = await getProducts(false);
     // Filter to only in-stock products
     const inStockProducts = products.filter((p) => p.inStock);
 
@@ -626,7 +627,10 @@ export const getFeaturedProducts = async (): Promise<Product[]> => {
     const featuredNonSale = shuffledNonSale.slice(0, 5);
 
     // Combine: sale item first, then non-sale items
-    return [...featuredSale, ...featuredNonSale];
+    const selectedProducts = [...featuredSale, ...featuredNonSale];
+
+    // NOW attach photos only to the 6 selected products
+    return await attachPhotosToProducts(selectedProducts);
   } catch (error) {
     console.error("Error fetching featured products:", error);
     return [];
@@ -636,14 +640,16 @@ export const getFeaturedProducts = async (): Promise<Product[]> => {
 // Get sale products (products with Customer category discounts from SpecialOffer table)
 export const getSaleProducts = async (): Promise<Product[]> => {
   try {
-    const products = await getProducts(true); // Get all products with photos
+    // Load products WITHOUT photos first for better performance
+    const products = await getProducts(false);
 
     // Filter to only products with discounts
     const saleProducts = products.filter(
       (p) => p.DiscountPct && p.DiscountPct > 0
     );
 
-    return saleProducts;
+    // NOW attach photos only to the sale products
+    return await attachPhotosToProducts(saleProducts);
   } catch (error) {
     console.error("❌ [getSaleProducts] Error:", error);
     throw error; // Re-throw to let React Query handle it

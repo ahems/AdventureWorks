@@ -112,4 +112,36 @@ PRINT 'Created view Production.vProductSearch for multi-language semantic search
 
 GO
 
+-- Step 8: Remove all references to ProductPhotoID 1 (placeholder image)
+-- This clears out the old placeholder photo that was used before AI-generated images
+
+DELETE FROM [Production].[ProductProductPhoto]
+WHERE [ProductPhotoID] = 1;
+
+PRINT 'Removed all ProductProductPhoto records referencing ProductPhotoID 1';
+
+GO
+
+-- Step 9: Set Primary photo to most recent (box shot) for all products
+-- The GenerateProductImages function creates box shots with the most recent ModifiedDate
+-- Update Primary flag: set most recent photo to Primary (1), all others to non-Primary (0)
+
+WITH RankedPhotos AS (
+    SELECT 
+        ProductID,
+        ProductPhotoID,
+        ROW_NUMBER() OVER (PARTITION BY ProductID ORDER BY ModifiedDate DESC) as PhotoRank
+    FROM [Production].[ProductProductPhoto]
+)
+UPDATE pp
+SET pp.[Primary] = CASE WHEN rp.PhotoRank = 1 THEN 1 ELSE 0 END
+FROM [Production].[ProductProductPhoto] pp
+INNER JOIN RankedPhotos rp 
+    ON pp.ProductID = rp.ProductID 
+    AND pp.ProductPhotoID = rp.ProductPhotoID;
+
+PRINT 'Updated Primary flag: most recent photo (box shot) set as Primary for all products';
+
+GO
+
 PRINT 'AI enhancements applied successfully';

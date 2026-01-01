@@ -95,8 +95,12 @@ public class GenerateProductThumbnails
                 thumbnailData.Length
             );
 
+            // Generate thumbnail filename based on large photo filename
+            // Example: "product_680_photo_2.png" -> "product_680_photo_2_small.png"
+            var thumbnailFileName = GenerateThumbnailFileName(largePhotoFileName);
+
             // Save to database
-            await _productService.SaveProductThumbnailAsync(productPhotoId, thumbnailData);
+            await _productService.SaveProductThumbnailAsync(productPhotoId, thumbnailData, thumbnailFileName);
 
             _logger.LogInformation(
                 "Saved thumbnail for ProductPhotoID {photoId}",
@@ -113,88 +117,21 @@ public class GenerateProductThumbnails
         }
     }
 
-    [Function(nameof(RepairMissingThumbnails_HttpStart))]
-    public async Task<HttpResponseData> RepairMissingThumbnails_HttpStart(
-        [HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequestData req,
-        FunctionContext executionContext)
+    /// <summary>
+    /// Generate thumbnail filename from large photo filename
+    /// Examples:
+    ///   "product_680_photo_2.png" -> "product_680_photo_2_small.png"
+    ///   "my_image.jpg" -> "my_image_small.jpg"
+    /// </summary>
+    private static string GenerateThumbnailFileName(string? largePhotoFileName)
     {
-        _logger.LogInformation("Starting repair of missing thumbnails");
-
-        try
+        if (string.IsNullOrEmpty(largePhotoFileName))
         {
-            // Get all photos without thumbnails from database
-            var photosNeedingThumbnails = await _productService.GetProductPhotosWithoutThumbnailsAsync();
-
-            _logger.LogInformation(
-                "Found {count} photos without thumbnails",
-                photosNeedingThumbnails.Count
-            );
-
-            if (photosNeedingThumbnails.Count == 0)
-            {
-                var noWorkResponse = req.CreateResponse(HttpStatusCode.OK);
-                await noWorkResponse.WriteStringAsync(
-                    JsonSerializer.Serialize(new { message = "No photos need thumbnails" })
-                );
-                return noWorkResponse;
-            }
-
-            // Get storage account connection for thumbnail queue
-            var queueServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
-            if (string.IsNullOrEmpty(queueServiceUri))
-            {
-                var storageAccountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
-                    ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
-                queueServiceUri = $"https://{storageAccountName}.queue.core.windows.net";
-            }
-
-            var queueServiceClient = new QueueServiceClient(
-                new Uri(queueServiceUri),
-                new DefaultAzureCredential(),
-                new QueueClientOptions
-                {
-                    MessageEncoding = QueueMessageEncoding.Base64
-                }
-            );
-
-            var thumbnailQueueClient = queueServiceClient.GetQueueClient(QUEUE_NAME);
-            await thumbnailQueueClient.CreateIfNotExistsAsync();
-
-            // Enqueue a message for each photo that needs a thumbnail
-            int enqueuedCount = 0;
-            foreach (var photo in photosNeedingThumbnails)
-            {
-                var thumbnailMessage = JsonSerializer.Serialize(new
-                {
-                    ProductPhotoID = photo.ProductPhotoID,
-                    LargePhotoFileName = photo.LargePhotoFileName ?? $"product_photo_{photo.ProductPhotoID}.png"
-                });
-
-                await thumbnailQueueClient.SendMessageAsync(thumbnailMessage);
-                enqueuedCount++;
-            }
-
-            _logger.LogInformation(
-                "Enqueued {count} thumbnail generation messages",
-                enqueuedCount
-            );
-
-            var response = req.CreateResponse(HttpStatusCode.OK);
-            await response.WriteStringAsync(
-                JsonSerializer.Serialize(new
-                {
-                    message = $"Enqueued {enqueuedCount} photos for thumbnail generation",
-                    count = enqueuedCount
-                })
-            );
-            return response;
+            return "thumbnail.png";
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to repair missing thumbnails");
-            var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await errorResponse.WriteStringAsync($"Error: {ex.Message}");
-            return errorResponse;
-        }
+
+        var extension = Path.GetExtension(largePhotoFileName);
+        var nameWithoutExtension = Path.GetFileNameWithoutExtension(largePhotoFileName);
+        return $"{nameWithoutExtension}_small{extension}";
     }
 }

@@ -390,27 +390,33 @@ public class ProductService
                 LargePhotoFileName
             FROM Production.ProductPhoto
             WHERE LargePhoto IS NOT NULL 
-            AND (ThumbNailPhoto IS NULL OR DATALENGTH(ThumbNailPhoto) = 0)
+            AND (
+                ThumbNailPhoto IS NULL 
+                OR DATALENGTH(ThumbNailPhoto) = 0
+                OR ThumbnailPhotoFileName IS NULL
+            )
             ORDER BY ProductPhotoID";
 
         var photos = await connection.QueryAsync<ProductPhotoThumbnailData>(sql);
         return photos.ToList();
     }
 
-    public async Task SaveProductThumbnailAsync(int productPhotoId, byte[] thumbnailData)
+    public async Task SaveProductThumbnailAsync(int productPhotoId, byte[] thumbnailData, string? thumbnailFileName = null)
     {
         using var connection = await GetConnectionAsync();
 
-        // Update only the thumbnail field without touching ModifiedDate
+        // Update thumbnail data and filename without touching ModifiedDate
         var updateSql = @"
             UPDATE Production.ProductPhoto
-            SET ThumbNailPhoto = @ThumbnailData
+            SET ThumbNailPhoto = @ThumbnailData,
+                ThumbnailPhotoFileName = @ThumbnailFileName
             WHERE ProductPhotoID = @ProductPhotoID";
 
         await connection.ExecuteAsync(updateSql, new
         {
             ProductPhotoID = productPhotoId,
-            ThumbnailData = thumbnailData
+            ThumbnailData = thumbnailData,
+            ThumbnailFileName = thumbnailFileName
         });
     }
 }

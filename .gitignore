@@ -174,3 +174,5 @@ __blobstorage__/
 __queuestorage__/
 __tablestorage__/
 .azurite/
+# Downloaded product images
+product-images/

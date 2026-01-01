@@ -210,13 +210,163 @@ const AccountPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-doodle-bg">
-        <div className="text-center">
-          <span className="text-6xl block mb-4 animate-bounce">🚴</span>
-          <p className="font-doodle text-doodle-text">
-            {t("orderTracking.loading")}
-          </p>
-        </div>
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-1">
+          {/* Breadcrumb Skeleton */}
+          <div className="container mx-auto px-4 py-4">
+            <div className="h-4 w-32 bg-doodle-text/10 animate-pulse"></div>
+          </div>
+
+          <section className="container mx-auto px-4 pb-12">
+            <div className="max-w-4xl mx-auto">
+              {/* Profile Header Skeleton */}
+              <div className="doodle-card p-6 md:p-8 mb-6">
+                <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+                  <div className="w-20 h-20 rounded-full bg-doodle-text/10 animate-pulse"></div>
+                  <div className="text-center sm:text-left space-y-2 flex-1">
+                    <div className="h-8 w-48 bg-doodle-text/10 animate-pulse mx-auto sm:mx-0"></div>
+                    <div className="h-4 w-64 bg-doodle-text/10 animate-pulse mx-auto sm:mx-0"></div>
+                    <div className="h-3 w-40 bg-doodle-text/10 animate-pulse mx-auto sm:mx-0"></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Order History Skeleton */}
+              <div className="doodle-card p-6 mb-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-6 h-6 bg-doodle-text/10 animate-pulse"></div>
+                  <div className="h-6 w-32 bg-doodle-text/10 animate-pulse"></div>
+                  <div className="h-4 w-16 bg-doodle-text/10 animate-pulse"></div>
+                </div>
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="border-2 border-dashed border-doodle-text/20 p-4"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-2 flex-1">
+                          <div className="flex items-center gap-2">
+                            <div className="h-5 w-32 bg-doodle-text/10 animate-pulse"></div>
+                            <div className="h-6 w-20 bg-doodle-text/10 animate-pulse rounded-full"></div>
+                          </div>
+                          <div className="h-4 w-40 bg-doodle-text/10 animate-pulse"></div>
+                        </div>
+                        <div className="h-5 w-20 bg-doodle-text/10 animate-pulse"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Wishlist Skeleton */}
+              <div className="doodle-card p-6 mb-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-6 h-6 bg-doodle-text/10 animate-pulse"></div>
+                  <div className="h-6 w-32 bg-doodle-text/10 animate-pulse"></div>
+                  <div className="h-4 w-16 bg-doodle-text/10 animate-pulse"></div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {[1, 2].map((i) => (
+                    <div
+                      key={i}
+                      className="border-2 border-dashed border-doodle-text/20 p-4 flex gap-4"
+                    >
+                      <div className="w-20 h-20 bg-doodle-text/10 animate-pulse"></div>
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 w-full bg-doodle-text/10 animate-pulse"></div>
+                        <div className="h-5 w-20 bg-doodle-text/10 animate-pulse"></div>
+                        <div className="flex gap-2">
+                          <div className="h-8 w-24 bg-doodle-text/10 animate-pulse"></div>
+                          <div className="h-8 w-20 bg-doodle-text/10 animate-pulse"></div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Profile Details Skeleton */}
+              <div className="doodle-card p-6 mb-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 bg-doodle-text/10 animate-pulse"></div>
+                    <div className="h-6 w-32 bg-doodle-text/10 animate-pulse"></div>
+                  </div>
+                  <div className="h-10 w-20 bg-doodle-text/10 animate-pulse"></div>
+                </div>
+                <div className="space-y-4">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div
+                      key={i}
+                      className="flex justify-between py-3 border-b border-dashed border-doodle-text/20"
+                    >
+                      <div className="h-4 w-24 bg-doodle-text/10 animate-pulse"></div>
+                      <div className="h-4 w-48 bg-doodle-text/10 animate-pulse"></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Addresses Skeleton */}
+              <div className="doodle-card p-6 mb-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 bg-doodle-text/10 animate-pulse"></div>
+                    <div className="h-6 w-32 bg-doodle-text/10 animate-pulse"></div>
+                  </div>
+                  <div className="h-10 w-32 bg-doodle-text/10 animate-pulse"></div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[1, 2].map((i) => (
+                    <div
+                      key={i}
+                      className="border-2 border-dashed border-doodle-text/20 p-4 space-y-2"
+                    >
+                      <div className="h-5 w-24 bg-doodle-text/10 animate-pulse"></div>
+                      <div className="h-4 w-full bg-doodle-text/10 animate-pulse"></div>
+                      <div className="h-4 w-3/4 bg-doodle-text/10 animate-pulse"></div>
+                      <div className="flex gap-2 mt-3">
+                        <div className="h-8 w-16 bg-doodle-text/10 animate-pulse"></div>
+                        <div className="h-8 w-20 bg-doodle-text/10 animate-pulse"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Payment Methods Skeleton */}
+              <div className="doodle-card p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 bg-doodle-text/10 animate-pulse"></div>
+                    <div className="h-6 w-40 bg-doodle-text/10 animate-pulse"></div>
+                  </div>
+                  <div className="h-10 w-32 bg-doodle-text/10 animate-pulse"></div>
+                </div>
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <div
+                      key={i}
+                      className="border-2 border-dashed border-doodle-text/20 p-4 flex justify-between items-center"
+                    >
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className="w-10 h-6 bg-doodle-text/10 animate-pulse"></div>
+                        <div className="space-y-1">
+                          <div className="h-4 w-32 bg-doodle-text/10 animate-pulse"></div>
+                          <div className="h-3 w-20 bg-doodle-text/10 animate-pulse"></div>
+                        </div>
+                      </div>
+                      <div className="h-8 w-20 bg-doodle-text/10 animate-pulse"></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+        <Footer />
       </div>
     );
   }

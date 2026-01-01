@@ -35,12 +35,16 @@ const CategoryPage: React.FC = () => {
   const { data: subcategories = [] } = useSubcategoriesByCategory(
     categoryId ? parseInt(categoryId) : 0
   );
-  const { data: allCategoryProducts = [] } = useProductsByCategory(
-    categoryId ? parseInt(categoryId) : 0
-  );
-  const { data: subcategoryProducts = [] } = useProductsBySubcategory(
-    selectedSubcategory || 0
-  );
+  const { data: allCategoryProducts = [], isLoading: categoryProductsLoading } =
+    useProductsByCategory(categoryId ? parseInt(categoryId) : 0);
+  const {
+    data: subcategoryProducts = [],
+    isLoading: subcategoryProductsLoading,
+  } = useProductsBySubcategory(selectedSubcategory || 0);
+
+  const isLoadingProducts = selectedSubcategory
+    ? subcategoryProductsLoading
+    : categoryProductsLoading;
 
   const products = React.useMemo(() => {
     let productList = selectedSubcategory
@@ -310,7 +314,38 @@ const CategoryPage: React.FC = () => {
 
             {/* Product Grid */}
             <div className="flex-1">
-              {products.length > 0 ? (
+              {isLoadingProducts ? (
+                <>
+                  {/* Controls Bar Skeleton */}
+                  <div className="doodle-card p-4 mb-6">
+                    <div className="flex items-center justify-between flex-wrap gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-4 w-12 bg-doodle-text/10 animate-pulse"></div>
+                        <div className="h-10 w-20 bg-doodle-text/10 animate-pulse"></div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="h-4 w-16 bg-doodle-text/10 animate-pulse"></div>
+                        <div className="h-10 w-48 bg-doodle-text/10 animate-pulse"></div>
+                      </div>
+                      <div className="h-4 w-32 bg-doodle-text/10 animate-pulse"></div>
+                    </div>
+                  </div>
+
+                  {/* Products Grid Skeleton */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {[...Array(6)].map((_, i) => (
+                      <div key={i} className="doodle-card overflow-hidden">
+                        <div className="aspect-square bg-doodle-text/10 animate-pulse"></div>
+                        <div className="p-4 space-y-3">
+                          <div className="h-4 w-3/4 bg-doodle-text/10 animate-pulse"></div>
+                          <div className="h-4 w-1/2 bg-doodle-text/10 animate-pulse"></div>
+                          <div className="h-6 w-24 bg-doodle-text/10 animate-pulse"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : products.length > 0 ? (
                 <>
                   {/* Controls Bar */}
                   <div className="doodle-card p-4 mb-6">
