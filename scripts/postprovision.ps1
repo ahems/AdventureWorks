@@ -623,7 +623,11 @@ try {
         @{ Table='Production.BillOfMaterials'; File='BillOfMaterials.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # ProductPhoto has ThumbNailPhoto and LargePhoto fields hex-encoded to handle varbinary data
         @{ Table='Production.ProductPhoto'; File='ProductPhoto.csv'; Delimiter="+|"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('ThumbNailPhoto', 'LargePhoto') }
+        # AI-generated photos (created by image generation Functions, preserved to avoid regeneration cost)
+        @{ Table='Production.ProductPhoto'; File='ProductPhoto-ai.csv'; Delimiter="+|"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('ThumbNailPhoto', 'LargePhoto') }
         @{ Table='Production.ProductProductPhoto'; File='ProductProductPhoto.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # AI-generated photo mappings (links AI photos to products)
+        @{ Table='Production.ProductProductPhoto'; File='ProductProductPhoto-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # Document has hierarchyid DocumentNode (hex-encoded), varbinary Document field (hex-encoded), and nvarchar DocumentSummary (hex-encoded to handle newlines)
         @{ Table='Production.Document'; File='Document.csv'; Delimiter="+|"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('DocumentNode', 'DocumentSummary', 'Document') }
         # ProductDocument references ProductIDs that all exist in Product.csv - load order ensures Product is loaded first
