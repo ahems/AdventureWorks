@@ -11,7 +11,9 @@ This directory contains Azure Functions that provide serverless backend capabili
 ### AI-Powered Product Enhancement
 
 - **EmbellishProductsUsingAI**: Enhances product descriptions using AI
-- **GenerateProductEmbeddings**: Creates vector embeddings for products
+- **GenerateProductEmbeddings**: Creates vector embeddings for product descriptions
+- **GenerateProductReviewEmbeddings**: Creates vector embeddings for product review comments
+- **GenerateProductReviewsUsingAI**: Generates creative product reviews using AI (0-10 reviews per product with varied sentiment)
 - **GenerateProductImages**: Generates product images using DALL-E
 - **GenerateProductThumbnails**: Creates thumbnails from product images
 - **TranslateProductDescriptions**: Translates product descriptions to multiple languages
@@ -43,6 +45,10 @@ Provides AI capabilities using Azure OpenAI:
 ### ProductService
 
 Manages product data operations with Azure SQL.
+
+### ReviewService
+
+Handles product review data operations with Azure SQL, including embedding storage.
 
 ## Configuration
 
@@ -85,6 +91,8 @@ api-functions/
 │   ├── AddressFunctions.cs
 │   ├── EmbellishProductsUsingAI.cs
 │   ├── GenerateProductEmbeddings.cs
+│   ├── GenerateProductReviewEmbeddings.cs
+│   ├── GenerateProductReviewsUsingAI.cs
 │   ├── GenerateProductImages.cs
 │   ├── GenerateProductThumbnails.cs
 │   ├── TranslateProductDescriptions.cs
@@ -92,11 +100,13 @@ api-functions/
 ├── Models/             # Data models
 │   ├── Address.cs
 │   ├── ProductData.cs
+│   ├── ReviewData.cs
 │   └── TranslationData.cs
 ├── Services/           # Business logic
 │   ├── AddressService.cs
 │   ├── AIService.cs
-│   └── ProductService.cs
+│   ├── ProductService.cs
+│   └── ReviewService.cs
 ├── Program.cs          # Function app configuration
 ├── host.json          # Function host configuration
 └── Dockerfile         # Container image definition

@@ -38,6 +38,15 @@ builder.Services.AddScoped<ProductService>(sp =>
     return new ProductService(connectionString);
 });
 
+// Register ReviewService with connection string from configuration
+builder.Services.AddScoped<ReviewService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new ReviewService(connectionString);
+});
+
 // Register AIService with Azure OpenAI endpoint from configuration
 builder.Services.AddScoped<AIService>(sp =>
 {

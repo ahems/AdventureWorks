@@ -345,6 +345,218 @@ Translate the description into each target language. Return ONLY a valid JSON ob
         return embeddings;
     }
 
+    public async Task<List<ProductReviewEmbedding>> GenerateReviewEmbeddingsAsync(List<ProductReviewData> reviews)
+    {
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var embeddingClient = client.GetEmbeddingClient(_embeddingDeploymentName);
+
+        var embeddings = new List<ProductReviewEmbedding>();
+
+        foreach (var review in reviews)
+        {
+            // Skip reviews without comments
+            if (string.IsNullOrWhiteSpace(review.Comments))
+            {
+                _logger.LogWarning(
+                    "Skipping ProductReviewID {id} - no comments to embed",
+                    review.ProductReviewID
+                );
+                continue;
+            }
+
+            _logger.LogInformation(
+                "Generating embedding for ProductReviewID {id} (ProductID: {productId}, Rating: {rating}, Length: {length} chars)",
+                review.ProductReviewID,
+                review.ProductID,
+                review.Rating,
+                review.Comments.Length
+            );
+
+            try
+            {
+                // Generate embedding for the review comments
+                var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(review.Comments);
+                var embeddingVector = embeddingResponse.Value.ToFloats();
+
+                // Convert ReadOnlyMemory<float> to byte array for VARBINARY storage
+                var floatArray = embeddingVector.ToArray();
+                var embeddingBytes = new byte[floatArray.Length * sizeof(float)];
+                Buffer.BlockCopy(floatArray, 0, embeddingBytes, 0, embeddingBytes.Length);
+
+                embeddings.Add(new ProductReviewEmbedding
+                {
+                    ProductReviewID = review.ProductReviewID,
+                    Embedding = embeddingBytes,
+                    ProductID = review.ProductID
+                });
+
+                _logger.LogInformation(
+                    "Generated embedding for ProductReviewID {id}: {dimensions} dimensions, {bytes} bytes",
+                    review.ProductReviewID,
+                    floatArray.Length,
+                    embeddingBytes.Length
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to generate embedding for ProductReviewID {id}",
+                    review.ProductReviewID
+                );
+                throw;
+            }
+        }
+
+        return embeddings;
+    }
+
+    public async Task<List<GeneratedReview>> GenerateProductReviewsAsync(List<ProductForReviewGeneration> products)
+    {
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var chatClient = client.GetChatClient(_deploymentName);
+
+        var allReviews = new List<GeneratedReview>();
+
+        // Process each product individually for better control
+        foreach (var product in products)
+        {
+            var reviews = await GenerateReviewsForProductAsync(chatClient, product);
+            allReviews.AddRange(reviews);
+        }
+
+        return allReviews;
+    }
+
+    private async Task<List<GeneratedReview>> GenerateReviewsForProductAsync(ChatClient chatClient, ProductForReviewGeneration product)
+    {
+        var random = new Random();
+
+        // Generate between 0 and 10 reviews per product
+        var reviewCount = random.Next(0, 11);
+
+        if (reviewCount == 0)
+        {
+            _logger.LogInformation("Skipping reviews for ProductID {ProductID} (randomly selected 0 reviews)", product.ProductID);
+            return new List<GeneratedReview>();
+        }
+
+        // Randomly select review sentiment ratio (1=positive, 2=mixed, 3=negative)
+        var sentimentRatio = random.Next(1, 4);
+        var sentimentDescription = sentimentRatio switch
+        {
+            1 => "mostly positive (4-5 stars), with some 3-star mixed reviews",
+            2 => "evenly mixed between positive (4-5 stars) and negative (1-2 stars), with some 3-star reviews",
+            3 => "mostly negative (1-2 stars), with some 3-star mixed reviews",
+            _ => "mixed"
+        };
+
+        _logger.LogInformation(
+            "Generating {count} {sentiment} reviews for ProductID {ProductID}: {name}",
+            reviewCount,
+            sentimentDescription,
+            product.ProductID,
+            product.Name
+        );
+
+        var systemPrompt = @"You are a creative review generator for AdventureWorks, an outdoor adventure equipment retailer.
+Your task is to generate fun, amusing, and realistic product reviews that match the playful tone of the demo site.
+
+Generate reviews that:
+1. Match the specified sentiment ratio (positive/mixed/negative)
+2. Reference specific product features from the description
+3. Include funny, creative reasons people might love or hate the product
+4. Sound like real customer reviews with personality
+5. Use varied reviewer names (some names can appear multiple times across different products)
+6. Include realistic email addresses matching the names
+7. Have appropriate ratings (1-5 stars) matching the sentiment
+8. Vary in length and detail (some short, some longer)
+
+Return ONLY a valid JSON array with this exact structure:
+[
+  {
+    ""ReviewerName"": ""John Smith"",
+    ""EmailAddress"": ""john.smith@email.com"",
+    ""Rating"": 5,
+    ""Comments"": ""Absolutely love this product! The extra-shiny coating makes me feel like a superhero...""
+  }
+]
+
+Make the reviews entertaining while keeping them realistic. Be creative with the commentary!";
+
+        var productJson = JsonSerializer.Serialize(new
+        {
+            product.ProductID,
+            product.Name,
+            product.Description
+        }, new JsonSerializerOptions { WriteIndented = true });
+
+        var userPrompt = $@"Generate {reviewCount} reviews for this product with {sentimentDescription}:
+
+{productJson}
+
+Return the reviews as a JSON array.";
+
+        var messages = new List<ChatMessage>
+        {
+            new SystemChatMessage(systemPrompt),
+            new UserChatMessage(userPrompt)
+        };
+
+        try
+        {
+            var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+            {
+                Temperature = 0.9f, // Higher temperature for more creative/varied reviews
+                MaxOutputTokenCount = 4000
+            });
+
+            var content = response.Value.Content[0].Text;
+
+            // Extract JSON from response (may be wrapped in markdown code blocks)
+            var jsonStart = content.IndexOf('[');
+            var jsonEnd = content.LastIndexOf(']') + 1;
+
+            if (jsonStart == -1 || jsonEnd <= jsonStart)
+            {
+                _logger.LogWarning("No valid JSON array found in response for ProductID {ProductID}", product.ProductID);
+                return new List<GeneratedReview>();
+            }
+
+            var json = content.Substring(jsonStart, jsonEnd - jsonStart);
+            var generatedReviews = JsonSerializer.Deserialize<List<GeneratedReview>>(json);
+
+            if (generatedReviews != null)
+            {
+                // Set the ProductID for all reviews
+                foreach (var review in generatedReviews)
+                {
+                    review.ProductID = product.ProductID;
+                }
+
+                _logger.LogInformation(
+                    "Generated {count} reviews for ProductID {ProductID}",
+                    generatedReviews.Count,
+                    product.ProductID
+                );
+
+                return generatedReviews;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to generate reviews for ProductID {ProductID}",
+                product.ProductID
+            );
+        }
+
+        return new List<GeneratedReview>();
+    }
+
     public async Task<List<ProductPhotoData>> GenerateProductImagesAsync(List<ProductImageData> products)
     {
         var credential = new DefaultAzureCredential();
