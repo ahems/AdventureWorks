@@ -558,6 +558,7 @@ try {
         
     # ===== GEOGRAPHY =====
         @{ Table='Person.StateProvince'; File='StateProvince.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Person.StateProvince'; File='StateProvince-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Person.Address'; File='Address.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
 
         # ===== CUSTOMER/PERSON DATA =====
