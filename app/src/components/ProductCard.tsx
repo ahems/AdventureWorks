@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ShoppingCart, Heart, Star, Scale, Eye } from "lucide-react";
 import { Product, getSalePrice } from "@/types/product";
+import { OptimizedImage } from "@/components/OptimizedImage";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { useCompare } from "@/context/CompareContext";
@@ -130,10 +131,12 @@ const ProductCard: React.FC<ProductCardProps> = ({
         {/* Product Image */}
         <div className="aspect-square mb-4 bg-doodle-bg border-2 border-doodle-text border-dashed flex items-center justify-center overflow-hidden relative">
           {product.ThumbNailPhoto ? (
-            <img
+            <OptimizedImage
               src={`data:image/gif;base64,${product.ThumbNailPhoto}`}
-              alt={product.Name}
-              className="w-full h-full object-contain"
+              alt={`${product.Name}${
+                product.Color ? ` - ${product.Color}` : ""
+              }`}
+              className="!aspect-square"
             />
           ) : (
             <div className="text-center p-4">

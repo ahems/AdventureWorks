@@ -29,4 +29,8 @@ if [ -d "app/dist" ]; then
   rm -rf app/dist
 fi
 
+# Generate staticwebapp.config.json from template with dynamic Functions URL
+echo "[PreDeploy] Generating staticwebapp.config.json with Functions URL: $API_FUNC_URL"
+sed "s|{{API_FUNCTIONS_URL}}|$API_FUNC_URL|g" app/staticwebapp.config.template.json > app/staticwebapp.config.json
+
 echo "[PreDeploy] Configuration completed"

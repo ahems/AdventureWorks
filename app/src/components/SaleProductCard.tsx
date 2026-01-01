@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ShoppingCart, Star, Bell } from "lucide-react";
 import { Product, getSalePrice, isVariantAvailable } from "@/types/product";
+import { OptimizedImage } from "@/components/OptimizedImage";
 import { useCart } from "@/context/CartContext";
 import { useReviews } from "@/hooks/useReviews";
 import { toast } from "@/hooks/use-toast";
@@ -81,10 +82,12 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
       <Link to={`/product/${product.ProductID}`} className="block relative">
         <div className="aspect-square bg-doodle-bg border-b-2 border-dashed border-doodle-text flex items-center justify-center overflow-hidden">
           {product.ThumbNailPhoto ? (
-            <img
+            <OptimizedImage
               src={`data:image/gif;base64,${product.ThumbNailPhoto}`}
-              alt={product.Name}
-              className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300"
+              alt={`${product.Name}${
+                product.Color ? ` - ${product.Color}` : ""
+              }`}
+              className="!aspect-square group-hover:scale-110 transition-transform duration-300"
             />
           ) : (
             <span className="text-6xl group-hover:scale-110 transition-transform duration-300">

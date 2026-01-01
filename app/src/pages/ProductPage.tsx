@@ -14,6 +14,11 @@ import {
   Heart,
 } from "lucide-react";
 import { Twemoji } from "@/components/Twemoji";
+import {
+  SEO,
+  generateProductStructuredData,
+  generateBreadcrumbStructuredData,
+} from "@/components/SEO";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductReviews from "@/components/ProductReviews";
@@ -72,6 +77,46 @@ const ProductPage: React.FC = () => {
   const currentVariantAvailable = product
     ? isVariantAvailable(product, selectedSize, selectedColor)
     : true;
+
+  // Generate breadcrumb structured data - MUST be before any conditional renders
+  const breadcrumbData = React.useMemo(() => {
+    if (!product) return null;
+
+    const items = [
+      { name: t("common:navigation.home"), url: window.location.origin },
+    ];
+
+    if (category) {
+      items.push({
+        name: category.Name,
+        url: `${window.location.origin}/category/${category.ProductCategoryID}`,
+      });
+    }
+
+    items.push({
+      name: product.Name,
+      url: window.location.href,
+    });
+
+    return generateBreadcrumbStructuredData(items);
+  }, [product, category, t]);
+
+  // Generate product structured data - MUST be before any conditional renders
+  const productStructuredData = React.useMemo(() => {
+    if (!product) return null;
+
+    const price = salePrice || product.ListPrice;
+
+    return generateProductStructuredData({
+      name: product.Name,
+      description: product.Description || product.Name,
+      image: product.LargePhoto || product.ThumbNailPhoto || "",
+      price: price,
+      sku: product.ProductNumber,
+      availability:
+        product.Stock && product.Stock > 0 ? "InStock" : "OutOfStock",
+    });
+  }, [product, salePrice]);
 
   // Add to recently viewed when product loads
   useEffect(() => {
@@ -240,6 +285,18 @@ const ProductPage: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      {product && (
+        <SEO
+          title={`${product.Name} | Adventure Works`}
+          description={
+            product.Description ||
+            `Buy ${product.Name} at Adventure Works. Premium quality outdoor adventure and sports gear.`
+          }
+          image={product.LargePhoto || product.ThumbNailPhoto}
+          type="product"
+          structuredData={[breadcrumbData, productStructuredData]}
+        />
+      )}
       <Header />
       <main className="flex-1">
         {/* Breadcrumb */}

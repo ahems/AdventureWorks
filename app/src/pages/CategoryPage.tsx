@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { ArrowLeft, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Twemoji } from "@/components/Twemoji";
+import { SEO, generateBreadcrumbStructuredData } from "@/components/SEO";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
@@ -137,6 +138,26 @@ const CategoryPage: React.FC = () => {
     setCurrentPage(1);
   };
 
+  // Generate breadcrumb structured data - must be before early returns
+  const breadcrumbData = React.useMemo(() => {
+    if (!category) return null;
+
+    return generateBreadcrumbStructuredData([
+      { name: t("navigation.home"), url: window.location.origin },
+      { name: category.Name, url: window.location.href },
+    ]);
+  }, [category, t]);
+
+  // Generate category description for SEO
+  const categoryDescription = category
+    ? `Shop ${category.Name.toLowerCase()} at Adventure Works. Browse our collection of ${
+        products.length
+      } premium products including ${subcategories
+        .slice(0, 3)
+        .map((s) => s.Name)
+        .join(", ")} and more.`
+    : "";
+
   if (categoryLoading) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -244,6 +265,12 @@ const CategoryPage: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO
+        title={`${category.Name} | Adventure Works`}
+        description={categoryDescription}
+        type="website"
+        structuredData={breadcrumbData}
+      />
       <Header />
       <main className="flex-1">
         {/* Breadcrumb */}

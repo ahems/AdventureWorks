@@ -6,7 +6,7 @@
   "routes": [
     {
       "route": "/sitemap.xml",
-      "redirect": "https://av-func-ewphuc52etkbc.purplesky-9d5d92b9.eastus2.azurecontainerapps.io/api/sitemap.xml",
+      "redirect": "{{API_FUNCTIONS_URL}}/api/sitemap.xml",
       "statusCode": 301
     },
     {

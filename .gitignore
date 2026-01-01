@@ -176,3 +176,6 @@ __tablestorage__/
 .azurite/
 # Downloaded product images
 product-images/
+
+# Generated config files
+app/staticwebapp.config.json

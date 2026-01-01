@@ -12,3 +12,9 @@ Allow: /
 
 User-agent: *
 Allow: /
+
+# Sitemap
+Sitemap: https://proud-flower-0e8bed00f.3.azurestaticapps.net/sitemap.xml
+
+# Crawl-delay (be nice to servers)
+Crawl-delay: 1
