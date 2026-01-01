@@ -178,7 +178,7 @@ const OrderTrackingPage: React.FC = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-doodle-bg">
         <div className="text-center">
-          <div className="block mb-4 animate-bounce inline-block">
+          <div className="mb-4 animate-bounce inline-block">
             <Twemoji emoji="📦" size="4rem" />
           </div>
           <p className="font-doodle text-doodle-text">
@@ -433,7 +433,8 @@ const OrderTrackingPage: React.FC = () => {
                             </p>
                           </div>
                           <p className="font-doodle font-bold text-doodle-green">
-                            {(selectedOrder.currency?.CurrencyCode &&
+                            {(selectedOrder.currencyRate?.currency
+                              ?.CurrencyCode &&
                               CURRENCY_SYMBOLS[
                                 selectedOrder.currencyRate?.currency
                                   ?.CurrencyCode
@@ -454,7 +455,8 @@ const OrderTrackingPage: React.FC = () => {
                           {t("orderTracking.subtotal")}
                         </span>
                         <span>
-                          {(selectedOrder.currency?.CurrencyCode &&
+                          {(selectedOrder.currencyRate?.currency
+                            ?.CurrencyCode &&
                             CURRENCY_SYMBOLS[
                               selectedOrder.currencyRate?.currency?.CurrencyCode
                             ]) ||
@@ -467,7 +469,8 @@ const OrderTrackingPage: React.FC = () => {
                           {t("orderTracking.tax")}
                         </span>
                         <span>
-                          {(selectedOrder.currency?.CurrencyCode &&
+                          {(selectedOrder.currencyRate?.currency
+                            ?.CurrencyCode &&
                             CURRENCY_SYMBOLS[
                               selectedOrder.currencyRate?.currency?.CurrencyCode
                             ]) ||
@@ -483,7 +486,8 @@ const OrderTrackingPage: React.FC = () => {
                             : ""}
                         </span>
                         <span>
-                          {(selectedOrder.currency?.CurrencyCode &&
+                          {(selectedOrder.currencyRate?.currency
+                            ?.CurrencyCode &&
                             CURRENCY_SYMBOLS[
                               selectedOrder.currencyRate?.currency?.CurrencyCode
                             ]) ||
@@ -494,7 +498,8 @@ const OrderTrackingPage: React.FC = () => {
                       <div className="flex justify-between pt-2 border-t border-dashed border-doodle-text/20 font-bold text-base">
                         <span>{t("orderTracking.total")}</span>
                         <span className="text-doodle-green">
-                          {(selectedOrder.currency?.CurrencyCode &&
+                          {(selectedOrder.currencyRate?.currency
+                            ?.CurrencyCode &&
                             CURRENCY_SYMBOLS[
                               selectedOrder.currencyRate?.currency?.CurrencyCode
                             ]) ||
