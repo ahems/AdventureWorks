@@ -371,7 +371,6 @@ const ProductPage: React.FC = () => {
                     />
                   </div>
                   <div className="flex-1">
-                    \n{" "}
                     <h3
                       className={`font-doodle font-bold ${
                         product.inStock ? "text-green-700" : "text-red-700"
