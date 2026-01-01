@@ -544,6 +544,8 @@ try {
         @{ Table='Production.UnitMeasure'; File='UnitMeasure.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.Culture'; File='Culture.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Sales.Currency'; File='Currency.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # Modern Turkish Lira (TRY, post-2005) to replace old TRL
+        @{ Table='Sales.Currency'; File='Currency-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Person.AddressType'; File='AddressType.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Person.ContactType'; File='ContactType.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Person.PhoneNumberType'; File='PhoneNumberType.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
@@ -578,6 +580,8 @@ try {
         @{ Table='Production.ProductSubcategory'; File='ProductSubcategory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModel'; File='ProductModel.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
         @{ Table='Production.ProductDescription'; File='ProductDescription.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # Enhanced product descriptions with embeddings (DescriptionEmbedding varbinary field, hex-encoded)
+        @{ Table='Production.ProductDescription'; File='ProductDescription-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('DescriptionEmbedding') }
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModelIllustration'; File='ProductModelIllustration.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.Product'; File='Product.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -600,7 +604,11 @@ try {
         
         # ===== ADDITIONAL LOOKUP TABLES =====
         @{ Table='Sales.CountryRegionCurrency'; File='CountryRegionCurrency.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # Modern currency mapping for Turkey (TRY)
+        @{ Table='Sales.CountryRegionCurrency'; File='CountryRegionCurrency-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Sales.SalesTaxRate'; File='SalesTaxRate.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # Additional sales tax rates for new language regions
+        @{ Table='Sales.SalesTaxRate'; File='SalesTaxRate-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ScrapReason'; File='ScrapReason.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='dbo.AWBuildVersion'; File='AWBuildVersion.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         
@@ -628,6 +636,8 @@ try {
         @{ Table='Production.ProductProductPhoto'; File='ProductProductPhoto.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # AI-generated photo mappings (links AI photos to products)
         @{ Table='Production.ProductProductPhoto'; File='ProductProductPhoto-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # Additional cultures for languages added to the website
+        @{ Table='Production.Culture'; File='Culture-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # Document has hierarchyid DocumentNode (hex-encoded), varbinary Document field (hex-encoded), and nvarchar DocumentSummary (hex-encoded to handle newlines)
         @{ Table='Production.Document'; File='Document.csv'; Delimiter="+|"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('DocumentNode', 'DocumentSummary', 'Document') }
         # ProductDocument references ProductIDs that all exist in Product.csv - load order ensures Product is loaded first
