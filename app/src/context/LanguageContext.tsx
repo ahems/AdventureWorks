@@ -43,6 +43,33 @@ const LanguageContext = createContext<LanguageContextType | undefined>(
   undefined
 );
 
+const detectBrowserLanguage = (): string => {
+  // Get browser language
+  const browserLang = navigator.language.toLowerCase();
+
+  // First, try exact match
+  const exactMatch = LANGUAGES.find(
+    (lang) => lang.code.toLowerCase() === browserLang
+  );
+  if (exactMatch) return exactMatch.code;
+
+  // Try to match the base language (e.g., "en" from "en-US")
+  const baseLang = browserLang.split("-")[0];
+  const baseMatch = LANGUAGES.find(
+    (lang) => lang.code.toLowerCase() === baseLang
+  );
+  if (baseMatch) return baseMatch.code;
+
+  // Try to match any language that starts with the base (e.g., "en-gb" for "en")
+  const partialMatch = LANGUAGES.find((lang) =>
+    lang.code.toLowerCase().startsWith(baseLang)
+  );
+  if (partialMatch) return partialMatch.code;
+
+  // Default to English
+  return "en";
+};
+
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -50,7 +77,8 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({
   const [selectedLanguage, setSelectedLanguageState] = useState<string>(() => {
     // Try to get saved language from localStorage
     const saved = localStorage.getItem("selectedLanguage");
-    return saved || "en";
+    // If no saved preference, detect from browser
+    return saved || detectBrowserLanguage();
   });
 
   // Initialize i18n language on mount

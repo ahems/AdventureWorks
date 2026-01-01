@@ -16,10 +16,15 @@ import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { useCategories } from "@/hooks/useProducts";
 import { useLanguage } from "@/context/LanguageContext";
-import { Twemoji } from "@/components/Twemoji";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const Header: React.FC = () => {
-  const { t } = useTranslation("common");
+  const { t, i18n } = useTranslation("common");
   const { getTotalItems } = useCart();
   const { user, isAuthenticated, logout } = useAuth();
   const { data: categories = [], isLoading: categoriesLoading } =
@@ -29,13 +34,18 @@ const Header: React.FC = () => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [userMenuOpen, setUserMenuOpen] = React.useState(false);
-  const [languageMenuOpen, setLanguageMenuOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [showSearch, setShowSearch] = React.useState(false);
   const totalItems = getTotalItems();
 
   const userMenuRef = React.useRef<HTMLDivElement>(null);
-  const languageMenuRef = React.useRef<HTMLDivElement>(null);
+  const currentLanguage =
+    languages.find((l) => l.code === selectedLanguage) || languages[0];
+
+  const handleLanguageChange = (code: string) => {
+    setSelectedLanguage(code);
+    i18n.changeLanguage(code);
+  };
 
   // Close user menu when clicking outside
   React.useEffect(() => {
@@ -45,12 +55,6 @@ const Header: React.FC = () => {
         !userMenuRef.current.contains(event.target as Node)
       ) {
         setUserMenuOpen(false);
-      }
-      if (
-        languageMenuRef.current &&
-        !languageMenuRef.current.contains(event.target as Node)
-      ) {
-        setLanguageMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -201,60 +205,31 @@ const Header: React.FC = () => {
             )}
 
             {/* Language Selector */}
-            <div className="relative" ref={languageMenuRef}>
-              <button
-                onClick={() => setLanguageMenuOpen(!languageMenuOpen)}
-                className="doodle-button flex items-center gap-2 py-2 px-3"
-                aria-label={t("headerAria.selectLanguage")}
+            <DropdownMenu>
+              <DropdownMenuTrigger className="doodle-button flex items-center gap-2 py-2 px-3">
+                <span className="text-lg">{currentLanguage.flag}</span>
+                <Globe className="w-4 h-4 hidden sm:block" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-48 bg-doodle-bg border-2 border-doodle-text"
               >
-                <Globe className="w-5 h-5" />
-                <Twemoji
-                  emoji={
-                    languages.find((lang) => lang.code === selectedLanguage)
-                      ?.flag || "🌐"
-                  }
-                  size="1.25rem"
-                  className="inline-flex items-center"
-                />
-                <ChevronDown
-                  className={`w-4 h-4 transition-transform ${
-                    languageMenuOpen ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-
-              {/* Language Dropdown Menu */}
-              {languageMenuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-auto min-w-[4rem] doodle-card p-2 z-50 max-h-96 overflow-y-auto">
-                  <div className="px-3 py-2 border-b-2 border-dashed border-doodle-text/20 mb-2">
-                    <p className="font-doodle font-bold text-doodle-text text-sm">
-                      {t("header.selectLanguage")}
-                    </p>
-                  </div>
-                  {languages.map((language) => (
-                    <button
-                      key={language.code}
-                      onClick={() => {
-                        setSelectedLanguage(language.code);
-                        setLanguageMenuOpen(false);
-                      }}
-                      title={language.name}
-                      className={`w-full flex items-center justify-center px-3 py-2 font-doodle text-doodle-text hover:bg-doodle-text/10 transition-colors ${
-                        selectedLanguage === language.code
-                          ? "bg-doodle-accent/10 ring-2 ring-doodle-accent"
-                          : ""
-                      }`}
-                    >
-                      <Twemoji
-                        emoji={language.flag}
-                        size="2rem"
-                        className="inline-flex items-center"
-                      />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+                {languages.map((lang) => (
+                  <DropdownMenuItem
+                    key={lang.code}
+                    onClick={() => handleLanguageChange(lang.code)}
+                    className={`flex items-center gap-2 cursor-pointer font-doodle ${
+                      selectedLanguage === lang.code
+                        ? "bg-doodle-accent/20"
+                        : ""
+                    }`}
+                  >
+                    <span className="text-lg">{lang.flag}</span>
+                    <span>{lang.name}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             {/* Cart */}
             <Link
