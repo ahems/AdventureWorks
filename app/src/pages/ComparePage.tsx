@@ -18,6 +18,7 @@ import { useCompare } from "@/context/CompareContext";
 import { useCart } from "@/context/CartContext";
 import { useReviews } from "@/hooks/useReviews";
 import { getSalePrice, Product } from "@/types/product";
+import { useCurrency } from "@/context/CurrencyContext";
 
 const CompareProductReview: React.FC<{
   productId: number;
@@ -86,6 +87,7 @@ const ComparePage: React.FC = () => {
   const { t } = useTranslation("common");
   const { items, removeFromCompare, clearCompare } = useCompare();
   const { addToCart } = useCart();
+  const { formatPrice } = useCurrency();
 
   // Calculate best values for highlighting
   const highlights = useMemo(() => {
@@ -132,14 +134,14 @@ const ComparePage: React.FC = () => {
                 </div>
               )}
               <span className="font-doodle text-sm text-doodle-text/50 line-through">
-                ${p.ListPrice.toFixed(2)}
+                {formatPrice(p.ListPrice)}
               </span>
               <span
                 className={`font-doodle text-xl font-bold ${
                   isBest ? "text-doodle-green" : "text-doodle-accent"
                 }`}
               >
-                ${salePrice.toFixed(2)}
+                {formatPrice(salePrice)}
               </span>
               <span className="font-doodle text-xs text-doodle-green font-bold">
                 {t("compare.save")} {Math.round((p.DiscountPct || 0) * 100)}%
@@ -166,7 +168,7 @@ const ComparePage: React.FC = () => {
                 isBest ? "text-doodle-green" : "text-doodle-green"
               }`}
             >
-              ${p.ListPrice.toFixed(2)}
+              {formatPrice(p.ListPrice)}
             </span>
           </div>
         );

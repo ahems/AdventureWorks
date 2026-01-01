@@ -42,7 +42,7 @@ import { toast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { formatPhoneNumber, parsePhoneNumber } from "@/lib/phoneFormatter";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CURRENCY_SYMBOLS } from "@/lib/currencies";
+import { useCurrency } from "@/context/CurrencyContext";
 
 const profileSchema = z.object({
   title: z.string().optional(),
@@ -81,6 +81,7 @@ const AccountPage: React.FC = () => {
   const { t } = useTranslation("common");
   const { items: wishlistItems, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
+  const { formatPrice } = useCurrency();
   const {
     addresses,
     addAddress,
@@ -677,7 +678,7 @@ const AccountPage: React.FC = () => {
                           {item.Name}
                         </Link>
                         <p className="font-doodle text-lg font-bold text-doodle-green mt-1">
-                          ${item.ListPrice.toFixed(2)}
+                          {formatPrice(item.ListPrice)}
                         </p>
                         <div className="flex gap-2 mt-2">
                           <button

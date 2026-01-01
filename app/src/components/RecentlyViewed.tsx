@@ -7,6 +7,7 @@ import { graphqlClient } from "@/lib/graphql-client";
 import { gql } from "graphql-request";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTranslation } from "react-i18next";
+import { useCurrency } from "@/context/CurrencyContext";
 
 // Query to fetch thumbnail photos for recently viewed products
 const GET_PRODUCT_THUMBNAILS = gql`
@@ -42,6 +43,7 @@ const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
 }) => {
   const { recentlyViewed, clearRecentlyViewed } = useRecentlyViewed();
   const { t } = useTranslation("common");
+  const { formatPrice } = useCurrency();
   const [thumbnails, setThumbnails] = useState<Map<number, string | null>>(
     new Map()
   );
@@ -153,15 +155,15 @@ const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
                   {salePrice ? (
                     <>
                       <span className="font-doodle text-xs text-doodle-text/50 line-through">
-                        ${product.ListPrice.toFixed(2)}
+                        {formatPrice(product.ListPrice)}
                       </span>
                       <span className="font-doodle text-sm font-bold text-doodle-accent">
-                        ${salePrice.toFixed(2)}
+                        {formatPrice(salePrice)}
                       </span>
                     </>
                   ) : (
                     <span className="font-doodle text-sm font-bold text-doodle-green">
-                      ${product.ListPrice.toFixed(2)}
+                      {formatPrice(product.ListPrice)}
                     </span>
                   )}
                 </div>

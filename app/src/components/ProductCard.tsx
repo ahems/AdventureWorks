@@ -8,6 +8,7 @@ import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { useCompare } from "@/context/CompareContext";
 import { useReviews } from "@/hooks/useReviews";
+import { useCurrency } from "@/context/CurrencyContext";
 import QuickViewModal from "./QuickViewModal";
 
 interface ProductCardProps {
@@ -24,6 +25,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const { addToCompare, removeFromCompare, isInCompare } = useCompare();
   const { averageRating, reviewCount } = useReviews(product.ProductID);
+  const { formatPrice } = useCurrency();
   const [quickViewOpen, setQuickViewOpen] = useState(false);
 
   const inWishlist = isInWishlist(product.ProductID);
@@ -204,11 +206,11 @@ const ProductCard: React.FC<ProductCardProps> = ({
               {salePrice ? (
                 <>
                   <span className="font-doodle text-sm text-doodle-text/50 line-through">
-                    ${product.ListPrice.toFixed(2)}
+                    {formatPrice(product.ListPrice)}
                   </span>
                   <div className="flex items-center gap-2">
                     <span className="font-doodle text-xl font-bold text-doodle-accent">
-                      ${salePrice.toFixed(2)}
+                      {formatPrice(salePrice)}
                     </span>
                     {variant === "featured" && (
                       <span className="font-doodle text-xs font-bold text-doodle-green">
@@ -221,7 +223,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
                 </>
               ) : (
                 <span className="font-doodle text-xl font-bold text-doodle-green">
-                  ${product.ListPrice.toFixed(2)}
+                  {formatPrice(product.ListPrice)}
                 </span>
               )}
             </div>

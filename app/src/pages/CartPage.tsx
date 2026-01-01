@@ -16,12 +16,14 @@ import Footer from "@/components/Footer";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { getSalePrice } from "@/types/product";
+import { useCurrency } from "@/context/CurrencyContext";
 
 const CartPage: React.FC = () => {
   const { t } = useTranslation(["cart", "common"]);
   const { items, isLoading, updateQuantity, removeFromCart, clearCart } =
     useCart();
   const { addToWishlist, isInWishlist } = useWishlist();
+  const { formatPrice } = useCurrency();
 
   // Calculate totals with sale prices
   const { subtotalBeforeDiscount, totalAfterDiscount, totalDiscount } =
@@ -198,12 +200,11 @@ const CartPage: React.FC = () => {
                         <div className="mt-2">
                           <div className="flex items-center gap-2">
                             <span className="font-doodle text-sm text-doodle-text/50 line-through">
-                              ${item.ListPrice.toFixed(2)}
+                              {formatPrice(item.ListPrice)}
                             </span>
                             <span className="font-doodle text-lg font-bold text-doodle-accent">
-                              $
-                              {(getSalePrice(item) || item.ListPrice).toFixed(
-                                2
+                              {formatPrice(
+                                getSalePrice(item) || item.ListPrice
                               )}
                             </span>
                           </div>
@@ -216,7 +217,7 @@ const CartPage: React.FC = () => {
                         </div>
                       ) : (
                         <p className="font-doodle text-lg font-bold text-doodle-green mt-2">
-                          ${item.ListPrice.toFixed(2)}
+                          {formatPrice(item.ListPrice)}
                         </p>
                       )}
                     </div>
@@ -294,11 +295,10 @@ const CartPage: React.FC = () => {
                       <p className="font-doodle text-sm text-doodle-text/70">
                         Subtotal:{" "}
                         <span className="font-bold">
-                          $
-                          {(
+                          {formatPrice(
                             (getSalePrice(item) || item.ListPrice) *
-                            item.quantity
-                          ).toFixed(2)}
+                              item.quantity
+                          )}
                         </span>
                       </p>
                     </div>
@@ -342,7 +342,7 @@ const CartPage: React.FC = () => {
                   <div className="flex justify-between">
                     <span className="text-doodle-text/70">Subtotal</span>
                     <span className="font-bold">
-                      ${subtotalBeforeDiscount.toFixed(2)}
+                      {formatPrice(subtotalBeforeDiscount)}
                     </span>
                   </div>
 
@@ -354,7 +354,7 @@ const CartPage: React.FC = () => {
                         Discounts
                       </span>
                       <span className="font-bold">
-                        -${totalDiscount.toFixed(2)}
+                        -{formatPrice(totalDiscount)}
                       </span>
                     </div>
                   )}
@@ -366,12 +366,12 @@ const CartPage: React.FC = () => {
                         shipping === 0 ? "text-doodle-green font-bold" : ""
                       }
                     >
-                      {shipping === 0 ? "FREE" : `$${shipping.toFixed(2)}`}
+                      {shipping === 0 ? "FREE" : formatPrice(shipping)}
                     </span>
                   </div>
                   {shipping > 0 && (
                     <p className="text-xs text-doodle-accent">
-                      Add ${(50 - totalAfterDiscount).toFixed(2)} more for FREE
+                      Add {formatPrice(50 - totalAfterDiscount)} more for FREE
                       shipping!
                     </p>
                   )}
@@ -381,14 +381,14 @@ const CartPage: React.FC = () => {
                   <div className="flex justify-between text-xl">
                     <span className="font-bold">Total</span>
                     <span className="font-bold text-doodle-green">
-                      ${grandTotal.toFixed(2)}
+                      {formatPrice(grandTotal)}
                     </span>
                   </div>
 
                   {totalDiscount > 0 && (
                     <p className="text-xs text-doodle-green text-center font-bold bg-doodle-green/10 py-2 border border-dashed border-doodle-green/30 flex items-center justify-center gap-1">
-                      <Twemoji emoji="🎉" size="1rem" /> You're saving $
-                      {totalDiscount.toFixed(2)} on this order!
+                      <Twemoji emoji="🎉" size="1rem" /> You're saving{" "}
+                      {formatPrice(totalDiscount)} on this order!
                     </p>
                   )}
                 </div>

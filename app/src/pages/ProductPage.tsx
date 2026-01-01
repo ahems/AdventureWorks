@@ -29,6 +29,7 @@ import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { useRecentlyViewed } from "@/context/RecentlyViewedContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { useCurrency } from "@/context/CurrencyContext";
 import { useProduct, useSubcategory, useCategory } from "@/hooks/useProducts";
 import { getSalePrice, isVariantAvailable } from "@/types/product";
 import { useReviews } from "@/hooks/useReviews";
@@ -48,6 +49,7 @@ const ProductPage: React.FC = () => {
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const { addToRecentlyViewed } = useRecentlyViewed();
   const { selectedLanguage } = useLanguage();
+  const { formatPrice } = useCurrency();
   const [quantity, setQuantity] = React.useState(1);
   const [selectedSize, setSelectedSize] = React.useState<string | undefined>(
     undefined
@@ -383,10 +385,10 @@ const ProductPage: React.FC = () => {
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-3">
                       <span className="font-doodle text-xl text-doodle-text/50 line-through">
-                        ${product.ListPrice.toFixed(2)}
+                        {formatPrice(product.ListPrice)}
                       </span>
                       <span className="font-doodle text-3xl font-bold text-doodle-accent">
-                        ${salePrice.toFixed(2)}
+                        {formatPrice(salePrice)}
                       </span>
                     </div>
                     <span className="font-doodle text-sm text-doodle-green font-bold">
@@ -397,7 +399,7 @@ const ProductPage: React.FC = () => {
                   </div>
                 ) : (
                   <span className="font-doodle text-3xl font-bold text-doodle-green">
-                    ${product.ListPrice.toFixed(2)}
+                    {formatPrice(product.ListPrice)}
                   </span>
                 )}
               </div>

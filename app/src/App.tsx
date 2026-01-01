@@ -9,6 +9,7 @@ import { WishlistProvider } from "@/context/WishlistContext";
 import { RecentlyViewedProvider } from "@/context/RecentlyViewedContext";
 import { CompareProvider } from "@/context/CompareContext";
 import { LanguageProvider } from "@/context/LanguageContext";
+import { CurrencyProvider } from "@/context/CurrencyContext";
 import CompareBar from "@/components/CompareBar";
 import "./i18n"; // Initialize i18next
 import Index from "./pages/Index";
@@ -34,61 +35,63 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <LanguageProvider>
-        <AuthProvider>
-          <WishlistProvider>
-            <RecentlyViewedProvider>
-              <CompareProvider>
-                <CartProvider>
-                  <Toaster />
-                  <Sonner />
-                  <BrowserRouter
-                    future={{
-                      v7_startTransition: true,
-                      v7_relativeSplatPath: true,
-                    }}
-                  >
-                    <CompareBar />
-                    <Routes>
-                      <Route path="/" element={<Index />} />
-                      <Route
-                        path="/category/:categoryId"
-                        element={<CategoryPage />}
-                      />
-                      <Route
-                        path="/product/:productId"
-                        element={<ProductPage />}
-                      />
-                      <Route path="/cart" element={<CartPage />} />
-                      <Route path="/checkout" element={<CheckoutPage />} />
-                      <Route
-                        path="/order-confirmation"
-                        element={<OrderConfirmationPage />}
-                      />
-                      <Route path="/auth" element={<AuthPage />} />
-                      <Route path="/account" element={<AccountPage />} />
-                      <Route path="/sale" element={<SalePage />} />
-                      <Route path="/search" element={<SearchPage />} />
-                      <Route path="/wishlist" element={<WishlistPage />} />
-                      <Route
-                        path="/order-tracking"
-                        element={<OrderTrackingPage />}
-                      />
-                      <Route
-                        path="/order-tracking/:orderId"
-                        element={<OrderTrackingPage />}
-                      />
-                      <Route path="/returns" element={<ReturnsPage />} />
-                      <Route path="/faq" element={<FAQPage />} />
-                      <Route path="/compare" element={<ComparePage />} />
-                      {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                  </BrowserRouter>
-                </CartProvider>
-              </CompareProvider>
-            </RecentlyViewedProvider>
-          </WishlistProvider>
-        </AuthProvider>
+        <CurrencyProvider>
+          <AuthProvider>
+            <WishlistProvider>
+              <RecentlyViewedProvider>
+                <CompareProvider>
+                  <CartProvider>
+                    <Toaster />
+                    <Sonner />
+                    <BrowserRouter
+                      future={{
+                        v7_startTransition: true,
+                        v7_relativeSplatPath: true,
+                      }}
+                    >
+                      <CompareBar />
+                      <Routes>
+                        <Route path="/" element={<Index />} />
+                        <Route
+                          path="/category/:categoryId"
+                          element={<CategoryPage />}
+                        />
+                        <Route
+                          path="/product/:productId"
+                          element={<ProductPage />}
+                        />
+                        <Route path="/cart" element={<CartPage />} />
+                        <Route path="/checkout" element={<CheckoutPage />} />
+                        <Route
+                          path="/order-confirmation"
+                          element={<OrderConfirmationPage />}
+                        />
+                        <Route path="/auth" element={<AuthPage />} />
+                        <Route path="/account" element={<AccountPage />} />
+                        <Route path="/sale" element={<SalePage />} />
+                        <Route path="/search" element={<SearchPage />} />
+                        <Route path="/wishlist" element={<WishlistPage />} />
+                        <Route
+                          path="/order-tracking"
+                          element={<OrderTrackingPage />}
+                        />
+                        <Route
+                          path="/order-tracking/:orderId"
+                          element={<OrderTrackingPage />}
+                        />
+                        <Route path="/returns" element={<ReturnsPage />} />
+                        <Route path="/faq" element={<FAQPage />} />
+                        <Route path="/compare" element={<ComparePage />} />
+                        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                        <Route path="*" element={<NotFound />} />
+                      </Routes>
+                    </BrowserRouter>
+                  </CartProvider>
+                </CompareProvider>
+              </RecentlyViewedProvider>
+            </WishlistProvider>
+          </AuthProvider>
+        </CurrencyProvider>
       </LanguageProvider>
     </TooltipProvider>
   </QueryClientProvider>

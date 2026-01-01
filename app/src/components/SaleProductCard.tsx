@@ -7,6 +7,7 @@ import { OptimizedImage } from "@/components/OptimizedImage";
 import { useCart } from "@/context/CartContext";
 import { useReviews } from "@/hooks/useReviews";
 import { toast } from "@/hooks/use-toast";
+import { useCurrency } from "@/context/CurrencyContext";
 import NotifyWhenAvailable from "@/components/NotifyWhenAvailable";
 import {
   Select,
@@ -24,6 +25,7 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
   const { t } = useTranslation("common");
   const { addToCart } = useCart();
   const { averageRating } = useReviews(product.ProductID);
+  const { formatPrice } = useCurrency();
   const [selectedSize, setSelectedSize] = useState<string | undefined>(
     undefined
   );
@@ -146,10 +148,10 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
         <div className="mb-3">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-doodle text-sm text-doodle-text/50 line-through">
-              ${product.ListPrice.toFixed(2)}
+              {formatPrice(product.ListPrice)}
             </span>
             <span className="font-doodle text-xl font-bold text-doodle-accent">
-              ${salePrice?.toFixed(2)}
+              {salePrice && formatPrice(salePrice)}
             </span>
           </div>
           <span className="font-doodle text-xs text-doodle-green font-bold">

@@ -16,6 +16,7 @@ import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { useCategories } from "@/hooks/useProducts";
 import { useLanguage } from "@/context/LanguageContext";
+import { useCurrency } from "@/context/CurrencyContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +32,7 @@ const Header: React.FC = () => {
   const { data: categories = [], isLoading: categoriesLoading } =
     useCategories();
   const { selectedLanguage, setSelectedLanguage, languages } = useLanguage();
+  const { setSelectedCurrency, getCurrencyForLanguage } = useCurrency();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -46,6 +48,9 @@ const Header: React.FC = () => {
   const handleLanguageChange = (code: string) => {
     setSelectedLanguage(code);
     i18n.changeLanguage(code);
+    // Automatically change currency based on language
+    const newCurrency = getCurrencyForLanguage(code);
+    setSelectedCurrency(newCurrency);
   };
 
   // Close user menu when clicking outside

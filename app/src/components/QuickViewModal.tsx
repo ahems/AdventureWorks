@@ -23,6 +23,7 @@ import { useWishlist } from "@/context/WishlistContext";
 import { useCompare } from "@/context/CompareContext";
 import { useReviews } from "@/hooks/useReviews";
 import { useTranslation } from "react-i18next";
+import { useCurrency } from "@/context/CurrencyContext";
 
 interface QuickViewModalProps {
   product: Product;
@@ -40,6 +41,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
   const { addToCompare, removeFromCompare, isInCompare } = useCompare();
   const { averageRating, reviewCount } = useReviews(product.ProductID);
   const { t } = useTranslation("common");
+  const { formatPrice } = useCurrency();
 
   const [selectedSize, setSelectedSize] = useState<string | undefined>(
     product.availableSizes?.[0]
@@ -163,10 +165,10 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
               {salePrice ? (
                 <>
                   <span className="font-doodle text-2xl font-bold text-doodle-accent">
-                    ${salePrice.toFixed(2)}
+                    {formatPrice(salePrice)}
                   </span>
                   <span className="font-doodle text-lg text-doodle-text/50 line-through">
-                    ${product.ListPrice.toFixed(2)}
+                    {formatPrice(product.ListPrice)}
                   </span>
                   <span className="font-doodle text-sm font-bold text-doodle-green">
                     {t("quickViewModal.save")}{" "}
@@ -175,7 +177,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
                 </>
               ) : (
                 <span className="font-doodle text-2xl font-bold text-doodle-green">
-                  ${product.ListPrice.toFixed(2)}
+                  {formatPrice(product.ListPrice)}
                 </span>
               )}
             </div>
