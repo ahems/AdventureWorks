@@ -77,3 +77,15 @@ public class ProductPhotoThumbnailData
     public string LargePhotoFileName { get; set; } = string.Empty;
     public byte[]? ThumbNailPhoto { get; set; }
 }
+
+public class SemanticSearchResult
+{
+    public int ProductID { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public decimal? ListPrice { get; set; }
+    public string? Color { get; set; }
+    public double SimilarityScore { get; set; }
+    public string MatchSource { get; set; } = string.Empty; // "Description" or "Review"
+    public string? MatchText { get; set; }
+}

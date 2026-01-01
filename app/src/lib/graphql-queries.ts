@@ -12,6 +12,8 @@ export const GET_PRODUCT_REVIEWS = gql`
         EmailAddress
         Rating
         Comments
+        HelpfulVotes
+        UserID
       }
     }
   }
@@ -29,6 +31,8 @@ export const GET_ALL_REVIEWS = gql`
         EmailAddress
         Rating
         Comments
+        HelpfulVotes
+        UserID
       }
     }
   }

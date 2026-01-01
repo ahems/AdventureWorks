@@ -523,16 +523,6 @@ const ProductPage: React.FC = () => {
                       <span className="text-doodle-text">{product.Style}</span>
                     </>
                   )}
-                  {product.StandardCost && (
-                    <>
-                      <span className="text-doodle-text/60">
-                        {t("product:specifications.cost")}
-                      </span>
-                      <span className="text-doodle-text">
-                        ${product.StandardCost.toFixed(2)}
-                      </span>
-                    </>
-                  )}
                   {product.SellStartDate && (
                     <>
                       <span className="text-doodle-text/60">

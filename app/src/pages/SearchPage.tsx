@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   Search,
   SlidersHorizontal,
   X,
   ChevronLeft,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -17,6 +19,7 @@ import {
 } from "@/hooks/useProducts";
 import { Product, getSalePrice } from "@/types/product";
 import { useAllReviews } from "@/hooks/useReviews";
+import { useSemanticSearch } from "@/hooks/useSemanticSearch";
 import {
   Select,
   SelectContent,
@@ -32,6 +35,8 @@ type SortOption =
   | "discount"
   | "rating";
 
+type SearchMode = "keyword" | "semantic";
+
 const SearchPage: React.FC = () => {
   const { t } = useTranslation("common");
   const [searchParams, setSearchParams] = useSearchParams();
@@ -44,6 +49,8 @@ const SearchPage: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(12);
+  const [searchMode, setSearchMode] = useState<SearchMode>("keyword");
+  const [semanticQuerySubmitted, setSemanticQuerySubmitted] = useState("");
 
   const { data: products = [], isLoading: productsLoading } = useProducts();
   const { data: categories = [], isLoading: categoriesLoading } =
@@ -51,7 +58,20 @@ const SearchPage: React.FC = () => {
   const { data: subcategories = [] } = useSubcategories();
   const { data: allReviews = [] } = useAllReviews();
 
-  const isLoading = productsLoading || categoriesLoading;
+  // Semantic search hook - only enabled when in semantic mode and query is submitted
+  const {
+    data: semanticSearchData,
+    isLoading: semanticSearchLoading,
+    error: semanticSearchError,
+  } = useSemanticSearch(
+    semanticQuerySubmitted,
+    searchMode === "semantic" && semanticQuerySubmitted.length > 0
+  );
+
+  const isLoading =
+    productsLoading ||
+    categoriesLoading ||
+    (searchMode === "semantic" && semanticSearchLoading);
 
   // Create a map of product ratings from all reviews
   const productRatings = useMemo(() => {
@@ -81,8 +101,83 @@ const SearchPage: React.FC = () => {
     };
   }, [products]);
 
+  // Map semantic search results to products
+  const semanticProducts = useMemo(() => {
+    if (searchMode !== "semantic" || !semanticSearchData) {
+      return [];
+    }
+
+    // Map semantic search result IDs to actual Product objects
+    const productMap = new Map(products.map((p) => [p.ProductID, p]));
+    return semanticSearchData.results
+      .map((result) => productMap.get(result.ProductID))
+      .filter((p): p is Product => p !== undefined);
+  }, [searchMode, semanticSearchData, products]);
+
   // Filter and sort products
   const filteredProducts = useMemo(() => {
+    // Use semantic search results if in semantic mode
+    if (searchMode === "semantic" && semanticQuerySubmitted) {
+      let result = [...semanticProducts];
+
+      // Still apply category and price filters to semantic results
+      if (selectedCategory !== null) {
+        const categorySubcategoryIds = subcategories
+          .filter((s) => s.ProductCategoryID === selectedCategory)
+          .map((s) => s.ProductSubcategoryID);
+        result = result.filter(
+          (p) =>
+            p.ProductSubcategoryID &&
+            categorySubcategoryIds.includes(p.ProductSubcategoryID)
+        );
+      }
+
+      result = result.filter((p) => {
+        const price = getSalePrice(p) || p.ListPrice;
+        return price >= priceRange[0] && price <= priceRange[1];
+      });
+
+      // Semantic results are already sorted by relevance
+      // But allow re-sorting by price, discount, or rating
+      if (sortBy !== "relevance") {
+        switch (sortBy) {
+          case "price-asc":
+            result.sort((a, b) => {
+              const priceA = getSalePrice(a) || a.ListPrice;
+              const priceB = getSalePrice(b) || b.ListPrice;
+              return priceA - priceB;
+            });
+            break;
+          case "price-desc":
+            result.sort((a, b) => {
+              const priceA = getSalePrice(a) || a.ListPrice;
+              const priceB = getSalePrice(b) || b.ListPrice;
+              return priceB - priceA;
+            });
+            break;
+          case "discount":
+            result.sort((a, b) => (b.DiscountPct || 0) - (a.DiscountPct || 0));
+            break;
+          case "rating":
+            result.sort((a, b) => {
+              const ratingDataA = productRatings.get(a.ProductID);
+              const ratingDataB = productRatings.get(b.ProductID);
+              const ratingA = ratingDataA
+                ? ratingDataA.total / ratingDataA.count
+                : 0;
+              const ratingB = ratingDataB
+                ? ratingDataB.total / ratingDataB.count
+                : 0;
+              return ratingB - ratingA;
+            });
+            break;
+        }
+      }
+
+      return result;
+    }
+
+    // Keyword search mode (original logic)
     let result = [...products];
 
     // Search by name
@@ -162,6 +257,9 @@ const SearchPage: React.FC = () => {
     sortBy,
     productRatings,
     subcategories,
+    searchMode,
+    semanticQuerySubmitted,
+    semanticProducts,
   ]);
 
   // Reset to page 1 when filters change
@@ -234,6 +332,11 @@ const SearchPage: React.FC = () => {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setSearchParams(searchQuery ? { q: searchQuery } : {});
+
+    // If in semantic mode, trigger the search
+    if (searchMode === "semantic" && searchQuery.trim()) {
+      setSemanticQuerySubmitted(searchQuery.trim());
+    }
   };
 
   const clearFilters = () => {
@@ -355,30 +458,93 @@ const SearchPage: React.FC = () => {
             </h1>
 
             {/* Search Form */}
-            <form onSubmit={handleSearch} className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-text/50" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={t("search.placeholder")}
-                  className="w-full pl-10 pr-4 py-3 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
-                />
+            <form onSubmit={handleSearch} className="space-y-3">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-text/50" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={
+                      searchMode === "semantic"
+                        ? "Describe what you're looking for..."
+                        : t("search.placeholder")
+                    }
+                    className="w-full pl-10 pr-4 py-3 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="doodle-button doodle-button-primary px-6"
+                >
+                  Search
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="doodle-button flex items-center gap-2 md:hidden"
+                >
+                  <SlidersHorizontal className="w-5 h-5" />
+                </button>
               </div>
-              <button
-                type="submit"
-                className="doodle-button doodle-button-primary px-6"
-              >
-                Search
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowFilters(!showFilters)}
-                className="doodle-button flex items-center gap-2 md:hidden"
-              >
-                <SlidersHorizontal className="w-5 h-5" />
-              </button>
+
+              {/* Search Mode Toggle */}
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchMode("keyword");
+                    setSemanticQuerySubmitted("");
+                  }}
+                  className={`font-doodle text-sm px-4 py-2 border-2 transition-all ${
+                    searchMode === "keyword"
+                      ? "border-doodle-accent bg-doodle-accent text-white"
+                      : "border-doodle-text/30 bg-white text-doodle-text hover:border-doodle-accent"
+                  }`}
+                >
+                  Keyword Search
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSearchMode("semantic")}
+                  className={`font-doodle text-sm px-4 py-2 border-2 transition-all flex items-center gap-2 ${
+                    searchMode === "semantic"
+                      ? "border-doodle-accent bg-doodle-accent text-white"
+                      : "border-doodle-text/30 bg-white text-doodle-text hover:border-doodle-accent"
+                  }`}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  AI Semantic Search
+                </button>
+                {searchMode === "semantic" && semanticSearchData && (
+                  <span className="font-doodle text-xs text-doodle-text/60">
+                    {semanticSearchData.descriptionMatches} description matches,{" "}
+                    {semanticSearchData.reviewMatches} review matches
+                  </span>
+                )}
+              </div>
+
+              {/* Semantic Search Info */}
+              {searchMode === "semantic" && (
+                <div className="bg-doodle-accent/10 border-2 border-doodle-accent/30 p-3">
+                  <p className="font-doodle text-xs text-doodle-text/80">
+                    <Sparkles className="w-4 h-4 inline mr-1" />
+                    AI-powered search uses embeddings to find products based on
+                    meaning, not just keywords. Try: "waterproof gear for rainy
+                    hikes" or "lightweight equipment for cyclists"
+                  </p>
+                </div>
+              )}
+
+              {semanticSearchError && (
+                <div className="bg-red-50 border-2 border-red-200 p-3">
+                  <p className="font-doodle text-xs text-red-600">
+                    Error performing semantic search. Falling back to keyword
+                    search.
+                  </p>
+                </div>
+              )}
             </form>
           </div>
         </section>

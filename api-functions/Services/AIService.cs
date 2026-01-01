@@ -412,6 +412,35 @@ Translate the description into each target language. Return ONLY a valid JSON ob
         return embeddings;
     }
 
+    public async Task<byte[]> GenerateQueryEmbeddingAsync(string queryText)
+    {
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var embeddingClient = client.GetEmbeddingClient(_embeddingDeploymentName);
+
+        _logger.LogInformation(
+            "Generating embedding for search query (Length: {length} chars)",
+            queryText.Length
+        );
+
+        // Generate embedding for the query text
+        var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(queryText);
+        var embeddingVector = embeddingResponse.Value.ToFloats();
+
+        // Convert ReadOnlyMemory<float> to byte array for VARBINARY comparison
+        var floatArray = embeddingVector.ToArray();
+        var embeddingBytes = new byte[floatArray.Length * sizeof(float)];
+        Buffer.BlockCopy(floatArray, 0, embeddingBytes, 0, embeddingBytes.Length);
+
+        _logger.LogInformation(
+            "Generated query embedding: {dimensions} dimensions, {bytes} bytes",
+            floatArray.Length,
+            embeddingBytes.Length
+        );
+
+        return embeddingBytes;
+    }
+
     public async Task<List<GeneratedReview>> GenerateProductReviewsAsync(List<ProductForReviewGeneration> products)
     {
         var credential = new DefaultAzureCredential();

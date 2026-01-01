@@ -418,4 +418,40 @@ public class ProductService
             ThumbnailFileName = thumbnailFileName
         });
     }
+
+    public async Task<List<SemanticSearchResult>> SearchProductsByDescriptionEmbeddingAsync(byte[] queryEmbedding, int topN = 20)
+    {
+        using var connection = await GetConnectionAsync();
+
+        // Use VECTOR_DISTANCE for semantic similarity search
+        // Returns products with the most similar descriptions to the query
+        var sql = @"
+            SELECT TOP (@TopN)
+                p.ProductID,
+                p.Name,
+                pd.Description,
+                p.ListPrice,
+                p.Color,
+                VECTOR_DISTANCE('cosine', pd.DescriptionEmbedding, @QueryEmbedding) AS SimilarityScore,
+                'Description' AS MatchSource,
+                pd.Description AS MatchText
+            FROM Production.Product p
+            INNER JOIN Production.ProductModel pm ON p.ProductModelID = pm.ProductModelID
+            INNER JOIN Production.ProductModelProductDescriptionCulture pmpdc 
+                ON pm.ProductModelID = pmpdc.ProductModelID
+            INNER JOIN Production.ProductDescription pd 
+                ON pmpdc.ProductDescriptionID = pd.ProductDescriptionID
+            WHERE p.FinishedGoodsFlag = 1
+              AND pd.DescriptionEmbedding IS NOT NULL
+              AND pmpdc.CultureID = 'en'
+            ORDER BY VECTOR_DISTANCE('cosine', pd.DescriptionEmbedding, @QueryEmbedding)";
+
+        var results = await connection.QueryAsync<SemanticSearchResult>(sql, new
+        {
+            TopN = topN,
+            QueryEmbedding = queryEmbedding
+        });
+
+        return results.ToList();
+    }
 }

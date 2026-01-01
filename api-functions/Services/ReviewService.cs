@@ -112,4 +112,40 @@ public class ReviewService
             review.Comments
         });
     }
+
+    public async Task<List<SemanticSearchResult>> SearchProductsByReviewEmbeddingAsync(byte[] queryEmbedding, int topN = 20)
+    {
+        using var connection = await GetConnectionAsync();
+
+        // Use VECTOR_DISTANCE for semantic similarity search
+        // Returns products with reviews that are most similar to the query
+        var sql = @"
+            SELECT TOP (@TopN)
+                p.ProductID,
+                p.Name,
+                pd.Description,
+                p.ListPrice,
+                p.Color,
+                VECTOR_DISTANCE('cosine', pr.CommentsEmbedding, @QueryEmbedding) AS SimilarityScore,
+                'Review' AS MatchSource,
+                pr.Comments AS MatchText
+            FROM Production.Product p
+            INNER JOIN Production.ProductReview pr ON p.ProductID = pr.ProductID
+            LEFT JOIN Production.ProductModel pm ON p.ProductModelID = pm.ProductModelID
+            LEFT JOIN Production.ProductModelProductDescriptionCulture pmpdc 
+                ON pm.ProductModelID = pmpdc.ProductModelID AND pmpdc.CultureID = 'en'
+            LEFT JOIN Production.ProductDescription pd 
+                ON pmpdc.ProductDescriptionID = pd.ProductDescriptionID
+            WHERE p.FinishedGoodsFlag = 1
+              AND pr.CommentsEmbedding IS NOT NULL
+            ORDER BY VECTOR_DISTANCE('cosine', pr.CommentsEmbedding, @QueryEmbedding)";
+
+        var results = await connection.QueryAsync<SemanticSearchResult>(sql, new
+        {
+            TopN = topN,
+            QueryEmbedding = queryEmbedding
+        });
+
+        return results.ToList();
+    }
 }

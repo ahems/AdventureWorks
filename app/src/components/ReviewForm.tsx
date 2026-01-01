@@ -14,10 +14,15 @@ interface ReviewFormProps {
     rating: number;
     title: string;
     comment: string;
-  }) => void;
+  }) => Promise<void>;
+  hasUserReviewed?: boolean;
 }
 
-const ReviewForm: React.FC<ReviewFormProps> = ({ productId, onSubmit }) => {
+const ReviewForm: React.FC<ReviewFormProps> = ({
+  productId,
+  onSubmit,
+  hasUserReviewed = false,
+}) => {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const { t } = useTranslation("common");
@@ -66,7 +71,21 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ productId, onSubmit }) => {
     );
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  if (hasUserReviewed) {
+    return (
+      <div className="doodle-card p-6 text-center">
+        <span className="text-4xl mb-2 block">✅</span>
+        <h3 className="font-doodle text-lg font-bold text-doodle-text mb-2">
+          {t("reviewForm.alreadyReviewed")}
+        </h3>
+        <p className="font-doodle text-doodle-text/70">
+          {t("reviewForm.thankYouForReview")}
+        </p>
+      </div>
+    );
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
 
@@ -85,24 +104,33 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ productId, onSubmit }) => {
 
     setIsSubmitting(true);
 
-    onSubmit({
-      productId,
-      userName: `${user!.firstName} ${user!.lastName[0]}.`,
-      rating: result.data.rating,
-      title: result.data.title,
-      comment: result.data.comment,
-    });
+    try {
+      await onSubmit({
+        productId,
+        userName: `${user!.firstName} ${user!.lastName[0]}.`,
+        rating: result.data.rating,
+        title: result.data.title,
+        comment: result.data.comment,
+      });
 
-    // Reset form
-    setRating(0);
-    setTitle("");
-    setComment("");
-    setIsSubmitting(false);
+      // Reset form
+      setRating(0);
+      setTitle("");
+      setComment("");
 
-    toast({
-      title: t("reviewForm.reviewSubmitted"),
-      description: t("reviewForm.thanksForFeedback"),
-    });
+      toast({
+        title: t("reviewForm.reviewSubmitted"),
+        description: t("reviewForm.thankYouForFeedback"),
+      });
+    } catch (error) {
+      toast({
+        title: t("reviewForm.error"),
+        description: t("reviewForm.failedToSubmit"),
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

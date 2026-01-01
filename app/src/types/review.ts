@@ -19,4 +19,6 @@ export interface ProductReview {
   EmailAddress: string;
   Rating: number;
   Comments: string;
+  HelpfulVotes: number;
+  UserID?: number;
 }

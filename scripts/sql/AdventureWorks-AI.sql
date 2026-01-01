@@ -157,7 +157,66 @@ PRINT 'ProductReview.CommentsEmbedding column added for vector embeddings';
 
 GO
 
--- Step 11: Create view for semantic review search
+-- Step 11: Add helpful vote counter to ProductReview
+-- Tracks the number of "helpful" votes each review receives from customers
+-- Defaults to 0 for all existing and new reviews
+-- Useful for sorting and displaying most helpful reviews
+
+ALTER TABLE [Production].[ProductReview]
+ADD [HelpfulVotes] INT NOT NULL DEFAULT 0;
+
+PRINT 'ProductReview.HelpfulVotes column added for tracking helpful votes';
+
+GO
+
+-- Step 12: Add UserID column to ProductReview
+-- Stores the BusinessEntityID to link reviews to user accounts in Person.Person table
+-- Nullable to preserve existing reviews that don't have a UserID
+-- Enables features like: preventing duplicate reviews, edit/delete own reviews, and tracking user activity
+
+ALTER TABLE [Production].[ProductReview]
+ADD [UserID] INT NULL;
+
+PRINT 'ProductReview.UserID column added for linking reviews to user accounts';
+
+GO
+
+-- Step 12a: Add foreign key constraint to Person.Person
+-- Links UserID directly to the Person table via BusinessEntityID
+-- This enforces referential integrity - reviews can only reference valid users
+
+ALTER TABLE [Production].[ProductReview]
+ADD CONSTRAINT [FK_ProductReview_Person_UserID]
+FOREIGN KEY ([UserID]) REFERENCES [Person].[Person]([BusinessEntityID]);
+
+PRINT 'Added foreign key constraint linking UserID to Person.BusinessEntityID';
+
+GO
+
+-- Step 12b: Add unique constraint to prevent duplicate reviews per user
+-- Ensures each user can only submit one review per product
+-- Filtered to exclude legacy reviews that don't have a UserID
+
+CREATE UNIQUE NONCLUSTERED INDEX [IX_ProductReview_ProductID_UserID_Unique]
+ON [Production].[ProductReview]([ProductID], [UserID])
+WHERE [UserID] IS NOT NULL;
+
+PRINT 'Added unique constraint on (ProductID, UserID) to prevent duplicate reviews';
+
+GO
+
+-- Step 12c: Add index on UserID for query performance
+-- Enables efficient lookup of all reviews by a specific user
+
+CREATE NONCLUSTERED INDEX [IX_ProductReview_UserID]
+ON [Production].[ProductReview]([UserID])
+WHERE [UserID] IS NOT NULL;
+
+PRINT 'Added index on UserID for improved query performance';
+
+GO
+
+-- Step 13: Create view for semantic review search
 -- Enables vector similarity search on product reviews via DAB API
 -- Useful for finding reviews based on semantic meaning rather than keyword matching
 
@@ -171,6 +230,8 @@ SELECT
     pr.[Rating],
     pr.[Comments],
     pr.[CommentsEmbedding],
+    pr.[HelpfulVotes],
+    pr.[UserID],
     pr.[ModifiedDate],
     p.[Name] AS [ProductName],
     p.[ProductNumber]

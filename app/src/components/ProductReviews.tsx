@@ -20,6 +20,7 @@ const ProductReviews: React.FC<ProductReviewsProps> = ({ productId }) => {
     addReview,
     markAsUseful,
     hasUserMarkedUseful,
+    hasUserReviewedProduct,
     averageRating,
     reviewCount,
   } = useReviews(productId);
@@ -27,14 +28,18 @@ const ProductReviews: React.FC<ProductReviewsProps> = ({ productId }) => {
   const { t } = useTranslation("common");
   const [sortBy, setSortBy] = useState<SortOption>("newest");
 
-  const handleSubmitReview = (review: {
+  const handleSubmitReview = async (review: {
     productId: number;
     userName: string;
     rating: number;
     title: string;
     comment: string;
   }) => {
-    addReview(review);
+    try {
+      await addReview(review, user?.email, user?.businessEntityId);
+    } catch (error) {
+      console.error("Failed to submit review:", error);
+    }
   };
 
   const handleMarkUseful = (reviewId: string) => {
@@ -135,7 +140,15 @@ const ProductReviews: React.FC<ProductReviewsProps> = ({ productId }) => {
           </div>
 
           {/* Review Form */}
-          <ReviewForm productId={productId} onSubmit={handleSubmitReview} />
+          <ReviewForm
+            productId={productId}
+            onSubmit={handleSubmitReview}
+            hasUserReviewed={
+              user
+                ? hasUserReviewedProduct(user.businessEntityId, productId)
+                : false
+            }
+          />
         </div>
 
         {/* Right Column: Reviews List */}
