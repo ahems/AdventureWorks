@@ -61,7 +61,7 @@ if [ -z "$FUNCTION_APP_URL" ]; then
   exit 1
 fi
 
-FUNCTION_URL="${FUNCTION_APP_URL}/api/TranslateLanguageFile"
+FUNCTION_URL="${FUNCTION_APP_URL}/api/TranslateLanguageFile_HttpStart"
 
 echo "Function URL: $FUNCTION_URL"
 echo ""
@@ -176,37 +176,84 @@ for SOURCE_FILE in "${SOURCE_FILES[@]}"; do
     SUCCESS_FLAG=false
     
     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-      # Make the API request
+      # Make the API request to start orchestration
       TEMP_FILE="/tmp/translation_${lang_code}_${FILE_NAME}"
       HTTP_STATUS=$(curl -s -w "%{http_code}" -o "$TEMP_FILE" \
         -X POST "$FUNCTION_URL" \
         -H "Content-Type: application/json" \
         -d "$REQUEST_PAYLOAD")
       
-      if [ "$HTTP_STATUS" -eq 200 ]; then
-        # Check if response is valid JSON
-        if jq -e '.' "$TEMP_FILE" >/dev/null 2>&1; then
-          # Check if it's an error response
-          if jq -e '.error' "$TEMP_FILE" >/dev/null 2>&1; then
-            ERROR_MSG=$(jq -r '.error' "$TEMP_FILE")
+      if [ "$HTTP_STATUS" -eq 202 ]; then
+        # Orchestration started - get status URL
+        STATUS_URL=$(jq -r '.statusUrl' "$TEMP_FILE" 2>/dev/null)
+        
+        if [ -z "$STATUS_URL" ] || [ "$STATUS_URL" = "null" ]; then
+          echo "  ✗ Failed: No status URL returned"
+          FAILED=$((FAILED + 1))
+          FAILED_ITEMS+=("$FILE_NAME → $lang_code: No status URL")
+          SUCCESS_FLAG=false
+          break
+        fi
+        
+        # Poll for completion
+        echo "  ⏳ Orchestration started, waiting for completion..."
+        MAX_POLL_ATTEMPTS=60  # 5 minutes max (5 seconds per attempt)
+        POLL_ATTEMPT=0
+        
+        while [ $POLL_ATTEMPT -lt $MAX_POLL_ATTEMPTS ]; do
+          sleep 5
+          POLL_ATTEMPT=$((POLL_ATTEMPT + 1))
+          
+          STATUS_RESPONSE=$(curl -s "$STATUS_URL")
+          RUNTIME_STATUS=$(echo "$STATUS_RESPONSE" | jq -r '.runtimeStatus' 2>/dev/null)
+          
+          if [ "$RUNTIME_STATUS" = "Completed" ]; then
+            # Get the output
+            TRANSLATED_JSON=$(echo "$STATUS_RESPONSE" | jq -r '.output' 2>/dev/null)
+            
+            if [ -z "$TRANSLATED_JSON" ] || [ "$TRANSLATED_JSON" = "null" ]; then
+              echo "  ✗ Failed: Empty output from orchestration"
+              FAILED=$((FAILED + 1))
+              FAILED_ITEMS+=("$FILE_NAME → $lang_code: Empty output")
+              SUCCESS_FLAG=false
+              break 2
+            fi
+            
+            # Parse and save the translated JSON
+            echo "$TRANSLATED_JSON" | jq '.' > "$OUTPUT_FILE" 2>/dev/null
+            
+            if [ $? -eq 0 ]; then
+              FILE_SIZE=$(wc -c < "$OUTPUT_FILE")
+              echo "  ✓ Success: $OUTPUT_FILE (${FILE_SIZE} bytes, ${POLL_ATTEMPT} polls)"
+              SUCCESS=$((SUCCESS + 1))
+              SUCCESS_FLAG=true
+              break 2
+            else
+              echo "  ✗ Failed: Invalid JSON in output"
+              FAILED=$((FAILED + 1))
+              FAILED_ITEMS+=("$FILE_NAME → $lang_code: Invalid JSON output")
+              SUCCESS_FLAG=false
+              break 2
+            fi
+          elif [ "$RUNTIME_STATUS" = "Failed" ]; then
+            ERROR_MSG=$(echo "$STATUS_RESPONSE" | jq -r '.output // "Orchestration failed"' 2>/dev/null)
             echo "  ✗ Failed: $ERROR_MSG"
             FAILED=$((FAILED + 1))
             FAILED_ITEMS+=("$FILE_NAME → $lang_code: $ERROR_MSG")
             SUCCESS_FLAG=false
-            break
+            break 2
+          elif [ "$RUNTIME_STATUS" = "Running" ] || [ "$RUNTIME_STATUS" = "Pending" ]; then
+            # Still running, continue polling
+            echo "  ⏳ Still processing... (attempt $POLL_ATTEMPT/$MAX_POLL_ATTEMPTS)"
           else
-            # Success - save the file
-            jq '.' "$TEMP_FILE" > "$OUTPUT_FILE"
-            FILE_SIZE=$(wc -c < "$OUTPUT_FILE")
-            echo "  ✓ Success: $OUTPUT_FILE (${FILE_SIZE} bytes)"
-            SUCCESS=$((SUCCESS + 1))
-            SUCCESS_FLAG=true
-            break
+            echo "  ⚠ Unknown status: $RUNTIME_STATUS"
           fi
-        else
-          echo "  ✗ Failed: Invalid JSON response"
+        done
+        
+        if [ $POLL_ATTEMPT -ge $MAX_POLL_ATTEMPTS ]; then
+          echo "  ✗ Failed: Orchestration timeout after $((MAX_POLL_ATTEMPTS * 5)) seconds"
           FAILED=$((FAILED + 1))
-          FAILED_ITEMS+=("$FILE_NAME → $lang_code: Invalid JSON response")
+          FAILED_ITEMS+=("$FILE_NAME → $lang_code: Orchestration timeout")
           SUCCESS_FLAG=false
           break
         fi

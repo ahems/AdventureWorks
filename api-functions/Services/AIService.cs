@@ -822,6 +822,69 @@ Return the complete translated version with all values translated to {languageNa
         }
     }
 
+    public async Task<string> TranslateTextAsync(
+        string text,
+        string languageCode,
+        string languageName)
+    {
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var chatClient = client.GetChatClient(_deploymentName);
+
+        // Get region-specific information
+        var regionalInfo = GetRegionalInfo(languageCode);
+
+        // Check if this is an English regional variant
+        var isEnglishVariant = languageCode.ToLowerInvariant().StartsWith("en-");
+
+        var systemPrompt = isEnglishVariant
+            ? $@"You are a professional localizer adapting text from American English to {languageName}.
+
+CRITICAL INSTRUCTIONS:
+1. Apply regional spelling conventions (e.g., 'colour' vs 'color', 'favourite' vs 'favorite')
+2. Use regional vocabulary and phrases where appropriate
+3. Preserve HTML tags, placeholders like {{{{count}}}}, {{{{percent}}}}, {{{{name}}}}, etc. exactly as they appear
+4. Maintain the tone and style of the original text
+5. Keep technical terms, brand names, and product codes in English
+6. For email addresses: use regional suffix {regionalInfo.EmailSuffix}
+7. For cities/locations: use realistic names from {string.Join(", ", regionalInfo.ExampleCities)}
+8. Return ONLY the adapted text, nothing else"
+            : $@"You are a professional translator translating from English to {languageName}.
+
+CRITICAL INSTRUCTIONS:
+1. Translate the text naturally while maintaining its original tone and intent
+2. Preserve HTML tags, placeholders like {{{{count}}}}, {{{{percent}}}}, {{{{name}}}}, etc. exactly as they appear
+3. Keep technical terms, brand names, and product codes in English
+4. For email addresses: use regional suffix {regionalInfo.EmailSuffix}
+5. For cities/locations: use realistic names from {string.Join(", ", regionalInfo.ExampleCities)}
+6. Ensure cultural appropriateness for {languageName}-speaking audiences
+7. Return ONLY the translated text, nothing else";
+
+        var userPrompt = $"Text to {(isEnglishVariant ? "adapt" : "translate")}:\n\n{text}";
+
+        var messages = new List<ChatMessage>
+        {
+            new SystemChatMessage(systemPrompt),
+            new UserChatMessage(userPrompt)
+        };
+
+        var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+        {
+            Temperature = 0.3f, // Lower temperature for more consistent translations
+            MaxOutputTokenCount = 1000
+        });
+
+        var translatedText = response.Value.Content[0].Text?.Trim() ?? text;
+
+        if (string.IsNullOrWhiteSpace(translatedText))
+        {
+            _logger.LogWarning("Empty translation response for text: {Text}", text);
+            return text; // Return original if translation fails
+        }
+
+        return translatedText;
+    }
+
     private RegionalInfo GetRegionalInfo(string languageCode)
     {
         return languageCode.ToLowerInvariant() switch
