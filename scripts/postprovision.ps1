@@ -632,8 +632,6 @@ try {
         @{ Table='Production.BillOfMaterials'; File='BillOfMaterials.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # ProductPhoto has ThumbNailPhoto and LargePhoto fields hex-encoded to handle varbinary data
         @{ Table='Production.ProductPhoto'; File='ProductPhoto.csv'; Delimiter="+|"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('ThumbNailPhoto', 'LargePhoto') }
-        # AI-generated photos (created by image generation Functions, preserved to avoid regeneration cost)
-        @{ Table='Production.ProductPhoto'; File='ProductPhoto-ai.csv'; Delimiter="+|"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('ThumbNailPhoto', 'LargePhoto') }
         @{ Table='Production.ProductProductPhoto'; File='ProductProductPhoto.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # AI-generated photo mappings (links AI photos to products)
         @{ Table='Production.ProductProductPhoto'; File='ProductProductPhoto-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -1152,6 +1150,160 @@ ORDER BY c.ORDINAL_POSITION
     Write-Output "  - $csvLoadSuccess tables loaded successfully"
     Write-Output "  - $csvLoadFailed tables failed to load"
     Write-Output "  - $csvLoadSkipped tables skipped"
+    
+    # Upload AI-generated PNG images from images directory
+    Write-Output "`nUploading AI-generated PNG images..."
+    $imagesDir = Join-Path $PSScriptRoot ".." "images"
+    
+    if (Test-Path $imagesDir) {
+        $pngFiles = Get-ChildItem -Path $imagesDir -Filter "*.png" | Sort-Object Name
+        $totalPngFiles = $pngFiles.Count
+        
+        if ($totalPngFiles -gt 0) {
+            Write-Output "  Found $totalPngFiles PNG files to upload"
+            
+            $uploadedCount = 0
+            $skippedCount = 0
+            $failedCount = 0
+            $currentFile = 0
+            
+            # Start ProductPhotoID at 1000 to match AI-generated photo range
+            $nextPhotoId = 1000
+            
+            foreach ($pngFile in $pngFiles) {
+                $currentFile++
+                $fileName = $pngFile.Name
+                
+                try {
+                    # Read image bytes
+                    $imageBytes = [System.IO.File]::ReadAllBytes($pngFile.FullName)
+                    
+                    # Determine if this is a thumbnail or large image
+                    $isThumbnail = $fileName -like "*_thumb.png" -or $fileName -like "*_small.png"
+                    
+                    if ($isThumbnail) {
+                        # Extract the base filename to find corresponding large image
+                        $baseFileName = $fileName -replace '_thumb\.png$', '.png' -replace '_small\.png$', '.png'
+                        $largeImagePath = Join-Path $imagesDir $baseFileName
+                        
+                        if (Test-Path $largeImagePath) {
+                            # Read large image
+                            $largeImageBytes = [System.IO.File]::ReadAllBytes($largeImagePath)
+                            
+                            # Check if this ProductPhotoID already exists (idempotency)
+                            $checkCmd = $conn.CreateCommand()
+                            $checkCmd.CommandText = "SELECT COUNT(*) FROM Production.ProductPhoto WHERE ProductPhotoID = @PhotoID"
+                            $checkCmd.Parameters.AddWithValue("@PhotoID", $nextPhotoId) | Out-Null
+                            $exists = [int]$checkCmd.ExecuteScalar()
+                            
+                            if ($exists -eq 0) {
+                                # Insert with both thumbnail and large image
+                                $cmd = $conn.CreateCommand()
+                                $cmd.CommandText = @"
+SET IDENTITY_INSERT Production.ProductPhoto ON;
+INSERT INTO Production.ProductPhoto 
+    (ProductPhotoID, ThumbNailPhoto, ThumbnailPhotoFileName, LargePhoto, LargePhotoFileName, ModifiedDate)
+VALUES 
+    (@PhotoID, @ThumbBytes, @ThumbFileName, @LargeBytes, @LargeFileName, GETDATE());
+SET IDENTITY_INSERT Production.ProductPhoto OFF;
+"@
+                                $cmd.Parameters.AddWithValue("@PhotoID", $nextPhotoId) | Out-Null
+                                $cmd.Parameters.Add("@ThumbBytes", [System.Data.SqlDbType]::VarBinary, $imageBytes.Length).Value = $imageBytes
+                                $cmd.Parameters.AddWithValue("@ThumbFileName", $fileName) | Out-Null
+                                $cmd.Parameters.Add("@LargeBytes", [System.Data.SqlDbType]::VarBinary, $largeImageBytes.Length).Value = $largeImageBytes
+                                $cmd.Parameters.AddWithValue("@LargeFileName", $baseFileName) | Out-Null
+                                
+                                $cmd.ExecuteNonQuery() | Out-Null
+                                $uploadedCount++
+                            }
+                            else {
+                                $skippedCount++
+                            }
+                            $nextPhotoId++
+                            
+                            if ($currentFile % 50 -eq 0) {
+                                Write-Output "    ...uploaded $currentFile of $totalPngFiles images"
+                            }
+                        }
+                        else {
+                            Write-Warning "    [$currentFile/$totalPngFiles] Skipping $fileName - no corresponding large image found"
+                            $skippedCount++
+                        }
+                    }
+                    else {
+                        # Skip large images - they're processed with their thumbnails
+                        $skippedCount++
+                    }
+                }
+                catch {
+                    Write-Warning "    [$currentFile/$totalPngFiles] Failed to upload $fileName : $($_.Exception.Message)"
+                    $failedCount++
+                }
+            }
+            
+            Write-Output "`nPNG Upload Summary:"
+            Write-Output "  - $uploadedCount image pairs uploaded successfully"
+            Write-Output "  - $skippedCount files skipped"
+            Write-Output "  - $failedCount files failed"
+        }
+        else {
+            Write-Output "  No PNG files found in images directory"
+        }
+    }
+    else {
+        Write-Output "  Images directory not found: $imagesDir"
+    }
+    
+    # Now load ProductProductPhoto-ai.csv to link photos to products
+    Write-Output "`nLoading AI-generated photo mappings..."
+    $photoMappingFile = Join-Path $sqlFilesDir "ProductProductPhoto-ai.csv"
+    if (Test-Path $photoMappingFile) {
+        try {
+            $mappingData = Import-Csv -Path $photoMappingFile -Delimiter "`t" -Header @('ProductID', 'ProductPhotoID', 'Primary', 'ModifiedDate')
+            $mappingCount = $mappingData.Count
+            Write-Output "  Loading $mappingCount photo mappings..."
+            
+            $mappingInserted = 0
+            $mappingSkipped = 0
+            
+            foreach ($mapping in $mappingData) {
+                # Check if this mapping already exists (idempotency)
+                $checkCmd = $conn.CreateCommand()
+                $checkCmd.CommandText = "SELECT COUNT(*) FROM Production.ProductProductPhoto WHERE ProductID = @ProductID AND ProductPhotoID = @ProductPhotoID"
+                $checkCmd.Parameters.AddWithValue("@ProductID", [int]$mapping.ProductID) | Out-Null
+                $checkCmd.Parameters.AddWithValue("@ProductPhotoID", [int]$mapping.ProductPhotoID) | Out-Null
+                $exists = [int]$checkCmd.ExecuteScalar()
+                
+                if ($exists -eq 0) {
+                    $cmd = $conn.CreateCommand()
+                    $cmd.CommandText = @"
+INSERT INTO Production.ProductProductPhoto 
+    (ProductID, ProductPhotoID, [Primary], ModifiedDate)
+VALUES 
+    (@ProductID, @ProductPhotoID, @Primary, @ModifiedDate)
+"@
+                    $cmd.Parameters.AddWithValue("@ProductID", [int]$mapping.ProductID) | Out-Null
+                    $cmd.Parameters.AddWithValue("@ProductPhotoID", [int]$mapping.ProductPhotoID) | Out-Null
+                    $cmd.Parameters.AddWithValue("@Primary", [int]$mapping.Primary) | Out-Null
+                    $cmd.Parameters.AddWithValue("@ModifiedDate", [datetime]$mapping.ModifiedDate) | Out-Null
+                    
+                    $cmd.ExecuteNonQuery() | Out-Null
+                    $mappingInserted++
+                }
+                else {
+                    $mappingSkipped++
+                }
+            }
+            
+            Write-Output "  Successfully loaded $mappingInserted photo mappings ($mappingSkipped already existed)"
+        }
+        catch {
+            Write-Warning "  Failed to load photo mappings: $($_.Exception.Message)"
+        }
+    }
+    else {
+        Write-Output "  ProductProductPhoto-ai.csv not found - skipping photo mappings"
+    }
     
     $conn.Close()
 }
