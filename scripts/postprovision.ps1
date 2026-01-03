@@ -295,6 +295,12 @@ ORDER BY c.ORDINAL_POSITION
                             $escapedVal = $value.ToString().Replace("'", "''")
                             $values += "CAST(N'$escapedVal' AS XML)"
                         }
+                        elseif ($col.Type -eq 'vector') {
+                            # VECTOR columns: Cast JSON array to VECTOR
+                            # Format: "[0.1,0.2,0.3,...]" -> CAST('[...]' AS VECTOR(1536))
+                            $escapedVal = $value.ToString().Replace("'", "''")
+                            $values += "CAST('$escapedVal' AS VECTOR(1536))"
+                        }
                         elseif ($col.Type -eq 'hierarchyid') {
                             # Use hierarchyid::Parse()
                             $values += "hierarchyid::Parse('$($value.ToString())')"
@@ -581,14 +587,14 @@ try {
         @{ Table='Production.ProductSubcategory'; File='ProductSubcategory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModel'; File='ProductModel.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
         @{ Table='Production.ProductDescription'; File='ProductDescription.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        # Enhanced product descriptions with embeddings (DescriptionEmbedding varbinary field, hex-encoded)
-        @{ Table='Production.ProductDescription'; File='ProductDescription-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('DescriptionEmbedding') }
+        # Enhanced product descriptions with embeddings (DescriptionEmbedding VECTOR field, JSON array)
+        @{ Table='Production.ProductDescription'; File='ProductDescription-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('DescriptionEmbedding') }
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModelIllustration'; File='ProductModelIllustration.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.Product'; File='Product.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductReview'; File='ProductReview.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments') }
-        # AI-generated product reviews with embeddings (CommentsEmbedding varbinary field, base64-encoded)
-        @{ Table='Production.ProductReview'; File='ProductReview-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments'); Base64Columns=@('CommentsEmbedding') }
+        # AI-generated product reviews with embeddings (CommentsEmbedding VECTOR field, JSON array)
+        @{ Table='Production.ProductReview'; File='ProductReview-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments'); VectorColumns=@('CommentsEmbedding') }
         @{ Table='Production.ProductCostHistory'; File='ProductCostHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductListPriceHistory'; File='ProductListPriceHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductInventory'; File='ProductInventory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -720,7 +726,7 @@ FROM INFORMATION_SCHEMA.COLUMNS
 WHERE TABLE_SCHEMA = '$schemaName' AND TABLE_NAME = '$tableName'
 AND DATA_TYPE IN ('hierarchyid', 'geography', 'geometry')
 "@
-            $hasSpecialColumns = ($cmd.ExecuteScalar() -gt 0) -or ($config.HexColumns -and $config.HexColumns.Count -gt 0) -or ($config.Base64Columns -and $config.Base64Columns.Count -gt 0)
+            $hasSpecialColumns = ($cmd.ExecuteScalar() -gt 0) -or ($config.HexColumns -and $config.HexColumns.Count -gt 0) -or ($config.Base64Columns -and $config.Base64Columns.Count -gt 0) -or ($config.VectorColumns -and $config.VectorColumns.Count -gt 0)
             
             # First, get ALL columns from the database to understand CSV structure
             $cmd.CommandText = @"
@@ -941,6 +947,16 @@ ORDER BY c.ORDINAL_POSITION
                                             $byteArray[$j / 2] = [Convert]::ToByte($val.Substring($j, 2), 16)
                                         }
                                         $dataRow[$dataTableColIndex] = $byteArray
+                                    }
+                                }
+                                'vector' {
+                                    # VECTOR columns contain JSON arrays of floats
+                                    # Format: "[0.1,0.2,0.3,...]"
+                                    if ([string]::IsNullOrWhiteSpace($val)) {
+                                        $dataRow[$dataTableColIndex] = [System.DBNull]::Value
+                                    } else {
+                                        # Store as string - will use CAST(@Json AS VECTOR(1536)) in INSERT
+                                        $dataRow[$dataTableColIndex] = $val
                                     }
                                 }
                                 'hierarchyid' {

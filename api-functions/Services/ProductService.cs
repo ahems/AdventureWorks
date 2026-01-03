@@ -260,17 +260,20 @@ public class ProductService
 
         // Save embedding to ProductDescription table
         // Embeddings stored per language for multi-language semantic search
+        // Convert float array to JSON array format for VECTOR column
+        var embeddingJson = System.Text.Json.JsonSerializer.Serialize(embedding.Embedding);
+
         var updateDescriptionSql = @"
             UPDATE Production.ProductDescription
             SET 
-                DescriptionEmbedding = @Embedding,
+                DescriptionEmbedding = CAST(@EmbeddingJson AS VECTOR(1536)),
                 ModifiedDate = GETDATE()
             WHERE ProductDescriptionID = @ProductDescriptionID";
 
         await connection.ExecuteAsync(updateDescriptionSql, new
         {
             embedding.ProductDescriptionID,
-            embedding.Embedding
+            EmbeddingJson = embeddingJson
         });
     }
 
@@ -419,12 +422,15 @@ public class ProductService
         });
     }
 
-    public async Task<List<SemanticSearchResult>> SearchProductsByDescriptionEmbeddingAsync(byte[] queryEmbedding, int topN = 20)
+    public async Task<List<SemanticSearchResult>> SearchProductsByDescriptionEmbeddingAsync(float[] queryEmbedding, int topN = 20)
     {
         using var connection = await GetConnectionAsync();
 
-        // Use VECTOR_DISTANCE for semantic similarity search
+        // Use VECTOR_DISTANCE for semantic similarity search with native VECTOR columns
         // Returns products with the most similar descriptions to the query
+        // Convert float array to JSON for CAST to VECTOR
+        var embeddingJson = System.Text.Json.JsonSerializer.Serialize(queryEmbedding);
+
         var sql = @"
             SELECT TOP (@TopN)
                 p.ProductID,
@@ -432,7 +438,7 @@ public class ProductService
                 pd.Description,
                 p.ListPrice,
                 p.Color,
-                VECTOR_DISTANCE('cosine', pd.DescriptionEmbedding, @QueryEmbedding) AS SimilarityScore,
+                VECTOR_DISTANCE('cosine', pd.DescriptionEmbedding, CAST(@QueryEmbedding AS VECTOR(1536))) AS SimilarityScore,
                 'Description' AS MatchSource,
                 pd.Description AS MatchText
             FROM Production.Product p
@@ -444,14 +450,15 @@ public class ProductService
             WHERE p.FinishedGoodsFlag = 1
               AND pd.DescriptionEmbedding IS NOT NULL
               AND pmpdc.CultureID = 'en'
-            ORDER BY VECTOR_DISTANCE('cosine', pd.DescriptionEmbedding, @QueryEmbedding)";
+            ORDER BY VECTOR_DISTANCE('cosine', pd.DescriptionEmbedding, CAST(@QueryEmbedding AS VECTOR(1536)))";
 
         var results = await connection.QueryAsync<SemanticSearchResult>(sql, new
         {
             TopN = topN,
-            QueryEmbedding = queryEmbedding
+            QueryEmbedding = embeddingJson
         });
 
         return results.ToList();
     }
+
 }

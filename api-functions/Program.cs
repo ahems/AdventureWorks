@@ -24,12 +24,10 @@ builder.Services.AddOpenTelemetry()
     .WithTracing(tracing =>
     {
         tracing
-            .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation()
             .AddSqlClientInstrumentation(options =>
             {
                 options.SetDbStatementForText = true;
-                options.RecordException = true;
             });
     });
 

@@ -35,8 +35,6 @@ type SortOption =
   | "discount"
   | "rating";
 
-type SearchMode = "keyword" | "semantic";
-
 const SearchPage: React.FC = () => {
   const { t } = useTranslation("common");
   const [searchParams, setSearchParams] = useSearchParams();
@@ -49,7 +47,6 @@ const SearchPage: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(12);
-  const [searchMode, setSearchMode] = useState<SearchMode>("keyword");
   const [semanticQuerySubmitted, setSemanticQuerySubmitted] = useState("");
 
   const { data: products = [], isLoading: productsLoading } = useProducts();
@@ -58,20 +55,18 @@ const SearchPage: React.FC = () => {
   const { data: subcategories = [] } = useSubcategories();
   const { data: allReviews = [] } = useAllReviews();
 
-  // Semantic search hook - only enabled when in semantic mode and query is submitted
+  // Semantic search hook - always enabled when query is submitted
   const {
     data: semanticSearchData,
     isLoading: semanticSearchLoading,
     error: semanticSearchError,
   } = useSemanticSearch(
     semanticQuerySubmitted,
-    searchMode === "semantic" && semanticQuerySubmitted.length > 0
+    semanticQuerySubmitted.length > 0
   );
 
   const isLoading =
-    productsLoading ||
-    categoriesLoading ||
-    (searchMode === "semantic" && semanticSearchLoading);
+    productsLoading || categoriesLoading || semanticSearchLoading;
 
   // Create a map of product ratings from all reviews
   const productRatings = useMemo(() => {
@@ -103,7 +98,7 @@ const SearchPage: React.FC = () => {
 
   // Map semantic search results to products
   const semanticProducts = useMemo(() => {
-    if (searchMode !== "semantic" || !semanticSearchData) {
+    if (!semanticSearchData) {
       return [];
     }
 
@@ -112,81 +107,14 @@ const SearchPage: React.FC = () => {
     return semanticSearchData.results
       .map((result) => productMap.get(result.ProductID))
       .filter((p): p is Product => p !== undefined);
-  }, [searchMode, semanticSearchData, products]);
+  }, [semanticSearchData, products]);
 
-  // Filter and sort products
+  // Filter and sort products using semantic search
   const filteredProducts = useMemo(() => {
-    // Use semantic search results if in semantic mode
-    if (searchMode === "semantic" && semanticQuerySubmitted) {
-      let result = [...semanticProducts];
+    // Use semantic search results when available
+    let result = semanticQuerySubmitted ? [...semanticProducts] : [...products];
 
-      // Still apply category and price filters to semantic results
-      if (selectedCategory !== null) {
-        const categorySubcategoryIds = subcategories
-          .filter((s) => s.ProductCategoryID === selectedCategory)
-          .map((s) => s.ProductSubcategoryID);
-        result = result.filter(
-          (p) =>
-            p.ProductSubcategoryID &&
-            categorySubcategoryIds.includes(p.ProductSubcategoryID)
-        );
-      }
-
-      result = result.filter((p) => {
-        const price = getSalePrice(p) || p.ListPrice;
-        return price >= priceRange[0] && price <= priceRange[1];
-      });
-
-      // Semantic results are already sorted by relevance
-      // But allow re-sorting by price, discount, or rating
-      if (sortBy !== "relevance") {
-        switch (sortBy) {
-          case "price-asc":
-            result.sort((a, b) => {
-              const priceA = getSalePrice(a) || a.ListPrice;
-              const priceB = getSalePrice(b) || b.ListPrice;
-              return priceA - priceB;
-            });
-            break;
-          case "price-desc":
-            result.sort((a, b) => {
-              const priceA = getSalePrice(a) || a.ListPrice;
-              const priceB = getSalePrice(b) || b.ListPrice;
-              return priceB - priceA;
-            });
-            break;
-          case "discount":
-            result.sort((a, b) => (b.DiscountPct || 0) - (a.DiscountPct || 0));
-            break;
-          case "rating":
-            result.sort((a, b) => {
-              const ratingDataA = productRatings.get(a.ProductID);
-              const ratingDataB = productRatings.get(b.ProductID);
-              const ratingA = ratingDataA
-                ? ratingDataA.total / ratingDataA.count
-                : 0;
-              const ratingB = ratingDataB
-                ? ratingDataB.total / ratingDataB.count
-                : 0;
-              return ratingB - ratingA;
-            });
-            break;
-        }
-      }
-
-      return result;
-    }
-
-    // Keyword search mode (original logic)
-    let result = [...products];
-
-    // Search by name
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter((p) => p.Name.toLowerCase().includes(query));
-    }
-
-    // Filter by category
+    // Apply category filter
     if (selectedCategory !== null) {
       const categorySubcategoryIds = subcategories
         .filter((s) => s.ProductCategoryID === selectedCategory)
@@ -198,66 +126,57 @@ const SearchPage: React.FC = () => {
       );
     }
 
-    // Filter by price range
+    // Apply price range filter
     result = result.filter((p) => {
       const price = getSalePrice(p) || p.ListPrice;
       return price >= priceRange[0] && price <= priceRange[1];
     });
 
-    // Sort
-    switch (sortBy) {
-      case "price-asc":
-        result.sort((a, b) => {
-          const priceA = getSalePrice(a) || a.ListPrice;
-          const priceB = getSalePrice(b) || b.ListPrice;
-          return priceA - priceB;
-        });
-        break;
-      case "price-desc":
-        result.sort((a, b) => {
-          const priceA = getSalePrice(a) || a.ListPrice;
-          const priceB = getSalePrice(b) || b.ListPrice;
-          return priceB - priceA;
-        });
-        break;
-      case "discount":
-        result.sort((a, b) => (b.DiscountPct || 0) - (a.DiscountPct || 0));
-        break;
-      case "rating":
-        result.sort((a, b) => {
-          const ratingDataA = productRatings.get(a.ProductID);
-          const ratingDataB = productRatings.get(b.ProductID);
-          const ratingA = ratingDataA
-            ? ratingDataA.total / ratingDataA.count
-            : 0;
-          const ratingB = ratingDataB
-            ? ratingDataB.total / ratingDataB.count
-            : 0;
-          return ratingB - ratingA;
-        });
-        break;
-      default:
-        // Relevance: prioritize name matches
-        if (searchQuery.trim()) {
-          const query = searchQuery.toLowerCase();
+    // Semantic results are already sorted by relevance
+    // But allow re-sorting by price, discount, or rating
+    if (sortBy !== "relevance") {
+      switch (sortBy) {
+        case "price-asc":
           result.sort((a, b) => {
-            const aNameMatch = a.Name.toLowerCase().includes(query) ? 1 : 0;
-            const bNameMatch = b.Name.toLowerCase().includes(query) ? 1 : 0;
-            return bNameMatch - aNameMatch;
+            const priceA = getSalePrice(a) || a.ListPrice;
+            const priceB = getSalePrice(b) || b.ListPrice;
+            return priceA - priceB;
           });
-        }
+          break;
+        case "price-desc":
+          result.sort((a, b) => {
+            const priceA = getSalePrice(a) || a.ListPrice;
+            const priceB = getSalePrice(b) || b.ListPrice;
+            return priceB - priceA;
+          });
+          break;
+        case "discount":
+          result.sort((a, b) => (b.DiscountPct || 0) - (a.DiscountPct || 0));
+          break;
+        case "rating":
+          result.sort((a, b) => {
+            const ratingDataA = productRatings.get(a.ProductID);
+            const ratingDataB = productRatings.get(b.ProductID);
+            const ratingA = ratingDataA
+              ? ratingDataA.total / ratingDataA.count
+              : 0;
+            const ratingB = ratingDataB
+              ? ratingDataB.total / ratingDataB.count
+              : 0;
+            return ratingB - ratingA;
+          });
+          break;
+      }
     }
 
     return result;
   }, [
     products,
-    searchQuery,
     selectedCategory,
     priceRange,
     sortBy,
     productRatings,
     subcategories,
-    searchMode,
     semanticQuerySubmitted,
     semanticProducts,
   ]);
@@ -333,8 +252,8 @@ const SearchPage: React.FC = () => {
     e.preventDefault();
     setSearchParams(searchQuery ? { q: searchQuery } : {});
 
-    // If in semantic mode, trigger the search
-    if (searchMode === "semantic" && searchQuery.trim()) {
+    // Trigger semantic search
+    if (searchQuery.trim()) {
       setSemanticQuerySubmitted(searchQuery.trim());
     }
   };
@@ -466,11 +385,7 @@ const SearchPage: React.FC = () => {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={
-                      searchMode === "semantic"
-                        ? "Describe what you're looking for..."
-                        : t("search.placeholder")
-                    }
+                    placeholder="Describe what you're looking for..."
                     className="w-full pl-10 pr-4 py-3 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
                   />
                 </div>
@@ -489,53 +404,29 @@ const SearchPage: React.FC = () => {
                 </button>
               </div>
 
-              {/* Search Mode Toggle */}
-              <div className="flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchMode("keyword");
-                    setSemanticQuerySubmitted("");
-                  }}
-                  className={`font-doodle text-sm px-4 py-2 border-2 transition-all ${
-                    searchMode === "keyword"
-                      ? "border-doodle-accent bg-doodle-accent text-white"
-                      : "border-doodle-text/30 bg-white text-doodle-text hover:border-doodle-accent"
-                  }`}
-                >
-                  Keyword Search
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSearchMode("semantic")}
-                  className={`font-doodle text-sm px-4 py-2 border-2 transition-all flex items-center gap-2 ${
-                    searchMode === "semantic"
-                      ? "border-doodle-accent bg-doodle-accent text-white"
-                      : "border-doodle-text/30 bg-white text-doodle-text hover:border-doodle-accent"
-                  }`}
-                >
-                  <Sparkles className="w-4 h-4" />
-                  AI Semantic Search
-                </button>
-                {searchMode === "semantic" && semanticSearchData && (
-                  <span className="font-doodle text-xs text-doodle-text/60">
-                    {semanticSearchData.descriptionMatches} description matches,{" "}
-                    {semanticSearchData.reviewMatches} review matches
-                  </span>
-                )}
-              </div>
-
-              {/* Semantic Search Info */}
-              {searchMode === "semantic" && (
-                <div className="bg-doodle-accent/10 border-2 border-doodle-accent/30 p-3">
-                  <p className="font-doodle text-xs text-doodle-text/80">
-                    <Sparkles className="w-4 h-4 inline mr-1" />
-                    AI-powered search uses embeddings to find products based on
-                    meaning, not just keywords. Try: "waterproof gear for rainy
-                    hikes" or "lightweight equipment for cyclists"
-                  </p>
+              {/* AI Search Info Banner */}
+              <div className="bg-doodle-accent/10 border-2 border-doodle-accent/30 p-3">
+                <div className="flex items-start gap-2">
+                  <Sparkles className="w-5 h-5 text-doodle-accent flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-doodle text-sm text-doodle-text font-bold mb-1">
+                      AI-Enhanced Search
+                    </p>
+                    <p className="font-doodle text-xs text-doodle-text/80">
+                      Powered by embeddings to understand product descriptions
+                      and reviews. Try: "waterproof gear for rainy hikes" or
+                      "lightweight equipment for cyclists"
+                    </p>
+                    {semanticSearchData && semanticQuerySubmitted && (
+                      <p className="font-doodle text-xs text-doodle-text/60 mt-1">
+                        Found {semanticSearchData.descriptionMatches}{" "}
+                        description matches and{" "}
+                        {semanticSearchData.reviewMatches} review matches
+                      </p>
+                    )}
+                  </div>
                 </div>
-              )}
+              </div>
 
               {semanticSearchError && (
                 <div className="bg-red-50 border-2 border-red-200 p-3">
@@ -824,6 +715,7 @@ const SearchPage: React.FC = () => {
                   <button
                     onClick={() => {
                       setSearchQuery("");
+                      setSemanticQuerySubmitted("");
                       clearFilters();
                     }}
                     className="doodle-button doodle-button-primary"

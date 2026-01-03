@@ -49,7 +49,7 @@ public class ProductDescriptionData
 public class ProductDescriptionEmbedding
 {
     public int ProductDescriptionID { get; set; }
-    public byte[] Embedding { get; set; } = Array.Empty<byte>();
+    public float[] Embedding { get; set; } = Array.Empty<float>();
     public int? ProductModelID { get; set; }
 }
 

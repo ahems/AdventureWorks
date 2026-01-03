@@ -14,7 +14,7 @@ public class ProductReviewData
 public class ProductReviewEmbedding
 {
     public int ProductReviewID { get; set; }
-    public byte[] Embedding { get; set; } = Array.Empty<byte>();
+    public float[] Embedding { get; set; } = Array.Empty<float>();
     public int ProductID { get; set; }
 }
 

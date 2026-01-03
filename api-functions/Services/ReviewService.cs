@@ -53,17 +53,20 @@ public class ReviewService
         using var connection = await GetConnectionAsync();
 
         // Save embedding to ProductReview table
+        // Convert float array to JSON array format for VECTOR column
+        var embeddingJson = System.Text.Json.JsonSerializer.Serialize(embedding.Embedding);
+
         var updateSql = @"
             UPDATE Production.ProductReview
             SET 
-                CommentsEmbedding = @Embedding,
+                CommentsEmbedding = CAST(@EmbeddingJson AS VECTOR(1536)),
                 ModifiedDate = GETDATE()
             WHERE ProductReviewID = @ProductReviewID";
 
         await connection.ExecuteAsync(updateSql, new
         {
             embedding.ProductReviewID,
-            embedding.Embedding
+            EmbeddingJson = embeddingJson
         });
     }
 
@@ -115,12 +118,15 @@ public class ReviewService
         });
     }
 
-    public async Task<List<SemanticSearchResult>> SearchProductsByReviewEmbeddingAsync(byte[] queryEmbedding, int topN = 20)
+    public async Task<List<SemanticSearchResult>> SearchProductsByReviewEmbeddingAsync(float[] queryEmbedding, int topN = 20)
     {
         using var connection = await GetConnectionAsync();
 
-        // Use VECTOR_DISTANCE for semantic similarity search
+        // Use VECTOR_DISTANCE for semantic similarity search with native VECTOR columns
         // Returns products with reviews that are most similar to the query
+        // Convert float array to JSON for CAST to VECTOR
+        var embeddingJson = System.Text.Json.JsonSerializer.Serialize(queryEmbedding);
+
         var sql = @"
             SELECT TOP (@TopN)
                 p.ProductID,
@@ -128,7 +134,7 @@ public class ReviewService
                 pd.Description,
                 p.ListPrice,
                 p.Color,
-                VECTOR_DISTANCE('cosine', pr.CommentsEmbedding, @QueryEmbedding) AS SimilarityScore,
+                VECTOR_DISTANCE('cosine', pr.CommentsEmbedding, CAST(@QueryEmbedding AS VECTOR(1536))) AS SimilarityScore,
                 'Review' AS MatchSource,
                 pr.Comments AS MatchText
             FROM Production.Product p
@@ -140,14 +146,15 @@ public class ReviewService
                 ON pmpdc.ProductDescriptionID = pd.ProductDescriptionID
             WHERE p.FinishedGoodsFlag = 1
               AND pr.CommentsEmbedding IS NOT NULL
-            ORDER BY VECTOR_DISTANCE('cosine', pr.CommentsEmbedding, @QueryEmbedding)";
+            ORDER BY VECTOR_DISTANCE('cosine', pr.CommentsEmbedding, CAST(@QueryEmbedding AS VECTOR(1536)))";
 
         var results = await connection.QueryAsync<SemanticSearchResult>(sql, new
         {
             TopN = topN,
-            QueryEmbedding = queryEmbedding
+            QueryEmbedding = embeddingJson
         });
 
         return results.ToList();
     }
+
 }

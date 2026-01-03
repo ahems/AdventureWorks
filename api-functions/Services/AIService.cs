@@ -312,23 +312,20 @@ Translate the description into each target language. Return ONLY a valid JSON ob
                 var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(description.Description);
                 var embeddingVector = embeddingResponse.Value.ToFloats();
 
-                // Convert ReadOnlyMemory<float> to byte array for VARBINARY storage
+                // Store as float array for VECTOR column
                 var floatArray = embeddingVector.ToArray();
-                var embeddingBytes = new byte[floatArray.Length * sizeof(float)];
-                Buffer.BlockCopy(floatArray, 0, embeddingBytes, 0, embeddingBytes.Length);
 
                 embeddings.Add(new ProductDescriptionEmbedding
                 {
                     ProductDescriptionID = description.ProductDescriptionID,
-                    Embedding = embeddingBytes,
+                    Embedding = floatArray,
                     ProductModelID = description.ProductModelID
                 });
 
                 _logger.LogInformation(
-                    "Generated embedding for ProductDescriptionID {id}: {dimensions} dimensions, {bytes} bytes",
+                    "Generated embedding for ProductDescriptionID {id}: {dimensions} dimensions",
                     description.ProductDescriptionID,
-                    floatArray.Length,
-                    embeddingBytes.Length
+                    floatArray.Length
                 );
             }
             catch (Exception ex)
@@ -379,23 +376,20 @@ Translate the description into each target language. Return ONLY a valid JSON ob
                 var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(review.Comments);
                 var embeddingVector = embeddingResponse.Value.ToFloats();
 
-                // Convert ReadOnlyMemory<float> to byte array for VARBINARY storage
+                // Store as float array for VECTOR column
                 var floatArray = embeddingVector.ToArray();
-                var embeddingBytes = new byte[floatArray.Length * sizeof(float)];
-                Buffer.BlockCopy(floatArray, 0, embeddingBytes, 0, embeddingBytes.Length);
 
                 embeddings.Add(new ProductReviewEmbedding
                 {
                     ProductReviewID = review.ProductReviewID,
-                    Embedding = embeddingBytes,
+                    Embedding = floatArray,
                     ProductID = review.ProductID
                 });
 
                 _logger.LogInformation(
-                    "Generated embedding for ProductReviewID {id}: {dimensions} dimensions, {bytes} bytes",
+                    "Generated embedding for ProductReviewID {id}: {dimensions} dimensions",
                     review.ProductReviewID,
-                    floatArray.Length,
-                    embeddingBytes.Length
+                    floatArray.Length
                 );
             }
             catch (Exception ex)
@@ -412,7 +406,7 @@ Translate the description into each target language. Return ONLY a valid JSON ob
         return embeddings;
     }
 
-    public async Task<byte[]> GenerateQueryEmbeddingAsync(string queryText)
+    public async Task<float[]> GenerateQueryEmbeddingAsync(string queryText)
     {
         var credential = new DefaultAzureCredential();
         var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
@@ -427,18 +421,15 @@ Translate the description into each target language. Return ONLY a valid JSON ob
         var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(queryText);
         var embeddingVector = embeddingResponse.Value.ToFloats();
 
-        // Convert ReadOnlyMemory<float> to byte array for VARBINARY comparison
+        // Return float array for VECTOR comparison
         var floatArray = embeddingVector.ToArray();
-        var embeddingBytes = new byte[floatArray.Length * sizeof(float)];
-        Buffer.BlockCopy(floatArray, 0, embeddingBytes, 0, embeddingBytes.Length);
 
         _logger.LogInformation(
-            "Generated query embedding: {dimensions} dimensions, {bytes} bytes",
-            floatArray.Length,
-            embeddingBytes.Length
+            "Generated query embedding: {dimensions} dimensions",
+            floatArray.Length
         );
 
-        return embeddingBytes;
+        return floatArray;
     }
 
     public async Task<List<GeneratedReview>> GenerateProductReviewsAsync(List<ProductForReviewGeneration> products)
