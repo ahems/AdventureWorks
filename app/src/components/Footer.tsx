@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Bike, Mail, MapPin, Phone } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useCategories } from "@/hooks/useProducts";
+import { TwemojiText } from "@/components/TwemojiText";
 
 const Footer: React.FC = () => {
   const { t } = useTranslation("footer");
@@ -119,7 +120,9 @@ const Footer: React.FC = () => {
             <p className="font-doodle text-sm opacity-60">
               {t("copyright", { year: new Date().getFullYear() })}
             </p>
-            <p className="font-doodle text-sm opacity-60">{t("builtWith")}</p>
+            <p className="font-doodle text-sm opacity-60">
+              <TwemojiText text={t("builtWith")} size="0.875rem" />
+            </p>
           </div>
         </div>
       </div>

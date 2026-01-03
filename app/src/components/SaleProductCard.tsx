@@ -9,6 +9,7 @@ import { useReviews } from "@/hooks/useReviews";
 import { toast } from "@/hooks/use-toast";
 import { useCurrency } from "@/context/CurrencyContext";
 import NotifyWhenAvailable from "@/components/NotifyWhenAvailable";
+import { TwemojiText } from "@/components/TwemojiText";
 import {
   Select,
   SelectContent,
@@ -214,7 +215,10 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
         {showUnavailable && (
           <div className="bg-doodle-accent/10 border border-dashed border-doodle-accent p-2 mb-2 space-y-2">
             <p className="font-doodle text-xs text-doodle-accent font-bold">
-              {t("saleProductCard.currentlyUnavailableWarning")}
+              <TwemojiText
+                text={t("saleProductCard.currentlyUnavailableWarning")}
+                size="0.75rem"
+              />
             </p>
             <NotifyWhenAvailable
               productName={product.Name}

@@ -72,8 +72,9 @@ if [ ! -d "$SOURCE_DIR" ]; then
   exit 1
 fi
 
-# Get all JSON files in the source directory
-SOURCE_FILES=($(find "$SOURCE_DIR" -name "*.json" -type f))
+# Get all JSON files in the source directory, sorted by size (largest first)
+# This processes common.json first since it's the largest file
+SOURCE_FILES=($(find "$SOURCE_DIR" -name "*.json" -type f -exec du -b {} + | sort -rn | cut -f2))
 
 if [ ${#SOURCE_FILES[@]} -eq 0 ]; then
   echo "Error: No JSON files found in $SOURCE_DIR"
@@ -107,13 +108,10 @@ for SOURCE_FILE in "${SOURCE_FILES[@]}"; do
 done
 
 echo ""
-echo "Needed translations: $NEEDED_TRANSLATIONS (skipping existing files)"
+echo "Total translations to create: $((${#SOURCE_FILES[@]} * ${#LANGUAGES[@]}))"
 echo ""
-
-if [ $NEEDED_TRANSLATIONS -eq 0 ]; then
-  echo "All files already translated. Nothing to do!"
-  exit 0
-fi
+echo "Note: This will overwrite any existing translation files."
+echo ""
 
 read -p "Continue? (y/n) " -n 1 -r
 echo ""
@@ -123,19 +121,153 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
   exit 0
 fi
 
-# Track statistics
-SUCCESS=0
-FAILED=0
-SKIPPED=0
-declare -a FAILED_ITEMS
+# Track statistics with temp files for parallel processing
+TEMP_DIR=$(mktemp -d)
+trap "rm -rf $TEMP_DIR" EXIT
+
+SUCCESS_FILE="$TEMP_DIR/success_count"
+FAILED_FILE="$TEMP_DIR/failed_count"
+FAILED_ITEMS_FILE="$TEMP_DIR/failed_items"
+
+echo "0" > "$SUCCESS_FILE"
+echo "0" > "$FAILED_FILE"
+touch "$FAILED_ITEMS_FILE"
 
 echo ""
-echo "Starting translations..."
+echo "Starting translations (parallel processing)..."
 echo "========================================="
 
 # Retry configuration
 MAX_RETRIES=3
 BASE_DELAY=2
+
+# Parallel processing configuration
+MAX_CONCURRENT_JOBS=15  # Increased for faster processing with blob existence checks
+
+# Function to handle a single translation job
+translate_job() {
+  local SOURCE_FILE=$1
+  local lang_code=$2
+  local lang_name=$3
+  local FILE_NAME=$(basename "$SOURCE_FILE")
+  local FILE_NAME_WITHOUT_EXT="${FILE_NAME%.json}"
+  
+  echo "[$FILE_NAME → $lang_name] Starting translation..."
+  
+  # Create request payload with sourceFilename
+  REQUEST_PAYLOAD=$(jq -n \
+    --arg lang "$lang_code" \
+    --arg filename "$FILE_NAME_WITHOUT_EXT" \
+    --slurpfile data "$SOURCE_FILE" \
+    '{targetLanguage: $lang, sourceFilename: $filename, languageData: $data[0]}')
+  
+  # Retry loop for handling 504 errors
+  RETRY_COUNT=0
+  SUCCESS_FLAG=false
+  
+  while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    # Make the API request to start orchestration
+    TEMP_FILE="$TEMP_DIR/translation_${lang_code}_${FILE_NAME}_$$"
+    HTTP_STATUS=$(curl -s -w "%{http_code}" -o "$TEMP_FILE" \
+      -X POST "$FUNCTION_URL" \
+      -H "Content-Type: application/json" \
+      -d "$REQUEST_PAYLOAD")
+    
+    if [ "$HTTP_STATUS" -eq 202 ]; then
+      # Orchestration started - get status URL
+      STATUS_URL=$(jq -r '.statusUrl' "$TEMP_FILE" 2>/dev/null)
+      
+      if [ -z "$STATUS_URL" ] || [ "$STATUS_URL" = "null" ]; then
+        echo "[$FILE_NAME → $lang_name] ✗ Failed: No status URL returned"
+        echo "$FILE_NAME → $lang_code: No status URL" >> "$FAILED_ITEMS_FILE"
+        echo $(($(cat "$FAILED_FILE") + 1)) > "$FAILED_FILE"
+        rm -f "$TEMP_FILE"
+        return 1
+      fi
+      
+      # Poll for completion
+      echo "[$FILE_NAME → $lang_name] ⏳ Orchestration started, polling..."
+      MAX_POLL_ATTEMPTS=60  # 5 minutes max
+      POLL_ATTEMPT=0
+      
+      while [ $POLL_ATTEMPT -lt $MAX_POLL_ATTEMPTS ]; do
+        sleep 5
+        POLL_ATTEMPT=$((POLL_ATTEMPT + 1))
+        
+        STATUS_RESPONSE=$(curl -s "$STATUS_URL")
+        RUNTIME_STATUS=$(echo "$STATUS_RESPONSE" | jq -r '.runtimeStatus' 2>/dev/null)
+        
+        if [ "$RUNTIME_STATUS" = "Completed" ]; then
+          # Get the blob path from output
+          BLOB_PATH=$(echo "$STATUS_RESPONSE" | jq -r '.output' 2>/dev/null | tr -d '"')
+          
+          if [ -z "$BLOB_PATH" ] || [ "$BLOB_PATH" = "null" ]; then
+            echo "[$FILE_NAME → $lang_name] ✗ Failed: No blob path in output"
+            echo "$FILE_NAME → $lang_code: No blob path" >> "$FAILED_ITEMS_FILE"
+            echo $(($(cat "$FAILED_FILE") + 1)) > "$FAILED_FILE"
+            rm -f "$TEMP_FILE"
+            return 1
+          fi
+          
+          echo "[$FILE_NAME → $lang_name] ✓ Success (saved to: $BLOB_PATH, ${POLL_ATTEMPT} polls)"
+          echo $(($(cat "$SUCCESS_FILE") + 1)) > "$SUCCESS_FILE"
+          rm -f "$TEMP_FILE"
+          return 0
+        elif [ "$RUNTIME_STATUS" = "Failed" ]; then
+          ERROR_MSG=$(echo "$STATUS_RESPONSE" | jq -r '.output // "Orchestration failed"' 2>/dev/null)
+          echo "[$FILE_NAME → $lang_name] ✗ Failed: $ERROR_MSG"
+          echo "$FILE_NAME → $lang_code: $ERROR_MSG" >> "$FAILED_ITEMS_FILE"
+          echo $(($(cat "$FAILED_FILE") + 1)) > "$FAILED_FILE"
+          rm -f "$TEMP_FILE"
+          return 1
+        elif [ "$RUNTIME_STATUS" = "Running" ] || [ "$RUNTIME_STATUS" = "Pending" ]; then
+          # Still running, continue polling (silent to reduce output)
+          :
+        else
+          echo "[$FILE_NAME → $lang_name] ⚠ Unknown status: $RUNTIME_STATUS"
+        fi
+      done
+      
+      if [ $POLL_ATTEMPT -ge $MAX_POLL_ATTEMPTS ]; then
+        echo "[$FILE_NAME → $lang_name] ✗ Failed: Timeout after $((MAX_POLL_ATTEMPTS * 5))s"
+        echo "$FILE_NAME → $lang_code: Timeout" >> "$FAILED_ITEMS_FILE"
+        echo $(($(cat "$FAILED_FILE") + 1)) > "$FAILED_FILE"
+        rm -f "$TEMP_FILE"
+        return 1
+      fi
+    elif [ "$HTTP_STATUS" -eq 504 ]; then
+      # Gateway timeout - retry with exponential backoff
+      RETRY_COUNT=$((RETRY_COUNT + 1))
+      if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+        DELAY=$((BASE_DELAY * (2 ** (RETRY_COUNT - 1))))
+        echo "[$FILE_NAME → $lang_name] ⚠ Timeout (504) - Retry $RETRY_COUNT/$MAX_RETRIES after ${DELAY}s"
+        sleep $DELAY
+      else
+        echo "[$FILE_NAME → $lang_name] ✗ Failed: Timeout after $MAX_RETRIES retries"
+        echo "$FILE_NAME → $lang_code: Timeout after retries" >> "$FAILED_ITEMS_FILE"
+        echo $(($(cat "$FAILED_FILE") + 1)) > "$FAILED_FILE"
+        rm -f "$TEMP_FILE"
+        return 1
+      fi
+    else
+      # Other error
+      ERROR_MSG=$(jq -r '.error // "Unknown error"' "$TEMP_FILE" 2>/dev/null || echo "HTTP $HTTP_STATUS")
+      echo "[$FILE_NAME → $lang_name] ✗ Failed: $ERROR_MSG"
+      echo "$FILE_NAME → $lang_code: $ERROR_MSG" >> "$FAILED_ITEMS_FILE"
+      echo $(($(cat "$FAILED_FILE") + 1)) > "$FAILED_FILE"
+      rm -f "$TEMP_FILE"
+      return 1
+    fi
+  done
+  
+  rm -f "$TEMP_FILE"
+  return 1
+}
+
+# Export function and variables for use in subshells
+export -f translate_job
+export FUNCTION_URL LOCALES_DIR TEMP_DIR SUCCESS_FILE FAILED_FILE FAILED_ITEMS_FILE
+export MAX_RETRIES BASE_DELAY
 
 # Process each source file
 for SOURCE_FILE in "${SOURCE_FILES[@]}"; do
@@ -145,174 +277,68 @@ for SOURCE_FILE in "${SOURCE_FILES[@]}"; do
   echo "Processing: $FILE_NAME"
   echo "----------------------------------------"
   
-  # Translate to each language
+  # Translate to each language in parallel
+  ACTIVE_JOBS=0
+  
   for lang_info in "${LANGUAGES[@]}"; do
     IFS=':' read -r lang_code lang_name <<< "$lang_info"
     
-    # Create output directory if it doesn't exist
-    OUTPUT_DIR="$LOCALES_DIR/$lang_code"
-    mkdir -p "$OUTPUT_DIR"
-    OUTPUT_FILE="$OUTPUT_DIR/$FILE_NAME"
-    
-    # Skip if file already exists
-    if [ -f "$OUTPUT_FILE" ]; then
-      echo "  ⊘ Skipped: $lang_name ($lang_code) - file already exists"
-      SKIPPED=$((SKIPPED + 1))
-      continue
-    fi
-    
-    PROGRESS=$((SUCCESS + FAILED + SKIPPED + 1))
-    TOTAL=$((${#SOURCE_FILES[@]} * ${#LANGUAGES[@]}))
-    echo "[$PROGRESS/$TOTAL] Translating $FILE_NAME to $lang_name ($lang_code)..."
-    
-    # Create request payload
-    REQUEST_PAYLOAD=$(jq -n \
-      --arg lang "$lang_code" \
-      --slurpfile data "$SOURCE_FILE" \
-      '{targetLanguage: $lang, languageData: $data[0]}')
-    
-    # Retry loop for handling 504 errors
-    RETRY_COUNT=0
-    SUCCESS_FLAG=false
-    
-    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-      # Make the API request to start orchestration
-      TEMP_FILE="/tmp/translation_${lang_code}_${FILE_NAME}"
-      HTTP_STATUS=$(curl -s -w "%{http_code}" -o "$TEMP_FILE" \
-        -X POST "$FUNCTION_URL" \
-        -H "Content-Type: application/json" \
-        -d "$REQUEST_PAYLOAD")
-      
-      if [ "$HTTP_STATUS" -eq 202 ]; then
-        # Orchestration started - get status URL
-        STATUS_URL=$(jq -r '.statusUrl' "$TEMP_FILE" 2>/dev/null)
-        
-        if [ -z "$STATUS_URL" ] || [ "$STATUS_URL" = "null" ]; then
-          echo "  ✗ Failed: No status URL returned"
-          FAILED=$((FAILED + 1))
-          FAILED_ITEMS+=("$FILE_NAME → $lang_code: No status URL")
-          SUCCESS_FLAG=false
-          break
-        fi
-        
-        # Poll for completion
-        echo "  ⏳ Orchestration started, waiting for completion..."
-        MAX_POLL_ATTEMPTS=60  # 5 minutes max (5 seconds per attempt)
-        POLL_ATTEMPT=0
-        
-        while [ $POLL_ATTEMPT -lt $MAX_POLL_ATTEMPTS ]; do
-          sleep 5
-          POLL_ATTEMPT=$((POLL_ATTEMPT + 1))
-          
-          STATUS_RESPONSE=$(curl -s "$STATUS_URL")
-          RUNTIME_STATUS=$(echo "$STATUS_RESPONSE" | jq -r '.runtimeStatus' 2>/dev/null)
-          
-          if [ "$RUNTIME_STATUS" = "Completed" ]; then
-            # Get the output
-            TRANSLATED_JSON=$(echo "$STATUS_RESPONSE" | jq -r '.output' 2>/dev/null)
-            
-            if [ -z "$TRANSLATED_JSON" ] || [ "$TRANSLATED_JSON" = "null" ]; then
-              echo "  ✗ Failed: Empty output from orchestration"
-              FAILED=$((FAILED + 1))
-              FAILED_ITEMS+=("$FILE_NAME → $lang_code: Empty output")
-              SUCCESS_FLAG=false
-              break 2
-            fi
-            
-            # Parse and save the translated JSON
-            echo "$TRANSLATED_JSON" | jq '.' > "$OUTPUT_FILE" 2>/dev/null
-            
-            if [ $? -eq 0 ]; then
-              FILE_SIZE=$(wc -c < "$OUTPUT_FILE")
-              echo "  ✓ Success: $OUTPUT_FILE (${FILE_SIZE} bytes, ${POLL_ATTEMPT} polls)"
-              SUCCESS=$((SUCCESS + 1))
-              SUCCESS_FLAG=true
-              break 2
-            else
-              echo "  ✗ Failed: Invalid JSON in output"
-              FAILED=$((FAILED + 1))
-              FAILED_ITEMS+=("$FILE_NAME → $lang_code: Invalid JSON output")
-              SUCCESS_FLAG=false
-              break 2
-            fi
-          elif [ "$RUNTIME_STATUS" = "Failed" ]; then
-            ERROR_MSG=$(echo "$STATUS_RESPONSE" | jq -r '.output // "Orchestration failed"' 2>/dev/null)
-            echo "  ✗ Failed: $ERROR_MSG"
-            FAILED=$((FAILED + 1))
-            FAILED_ITEMS+=("$FILE_NAME → $lang_code: $ERROR_MSG")
-            SUCCESS_FLAG=false
-            break 2
-          elif [ "$RUNTIME_STATUS" = "Running" ] || [ "$RUNTIME_STATUS" = "Pending" ]; then
-            # Still running, continue polling
-            echo "  ⏳ Still processing... (attempt $POLL_ATTEMPT/$MAX_POLL_ATTEMPTS)"
-          else
-            echo "  ⚠ Unknown status: $RUNTIME_STATUS"
-          fi
-        done
-        
-        if [ $POLL_ATTEMPT -ge $MAX_POLL_ATTEMPTS ]; then
-          echo "  ✗ Failed: Orchestration timeout after $((MAX_POLL_ATTEMPTS * 5)) seconds"
-          FAILED=$((FAILED + 1))
-          FAILED_ITEMS+=("$FILE_NAME → $lang_code: Orchestration timeout")
-          SUCCESS_FLAG=false
-          break
-        fi
-      elif [ "$HTTP_STATUS" -eq 504 ]; then
-        # Gateway timeout - retry with exponential backoff
-        RETRY_COUNT=$((RETRY_COUNT + 1))
-        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-          DELAY=$((BASE_DELAY * (2 ** (RETRY_COUNT - 1))))
-          echo "  ⚠ Timeout (504) - Retry $RETRY_COUNT/$MAX_RETRIES after ${DELAY}s..."
-          sleep $DELAY
-        else
-          echo "  ✗ Failed: Timeout after $MAX_RETRIES retries"
-          FAILED=$((FAILED + 1))
-          FAILED_ITEMS+=("$FILE_NAME → $lang_code: Timeout after retries")
-          SUCCESS_FLAG=false
-        fi
-      else
-        # Other error
-        ERROR_MSG=$(jq -r '.error // "Unknown error"' "$TEMP_FILE" 2>/dev/null || echo "HTTP $HTTP_STATUS")
-        echo "  ✗ Failed: $ERROR_MSG"
-        FAILED=$((FAILED + 1))
-        FAILED_ITEMS+=("$FILE_NAME → $lang_code: $ERROR_MSG")
-        SUCCESS_FLAG=false
-        break
-      fi
+    # Wait if we've reached max concurrent jobs
+    while [ $ACTIVE_JOBS -ge $MAX_CONCURRENT_JOBS ]; do
+      # Wait for any job to complete
+      wait -n 2>/dev/null || true
+      ACTIVE_JOBS=$((ACTIVE_JOBS - 1))
     done
     
-    # Clean up temp file
-    rm -f "$TEMP_FILE"
+    # Start translation job in background
+    translate_job "$SOURCE_FILE" "$lang_code" "$lang_name" &
+    ACTIVE_JOBS=$((ACTIVE_JOBS + 1))
     
-    # Delay between requests to avoid rate limiting
-    if [ "$SUCCESS_FLAG" = true ]; then
-      sleep 1
-    else
-      # Longer delay after errors
-      sleep 2
-    fi
+    # Small delay to stagger job starts and avoid simultaneous blob creation
+    sleep 0.5
   done
+  
+  # Wait for all jobs for this file to complete
+  echo ""
+  echo "Waiting for all $FILE_NAME translations to complete..."
+  wait
 done
+
+# Read final statistics from files
+SUCCESS=$(cat "$SUCCESS_FILE")
+FAILED=$(cat "$FAILED_FILE")
 
 echo ""
 echo "========================================="
 echo "Translation Complete"
 echo "========================================="
-echo "Total Processed: $((SUCCESS + FAILED + SKIPPED))"
+echo "Total Processed: $((SUCCESS + FAILED))"
 echo "Successful: $SUCCESS"
-echo "Skipped (already exist): $SKIPPED"
 echo "Failed: $FAILED"
 
 if [ $FAILED -gt 0 ]; then
   echo ""
   echo "Failed Translations:"
-  for failed in "${FAILED_ITEMS[@]}"; do
-    echo "  - $failed"
-  done
+  while IFS= read -r line; do
+    if [ -n "$line" ]; then
+      echo "  - $line"
+    fi
+  done < "$FAILED_ITEMS_FILE"
 fi
 
 echo ""
-echo "Translated files are in: $LOCALES_DIR/{language-code}/"
+echo "Translations are saved in Azure Blob Storage:"
+echo "  Storage Account: avstoragewje2yrjsuipbs"
+echo "  Container: locales"
+echo "  Structure: {language-code}/{filename}.json"
+echo ""
+echo "To download all translated files:"
+echo "  az storage blob download-batch \\"
+echo "    --account-name avstoragewje2yrjsuipbs \\"
+echo "    --source locales \\"
+echo "    --destination $LOCALES_DIR \\"
+echo "    --auth-mode login \\"
+echo "    --overwrite"
 echo "========================================="
 
 # Exit with error if any translations failed

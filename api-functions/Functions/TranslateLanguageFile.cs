@@ -115,7 +115,8 @@ public class TranslateLanguageFile
             {
                 LanguageDataJson = JsonSerializer.Serialize(request.LanguageData),
                 TargetLanguageCode = languageCode,
-                TargetLanguageName = languageName
+                TargetLanguageName = languageName,
+                SourceFilename = request.SourceFilename ?? "translation"
             };
 
             var instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
@@ -310,7 +311,8 @@ public class TranslateLanguageFile
                 {
                     InstanceId = context.InstanceId,
                     JsonResult = jsonResult,
-                    TargetLanguageCode = input.TargetLanguageCode
+                    TargetLanguageCode = input.TargetLanguageCode,
+                    SourceFilename = input.SourceFilename
                 });
 
             logger.LogInformation("Translation result saved to blob storage with SAS URL");
@@ -372,7 +374,11 @@ public class TranslateLanguageFile
                 }
 
                 // Extract the last key from the path for nested objects
-                var lastKey = currentPath.Contains('.') ? currentPath.Split('.').Last() : currentPath;
+                var pathParts = currentPath.Split('.');
+                var lastKey = pathParts.Length > 0 && !string.IsNullOrEmpty(currentPath)
+                    ? pathParts[pathParts.Length - 1]
+                    : currentPath;
+
                 if (!string.IsNullOrEmpty(lastKey))
                 {
                     result[lastKey] = nestedObject;
@@ -403,12 +409,18 @@ public class TranslateLanguageFile
 
                     var translated = await TranslateValueWithRetry(translationInput, logger);
 
-                    var lastKeyString = currentPath.Contains('.') ? currentPath.Split('.').Last() : currentPath;
+                    var pathPartsStr = currentPath.Split('.');
+                    var lastKeyString = pathPartsStr.Length > 0 && !string.IsNullOrEmpty(currentPath)
+                        ? pathPartsStr[pathPartsStr.Length - 1]
+                        : currentPath;
                     result[lastKeyString] = translated;
                 }
                 else
                 {
-                    var lastKeyEmpty = currentPath.Contains('.') ? currentPath.Split('.').Last() : currentPath;
+                    var pathPartsEmpty = currentPath.Split('.');
+                    var lastKeyEmpty = pathPartsEmpty.Length > 0 && !string.IsNullOrEmpty(currentPath)
+                        ? pathPartsEmpty[pathPartsEmpty.Length - 1]
+                        : currentPath;
                     result[lastKeyEmpty] = stringValue;
                 }
                 break;
@@ -417,7 +429,10 @@ public class TranslateLanguageFile
             case JsonValueKind.True:
             case JsonValueKind.False:
             case JsonValueKind.Null:
-                var lastKeySimple = currentPath.Contains('.') ? currentPath.Split('.').Last() : currentPath;
+                var pathPartsSimple = currentPath.Split('.');
+                var lastKeySimple = pathPartsSimple.Length > 0 && !string.IsNullOrEmpty(currentPath)
+                    ? pathPartsSimple[pathPartsSimple.Length - 1]
+                    : currentPath;
                 result[lastKeySimple] = JsonSerializer.Deserialize<object>(element.GetRawText()) ?? "";
                 break;
 
@@ -429,7 +444,10 @@ public class TranslateLanguageFile
                     await ProcessJsonElement(item, "", arrayItem, input, logger);
                     array.Add(arrayItem.Count == 1 ? arrayItem.Values.First() : arrayItem);
                 }
-                var lastKeyArray = currentPath.Contains('.') ? currentPath.Split('.').Last() : currentPath;
+                var pathPartsArray = currentPath.Split('.');
+                var lastKeyArray = pathPartsArray.Length > 0 && !string.IsNullOrEmpty(currentPath)
+                    ? pathPartsArray[pathPartsArray.Length - 1]
+                    : currentPath;
                 result[lastKeyArray] = array;
                 break;
         }
@@ -538,33 +556,41 @@ public class TranslateLanguageFile
         TranslationResultInput input,
         ILogger logger)
     {
-        // Create or get container
-        var containerName = "translation-outputs";
+        // Create or get container (locales mirror)
+        var containerName = "locales";
         var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
         await containerClient.CreateIfNotExistsAsync();
 
-        // Create blob name with timestamp
-        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");
-        var blobName = $"{input.InstanceId}/{input.TargetLanguageCode}-{timestamp}.json";
+        // Create blob path matching local structure: {languageCode}/{filename}.json
+        var filename = string.IsNullOrEmpty(input.SourceFilename) ? "translation" : input.SourceFilename;
+        var blobName = $"{input.TargetLanguageCode}/{filename}.json";
         var blobClient = containerClient.GetBlobClient(blobName);
+
+        // Check if blob already exists - skip if it does
+        bool exists = await blobClient.ExistsAsync();
+        if (exists)
+        {
+            logger.LogInformation("Translation already exists at {BlobName}, skipping upload", blobName);
+            return blobName; // Return existing blob path
+        }
 
         // Upload JSON content
         using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(input.JsonResult)))
         {
-            await blobClient.UploadAsync(stream, overwrite: true);
+            await blobClient.UploadAsync(stream, overwrite: false);
         }
 
         logger.LogInformation("Uploaded translation result to blob: {BlobName}", blobName);
+        logger.LogInformation("Translation saved to: {LanguageCode}/{Filename}.json", input.TargetLanguageCode, filename);
 
-        // Return the blob URL - client can access with their own credentials
-        var blobUri = blobClient.Uri.ToString();
-        logger.LogInformation("Returning blob URI: {Uri}", blobUri);
-        return blobUri;
+        // Return the blob path for reference
+        return blobName;
     }
 
     public class TranslationRequest
     {
         public JsonElement LanguageData { get; set; }
         public string TargetLanguage { get; set; } = string.Empty;
+        public string SourceFilename { get; set; } = string.Empty;
     }
 }

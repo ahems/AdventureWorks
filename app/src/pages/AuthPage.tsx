@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import { z } from "zod";
 import { Twemoji } from "@/components/Twemoji";
+import { TwemojiText } from "@/components/TwemojiText";
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email" }),
@@ -307,7 +308,7 @@ const AuthPage: React.FC = () => {
             {/* Demo Hint */}
             <div className="mt-6 pt-4 border-t-2 border-dashed border-doodle-text/20">
               <p className="font-doodle text-xs text-center text-doodle-text/50">
-                {t("auth.demoHint")}
+                <TwemojiText text={t("auth.demoHint")} size="0.875rem" />
               </p>
             </div>
           </div>

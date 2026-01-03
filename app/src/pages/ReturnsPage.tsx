@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { TwemojiText } from "@/components/TwemojiText";
 
 const ReturnsPage: React.FC = () => {
   const { t } = useTranslation("common");
@@ -131,7 +132,10 @@ const ReturnsPage: React.FC = () => {
               <div className="space-y-6">
                 <div>
                   <h3 className="font-doodle font-bold text-doodle-text mb-2">
-                    {t("returns.eligibleForReturn")}
+                    <TwemojiText
+                      text={t("returns.eligibleForReturn")}
+                      size="1rem"
+                    />
                   </h3>
                   <ul className="font-doodle text-doodle-text/70 space-y-1 ml-4">
                     <li>{t("returns.unusedItemsInOriginalPackaging")}</li>
@@ -143,7 +147,10 @@ const ReturnsPage: React.FC = () => {
 
                 <div>
                   <h3 className="font-doodle font-bold text-doodle-text mb-2">
-                    {t("returns.notEligibleForReturn")}
+                    <TwemojiText
+                      text={t("returns.notEligibleForReturn")}
+                      size="1rem"
+                    />
                   </h3>
                   <ul className="font-doodle text-doodle-text/70 space-y-1 ml-4">
                     <li>{t("returns.usedOrWornItems")}</li>

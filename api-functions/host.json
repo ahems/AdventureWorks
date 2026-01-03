@@ -19,6 +19,8 @@
   "extensions": {
     "durableTask": {
       "hubName": "AdventureWorksFunctions",
+      "maxOrchestrationActions": 100000,
+      "maxActivityPollingInterval": "00:00:02",
       "storageProvider": {
         "type": "AzureStorage"
       }

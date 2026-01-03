@@ -37,6 +37,7 @@ public class TranslationOrchestrationInput
     public string LanguageDataJson { get; set; } = string.Empty;
     public string TargetLanguageCode { get; set; } = string.Empty;
     public string TargetLanguageName { get; set; } = string.Empty;
+    public string SourceFilename { get; set; } = string.Empty;
 }
 
 public class SectionTranslationInput
@@ -67,4 +68,5 @@ public class TranslationResultInput
     public string InstanceId { get; set; } = string.Empty;
     public string JsonResult { get; set; } = string.Empty;
     public string TargetLanguageCode { get; set; } = string.Empty;
+    public string SourceFilename { get; set; } = string.Empty;
 }
