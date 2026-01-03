@@ -7,20 +7,45 @@ using Microsoft.Extensions.Logging;
 using Azure.Identity;
 using AddressFunctions.Services;
 using api_functions.Services;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Metrics;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
 builder.ConfigureFunctionsWebApplication();
 
-// Configure services
+// Configure Application Insights + OpenTelemetry for enhanced observability
 builder.Services
     .AddApplicationInsightsTelemetryWorkerService()
     .ConfigureFunctionsApplicationInsights();
 
+// Add OpenTelemetry tracing for distributed tracing
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+    {
+        tracing
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddSqlClientInstrumentation(options =>
+            {
+                options.SetDbStatementForText = true;
+                options.RecordException = true;
+            });
+    });
+
 // Configure DefaultAzureCredential for Azure SDK clients
 builder.Services.AddSingleton(new DefaultAzureCredential());
 
-// Register AddressService with connection string from configuration
+// Aspire SQL Client with automatic tracing and health checks
+builder.AddSqlServerClient("SQL_CONNECTION_STRING");
+
+// Aspire Blob Storage with observability
+builder.AddAzureBlobClient("AZURE_STORAGE_CONNECTION_STRING");
+
+// Aspire Queue Storage with observability
+builder.AddAzureQueueClient("AZURE_STORAGE_CONNECTION_STRING");
+
+// Register custom services with connection string from configuration
 builder.Services.AddScoped<AddressService>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
@@ -29,7 +54,6 @@ builder.Services.AddScoped<AddressService>(sp =>
     return new AddressService(connectionString);
 });
 
-// Register ProductService with connection string from configuration
 builder.Services.AddScoped<ProductService>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
@@ -38,7 +62,6 @@ builder.Services.AddScoped<ProductService>(sp =>
     return new ProductService(connectionString);
 });
 
-// Register ReviewService with connection string from configuration
 builder.Services.AddScoped<ReviewService>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
@@ -47,7 +70,7 @@ builder.Services.AddScoped<ReviewService>(sp =>
     return new ReviewService(connectionString);
 });
 
-// Register AIService with Azure OpenAI endpoint from configuration
+// Register AIService with Azure OpenAI endpoint
 builder.Services.AddScoped<AIService>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();

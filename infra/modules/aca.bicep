@@ -53,6 +53,17 @@ resource containerAppEnv 'Microsoft.App/managedEnvironments@2023-11-02-preview' 
         sharedKey: workspace.listKeys().primarySharedKey
       }
     }
+    // OpenTelemetry is automatically enabled when using Aspire components in the app
+    // The Application Insights connection above captures all telemetry
+  }
+}
+
+// Aspire Dashboard as a managed .NET component
+resource aspireDashboard 'Microsoft.App/managedEnvironments/dotNetComponents@2025-10-02-preview' = {
+  parent: containerAppEnv
+  name: 'aspire-dashboard'
+  properties: {
+    componentType: 'AspireDashboard'
   }
 }
 
