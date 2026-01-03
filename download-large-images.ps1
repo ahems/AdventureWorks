@@ -1,11 +1,11 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Downloads all large product images from the GraphQL API to the images directory.
+    Downloads all product thumbnail images from the GraphQL API to the images directory.
 
 .DESCRIPTION
     This script queries the GraphQL API for all ProductPhoto records, extracts the 
-    LargePhoto (base64 encoded) data and LargePhotoFileName, and writes each image 
+    ThumbnailPhoto (base64 encoded) data and ThumbnailPhotoFileName, and writes each image 
     to disk in the images/ directory.
 
 .PARAMETER ApiUrl
@@ -58,7 +58,7 @@ try {
   productPhotos(first: $metadataPageSize, after: "$after") {
     items {
       ProductPhotoID
-      LargePhotoFileName
+      ThumbnailPhotoFileName
     }
     endCursor
     hasNextPage
@@ -72,7 +72,7 @@ try {
   productPhotos(first: $metadataPageSize) {
     items {
       ProductPhotoID
-      LargePhotoFileName
+      ThumbnailPhotoFileName
     }
     endCursor
     hasNextPage
@@ -128,7 +128,7 @@ try {
     foreach ($metadata in $allMetadata) {
         $current++
         $photoId = $metadata.ProductPhotoID
-        $fileName = $metadata.LargePhotoFileName
+        $fileName = $metadata.ThumbnailPhotoFileName
         
         if ([string]::IsNullOrWhiteSpace($fileName)) {
             Write-Warning "[$current/$totalPhotos] Photo ID $photoId has no filename, skipping..."
@@ -148,7 +148,7 @@ try {
         try {
             # Query for individual photo with binary data
             $photoQuery = @{
-                query = "{ productPhoto_by_pk(ProductPhotoID: $photoId) { ProductPhotoID LargePhotoFileName LargePhoto } }"
+                query = "{ productPhoto_by_pk(ProductPhotoID: $photoId) { ProductPhotoID ThumbnailPhotoFileName ThumbNailPhoto } }"
             } | ConvertTo-Json
             
             $photoResponse = Invoke-RestMethod -Uri $ApiUrl -Method Post -Body $photoQuery -ContentType "application/json"
@@ -160,7 +160,7 @@ try {
             }
             
             $photo = $photoResponse.data.productPhoto_by_pk
-            $base64Data = $photo.LargePhoto
+            $base64Data = $photo.ThumbNailPhoto
             
             if ([string]::IsNullOrWhiteSpace($base64Data)) {
                 Write-Warning "[$current/$totalPhotos] Photo ID $photoId ($fileName) has no image data, skipping..."
