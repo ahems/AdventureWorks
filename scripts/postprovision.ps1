@@ -587,6 +587,8 @@ try {
         @{ Table='Production.ProductModelIllustration'; File='ProductModelIllustration.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.Product'; File='Product.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductReview'; File='ProductReview.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments') }
+        # AI-generated product reviews with embeddings (CommentsEmbedding varbinary field, base64-encoded)
+        @{ Table='Production.ProductReview'; File='ProductReview-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments'); Base64Columns=@('CommentsEmbedding') }
         @{ Table='Production.ProductCostHistory'; File='ProductCostHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductListPriceHistory'; File='ProductListPriceHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductInventory'; File='ProductInventory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -718,7 +720,7 @@ FROM INFORMATION_SCHEMA.COLUMNS
 WHERE TABLE_SCHEMA = '$schemaName' AND TABLE_NAME = '$tableName'
 AND DATA_TYPE IN ('hierarchyid', 'geography', 'geometry')
 "@
-            $hasSpecialColumns = ($cmd.ExecuteScalar() -gt 0) -or ($config.HexColumns -and $config.HexColumns.Count -gt 0)
+            $hasSpecialColumns = ($cmd.ExecuteScalar() -gt 0) -or ($config.HexColumns -and $config.HexColumns.Count -gt 0) -or ($config.Base64Columns -and $config.Base64Columns.Count -gt 0)
             
             # First, get ALL columns from the database to understand CSV structure
             $cmd.CommandText = @"
@@ -916,8 +918,18 @@ ORDER BY c.ORDINAL_POSITION
                                     $dataRow[$dataTableColIndex] = [guid]::Parse($val)
                                 }
                                 'varbinary' {
+                                    # Check if this column is base64-encoded (for embeddings from GraphQL API)
+                                    if ($config.Base64Columns -and $col.Name -in $config.Base64Columns) {
+                                        # Decode base64 string to byte array
+                                        if ([string]::IsNullOrWhiteSpace($val)) {
+                                            $dataRow[$dataTableColIndex] = [System.DBNull]::Value
+                                        } else {
+                                            $bytes = [Convert]::FromBase64String($val)
+                                            $dataRow[$dataTableColIndex] = $bytes
+                                        }
+                                    }
                                     # Check if this column is hex-encoded (for large binary data exported via CONVERT)
-                                    if ($config.HexColumns -and $col.Name -in $config.HexColumns) {
+                                    elseif ($config.HexColumns -and $col.Name -in $config.HexColumns) {
                                         # Decode hex string to byte array using helper function
                                         $bytes = Convert-HexStringToByteArray -HexString $val
                                         $dataRow[$dataTableColIndex] = $bytes
