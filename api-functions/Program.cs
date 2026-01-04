@@ -68,6 +68,18 @@ builder.Services.AddScoped<ReviewService>(sp =>
     return new ReviewService(connectionString);
 });
 
+// Register OrderService for MCP Server
+builder.Services.AddScoped<OrderService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new OrderService(connectionString);
+});
+
+// Register AdventureWorks MCP Tools for AI agent integration
+builder.Services.AddScoped<AdventureWorksMcpTools>();
+
 // Register AIService with Azure OpenAI endpoint
 builder.Services.AddScoped<AIService>(sp =>
 {
