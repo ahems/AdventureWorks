@@ -388,7 +388,7 @@ const SearchPage: React.FC = () => {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Describe what you're looking for..."
+                    placeholder={t("search.placeholder")}
                     className="w-full pl-10 pr-4 py-3 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
                   />
                 </div>

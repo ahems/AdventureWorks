@@ -1594,7 +1594,7 @@ const CheckoutPage: React.FC = () => {
                           <button
                             onClick={handleRemoveCode}
                             className="p-1 hover:bg-doodle-text/10 rounded transition-colors"
-                            aria-label="Remove discount code"
+                            aria-label={t("removeDiscountCode")}
                           >
                             <X className="w-4 h-4 text-doodle-text/70" />
                           </button>

@@ -281,7 +281,7 @@
     "qty": "数量",
     "save": "保存",
     "was": "之前价格",
-    "discountCode": "折扣码",
+    "discountCode": "折扣码","removeDiscountCode": "删除折扣码",
     "enterCode": "输入折扣码",
     "apply": "应用",
     "shippingMethod": "配送方式",

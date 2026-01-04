@@ -632,7 +632,7 @@ const ProductPage: React.FC = () => {
                   <button
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
                     className="p-3 hover:bg-doodle-text/10 transition-colors"
-                    aria-label="Decrease quantity"
+                    aria-label={t("cart.decreaseQuantity")}
                   >
                     <Minus className="w-5 h-5" />
                   </button>
@@ -642,7 +642,7 @@ const ProductPage: React.FC = () => {
                   <button
                     onClick={() => setQuantity(quantity + 1)}
                     className="p-3 hover:bg-doodle-text/10 transition-colors"
-                    aria-label="Increase quantity"
+                    aria-label={t("cart.increaseQuantity")}
                   >
                     <Plus className="w-5 h-5" />
                   </button>

@@ -281,7 +281,7 @@
     "qty": "Cantidad",
     "save": "Guardar",
     "was": "Era",
-    "discountCode": "Código de descuento",
+    "discountCode": "Código de descuento","removeDiscountCode": "Eliminar código de descuento",
     "enterCode": "INGRESAR CÓDIGO",
     "apply": "Aplicar",
     "shippingMethod": "Método de envío",
