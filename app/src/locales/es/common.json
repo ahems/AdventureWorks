@@ -5,7 +5,8 @@
     "cart": "Carrito",
     "myAccount": "Mi cuenta",
     "search": "Buscar",
-    "searchPlaceholder": "Busca bicicletas, equipo, ropa...","aiSearchPlaceholder": "Búsqueda IA: Describe lo que buscas...",
+    "searchPlaceholder": "Busca bicicletas, equipo, ropa...",
+    "aiSearchPlaceholder": "Búsqueda IA: Describe lo que buscas...",
     "selectLanguage": "Seleccionar idioma"
   },
   "buttons": {
@@ -281,7 +282,8 @@
     "qty": "Cantidad",
     "save": "Guardar",
     "was": "Era",
-    "discountCode": "Código de descuento","removeDiscountCode": "Eliminar código de descuento",
+    "discountCode": "Código de descuento",
+    "removeDiscountCode": "Eliminar código de descuento",
     "enterCode": "INGRESAR CÓDIGO",
     "apply": "Aplicar",
     "shippingMethod": "Método de envío",
@@ -545,7 +547,12 @@
     "titleRequired": "El título es obligatorio",
     "titleMustBeLessThan100Characters": "El título debe tener menos de 100 caracteres",
     "reviewMustBeAtLeast10Characters": "La reseña debe tener al menos 10 caracteres",
-    "reviewMustBeLessThan500Characters": "La reseña debe tener menos de 500 caracteres"
+    "reviewMustBeLessThan500Characters": "La reseña debe tener menos de 500 caracteres",
+    "alreadyReviewed": "Ya has reseñado este producto",
+    "error": "Error",
+    "failedToSubmit": "No se pudo enviar la reseña. Por favor, inténtelo de nuevo.",
+    "thankYouForFeedback": "Gracias por compartir tus comentarios.",
+    "thankYouForReview": "¡Gracias por tus comentarios!"
   },
   "productReviews": {
     "customerReviews": "Reseñas de clientes",

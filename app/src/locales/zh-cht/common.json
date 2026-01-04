@@ -6,7 +6,8 @@
     "myAccount": "我的帳戶",
     "search": "搜尋",
     "searchPlaceholder": "搜尋自行車、裝備、服飾⋯",
-    "selectLanguage": "選擇語言"
+    "selectLanguage": "選擇語言",
+    "aiSearchPlaceholder": "AI 搜尋：請描述您正在尋找的內容..."
   },
   "buttons": {
     "addToCart": "加入購物車",
@@ -314,7 +315,8 @@
     "placeholders": {
       "cardNumber": "4242 4242 4242 4242",
       "cvv": "123"
-    }
+    },
+    "removeDiscountCode": "移除折扣碼"
   },
   "compare": {
     "bestRated": "最高評分",
@@ -545,7 +547,12 @@
     "titleRequired": "標題為必填",
     "titleMustBeLessThan100Characters": "標題長度須少於 100 字元",
     "reviewMustBeAtLeast10Characters": "評論至少需有 10 個字元",
-    "reviewMustBeLessThan500Characters": "評論長度須少於 500 字元"
+    "reviewMustBeLessThan500Characters": "評論長度須少於 500 字元",
+    "alreadyReviewed": "您已經評論過此產品",
+    "error": "錯誤",
+    "failedToSubmit": "提交評論失敗。請再試一次。",
+    "thankYouForFeedback": "感謝您分享您的意見。",
+    "thankYouForReview": "感謝您的反饋！"
   },
   "productReviews": {
     "customerReviews": "顧客評論",

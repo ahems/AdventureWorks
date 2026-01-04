@@ -6,7 +6,8 @@
     "myAccount": "Tài Khoản Của Tôi",
     "search": "Tìm Kiếm",
     "searchPlaceholder": "Tìm kiếm xe đạp, thiết bị, quần áo...",
-    "selectLanguage": "Chọn Ngôn Ngữ"
+    "selectLanguage": "Chọn Ngôn Ngữ",
+    "aiSearchPlaceholder": "Tìm kiếm AI: Mô tả những gì bạn đang tìm kiếm..."
   },
   "buttons": {
     "addToCart": "Thêm Vào Giỏ",
@@ -314,7 +315,8 @@
     "placeholders": {
       "cardNumber": "4242 4242 4242 4242",
       "cvv": "123"
-    }
+    },
+    "removeDiscountCode": "Xóa mã giảm giá"
   },
   "compare": {
     "bestRated": "Đánh Giá Cao Nhất",
@@ -545,7 +547,12 @@
     "titleRequired": "Tiêu đề là bắt buộc",
     "titleMustBeLessThan100Characters": "Tiêu đề phải dưới 100 ký tự",
     "reviewMustBeAtLeast10Characters": "Đánh giá phải có ít nhất 10 ký tự",
-    "reviewMustBeLessThan500Characters": "Đánh giá phải dưới 500 ký tự"
+    "reviewMustBeLessThan500Characters": "Đánh giá phải dưới 500 ký tự",
+    "alreadyReviewed": "Bạn đã đánh giá sản phẩm này rồi",
+    "error": "Lỗi",
+    "failedToSubmit": "Không thể gửi đánh giá. Vui lòng thử lại.",
+    "thankYouForFeedback": "Cảm ơn bạn đã chia sẻ phản hồi.",
+    "thankYouForReview": "Cảm ơn bạn đã phản hồi!"
   },
   "productReviews": {
     "customerReviews": "Đánh Giá Khách Hàng",

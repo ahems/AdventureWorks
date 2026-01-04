@@ -5,7 +5,8 @@
     "cart": "Panier",
     "myAccount": "Mon Compte",
     "search": "Rechercher",
-    "searchPlaceholder": "Recherchez vélos, équipement, vêtements...","aiSearchPlaceholder": "Recherche IA: Décrivez ce que vous recherchez...",
+    "searchPlaceholder": "Recherchez vélos, équipement, vêtements...",
+    "aiSearchPlaceholder": "Recherche IA: Décrivez ce que vous recherchez...",
     "selectLanguage": "Choisir la Langue"
   },
   "buttons": {
@@ -314,7 +315,8 @@
     "placeholders": {
       "cardNumber": "4242 4242 4242 4242",
       "cvv": "123"
-    }
+    },
+    "removeDiscountCode": "Supprimer le code de réduction"
   },
   "compare": {
     "bestRated": "Les Mieux Notés",
@@ -545,7 +547,12 @@
     "titleRequired": "Le titre est requis",
     "titleMustBeLessThan100Characters": "Le titre doit faire moins de 100 caractères",
     "reviewMustBeAtLeast10Characters": "L’avis doit contenir au moins 10 caractères",
-    "reviewMustBeLessThan500Characters": "L’avis doit faire moins de 500 caractères"
+    "reviewMustBeLessThan500Characters": "L’avis doit faire moins de 500 caractères",
+    "alreadyReviewed": "Vous avez déjà évalué ce produit",
+    "error": "Erreur",
+    "failedToSubmit": "Échec de l'envoi de l'avis. Veuillez réessayer.",
+    "thankYouForFeedback": "Merci d'avoir partagé vos commentaires.",
+    "thankYouForReview": "Merci pour votre retour !"
   },
   "productReviews": {
     "customerReviews": "Avis des Clients",

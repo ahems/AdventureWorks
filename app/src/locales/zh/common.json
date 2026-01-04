@@ -5,7 +5,8 @@
     "cart": "购物车",
     "myAccount": "我的账户",
     "search": "搜索",
-    "searchPlaceholder": "搜索自行车、装备、服装…","aiSearchPlaceholder": "AI搜索：描述您要找的东西...",
+    "searchPlaceholder": "搜索自行车、装备、服装…",
+    "aiSearchPlaceholder": "AI搜索：描述您要找的东西...",
     "selectLanguage": "选择语言"
   },
   "buttons": {
@@ -281,7 +282,8 @@
     "qty": "数量",
     "save": "保存",
     "was": "之前价格",
-    "discountCode": "折扣码","removeDiscountCode": "删除折扣码",
+    "discountCode": "折扣码",
+    "removeDiscountCode": "删除折扣码",
     "enterCode": "输入折扣码",
     "apply": "应用",
     "shippingMethod": "配送方式",
@@ -545,7 +547,12 @@
     "titleRequired": "标题为必填项",
     "titleMustBeLessThan100Characters": "标题必须少于100个字符",
     "reviewMustBeAtLeast10Characters": "评论至少10个字符",
-    "reviewMustBeLessThan500Characters": "评论必须少于500个字符"
+    "reviewMustBeLessThan500Characters": "评论必须少于500个字符",
+    "alreadyReviewed": "您已对该产品进行了评价",
+    "error": "错误",
+    "failedToSubmit": "提交评论失败。请重试。",
+    "thankYouForFeedback": "感谢您分享您的反馈。",
+    "thankYouForReview": "感谢您的反馈！"
   },
   "productReviews": {
     "customerReviews": "顾客评价",

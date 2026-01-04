@@ -6,7 +6,8 @@
     "myAccount": "Мой аккаунт",
     "search": "Поиск",
     "searchPlaceholder": "Ищите велосипеды, снаряжение, одежду...",
-    "selectLanguage": "Выберите язык"
+    "selectLanguage": "Выберите язык",
+    "aiSearchPlaceholder": "Поиск с ИИ: Опишите, что вы ищете..."
   },
   "buttons": {
     "addToCart": "Добавить в корзину",
@@ -314,7 +315,8 @@
     "placeholders": {
       "cardNumber": "4242 4242 4242 4242",
       "cvv": "123"
-    }
+    },
+    "removeDiscountCode": "Удалить код скидки"
   },
   "compare": {
     "bestRated": "Лучший рейтинг",
@@ -545,7 +547,12 @@
     "titleRequired": "Заголовок обязателен",
     "titleMustBeLessThan100Characters": "Заголовок должен быть менее 100 символов",
     "reviewMustBeAtLeast10Characters": "Отзыв должен содержать не менее 10 символов",
-    "reviewMustBeLessThan500Characters": "Отзыв должен быть менее 500 символов"
+    "reviewMustBeLessThan500Characters": "Отзыв должен быть менее 500 символов",
+    "alreadyReviewed": "Вы уже оставили отзыв об этом продукте",
+    "error": "Ошибка",
+    "failedToSubmit": "Не удалось отправить отзыв. Пожалуйста, попробуйте снова.",
+    "thankYouForFeedback": "Спасибо за ваш отзыв.",
+    "thankYouForReview": "Спасибо за ваш отзыв!"
   },
   "productReviews": {
     "customerReviews": "Отзывы покупателей",
