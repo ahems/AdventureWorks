@@ -1,5 +1,5 @@
 {
-  "header": {"signIn":"로그인","signOut":"로그아웃","cart":"장바구니","myAccount":"내 계정","search":"검색","searchPlaceholder":"자전거, 장비, 의류 검색...","selectLanguage":"언어 선택"},
+  "header": {"signIn":"로그인","signOut":"로그아웃","cart":"장바구니","myAccount":"내 계정","search":"검색","searchPlaceholder":"자전거, 장비, 의류 검색...","aiSearchPlaceholder":"AI 검색: 찾으시는 것을 설명해 주세요...","selectLanguage":"언어 선택"},
   "buttons": {"addToCart":"장바구니에 담기","buyNow":"지금 구매하기","viewDetails":"상세 보기","search":"검색","backToHome":"홈으로 돌아가기"},
   "navigation": {"home":"홈"},
   "newsletter": {"title":"모험 클럽에 참여하세요!","description":"독점 할인, 트레일 팁, 장비 가이드를 이메일로 받아보세요.","emailPlaceholder":"your@email.kr","subscribe":"구독하기","disclaimer":"스팸 없음, 좋은 기분만 가득. 언제든지 구독 취소하세요!"},

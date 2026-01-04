@@ -1,5 +1,5 @@
 {
-  "header": {"signIn":"Inloggen","signOut":"Uitloggen","cart":"Winkelwagen","myAccount":"Mijn Account","search":"Zoeken","searchPlaceholder":"Zoek naar fietsen, uitrusting, kleding...","selectLanguage":"Selecteer taal"},
+  "header": {"signIn":"Inloggen","signOut":"Uitloggen","cart":"Winkelwagen","myAccount":"Mijn Account","search":"Zoeken","searchPlaceholder":"Zoek naar fietsen, uitrusting, kleding...","aiSearchPlaceholder":"AI-zoeken: Beschrijf wat je zoekt...","selectLanguage":"Selecteer taal"},
   "buttons": {"addToCart":"Toevoegen aan winkelwagen","buyNow":"Koop Nu","viewDetails":"Bekijk details","search":"Zoeken","backToHome":"Terug naar Home"},
   "navigation": {"home":"Home"},
   "newsletter": {"title":"Word lid van de Avonturenclub!","description":"Ontvang exclusieve aanbiedingen, trailtips en uitrustingsgidsen rechtstreeks in je inbox.","emailPlaceholder":"your@email.nl","subscribe":"Abonneren","disclaimer":"Geen spam, alleen goede vibes. Afmelden kan altijd!"},

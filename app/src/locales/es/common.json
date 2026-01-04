@@ -5,7 +5,7 @@
     "cart": "Carrito",
     "myAccount": "Mi cuenta",
     "search": "Buscar",
-    "searchPlaceholder": "Busca bicicletas, equipo, ropa...",
+    "searchPlaceholder": "Busca bicicletas, equipo, ropa...","aiSearchPlaceholder": "Búsqueda IA: Describe lo que buscas...",
     "selectLanguage": "Seleccionar idioma"
   },
   "buttons": {

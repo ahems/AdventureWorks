@@ -43,7 +43,7 @@ const SearchPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 5000]);
-  const [sortBy, setSortBy] = useState<SortOption>("relevance");
+  const [sortBy, setSortBy] = useState<SortOption>("rating");
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(12);
@@ -113,6 +113,9 @@ const SearchPage: React.FC = () => {
   const filteredProducts = useMemo(() => {
     // Use semantic search results when available
     let result = semanticQuerySubmitted ? [...semanticProducts] : [...products];
+
+    // Filter out out-of-stock items
+    result = result.filter((p) => p.inStock !== false);
 
     // Apply category filter
     if (selectedCategory !== null) {
@@ -261,7 +264,7 @@ const SearchPage: React.FC = () => {
   const clearFilters = () => {
     setSelectedCategory(null);
     setPriceRange([priceStats.min, priceStats.max]);
-    setSortBy("relevance");
+    setSortBy("rating");
   };
 
   const sortOptions: { value: SortOption; label: string }[] = [

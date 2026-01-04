@@ -1,5 +1,5 @@
 {
-  "header": {"signIn":"Anmelden","signOut":"Abmelden","cart":"Warenkorb","myAccount":"Mein Konto","search":"Suche","searchPlaceholder":"Suche nach Fahrrädern, Ausrüstung, Kleidung...","selectLanguage":"Sprache auswählen"},
+  "header": {"signIn":"Anmelden","signOut":"Abmelden","cart":"Warenkorb","myAccount":"Mein Konto","search":"Suche","searchPlaceholder":"Suche nach Fahrrädern, Ausrüstung, Kleidung...","aiSearchPlaceholder":"KI-Suche: Beschreiben Sie, wonach Sie suchen...","selectLanguage":"Sprache auswählen"},
   "buttons": {"addToCart":"In den Warenkorb legen","buyNow":"Jetzt kaufen","viewDetails":"Details anzeigen","search":"Suche","backToHome":"Zurück zur Startseite"},
   "navigation": {"home":"Startseite"},
   "newsletter": {"title":"Tritt dem Abenteuer-Club bei!","description":"Erhalten Sie exklusive Angebote, Trail-Tipps und Ausrüstungsratgeber direkt in Ihren Posteingang.","emailPlaceholder":"your@email.de","subscribe":"Abonnieren","disclaimer":"Kein Spam, nur gute Stimmung. Jederzeit abmelden!"},

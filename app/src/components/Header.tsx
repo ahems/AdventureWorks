@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Search,
   Globe,
+  Sparkles,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useCart } from "@/context/CartContext";
@@ -336,20 +337,21 @@ const Header: React.FC = () => {
           <div className="py-3 border-t-2 border-doodle-text border-dashed">
             <form onSubmit={handleSearch} className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-text/50" />
+                <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-accent" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={t("header.searchPlaceholder")}
-                  className="w-full pl-10 pr-4 py-2 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
+                  placeholder={t("header.aiSearchPlaceholder")}
+                  className="w-full pl-10 pr-4 py-2 font-doodle border-2 border-doodle-accent bg-white focus:border-doodle-accent focus:outline-none placeholder:text-doodle-text/50"
                   autoFocus
                 />
               </div>
               <button
                 type="submit"
-                className="doodle-button doodle-button-primary px-4"
+                className="doodle-button doodle-button-primary px-4 flex items-center gap-2"
               >
+                <Sparkles className="w-4 h-4" />
                 {t("buttons.search")}
               </button>
               <button

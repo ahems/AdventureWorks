@@ -5,7 +5,7 @@
     "cart": "Panier",
     "myAccount": "Mon Compte",
     "search": "Rechercher",
-    "searchPlaceholder": "Recherchez vélos, équipement, vêtements...",
+    "searchPlaceholder": "Recherchez vélos, équipement, vêtements...","aiSearchPlaceholder": "Recherche IA: Décrivez ce que vous recherchez...",
     "selectLanguage": "Choisir la Langue"
   },
   "buttons": {

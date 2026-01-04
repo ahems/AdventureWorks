@@ -1,5 +1,5 @@
 {
-  "header": {"signIn":"サインイン","signOut":"サインアウト","cart":"カート","myAccount":"マイアカウント","search":"検索","searchPlaceholder":"自転車、ギア、ウェアを検索...","selectLanguage":"言語を選択してください"},
+  "header": {"signIn":"サインイン","signOut":"サインアウト","cart":"カート","myAccount":"マイアカウント","search":"検索","searchPlaceholder":"自転車、ギア、ウェアを検索...","aiSearchPlaceholder":"AI検索: お探しのものを説明してください...","selectLanguage":"言語を選択してください"},
   "buttons": {"addToCart":"カートに追加する","buyNow":"今すぐ購入","viewDetails":"詳細を見る","search":"検索","backToHome":"ホームに戻る"},
   "navigation": {"home":"ホーム"},
   "newsletter": {"title":"アドベンチャークラブに参加しよう！","description":"限定のお得情報、トレイルのコツ、ギアガイドをあなたのメールボックスにお届けします。","emailPlaceholder":"your@email.jp","subscribe":"購読する","disclaimer":"スパムなし、良い雰囲気だけ。いつでも購読解除できます！"},

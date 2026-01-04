@@ -5,7 +5,7 @@
     "cart": "购物车",
     "myAccount": "我的账户",
     "search": "搜索",
-    "searchPlaceholder": "搜索自行车、装备、服装…",
+    "searchPlaceholder": "搜索自行车、装备、服装…","aiSearchPlaceholder": "AI搜索：描述您要找的东西...",
     "selectLanguage": "选择语言"
   },
   "buttons": {
