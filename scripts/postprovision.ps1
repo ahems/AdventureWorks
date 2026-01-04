@@ -1450,3 +1450,198 @@ if ($apiFunctionsUrl) {
 } else {
     Write-Warning "API_FUNCTIONS_URL not found in environment. VITE_API_FUNCTIONS_URL will not be set."
 }
+
+## ---------------------------------------------------------------------------
+## Create AI Agent with MCP Server Integration
+## ---------------------------------------------------------------------------
+Write-Output "`n=========================================="
+Write-Output "Creating AI Agent with MCP Server Tools"
+Write-Output "=========================================="
+
+# Check if agent-framework-azure-ai is installed
+try {
+    $pythonVersion = python3 --version 2>&1
+    Write-Output "Python version: $pythonVersion"
+    
+    # Check if pip package is installed
+    $packageCheck = python3 -m pip show agent-framework-azure-ai 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Output "Installing agent-framework-azure-ai (preview)..."
+        python3 -m pip install agent-framework-azure-ai --pre --quiet
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Failed to install agent-framework-azure-ai. AI Agent will not be created."
+            Write-Warning "You can manually install it with: pip install agent-framework-azure-ai --pre"
+        } else {
+            Write-Output "Successfully installed agent-framework-azure-ai"
+        }
+    } else {
+        Write-Output "agent-framework-azure-ai is already installed"
+    }
+}
+catch {
+    Write-Warning "Python3 not found. Skipping AI Agent creation."
+    Write-Warning "Install Python 3.8+ and run: pip install agent-framework-azure-ai --pre"
+}
+
+# Get required values for agent creation
+$openAiEndpoint = (azd env get-value 'AZURE_OPENAI_ENDPOINT' 2>$null).Trim()
+$chatModelName = (azd env get-value 'chatGptModelName' 2>$null).Trim()
+$mcpServerUrl = $apiFunctionsUrl
+
+if (-not $openAiEndpoint) {
+    # Try to get from Key Vault or construct from account name
+    $openAiAccountName = (azd env get-value 'AZURE_OPENAI_ACCOUNT_NAME' 2>$null).Trim()
+    if ($openAiAccountName) {
+        $openAiEndpoint = "https://$openAiAccountName.cognitiveservices.azure.com/"
+        Write-Output "Constructed OpenAI endpoint: $openAiEndpoint"
+        azd env set 'AZURE_OPENAI_ENDPOINT' $openAiEndpoint
+    }
+}
+
+if ($openAiEndpoint -and $chatModelName -and $mcpServerUrl) {
+    Write-Output "AI Foundry Endpoint: $openAiEndpoint"
+    Write-Output "Model Deployment: $chatModelName"
+    Write-Output "MCP Server URL: $mcpServerUrl"
+    
+    # Create Python script to set up the agent
+    $agentScript = @"
+import asyncio
+import sys
+from pathlib import Path
+
+async def create_agent():
+    try:
+        from agent_framework import ChatAgent, MCPStreamableHTTPTool
+        from agent_framework_azure_ai import AzureAIAgentClient
+        from azure.identity.aio import DefaultAzureCredential
+        
+        print("Creating AdventureWorks Customer Service AI Agent...")
+        print("Note: Agent is ephemeral and will be recreated on each deployment")
+        
+        # Create MCP tool for AdventureWorks server
+        mcp_tool = MCPStreamableHTTPTool(
+            name="AdventureWorks MCP",
+            description="Provides customer service tools for AdventureWorks including order tracking, product search, and complementary product recommendations",
+            url="$mcpServerUrl/api/mcp",
+        )
+        
+        # Create the agent client
+        async with DefaultAzureCredential() as credential:
+            chat_client = AzureAIAgentClient(
+                project_endpoint="$openAiEndpoint",
+                model_deployment_name="$chatModelName",
+                async_credential=credential,
+                agent_name="AdventureWorks Customer Service Agent",
+            )
+            
+            # Create ephemeral agent with MCP tools
+            # Note: Without an agent_id parameter, the agent is created temporarily
+            # and automatically deleted after the context manager exits.
+            # This makes the deployment idempotent - running multiple times is safe.
+            async with ChatAgent(
+                chat_client=chat_client,
+                instructions='''You are a helpful customer service assistant for AdventureWorks, an outdoor and sporting goods retailer.
+
+Your role is to help customers with:
+- Order tracking and status inquiries
+- Product searches and recommendations  
+- Finding complementary products for their purchases
+- Answering questions about their order history
+
+When customers ask about their orders:
+1. Ask for their Customer ID if not provided
+2. Use get_customer_orders to retrieve their order history
+3. Use get_order_details to show specific order information
+
+When customers ask about products:
+1. Use search_products to find items matching their needs
+2. Use get_product_details to show product specifications
+3. Use find_complementary_products to suggest related items
+
+Always be friendly, professional, and helpful. If you cannot find information, explain what you tried and offer alternatives.''',
+                tools=[mcp_tool],
+            ) as agent:
+                # Test the agent with a simple query
+                print("\nTesting agent with sample query...")
+                response = await agent.run("Hello! Can you tell me what tools you have available?")
+                print(f"Agent response: {response.text[:200]}...")
+                
+                print("\n✅ AI Agent created successfully!")
+                print(f"Agent Name: AdventureWorks Customer Service Agent")
+                print(f"Model: $chatModelName")
+                print(f"Tools: AdventureWorks MCP Server (5 tools)")
+                print(f"MCP Endpoint: $mcpServerUrl/api/mcp")
+                
+                # Save agent configuration to file (overwrite if exists - idempotent)
+                config = {
+                    'agent_name': 'AdventureWorks Customer Service Agent',
+                    'model': '$chatModelName',
+                    'endpoint': '$openAiEndpoint',
+                    'mcp_server': '$mcpServerUrl/api/mcp',
+                    'tools': ['get_customer_orders', 'get_order_details', 'find_complementary_products', 'search_products', 'get_product_details']
+                }
+                
+                config_path = Path('AI_AGENT_CONFIG.json')
+                import json
+                with open(config_path, 'w') as f:
+                    json.dump(config, f, indent=2)
+                print(f"\nAgent configuration saved to: {config_path.absolute()}")
+                
+                return 0
+                
+    except ImportError as e:
+        print(f"⚠️  Required package not installed: {e}")
+        print("Install with: pip install agent-framework-azure-ai --pre")
+        return 1
+    except Exception as e:
+        print(f"❌ Error creating agent: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+if __name__ == "__main__":
+    exit_code = asyncio.run(create_agent())
+    sys.exit(exit_code)
+"@
+    
+    # Write the script to a temporary file
+    $scriptPath = Join-Path $env:TEMP "create_agent.py"
+    $agentScript | Out-File -FilePath $scriptPath -Encoding UTF8 -Force
+    
+    Write-Output "`nExecuting agent creation script..."
+    try {
+        python3 $scriptPath
+        if ($LASTEXITCODE -eq 0) {
+            Write-Output "`n✅ AI Agent successfully created and tested!"
+            
+            # Check if config file was created
+            if (Test-Path "AI_AGENT_CONFIG.json") {
+                $configContent = Get-Content "AI_AGENT_CONFIG.json" | ConvertFrom-Json
+                azd env set 'AI_AGENT_NAME' $configContent.agent_name
+                azd env set 'AI_AGENT_MODEL' $configContent.model
+                Write-Output "Agent configuration saved to azd environment"
+            }
+        } else {
+            Write-Warning "Agent creation script returned non-zero exit code: $LASTEXITCODE"
+        }
+    }
+    catch {
+        Write-Warning "Failed to execute agent creation script: $($_.Exception.Message)"
+    }
+    finally {
+        # Clean up temporary script
+        if (Test-Path $scriptPath) {
+            Remove-Item $scriptPath -Force
+        }
+    }
+} else {
+    Write-Warning "Missing required configuration for AI Agent creation:"
+    if (-not $openAiEndpoint) { Write-Warning "  - AZURE_OPENAI_ENDPOINT not set" }
+    if (-not $chatModelName) { Write-Warning "  - chatGptModelName not set" }
+    if (-not $mcpServerUrl) { Write-Warning "  - MCP Server URL (API_FUNCTIONS_URL) not set" }
+    Write-Output "`nYou can manually create the agent later using the code samples in api-functions/MCP_SERVER.md"
+}
+
+Write-Output "`n=========================================="
+Write-Output "Post-provision script completed"
+Write-Output "=========================================="

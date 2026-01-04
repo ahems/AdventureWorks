@@ -334,20 +334,71 @@ GET /api/mcp/info
 
 ## Deployment to Azure
 
-The MCP Server deploys automatically as part of the Azure Functions app:
+### Automated Deployment with azd
+
+The entire deployment process, including AI Agent creation, is **fully automated**:
 
 ```bash
-# Deploy with azd
+# Full deployment (infrastructure + code + AI agent)
 azd up
 
-# Or deploy just the functions
-cd api-functions
-func azure functionapp publish <function-app-name>
+# Or deploy incrementally:
+azd provision  # Deploy infrastructure
+azd deploy     # Deploy code
+```
+
+**What happens automatically:**
+
+During `azd provision`, the `postprovision.ps1` script:
+
+1. ✅ Deploys the MCP Server as part of the Functions Container App
+2. ✅ Installs `agent-framework-azure-ai` Python package (if Python is available)
+3. ✅ Creates an AI Agent with MCP Server tools integrated
+4. ✅ Tests the agent with a sample query
+5. ✅ Saves agent configuration to `AI_AGENT_CONFIG.json` in the workspace root
+6. ✅ Stores agent details in azd environment variables
+
+**Agent Configuration Created:**
+
+- **Agent Name:** AdventureWorks Customer Service Agent
+- **Model:** Uses the deployed chat model (e.g., `gpt-4.1-mini`)
+- **MCP Tools:** All 5 tools (orders, products, recommendations)
+- **Endpoint:** Your Azure Functions URL at `/api/mcp`
+
+### Testing the Deployed Agent
+
+After deployment, test the agent using the provided script in the workspace root:
+
+```bash
+# Test with default query
+python3 test_agent.py
+
+# Test with custom query
+python3 test_agent.py "Show me mountain bikes under $500"
+
+# Test customer service scenarios
+python3 test_agent.py "I'm customer 29825, what's the status of my orders?"
 ```
 
 ### Get the MCP Server URL
 
-After deployment, get the function URL:
+The MCP Server URL is automatically saved to your azd environment:
+
+### Get the MCP Server URL
+
+The MCP Server URL is automatically saved to your azd environment:
+
+```bash
+# Get the MCP endpoint
+azd env get-values | grep API_FUNCTIONS_URL
+
+# Full MCP endpoint is:
+# https://<your-functions-app>.azurecontainerapps.io/api/mcp
+```
+
+### Manual Function Deployment (Alternative)
+
+If you need to deploy just the functions without azd:
 
 ```bash
 # List functions

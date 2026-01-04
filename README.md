@@ -7,13 +7,14 @@ This is a modern, cloud-native sample application that demonstrates enterprise-g
 ### Key Features
 
 - **🔐 Zero-Trust Security**: All Azure services use Azure Entra ID (Azure AD) authentication with managed identities for passwordless, secure connections
-- **🤖 AI-Powered Recommendations**: Integrated Azure AI Foundry provides intelligent task completion suggestions and priority recommendations
+- **🤖 AI-Powered Customer Service**: Automated AI Agent creation with MCP Server integration for customer service chat (order tracking, product recommendations)
 - **🧠 Intelligent Model Selection**: Automated discovery of optimal OpenAI models based on availability and quota in the deployment region at deploy-time, with preference for cost-effective mini/small models
 - **📊 Modern API Architecture**: REST and GraphQL endpoints via Microsoft Data API Builder (DAB) for flexible data access, secured using Entra ID
 - **🔄 Session Management**: Redis-backed sessions with automatic token refresh and secure credential storage
 - **📈 Comprehensive Monitoring**: OpenTelemetry integration with Application Insights for telemetry, logging, and performance tracking
 - **🚀 Serverless Deployment**: Runs on Azure Container Apps for automatic scaling and high availability
 - **👥 User Data Isolation**: Row-level security ensures users can only access their own tasks
+- **🛠️ MCP Server**: Model Context Protocol server exposing 5 customer service tools for AI agents
 
 ## Usage Demo
 
@@ -84,11 +85,11 @@ The easiest way to get started is to use GitHub Codespaces as all the tools are 
 
    This will launch the repo is VS Code in a Browser.
 
-2. Next, we reccommend you launch the CodeSpace in *Visual Studio Code Dev Containers* as the Login from the command line to Azure using 2-factor Credentials often fails from a CodeSpace running in a Browser. To do this, left-click the name of the Codespace in the bottom-left of the screen and then select "Open in VS Code Desktop" as shown here:
+2. Next, we reccommend you launch the CodeSpace in _Visual Studio Code Dev Containers_ as the Login from the command line to Azure using 2-factor Credentials often fails from a CodeSpace running in a Browser. To do this, left-click the name of the Codespace in the bottom-left of the screen and then select "Open in VS Code Desktop" as shown here:
 
-    ![VS Code Dev Containers](images/OpenInCodeSpaces.png)
+   ![VS Code Dev Containers](images/OpenInCodeSpaces.png)
 
-   *Note:* If you don't see the name of the CodeSpace in the bottom right, *right*-Click the status bar and ensure 'Remote Host' is checked.
+   _Note:_ If you don't see the name of the CodeSpace in the bottom right, _right_-Click the status bar and ensure 'Remote Host' is checked.
 
 3. Once the project files show up in your desktop deployment of Visual Studio Code (this may take several minutes), use the terminal window to follow the steps below to deploy the infrasructure. To easily view the instructions, select README.md, right-click and select "Open Preview" which will make it easier to read.
 
@@ -132,9 +133,19 @@ Use the terminal in Visual Studio Code to do these steps. From the top menu, sel
    azd up
    ```
 
-   You will be prompted to login to Azure the first time you run this command; select "Y" in order to so so. A web browser will pop up and you will select the account you wish to use. Please note if this fails, make sure you have followed Step at the top of the page to launch the CodeSpace in *Visual Studio Code Dev Containers*.
+   You will be prompted to login to Azure the first time you run this command; select "Y" in order to so so. A web browser will pop up and you will select the account you wish to use. Please note if this fails, make sure you have followed Step at the top of the page to launch the CodeSpace in _Visual Studio Code Dev Containers_.
 
    You may be asked to log in a second time using <https://microsoft.com/devicelogin> and entering a code (provided). Do so, if asked. You may also be asked "Are you trying to sign in to Microsoft Azure PowerShell?" - select Yes if so in order to run the automated scripts of this deployment.
+
+   **🤖 AI Agent Automatic Creation:** During provisioning, the system automatically creates an AI Agent with MCP Server tools integrated for customer service scenarios. Test it after deployment:
+
+   ```shell
+   # Test the automatically created AI agent
+   python3 test_agent.py "What tools do you have?"
+
+   # Try customer service queries
+   python3 test_agent.py "I'm customer 29825, show me my orders"
+   ```
 
 4. De-Provision Infrastructure
 
@@ -150,5 +161,8 @@ This repository contains detailed documentation for each component of the MyToDo
 
 - **[App Documentation](app/README.md)** - Frontend web application built with Flask, including authentication flow, AI-powered recommendations, session management, and integration with Azure services using managed identity
 - **[API Documentation](api/README.md)** - Backend API service using Microsoft Data API Builder (DAB), providing REST and GraphQL endpoints with Azure AD authentication and managed identity database access
+- **[API Functions Documentation](api-functions/README.md)** - Azure Functions for custom business logic and MCP Server for AI Agent integration
+- **[MCP Server Documentation](api-functions/MCP_SERVER.md)** - Model Context Protocol server providing 5 customer service tools (order tracking, product search, recommendations)
+- **[AI Agent Automation](AI_AGENT_AUTOMATION.md)** - Automated AI Agent creation during deployment with MCP Server integration
 - **[Infrastructure Documentation](infra/README.md)** - Infrastructure as Code (IaC) using Azure Bicep templates, including architecture overview, module descriptions, and deployment configuration for all Azure resources
 - **[Scripts Documentation](scripts/README.md)** - PowerShell automation scripts for the Azure Developer CLI (azd) deployment lifecycle, including pre-deployment setup, post-provisioning configuration, and teardown procedures

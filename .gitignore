@@ -179,3 +179,6 @@ product-images/
 
 # Generated config files
 app/staticwebapp.config.json
+
+# AI Agent configuration (auto-generated during deployment)
+AI_AGENT_CONFIG.json

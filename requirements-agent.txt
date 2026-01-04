@@ -1,0 +1,9 @@
+# Python requirements for AI Agent testing
+# Install with: pip install -r requirements-agent.txt
+
+# Microsoft Agent Framework for Azure AI
+# Required for creating and testing AI Agents with Azure AI Foundry
+agent-framework-azure-ai>=0.1.0
+
+# Note: --pre flag required during preview
+# Install command: pip install -r requirements-agent.txt --pre
