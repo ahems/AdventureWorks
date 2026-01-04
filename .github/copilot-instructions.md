@@ -59,6 +59,44 @@ azd up  # Full deploy: preup → provision → deploy → postdeploy
 
 **Key distinction**: `api/` and `api-functions/` build with **remote build** in ACR (see `azure.yaml`). The `app/` builds locally then deploys to Static Web Apps.
 
+### Getting Azure Resource Information
+
+All deployed Azure resource details (URLs, resource groups, connection strings, etc.) are available via:
+
+```bash
+azd env get-values
+```
+
+Key values include:
+
+- `API_URL` - DAB GraphQL/REST API endpoint in Azure Container Apps
+- `FUNCTION_URL` - Azure Functions endpoint in Container Apps
+- `AZURE_RESOURCE_GROUP` - Resource group name
+- `DATABASE_CONNECTION_STRING` - SQL connection string with Managed Identity auth
+
+**Important**: The DAB API always paginates results at **100 items**. When querying large datasets, use filters or check for multiple pages:
+
+```graphql
+# This returns maximum 100 items even if more exist
+query {
+  products {
+    items {
+      ProductID
+      Name
+    }
+  }
+}
+
+# Use filters to check for additional records
+query {
+  products(filter: { ProductID: { gt: 100 } }) {
+    items {
+      ProductID
+    }
+  }
+}
+```
+
 ### VS Code Tasks
 
 Use built-in tasks for development (accessible via `Cmd/Ctrl+Shift+B`):
@@ -202,6 +240,24 @@ The project includes several test scripts in root:
 cd api && ./test-graphql-endpoints.sh  # Tests all entity queries
 ```
 
+### Examining the Azure Database
+
+**Direct SQL access from dev container usually fails** due to Entra ID authentication requirements. Instead, use the deployed DAB API:
+
+```bash
+# Get the API URL
+API_URL=$(azd env get-values | grep API_URL | cut -d'=' -f2 | tr -d '"')
+
+# Query via GraphQL
+curl -X POST $API_URL/graphql -H "Content-Type: application/json" \
+  -d '{"query": "{ products { items { ProductID Name } } }"}'
+
+# Or use REST API
+curl "$API_URL/api/Product"
+```
+
+**Remember**: API results are paginated at 100 items. To verify full table counts, use filters to check for records beyond the first page.
+
 ### Application Insights Integration
 
 DAB and Functions auto-send telemetry. Check logs:
@@ -214,9 +270,11 @@ az monitor app-insights query --app <app-name> --analytics-query "requests | top
 
 1. **CORS during local dev**: Always use `dab-config.json` (not `dab-config.prod.json`) locally
 2. **GraphQL query failures**: Check for `.items` in response - DAB wraps all lists
-3. **Build failures**: Functions require restore before build - use `restore (functions)` task first
-4. **Connection errors**: Ensure `az login` is fresh - tokens expire after hours
-5. **Missing env vars**: DAB reads from `@env()` placeholders - check azd environment with `azd env get-values`
+3. **API pagination limits**: DAB API returns maximum 100 items per query - use filters or pagination to access larger datasets
+4. **Direct SQL access**: Connecting to Azure SQL from dev container typically fails due to Entra ID auth - use the DAB API instead to query the database
+5. **Build failures**: Functions require restore before build - use `restore (functions)` task first
+6. **Connection errors**: Ensure `az login` is fresh - tokens expire after hours
+7. **Missing env vars**: DAB reads from `@env()` placeholders - check azd environment with `azd env get-values`
 
 ## Documentation Map
 

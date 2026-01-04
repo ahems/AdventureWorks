@@ -590,6 +590,8 @@ try {
         # Enhanced product descriptions with embeddings (DescriptionEmbedding VECTOR field, JSON array)
         @{ Table='Production.ProductDescription'; File='ProductDescription-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('DescriptionEmbedding') }
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # AI-translated product descriptions (16 additional cultures beyond base AdventureWorks 7)
+        @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModelIllustration'; File='ProductModelIllustration.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.Product'; File='Product.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductReview'; File='ProductReview.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments') }
@@ -663,6 +665,20 @@ try {
     $csvLoadFailed = 0
     $csvLoadSkipped = 0
     
+    # Define base record counts for -ai.csv files (additive data)
+    # These files should only be loaded when table has exactly the base AdventureWorks count
+    $aiCsvBaseRecordCounts = @{
+        'Culture-ai.csv' = 7
+        'Currency-ai.csv' = 105
+        'StateProvince-ai.csv' = 181
+        'CountryRegionCurrency-ai.csv' = 109
+        'SalesTaxRate-ai.csv' = 29
+        'ProductProductPhoto-ai.csv' = 504
+        'ProductDescription-ai.csv' = 762
+        'ProductReview-ai.csv' = 4
+        'ProductModelProductDescriptionCulture-ai.csv' = 874
+    }
+    
     foreach ($config in $csvLoadConfig) {
         $csvPath = Join-Path $csvFolder $config.File
         
@@ -689,7 +705,28 @@ try {
             $cmd.CommandText = "SELECT COUNT(*) FROM [$schemaName].[$tableName]"
             $existingCount = $cmd.ExecuteScalar()
             
-            if ($existingCount -gt 0) {
+            # Determine if this is an additive -ai.csv file
+            $isAiCsv = $config.File -match '-ai\.csv$'
+            $baseRecordCount = $aiCsvBaseRecordCounts[$config.File]
+            
+            if ($isAiCsv -and $baseRecordCount) {
+                # For -ai.csv files, only load if table has exactly the base record count
+                if ($existingCount -eq $baseRecordCount) {
+                    Write-Output "    Table contains base $existingCount rows, adding AI enhancements..."
+                }
+                elseif ($existingCount -gt $baseRecordCount) {
+                    Write-Output "    Table already contains $existingCount rows (expected $baseRecordCount) - AI data already loaded, skipping"
+                    $csvLoadSkipped++
+                    continue
+                }
+                else {
+                    Write-Output "    Table contains $existingCount rows (expected $baseRecordCount) - Base data not loaded yet, skipping AI data"
+                    $csvLoadSkipped++
+                    continue
+                }
+            }
+            elseif ($existingCount -gt 0) {
+                # For regular CSV files, skip if any data exists
                 Write-Output "    Table already contains $existingCount rows - Skipping"
                 $csvLoadSkipped++
                 continue
@@ -1181,22 +1218,32 @@ ORDER BY c.ORDINAL_POSITION
     
     # Upload AI-generated PNG images from images directory
     Write-Output "`nUploading AI-generated PNG images..."
-    $imagesDir = Join-Path $PSScriptRoot ".." "images"
     
-    if (Test-Path $imagesDir) {
-        $pngFiles = Get-ChildItem -Path $imagesDir -Filter "*.png" | Sort-Object Name
-        $totalPngFiles = $pngFiles.Count
+    # Check if AI photos already uploaded (idempotency check)
+    # Base AdventureWorks data uses ProductPhotoIDs 1-100, AI photos use IDs > 100
+    $cmd.CommandText = "SELECT COUNT(*) FROM Production.ProductPhoto WHERE ProductPhotoID > 100"
+    $aiPhotoCount = $cmd.ExecuteScalar()
+    
+    if ($aiPhotoCount -gt 0) {
+        Write-Output "  AI-generated photos already uploaded ($aiPhotoCount AI photos found) - Skipping"
+    }
+    else {
+        $imagesDir = Join-Path $PSScriptRoot ".." "images"
         
-        if ($totalPngFiles -gt 0) {
-            Write-Output "  Found $totalPngFiles PNG files to upload"
+        if (Test-Path $imagesDir) {
+            $pngFiles = Get-ChildItem -Path $imagesDir -Filter "*.png" | Sort-Object Name
+            $totalPngFiles = $pngFiles.Count
             
-            $uploadedCount = 0
-            $skippedCount = 0
-            $failedCount = 0
-            $currentFile = 0
-            
-            # Start ProductPhotoID at 1000 to match AI-generated photo range
-            $nextPhotoId = 1000
+            if ($totalPngFiles -gt 0) {
+                Write-Output "  Found $totalPngFiles PNG files to upload"
+                
+                $uploadedCount = 0
+                $skippedCount = 0
+                $failedCount = 0
+                $currentFile = 0
+                
+                # Start ProductPhotoID at 1000 to match AI-generated photo range
+                $nextPhotoId = 1000
             
             foreach ($pngFile in $pngFiles) {
                 $currentFile++
@@ -1281,6 +1328,7 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
     else {
         Write-Output "  Images directory not found: $imagesDir"
     }
+    }  # End idempotency check for AI photos
     
     # Now load ProductProductPhoto-ai.csv to link photos to products
     Write-Output "`nLoading AI-generated photo mappings..."

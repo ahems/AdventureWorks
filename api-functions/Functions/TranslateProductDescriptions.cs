@@ -26,8 +26,25 @@ public class TranslateProductDescriptions
     {
         _logger.LogInformation("Starting product translation orchestration");
 
+        // Read product model IDs from request body (optional - if empty, uses recently enhanced)
+        List<int>? productModelIds = null;
+        try
+        {
+            productModelIds = await req.ReadFromJsonAsync<List<int>>();
+            if (productModelIds != null && productModelIds.Count > 0)
+            {
+                _logger.LogInformation("Received {count} product model IDs to translate", productModelIds.Count);
+            }
+        }
+        catch
+        {
+            // If parsing fails or body is empty, productModelIds remains null (will use recently enhanced)
+            _logger.LogInformation("No product model IDs provided, will use recently enhanced products");
+        }
+
         var instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(TranslateProductDescriptions_Orchestrator));
+            nameof(TranslateProductDescriptions_Orchestrator),
+            productModelIds);
 
         _logger.LogInformation("Started orchestration with ID = '{instanceId}'", instanceId);
 
