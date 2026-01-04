@@ -589,8 +589,10 @@ try {
         @{ Table='Production.ProductDescription'; File='ProductDescription.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # Enhanced product descriptions with embeddings (DescriptionEmbedding VECTOR field, JSON array)
         @{ Table='Production.ProductDescription'; File='ProductDescription-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('DescriptionEmbedding') }
+        # AI-translated product descriptions (actual text content for 16 new cultures)
+        @{ Table='Production.ProductDescription'; File='ProductDescription-ai-translations.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        # AI-translated product descriptions (16 additional cultures beyond base AdventureWorks 7)
+        # AI-translated product description culture mappings (16 additional cultures beyond base AdventureWorks 7)
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModelIllustration'; File='ProductModelIllustration.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.Product'; File='Product.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -675,6 +677,7 @@ try {
         'SalesTaxRate-ai.csv' = 29
         'ProductProductPhoto-ai.csv' = 504
         'ProductDescription-ai.csv' = 762
+        'ProductDescription-ai-translations.csv' = 762
         'ProductReview-ai.csv' = 4
         'ProductModelProductDescriptionCulture-ai.csv' = 874
     }

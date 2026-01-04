@@ -41,13 +41,71 @@ Translations are generated using Azure Functions with Azure OpenAI:
 
 1. Run the `TranslateProductDescriptions` Azure Function with all ProductModel IDs
 2. Function translates each ProductModel's description into all 16 new cultures
-3. Expected result: 128 ProductModels × 16 cultures = 2,048 translation records
+3. Function creates NEW ProductDescription records (translated text) and ProductModelProductDescriptionCulture mappings
+4. Expected result:
+   - 2,048 culture mapping records (128 ProductModels × 16 cultures)
+   - ~2,032 new ProductDescription records (actual translated text)
 
-## Export Script
+## Export Scripts
+
+### 1. Export Translation Mappings
 
 **Location**: `scripts/export-ai-translations.sh`
 
-**Purpose**: Exports AI-generated translations to `scripts/sql/ProductModelProductDescriptionCulture-ai.csv`
+**Purpose**: Exports culture mappings to `scripts/sql/ProductModelProductDescriptionCulture-ai.csv`
+
+**Usage**:
+
+```bash
+cd scripts
+./export-ai-translations.sh
+```
+
+**What it exports**:
+
+- ProductModelID → ProductDescriptionID → CultureID mappings
+- Records for 16 AI cultures only (excludes base 7)
+- Expected: 2,048 mapping records
+
+### 2. Export Translated Text Content
+
+**Location**: `scripts/export-ai-product-descriptions.sh`
+
+**Purpose**: Exports actual translated descriptions to `scripts/sql/ProductDescription-ai-translations.csv`
+
+**Usage**:
+
+```bash
+cd scripts
+./export-ai-product-descriptions.sh
+```
+
+**What it exports**:
+
+- ProductDescription records (ProductDescriptionID, Description text, ModifiedDate)
+- Only NEW descriptions created for AI translations
+- Expected: ~2,032 description records (may be less if translations share descriptions)
+
+### Running the Export Scripts
+
+**Run both scripts**:
+
+```bash
+cd scripts
+./export-ai-translations.sh          # Export culture mappings
+./export-ai-product-descriptions.sh   # Export translated text
+```
+
+**When to run**:
+
+- **During translation**: Capture partial progress
+- **After completion**: Capture all records for deployment
+
+Both scripts overwrite their CSV files each time, so run them multiple times safely.
+
+## Deployment Integration
+
+The exported CSVs are automatically loaded by `scripts/postprovision.ps1` during `azd provision`:
 
 **Usage**:
 
@@ -65,27 +123,31 @@ cd scripts
 
 **Run this script**:
 
-- **During translation**: To capture partial progress (file will have < 2,048 records)
-- **After completion**: To capture all 2,048 records for future deployments
-
-The script overwrites the CSV file each time, so you can run it multiple times as translations complete.
-
 ## Deployment Integration
 
-The exported CSV is automatically loaded by `scripts/postprovision.ps1` during `azd provision`:
+Both exported CSVs are automatically loaded by `scripts/postprovision.ps1` during `azd provision`:
 
-**Configuration** (lines 667-676):
+**Configuration** (lines 667-678):
 
 ```powershell
 $aiCsvBaseRecordCounts = @{
     ...
+    'ProductDescription-ai-translations.csv' = 762
     'ProductModelProductDescriptionCulture-ai.csv' = 874
 }
 ```
 
-**Load configuration** (line 593):
+**Load configuration** (lines 591-595):
 
 ```powershell
+# AI-translated product descriptions (actual text content for 16 new cultures)
+@{ Table='Production.ProductDescription';
+   File='ProductDescription-ai-translations.csv';
+   Delimiter="`t";
+   RowTerminator="`n";
+   IsWideChar=$false }
+
+# AI-translated product description culture mappings (16 additional cultures)
 @{ Table='Production.ProductModelProductDescriptionCulture';
    File='ProductModelProductDescriptionCulture-ai.csv';
    Delimiter="`t";
