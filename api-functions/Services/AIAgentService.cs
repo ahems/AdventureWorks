@@ -295,6 +295,58 @@ Guidelines:
                     "required": ["productId"]
                 }
                 """)
+            ),
+            ChatTool.CreateFunctionTool(
+                functionName: "get_personalized_recommendations",
+                functionDescription: "Get personalized product recommendations for a customer based on their purchase history, preferences, and buying patterns.",
+                functionParameters: BinaryData.FromString("""
+                {
+                    "type": "object",
+                    "properties": {
+                        "customerId": {
+                            "type": "integer",
+                            "description": "Customer ID to generate recommendations for"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of recommendations to return (default: 5)"
+                        }
+                    },
+                    "required": ["customerId"]
+                }
+                """)
+            ),
+            ChatTool.CreateFunctionTool(
+                functionName: "analyze_product_reviews",
+                functionDescription: "Analyze and summarize customer reviews for a product. Returns average rating, review count, sentiment analysis, and common themes.",
+                functionParameters: BinaryData.FromString("""
+                {
+                    "type": "object",
+                    "properties": {
+                        "productId": {
+                            "type": "integer",
+                            "description": "Product ID to analyze reviews for"
+                        }
+                    },
+                    "required": ["productId"]
+                }
+                """)
+            ),
+            ChatTool.CreateFunctionTool(
+                functionName: "check_inventory_availability",
+                functionDescription: "Check real-time inventory availability for a product across all warehouse locations. Returns stock levels, locations, and availability status.",
+                functionParameters: BinaryData.FromString("""
+                {
+                    "type": "object",
+                    "properties": {
+                        "productId": {
+                            "type": "integer",
+                            "description": "Product ID to check inventory for"
+                        }
+                    },
+                    "required": ["productId"]
+                }
+                """)
             )
         };
     }

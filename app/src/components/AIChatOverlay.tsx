@@ -14,16 +14,25 @@ interface Message {
   timestamp: Date;
 }
 
+// Initial suggested questions to showcase AI capabilities
+const INITIAL_SUGGESTED_QUESTIONS = [
+  "Show me my order history",
+  "What products would you recommend for me?",
+  "Find bike accessories",
+  "What are people saying about product 937?",
+  "Is product 680 in stock?",
+  "Tell me about my recent orders",
+];
+
 export const AIChatOverlay = () => {
   const { user, isAuthenticated } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([
-    "Show me my order history",
-    "Help me find bike accessories",
-  ]);
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>(
+    INITIAL_SUGGESTED_QUESTIONS
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -42,7 +51,15 @@ export const AIChatOverlay = () => {
         {
           id: "1",
           role: "assistant",
-          content: `Hello ${user?.firstName}! I'm your AdventureWorks AI assistant. I can help you track orders, find products, and get recommendations. What can I help you with today?`,
+          content: `Hello ${user?.firstName}! I'm your AdventureWorks AI assistant. I can help you:
+
+• Track your orders and get details
+• Get personalized product recommendations
+• Check real-time inventory availability
+• Read product reviews and ratings
+• Find complementary products
+
+What can I help you with today?`,
           timestamp: new Date(),
         },
       ]);
@@ -165,7 +182,7 @@ export const AIChatOverlay = () => {
               Quick questions:
             </p>
             <div className="flex flex-wrap gap-2">
-              {SUGGESTED_QUESTIONS.map((question, idx) => (
+              {suggestedQuestions.map((question, idx) => (
                 <button
                   key={idx}
                   onClick={() => handleSuggestedQuestion(question)}

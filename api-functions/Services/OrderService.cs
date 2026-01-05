@@ -1,5 +1,6 @@
 using System.Data;
 using System.Text;
+using Azure.Core;
 using Azure.Identity;
 using Dapper;
 using Microsoft.Data.SqlClient;
@@ -295,6 +296,80 @@ public class OrderService
         {
             result.AppendLine($"Order #{order.SalesOrderID} - {order.CustomerName}");
             result.AppendLine($"  Date: {order.OrderDate:yyyy-MM-dd}, Status: {order.StatusText}, Total: ${order.TotalDue:N2}");
+        }
+
+        return result.ToString();
+    }
+
+    public async Task<string> GetPersonalizedRecommendationsAsync(int customerId, int limit = 5)
+    {
+        using var connection = await GetConnectionAsync();
+
+        // Find product categories the customer has purchased from
+        var purchasedCategories = await connection.QueryAsync<dynamic>(@"
+            SELECT DISTINCT TOP 5 pc.ProductCategoryID, pc.Name as CategoryName, COUNT(*) as PurchaseCount
+            FROM Sales.SalesOrderHeader soh
+            INNER JOIN Sales.SalesOrderDetail sod ON soh.SalesOrderID = sod.SalesOrderID
+            INNER JOIN Production.Product p ON sod.ProductID = p.ProductID
+            LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID
+            WHERE soh.CustomerID = @CustomerId
+            AND pc.ProductCategoryID IS NOT NULL
+            GROUP BY pc.ProductCategoryID, pc.Name
+            ORDER BY COUNT(*) DESC",
+            new { CustomerId = customerId });
+
+        if (!purchasedCategories.Any())
+        {
+            return "No purchase history found. Unable to generate personalized recommendations.";
+        }
+
+        // Get products from same categories that customer hasn't purchased yet
+        var recommendations = await connection.QueryAsync<dynamic>($@"
+            SELECT TOP {limit} p.ProductID, p.Name, p.ListPrice, pc.Name as CategoryName,
+                   COALESCE(p.Color, 'N/A') as Color
+            FROM Production.Product p
+            LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID
+            WHERE pc.ProductCategoryID IN @CategoryIds
+            AND p.ProductID NOT IN (
+                SELECT DISTINCT sod.ProductID
+                FROM Sales.SalesOrderHeader soh
+                INNER JOIN Sales.SalesOrderDetail sod ON soh.SalesOrderID = sod.SalesOrderID
+                WHERE soh.CustomerID = @CustomerId
+            )
+            AND p.SellEndDate IS NULL
+            AND p.ListPrice > 0
+            ORDER BY NEWID()",
+            new
+            {
+                CategoryIds = purchasedCategories.Select(c => (int)c.ProductCategoryID).ToList(),
+                CustomerId = customerId
+            });
+
+        var result = new StringBuilder();
+        result.AppendLine($"🎯 Personalized Recommendations for Customer #{customerId}");
+        result.AppendLine();
+        result.AppendLine("Based on your purchase history in:");
+        foreach (var category in purchasedCategories)
+        {
+            result.AppendLine($"  • {category.CategoryName} ({category.PurchaseCount} purchases)");
+        }
+        result.AppendLine();
+        result.AppendLine("We recommend:");
+
+        if (!recommendations.Any())
+        {
+            result.AppendLine("  (No new products available in your preferred categories)");
+        }
+        else
+        {
+            foreach (var product in recommendations)
+            {
+                result.AppendLine($"  • {product.Name}");
+                result.AppendLine($"    Category: {product.CategoryName}, Price: ${product.ListPrice:N2}, Color: {product.Color}");
+                result.AppendLine($"    ProductID: {product.ProductID}");
+            }
         }
 
         return result.ToString();

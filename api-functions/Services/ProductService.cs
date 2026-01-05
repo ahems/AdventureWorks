@@ -461,4 +461,68 @@ public class ProductService
         return results.ToList();
     }
 
+    public async Task<string> CheckInventoryAvailabilityAsync(int productId)
+    {
+        using var connection = await GetConnectionAsync();
+
+        // Get product name
+        var productName = await connection.QueryFirstOrDefaultAsync<string>(
+            "SELECT Name FROM Production.Product WHERE ProductID = @ProductId",
+            new { ProductId = productId });
+
+        if (string.IsNullOrEmpty(productName))
+        {
+            return $"Product #{productId} not found.";
+        }
+
+        // Get inventory across all locations
+        var inventory = await connection.QueryAsync<dynamic>(@"
+            SELECT 
+                pi.LocationID,
+                l.Name as LocationName,
+                pi.Quantity,
+                pi.Shelf,
+                pi.Bin
+            FROM Production.ProductInventory pi
+            INNER JOIN Production.Location l ON pi.LocationID = l.LocationID
+            WHERE pi.ProductID = @ProductId
+            AND pi.Quantity > 0
+            ORDER BY pi.Quantity DESC",
+            new { ProductId = productId });
+
+        var inventoryList = inventory.ToList();
+
+        var result = new System.Text.StringBuilder();
+        result.AppendLine($"📦 Inventory Availability for: {productName}");
+        result.AppendLine($"Product ID: {productId}");
+        result.AppendLine();
+
+        if (!inventoryList.Any())
+        {
+            result.AppendLine("❌ OUT OF STOCK at all locations");
+            result.AppendLine("This product is currently unavailable. Please check back later or contact support.");
+        }
+        else
+        {
+            var totalStock = inventoryList.Sum(i => (int)i.Quantity);
+            result.AppendLine($"✅ IN STOCK - Total Available: {totalStock} units");
+            result.AppendLine();
+            result.AppendLine("Available at:");
+
+            foreach (var location in inventoryList)
+            {
+                result.AppendLine($"  📍 {location.LocationName}");
+                result.AppendLine($"     Quantity: {location.Quantity} units");
+                result.AppendLine($"     Location: Shelf {location.Shelf}, Bin {location.Bin}");
+                result.AppendLine();
+            }
+
+            // Suggest best location (highest stock)
+            var bestLocation = inventoryList.First();
+            result.AppendLine($"💡 Recommended: Order from {bestLocation.LocationName} ({bestLocation.Quantity} units available)");
+        }
+
+        return result.ToString();
+    }
+
 }

@@ -10,11 +10,13 @@ public class AdventureWorksMcpTools
 {
     private readonly OrderService _orderService;
     private readonly ProductService _productService;
+    private readonly ReviewService _reviewService;
 
-    public AdventureWorksMcpTools(OrderService orderService, ProductService productService)
+    public AdventureWorksMcpTools(OrderService orderService, ProductService productService, ReviewService reviewService)
     {
         _orderService = orderService;
         _productService = productService;
+        _reviewService = reviewService;
     }
 
     /// <summary>
@@ -97,8 +99,49 @@ public class AdventureWorksMcpTools
                             { "productId", new McpProperty { Type = "integer", Description = "Product ID to retrieve details for" } }
                         },
                         Required = new List<string> { "productId" }
+                    }                },
+                new McpToolDefinition
+                {
+                    Name = "get_personalized_recommendations",
+                    Description = "Get personalized product recommendations for a customer based on their purchase history, preferences, and buying patterns. Returns products the customer might like.",
+                    InputSchema = new McpInputSchema
+                    {
+                        Type = "object",
+                        Properties = new Dictionary<string, McpProperty>
+                        {
+                            { "customerId", new McpProperty { Type = "integer", Description = "Customer ID to generate recommendations for" } },
+                            { "limit", new McpProperty { Type = "integer", Description = "Maximum number of recommendations to return (default: 5)" } }
+                        },
+                        Required = new List<string> { "customerId" }
                     }
-                }
+                },
+                new McpToolDefinition
+                {
+                    Name = "analyze_product_reviews",
+                    Description = "Analyze and summarize customer reviews for a product. Returns average rating, review count, sentiment analysis, and common themes from customer feedback.",
+                    InputSchema = new McpInputSchema
+                    {
+                        Type = "object",
+                        Properties = new Dictionary<string, McpProperty>
+                        {
+                            { "productId", new McpProperty { Type = "integer", Description = "Product ID to analyze reviews for" } }
+                        },
+                        Required = new List<string> { "productId" }
+                    }
+                },
+                new McpToolDefinition
+                {
+                    Name = "check_inventory_availability",
+                    Description = "Check real-time inventory availability for a product across all warehouse locations. Returns stock levels, locations, and availability status.",
+                    InputSchema = new McpInputSchema
+                    {
+                        Type = "object",
+                        Properties = new Dictionary<string, McpProperty>
+                        {
+                            { "productId", new McpProperty { Type = "integer", Description = "Product ID to check inventory for" } }
+                        },
+                        Required = new List<string> { "productId" }
+                    }                }
             }
         };
     }
@@ -117,6 +160,9 @@ public class AdventureWorksMcpTools
                 "find_complementary_products" => await ExecuteFindComplementaryProductsAsync(request.Arguments),
                 "search_products" => await ExecuteSearchProductsAsync(request.Arguments),
                 "get_product_details" => await ExecuteGetProductDetailsAsync(request.Arguments),
+                "get_personalized_recommendations" => await ExecuteGetPersonalizedRecommendationsAsync(request.Arguments),
+                "analyze_product_reviews" => await ExecuteAnalyzeProductReviewsAsync(request.Arguments),
+                "check_inventory_availability" => await ExecuteCheckInventoryAvailabilityAsync(request.Arguments),
                 _ => $"Unknown tool: {request.Name}"
             };
 
@@ -292,5 +338,56 @@ public class AdventureWorksMcpTools
         }
 
         return result.ToString();
+    }
+
+    private async Task<string> ExecuteGetPersonalizedRecommendationsAsync(Dictionary<string, object>? arguments)
+    {
+        if (arguments == null || !arguments.ContainsKey("customerId"))
+        {
+            return "Error: customerId parameter is required";
+        }
+
+        if (!int.TryParse(arguments["customerId"].ToString(), out int customerId))
+        {
+            return "Error: customerId must be a valid integer";
+        }
+
+        int limit = 5; // default
+        if (arguments.ContainsKey("limit") && int.TryParse(arguments["limit"].ToString(), out int parsedLimit))
+        {
+            limit = parsedLimit;
+        }
+
+        return await _orderService.GetPersonalizedRecommendationsAsync(customerId, limit);
+    }
+
+    private async Task<string> ExecuteAnalyzeProductReviewsAsync(Dictionary<string, object>? arguments)
+    {
+        if (arguments == null || !arguments.ContainsKey("productId"))
+        {
+            return "Error: productId parameter is required";
+        }
+
+        if (!int.TryParse(arguments["productId"].ToString(), out int productId))
+        {
+            return "Error: productId must be a valid integer";
+        }
+
+        return await _reviewService.AnalyzeProductReviewsAsync(productId);
+    }
+
+    private async Task<string> ExecuteCheckInventoryAvailabilityAsync(Dictionary<string, object>? arguments)
+    {
+        if (arguments == null || !arguments.ContainsKey("productId"))
+        {
+            return "Error: productId parameter is required";
+        }
+
+        if (!int.TryParse(arguments["productId"].ToString(), out int productId))
+        {
+            return "Error: productId must be a valid integer";
+        }
+
+        return await _productService.CheckInventoryAvailabilityAsync(productId);
     }
 }
