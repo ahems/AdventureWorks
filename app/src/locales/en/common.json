@@ -465,7 +465,12 @@
     "save": "Save {{percent}}%",
     "addToCart": "Add to cart",
     "add": "Add",
-    "notAvailable": "N/A"
+    "notAvailable": "N/A",
+    "variants": "variants",
+    "variants_one": "variant",
+    "variants_other": "variants",
+    "color": "Color",
+    "selectSize": "Select Size"
   },
   "saleProductCard": {
     "limitedTimeSpecial": "Limited-Time Special",

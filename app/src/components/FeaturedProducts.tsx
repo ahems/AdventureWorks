@@ -3,11 +3,21 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowRight } from "lucide-react";
 import ProductCard from "./ProductCard";
+import ProductModelCard from "./ProductModelCard";
+import {
+  groupProductsByModel,
+  isProductModelGroup,
+} from "@/utils/productGrouping";
 import { useFeaturedProducts } from "@/hooks/useProducts";
 
 const FeaturedProducts: React.FC = () => {
   const { t } = useTranslation("common");
   const { data: featuredProducts = [], isLoading } = useFeaturedProducts();
+
+  // Group products by model for display
+  const groupedProducts = React.useMemo(() => {
+    return groupProductsByModel(featuredProducts);
+  }, [featuredProducts]);
 
   if (isLoading) {
     return (
@@ -61,13 +71,21 @@ const FeaturedProducts: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {featuredProducts.map((product) => (
-            <ProductCard
-              key={product.ProductID}
-              product={product}
-              variant="featured"
-            />
-          ))}
+          {groupedProducts.map((item) =>
+            isProductModelGroup(item) ? (
+              <ProductModelCard
+                key={`model-${item.ProductModelID}`}
+                productGroup={item}
+                variant="featured"
+              />
+            ) : (
+              <ProductCard
+                key={`product-${item.ProductID}`}
+                product={item}
+                variant="featured"
+              />
+            )
+          )}
         </div>
       </div>
     </section>

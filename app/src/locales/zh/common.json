@@ -465,7 +465,12 @@
     "save": "节省 {{percent}}%",
     "addToCart": "加入购物车",
     "add": "添加",
-    "notAvailable": "无"
+    "notAvailable": "无",
+    "variants": "款式",
+    "variants_one": "款式",
+    "variants_other": "款式",
+    "color": "颜色",
+    "selectSize": "选择尺寸"
   },
   "saleProductCard": {
     "limitedTimeSpecial": "限时特惠",

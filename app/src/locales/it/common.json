@@ -463,7 +463,12 @@
     "save": "Risparmia {{percent}}%",
     "addToCart": "Aggiungi al carrello",
     "add": "Aggiungi",
-    "notAvailable": "N/D"
+    "notAvailable": "N/D",
+    "variants": "varianti",
+    "variants_one": "variante",
+    "variants_other": "varianti",
+    "color": "Colore",
+    "selectSize": "Seleziona la Taglia"
   },
   "saleProductCard": {
     "limitedTimeSpecial": "Offerta a Tempo Limitato",

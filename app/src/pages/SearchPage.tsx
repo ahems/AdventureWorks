@@ -12,6 +12,11 @@ import {
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
+import ProductModelCard from "@/components/ProductModelCard";
+import {
+  groupProductsByModel,
+  isProductModelGroup,
+} from "@/utils/productGrouping";
 import {
   useProducts,
   useCategories,
@@ -184,6 +189,12 @@ const SearchPage: React.FC = () => {
     semanticProducts,
   ]);
 
+  // Group products by model
+  const groupedProducts = useMemo(
+    () => groupProductsByModel(filteredProducts),
+    [filteredProducts]
+  );
+
   // Reset to page 1 when filters change
   React.useEffect(() => {
     setCurrentPage(1);
@@ -196,10 +207,10 @@ const SearchPage: React.FC = () => {
   ]);
 
   // Pagination calculations
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+  const totalPages = Math.ceil(groupedProducts.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
+  const paginatedItems = groupedProducts.slice(startIndex, endIndex);
 
   // Generate page numbers to display
   const getPageNumbers = () => {
@@ -642,8 +653,8 @@ const SearchPage: React.FC = () => {
                     {/* Right side: Results count */}
                     <div className="font-doodle text-sm text-doodle-text">
                       Showing {startIndex + 1}-
-                      {Math.min(endIndex, filteredProducts.length)} of{" "}
-                      {filteredProducts.length}
+                      {Math.min(endIndex, groupedProducts.length)} of{" "}
+                      {groupedProducts.length}
                     </div>
                   </div>
                 </div>
@@ -653,9 +664,19 @@ const SearchPage: React.FC = () => {
               {filteredProducts.length > 0 ? (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                    {paginatedProducts.map((product) => (
-                      <ProductCard key={product.ProductID} product={product} />
-                    ))}
+                    {paginatedItems.map((item) =>
+                      isProductModelGroup(item) ? (
+                        <ProductModelCard
+                          key={`model-${item.ProductModelID}`}
+                          productGroup={item}
+                        />
+                      ) : (
+                        <ProductCard
+                          key={`product-${item.ProductID}`}
+                          product={item}
+                        />
+                      )
+                    )}
                   </div>
 
                   {/* Pagination */}

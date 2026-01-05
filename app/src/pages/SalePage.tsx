@@ -5,6 +5,11 @@ import { Twemoji } from "@/components/Twemoji";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SaleProductCard from "@/components/SaleProductCard";
+import SaleProductModelCard from "@/components/SaleProductModelCard";
+import {
+  groupProductsByModel,
+  isProductModelGroup,
+} from "@/utils/productGrouping";
 import { useSaleProducts } from "@/hooks/useProducts";
 import {
   Select,
@@ -48,16 +53,21 @@ const SalePage: React.FC = () => {
     return sorted;
   }, [allSaleProducts, sortBy]);
 
+  // Group products by model for display
+  const groupedSaleProducts = React.useMemo(() => {
+    return groupProductsByModel(saleProducts);
+  }, [saleProducts]);
+
   // Reset to page 1 when filters change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [sortBy, saleProducts.length]);
+  }, [sortBy, groupedSaleProducts.length]);
 
   // Pagination calculations
-  const totalPages = Math.ceil(saleProducts.length / itemsPerPage);
+  const totalPages = Math.ceil(groupedSaleProducts.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedProducts = saleProducts.slice(startIndex, endIndex);
+  const paginatedItems = groupedSaleProducts.slice(startIndex, endIndex);
 
   // Generate page numbers to display
   const getPageNumbers = () => {
@@ -279,8 +289,8 @@ const SalePage: React.FC = () => {
                   <div className="font-doodle text-sm text-doodle-text">
                     {t("search.showingResults", {
                       start: startIndex + 1,
-                      end: Math.min(endIndex, saleProducts.length),
-                      total: saleProducts.length,
+                      end: Math.min(endIndex, groupedSaleProducts.length),
+                      total: groupedSaleProducts.length,
                     })}
                   </div>
                 </div>
@@ -288,9 +298,19 @@ const SalePage: React.FC = () => {
 
               {/* Products Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
-                {paginatedProducts.map((product) => (
-                  <SaleProductCard key={product.ProductID} product={product} />
-                ))}
+                {paginatedItems.map((item) =>
+                  isProductModelGroup(item) ? (
+                    <SaleProductModelCard
+                      key={`model-${item.ProductModelID}`}
+                      productGroup={item}
+                    />
+                  ) : (
+                    <SaleProductCard
+                      key={`product-${item.ProductID}`}
+                      product={item}
+                    />
+                  )
+                )}
               </div>
 
               {/* Pagination */}

@@ -140,3 +140,17 @@ export interface CartItem extends Product {
   selectedSize?: string;
   selectedColor?: string;
 }
+
+// Product Model Group - groups multiple product variants by their model
+export interface ProductModelGroup {
+  ProductModelID: number;
+  modelName: string; // Base name without size/color (e.g., "Mountain-100")
+  baseProduct: Product; // Representative product (first variant)
+  variants: Product[]; // All product variants
+  colors: string[]; // Available colors
+  sizes: string[]; // Available sizes
+  priceRange: {
+    min: number;
+    max: number;
+  };
+}

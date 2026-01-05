@@ -7,6 +7,11 @@ import { SEO, generateBreadcrumbStructuredData } from "@/components/SEO";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
+import ProductModelCard from "@/components/ProductModelCard";
+import {
+  groupProductsByModel,
+  isProductModelGroup,
+} from "@/utils/productGrouping";
 import {
   useCategory,
   useProductsByCategory,
@@ -77,16 +82,21 @@ const CategoryPage: React.FC = () => {
     return sorted;
   }, [selectedSubcategory, allCategoryProducts, subcategoryProducts, sortBy]);
 
+  // Group products by model for display
+  const groupedProducts = React.useMemo(() => {
+    return groupProductsByModel(products);
+  }, [products]);
+
   // Reset to page 1 when filters change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [selectedSubcategory, products.length, sortBy]);
+  }, [selectedSubcategory, groupedProducts.length, sortBy]);
 
-  // Pagination calculations
-  const totalPages = Math.ceil(products.length / itemsPerPage);
+  // Pagination calculations (use groupedProducts for pagination)
+  const totalPages = Math.ceil(groupedProducts.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedProducts = products.slice(startIndex, endIndex);
+  const paginatedItems = groupedProducts.slice(startIndex, endIndex);
 
   // Generate page numbers to display
   const getPageNumbers = () => {
@@ -151,7 +161,7 @@ const CategoryPage: React.FC = () => {
   // Generate category description for SEO
   const categoryDescription = category
     ? `Shop ${category.Name.toLowerCase()} at Adventure Works. Browse our collection of ${
-        products.length
+        groupedProducts.length
       } premium products including ${subcategories
         .slice(0, 3)
         .map((s) => s.Name)
@@ -291,7 +301,9 @@ const CategoryPage: React.FC = () => {
               {category.Name}
             </h1>
             <p className="font-doodle text-doodle-text/70">
-              {t("category.productsAvailable", { count: products.length })}
+              {t("category.productsAvailable", {
+                count: groupedProducts.length,
+              })}
             </p>
           </div>
         </section>
@@ -373,7 +385,7 @@ const CategoryPage: React.FC = () => {
                     ))}
                   </div>
                 </>
-              ) : products.length > 0 ? (
+              ) : groupedProducts.length > 0 ? (
                 <>
                   {/* Controls Bar */}
                   <div className="doodle-card p-4 mb-6">
@@ -455,8 +467,8 @@ const CategoryPage: React.FC = () => {
                       <div className="font-doodle text-sm text-doodle-text">
                         {t("search.showingResults", {
                           start: startIndex + 1,
-                          end: Math.min(endIndex, products.length),
-                          total: products.length,
+                          end: Math.min(endIndex, groupedProducts.length),
+                          total: groupedProducts.length,
                         })}
                       </div>
                     </div>
@@ -464,9 +476,19 @@ const CategoryPage: React.FC = () => {
 
                   {/* Products */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
-                    {paginatedProducts.map((product) => (
-                      <ProductCard key={product.ProductID} product={product} />
-                    ))}
+                    {paginatedItems.map((item) =>
+                      isProductModelGroup(item) ? (
+                        <ProductModelCard
+                          key={`model-${item.ProductModelID}`}
+                          productGroup={item}
+                        />
+                      ) : (
+                        <ProductCard
+                          key={`product-${item.ProductID}`}
+                          product={item}
+                        />
+                      )
+                    )}
                   </div>
 
                   {/* Pagination */}

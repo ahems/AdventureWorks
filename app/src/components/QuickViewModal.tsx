@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   X,
@@ -50,6 +50,19 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
     product.availableColors?.[0]
   );
   const [quantity, setQuantity] = useState(1);
+
+  // Reset selections when product changes (e.g., when variant is changed in ProductModelCard)
+  useEffect(() => {
+    setSelectedSize(product.Size || product.availableSizes?.[0]);
+    setSelectedColor(product.Color || product.availableColors?.[0]);
+    setQuantity(1);
+  }, [
+    product.ProductID,
+    product.Size,
+    product.Color,
+    product.availableSizes,
+    product.availableColors,
+  ]);
 
   const inWishlist = isInWishlist(product.ProductID);
   const inCompare = isInCompare(product.ProductID);
@@ -114,22 +127,30 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
               </div>
             )}
 
-            {product.LargePhoto || product.ThumbNailPhoto ? (
-              <img
-                src={`data:image/gif;base64,${
-                  product.LargePhoto || product.ThumbNailPhoto
-                }`}
-                alt={product.Name}
-                className="max-w-full max-h-96 object-contain"
-              />
-            ) : (
-              <div className="text-center">
-                <span className="font-doodle text-8xl">🚴</span>
-                <p className="font-doodle text-sm text-doodle-text/60 mt-4">
-                  {product.Color || t("quickViewModal.productImage")}
-                </p>
-              </div>
-            )}
+            <Link
+              to={`/product/${product.ProductID}`}
+              onClick={() => onOpenChange(false)}
+              className="block cursor-pointer hover:opacity-90 transition-opacity"
+            >
+              {product.LargePhoto || product.ThumbNailPhoto ? (
+                <img
+                  src={`data:image/gif;base64,${
+                    product.LargePhoto || product.ThumbNailPhoto
+                  }`}
+                  alt={`${product.Name}${
+                    product.Color ? ` - ${product.Color}` : ""
+                  }`}
+                  className="max-w-full max-h-96 object-contain"
+                />
+              ) : (
+                <div className="text-center">
+                  <span className="font-doodle text-8xl">🚴</span>
+                  <p className="font-doodle text-sm text-doodle-text/60 mt-4">
+                    {product.Color || t("quickViewModal.productImage")}
+                  </p>
+                </div>
+              )}
+            </Link>
           </div>
 
           {/* Product Details */}

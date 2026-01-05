@@ -34,7 +34,7 @@ export const useSubcategoriesByCategory = (categoryId: number) => {
 export const useProducts = () => {
   return useQuery<Product[]>({
     queryKey: ["products"],
-    queryFn: () => apiService.getProducts(),
+    queryFn: () => apiService.getProducts(true),
     staleTime: 2 * 60 * 1000, // 2 minutes
   });
 };
