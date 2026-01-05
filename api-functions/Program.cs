@@ -34,6 +34,9 @@ builder.Services.AddOpenTelemetry()
 // Configure DefaultAzureCredential for Azure SDK clients
 builder.Services.AddSingleton(new DefaultAzureCredential());
 
+// Register HttpClient for MCP tool calls
+builder.Services.AddHttpClient();
+
 // Aspire SQL Client with automatic tracing and health checks
 builder.AddSqlServerClient("SQL_CONNECTION_STRING");
 
@@ -79,6 +82,9 @@ builder.Services.AddScoped<OrderService>(sp =>
 
 // Register AdventureWorks MCP Tools for AI agent integration
 builder.Services.AddScoped<AdventureWorksMcpTools>();
+
+// Register AI Agent Service for conversational AI with MCP tools
+builder.Services.AddScoped<AIAgentService>();
 
 // Register AIService with Azure OpenAI endpoint
 builder.Services.AddScoped<AIService>(sp =>

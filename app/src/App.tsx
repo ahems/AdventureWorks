@@ -12,6 +12,7 @@ import { LanguageProvider } from "@/context/LanguageContext";
 import { CurrencyProvider } from "@/context/CurrencyContext";
 import { UnitMeasureProvider } from "@/context/UnitMeasureContext";
 import CompareBar from "@/components/CompareBar";
+import { AIChatOverlay } from "@/components/AIChatOverlay";
 import "./i18n"; // Initialize i18next
 import Index from "./pages/Index";
 import CategoryPage from "./pages/CategoryPage";
@@ -52,6 +53,7 @@ const App = () => (
                         }}
                       >
                         <CompareBar />
+                        <AIChatOverlay />
                         <Routes>
                           <Route path="/" element={<Index />} />
                           <Route
