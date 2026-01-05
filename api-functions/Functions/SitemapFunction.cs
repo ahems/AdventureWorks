@@ -21,9 +21,13 @@ public class SitemapFunction
     }
 
     /// <summary>
-    /// GET /api/sitemap.xml - Generate dynamic XML sitemap for SEO
+    /// Generate XML sitemap for SEO
     /// Includes all products with their last modified dates
     /// </summary>
+    /// <param name="req">HTTP request</param>
+    /// <returns>XML sitemap with all products and static pages</returns>
+    /// <response code="200">Successfully generated XML sitemap</response>
+    /// <response code="500">Internal server error</response>
     [Function("GetSitemap")]
     public async Task<HttpResponseData> GetSitemap(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "sitemap.xml")] HttpRequestData req)

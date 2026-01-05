@@ -21,9 +21,12 @@ public class AddressFunctions
     }
 
     /// <summary>
-    /// GET /api/addresses - Get all addresses
-    /// Query params: limit (default 100), offset (default 0)
+    /// Get all addresses with pagination
     /// </summary>
+    /// <param name="req">HTTP request with optional query parameters: limit (default 100), offset (default 0)</param>
+    /// <returns>Paginated list of addresses</returns>
+    /// <response code="200">Successfully retrieved addresses</response>
+    /// <response code="500">Internal server error</response>
     [Function("GetAddresses")]
     public async Task<HttpResponseData> GetAddresses(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "addresses")] HttpRequestData req)
@@ -53,8 +56,14 @@ public class AddressFunctions
     }
 
     /// <summary>
-    /// GET /api/addresses/{id} - Get a specific address by ID
+    /// Get a specific address by ID
     /// </summary>
+    /// <param name="req">HTTP request</param>
+    /// <param name="id">The address ID</param>
+    /// <returns>Address details</returns>
+    /// <response code="200">Successfully retrieved address</response>
+    /// <response code="404">Address not found</response>
+    /// <response code="500">Internal server error</response>
     [Function("GetAddressById")]
     public async Task<HttpResponseData> GetAddressById(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "addresses/{id:int}")] HttpRequestData req,
@@ -87,8 +96,13 @@ public class AddressFunctions
     }
 
     /// <summary>
-    /// POST /api/addresses - Create a new address
+    /// Create a new address
     /// </summary>
+    /// <param name="req">HTTP request with address data in body</param>
+    /// <returns>Created address</returns>
+    /// <response code="201">Address created successfully</response>
+    /// <response code="400">Invalid request body or missing required fields</response>
+    /// <response code="500">Internal server error</response>
     [Function("CreateAddress")]
     public async Task<HttpResponseData> CreateAddress(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "addresses")] HttpRequestData req)
@@ -98,7 +112,7 @@ public class AddressFunctions
         try
         {
             var createRequest = await req.ReadFromJsonAsync<CreateAddressRequest>();
-            
+
             if (createRequest == null)
             {
                 var badRequest = req.CreateResponse(HttpStatusCode.BadRequest);
@@ -133,8 +147,15 @@ public class AddressFunctions
     }
 
     /// <summary>
-    /// PUT /api/addresses/{id} - Update an existing address
+    /// Update an existing address
     /// </summary>
+    /// <param name="req">HTTP request with updated address data</param>
+    /// <param name="id">The address ID to update</param>
+    /// <returns>Updated address</returns>
+    /// <response code="200">Address updated successfully</response>
+    /// <response code="404">Address not found</response>
+    /// <response code="400">Invalid request body</response>
+    /// <response code="500">Internal server error</response>
     [Function("UpdateAddress")]
     public async Task<HttpResponseData> UpdateAddress(
         [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "addresses/{id:int}")] HttpRequestData req,
@@ -145,7 +166,7 @@ public class AddressFunctions
         try
         {
             var updateRequest = await req.ReadFromJsonAsync<UpdateAddressRequest>();
-            
+
             if (updateRequest == null)
             {
                 var badRequest = req.CreateResponse(HttpStatusCode.BadRequest);
@@ -176,8 +197,14 @@ public class AddressFunctions
     }
 
     /// <summary>
-    /// DELETE /api/addresses/{id} - Delete an address
+    /// Delete an address
     /// </summary>
+    /// <param name="req">HTTP request</param>
+    /// <param name="id">The address ID to delete</param>
+    /// <returns>No content on success</returns>
+    /// <response code="204">Address deleted successfully</response>
+    /// <response code="404">Address not found</response>
+    /// <response code="500">Internal server error</response>
     [Function("DeleteAddress")]
     public async Task<HttpResponseData> DeleteAddress(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "addresses/{id:int}")] HttpRequestData req,

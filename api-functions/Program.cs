@@ -9,10 +9,35 @@ using AddressFunctions.Services;
 using api_functions.Services;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Metrics;
+using Microsoft.OpenApi.Models;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
 builder.ConfigureFunctionsWebApplication();
+
+// Configure Swashbuckle for OpenAPI documentation
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Version = "v1",
+        Title = "AdventureWorks Azure Functions API",
+        Description = "API endpoints for AdventureWorks e-commerce platform including addresses, semantic search, and SEO",
+        Contact = new OpenApiContact
+        {
+            Name = "AdventureWorks Support",
+            Url = new Uri("https://github.com/ahems/AdventureWorks")
+        }
+    });
+
+    // Include XML comments if available
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    if (File.Exists(xmlPath))
+    {
+        c.IncludeXmlComments(xmlPath);
+    }
+});
 
 // Configure Application Insights + OpenTelemetry for enhanced observability
 builder.Services

@@ -299,17 +299,22 @@ Translate the description into each target language. Return ONLY a valid JSON ob
 
         foreach (var description in descriptions)
         {
+            // Create enriched text for embedding that includes variant information
+            // This allows semantic search to find products by color, size, style, etc.
+            var enrichedText = BuildEnrichedTextForEmbedding(description);
+
             _logger.LogInformation(
-                "Generating embedding for ProductDescriptionID {id} (Culture: {culture}, Length: {length} chars)",
+                "Generating embedding for ProductDescriptionID {id} (Culture: {culture}, Original: {length} chars, Enriched: {enrichedLength} chars)",
                 description.ProductDescriptionID,
                 description.CultureID,
-                description.Description.Length
+                description.Description.Length,
+                enrichedText.Length
             );
 
             try
             {
-                // Generate embedding for the description text
-                var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(description.Description);
+                // Generate embedding for the enriched description text (includes variants)
+                var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(enrichedText);
                 var embeddingVector = embeddingResponse.Value.ToFloats();
 
                 // Store as float array for VECTOR column
@@ -340,6 +345,49 @@ Translate the description into each target language. Return ONLY a valid JSON ob
         }
 
         return embeddings;
+    }
+
+    /// <summary>
+    /// Builds enriched text for embedding generation that includes product variants.
+    /// This allows semantic search to match queries like "red bike" or "large helmet".
+    /// </summary>
+    private string BuildEnrichedTextForEmbedding(ProductDescriptionData description)
+    {
+        var parts = new List<string>();
+
+        // Start with the main description
+        parts.Add(description.Description);
+
+        // Add category information if available
+        if (!string.IsNullOrWhiteSpace(description.ProductCategoryName))
+        {
+            parts.Add($"Category: {description.ProductCategoryName}");
+        }
+        if (!string.IsNullOrWhiteSpace(description.ProductSubcategoryName))
+        {
+            parts.Add($"Type: {description.ProductSubcategoryName}");
+        }
+
+        // Add variant information - these are key for matching specific product attributes
+        if (!string.IsNullOrWhiteSpace(description.Colors))
+        {
+            parts.Add($"Available colors: {description.Colors}");
+        }
+        if (!string.IsNullOrWhiteSpace(description.Sizes))
+        {
+            parts.Add($"Available sizes: {description.Sizes}");
+        }
+        if (!string.IsNullOrWhiteSpace(description.Styles))
+        {
+            parts.Add($"Styles: {description.Styles}");
+        }
+        if (!string.IsNullOrWhiteSpace(description.Classes))
+        {
+            parts.Add($"Quality class: {description.Classes}");
+        }
+
+        // Join all parts with newlines for better semantic understanding
+        return string.Join("\n", parts);
     }
 
     public async Task<List<ProductReviewEmbedding>> GenerateReviewEmbeddingsAsync(List<ProductReviewData> reviews)

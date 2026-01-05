@@ -44,6 +44,14 @@ public class ProductDescriptionData
     public string Description { get; set; } = string.Empty;
     public string CultureID { get; set; } = string.Empty;
     public int? ProductModelID { get; set; }
+    // Product variant information for richer embeddings
+    public string? ProductNames { get; set; }  // All product names for this model
+    public string? Colors { get; set; }  // All available colors
+    public string? Sizes { get; set; }  // All available sizes
+    public string? Styles { get; set; }  // All styles (e.g., Women's, Men's, Unisex)
+    public string? Classes { get; set; }  // All classes (e.g., High, Medium, Low)
+    public string? ProductCategoryName { get; set; }
+    public string? ProductSubcategoryName { get; set; }
 }
 
 public class ProductDescriptionEmbedding

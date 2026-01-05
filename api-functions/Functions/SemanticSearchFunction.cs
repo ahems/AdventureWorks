@@ -27,6 +27,14 @@ public class SemanticSearchFunction
         _reviewService = reviewService;
     }
 
+    /// <summary>
+    /// Semantic search endpoint for products and reviews
+    /// </summary>
+    /// <param name="req">HTTP request with JSON body containing query, limit, and similarity threshold</param>
+    /// <returns>Search results with product descriptions and reviews</returns>
+    /// <response code="200">Search completed successfully</response>
+    /// <response code="400">Invalid request body</response>
+    /// <response code="500">Internal server error</response>
     [Function("SemanticSearch")]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "search/semantic")] HttpRequestData req)

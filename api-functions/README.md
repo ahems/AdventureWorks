@@ -2,6 +2,17 @@
 
 This directory contains Azure Functions that provide serverless backend capabilities for the AdventureWorks e-commerce application.
 
+## 📖 Documentation
+
+- **[OpenAPI Specification](OPENAPI.md)** - Interactive API documentation and testing
+  - Access Swagger UI at `/api/swagger/ui`
+  - Download OpenAPI spec at `/api/swagger.json`
+  - Test endpoints interactively
+- **[Variant Embedding Enhancement](../VARIANT_EMBEDDING_ENHANCEMENT.md)** - Enhanced semantic search with product variants
+  - Includes colors, sizes, styles in embeddings
+  - Improved search accuracy for attribute-specific queries
+  - Instructions for regenerating embeddings
+
 ## Functions
 
 ### Address Functions
@@ -11,7 +22,7 @@ This directory contains Azure Functions that provide serverless backend capabili
 ### AI-Powered Product Enhancement
 
 - **EmbellishProductsUsingAI**: Enhances product descriptions using AI
-- **GenerateProductEmbeddings**: Creates vector embeddings for product descriptions
+- **GenerateProductEmbeddings**: Creates vector embeddings for product descriptions **with variant information** (colors, sizes, styles)
 - **GenerateProductReviewEmbeddings**: Creates vector embeddings for product review comments
 - **GenerateProductReviewsUsingAI**: Generates creative product reviews using AI (0-10 reviews per product with varied sentiment)
 - **GenerateProductImages**: Generates product images using DALL-E

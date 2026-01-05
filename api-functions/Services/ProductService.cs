@@ -237,17 +237,31 @@ public class ProductService
     {
         using var connection = await GetConnectionAsync();
 
-        // Get all product descriptions (all languages) that don't have embeddings yet
+        // Get all product descriptions (all languages) with variant information
+        // Include all product variants (colors, sizes, styles) for richer semantic search
         var sql = @"
             SELECT 
                 pd.ProductDescriptionID,
                 pd.Description,
                 pmx.CultureID,
-                pmx.ProductModelID
+                pmx.ProductModelID,
+                -- Aggregate all variant information from products in this model
+                STRING_AGG(DISTINCT p.Name, ', ') WITHIN GROUP (ORDER BY p.Name) AS ProductNames,
+                STRING_AGG(DISTINCT p.Color, ', ') WITHIN GROUP (ORDER BY p.Color) AS Colors,
+                STRING_AGG(DISTINCT CASE WHEN p.Size IS NOT NULL THEN p.Size + COALESCE(' ' + p.SizeUnitMeasureCode, '') END, ', ') WITHIN GROUP (ORDER BY p.Size) AS Sizes,
+                STRING_AGG(DISTINCT p.Style, ', ') WITHIN GROUP (ORDER BY p.Style) AS Styles,
+                STRING_AGG(DISTINCT p.Class, ', ') WITHIN GROUP (ORDER BY p.Class) AS Classes,
+                MAX(pc.Name) AS ProductCategoryName,
+                MAX(ps.Name) AS ProductSubcategoryName
             FROM Production.ProductDescription pd
             INNER JOIN Production.ProductModelProductDescriptionCulture pmx
                 ON pd.ProductDescriptionID = pmx.ProductDescriptionID
+            LEFT JOIN Production.Product p ON p.ProductModelID = pmx.ProductModelID
+            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID
             WHERE pd.DescriptionEmbedding IS NULL
+              AND p.FinishedGoodsFlag = 1
+            GROUP BY pd.ProductDescriptionID, pd.Description, pmx.CultureID, pmx.ProductModelID
             ORDER BY pmx.ProductModelID, pmx.CultureID";
 
         var descriptions = await connection.QueryAsync<ProductDescriptionData>(sql);
