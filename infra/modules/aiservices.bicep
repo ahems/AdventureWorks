@@ -10,6 +10,7 @@ param restoreOpenAi bool = false
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param aadAdminObjectId string
 param projectName string
+param storageAccountName string
 
 @allowed([ 'Enabled', 'Disabled' ])
 param publicNetworkAccess string = 'Enabled'
@@ -112,6 +113,12 @@ resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31
   name: identityName
 }
 
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
+  name: storageAccountName
+}
+
+// Microsoft Foundry resource (AIServices kind enables access to broader model catalog, agents, and Foundry Tools)
+// Uses latest 2025-06-01 API with allowProjectManagement for full Foundry capabilities
 resource account 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   name: name
   location: location
@@ -127,15 +134,23 @@ resource account 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
     customSubDomainName: customSubDomainName
     publicNetworkAccess: publicNetworkAccess
     networkAcls: networkAcls
-    disableLocalAuth: true
+    disableLocalAuth: true // Enforce Entra ID authentication only
     dynamicThrottlingEnabled: false
     restrictOutboundNetworkAccess: false
     restore: restoreOpenAi
-    allowProjectManagement: true // Allow management of deployments via API/SDK
+    allowProjectManagement: true // Required for Microsoft Foundry features (projects, agents, broader model catalog)
+    userOwnedStorage: [
+      {
+      identityClientId: azidentity.properties.clientId
+      resourceId: storageAccount.id
+      }
+    ] 
   }
   sku: sku
 }
 
+// Microsoft Foundry Project (organizes work, provides access management and data isolation)
+// Projects are containers for agents, model deployments, and other Foundry resources
 resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-04-01-preview' = {
   name: projectName
   parent: account
@@ -152,13 +167,13 @@ resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-04-01-pre
   }
 }
 
-// Grant the managed identity data-plane permission to invoke Azure AI Foundry deployments (chat/completions, embeddings, etc.)
-// Role: Cognitive Services OpenAI User (least-privilege for inference)
-// If you need to manage deployments, consider Cognitive Services OpenAI Contributor instead.
-// Role definition ID source: Built-in role GUID for 'Cognitive Services OpenAI User'. Adjust if tenant introduces custom role.
+// Grant the managed identity data-plane permissions to invoke Microsoft Foundry deployments
+// Role: Cognitive Services OpenAI Contributor - allows both inference and deployment management
+// This role works with all Microsoft Foundry models (OpenAI, Meta, Mistral, etc.) not just OpenAI
+// For inference-only access, use 'Cognitive Services OpenAI User' (5e0bd9bd-7b93-4f28-af87-19fc36ad61bd)
 resource openAiUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   // Use deterministic GUID from account id + identity name (both known at compile time)
-  name: guid(account.id, identityName, 'openai-user')
+  name: guid(account.id, identityName, 'openai-contributor')
   scope: account
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a001fd3d-188f-4b5d-821b-7da978bf7442') // Cognitive Services OpenAI Contributor
@@ -167,10 +182,11 @@ resource openAiUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-
   }
 }
 
-// Grant the same data-plane role to the specified AAD admin/user so local development (DefaultAzureCredential using user context) can call the Azure AI Foundry deployments directly.
-// Uses deterministic GUID to stay idempotent across deployments.
+// Grant the specified Entra ID admin/user data-plane access for local development
+// Enables DefaultAzureCredential (az login) to call Microsoft Foundry deployments during development
+// Uses deterministic GUID to maintain idempotency across deployments
 resource openAiUserLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(account.id, aadAdminObjectId, 'openai-user')
+  name: guid(account.id, aadAdminObjectId, 'openai-contributor-user')
   scope: account
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a001fd3d-188f-4b5d-821b-7da978bf7442') // Cognitive Services OpenAI Contributor
@@ -179,8 +195,10 @@ resource openAiUserLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@
   }
 }
 
+// Deploy models to Microsoft Foundry resource using latest API
+// Models deployed here are accessible via Azure AI Model Inference API endpoint
 @batchSize(1)
-resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = [for deployment in allDeployments: {
+resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = [for deployment in allDeployments: {
   parent: account
   name: deployment.name
   properties: {

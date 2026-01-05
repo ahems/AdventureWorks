@@ -328,16 +328,18 @@ function Ensure-ApiAppRegistration {
 #############################################
 # Azure AI Foundry Account + Model Selection
 #############################################
+# Microsoft Foundry Account + Model Selection
+#############################################
 # Minimal model (only fields we actually use)
 class Model { [string]$format; [string]$name; [string]$version }
 
 # PSScriptAnalyzer SuppressMessage = PSUseApprovedVerbs "Ensure helper naming aligns with rest of script."
-function Ensure-OpenAIAccount {
+function Ensure-FoundryAccount {
 	param([string]$SubId,[string]$Rg,[string]$Acct,[string]$Loc)
-	if ([string]::IsNullOrWhiteSpace($Acct)) { throw 'Ensure-OpenAIAccount received an empty account name.' }
+	if ([string]::IsNullOrWhiteSpace($Acct)) { throw 'Ensure-FoundryAccount received an empty account name.' }
 	$existingAcct = Get-AzCognitiveServicesAccount -Name $Acct -ResourceGroupName $Rg -ErrorAction SilentlyContinue
 	if (-not $existingAcct) {
-		Write-Host "Creating Azure AI Foundry account '$Acct' in $Loc..." -ForegroundColor Green
+		Write-Host "Creating Microsoft Foundry account '$Acct' in $Loc..." -ForegroundColor Green
 		New-AzCognitiveServicesAccount -ResourceGroupName $Rg -Name $Acct -Type 'AIServices' -SkuName 'S0' -Location $Loc -CustomSubDomainName $Acct -Force | Out-Null
 	} elseif ($existingAcct.Location -ne $Loc) {
 		Write-Warning "Existing account region '$($existingAcct.Location)' differs from requested '$Loc'; proceeding with existing region."
@@ -553,17 +555,17 @@ if (-not $accountName) {
 	$hash = ([System.BitConverter]::ToString((New-Guid).ToByteArray()) -replace '-','').Substring(0,8).ToLower()
 	$accountName = "av-openai-$hash"
 	Set-AzdValue -Name 'AZURE_OPENAI_ACCOUNT_NAME' -Value $accountName
-	Write-Host "Derived Azure AI Foundry account name: $accountName" -ForegroundColor Cyan
+	Write-Host "Derived Microsoft Foundry account name: $accountName" -ForegroundColor Cyan
 }
 
-Ensure-OpenAIAccount -SubId $subscriptionId -Rg $resourceGroup -Acct $accountName -Loc $location
+Ensure-FoundryAccount -SubId $subscriptionId -Rg $resourceGroup -Acct $accountName -Loc $location
 
-Write-Host "Enumerating models for account '$accountName' in region '$location'..." -ForegroundColor Cyan
+Write-Host "Enumerating models for Microsoft Foundry account '$accountName' in region '$location'..." -ForegroundColor Cyan
 $null = if (-not $subscriptionId) { throw 'Subscription id is missing; cannot enumerate models. Ensure you are logged in (Connect-AzAccount) and that a subscription is selected (Set-AzContext).' }
 $models = Get-AccountModelsMultiVersion -SubId $subscriptionId -Rg $resourceGroup -Acct $accountName
-if (-not $models -or $models.Count -eq 0) { throw 'No models returned from Azure AI Foundry account; aborting preup hook.' }
+if (-not $models -or $models.Count -eq 0) { throw 'No models returned from Microsoft Foundry account; aborting preup hook.' }
 
-# Filter to OpenAI models only (includes DALL-E for image generation)
+# Filter to OpenAI-format models (includes GPT, DALL-E, embeddings, and other Foundry models)
 $originalModelCount = $models.Count
 $models = $models | Where-Object { 
 	[string]::IsNullOrWhiteSpace($_.format) -or 
