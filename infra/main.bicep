@@ -118,6 +118,7 @@ module cognitiveservices 'modules/aiservices.bicep' = {
     kind: AIServicesKind
     publicNetworkAccess: publicNetworkAccess
     aadAdminObjectId: aadAdminObjectId
+    projectName: 'av-aiproject-${resourceToken}'
   }
   dependsOn: [
     keyvault

@@ -9,6 +9,7 @@ param openAiDeploymentName string = 'chat'
 param restoreOpenAi bool = false
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param aadAdminObjectId string
+param projectName string
 
 @allowed([ 'Enabled', 'Disabled' ])
 param publicNetworkAccess string = 'Enabled'
@@ -130,8 +131,25 @@ resource account 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
     dynamicThrottlingEnabled: false
     restrictOutboundNetworkAccess: false
     restore: restoreOpenAi
+    allowProjectManagement: true // Allow management of deployments via API/SDK
   }
   sku: sku
+}
+
+resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-04-01-preview' = {
+  name: projectName
+  parent: account
+  location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${azidentity.id}': {}
+    }
+  }
+  properties: {
+    description: 'AI Foundry Project for AI Foundry Demo'
+    displayName: 'AI Foundry Demo Project'
+  }
 }
 
 // Grant the managed identity data-plane permission to invoke Azure AI Foundry deployments (chat/completions, embeddings, etc.)
