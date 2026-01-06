@@ -17,6 +17,7 @@ import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { getSalePrice } from "@/types/product";
 import { useCurrency } from "@/context/CurrencyContext";
+import { OptimizedImage } from "@/components/OptimizedImage";
 
 const CartPage: React.FC = () => {
   const { t } = useTranslation(["cart", "common"]);
@@ -159,8 +160,30 @@ const CartPage: React.FC = () => {
                 >
                   <div className="flex gap-4">
                     {/* Product Image */}
-                    <div className="w-24 h-24 flex-shrink-0 bg-doodle-bg border-2 border-dashed border-doodle-text flex items-center justify-center">
-                      <span className="text-3xl">🚴</span>
+                    <div className="w-24 h-24 flex-shrink-0 bg-doodle-bg border-2 border-dashed border-doodle-text flex items-center justify-center overflow-hidden">
+                      {item.ThumbNailPhoto ? (
+                        <OptimizedImage
+                          src={`data:image/gif;base64,${item.ThumbNailPhoto}`}
+                          alt={`${item.Name}${
+                            item.selectedColor
+                              ? ` - ${item.selectedColor}`
+                              : item.Color
+                              ? ` - ${item.Color}`
+                              : ""
+                          }`}
+                          className="!aspect-square"
+                          aspectRatio="1/1"
+                        />
+                      ) : (
+                        <div className="text-center">
+                          <span className="text-3xl">🚴</span>
+                          {item.Color && (
+                            <p className="font-doodle text-[8px] text-doodle-text/60 mt-1">
+                              {item.Color}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Product Details */}
@@ -252,7 +275,7 @@ const CartPage: React.FC = () => {
                             )
                           }
                           className="text-doodle-text/50 hover:text-doodle-accent transition-colors p-1"
-                          aria-label={t("cart.removeItem")}
+                          aria-label={t("cart:cart.removeItem")}
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
@@ -269,7 +292,7 @@ const CartPage: React.FC = () => {
                             )
                           }
                           className="p-1.5 hover:bg-doodle-text/10 transition-colors"
-                          aria-label={t("cart.decreaseQuantity")}
+                          aria-label={t("cart:cart.decreaseQuantity")}
                         >
                           <Minus className="w-4 h-4" />
                         </button>
@@ -286,7 +309,7 @@ const CartPage: React.FC = () => {
                             )
                           }
                           className="p-1.5 hover:bg-doodle-text/10 transition-colors"
-                          aria-label={t("cart.increaseQuantity")}
+                          aria-label={t("cart:cart.increaseQuantity")}
                         >
                           <Plus className="w-4 h-4" />
                         </button>

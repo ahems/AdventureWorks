@@ -28,6 +28,7 @@ import { AddressCard } from "@/components/AddressCard";
 import { AddressForm } from "@/components/AddressForm";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
+import { OptimizedImage } from "@/components/OptimizedImage";
 import { z } from "zod";
 import { getSalePrice } from "@/types/product";
 import { useProfile } from "@/hooks/useProfile";
@@ -1555,8 +1556,23 @@ const CheckoutPage: React.FC = () => {
                         key={`${item.ProductID}-${item.selectedSize}-${item.selectedColor}`}
                         className="flex gap-3"
                       >
-                        <div className="w-12 h-12 flex-shrink-0 bg-doodle-bg border border-dashed border-doodle-text/50 flex items-center justify-center text-lg">
-                          🚴
+                        <div className="w-12 h-12 flex-shrink-0 bg-doodle-bg border border-dashed border-doodle-text/50 flex items-center justify-center overflow-hidden">
+                          {item.ThumbNailPhoto ? (
+                            <OptimizedImage
+                              src={`data:image/gif;base64,${item.ThumbNailPhoto}`}
+                              alt={`${item.Name}${
+                                item.selectedColor
+                                  ? ` - ${item.selectedColor}`
+                                  : item.Color
+                                  ? ` - ${item.Color}`
+                                  : ""
+                              }`}
+                              className="!aspect-square"
+                              aspectRatio="1/1"
+                            />
+                          ) : (
+                            <span className="text-lg">🚴</span>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-doodle text-sm font-bold text-doodle-text line-clamp-1">
