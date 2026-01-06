@@ -10,8 +10,7 @@ This is a modern, cloud-native sample application that demonstrates enterprise-g
 - **🤖 AI-Powered Customer Service**: Automated AI Agent creation with MCP Server integration for customer service chat (order tracking, product recommendations)
 - **🧠 Intelligent Model Selection**: Automated discovery of optimal OpenAI models based on availability and quota in the deployment region at deploy-time, with preference for cost-effective mini/small models
 - **📊 Modern API Architecture**: REST and GraphQL endpoints via Microsoft Data API Builder (DAB) for flexible data access, secured using Entra ID
-- **🔄 Session Management**: Redis-backed sessions with automatic token refresh and secure credential storage
-- **📈 Comprehensive Monitoring**: OpenTelemetry integration with Application Insights for telemetry, logging, and performance tracking
+- ** Comprehensive Monitoring**: OpenTelemetry integration with Application Insights for telemetry, logging, and performance tracking
 - **🚀 Serverless Deployment**: Runs on Azure Container Apps for automatic scaling and high availability
 - **👥 User Data Isolation**: Row-level security ensures users can only access their own tasks
 - **🛠️ MCP Server**: Model Context Protocol server exposing 5 customer service tools for AI agents
@@ -48,7 +47,6 @@ The application consists of:
 - **Backend API**: Data API Builder providing REST/GraphQL endpoints with JWT authentication
 - **Database**: Azure SQL Database with Entra ID authentication and row-level security
 - **AI Services**: Azure AI Foundry for intelligent task suggestions with managed identity authentication
-- **Session Storage**: Azure Cache for Redis with managed identity authentication
 - **Monitoring**: Application Insights and Log Analytics workspace with managed identity authentication
 
 ### End-to-End Entra ID Authentication
@@ -59,7 +57,6 @@ This sample demonstrates a comprehensive zero-trust security model using Azure E
 - **Frontend App → Backend API**: The web app uses client credentials flow (app-to-app authentication) with Azure AD to obtain access tokens for API calls from Data API Builder
 - **Backend API → Database**: Data API Builder uses a user managed identity to authenticate to Azure SQL Database, eliminating connection strings and passwords
 - **Frontend App → Azure Services**: The Flask application uses managed identity credentials to authenticate to:
-  - **Redis Cache**: Passwordless authentication for session storage
   - **Azure AI Foundry**: Token-based access for AI recommendations
   - **Application Insights**: Secure telemetry publishing
   - **Key Vault**: Retrieving secrets without hardcoded credentials

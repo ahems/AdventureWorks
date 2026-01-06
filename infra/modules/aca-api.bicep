@@ -17,8 +17,6 @@ param maxReplica int = 3
 param revisionSuffix string
 @secure()
 param sqlConnectionString string
-@secure()
-param redisConnectionString string
 param appUrl string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
@@ -94,10 +92,6 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'DATABASE_CONNECTION_STRING'
               value: sqlConnectionString
-            }
-            {
-              name: 'REDIS_CONNECTION_STRING'
-              value: redisConnectionString
             }
             {
               name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'

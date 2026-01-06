@@ -318,11 +318,9 @@ The redirect URIs depend on the deployed container app's URL, which isn't known 
 
 - `IS_LOCALHOST=true` - Marker for local execution code paths
 - `APPLICATIONINSIGHTS_CONNECTION_STRING` - Telemetry endpoint
-- `REDIS_CONNECTION_STRING` - Redis connection with Entra ID authentication
 - `AZURE_CLIENT_ID` - Managed identity client ID for local development
 - `KEY_VAULT_NAME` - Key Vault for secrets retrieval
 - `API_URL` - Backend GraphQL API endpoint
-- `REDIS_LOCAL_PRINCIPAL_ID` - User's principal ID for Redis AAD authentication
 
 ### postup.ps1 Key Functions
 
@@ -344,18 +342,16 @@ The redirect URIs depend on the deployed container app's URL, which isn't known 
 2. `postup.ps1` automatically generates `.env` file
 3. Local Flask app reads `.env` on startup
 4. Application uses local Azure CLI credentials for authentication
-5. Connects to deployed Azure resources (Redis, SQL, OpenAI, Key Vault)
+5. Connects to deployed Azure resources (SQL, OpenAI, Key Vault)
 
 ### File Format
 
 ```env
 IS_LOCALHOST=true
 APPLICATIONINSIGHTS_CONNECTION_STRING='InstrumentationKey=abc...'
-REDIS_CONNECTION_STRING='rediss://identity-name@hostname:6380/0'
 AZURE_CLIENT_ID=12345678-1234-1234-1234-123456789abc
 KEY_VAULT_NAME=av-kv-abc123def456
 API_URL=https://av-api-abc123.azurecontainerapps.io/graphql
-REDIS_LOCAL_PRINCIPAL_ID=87654321-4321-4321-4321-cba987654321
 ```
 
 ---
@@ -593,7 +589,6 @@ Update-AzADApplication -ObjectId $app.Id -SignInAudience 'AzureADMultipleOrgs'
 ### Local Development
 
 - Uses **Azure CLI** or **Visual Studio** credentials for managed identity
-- **REDIS_LOCAL_PRINCIPAL_ID** enables Redis AAD authentication locally
 - No local secrets required (all retrieved from Key Vault)
 
 ---

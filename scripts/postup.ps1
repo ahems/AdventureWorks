@@ -114,7 +114,6 @@ Write-Host "Generating/updating .env at $envFile" -ForegroundColor Cyan
 $desiredVariables = @(
     @{ Target='IS_LOCALHOST'; Static='true' },
     @{ Target='APPLICATIONINSIGHTS_CONNECTION_STRING'; Candidates=@('APPLICATIONINSIGHTS_CONNECTION_STRING') },
-    @{ Target='REDIS_CONNECTION_STRING'; Candidates=@('REDIS_CONNECTION_STRING','REDIS_URL','REDIS_HOST') },
     @{ Target='AZURE_CLIENT_ID'; Candidates=@('AZURE_CLIENT_ID','CLIENT_ID') },
     @{ Target='KEY_VAULT_NAME'; Candidates=@('KEY_VAULT_NAME','AZURE_KEY_VAULT_NAME') },
     @{ Target='API_URL'; Candidates=@('API_URL','GRAPHQL_API_URL') }
@@ -137,15 +136,6 @@ foreach ($entry in $desiredVariables) {
     } else {
         Write-Host "Skipping $target (no candidate value found in azd env)" -ForegroundColor DarkYellow
     }
-}
-
-# Add REDIS_LOCAL_PRINCIPAL_ID using OBJECT_ID (if available) for local Redis AAD debugging
-$objectIdValue = Get-AzdValue -Name 'OBJECT_ID'
-if ($objectIdValue) {
-    $resolved['REDIS_LOCAL_PRINCIPAL_ID'] = Quote-EnvValue -Value $objectIdValue
-    Write-Host "Set REDIS_LOCAL_PRINCIPAL_ID from OBJECT_ID ($objectIdValue)" -ForegroundColor Cyan
-} else {
-    Write-Host "OBJECT_ID not found in azd env; skipping REDIS_LOCAL_PRINCIPAL_ID" -ForegroundColor DarkYellow
 }
 
 if ($resolved.Keys.Count -eq 0) {

@@ -10,7 +10,6 @@ param acrName string = 'avacr${toLower(resourceToken)}'
 param sqlServerName string = 'av-sql-${toLower(resourceToken)}'
 param diagnosticsName string = 'acr-diagnostics-${toLower(resourceToken)}'
 param cognitiveservicesLocation string = resourceGroup().location
-param redisCacheName string = 'av-redis-${resourceToken}'
 param location string = resourceGroup().location
 param adminUserEnabled bool = true
 param aadAdminLogin string
@@ -51,20 +50,6 @@ module identity 'modules/identity.bicep' = {
     identityName: identityName
     location: location
   }
-}
-
-module redis 'modules/redis.bicep' = {
-  name: 'Deploy-Redis'
-  params: {
-    redisCacheName: redisCacheName
-    location: location
-    identityName: identityName
-    aadAdminObjectId: aadAdminObjectId
-    aadAdminLogin: aadAdminLogin
-  }
-  dependsOn: [
-    identity
-  ]
 }
 
 module storage 'modules/storage.bicep' = {
@@ -119,6 +104,7 @@ module cognitiveservices 'modules/aiservices.bicep' = {
     publicNetworkAccess: publicNetworkAccess
     aadAdminObjectId: aadAdminObjectId
     projectName: 'av-aiproject-${resourceToken}'
+    storageAccountName: storage.outputs.storageAccountName
   }
   dependsOn: [
     keyvault
@@ -201,7 +187,6 @@ module containerAppApi 'modules/aca-api.bicep' = {
     identityName:identityName
     sqlConnectionString: database.outputs.connectionString
     revisionSuffix:revisionSuffix
-    redisConnectionString: redis.outputs.entraConnectionString
     keyVaultName:keyVaultName
     containerAppEnvId: containerApp.outputs.containerAppEnvId
     minReplica:0
@@ -255,9 +240,6 @@ output APP_REDIRECT_URI string = staticWebAppFrontend.outputs.appRedirectUri
 // Expose values needed for local debugging / .env population
 // Key Vault name (already determined as a param -> output for azd env injection)
 output KEY_VAULT_NAME string = keyVaultName
-
-// Redis Entra-based connection string (surfaced from redis module output)
-output REDIS_CONNECTION_STRING string = redis.outputs.entraConnectionString
 
 // Application Insights connection string (need to reference component resource id after module deployment)
 // The module doesn't output it directly, so recreate the name and reference the implicit resource symbol in the module via existing name
