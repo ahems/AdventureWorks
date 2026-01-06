@@ -1,5 +1,4 @@
 param name string = 'av-openai-${uniqueString(resourceGroup().id)}'
-param keyVaultName string = 'av-kv-${uniqueString(resourceGroup().id)}'
 param location string = 'canadaeast'
 param tags object = {}
 @description('The custom subdomain name used to access the API. Defaults to the value of the name parameter.')
@@ -206,28 +205,6 @@ resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01
   }
   sku: deployment.sku
 }]
-
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
-  name: keyVaultName
-}
-
-resource OpenAiDeployment 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
-  name: 'AZUREOPENAIDEPLOYMENTNAME'
-  properties: {
-    value: openAiDeploymentName
-    contentType: 'text/plain'
-  }
-}
-
-resource Endpoint 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
-  name: 'AZUREOPENAIENDPOINT'
-  properties: {
-    value: account.properties.endpoint
-    contentType: 'text/plain'
-  }
-}
 
 output endpoint string = account.properties.endpoint
 output id string = account.id

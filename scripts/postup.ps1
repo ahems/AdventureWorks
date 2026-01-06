@@ -115,7 +115,6 @@ $desiredVariables = @(
     @{ Target='IS_LOCALHOST'; Static='true' },
     @{ Target='APPLICATIONINSIGHTS_CONNECTION_STRING'; Candidates=@('APPLICATIONINSIGHTS_CONNECTION_STRING') },
     @{ Target='AZURE_CLIENT_ID'; Candidates=@('AZURE_CLIENT_ID','CLIENT_ID') },
-    @{ Target='KEY_VAULT_NAME'; Candidates=@('KEY_VAULT_NAME','AZURE_KEY_VAULT_NAME') },
     @{ Target='API_URL'; Candidates=@('API_URL','GRAPHQL_API_URL') }
 )
 

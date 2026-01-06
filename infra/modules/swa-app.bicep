@@ -3,7 +3,6 @@ param location string = resourceGroup().location
 param identityName string
 param apiUrl string
 param apiFunctionsUrl string = ''
-param keyVaultName string
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -48,19 +47,6 @@ resource swaConfig 'Microsoft.Web/staticSites/config@2023-01-01' = {
   properties: {
     API_URL: apiUrl
     API_FUNCTIONS_URL: apiFunctionsUrl
-  }
-}
-
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
-  name: keyVaultName
-}
-
-resource redirecturi 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
-  name: 'REDIRECT-URI'
-  properties: {
-    value: 'https://${staticWebApp.properties.defaultHostname}/getAToken'
-    contentType: 'text/plain'
   }
 }
 

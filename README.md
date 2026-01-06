@@ -59,7 +59,6 @@ This sample demonstrates a comprehensive zero-trust security model using Azure E
 - **Frontend App → Azure Services**: The Flask application uses managed identity credentials to authenticate to:
   - **Azure AI Foundry**: Token-based access for AI recommendations
   - **Application Insights**: Secure telemetry publishing
-  - **Key Vault**: Retrieving secrets without hardcoded credentials
 
 All authentication flows are configured automatically during deployment, demonstrating enterprise best practices for secure, passwordless cloud applications.
 

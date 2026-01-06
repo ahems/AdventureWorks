@@ -1,4 +1,3 @@
-param keyVaultName string = 'av-kv-${uniqueString(resourceGroup().id)}'
 param sqlServerName string = 'av-sql-${toLower(uniqueString(resourceGroup().id))}'
 param location string = resourceGroup().location
 param aadAdminLogin string
@@ -8,12 +7,9 @@ param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param useFreeLimit bool
 param sqlDatabaseName string
 
-// Existing user-assigned identity & Key Vault
+// Existing user-assigned identity
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
-}
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
-  name: keyVaultName
 }
 
 // Using deterministic FQDN pattern rather than module output to keep secret name stable.
@@ -74,36 +70,5 @@ module sqlServerModule 'br/public:avm/res/sql/server:0.14.0' = {
 // Connection string without Authentication parameter (Functions handle auth via Managed Identity using AZURE_CLIENT_ID)
 // This requires the application to also run with an identity that has been granted access to the database
 var connectionString = 'Server=tcp:${sqlServerFqdn};Database=${sqlDatabaseName};'
-
-// Secrets (depend on module to ensure ordering)
-resource server 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
-  name: 'AZURESQLSERVER'
-  properties: {
-    value: sqlServerFqdn
-    contentType: 'text/plain'
-  }
-  dependsOn: [ sqlServerModule ]
-}
-
-resource port 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
-  name: 'AZURESQLPORT'
-  properties: {
-    value: '1433'
-    contentType: 'text/plain'
-  }
-  dependsOn: [ sqlServerModule ]
-}
-
-resource connectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
-  name: 'DATABASE-CONNECTION-STRING'
-  properties: {
-    value: connectionString
-    contentType: 'text/plain'
-  }
-  dependsOn: [ sqlServerModule ]
-}
 
 output connectionString string = connectionString

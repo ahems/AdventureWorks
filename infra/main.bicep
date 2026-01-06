@@ -2,7 +2,6 @@ targetScope = 'resourceGroup'
 param resourceToken string = toLower(uniqueString(resourceGroup().id, environmentName, location))
 param environmentName string
 param cognitiveservicesname string
-param keyVaultName string = 'av-kv-${resourceToken}'
 param identityName string = 'av-identity-${resourceToken}'
 param appInsightsName string = 'av-appinsights-${toLower(resourceToken)}'
 param workspaceName string = 'av-workspace-${toLower(resourceToken)}'
@@ -61,19 +60,6 @@ module storage 'modules/storage.bicep' = {
   }
 }
 
-module keyvault 'modules/keyvault.bicep' = {
-  name: 'Deploy-KeyVault'
-  params: {
-    keyVaultName: keyVaultName
-    location: location
-    identityName: identityName
-    aadAdminObjectId: aadAdminObjectId
-  }
-  dependsOn: [
-    identity
-  ]
-}
-
 module cognitiveservices 'modules/aiservices.bicep' = {
   name: 'Deploy-AI-Foundry'
   params: {
@@ -87,7 +73,6 @@ module cognitiveservices 'modules/aiservices.bicep' = {
     chatGptDeploymentVersion: chatGptDeploymentVersion
     chatGptDeploymentCapacity: chatGptDeploymentCapacity
     chatGptSkuName: chatGptSkuName
-    keyVaultName: keyVaultName
     embeddingModelName: embeddingModelName
     embeddingDeploymentName: embeddingDeploymentName
     embeddingDeploymentVersion: embeddingDeploymentVersion
@@ -106,15 +91,11 @@ module cognitiveservices 'modules/aiservices.bicep' = {
     projectName: 'av-aiproject-${resourceToken}'
     storageAccountName: storage.outputs.storageAccountName
   }
-  dependsOn: [
-    keyvault
-  ]
 }
 
 module database 'modules/database.bicep' = {
   name: 'Deploy-Database'
   params: {
-    keyVaultName: keyVaultName
     sqlServerName: sqlServerName
     aadAdminLogin: aadAdminLogin
     aadAdminObjectId: aadAdminObjectId
@@ -123,9 +104,6 @@ module database 'modules/database.bicep' = {
     useFreeLimit: useFreeLimit
     sqlDatabaseName: sqlDatabaseName
   }
-  dependsOn: [
-    keyvault
-  ]
 }
 
 module acr 'modules/acr.bicep' = {
@@ -187,14 +165,10 @@ module containerAppApi 'modules/aca-api.bicep' = {
     identityName:identityName
     sqlConnectionString: database.outputs.connectionString
     revisionSuffix:revisionSuffix
-    keyVaultName:keyVaultName
     containerAppEnvId: containerApp.outputs.containerAppEnvId
     minReplica:0
     maxReplica:3
   }
-  dependsOn: [
-    keyvault
-  ]
 }
 
 module staticWebAppFrontend 'modules/swa-app.bicep' = {
@@ -205,11 +179,9 @@ module staticWebAppFrontend 'modules/swa-app.bicep' = {
     identityName: identityName
     apiUrl: containerAppApi.outputs.apiUrl
     apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
-    keyVaultName: keyVaultName
   }
   dependsOn: [
     cognitiveservices
-    keyvault
   ]
 }
 
@@ -230,7 +202,6 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
     containerAppEnvId: containerApp.outputs.containerAppEnvId
   }
   dependsOn: [
-    keyvault
     storage
   ]
 }
@@ -238,9 +209,6 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
 output APP_REDIRECT_URI string = staticWebAppFrontend.outputs.appRedirectUri
 
 // Expose values needed for local debugging / .env population
-// Key Vault name (already determined as a param -> output for azd env injection)
-output KEY_VAULT_NAME string = keyVaultName
-
 // Application Insights connection string (need to reference component resource id after module deployment)
 // The module doesn't output it directly, so recreate the name and reference the implicit resource symbol in the module via existing name
 // appinsights module uses name appInsightsName; we can read its properties via symbolic name 'appinsights'.

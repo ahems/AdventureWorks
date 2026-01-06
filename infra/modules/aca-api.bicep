@@ -1,4 +1,3 @@
-param keyVaultName string = 'av-kv-${uniqueString(resourceGroup().id)}'
 param appInsightsName string = 'av-appinsights-${toLower(uniqueString(resourceGroup().id))}'
 param apiName string = 'av-api-${uniqueString(resourceGroup().id)}'
 param location string = resourceGroup().location
@@ -147,19 +146,6 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         ]
       }
     }
-  }
-}
-
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
-  name: keyVaultName
-}
-
-resource apiurl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
-  name: 'API-URL'
-  properties: {
-    value: 'https://${api.properties.configuration.ingress.fqdn}/graphql/'
-    contentType: 'text/plain'
   }
 }
 
