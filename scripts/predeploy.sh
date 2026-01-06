@@ -6,19 +6,23 @@ set -e
 
 API_URL=$(azd env get-value API_URL)
 API_FUNC_URL=$(azd env get-value API_FUNCTIONS_URL)
+APPINSIGHTS_CONN_STR=$(azd env get-value APPINSIGHTS_CONNECTIONSTRING)
 
 echo "[PreDeploy] Setting environment variables for SWA build"
 echo "  VITE_API_URL: $API_URL"
 echo "  VITE_API_FUNCTIONS_URL: $API_FUNC_URL"
+echo "  VITE_APPINSIGHTS_CONNECTIONSTRING: $(if [ -n "$APPINSIGHTS_CONN_STR" ]; then echo "***set***"; else echo "not set"; fi)"
 
 # Export for any subsequent commands (though azd may not pass these to SWA CLI)
 export VITE_API_URL="$API_URL"
 export VITE_API_FUNCTIONS_URL="$API_FUNC_URL"
+export VITE_APPINSIGHTS_CONNECTIONSTRING="$APPINSIGHTS_CONN_STR"
 
 # Write to .env file that Vite will pick up during build
 cat > app/.env.production << EOF
 VITE_API_URL=$API_URL
 VITE_API_FUNCTIONS_URL=$API_FUNC_URL
+VITE_APPINSIGHTS_CONNECTIONSTRING=$APPINSIGHTS_CONN_STR
 EOF
 
 echo "[PreDeploy] Created app/.env.production with Azure URLs"

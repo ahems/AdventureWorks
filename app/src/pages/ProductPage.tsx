@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { trackEvent } from "@/lib/appInsights";
 import { useParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -126,6 +127,15 @@ const ProductPage: React.FC = () => {
   useEffect(() => {
     if (product) {
       addToRecentlyViewed(product);
+
+      // Track product view in Application Insights
+      trackEvent("Product_View", {
+        productId: product.ProductID,
+        productName: product.Name,
+        category: product.ProductSubcategory?.ProductCategory?.Name,
+        subcategory: product.ProductSubcategory?.Name,
+        price: product.ListPrice,
+      });
     }
   }, [product, addToRecentlyViewed]);
 

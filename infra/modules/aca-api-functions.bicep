@@ -44,7 +44,6 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
   }
   properties: {
     managedEnvironmentId: containerAppEnvId
-    workloadProfileName: 'Consumption'
     configuration: {
       secrets: [
         {

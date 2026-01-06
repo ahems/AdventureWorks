@@ -4,7 +4,7 @@
 set -e
 
 # Get function URL from azd environment
-FUNCTION_URL=$(azd env get-values 2>/dev/null | grep FUNCTION_URL | cut -d'=' -f2 | tr -d '"' || echo "")
+FUNCTION_URL=$(azd env get-values 2>/dev/null | grep VITE_API_FUNCTIONS_URL | cut -d'=' -f2 | tr -d '"' || echo "")
 
 if [ -z "$FUNCTION_URL" ]; then
     echo "❌ FUNCTION_URL not found in azd environment"

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { trackEvent } from "@/lib/appInsights";
 import {
   ArrowLeft,
   CreditCard,
@@ -861,6 +862,24 @@ const CheckoutPage: React.FC = () => {
 
       // Manually clear cart from UI
       clearCart();
+
+      // Track purchase event in Application Insights
+      trackEvent("Purchase_Complete", {
+        orderId: salesOrderId,
+        customerId: customerId,
+        revenue: grandTotal,
+        tax: tax,
+        shipping: shipping,
+        itemCount: items.length,
+        paymentMethod: paymentMethod,
+        currencyCode: currencyCode,
+        items: items.map((item) => ({
+          productId: item.ProductID,
+          productName: item.Name,
+          quantity: item.quantity,
+          price: item.ListPrice,
+        })),
+      });
 
       toast({
         title: t("checkout.orderPlaced"),

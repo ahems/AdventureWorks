@@ -12,6 +12,7 @@ interface ImportMeta {
 interface AppConfig {
   API_URL: string;
   API_FUNCTIONS_URL?: string;
+  APPINSIGHTS_CONNECTIONSTRING?: string;
 }
 
 interface Window {

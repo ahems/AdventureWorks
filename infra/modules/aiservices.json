@@ -1,0 +1,302 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.39.26.7824",
+      "templateHash": "10157948665272599262"
+    }
+  },
+  "parameters": {
+    "name": {
+      "type": "string",
+      "defaultValue": "[format('av-openai-{0}', uniqueString(resourceGroup().id))]"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "canadaeast"
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {}
+    },
+    "customSubDomainName": {
+      "type": "string",
+      "defaultValue": "[parameters('name')]",
+      "metadata": {
+        "description": "The custom subdomain name used to access the API. Defaults to the value of the name parameter."
+      }
+    },
+    "kind": {
+      "type": "string",
+      "defaultValue": "AIServices"
+    },
+    "openAiDeploymentName": {
+      "type": "string",
+      "defaultValue": "chat"
+    },
+    "restoreOpenAi": {
+      "type": "bool",
+      "defaultValue": false
+    },
+    "identityName": {
+      "type": "string",
+      "defaultValue": "[format('av-identity-{0}', uniqueString(resourceGroup().id))]"
+    },
+    "aadAdminObjectId": {
+      "type": "string"
+    },
+    "projectName": {
+      "type": "string"
+    },
+    "publicNetworkAccess": {
+      "type": "string",
+      "defaultValue": "Enabled",
+      "allowedValues": [
+        "Enabled",
+        "Disabled"
+      ]
+    },
+    "sku": {
+      "type": "object",
+      "defaultValue": {
+        "name": "S0"
+      }
+    },
+    "allowedIpRules": {
+      "type": "array",
+      "defaultValue": []
+    },
+    "networkAcls": {
+      "type": "object",
+      "defaultValue": "[if(empty(parameters('allowedIpRules')), createObject('defaultAction', 'Allow'), createObject('ipRules', parameters('allowedIpRules'), 'defaultAction', 'Deny'))]"
+    },
+    "embeddingModelName": {
+      "type": "string",
+      "defaultValue": "embedding"
+    },
+    "embeddingDeploymentName": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "embeddingDeploymentVersion": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "embeddingDeploymentCapacity": {
+      "type": "int",
+      "defaultValue": 0
+    },
+    "embeddingSkuName": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "imageModelName": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "imageDeploymentName": {
+      "type": "string",
+      "defaultValue": "gpt-image-1"
+    },
+    "imageDeploymentVersion": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "imageDeploymentCapacity": {
+      "type": "int",
+      "defaultValue": 0
+    },
+    "imageSkuName": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "imageModelFormat": {
+      "type": "string",
+      "defaultValue": "OpenAI"
+    },
+    "openAiHost": {
+      "type": "string",
+      "defaultValue": "azure"
+    },
+    "chatGptModelName": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "chatGptDeploymentName": {
+      "type": "string",
+      "defaultValue": "chat"
+    },
+    "chatGptDeploymentVersion": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "chatGptDeploymentCapacity": {
+      "type": "int",
+      "defaultValue": 0
+    },
+    "chatGptSkuName": {
+      "type": "string",
+      "defaultValue": ""
+    }
+  },
+  "variables": {
+    "embedding": {
+      "modelName": "[if(not(empty(parameters('embeddingModelName'))), parameters('embeddingModelName'), 'text-embedding-ada-002')]",
+      "deploymentName": "[if(not(empty(parameters('embeddingDeploymentName'))), parameters('embeddingDeploymentName'), 'embedding')]",
+      "deploymentVersion": "[if(not(empty(parameters('embeddingDeploymentVersion'))), parameters('embeddingDeploymentVersion'), '2')]",
+      "deploymentCapacity": "[if(not(equals(parameters('embeddingDeploymentCapacity'), 0)), parameters('embeddingDeploymentCapacity'), 30)]",
+      "embeddingSkuName": "[if(not(empty(parameters('embeddingSkuName'))), parameters('embeddingSkuName'), 'Standard')]"
+    },
+    "imageModel": {
+      "modelName": "[if(not(empty(parameters('imageModelName'))), parameters('imageModelName'), '')]",
+      "deploymentName": "[if(not(empty(parameters('imageDeploymentName'))), parameters('imageDeploymentName'), 'image')]",
+      "deploymentVersion": "[if(not(empty(parameters('imageDeploymentVersion'))), string(parameters('imageDeploymentVersion')), '')]",
+      "deploymentCapacity": "[if(not(equals(parameters('imageDeploymentCapacity'), 0)), parameters('imageDeploymentCapacity'), 1)]",
+      "imageSkuName": "[if(not(empty(parameters('imageSkuName'))), parameters('imageSkuName'), 'Standard')]",
+      "format": "[if(not(empty(parameters('imageModelFormat'))), parameters('imageModelFormat'), 'OpenAI')]"
+    },
+    "chatGpt": {
+      "modelName": "[if(not(empty(parameters('chatGptModelName'))), parameters('chatGptModelName'), if(startsWith(parameters('openAiHost'), 'azure'), 'gpt-35-turbo', 'gpt-3.5-turbo'))]",
+      "deploymentName": "[if(not(empty(parameters('chatGptDeploymentName'))), parameters('chatGptDeploymentName'), 'chat')]",
+      "deploymentVersion": "[if(not(empty(parameters('chatGptDeploymentVersion'))), parameters('chatGptDeploymentVersion'), '0613')]",
+      "deploymentCapacity": "[if(not(equals(parameters('chatGptDeploymentCapacity'), 0)), parameters('chatGptDeploymentCapacity'), 30)]",
+      "skuName": "[if(not(empty(parameters('chatGptSkuName'))), parameters('chatGptSkuName'), 'Standard')]"
+    },
+    "deployments": [
+      {
+        "name": "[variables('chatGpt').deploymentName]",
+        "model": {
+          "format": "OpenAI",
+          "name": "[variables('chatGpt').modelName]",
+          "version": "[variables('chatGpt').deploymentVersion]"
+        },
+        "sku": {
+          "name": "[variables('chatGpt').skuName]",
+          "capacity": "[variables('chatGpt').deploymentCapacity]"
+        }
+      },
+      {
+        "name": "[variables('embedding').deploymentName]",
+        "model": {
+          "format": "OpenAI",
+          "name": "[variables('embedding').modelName]",
+          "version": "[variables('embedding').deploymentVersion]"
+        },
+        "sku": {
+          "name": "[variables('embedding').embeddingSkuName]",
+          "capacity": "[variables('embedding').deploymentCapacity]"
+        }
+      }
+    ],
+    "imageDeployment": "[if(and(not(empty(variables('imageModel').modelName)), not(empty(variables('imageModel').deploymentVersion))), createArray(createObject('name', variables('imageModel').deploymentName, 'model', createObject('format', variables('imageModel').format, 'name', variables('imageModel').modelName, 'version', variables('imageModel').deploymentVersion), 'sku', createObject('name', variables('imageModel').imageSkuName, 'capacity', variables('imageModel').deploymentCapacity))), createArray())]",
+    "allDeployments": "[concat(variables('deployments'), variables('imageDeployment'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2025-06-01",
+      "name": "[parameters('name')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "kind": "[parameters('kind')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')))]": {}
+        }
+      },
+      "properties": {
+        "customSubDomainName": "[parameters('customSubDomainName')]",
+        "publicNetworkAccess": "[parameters('publicNetworkAccess')]",
+        "networkAcls": "[parameters('networkAcls')]",
+        "disableLocalAuth": true,
+        "dynamicThrottlingEnabled": false,
+        "restrictOutboundNetworkAccess": false,
+        "restore": "[parameters('restoreOpenAi')]",
+        "allowProjectManagement": true
+      },
+      "sku": "[parameters('sku')]"
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/projects",
+      "apiVersion": "2025-04-01-preview",
+      "name": "[format('{0}/{1}', parameters('name'), parameters('projectName'))]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')))]": {}
+        }
+      },
+      "properties": {
+        "description": "AI Foundry Project for AI Foundry Demo",
+        "displayName": "AI Foundry Demo Project"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2020-04-01-preview",
+      "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', parameters('name'))]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('name')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), 'a001fd3d-188f-4b5d-821b-7da978bf7442')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a001fd3d-188f-4b5d-821b-7da978bf7442')]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2020-04-01-preview",
+      "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', parameters('name'))]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('name')), parameters('aadAdminObjectId'), 'a001fd3d-188f-4b5d-821b-7da978bf7442')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a001fd3d-188f-4b5d-821b-7da978bf7442')]",
+        "principalId": "[parameters('aadAdminObjectId')]",
+        "principalType": "User"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]"
+      ]
+    },
+    {
+      "copy": {
+        "name": "deployment",
+        "count": "[length(variables('allDeployments'))]",
+        "mode": "serial",
+        "batchSize": 1
+      },
+      "type": "Microsoft.CognitiveServices/accounts/deployments",
+      "apiVersion": "2025-06-01",
+      "name": "[format('{0}/{1}', parameters('name'), variables('allDeployments')[copyIndex()].name)]",
+      "properties": {
+        "model": "[variables('allDeployments')[copyIndex()].model]"
+      },
+      "sku": "[variables('allDeployments')[copyIndex()].sku]",
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "endpoint": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('name')), '2025-06-01').endpoint]"
+    },
+    "id": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]"
+    },
+    "name": {
+      "type": "string",
+      "value": "[parameters('name')]"
+    }
+  }
+}

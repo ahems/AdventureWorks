@@ -29,18 +29,11 @@ module appInsights 'br/public:avm/res/insights/component:0.6.1' = {
     kind: 'web'
     applicationType: 'web'
     workspaceResourceId: workspace.outputs.resourceId
-    disableLocalAuth: true
-    roleAssignments: [
-      {
-        principalId: azidentity.properties.principalId
-        roleDefinitionIdOrName: 'Monitoring Metrics Publisher'
-        principalType: 'ServicePrincipal'
-      }
-      {
-        principalId: aadAdminObjectId
-        roleDefinitionIdOrName: 'Monitoring Metrics Publisher'
-        principalType: 'User'
-      }
-    ]
+    disableLocalAuth: false
   }
 }
+
+output resourceId string = appInsights.outputs.resourceId
+output instrumentationKey string = appInsights.outputs.instrumentationKey
+output connectionString string = appInsights.outputs.connectionString
+output name string = appInsights.outputs.name

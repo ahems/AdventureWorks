@@ -8,7 +8,7 @@ echo "============================================================"
 echo ""
 
 # Get function URL
-FUNCTION_URL=$(azd env get-values 2>/dev/null | grep VITE_API_FUNCTIONS_URL | cut -d'=' -f2 | tr -d '"' || echo "")
+FUNCTION_URL="https://av-func-ewphuc52etkbc.purplesky-9d5d92b9.eastus2.azurecontainerapps.io"
 
 if [ -z "$FUNCTION_URL" ]; then
     echo "❌ FUNCTION_URL not found"

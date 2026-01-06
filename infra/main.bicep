@@ -84,12 +84,10 @@ module cognitiveservices 'modules/aiservices.bicep' = {
     imageDeploymentCapacity: imageDeploymentCapacity
     imageSkuName: imageSkuName
     imageModelFormat: imageModelFormat
-    openAiDeploymentName: openAiDeploymentName
     kind: AIServicesKind
     publicNetworkAccess: publicNetworkAccess
     aadAdminObjectId: aadAdminObjectId
     projectName: 'av-aiproject-${resourceToken}'
-    storageAccountName: storage.outputs.storageAccountName
   }
 }
 
@@ -179,6 +177,7 @@ module staticWebAppFrontend 'modules/swa-app.bicep' = {
     identityName: identityName
     apiUrl: containerAppApi.outputs.apiUrl
     apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
+    appInsightsConnectionString: appinsights.outputs.connectionString
   }
   dependsOn: [
     cognitiveservices
@@ -213,6 +212,8 @@ output APP_REDIRECT_URI string = staticWebAppFrontend.outputs.appRedirectUri
 // The module doesn't output it directly, so recreate the name and reference the implicit resource symbol in the module via existing name
 // appinsights module uses name appInsightsName; we can read its properties via symbolic name 'appinsights'.
 output APPLICATIONINSIGHTS_CONNECTION_STRING string = containerApp.outputs.applicationInsightsConnectionString
+output APPINSIGHTS_INSTRUMENTATIONKEY string = appinsights.outputs.instrumentationKey
+output APPINSIGHTS_CONNECTIONSTRING string = appinsights.outputs.connectionString
 
 // API URL (GraphQL endpoint) - constructed similarly to what aca module sets inside env values
 // The middle tier container app FQDN is not surfaced directly; derive using known naming convention from aca module parameters
