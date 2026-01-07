@@ -18,6 +18,7 @@ import {
   useSubcategoriesByCategory,
   useProductsBySubcategory,
 } from "@/hooks/useProducts";
+import { useAllReviews } from "@/hooks/useReviews";
 import {
   Select,
   SelectContent,
@@ -48,10 +49,31 @@ const CategoryPage: React.FC = () => {
     data: subcategoryProducts = [],
     isLoading: subcategoryProductsLoading,
   } = useProductsBySubcategory(selectedSubcategory || 0);
+  const { data: allReviews = [] } = useAllReviews();
 
   const isLoadingProducts = selectedSubcategory
     ? subcategoryProductsLoading
     : categoryProductsLoading;
+
+  // Create a map of product ratings from all reviews
+  const productRatings = React.useMemo(() => {
+    const ratingsMap = new Map<number, { total: number; count: number }>();
+
+    allReviews.forEach((review) => {
+      const existing = ratingsMap.get(review.ProductID);
+      if (existing) {
+        existing.total += review.Rating;
+        existing.count += 1;
+      } else {
+        ratingsMap.set(review.ProductID, {
+          total: review.Rating,
+          count: 1,
+        });
+      }
+    });
+
+    return ratingsMap;
+  }, [allReviews]);
 
   const products = React.useMemo(() => {
     const productList = selectedSubcategory
@@ -74,13 +96,29 @@ const CategoryPage: React.FC = () => {
             new Date(b.SellStartDate || 0).getTime() -
             new Date(a.SellStartDate || 0).getTime()
           );
+        case "rating":
+          const ratingDataA = productRatings.get(a.ProductID);
+          const ratingDataB = productRatings.get(b.ProductID);
+          const ratingA = ratingDataA
+            ? ratingDataA.total / ratingDataA.count
+            : 0;
+          const ratingB = ratingDataB
+            ? ratingDataB.total / ratingDataB.count
+            : 0;
+          return ratingB - ratingA;
         default:
           return 0;
       }
     });
 
     return sorted;
-  }, [selectedSubcategory, allCategoryProducts, subcategoryProducts, sortBy]);
+  }, [
+    selectedSubcategory,
+    allCategoryProducts,
+    subcategoryProducts,
+    sortBy,
+    productRatings,
+  ]);
 
   // Group products by model for display
   const groupedProducts = React.useMemo(() => {
@@ -458,6 +496,9 @@ const CategoryPage: React.FC = () => {
                             </SelectItem>
                             <SelectItem value="newest" className="font-doodle">
                               {t("category.sortNewest")}
+                            </SelectItem>
+                            <SelectItem value="rating" className="font-doodle">
+                              {t("category.sortRating")}
                             </SelectItem>
                           </SelectContent>
                         </Select>
