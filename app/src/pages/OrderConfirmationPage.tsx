@@ -1,51 +1,316 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { CheckCircle, Package, Truck, MapPin, Mail } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { gql } from "graphql-request";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { getFunctionsApiUrl } from "@/lib/utils";
+import { graphqlClient } from "@/lib/graphql-client";
+
+// GraphQL query to fetch order details with relationships
+const GET_ORDER_DETAILS = gql`
+  query GetOrderDetails($salesOrderId: Int!) {
+    salesOrderHeaders(filter: { SalesOrderID: { eq: $salesOrderId } }) {
+      items {
+        SalesOrderID
+        SalesOrderNumber
+        OrderDate
+        SubTotal
+        TaxAmt
+        Freight
+        TotalDue
+        ShipToAddressID
+        BillToAddressID
+        CustomerID
+        shipMethod {
+          Name
+        }
+        salesOrderDetails {
+          items {
+            ProductID
+            OrderQty
+            UnitPrice
+            UnitPriceDiscount
+            LineTotal
+            product {
+              ProductID
+              Name
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+const GET_ADDRESS = gql`
+  query GetAddress($addressId: Int!) {
+    addresses(filter: { AddressID: { eq: $addressId } }) {
+      items {
+        AddressID
+        AddressLine1
+        AddressLine2
+        City
+        StateProvince {
+          StateProvinceCode
+          Name
+        }
+        PostalCode
+        CountryRegion {
+          Name
+        }
+      }
+    }
+  }
+`;
+
+const GET_CUSTOMER = gql`
+  query GetCustomer($customerId: Int!) {
+    customers(filter: { CustomerID: { eq: $customerId } }) {
+      items {
+        PersonID
+      }
+    }
+  }
+`;
+
+const GET_PERSON = gql`
+  query GetPerson($personId: Int!) {
+    people(filter: { BusinessEntityID: { eq: $personId } }) {
+      items {
+        FirstName
+        LastName
+        emailAddresses {
+          items {
+            EmailAddress
+          }
+        }
+      }
+    }
+  }
+`;
 
 interface OrderItem {
   ProductID: number;
   Name: string;
   ListPrice: number;
   quantity: number;
+  discount: number;
 }
 
 interface Order {
   id: string;
+  salesOrderNumber: string;
   items: OrderItem[];
   shipping: {
     firstName: string;
     lastName: string;
     email: string;
     address: string;
+    address2?: string;
     city: string;
     state: string;
     zipCode: string;
     country: string;
   };
-  paymentMethod: string;
   shippingMethodName: string;
   subtotal: number;
   shippingCost: number;
   tax: number;
   total: number;
-  currencyCode: string;
-  currencySymbol: string;
   date: string;
 }
 
 const OrderConfirmationPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [order, setOrder] = useState<Order | null>(null);
+  const [loading, setLoading] = useState(true);
   const { t } = useTranslation("common");
 
+  // Fetch order data from API using order ID from URL
   useEffect(() => {
-    const savedOrder = localStorage.getItem("lastOrder");
-    if (savedOrder) {
-      setOrder(JSON.parse(savedOrder));
-    }
-  }, []);
+    const fetchOrder = async () => {
+      const orderId = searchParams.get("orderId");
+      if (!orderId) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Parse order ID (format: "SO-12345" -> 12345)
+        const salesOrderId = parseInt(orderId.replace(/^SO-/, ""), 10);
+        if (isNaN(salesOrderId)) {
+          console.error("Invalid order ID format");
+          setLoading(false);
+          return;
+        }
+
+        // Fetch order header with details
+        const orderResponse = await graphqlClient.request<{
+          salesOrderHeaders: {
+            items: Array<{
+              SalesOrderID: number;
+              SalesOrderNumber: string;
+              OrderDate: string;
+              SubTotal: number;
+              TaxAmt: number;
+              Freight: number;
+              TotalDue: number;
+              ShipToAddressID: number;
+              CustomerID: number;
+              shipMethod: { Name: string } | null;
+              salesOrderDetails: {
+                items: Array<{
+                  ProductID: number;
+                  OrderQty: number;
+                  UnitPrice: number;
+                  UnitPriceDiscount: number;
+                  LineTotal: number;
+                  product: { ProductID: number; Name: string } | null;
+                }>;
+              };
+            }>;
+          };
+        }>(GET_ORDER_DETAILS, { salesOrderId });
+
+        const orderData = orderResponse.salesOrderHeaders.items[0];
+        if (!orderData) {
+          console.error("Order not found");
+          setLoading(false);
+          return;
+        }
+
+        // Fetch shipping address
+        const addressResponse = await graphqlClient.request<{
+          addresses: {
+            items: Array<{
+              AddressLine1: string;
+              AddressLine2: string | null;
+              City: string;
+              StateProvince: { StateProvinceCode: string; Name: string } | null;
+              PostalCode: string;
+              CountryRegion: { Name: string } | null;
+            }>;
+          };
+        }>(GET_ADDRESS, { addressId: orderData.ShipToAddressID });
+
+        const address = addressResponse.addresses.items[0];
+
+        // Fetch customer and person info
+        const customerResponse = await graphqlClient.request<{
+          customers: { items: Array<{ PersonID: number | null }> };
+        }>(GET_CUSTOMER, { customerId: orderData.CustomerID });
+
+        const personId = customerResponse.customers.items[0]?.PersonID;
+        let firstName = "Customer";
+        let lastName = "";
+        let email = "";
+
+        if (personId) {
+          const personResponse = await graphqlClient.request<{
+            people: {
+              items: Array<{
+                FirstName: string;
+                LastName: string;
+                emailAddresses: { items: Array<{ EmailAddress: string }> };
+              }>;
+            };
+          }>(GET_PERSON, { personId });
+
+          const person = personResponse.people.items[0];
+          if (person) {
+            firstName = person.FirstName;
+            lastName = person.LastName;
+            email = person.emailAddresses.items[0]?.EmailAddress || "";
+          }
+        }
+
+        // Build order object
+        const order: Order = {
+          id: orderId,
+          salesOrderNumber: orderData.SalesOrderNumber,
+          items: orderData.salesOrderDetails.items.map((detail) => ({
+            ProductID: detail.ProductID,
+            Name: detail.product?.Name || "Unknown Product",
+            ListPrice: detail.UnitPrice,
+            quantity: detail.OrderQty,
+            discount: detail.UnitPriceDiscount,
+          })),
+          shipping: {
+            firstName,
+            lastName,
+            email,
+            address: address?.AddressLine1 || "",
+            address2: address?.AddressLine2 || undefined,
+            city: address?.City || "",
+            state: address?.StateProvince?.StateProvinceCode || "",
+            zipCode: address?.PostalCode || "",
+            country: address?.CountryRegion?.Name || "",
+          },
+          shippingMethodName: orderData.shipMethod?.Name || "Standard Shipping",
+          subtotal: orderData.SubTotal,
+          shippingCost: orderData.Freight,
+          tax: orderData.TaxAmt,
+          total: orderData.TotalDue,
+          date: orderData.OrderDate,
+        };
+
+        setOrder(order);
+
+        // Generate PDF receipt
+        try {
+          const functionsApiUrl = getFunctionsApiUrl();
+          const response = await fetch(
+            `${functionsApiUrl}/api/GenerateOrderReceipts_HttpStart`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                salesOrderNumbers: [orderData.SalesOrderNumber],
+              }),
+            }
+          );
+
+          if (!response.ok) {
+            console.error("Failed to generate receipt:", await response.text());
+          } else {
+            const result = await response.json();
+            console.log("Receipt generation queued:", result);
+          }
+        } catch (error) {
+          console.error("Error generating receipt:", error);
+        }
+      } catch (error) {
+        console.error("Error fetching order:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOrder();
+  }, [searchParams]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-1 container mx-auto px-4 py-12">
+          <div className="max-w-md mx-auto text-center">
+            <div className="doodle-card p-12">
+              <Package className="w-20 h-20 mx-auto mb-6 text-doodle-accent animate-pulse" />
+              <p className="font-doodle text-doodle-text/70">
+                {t("orderTracking.loading")}
+              </p>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!order) {
     return (
@@ -135,17 +400,16 @@ const OrderConfirmationPage: React.FC = () => {
 
                 {/* Items */}
                 <div className="space-y-3">
-                  {order.items.map((item) => (
+                  {order.items.map((item, index) => (
                     <div
-                      key={item.ProductID}
+                      key={`${item.ProductID}-${index}`}
                       className="flex justify-between font-doodle text-sm"
                     >
                       <span className="text-doodle-text/70">
                         {item.Name} × {item.quantity}
                       </span>
                       <span>
-                        {order.currencySymbol}
-                        {(item.ListPrice * item.quantity).toFixed(2)}
+                        ${(item.ListPrice * item.quantity).toFixed(2)}
                       </span>
                     </div>
                   ))}
@@ -158,10 +422,7 @@ const OrderConfirmationPage: React.FC = () => {
                     <span className="text-doodle-text/70">
                       {t("orderTracking.subtotal")}
                     </span>
-                    <span>
-                      {order.currencySymbol}
-                      {order.subtotal.toFixed(2)}
-                    </span>
+                    <span>${order.subtotal.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-doodle-text/70">
@@ -170,26 +431,20 @@ const OrderConfirmationPage: React.FC = () => {
                     <span>
                       {order.shippingCost === 0
                         ? t("orderConfirmation.free")
-                        : `${order.currencySymbol}${order.shippingCost.toFixed(
-                            2
-                          )}`}
+                        : `$${order.shippingCost.toFixed(2)}`}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-doodle-text/70">
                       {t("orderTracking.tax")}
                     </span>
-                    <span>
-                      {order.currencySymbol}
-                      {order.tax.toFixed(2)}
-                    </span>
+                    <span>${order.tax.toFixed(2)}</span>
                   </div>
                   <hr className="border-dashed border-doodle-text/30" />
                   <div className="flex justify-between text-lg font-bold">
                     <span>{t("orderTracking.total")}</span>
                     <span className="text-doodle-green">
-                      {order.currencySymbol}
-                      {order.total.toFixed(2)}
+                      ${order.total.toFixed(2)}
                     </span>
                   </div>
                 </div>

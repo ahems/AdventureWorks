@@ -805,7 +805,7 @@ const CheckoutPage: React.FC = () => {
           if (stockResponse.products.items.length > 0) {
             const currentStock =
               stockResponse.products.items[0].SafetyStockLevel;
-            const newStock = Math.max(0, currentStock - item.quantity);
+            const newStock = currentStock - item.quantity; // Allow negative stock
 
             await graphqlClient.request(UPDATE_PRODUCT_STOCK, {
               productId: item.ProductID,
@@ -850,34 +850,6 @@ const CheckoutPage: React.FC = () => {
       const shippingMethodName =
         selectedShipMethod?.Name || "Standard Shipping";
 
-      // Store order in localStorage for confirmation page
-      const order = {
-        id: orderId,
-        salesOrderId,
-        items: items,
-        shipping: shippingData,
-        paymentMethod,
-        shippingMethodName,
-        subtotal: totalPrice,
-        shippingCost: shipping,
-        tax,
-        total: grandTotal,
-        currencyCode,
-        currencySymbol: CURRENCY_SYMBOLS[currencyCode] || currencyCode,
-        date: orderDate,
-      };
-
-      localStorage.setItem("lastOrder", JSON.stringify(order));
-
-      // Also save to order history
-      const existingOrders = JSON.parse(
-        localStorage.getItem("orderHistory") || "[]"
-      );
-      localStorage.setItem(
-        "orderHistory",
-        JSON.stringify([order, ...existingOrders])
-      );
-
       // Manually clear cart from UI
       clearCart();
 
@@ -904,7 +876,7 @@ const CheckoutPage: React.FC = () => {
         description: t("checkout.orderConfirmed", { orderId }),
       });
 
-      navigate("/order-confirmation");
+      navigate(`/order-confirmation?orderId=${orderId}`);
     } catch (error) {
       console.error("Order creation error:", error);
       toast({
