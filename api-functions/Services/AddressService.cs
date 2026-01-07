@@ -17,12 +17,14 @@ public class AddressService
 
     /// <summary>
     /// Creates a SQL connection with managed identity authentication
-    /// The connection string already contains "Authentication=Active Directory Default"
-    /// which automatically uses DefaultAzureCredential
+    /// Uses DefaultAzureCredential to obtain an access token for Azure SQL
     /// </summary>
     private async Task<SqlConnection> CreateConnectionAsync()
     {
         var connection = new SqlConnection(_connectionString);
+        var credential = new DefaultAzureCredential();
+        var token = await credential.GetTokenAsync(new TokenRequestContext(new[] { "https://database.windows.net/.default" }));
+        connection.AccessToken = token.Token;
         await connection.OpenAsync();
         return connection;
     }
@@ -33,7 +35,7 @@ public class AddressService
     public async Task<IEnumerable<Address>> GetAddressesAsync(int? limit = 100, int? offset = 0)
     {
         using var connection = await CreateConnectionAsync();
-        
+
         var sql = @"
             SELECT 
                 AddressID, 
@@ -48,7 +50,7 @@ public class AddressService
             ORDER BY AddressID
             OFFSET @Offset ROWS
             FETCH NEXT @Limit ROWS ONLY";
-        
+
         return await connection.QueryAsync<Address>(sql, new { Offset = offset, Limit = limit });
     }
 
@@ -58,7 +60,7 @@ public class AddressService
     public async Task<Address?> GetAddressByIdAsync(int id)
     {
         using var connection = await CreateConnectionAsync();
-        
+
         var sql = @"
             SELECT 
                 AddressID, 
@@ -71,7 +73,7 @@ public class AddressService
                 ModifiedDate
             FROM [Person].[Address]
             WHERE AddressID = @Id";
-        
+
         return await connection.QuerySingleOrDefaultAsync<Address>(sql, new { Id = id });
     }
 
@@ -81,7 +83,7 @@ public class AddressService
     public async Task<Address> CreateAddressAsync(CreateAddressRequest request)
     {
         using var connection = await CreateConnectionAsync();
-        
+
         var sql = @"
             INSERT INTO [Person].[Address] 
                 (AddressLine1, AddressLine2, City, StateProvinceID, PostalCode, rowguid, ModifiedDate)
@@ -96,9 +98,21 @@ public class AddressService
                 INSERTED.ModifiedDate
             VALUES 
                 (@AddressLine1, @AddressLine2, @City, @StateProvinceID, @PostalCode, NEWID(), GETDATE())";
-        
-        var address = await connection.QuerySingleAsync<Address>(sql, request);
-        return address;
+
+        try
+        {
+            var address = await connection.QuerySingleAsync<Address>(sql, request);
+            return address;
+        }
+        catch (SqlException ex)
+        {
+            // Check for foreign key constraint violation (error 547)
+            if (ex.Number == 547)
+            {
+                throw new InvalidOperationException($"Invalid StateProvinceID: {request.StateProvinceID}. The StateProvinceID must reference a valid state/province.", ex);
+            }
+            throw;
+        }
     }
 
     /// <summary>
@@ -107,7 +121,7 @@ public class AddressService
     public async Task<Address?> UpdateAddressAsync(int id, UpdateAddressRequest request)
     {
         using var connection = await CreateConnectionAsync();
-        
+
         // Build dynamic SQL for partial updates
         var setClauses = new List<string>();
         var parameters = new DynamicParameters();
@@ -171,10 +185,10 @@ public class AddressService
     public async Task<bool> DeleteAddressAsync(int id)
     {
         using var connection = await CreateConnectionAsync();
-        
+
         var sql = "DELETE FROM [Person].[Address] WHERE AddressID = @Id";
         var rowsAffected = await connection.ExecuteAsync(sql, new { Id = id });
-        
+
         return rowsAffected > 0;
     }
 }

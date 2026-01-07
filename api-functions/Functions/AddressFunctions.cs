@@ -115,18 +115,33 @@ public class AddressFunctions
 
             if (createRequest == null)
             {
+                _logger.LogWarning("CreateAddress: Invalid request body - could not deserialize");
                 var badRequest = req.CreateResponse(HttpStatusCode.BadRequest);
                 await badRequest.WriteAsJsonAsync(new { error = "Invalid request body" });
                 return badRequest;
             }
+
+            // Log the incoming request for debugging
+            _logger.LogInformation("CreateAddress request: AddressLine1={AddressLine1}, City={City}, StateProvinceID={StateProvinceID}, PostalCode={PostalCode}",
+                createRequest.AddressLine1, createRequest.City, createRequest.StateProvinceID, createRequest.PostalCode);
 
             // Validate required fields
             if (string.IsNullOrWhiteSpace(createRequest.AddressLine1) ||
                 string.IsNullOrWhiteSpace(createRequest.City) ||
                 string.IsNullOrWhiteSpace(createRequest.PostalCode))
             {
+                _logger.LogWarning("CreateAddress: Missing required fields");
                 var badRequest = req.CreateResponse(HttpStatusCode.BadRequest);
                 await badRequest.WriteAsJsonAsync(new { error = "AddressLine1, City, and PostalCode are required" });
+                return badRequest;
+            }
+
+            // Validate StateProvinceID (must be > 0)
+            if (createRequest.StateProvinceID <= 0)
+            {
+                _logger.LogWarning("CreateAddress: Invalid StateProvinceID={StateProvinceID}", createRequest.StateProvinceID);
+                var badRequest = req.CreateResponse(HttpStatusCode.BadRequest);
+                await badRequest.WriteAsJsonAsync(new { error = "StateProvinceID must be a valid positive integer" });
                 return badRequest;
             }
 
@@ -139,9 +154,9 @@ public class AddressFunctions
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating address");
+            _logger.LogError(ex, "Error creating address: {Message}", ex.Message);
             var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await errorResponse.WriteAsJsonAsync(new { error = "An error occurred while creating the address" });
+            await errorResponse.WriteAsJsonAsync(new { error = $"An error occurred while creating the address: {ex.Message}" });
             return errorResponse;
         }
     }

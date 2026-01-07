@@ -672,11 +672,28 @@ const CheckoutPage: React.FC = () => {
       // Save address if user opted in and entering a new address (either explicitly or when no saved addresses exist)
       const isEnteringNewAddress = useNewAddress || addresses.length === 0;
       if (isEnteringNewAddress && saveNewAddress && user) {
+        const stateProvinceId = parseInt(shippingData.state);
+
+        // Validate stateProvinceId before attempting to save
+        if (
+          !stateProvinceId ||
+          isNaN(stateProvinceId) ||
+          stateProvinceId <= 0
+        ) {
+          toast({
+            title: t("checkout.error"),
+            description: "Please select a valid state/province",
+            variant: "destructive",
+          });
+          setIsProcessing(false);
+          return;
+        }
+
         await addAddress({
           addressLine1: shippingData.address.split(",")[0],
           addressLine2: shippingData.address.split(",")[1]?.trim() || "",
           city: shippingData.city,
-          stateProvinceId: parseInt(shippingData.state),
+          stateProvinceId: stateProvinceId,
           postalCode: shippingData.zipCode,
           addressType: addressLabel || "Shipping Address",
           isDefault: addresses.length === 0,
