@@ -53,6 +53,14 @@
     <None Update="openapi-spec.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- Include Short Stack font for PDF generation -->
+    <None Update="Fonts\ShortStack-Regular.ttf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- Include bike icon for PDF receipts -->
+    <None Update="Fonts\bike-icon.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

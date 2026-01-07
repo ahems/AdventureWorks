@@ -16,6 +16,7 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
     minimumTlsVersion: 'TLS1_2'
     publicNetworkAccess: 'Enabled'
     requireInfrastructureEncryption: true
+    accessTier: 'Cool'
     networkAcls: {
       defaultAction: 'Allow'
     }

@@ -1,6 +1,7 @@
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using QuestPDF.Drawing;
 using api_functions.Models;
 using Azure.Storage.Blobs;
 using Azure.Identity;
@@ -35,6 +36,18 @@ public class PdfReceiptGenerator
 
         // Configure QuestPDF license (Community license for free use)
         QuestPDF.Settings.License = LicenseType.Community;
+
+        // Register Short Stack font (DoodleCSS handwritten font)
+        var fontPath = Path.Combine(AppContext.BaseDirectory, "Fonts", "ShortStack-Regular.ttf");
+        if (File.Exists(fontPath))
+        {
+            FontManager.RegisterFont(File.OpenRead(fontPath));
+            _logger.LogInformation("Short Stack font registered successfully");
+        }
+        else
+        {
+            _logger.LogWarning("Short Stack font file not found at {fontPath}, falling back to default font", fontPath);
+        }
     }
 
     /// <summary>
@@ -75,7 +88,7 @@ public class PdfReceiptGenerator
             {
                 page.Size(PageSizes.Letter);
                 page.Margin(40);
-                page.DefaultTextStyle(x => x.FontSize(10).FontColor(TEXT_COLOR).FontFamily("Arial"));
+                page.DefaultTextStyle(x => x.FontSize(10).FontColor(TEXT_COLOR).FontFamily("Short Stack"));
 
                 page.Header().Element(ComposeHeader);
                 page.Content().Element(content => ComposeContent(content, receipt));
@@ -93,11 +106,24 @@ public class PdfReceiptGenerator
     {
         container.Column(column =>
         {
-            // Company name with adventure orange color
-            column.Item().PaddingBottom(5).Text(COMPANY_NAME)
-                .FontSize(24)
-                .Bold()
-                .FontColor(PRIMARY_COLOR);
+            // Company logo and name row
+            column.Item().PaddingBottom(5).Row(row =>
+            {
+                // Bike icon
+                var iconPath = Path.Combine(AppContext.BaseDirectory, "Fonts", "bike-icon.png");
+                if (File.Exists(iconPath))
+                {
+                    row.ConstantItem(32).Image(iconPath);
+                    row.ConstantItem(8); // Spacing
+                }
+
+                // Company name matching website header: "Adventure" in orange, "Works" in black
+                row.AutoItem().AlignMiddle().Text(text =>
+                {
+                    text.Span("Adventure").FontSize(24).Bold().FontColor(PRIMARY_COLOR);
+                    text.Span("Works").FontSize(24).Bold().FontColor(TEXT_COLOR);
+                });
+            });
 
             // Company address
             column.Item().Text(text =>
@@ -368,7 +394,7 @@ public class PdfReceiptGenerator
         container.AlignCenter().Column(column =>
         {
             column.Item().BorderTop(1).BorderColor(Colors.Grey.Lighten2).PaddingTop(10);
-            column.Item().Text("Thank you for your order! 🎒")
+            column.Item().Text("Thank you for your order!")
                 .FontSize(12)
                 .Bold()
                 .FontColor(PRIMARY_COLOR);
