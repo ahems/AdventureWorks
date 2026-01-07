@@ -105,6 +105,18 @@ builder.Services.AddScoped<OrderService>(sp =>
     return new OrderService(connectionString);
 });
 
+// Register ReceiptService for PDF receipt generation
+builder.Services.AddScoped<ReceiptService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new ReceiptService(connectionString);
+});
+
+// Register PdfReceiptGenerator for PDF receipt generation
+builder.Services.AddScoped<PdfReceiptGenerator>();
+
 // Register AdventureWorks MCP Tools for AI agent integration
 builder.Services.AddScoped<AdventureWorksMcpTools>();
 

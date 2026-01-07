@@ -26,16 +26,61 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
         {
           name: 'azure-webjobs-hosts'
           publicAccess: 'None'
+          metadata: {
+            description: 'Azure Functions host container for durable functions state'
+          }
         }
         {
           name: 'azure-webjobs-secrets'
           publicAccess: 'None'
+          metadata: {
+            description: 'Azure Functions secrets container'
+          }
+        }
+        {
+          name: 'adventureworks-receipts'
+          publicAccess: 'Blob'
+          metadata: {
+            description: 'Public container for customer order receipt PDFs'
+          }
+        }
+        {
+          name: 'locales'
+          publicAccess: 'Blob'
+          metadata: {
+            description: 'Public container for translated language files'
+          }
         }
       ]
     }
     
     queueServices: {
-      queues: []
+      queues: [
+        {
+          name: 'order-receipt-generation'
+          metadata: {
+            description: 'Queue for generating PDF receipts for customer orders'
+          }
+        }
+        {
+          name: 'product-image-generation'
+          metadata: {
+            description: 'Queue for generating AI product images'
+          }
+        }
+        {
+          name: 'product-thumbnail-generation'
+          metadata: {
+            description: 'Queue for generating product thumbnails from large images'
+          }
+        }
+        {
+          name: 'product-review-generation'
+          metadata: {
+            description: 'Queue for generating AI product reviews'
+          }
+        }
+      ]
     }
     
     tableServices: {
