@@ -19,6 +19,7 @@ param aiFoundryEndpoint string = ''
 param chatGptDeploymentName string = ''
 param storageAccountName string = ''
 param communicationServiceEndpoint string = ''
+param emailSenderDomain string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -158,6 +159,10 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
             {
               name: 'COMMUNICATION_SERVICE_ENDPOINT'
               value: communicationServiceEndpoint
+            }
+            {
+              name: 'EMAIL_SENDER_DOMAIN'
+              value: emailSenderDomain
             }
           ]
         }

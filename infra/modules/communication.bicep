@@ -2,6 +2,7 @@ param communicationServiceName string = 'av-comms-${uniqueString(resourceGroup()
 param identityName string
 param aadAdminObjectId string
 param dataLocation string = 'United States' // Email service data location
+param workspaceName string
 
 // Get reference to existing managed identity
 resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
@@ -14,6 +15,9 @@ resource communicationService 'Microsoft.Communication/communicationServices@202
   location: 'global'
   properties: {
     dataLocation: dataLocation
+    linkedDomains: [
+      emailDomain.id
+    ]
   }
 }
 
@@ -55,6 +59,56 @@ resource emailDomain 'Microsoft.Communication/emailServices/domains@2023-04-01' 
   location: 'global'
   properties: {
     domainManagement: 'AzureManaged'
+  }
+}
+
+// Reference to Log Analytics workspace
+resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
+  name: workspaceName
+}
+
+// Diagnostic settings for Communication Service email logs
+resource communicationDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'email-diagnostics'
+  scope: communicationService
+  properties: {
+    workspaceId: workspace.id
+    logs: [
+      {
+        category: 'EmailSendMailLogs'
+        enabled: true
+        retentionPolicy: {
+          enabled: false
+          days: 0
+        }
+      }
+      {
+        category: 'EmailStatusUpdateLogs'
+        enabled: true
+        retentionPolicy: {
+          enabled: false
+          days: 0
+        }
+      }
+      {
+        category: 'EmailUserEngagementLogs'
+        enabled: true
+        retentionPolicy: {
+          enabled: false
+          days: 0
+        }
+      }
+    ]
+    metrics: [
+      {
+        category: 'AllMetrics'
+        enabled: true
+        retentionPolicy: {
+          enabled: false
+          days: 0
+        }
+      }
+    ]
   }
 }
 

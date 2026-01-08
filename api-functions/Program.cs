@@ -132,4 +132,26 @@ builder.Services.AddScoped<AIService>(sp =>
     return new AIService(endpoint, sp.GetRequiredService<ILogger<AIService>>());
 });
 
+// Register EmailService for sending emails via Azure Communication Services
+builder.Services.AddScoped<EmailService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var communicationServiceEndpoint = configuration["COMMUNICATION_SERVICE_ENDPOINT"]
+        ?? throw new InvalidOperationException("COMMUNICATION_SERVICE_ENDPOINT environment variable is not set");
+    var emailSenderDomain = configuration["EMAIL_SENDER_DOMAIN"]
+        ?? throw new InvalidOperationException("EMAIL_SENDER_DOMAIN environment variable is not set");
+
+    // Storage account is optional - only needed when sending attachments
+    var storageAccountName = configuration["AzureWebJobsStorage__accountName"];
+
+    return new EmailService(
+        connectionString,
+        communicationServiceEndpoint,
+        emailSenderDomain,
+        storageAccountName,
+        sp.GetRequiredService<ILogger<EmailService>>());
+});
+
 builder.Build().Run();

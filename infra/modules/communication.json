@@ -1,0 +1,170 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.39.26.7824",
+      "templateHash": "14899578617943290710"
+    }
+  },
+  "parameters": {
+    "communicationServiceName": {
+      "type": "string",
+      "defaultValue": "[format('av-comms-{0}', uniqueString(resourceGroup().id))]"
+    },
+    "identityName": {
+      "type": "string"
+    },
+    "aadAdminObjectId": {
+      "type": "string"
+    },
+    "dataLocation": {
+      "type": "string",
+      "defaultValue": "United States"
+    },
+    "workspaceName": {
+      "type": "string"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Communication/communicationServices",
+      "apiVersion": "2023-04-01",
+      "name": "[parameters('communicationServiceName')]",
+      "location": "global",
+      "properties": {
+        "dataLocation": "[parameters('dataLocation')]",
+        "linkedDomains": [
+          "[resourceId('Microsoft.Communication/emailServices/domains', format('{0}-email', parameters('communicationServiceName')), 'AzureManagedDomain')]"
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Communication/emailServices/domains', format('{0}-email', parameters('communicationServiceName')), 'AzureManagedDomain')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.Communication/communicationServices/{0}', parameters('communicationServiceName'))]",
+      "name": "[guid(resourceId('Microsoft.Communication/communicationServices', parameters('communicationServiceName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), 'Contributor')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Communication/communicationServices', parameters('communicationServiceName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.Communication/communicationServices/{0}', parameters('communicationServiceName'))]",
+      "name": "[guid(resourceId('Microsoft.Communication/communicationServices', parameters('communicationServiceName')), parameters('aadAdminObjectId'), 'Contributor')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",
+        "principalId": "[parameters('aadAdminObjectId')]",
+        "principalType": "User"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Communication/communicationServices', parameters('communicationServiceName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Communication/emailServices",
+      "apiVersion": "2023-04-01",
+      "name": "[format('{0}-email', parameters('communicationServiceName'))]",
+      "location": "global",
+      "properties": {
+        "dataLocation": "[parameters('dataLocation')]"
+      }
+    },
+    {
+      "type": "Microsoft.Communication/emailServices/domains",
+      "apiVersion": "2023-04-01",
+      "name": "[format('{0}/{1}', format('{0}-email', parameters('communicationServiceName')), 'AzureManagedDomain')]",
+      "location": "global",
+      "properties": {
+        "domainManagement": "AzureManaged"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Communication/emailServices', format('{0}-email', parameters('communicationServiceName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[format('Microsoft.Communication/communicationServices/{0}', parameters('communicationServiceName'))]",
+      "name": "email-diagnostics",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
+        "logs": [
+          {
+            "category": "EmailSendMailLogs",
+            "enabled": true,
+            "retentionPolicy": {
+              "enabled": false,
+              "days": 0
+            }
+          },
+          {
+            "category": "EmailStatusUpdateLogs",
+            "enabled": true,
+            "retentionPolicy": {
+              "enabled": false,
+              "days": 0
+            }
+          },
+          {
+            "category": "EmailUserEngagementLogs",
+            "enabled": true,
+            "retentionPolicy": {
+              "enabled": false,
+              "days": 0
+            }
+          }
+        ],
+        "metrics": [
+          {
+            "category": "AllMetrics",
+            "enabled": true,
+            "retentionPolicy": {
+              "enabled": false,
+              "days": 0
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Communication/communicationServices', parameters('communicationServiceName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "communicationServiceName": {
+      "type": "string",
+      "value": "[parameters('communicationServiceName')]"
+    },
+    "communicationServiceResourceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Communication/communicationServices', parameters('communicationServiceName'))]"
+    },
+    "communicationServiceEndpoint": {
+      "type": "string",
+      "value": "[format('https://{0}.communication.azure.com', parameters('communicationServiceName'))]"
+    },
+    "emailServiceName": {
+      "type": "string",
+      "value": "[format('{0}-email', parameters('communicationServiceName'))]"
+    },
+    "emailServiceResourceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Communication/emailServices', format('{0}-email', parameters('communicationServiceName')))]"
+    },
+    "senderDomain": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Communication/emailServices/domains', format('{0}-email', parameters('communicationServiceName')), 'AzureManagedDomain'), '2023-04-01').mailFromSenderDomain]"
+    }
+  }
+}

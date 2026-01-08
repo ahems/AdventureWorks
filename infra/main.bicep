@@ -16,7 +16,6 @@ param aadAdminObjectId string
 @description('Wether to restore the OpenAI service or not. If set to true, the OpenAI service will be restored from a soft-deleted backup. Use this only if you have previously deleted the OpenAI service created with this script, as you will need to restore it.')
 param restoreOpenAi bool
 param useFreeLimit bool
-param openAiDeploymentName string = 'chat'
 param chatGptModelName string
 param chatGptDeploymentName string = 'chat'
 param chatGptDeploymentVersion string
@@ -67,9 +66,11 @@ module communication 'modules/communication.bicep' = {
     identityName: identityName
     aadAdminObjectId: aadAdminObjectId
     dataLocation: 'United States'
+    workspaceName: workspaceName
   }
   dependsOn: [
     identity
+    appinsights
   ]
 }
 
@@ -210,6 +211,7 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
     chatGptDeploymentName: chatGptDeploymentName
     storageAccountName: storage.outputs.storageAccountName
     communicationServiceEndpoint: communication.outputs.communicationServiceEndpoint
+    emailSenderDomain: communication.outputs.senderDomain
     minReplica: 0
     maxReplica: 3
     revisionSuffix: revisionSuffix
