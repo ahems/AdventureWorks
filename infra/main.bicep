@@ -60,6 +60,19 @@ module storage 'modules/storage.bicep' = {
   }
 }
 
+module communication 'modules/communication.bicep' = {
+  name: 'Deploy-Communication-Service'
+  params: {
+    communicationServiceName: 'av-comms-${resourceToken}'
+    identityName: identityName
+    aadAdminObjectId: aadAdminObjectId
+    dataLocation: 'United States'
+  }
+  dependsOn: [
+    identity
+  ]
+}
+
 module cognitiveservices 'modules/aiservices.bicep' = {
   name: 'Deploy-AI-Foundry'
   params: {
@@ -196,6 +209,7 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
     aiFoundryEndpoint: cognitiveservices.outputs.endpoint
     chatGptDeploymentName: chatGptDeploymentName
     storageAccountName: storage.outputs.storageAccountName
+    communicationServiceEndpoint: communication.outputs.communicationServiceEndpoint
     minReplica: 0
     maxReplica: 3
     revisionSuffix: revisionSuffix
@@ -203,6 +217,7 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
   }
   dependsOn: [
     storage
+    communication
   ]
 }
 
@@ -241,3 +256,8 @@ output API_FUNCTIONS_URL string = containerAppApiFunctions.outputs.apiFunctionsU
 
 // Static Web App deployment token for azd deploy
 output AZURE_STATIC_WEB_APP_DEPLOYMENT_TOKEN string = staticWebAppFrontend.outputs.deploymentToken
+
+// Communication Services outputs
+output COMMUNICATION_SERVICE_NAME string = communication.outputs.communicationServiceName
+output COMMUNICATION_SERVICE_ENDPOINT string = communication.outputs.communicationServiceEndpoint
+output EMAIL_SENDER_DOMAIN string = communication.outputs.senderDomain
