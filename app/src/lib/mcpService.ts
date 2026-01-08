@@ -65,8 +65,19 @@ export const chatWithAgent = async (
       throw new Error(`Agent call failed: ${response.statusText}`);
     }
 
-    const data: AgentChatResponse = await response.json();
-    return data;
+    const data = await response.json();
+    console.log("[AI Agent] Raw API response:", data);
+
+    // Map API response (capital case) to interface (lowercase)
+    const result: AgentChatResponse = {
+      response: data.Response || data.response || "",
+      suggestedQuestions:
+        data.SuggestedQuestions || data.suggestedQuestions || [],
+      toolsUsed: data.ToolsUsed || data.toolsUsed || [],
+    };
+
+    console.log("[AI Agent] Mapped response:", result);
+    return result;
   } catch (error) {
     console.error("Agent chat error:", error);
     throw error;

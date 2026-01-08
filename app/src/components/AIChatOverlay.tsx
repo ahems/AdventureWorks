@@ -101,11 +101,13 @@ What can I help you with today?`,
       }));
 
       // Call AI Agent (which uses MCP tools internally)
+      console.log("[AI Chat] Sending message:", textToSend);
       const agentResponse = await chatWithAgent(
         textToSend,
         conversationHistory,
         user?.businessEntityId
       );
+      console.log("[AI Chat] Received response:", agentResponse);
 
       // Add assistant response
       const assistantMessage: Message = {
@@ -114,6 +116,7 @@ What can I help you with today?`,
         content: agentResponse.response,
         timestamp: new Date(),
       };
+      console.log("[AI Chat] Adding assistant message:", assistantMessage);
       setMessages((prev) => [...prev, assistantMessage]);
 
       // Update suggested questions from AI
@@ -121,6 +124,10 @@ What can I help you with today?`,
         agentResponse.suggestedQuestions &&
         agentResponse.suggestedQuestions.length > 0
       ) {
+        console.log(
+          "[AI Chat] Updating suggestions:",
+          agentResponse.suggestedQuestions
+        );
         setSuggestedQuestions(agentResponse.suggestedQuestions);
       }
     } catch (error) {

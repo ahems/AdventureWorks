@@ -16,6 +16,7 @@ param revisionSuffix string
 @secure()
 param sqlConnectionString string
 param aiFoundryEndpoint string = ''
+param chatGptDeploymentName string = ''
 param storageAccountName string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
@@ -108,6 +109,10 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
             {
               name: 'AZURE_OPENAI_ENDPOINT'
               value: aiFoundryEndpoint
+            }
+            {
+              name: 'chatGptDeploymentName'
+              value: chatGptDeploymentName
             }
             {
               name: 'EMBEDDING_GENERATION_ENDPOINT'

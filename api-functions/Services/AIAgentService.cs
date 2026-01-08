@@ -32,8 +32,7 @@ public class AIAgentService
         // Get AI Foundry configuration
         _endpoint = configuration["AZURE_OPENAI_ENDPOINT"]
             ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
-        _modelDeployment = configuration["chatGptModelName"]
-            ?? throw new InvalidOperationException("chatGptModelName not configured");
+        _modelDeployment = configuration["chatGptDeploymentName"] ?? "chat";
 
         // Get MCP server URL (self-reference)
         var websiteHostname = configuration["WEBSITE_HOSTNAME"];

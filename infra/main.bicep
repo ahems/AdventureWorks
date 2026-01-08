@@ -194,6 +194,7 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
     identityName: identityName
     sqlConnectionString: database.outputs.connectionString
     aiFoundryEndpoint: cognitiveservices.outputs.endpoint
+    chatGptDeploymentName: chatGptDeploymentName
     storageAccountName: storage.outputs.storageAccountName
     minReplica: 0
     maxReplica: 3
