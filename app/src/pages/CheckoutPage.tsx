@@ -14,6 +14,8 @@ import {
   Trash2,
   Tag,
   X,
+  AlertCircle,
+  Mail,
 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -24,6 +26,11 @@ import {
   usePaymentMethods,
   SavedPaymentMethod,
 } from "@/hooks/usePaymentMethods";
+import {
+  useEmailAddresses,
+  useCreateEmailAddress,
+  EmailAddress as EmailAddressType,
+} from "@/hooks/useEmailAddresses";
 import { AddressCard } from "@/components/AddressCard";
 import { AddressForm } from "@/components/AddressForm";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -302,6 +309,14 @@ const CheckoutPage: React.FC = () => {
   } = useAddresses();
   const { paymentMethods, getDefaultPaymentMethod, addPaymentMethod } =
     usePaymentMethods();
+  const { data: emailAddresses = [] } = useEmailAddresses(
+    user?.businessEntityId || 0
+  );
+  const createEmailAddress = useCreateEmailAddress();
+  const [selectedEmailId, setSelectedEmailId] = useState<number | null>(null);
+  const [useNewEmail, setUseNewEmail] = useState(false);
+  const [newEmailInput, setNewEmailInput] = useState("");
+  const [emailWarning, setEmailWarning] = useState("");
   const [step, setStep] = useState(1);
   const [countryCode, setCountryCode] = useState("+1");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -432,6 +447,33 @@ const CheckoutPage: React.FC = () => {
     selectedPaymentId,
     useNewPayment,
   ]);
+
+  // Initialize selected email from user's primary email address
+  useEffect(() => {
+    if (emailAddresses.length > 0 && !selectedEmailId && !useNewEmail) {
+      // Use the first email as the default (primary login email)
+      setSelectedEmailId(emailAddresses[0].EmailAddressID);
+      const email = emailAddresses[0].EmailAddress;
+      setShippingData((prev) => ({ ...prev, email }));
+      checkEmailWarning(email);
+    }
+  }, [emailAddresses, selectedEmailId, useNewEmail]);
+
+  // Function to check and set email warnings
+  const checkEmailWarning = (email: string) => {
+    const domain = email.toLowerCase().split("@")[1];
+    if (domain === "yahoo.com" || domain?.includes("yahoo")) {
+      setEmailWarning(
+        "⚠️ Yahoo emails may not receive order confirmations. Consider using a different email address."
+      );
+    } else if (domain === "gmail.com") {
+      setEmailWarning(
+        "⚠️ Gmail users: Check your spam folder for order confirmations."
+      );
+    } else {
+      setEmailWarning("");
+    }
+  };
 
   // Fetch tax rate and currency when address changes
   useEffect(() => {
@@ -640,7 +682,42 @@ const CheckoutPage: React.FC = () => {
     }
   };
 
-  const handleContinueToPayment = () => {
+  const handleContinueToPayment = async () => {
+    // Validate email selection
+    if (useNewEmail) {
+      if (!newEmailInput || !newEmailInput.includes("@")) {
+        toast({
+          title: "Email Required",
+          description: "Please enter a valid email address",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Create the new email address
+      if (user?.businessEntityId) {
+        try {
+          const result = await createEmailAddress.mutateAsync({
+            businessEntityId: user.businessEntityId,
+            emailAddress: newEmailInput,
+          });
+          setSelectedEmailId(result.EmailAddressID);
+          setShippingData((prev) => ({ ...prev, email: newEmailInput }));
+          checkEmailWarning(newEmailInput);
+          setUseNewEmail(false);
+        } catch (error) {
+          console.error("Error creating email:", error);
+          return;
+        }
+      }
+    } else if (!selectedEmailId && emailAddresses.length > 0) {
+      toast({
+        title: "Email Required",
+        description: "Please select an email address",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // If using saved address, just check that one is selected
     if (!useNewAddress && addresses.length > 0) {
       if (!selectedAddressId) {
@@ -966,8 +1043,109 @@ const CheckoutPage: React.FC = () => {
                   <div className="flex items-center gap-3 mb-6">
                     <Truck className="w-6 h-6 text-doodle-accent" />
                     <h2 className="font-doodle text-2xl font-bold text-doodle-text">
-                      {t("checkout.shippingAddress")}
+                      Shipping Address and Contact Email
                     </h2>
+                  </div>
+
+                  {/* Email Selection Section */}
+                  <div className="mb-6">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Mail className="w-5 h-5 text-doodle-accent" />
+                      <p className="font-doodle text-sm font-bold text-doodle-text">
+                        Contact Email for Order Confirmation
+                      </p>
+                    </div>
+
+                    {emailAddresses.length > 0 && !useNewEmail ? (
+                      <>
+                        <select
+                          value={selectedEmailId || ""}
+                          onChange={(e) => {
+                            const emailId = Number(e.target.value);
+                            setSelectedEmailId(emailId);
+                            const selectedEmail = emailAddresses.find(
+                              (em) => em.EmailAddressID === emailId
+                            );
+                            if (selectedEmail) {
+                              setShippingData((prev) => ({
+                                ...prev,
+                                email: selectedEmail.EmailAddress,
+                              }));
+                              checkEmailWarning(selectedEmail.EmailAddress);
+                            }
+                          }}
+                          className="doodle-input w-full mb-2"
+                        >
+                          {emailAddresses.map((em, idx) => (
+                            <option
+                              key={em.EmailAddressID}
+                              value={em.EmailAddressID}
+                            >
+                              {em.EmailAddress}
+                              {idx === 0 ? " (Primary)" : ""}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => {
+                            setUseNewEmail(true);
+                            setNewEmailInput("");
+                            setEmailWarning("");
+                          }}
+                          className="text-sm font-doodle text-doodle-accent hover:underline flex items-center gap-1"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Add a different email
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <input
+                          type="email"
+                          value={newEmailInput}
+                          onChange={(e) => {
+                            setNewEmailInput(e.target.value);
+                            checkEmailWarning(e.target.value);
+                          }}
+                          placeholder="Enter email address"
+                          className="doodle-input w-full mb-2"
+                        />
+                        {emailAddresses.length > 0 && (
+                          <button
+                            onClick={() => {
+                              setUseNewEmail(false);
+                              setNewEmailInput("");
+                              // Reset to first email
+                              if (emailAddresses[0]) {
+                                setSelectedEmailId(
+                                  emailAddresses[0].EmailAddressID
+                                );
+                                setShippingData((prev) => ({
+                                  ...prev,
+                                  email: emailAddresses[0].EmailAddress,
+                                }));
+                                checkEmailWarning(
+                                  emailAddresses[0].EmailAddress
+                                );
+                              }
+                            }}
+                            className="text-sm font-doodle text-doodle-accent hover:underline"
+                          >
+                            Use existing email
+                          </button>
+                        )}
+                      </>
+                    )}
+
+                    {/* Email Warning */}
+                    {emailWarning && (
+                      <div className="mt-3 p-3 bg-yellow-50 border-2 border-yellow-300 rounded-lg flex items-start gap-2">
+                        <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                        <p className="font-doodle text-sm text-yellow-800">
+                          {emailWarning}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Loading Skeleton */}
