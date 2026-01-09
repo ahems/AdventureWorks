@@ -90,7 +90,7 @@ public class ReceiptService
             LEFT JOIN Person.CountryRegion billCountry ON billSP.CountryRegionCode = billCountry.CountryRegionCode
             WHERE soh.SalesOrderNumber = @SalesOrderNumber";
 
-        var header = await connection.QuerySingleOrDefaultAsync(headerSql, new { SalesOrderNumber = salesOrderNumber });
+        var header = await connection.QueryFirstOrDefaultAsync(headerSql, new { SalesOrderNumber = salesOrderNumber });
 
         if (header == null)
         {

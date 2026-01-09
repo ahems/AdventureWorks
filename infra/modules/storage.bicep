@@ -64,6 +64,12 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
           }
         }
         {
+          name: 'order-email-generation'
+          metadata: {
+            description: 'Queue for sending order confirmation emails with receipt attachments'
+          }
+        }
+        {
           name: 'product-image-generation'
           metadata: {
             description: 'Queue for generating AI product images'

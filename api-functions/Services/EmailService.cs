@@ -79,7 +79,7 @@ public class EmailService
             INNER JOIN Person.EmailAddress ea ON c.PersonID = ea.BusinessEntityID
             WHERE c.CustomerID = @CustomerId AND ea.EmailAddressID = @EmailAddressId";
 
-        return await connection.QuerySingleOrDefaultAsync<string>(
+        return await connection.QueryFirstOrDefaultAsync<string>(
             sql, new { CustomerId = customerId, EmailAddressId = emailAddressId });
     }
 

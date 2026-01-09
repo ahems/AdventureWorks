@@ -91,6 +91,16 @@ const GET_PERSON = gql`
   }
 `;
 
+const GET_EMAIL_ADDRESS = gql`
+  query GetEmailAddress($emailAddressId: Int!) {
+    emailAddresses(filter: { EmailAddressID: { eq: $emailAddressId } }) {
+      items {
+        EmailAddress
+      }
+    }
+  }
+`;
+
 interface OrderItem {
   ProductID: number;
   Name: string;
@@ -126,6 +136,8 @@ const OrderConfirmationPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+  const [emailAddressId, setEmailAddressId] = useState<number | null>(null);
+  const [selectedEmail, setSelectedEmail] = useState<string>("");
   const { t } = useTranslation("common");
 
   // Fetch order data from API using order ID from URL
@@ -135,6 +147,37 @@ const OrderConfirmationPage: React.FC = () => {
       if (!orderId) {
         setLoading(false);
         return;
+      }
+
+      // Retrieve EmailAddressId from URL params or localStorage
+      const emailIdParam = searchParams.get("emailId");
+      const storedEmailId = localStorage.getItem("checkout_email_id");
+      const selectedEmailId = emailIdParam
+        ? parseInt(emailIdParam, 10)
+        : storedEmailId
+        ? parseInt(storedEmailId, 10)
+        : null;
+
+      if (selectedEmailId) {
+        setEmailAddressId(selectedEmailId);
+        console.log(
+          "Order confirmation using EmailAddressID:",
+          selectedEmailId
+        );
+        // Fetch the actual email address
+        try {
+          const emailResponse = await graphqlClient.request<{
+            emailAddresses: { items: Array<{ EmailAddress: string }> };
+          }>(GET_EMAIL_ADDRESS, { emailAddressId: selectedEmailId });
+
+          if (emailResponse.emailAddresses.items.length > 0) {
+            setSelectedEmail(
+              emailResponse.emailAddresses.items[0].EmailAddress
+            );
+          }
+        } catch (error) {
+          console.error("Error fetching selected email:", error);
+        }
       }
 
       try {
@@ -258,30 +301,47 @@ const OrderConfirmationPage: React.FC = () => {
 
         setOrder(order);
 
-        // Generate PDF receipt
-        try {
-          const functionsApiUrl = getFunctionsApiUrl();
-          const response = await fetch(
-            `${functionsApiUrl}/api/GenerateOrderReceipts_HttpStart`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                salesOrderNumbers: [orderData.SalesOrderNumber],
-              }),
-            }
-          );
+        // Clear the stored email ID from localStorage after order is confirmed
+        localStorage.removeItem("checkout_email_id");
 
-          if (!response.ok) {
-            console.error("Failed to generate receipt:", await response.text());
-          } else {
-            const result = await response.json();
-            console.log("Receipt generation queued:", result);
+        // Generate PDF receipt and send confirmation email with attachment (fire-and-forget)
+        if (selectedEmailId && orderData.CustomerID) {
+          try {
+            const functionsApiUrl = getFunctionsApiUrl();
+            const response = await fetch(
+              `${functionsApiUrl}/api/orders/generate-and-send-receipt`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  salesOrderId: salesOrderId,
+                  customerId: orderData.CustomerID,
+                  emailAddressId: selectedEmailId,
+                }),
+              }
+            );
+
+            if (response.ok) {
+              console.log(
+                "Receipt generation and email delivery initiated for SalesOrderId:",
+                salesOrderId,
+                "EmailAddressId:",
+                selectedEmailId
+              );
+            } else {
+              console.error(
+                "Failed to initiate receipt and email:",
+                await response.text()
+              );
+            }
+          } catch (error) {
+            console.error(
+              "Error initiating receipt generation and email:",
+              error
+            );
           }
-        } catch (error) {
-          console.error("Error generating receipt:", error);
         }
       } catch (error) {
         console.error("Error fetching order:", error);
@@ -317,20 +377,55 @@ const OrderConfirmationPage: React.FC = () => {
       <div className="min-h-screen flex flex-col">
         <Header />
         <main className="flex-1 container mx-auto px-4 py-12">
-          <div className="max-w-md mx-auto text-center">
+          <div className="max-w-2xl mx-auto text-center">
             <div className="doodle-card p-12">
-              <Package className="w-20 h-20 mx-auto mb-6 text-doodle-text/40" />
-              <h1 className="font-doodle text-3xl font-bold text-doodle-text mb-4">
-                {t("orderConfirmation.noOrderFound")}
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-doodle-green/20 rounded-full mb-6">
+                <CheckCircle className="w-12 h-12 text-doodle-green" />
+              </div>
+              <h1 className="font-doodle text-4xl font-bold text-doodle-text mb-4">
+                🎉 Order Confirmed!
               </h1>
-              <p className="font-doodle text-doodle-text/70 mb-8">
-                {t("orderConfirmation.noOrderMessage")}
+              <p className="font-doodle text-xl text-doodle-text mb-6">
+                Thank you for your order!
               </p>
+
+              <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-6 mb-6">
+                <p className="font-doodle text-lg text-yellow-800 mb-2">
+                  <span className="text-2xl">🎪</span>{" "}
+                  <strong>Demo Site Alert!</strong>
+                </p>
+                <p className="font-doodle text-sm text-yellow-700">
+                  Relax! No real payment was processed, no actual products will
+                  arrive at your door, and your wallet is safe. This is all
+                  pretend shopping magic! ✨
+                </p>
+              </div>
+
+              {selectedEmail && (
+                <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-6 mb-8">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <Mail className="w-6 h-6 text-blue-600" />
+                    <p className="font-doodle text-lg font-bold text-blue-900">
+                      Receipt Sent!
+                    </p>
+                  </div>
+                  <p className="font-doodle text-sm text-blue-700">
+                    Your order receipt has been emailed to:
+                  </p>
+                  <p className="font-doodle text-base font-bold text-blue-900 mt-2">
+                    {selectedEmail}
+                  </p>
+                  <p className="font-doodle text-xs text-blue-600 mt-2">
+                    (Check your spam folder if you don't see it!)
+                  </p>
+                </div>
+              )}
+
               <Link
                 to="/"
-                className="doodle-button doodle-button-primary inline-block"
+                className="doodle-button doodle-button-primary inline-block px-8 py-3"
               >
-                {t("orderTracking.startShopping")}
+                Continue Pretend Shopping 🛒
               </Link>
             </div>
           </div>

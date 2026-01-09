@@ -313,7 +313,11 @@ const CheckoutPage: React.FC = () => {
     user?.businessEntityId || 0
   );
   const createEmailAddress = useCreateEmailAddress();
-  const [selectedEmailId, setSelectedEmailId] = useState<number | null>(null);
+  const [selectedEmailId, setSelectedEmailId] = useState<number | null>(() => {
+    // Load from localStorage on mount
+    const stored = localStorage.getItem("checkout_email_id");
+    return stored ? parseInt(stored, 10) : null;
+  });
   const [useNewEmail, setUseNewEmail] = useState(false);
   const [newEmailInput, setNewEmailInput] = useState("");
   const [emailWarning, setEmailWarning] = useState("");
@@ -447,6 +451,13 @@ const CheckoutPage: React.FC = () => {
     selectedPaymentId,
     useNewPayment,
   ]);
+
+  // Persist selectedEmailId to localStorage whenever it changes
+  useEffect(() => {
+    if (selectedEmailId !== null) {
+      localStorage.setItem("checkout_email_id", selectedEmailId.toString());
+    }
+  }, [selectedEmailId]);
 
   // Initialize selected email from user's primary email address
   useEffect(() => {
@@ -940,6 +951,7 @@ const CheckoutPage: React.FC = () => {
         itemCount: items.length,
         paymentMethod: paymentMethod,
         currencyCode: currencyCode,
+        emailAddressId: selectedEmailId, // Include selected email for order confirmation
         items: items.map((item) => ({
           productId: item.ProductID,
           productName: item.Name,
@@ -948,12 +960,19 @@ const CheckoutPage: React.FC = () => {
         })),
       });
 
+      // Note: selectedEmailId is available in localStorage as 'checkout_email_id'
+      // for use in order confirmation emails via SendEmailFunction
+      // It will be cleared after order confirmation is sent
+
       toast({
         title: t("checkout.orderPlaced"),
         description: t("checkout.orderConfirmed", { orderId }),
       });
 
-      navigate(`/order-confirmation?orderId=${orderId}`);
+      // Navigate to order confirmation with email info
+      navigate(
+        `/order-confirmation?orderId=${orderId}&emailId=${selectedEmailId}`
+      );
     } catch (error) {
       console.error("Order creation error:", error);
       toast({

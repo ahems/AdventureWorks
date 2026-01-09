@@ -32,7 +32,7 @@ public class GenerateOrderReceipts
 
     /// <summary>
     /// HTTP trigger to enqueue receipt generation jobs for one or more sales order numbers
-    /// POST body: { "salesOrderNumbers": ["SO43659", "SO43660", ...] }
+    /// POST body: { "salesOrderNumbers": ["SO43659", "SO43660", ...] } OR { "salesOrderId": 43659 }
     /// </summary>
     [Function(nameof(GenerateOrderReceipts_HttpStart))]
     public async Task<HttpResponseData> GenerateOrderReceipts_HttpStart(
@@ -51,11 +51,27 @@ public class GenerateOrderReceipts
             };
             var requestData = JsonSerializer.Deserialize<ReceiptGenerationRequest>(requestBody, options);
 
-            if (requestData == null || requestData.SalesOrderNumbers == null || !requestData.SalesOrderNumbers.Any())
+            // Support both single salesOrderId (int) and multiple salesOrderNumbers (string[])
+            List<string> ordersToProcess = new();
+
+            if (requestData?.SalesOrderId.HasValue == true && requestData.SalesOrderId.Value > 0)
+            {
+                // Single order format: { "salesOrderId": 43659 }
+                ordersToProcess.Add($"SO{requestData.SalesOrderId.Value}");
+                _logger.LogInformation("Processing single order with SalesOrderId={salesOrderId}", requestData.SalesOrderId.Value);
+            }
+            else if (requestData?.SalesOrderNumbers != null && requestData.SalesOrderNumbers.Any())
+            {
+                // Batch format: { "salesOrderNumbers": ["SO-43659", "SO-43660"] }
+                ordersToProcess.AddRange(requestData.SalesOrderNumbers);
+                _logger.LogInformation("Processing batch of {count} orders", ordersToProcess.Count);
+            }
+            else
             {
                 var badRequestResponse = req.CreateResponse(HttpStatusCode.BadRequest);
                 await badRequestResponse.WriteStringAsync(
-                    "Invalid request. Please provide a JSON body with 'salesOrderNumbers' array. Example: { \"salesOrderNumbers\": [\"SO43659\", \"SO43660\"] }"
+                    "Invalid request. Provide either 'salesOrderId' (int) for single order or 'salesOrderNumbers' (array) for batch. " +
+                    "Examples: { \"salesOrderId\": 43659 } OR { \"salesOrderNumbers\": [\"SO-43659\", \"SO-43660\"] }"
                 );
                 return badRequestResponse;
             }
@@ -101,7 +117,7 @@ public class GenerateOrderReceipts
             int enqueued = 0;
             var enqueuedOrders = new List<string>();
 
-            foreach (var salesOrderNumber in requestData.SalesOrderNumbers)
+            foreach (var salesOrderNumber in ordersToProcess)
             {
                 if (string.IsNullOrWhiteSpace(salesOrderNumber))
                 {
@@ -189,6 +205,55 @@ public class GenerateOrderReceipts
                 salesOrderNumber,
                 blobUrl
             );
+
+            // Check if email metadata is present (sent from GenerateAndSendReceipt function)
+            if (messageData.TryGetProperty("EmailMetadata", out var emailMetadata))
+            {
+                var customerId = emailMetadata.GetProperty("CustomerId").GetInt32();
+                var emailAddressId = emailMetadata.GetProperty("EmailAddressId").GetInt32();
+                var salesOrderId = emailMetadata.GetProperty("SalesOrderId").GetInt32();
+
+                _logger.LogInformation(
+                    "Email metadata found for {orderNumber}. Enqueuing email delivery.",
+                    salesOrderNumber
+                );
+
+                // Enqueue email sending now that PDF is ready
+                var queueServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
+                if (string.IsNullOrEmpty(queueServiceUri))
+                {
+                    var storageAccountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
+                        ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
+                    queueServiceUri = $"https://{storageAccountName}.queue.core.windows.net";
+                }
+
+                var queueServiceClient = new Azure.Storage.Queues.QueueServiceClient(
+                    new Uri(queueServiceUri),
+                    new Azure.Identity.DefaultAzureCredential(),
+                    new Azure.Storage.Queues.QueueClientOptions
+                    {
+                        MessageEncoding = Azure.Storage.Queues.QueueMessageEncoding.Base64
+                    }
+                );
+
+                var emailQueueClient = queueServiceClient.GetQueueClient("order-email-generation");
+                await emailQueueClient.CreateIfNotExistsAsync();
+
+                var emailMessage = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    SalesOrderNumber = salesOrderNumber,
+                    CustomerId = customerId,
+                    EmailAddressId = emailAddressId,
+                    SalesOrderId = salesOrderId
+                });
+
+                await emailQueueClient.SendMessageAsync(emailMessage);
+                _logger.LogInformation(
+                    "Enqueued email delivery for {orderNumber} to EmailAddressId={emailAddressId}",
+                    salesOrderNumber,
+                    emailAddressId
+                );
+            }
         }
         catch (Exception ex)
         {
@@ -202,9 +267,11 @@ public class GenerateOrderReceipts
 
     /// <summary>
     /// Request model for HTTP trigger
+    /// Supports both single order (salesOrderId) and batch (salesOrderNumbers) formats
     /// </summary>
     private class ReceiptGenerationRequest
     {
-        public List<string> SalesOrderNumbers { get; set; } = new();
+        public int? SalesOrderId { get; set; }
+        public List<string>? SalesOrderNumbers { get; set; }
     }
 }
