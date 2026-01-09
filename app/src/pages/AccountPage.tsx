@@ -21,6 +21,7 @@ import {
   Star,
   Trash2,
   Phone,
+  Mail,
 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -35,6 +36,12 @@ import {
   getOrderStatusColor,
 } from "@/hooks/useOrders";
 import { useProfile, useUpdateProfile } from "@/hooks/useProfile";
+import {
+  useEmailAddresses,
+  useCreateEmailAddress,
+  useUpdateEmailAddress,
+  useDeleteEmailAddress,
+} from "@/hooks/useEmailAddresses";
 import { getCustomerByPersonId } from "@/lib/customerService";
 import { AddressForm } from "@/components/AddressForm";
 import { AddressCard } from "@/components/AddressCard";
@@ -103,6 +110,11 @@ const AccountPage: React.FC = () => {
     user?.businessEntityId || 0
   );
   const updateProfileMutation = useUpdateProfile();
+  const { data: emailAddresses = [], isLoading: emailAddressesLoading } =
+    useEmailAddresses(user?.businessEntityId || 0);
+  const createEmailMutation = useCreateEmailAddress();
+  const updateEmailMutation = useUpdateEmailAddress();
+  const deleteEmailMutation = useDeleteEmailAddress();
   const [expandedOrder, setExpandedOrder] = useState<number | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editProfileData, setEditProfileData] = useState({
@@ -121,6 +133,11 @@ const AccountPage: React.FC = () => {
   );
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [editingAddress, setEditingAddress] = useState<Address | null>(null);
+  const [showAddEmailForm, setShowAddEmailForm] = useState(false);
+  const [editingEmailId, setEditingEmailId] = useState<number | null>(null);
+  const [newEmailAddress, setNewEmailAddress] = useState("");
+  const [editEmailAddress, setEditEmailAddress] = useState("");
+  const [emailError, setEmailError] = useState("");
 
   const [memberSinceDate, setMemberSinceDate] = useState<string>("Recently");
 
@@ -513,12 +530,7 @@ const AccountPage: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-4">
                           <span className="font-doodle font-bold text-doodle-green">
-                            {(order.currencyRate?.currency?.CurrencyCode &&
-                              CURRENCY_SYMBOLS[
-                                order.currencyRate.currency.CurrencyCode
-                              ]) ||
-                              "$"}
-                            {order.TotalDue.toFixed(2)}
+                            {formatPrice(order.TotalDue)}
                           </span>
                           {expandedOrder === order.SalesOrderID ? (
                             <ChevronUp className="w-5 h-5 text-doodle-text/50" />
@@ -541,15 +553,7 @@ const AccountPage: React.FC = () => {
                                   <span className="text-doodle-text/70">
                                     {item.product.Name} × {item.OrderQty}
                                   </span>
-                                  <span>
-                                    {(order.currencyRate?.currency
-                                      ?.CurrencyCode &&
-                                      CURRENCY_SYMBOLS[
-                                        order.currencyRate.currency.CurrencyCode
-                                      ]) ||
-                                      "$"}
-                                    {item.LineTotal.toFixed(2)}
-                                  </span>
+                                  <span>{formatPrice(item.LineTotal)}</span>
                                 </div>
                               )
                             )}
@@ -563,14 +567,7 @@ const AccountPage: React.FC = () => {
                               <span className="text-doodle-text/70">
                                 {t("orderTracking.subtotal")}
                               </span>
-                              <span>
-                                {(order.currencyRate?.currency?.CurrencyCode &&
-                                  CURRENCY_SYMBOLS[
-                                    order.currencyRate.currency.CurrencyCode
-                                  ]) ||
-                                  "$"}
-                                {order.SubTotal.toFixed(2)}
-                              </span>
+                              <span>{formatPrice(order.SubTotal)}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-doodle-text/70">
@@ -578,37 +575,18 @@ const AccountPage: React.FC = () => {
                                 {order.shipMethod?.Name &&
                                   `(${order.shipMethod.Name})`}
                               </span>
-                              <span>
-                                {(order.currencyRate?.currency?.CurrencyCode &&
-                                  CURRENCY_SYMBOLS[
-                                    order.currencyRate.currency.CurrencyCode
-                                  ]) ||
-                                  "$"}
-                                {order.Freight.toFixed(2)}
-                              </span>
+                              <span>{formatPrice(order.Freight)}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-doodle-text/70">
                                 {t("orderTracking.tax")}
                               </span>
-                              <span>
-                                {(order.currencyRate?.currency?.CurrencyCode &&
-                                  CURRENCY_SYMBOLS[
-                                    order.currencyRate.currency.CurrencyCode
-                                  ]) ||
-                                  "$"}
-                                {order.TaxAmt.toFixed(2)}
-                              </span>
+                              <span>{formatPrice(order.TaxAmt)}</span>
                             </div>
                             <div className="flex justify-between font-bold text-base pt-2 border-t border-dashed border-doodle-text/20">
                               <span>{t("orderTracking.total")}</span>
                               <span className="text-doodle-green">
-                                {(order.currencyRate?.currency?.CurrencyCode &&
-                                  CURRENCY_SYMBOLS[
-                                    order.currencyRate.currency.CurrencyCode
-                                  ]) ||
-                                  "$"}
-                                {order.TotalDue.toFixed(2)}
+                                {formatPrice(order.TotalDue)}
                               </span>
                             </div>
                           </div>
@@ -1169,8 +1147,352 @@ const AccountPage: React.FC = () => {
                   </div>
                 )}
               </div>
+              {/* Email Addresses */}
+              <div className="doodle-card p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <Mail className="w-6 h-6 text-doodle-accent" />
+                    <h2 className="font-doodle text-xl font-bold text-doodle-text">
+                      Email Addresses
+                    </h2>
+                    <span className="font-doodle text-sm text-doodle-text/50">
+                      ({emailAddresses.length}{" "}
+                      {emailAddresses.length === 1 ? "email" : "emails"})
+                    </span>
+                  </div>
+                  {!showAddEmailForm && (
+                    <button
+                      onClick={() => {
+                        setShowAddEmailForm(true);
+                        setNewEmailAddress("");
+                        setEmailError("");
+                      }}
+                      className="doodle-button text-sm py-1 px-3 flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Email
+                    </button>
+                  )}
+                </div>
 
-              {/* Saved Addresses */}
+                {showAddEmailForm && (
+                  <div className="mb-6 p-4 border-2 border-dashed border-doodle-accent/30 bg-doodle-accent/5">
+                    <h3 className="font-doodle font-bold text-doodle-text mb-4">
+                      Add New Email Address
+                    </h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+                          Email Address *
+                        </label>
+                        <input
+                          type="email"
+                          value={newEmailAddress}
+                          onChange={(e) => {
+                            setNewEmailAddress(e.target.value);
+                            setEmailError("");
+                          }}
+                          className="doodle-input w-full"
+                          placeholder="your.email@example.com"
+                        />
+                        {emailError && (
+                          <p className="font-doodle text-xs text-doodle-accent mt-1">
+                            {emailError}
+                          </p>
+                        )}
+                        {newEmailAddress &&
+                          (newEmailAddress
+                            .toLowerCase()
+                            .includes("@yahoo.com") ||
+                            newEmailAddress
+                              .toLowerCase()
+                              .includes("@gmail.com")) && (
+                            <div className="mt-2 p-3 bg-amber-50 border-2 border-dashed border-amber-300 rounded">
+                              <p className="font-doodle text-xs text-amber-800">
+                                <strong>⚠️ Note:</strong> This demo site uses
+                                Azure Communication Services.
+                                {newEmailAddress
+                                  .toLowerCase()
+                                  .includes("@yahoo.com")
+                                  ? "Yahoo may block emails from this service."
+                                  : "Gmail may mark emails from this service as spam."}{" "}
+                                You can still use this address, but check your
+                                spam folder.
+                              </p>
+                            </div>
+                          )}
+                      </div>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={async () => {
+                            const trimmedEmail = newEmailAddress.trim();
+
+                            // Validation
+                            if (!trimmedEmail) {
+                              setEmailError("Email address is required");
+                              return;
+                            }
+                            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                            if (!emailRegex.test(trimmedEmail)) {
+                              setEmailError(
+                                "Please enter a valid email address"
+                              );
+                              return;
+                            }
+                            // Check for duplicates
+                            if (
+                              emailAddresses.some(
+                                (e) =>
+                                  e.EmailAddress.toLowerCase() ===
+                                  trimmedEmail.toLowerCase()
+                              )
+                            ) {
+                              setEmailError(
+                                "This email address is already in your account"
+                              );
+                              return;
+                            }
+
+                            try {
+                              await createEmailMutation.mutateAsync({
+                                businessEntityId: user!.businessEntityId,
+                                emailAddress: trimmedEmail,
+                              });
+                              setShowAddEmailForm(false);
+                              setNewEmailAddress("");
+                            } catch (error) {
+                              setEmailError("Failed to add email address");
+                            }
+                          }}
+                          disabled={createEmailMutation.isPending}
+                          className="doodle-button doodle-button-primary py-2 px-4 flex items-center gap-2"
+                        >
+                          <Save className="w-4 h-4" />
+                          {createEmailMutation.isPending ? "Saving..." : "Save"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowAddEmailForm(false);
+                            setNewEmailAddress("");
+                            setEmailError("");
+                          }}
+                          className="doodle-button py-2 px-4"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {emailAddressesLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className="border-2 border-dashed border-doodle-text/20 p-4"
+                      >
+                        <Skeleton className="h-4 w-full" />
+                      </div>
+                    ))}
+                  </div>
+                ) : emailAddresses.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Mail className="w-16 h-16 mx-auto mb-4 text-doodle-text/30" />
+                    <p className="font-doodle text-doodle-text/70 mb-4">
+                      No email addresses found
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {emailAddresses.map((email, index) => (
+                      <div
+                        key={email.EmailAddressID}
+                        className="border-2 border-dashed border-doodle-text/20 p-4"
+                      >
+                        {editingEmailId === email.EmailAddressID ? (
+                          <div className="space-y-3">
+                            <div>
+                              <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+                                Email Address *
+                              </label>
+                              <input
+                                type="email"
+                                value={editEmailAddress}
+                                onChange={(e) => {
+                                  setEditEmailAddress(e.target.value);
+                                  setEmailError("");
+                                }}
+                                className="doodle-input w-full"
+                              />
+                              {emailError && (
+                                <p className="font-doodle text-xs text-doodle-accent mt-1">
+                                  {emailError}
+                                </p>
+                              )}
+                              {editEmailAddress &&
+                                (editEmailAddress
+                                  .toLowerCase()
+                                  .includes("@yahoo.com") ||
+                                  editEmailAddress
+                                    .toLowerCase()
+                                    .includes("@gmail.com")) && (
+                                  <div className="mt-2 p-3 bg-amber-50 border-2 border-dashed border-amber-300 rounded">
+                                    <p className="font-doodle text-xs text-amber-800">
+                                      <strong>⚠️ Note:</strong> This demo site
+                                      uses Azure Communication Services.
+                                      {editEmailAddress
+                                        .toLowerCase()
+                                        .includes("@yahoo.com")
+                                        ? "Yahoo may block emails from this service."
+                                        : "Gmail may mark emails from this service as spam."}{" "}
+                                      You can still use this address, but check
+                                      your spam folder.
+                                    </p>
+                                  </div>
+                                )}
+                            </div>
+                            <div className="flex gap-3">
+                              <button
+                                onClick={async () => {
+                                  const trimmedEmail = editEmailAddress.trim();
+
+                                  // Validation
+                                  if (!trimmedEmail) {
+                                    setEmailError("Email address is required");
+                                    return;
+                                  }
+                                  const emailRegex =
+                                    /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                                  if (!emailRegex.test(trimmedEmail)) {
+                                    setEmailError(
+                                      "Please enter a valid email address"
+                                    );
+                                    return;
+                                  }
+                                  // Check for duplicates (excluding current email)
+                                  if (
+                                    emailAddresses.some(
+                                      (e) =>
+                                        e.EmailAddressID !==
+                                          email.EmailAddressID &&
+                                        e.EmailAddress.toLowerCase() ===
+                                          trimmedEmail.toLowerCase()
+                                    )
+                                  ) {
+                                    setEmailError(
+                                      "This email address is already in your account"
+                                    );
+                                    return;
+                                  }
+
+                                  try {
+                                    await updateEmailMutation.mutateAsync({
+                                      businessEntityId: user!.businessEntityId,
+                                      emailAddressId: email.EmailAddressID,
+                                      emailAddress: trimmedEmail,
+                                    });
+                                    setEditingEmailId(null);
+                                    setEditEmailAddress("");
+                                  } catch (error) {
+                                    setEmailError(
+                                      "Failed to update email address"
+                                    );
+                                  }
+                                }}
+                                disabled={updateEmailMutation.isPending}
+                                className="doodle-button doodle-button-primary py-2 px-4 flex items-center gap-2"
+                              >
+                                <Save className="w-4 h-4" />
+                                {updateEmailMutation.isPending
+                                  ? "Saving..."
+                                  : "Save"}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingEmailId(null);
+                                  setEditEmailAddress("");
+                                  setEmailError("");
+                                }}
+                                className="doodle-button py-2 px-4"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3 flex-1">
+                              <Mail className="w-5 h-5 text-doodle-text/50" />
+                              <div>
+                                <p className="font-doodle font-bold text-doodle-text">
+                                  {email.EmailAddress}
+                                </p>
+                                {email.EmailAddress.toLowerCase() ===
+                                  user?.email.toLowerCase() && (
+                                  <span className="text-xs text-doodle-text/50">
+                                    Used for login (cannot be removed)
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditingEmailId(email.EmailAddressID);
+                                  setEditEmailAddress(email.EmailAddress);
+                                  setEmailError("");
+                                }}
+                                className="doodle-button text-sm py-1 px-3 flex items-center gap-1"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                                Edit
+                              </button>
+                              {email.EmailAddress.toLowerCase() !==
+                                user?.email.toLowerCase() &&
+                                emailAddresses.length > 1 && (
+                                  <button
+                                    onClick={async () => {
+                                      if (
+                                        window.confirm(
+                                          "Are you sure you want to remove this email address?"
+                                        )
+                                      ) {
+                                        try {
+                                          await deleteEmailMutation.mutateAsync(
+                                            {
+                                              businessEntityId:
+                                                user!.businessEntityId,
+                                              emailAddressId:
+                                                email.EmailAddressID,
+                                            }
+                                          );
+                                        } catch (error) {
+                                          toast({
+                                            title: "Error",
+                                            description:
+                                              "Failed to remove email address",
+                                            variant: "destructive",
+                                          });
+                                        }
+                                      }
+                                    }}
+                                    disabled={deleteEmailMutation.isPending}
+                                    className="doodle-button text-sm py-1 px-3 flex items-center gap-1 text-doodle-accent hover:bg-doodle-accent/10"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                    Remove
+                                  </button>
+                                )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              ;{/* Saved Addresses */}
               <div className="doodle-card p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
@@ -1329,7 +1651,6 @@ const AccountPage: React.FC = () => {
                   </div>
                 )}
               </div>
-
               {/* Saved Payment Methods */}
               <div className="doodle-card p-6">
                 <div className="flex items-center justify-between mb-6">
@@ -1427,7 +1748,6 @@ const AccountPage: React.FC = () => {
                   </div>
                 )}
               </div>
-
               {/* Account Settings */}
               <div className="doodle-card p-6 group cursor-pointer">
                 <div className="flex items-start gap-4">
