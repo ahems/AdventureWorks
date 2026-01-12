@@ -16,15 +16,13 @@ public class AddressService
     }
 
     /// <summary>
-    /// Creates a SQL connection with managed identity authentication
-    /// Uses DefaultAzureCredential to obtain an access token for Azure SQL
+    /// Creates a SQL connection with Azure AD authentication via connection string
     /// </summary>
     private async Task<SqlConnection> CreateConnectionAsync()
     {
+        // Connection string contains Authentication=Active Directory Default
+        // which handles credential acquisition automatically using DefaultAzureCredential
         var connection = new SqlConnection(_connectionString);
-        var credential = new DefaultAzureCredential();
-        var token = await credential.GetTokenAsync(new TokenRequestContext(new[] { "https://database.windows.net/.default" }));
-        connection.AccessToken = token.Token;
         await connection.OpenAsync();
         return connection;
     }

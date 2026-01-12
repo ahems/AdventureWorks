@@ -35,14 +35,13 @@ public class EmailService
     }
 
     /// <summary>
-    /// Creates a SQL connection with managed identity authentication
+    /// Creates a SQL connection with Azure AD authentication via connection string
     /// </summary>
     private async Task<SqlConnection> CreateConnectionAsync()
     {
+        // Connection string contains Authentication=Active Directory Default
+        // which handles credential acquisition automatically using DefaultAzureCredential
         var connection = new SqlConnection(_connectionString);
-        var token = await _credential.GetTokenAsync(
-            new TokenRequestContext(new[] { "https://database.windows.net/.default" }));
-        connection.AccessToken = token.Token;
         await connection.OpenAsync();
         return connection;
     }
@@ -345,12 +344,20 @@ public class EmailService
             // Add attachment if provided
             if (!string.IsNullOrEmpty(attachmentUrl))
             {
+                _logger.LogInformation(
+                    "Attempting to download attachment from: {AttachmentUrl}",
+                    attachmentUrl);
+
                 var attachment = await DownloadAttachmentAsync(attachmentUrl);
                 if (attachment.HasValue)
                 {
+                    _logger.LogInformation(
+                        "Successfully downloaded attachment: {FileName}, Size: {Size} bytes",
+                        attachment.Value.FileName, attachment.Value.Content.Length);
+
                     var emailAttachment = new EmailAttachment(
                         attachment.Value.FileName,
-                        MediaTypeNames.Application.Octet,
+                        MediaTypeNames.Application.Pdf,
                         new BinaryData(attachment.Value.Content));
 
                     emailMessage.Attachments.Add(emailAttachment);
@@ -359,6 +366,16 @@ public class EmailService
                         "Added attachment {FileName} to email for customer {CustomerId}",
                         attachment.Value.FileName, customerId);
                 }
+                else
+                {
+                    _logger.LogWarning(
+                        "Failed to download attachment from {AttachmentUrl}. Email will be sent without attachment.",
+                        attachmentUrl);
+                }
+            }
+            else
+            {
+                _logger.LogInformation("No attachment URL provided, sending email without attachment");
             }
 
             // Send email (fire and forget - don't wait for delivery)

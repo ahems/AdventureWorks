@@ -301,8 +301,8 @@ public class TranslateLanguageFile
 
             var jsonResult = "{\n  " + string.Join(",\n  ", jsonParts) + "\n}";
 
-            logger.LogInformation("Translation orchestration completed successfully. Result length: {Length} chars", jsonResult?.Length ?? 0);
-            logger.LogInformation("Result preview: {Preview}", jsonResult != null ? jsonResult.Substring(0, Math.Min(200, jsonResult.Length)) : "null");
+            logger.LogInformation("Translation orchestration completed successfully. Result length: {Length} chars", jsonResult.Length);
+            logger.LogInformation("Result preview: {Preview}", jsonResult.Substring(0, Math.Min(200, jsonResult.Length)));
 
             // Save result to blob storage and get SAS URL
             var sasUrl = await context.CallActivityAsync<string>(
@@ -310,7 +310,7 @@ public class TranslateLanguageFile
                 new TranslationResultInput
                 {
                     InstanceId = context.InstanceId,
-                    JsonResult = jsonResult,
+                    JsonResult = jsonResult!,
                     TargetLanguageCode = input.TargetLanguageCode,
                     SourceFilename = input.SourceFilename
                 });

@@ -17,10 +17,9 @@ public class ReviewService
 
     private async Task<IDbConnection> GetConnectionAsync()
     {
+        // Connection string contains Authentication=Active Directory Default
+        // which handles credential acquisition automatically
         var connection = new SqlConnection(_connectionString);
-        var credential = new DefaultAzureCredential();
-        var token = await credential.GetTokenAsync(new Azure.Core.TokenRequestContext(new[] { "https://database.windows.net/.default" }));
-        connection.AccessToken = token.Token;
         await connection.OpenAsync();
         return connection;
     }
@@ -225,8 +224,11 @@ public class ReviewService
             result.AppendLine("👍 What Customers Love:");
             foreach (var comment in positiveReviews)
             {
-                var truncated = comment.Length > 100 ? comment.Substring(0, 100) + "..." : comment;
-                result.AppendLine($"  • \"{truncated}\"");
+                if (!string.IsNullOrWhiteSpace(comment))
+                {
+                    var truncated = comment.Length > 100 ? comment.Substring(0, 100) + "..." : comment;
+                    result.AppendLine($"  • \"{truncated}\"");
+                }
             }
         }
 
@@ -236,13 +238,17 @@ public class ReviewService
             result.AppendLine("👎 Common Concerns:");
             foreach (var comment in negativeReviews)
             {
-                var truncated = comment.Length > 100 ? comment.Substring(0, 100) + "..." : comment;
-                result.AppendLine($"  • \"{truncated}\"");
+                if (!string.IsNullOrWhiteSpace(comment))
+                {
+                    var truncated = comment.Length > 100 ? comment.Substring(0, 100) + "..." : comment;
+                    result.AppendLine($"  • \"{truncated}\"");
+                }
             }
         }
 
         result.AppendLine();
-        result.AppendLine($"Latest Review: {reviewList.First().ReviewDate:yyyy-MM-dd} by {reviewList.First().ReviewerName}");
+        var latestReview = reviewList.First();
+        result.AppendLine($"Latest Review: {latestReview.ReviewDate:yyyy-MM-dd} by {latestReview.ReviewerName ?? "Anonymous"}");
 
         return result.ToString();
     }

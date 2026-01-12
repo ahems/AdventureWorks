@@ -57,7 +57,13 @@ builder.Services.AddOpenTelemetry()
     });
 
 // Configure DefaultAzureCredential for Azure SDK clients
-builder.Services.AddSingleton(new DefaultAzureCredential());
+// This will use: Azure CLI > Environment > Workload Identity > Managed Identity
+var defaultCredential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+{
+    ExcludeManagedIdentityCredential = false,
+    ExcludeEnvironmentCredential = false
+});
+builder.Services.AddSingleton(defaultCredential);
 
 // Register HttpClient for MCP tool calls
 builder.Services.AddHttpClient();
@@ -65,11 +71,13 @@ builder.Services.AddHttpClient();
 // Aspire SQL Client with automatic tracing and health checks
 builder.AddSqlServerClient("SQL_CONNECTION_STRING");
 
-// Aspire Blob Storage with observability
-builder.AddAzureBlobClient("AZURE_STORAGE_CONNECTION_STRING");
-
-// Aspire Queue Storage with observability
-builder.AddAzureQueueClient("AZURE_STORAGE_CONNECTION_STRING");
+// Aspire Blob Storage with observability (only if connection string is configured)
+var storageConnectionString = builder.Configuration["AZURE_STORAGE_CONNECTION_STRING"];
+if (!string.IsNullOrEmpty(storageConnectionString))
+{
+    builder.AddAzureBlobClient("AZURE_STORAGE_CONNECTION_STRING");
+    builder.AddAzureQueueClient("AZURE_STORAGE_CONNECTION_STRING");
+}
 
 // Register custom services with connection string from configuration
 builder.Services.AddScoped<AddressService>(sp =>
@@ -144,7 +152,20 @@ builder.Services.AddScoped<EmailService>(sp =>
         ?? throw new InvalidOperationException("EMAIL_SENDER_DOMAIN environment variable is not set");
 
     // Storage account is optional - only needed when sending attachments
-    var storageAccountName = configuration["AzureWebJobsStorage__accountName"];
+    // Try configuration first, then fall back to environment variable
+    var storageAccountName = configuration["AzureWebJobsStorage__accountName"]
+        ?? Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName");
+
+    // Debug: Log if storage account name is found
+    var logger = sp.GetRequiredService<ILogger<EmailService>>();
+    if (string.IsNullOrEmpty(storageAccountName))
+    {
+        logger.LogWarning("AzureWebJobsStorage__accountName not found in configuration or environment. Email attachments will not work.");
+    }
+    else
+    {
+        logger.LogInformation("EmailService initialized with storage account: {StorageAccountName}", storageAccountName);
+    }
 
     return new EmailService(
         connectionString,

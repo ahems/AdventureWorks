@@ -26,7 +26,6 @@ public class PdfReceiptGenerator
     // DoodleCSS Theme Colors (RGB values)
     private static readonly string PRIMARY_COLOR = "#FF5E5B";      // Adventure orange/rust
     private static readonly string ACCENT_COLOR = "#4a7c59";       // Forest green
-    private static readonly string BACKGROUND_COLOR = "#FDF7F1";   // Warm cream
     private static readonly string TEXT_COLOR = "#3c3c3c";         // Dark gray
     private static readonly string SECONDARY_COLOR = "#E8DED3";    // Light cream
 

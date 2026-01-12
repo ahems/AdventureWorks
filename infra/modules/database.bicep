@@ -67,8 +67,8 @@ module sqlServerModule 'br/public:avm/res/sql/server:0.14.0' = {
   }
 }
 
-// Connection string without Authentication parameter (Functions handle auth via Managed Identity using AZURE_CLIENT_ID)
-// This requires the application to also run with an identity that has been granted access to the database
-var connectionString = 'Server=tcp:${sqlServerFqdn};Database=${sqlDatabaseName};'
+// Connection string with Authentication=Active Directory Default
+// This uses DefaultAzureCredential (Azure CLI locally, Managed Identity in Azure)
+var connectionString = 'Server=tcp:${sqlServerFqdn};Database=${sqlDatabaseName};Authentication=Active Directory Default;'
 
 output connectionString string = connectionString

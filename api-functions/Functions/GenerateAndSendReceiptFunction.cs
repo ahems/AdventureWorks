@@ -249,14 +249,9 @@ Order Number: {salesOrderNumber}
 Order Date: {receiptData.OrderDate:MMMM dd, yyyy}
 Total: {receiptData.TotalDue:C}
 
-⚠️ IMPORTANT: This is a Demo Site!
-This order is completely fictional - perfect for testing our e-commerce platform! 
-Nothing will actually ship, and no real charges have been made. We're just showing 
-off what's possible with modern web technologies. Your pretend order is safe with us! 😊
-
 Your demo receipt is attached to this email.
 
-Items in Your Make-Believe Order:
+Items in Your Order:
 {string.Join("\n", receiptData.LineItems.Select(item => $"- {item.ProductName} (Qty: {item.Quantity}) - {item.LineTotal:C}"))}
 
 Fictional Shipping Address:

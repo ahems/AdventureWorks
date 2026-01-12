@@ -17,10 +17,9 @@ public class ProductService
 
     private async Task<IDbConnection> GetConnectionAsync()
     {
+        // Connection string contains Authentication=Active Directory Default
+        // which handles credential acquisition automatically
         var connection = new SqlConnection(_connectionString);
-        var credential = new DefaultAzureCredential();
-        var token = await credential.GetTokenAsync(new Azure.Core.TokenRequestContext(new[] { "https://database.windows.net/.default" }));
-        connection.AccessToken = token.Token;
         await connection.OpenAsync();
         return connection;
     }

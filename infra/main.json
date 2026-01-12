@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "1301733724893903317"
+      "templateHash": "17518204086370327636"
     }
   },
   "parameters": {
@@ -773,7 +773,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "11002756633892686103"
+              "templateHash": "15013106653090063123"
             }
           },
           "parameters": {
@@ -879,6 +879,12 @@
                           "name": "order-receipt-generation",
                           "metadata": {
                             "description": "Queue for generating PDF receipts for customer orders"
+                          }
+                        },
+                        {
+                          "name": "order-email-generation",
+                          "metadata": {
+                            "description": "Queue for sending order confirmation emails with receipt attachments"
                           }
                         },
                         {
@@ -7290,7 +7296,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "1489647820257605706"
+              "templateHash": "5739138383676411341"
             }
           },
           "parameters": {
@@ -7325,7 +7331,7 @@
           },
           "variables": {
             "sqlServerFqdn": "[format('{0}{1}', parameters('sqlServerName'), environment().suffixes.sqlServerHostname)]",
-            "connectionString": "[format('Server=tcp:{0};Database={1};', variables('sqlServerFqdn'), parameters('sqlDatabaseName'))]"
+            "connectionString": "[format('Server=tcp:{0};Database={1};Authentication=Active Directory Default;', variables('sqlServerFqdn'), parameters('sqlDatabaseName'))]"
           },
           "resources": [
             {
