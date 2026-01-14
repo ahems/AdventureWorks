@@ -27,6 +27,13 @@ hooks:
     run: ./scripts/postdown.ps1
     interactive: true
 services:
+  api-mcp:
+    project: ./api-mcp
+    host: containerapp
+    language: docker
+    docker:
+      path: Dockerfile
+      remoteBuild: true
   api:
     project: ./api
     host: containerapp

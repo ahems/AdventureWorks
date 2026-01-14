@@ -1,12 +1,6 @@
 param appName string = 'av-appinsights-${toLower(uniqueString(resourceGroup().id))}'
 param workspaceName string = 'av-workspace-${toLower(uniqueString(resourceGroup().id))}'
-param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param location string = resourceGroup().location
-param aadAdminObjectId string
-
-resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
-  name: identityName
-}
 
 // Use Azure Verified Module for Log Analytics Workspace
 module workspace 'br/public:avm/res/operational-insights/workspace:0.12.0' = {
@@ -21,7 +15,7 @@ module workspace 'br/public:avm/res/operational-insights/workspace:0.12.0' = {
 }
 
 // Use Azure Verified Module for Application Insights
-module appInsights 'br/public:avm/res/insights/component:0.6.1' = {
+module appInsights 'br/public:avm/res/insights/component:0.4.1' = {
   name: 'app-insights-${appName}'
   params: {
     name: appName

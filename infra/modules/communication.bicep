@@ -67,38 +67,13 @@ resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existin
   name: workspaceName
 }
 
-// Diagnostic settings for Communication Service email logs
+// Diagnostic settings for Communication Service metrics only (log categories not supported)
 resource communicationDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
   name: 'email-diagnostics'
   scope: communicationService
   properties: {
     workspaceId: workspace.id
-    logs: [
-      {
-        category: 'EmailSendMailLogs'
-        enabled: true
-        retentionPolicy: {
-          enabled: false
-          days: 0
-        }
-      }
-      {
-        category: 'EmailStatusUpdateLogs'
-        enabled: true
-        retentionPolicy: {
-          enabled: false
-          days: 0
-        }
-      }
-      {
-        category: 'EmailUserEngagementLogs'
-        enabled: true
-        retentionPolicy: {
-          enabled: false
-          days: 0
-        }
-      }
-    ]
+    logs: []
     metrics: [
       {
         category: 'AllMetrics'

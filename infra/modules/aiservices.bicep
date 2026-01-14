@@ -8,6 +8,12 @@ param restoreOpenAi bool = false
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param aadAdminObjectId string
 param projectName string
+param appInsightsId string
+param appInsightConnectionString string
+param appInsightConnectionName string
+param aoaiConnectionName string
+param storageAccountName string
+param storageAccountConnectionName string
 
 @allowed([ 'Enabled', 'Disabled' ])
 param publicNetworkAccess string = 'Enabled'
@@ -110,6 +116,10 @@ resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31
   name: identityName
 }
 
+resource storageAccount 'Microsoft.Storage/storageAccounts@2022-09-01' existing = {
+  name: storageAccountName
+}
+
 // Microsoft Foundry resource (AIServices kind enables access to broader model catalog, agents, and Foundry Tools)
 // Uses latest 2025-06-01 API with allowProjectManagement for full Foundry capabilities
 resource account 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
@@ -134,6 +144,57 @@ resource account 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
     allowProjectManagement: true // Required for Microsoft Foundry features (projects, agents, broader model catalog)
   }
   sku: sku
+}
+
+resource aiServiceConnection 'Microsoft.CognitiveServices/accounts/connections@2025-04-01-preview' = {
+  name: aoaiConnectionName
+  parent: account
+  properties: {
+    category: 'AzureOpenAI'
+    authType: 'AAD'
+    isSharedToAll: true
+    target: account.properties.endpoints['OpenAI Language Model Instance API']
+    metadata: {
+      ApiType: 'azure'
+      ResourceId: account.id
+    }
+  }
+}
+
+
+// Creates the Azure Foundry connection to your Azure App Insights resource
+resource appInsightConnection 'Microsoft.CognitiveServices/accounts/connections@2025-04-01-preview' = {
+  name: appInsightConnectionName
+  parent: account
+  properties: {
+    category: 'AppInsights'
+    target: appInsightsId
+    authType: 'ApiKey'
+    isSharedToAll: true
+    credentials: {
+      key: appInsightConnectionString
+    }
+    metadata: {
+      ApiType: 'Azure'
+      ResourceId: appInsightsId
+    }
+  }
+}
+
+// Creates the Azure Foundry connection to your Azure Storage resource
+resource storageAccountConnection 'Microsoft.CognitiveServices/accounts/connections@2025-04-01-preview' = {
+  name: storageAccountConnectionName
+  parent: account
+  properties: {
+    category: 'AzureStorageAccount'
+    target: storageAccount.properties.primaryEndpoints.blob
+    authType: 'AAD'
+    isSharedToAll: true    
+    metadata: {
+      ApiType: 'Azure'
+      ResourceId: storageAccount.id
+    }
+  }
 }
 
 // Microsoft Foundry Project (organizes work, provides access management and data isolation)
@@ -197,3 +258,12 @@ resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01
 output endpoint string = account.properties.endpoint
 output id string = account.id
 output name string = account.name
+output projectResourceId string = aiProject.id
+output projectName string = aiProject.name
+output serviceName string = account.name
+output projectEndpoint string = aiProject.properties.endpoints['AI Foundry API']
+output PrincipalId string = account.identity.principalId
+output accountPrincipalId string = account.identity.principalId
+output projectPrincipalId string = aiProject.identity.principalId
+output storageConnectionId string = storageAccountConnection.id
+output storageConnectionName string = storageAccountConnection.name

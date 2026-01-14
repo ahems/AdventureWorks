@@ -54,5 +54,6 @@ resource swaConfig 'Microsoft.Web/staticSites/config@2023-01-01' = {
 
 output appRedirectUri string = 'https://${staticWebApp.properties.defaultHostname}'
 output appFqdn string = staticWebApp.properties.defaultHostname
+@secure()
 output deploymentToken string = staticWebApp.listSecrets().properties.apiKey
 output staticWebAppName string = staticWebApp.name

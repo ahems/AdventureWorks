@@ -8,7 +8,7 @@ using api_functions.Services;
 namespace api_functions.Functions;
 
 /// <summary>
-/// AI Agent Functions - Exposes AI agent endpoints with MCP tool integration
+/// AI Agent Functions - Exposes AI agent endpoints that integrate with the external api-mcp service
 /// </summary>
 public class AIAgentFunctions
 {
@@ -96,7 +96,7 @@ public class AIAgentFunctions
             features = new[]
             {
                 "conversational-ai",
-                "mcp-tool-integration",
+                "api-mcp-integration",
                 "contextual-suggestions",
                 "order-tracking",
                 "product-search",

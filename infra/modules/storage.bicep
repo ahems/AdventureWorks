@@ -40,16 +40,16 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
         }
         {
           name: 'adventureworks-receipts'
-          publicAccess: 'Blob'
+          publicAccess: 'None'
           metadata: {
-            description: 'Public container for customer order receipt PDFs'
+            description: 'Container for customer order receipt PDFs'
           }
         }
         {
           name: 'locales'
-          publicAccess: 'Blob'
+          publicAccess: 'None'
           metadata: {
-            description: 'Public container for translated language files'
+            description: 'Container for translated language files'
           }
         }
       ]

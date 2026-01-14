@@ -34,16 +34,16 @@ public class AIAgentService
             ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
         _modelDeployment = configuration["chatGptDeploymentName"] ?? "chat";
 
-        // Get MCP server URL (self-reference)
-        var websiteHostname = configuration["WEBSITE_HOSTNAME"];
-        if (!string.IsNullOrEmpty(websiteHostname))
+        // Get MCP server URL (external api-mcp service)
+        var mcpServiceUrl = configuration["MCP_SERVICE_URL"];
+        if (!string.IsNullOrEmpty(mcpServiceUrl))
         {
-            // WEBSITE_HOSTNAME may already include https://, so just append the path
-            _mcpServerUrl = websiteHostname.TrimEnd('/') + "/api/mcp/call";
+            _mcpServerUrl = mcpServiceUrl.TrimEnd('/') + "/api/mcp/call";
         }
         else
         {
-            _mcpServerUrl = "http://localhost:7071/api/mcp/call";
+            // For local development, point to the api-mcp service
+            _mcpServerUrl = "http://localhost:5001/api/mcp/call";
         }
 
         _logger.LogInformation($"AI Agent configured with endpoint: {_endpoint}, model: {_modelDeployment}, MCP: {_mcpServerUrl}");

@@ -125,10 +125,7 @@ builder.Services.AddScoped<ReceiptService>(sp =>
 // Register PdfReceiptGenerator for PDF receipt generation
 builder.Services.AddScoped<PdfReceiptGenerator>();
 
-// Register AdventureWorks MCP Tools for AI agent integration
-builder.Services.AddScoped<AdventureWorksMcpTools>();
-
-// Register AI Agent Service for conversational AI with MCP tools
+// Register AI Agent Service for conversational AI with MCP tools (calls external api-mcp service)
 builder.Services.AddScoped<AIAgentService>();
 
 // Register AIService with Azure OpenAI endpoint

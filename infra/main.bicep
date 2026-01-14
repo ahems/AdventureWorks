@@ -102,6 +102,12 @@ module cognitiveservices 'modules/aiservices.bicep' = {
     publicNetworkAccess: publicNetworkAccess
     aadAdminObjectId: aadAdminObjectId
     projectName: 'av-aiproject-${resourceToken}'
+    appInsightsId: appinsights.outputs.resourceId
+    appInsightConnectionString: appinsights.outputs.connectionString
+    appInsightConnectionName: 'av-appinsights-connection-${resourceToken}'
+    aoaiConnectionName: 'av-aoai-connection-${resourceToken}'
+    storageAccountName: storage.outputs.storageAccountName
+    storageAccountConnectionName: 'av-storage-connection-${resourceToken}'
   }
 }
 
@@ -141,9 +147,7 @@ module appinsights 'modules/applicationinsights.bicep' = {
   params: {
     appName: appInsightsName
     workspaceName: workspaceName
-    identityName: identityName
     location: location
-    aadAdminObjectId: aadAdminObjectId
   }
   dependsOn: [
     identity
@@ -193,9 +197,22 @@ module staticWebAppFrontend 'modules/swa-app.bicep' = {
     apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
     appInsightsConnectionString: appinsights.outputs.connectionString
   }
-  dependsOn: [
-    cognitiveservices
-  ]
+}
+
+module containerAppApiMcp 'modules/aca-api-mcp.bicep' = {
+  name: 'Deploy-Container-App-API-MCP'
+  params: {
+    location: location
+    appInsightsName: appInsightsName
+    apiMcpName: 'av-mcp-${resourceToken}'
+    containerRegistryName: acrName
+    identityName: identityName
+    sqlConnectionString: database.outputs.connectionString
+    minReplica: 0
+    maxReplica: 3
+    revisionSuffix: revisionSuffix
+    containerAppEnvId: containerApp.outputs.containerAppEnvId
+  }
 }
 
 module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
@@ -212,15 +229,12 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
     storageAccountName: storage.outputs.storageAccountName
     communicationServiceEndpoint: communication.outputs.communicationServiceEndpoint
     emailSenderDomain: communication.outputs.senderDomain
+    mcpServiceUrl: containerAppApiMcp.outputs.apiMcpUrl
     minReplica: 0
     maxReplica: 3
     revisionSuffix: revisionSuffix
     containerAppEnvId: containerApp.outputs.containerAppEnvId
   }
-  dependsOn: [
-    storage
-    communication
-  ]
 }
 
 output APP_REDIRECT_URI string = staticWebAppFrontend.outputs.appRedirectUri
@@ -253,13 +267,18 @@ output STORAGE_ACCOUNT_NAME string = storage.outputs.storageAccountName
 output SERVICE_APP_NAME string = staticWebAppFrontend.outputs.staticWebAppName
 output SERVICE_API_NAME string = 'av-api-${resourceToken}'
 output SERVICE_API_FUNCTIONS_NAME string = 'av-func-${resourceToken}'
+output SERVICE_API_MCP_NAME string = 'av-mcp-${resourceToken}'
 
 output API_FUNCTIONS_URL string = containerAppApiFunctions.outputs.apiFunctionsUrl
+output API_MCP_URL string = containerAppApiMcp.outputs.apiMcpUrl
 
 // Static Web App deployment token for azd deploy
+@secure()
 output AZURE_STATIC_WEB_APP_DEPLOYMENT_TOKEN string = staticWebAppFrontend.outputs.deploymentToken
 
 // Communication Services outputs
 output COMMUNICATION_SERVICE_NAME string = communication.outputs.communicationServiceName
 output COMMUNICATION_SERVICE_ENDPOINT string = communication.outputs.communicationServiceEndpoint
 output EMAIL_SENDER_DOMAIN string = communication.outputs.senderDomain
+output PROJECT_NAME string = cognitiveservices.outputs.projectName
+output PROJECT_RESOURCE_ID string = cognitiveservices.outputs.projectResourceId

@@ -185,3 +185,8 @@ AI_AGENT_CONFIG.json
 
 # Node.js dependencies
 node_modules/
+config.json
+
+# api-mcp .NET build outputs
+api-mcp/**/bin/
+api-mcp/**/obj/
