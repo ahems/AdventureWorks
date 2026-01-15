@@ -10,11 +10,11 @@
 # The AIAgentService in api-functions/Services/AIAgentService.cs is configured to call
 # the wrong MCP endpoint. It uses MCP_SERVICE_URL which points to:
 #   - OLD: /api/mcp/call (REST API that no longer exists)
-#   - NEW: Should use API_MCP_URL + /mcp with JSON-RPC 2.0 format
+#   - NEW: Should use MCP_SERVICE_URL with /mcp endpoint and JSON-RPC 2.0 format
 #
 # TO FIX:
 # 1. Update AIAgentService.cs CallMCPToolAsync() method to use JSON-RPC 2.0 format
-# 2. Update configuration to use API_MCP_URL environment variable
+# 2. Ensure MCP_SERVICE_URL includes /mcp endpoint in infrastructure
 # 3. Change endpoint from /api/mcp/call to /mcp
 # 4. Update request format to include jsonrpc, method: "tools/call", params, and id
 
@@ -29,14 +29,14 @@ NC='\033[0m' # No Color
 
 # Get Azure URLs from environment
 echo -e "${BLUE}=== Loading Azure Environment Configuration ===${NC}"
-eval $(azd env get-values | grep -E "(API_URL|API_FUNCTIONS_URL|API_MCP_URL)=")
+eval $(azd env get-values | grep -E "(API_URL|API_FUNCTIONS_URL|MCP_SERVICE_URL)=")
 
 # Strip trailing slash from API_URL if present
 API_URL="${API_URL%/}"
 
 echo -e "${GREEN}✓ API URL: ${API_URL}${NC}"
 echo -e "${GREEN}✓ Functions URL: ${API_FUNCTIONS_URL}${NC}"
-echo -e "${GREEN}✓ MCP URL: ${API_MCP_URL}${NC}"
+echo -e "${GREEN}✓ MCP URL: ${MCP_SERVICE_URL}${NC}"
 echo ""
 
 # Test counter
@@ -292,7 +292,8 @@ EOF
     echo "Params: $params"
     
     # Call MCP server endpoint (returns SSE format with event: and data: lines)
-    local response=$(curl -s -X POST "${API_MCP_URL}/mcp" \
+    # Note: MCP_SERVICE_URL already includes /mcp endpoint
+    local response=$(curl -s -X POST "${MCP_SERVICE_URL}" \
         -H "Content-Type: application/json" \
         -d "$request" | grep "^data:" | sed 's/^data: //')
     

@@ -18,7 +18,7 @@ echo -e "${BLUE}Loading Azure environment variables...${NC}"
 eval $(azd env get-values)
 
 # Validate required environment variables
-if [ -z "$API_URL" ] || [ -z "$API_FUNCTIONS_URL" ] || [ -z "$API_MCP_URL" ]; then
+if [ -z "$API_URL" ] || [ -z "$API_FUNCTIONS_URL" ] || [ -z "$MCP_SERVICE_URL" ]; then
     echo -e "${RED}Error: Required Azure URLs not found in environment${NC}"
     echo "Please ensure you have deployed the application with 'azd up'"
     exit 1
@@ -27,7 +27,7 @@ fi
 # Remove trailing slashes and set up URLs
 DAB_API_URL="${API_URL%/}"
 FUNCTIONS_API_URL="${API_FUNCTIONS_URL}"
-MCP_SERVER_URL="${API_MCP_URL}"
+MCP_SERVER_URL="${MCP_SERVICE_URL}"
 
 echo -e "${BLUE}Testing against:${NC}"
 echo "  DAB API: $DAB_API_URL"

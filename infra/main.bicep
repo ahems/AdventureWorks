@@ -270,7 +270,7 @@ output SERVICE_API_FUNCTIONS_NAME string = 'av-func-${resourceToken}'
 output SERVICE_API_MCP_NAME string = 'av-mcp-${resourceToken}'
 
 output API_FUNCTIONS_URL string = containerAppApiFunctions.outputs.apiFunctionsUrl
-output API_MCP_URL string = containerAppApiMcp.outputs.apiMcpUrl
+output MCP_SERVICE_URL string = containerAppApiMcp.outputs.apiMcpUrl
 
 // Static Web App deployment token for azd deploy
 @secure()
