@@ -1,7 +1,9 @@
 using System.Data;
 using System.Text.Json;
+using System.Globalization;
 using Dapper;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Localization;
 using AdventureWorks.Models;
 
 namespace AdventureWorks.Services;
@@ -9,10 +11,12 @@ namespace AdventureWorks.Services;
 public class ProductService
 {
     private readonly string _connectionString;
+    private readonly IStringLocalizer<ProductService> _localizer;
 
-    public ProductService(string connectionString)
+    public ProductService(string connectionString, IStringLocalizer<ProductService> localizer)
     {
         _connectionString = connectionString;
+        _localizer = localizer;
     }
 
     private async Task<IDbConnection> GetConnectionAsync()
@@ -71,8 +75,11 @@ public class ProductService
         return products.ToList();
     }
 
-    public async Task<string> CheckInventoryAvailabilityAsync(int productId)
+    public async Task<string> CheckInventoryAvailabilityAsync(int productId, string cultureId = "en")
     {
+        // Set culture for localization
+        CultureInfo.CurrentUICulture = new CultureInfo(cultureId);
+
         using var connection = await GetConnectionAsync();
 
         // Get product name (only for finished goods)
@@ -82,7 +89,7 @@ public class ProductService
 
         if (string.IsNullOrEmpty(productName))
         {
-            return $"Product #{productId} not found.";
+            return _localizer["ProductNotFound", productId];
         }
 
         // Get inventory across all locations (only for finished goods)
@@ -105,33 +112,33 @@ public class ProductService
         var inventoryList = inventory.ToList();
 
         var result = new System.Text.StringBuilder();
-        result.AppendLine($"📦 Inventory Availability for: {productName}");
-        result.AppendLine($"Product ID: {productId}");
+        result.AppendLine(_localizer["InventoryAvailability", productName]);
+        result.AppendLine(_localizer["ProductId", productId]);
         result.AppendLine();
 
         if (!inventoryList.Any())
         {
-            result.AppendLine("❌ OUT OF STOCK at all locations");
-            result.AppendLine("This product is currently unavailable. Please check back later or contact support.");
+            result.AppendLine(_localizer["OutOfStock"]);
+            result.AppendLine(_localizer["OutOfStockMessage"]);
         }
         else
         {
             var totalStock = inventoryList.Sum(i => (int)i.Quantity);
-            result.AppendLine($"✅ IN STOCK - Total Available: {totalStock} units");
+            result.AppendLine(_localizer["InStock", totalStock]);
             result.AppendLine();
-            result.AppendLine("Available at:");
+            result.AppendLine(_localizer["AvailableAt"]);
 
             foreach (var location in inventoryList)
             {
-                result.AppendLine($"  📍 {location.LocationName}");
-                result.AppendLine($"     Quantity: {location.Quantity} units");
-                result.AppendLine($"     Location: Shelf {location.Shelf}, Bin {location.Bin}");
+                result.AppendLine($"  {_localizer["LocationIcon", location.LocationName]}");
+                result.AppendLine($"     {_localizer["Quantity", location.Quantity]}");
+                result.AppendLine($"     {_localizer["Location", location.Shelf, location.Bin]}");
                 result.AppendLine();
             }
 
             // Suggest best location (highest stock)
             var bestLocation = inventoryList.First();
-            result.AppendLine($"💡 Recommended: Order from {bestLocation.LocationName} ({bestLocation.Quantity} units available)");
+            result.AppendLine(_localizer["Recommended", bestLocation.LocationName, bestLocation.Quantity]);
         }
 
         return result.ToString();

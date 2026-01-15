@@ -29,24 +29,24 @@ public class AdventureWorksMcpTools
     }
 
     [McpServerTool]
-    [Description("Get order history and status for a customer by their CustomerID. Returns up to 10 most recent orders with status information.")]
-    public async Task<string> GetCustomerOrders(int customerId)
+    [Description("Get order history and status for a customer by their CustomerID. Returns up to 10 most recent orders with status information. Supports multiple languages.")]
+    public async Task<string> GetCustomerOrders(int customerId, string? cultureId = null)
     {
-        return await _orderService.GetCustomerOrderStatusAsync(customerId);
+        return await _orderService.GetCustomerOrderStatusAsync(customerId, cultureId ?? "en");
     }
 
     [McpServerTool]
-    [Description("Get detailed information about a specific order including items, pricing, and shipping status. Optional: Validates order belongs to customer.")]
-    public async Task<string> GetOrderDetails(int orderId, int? customerId = null)
+    [Description("Get detailed information about a specific order including items, pricing, and shipping status. Optional: Validates order belongs to customer. Supports multiple languages.")]
+    public async Task<string> GetOrderDetails(int orderId, int? customerId = null, string? cultureId = null)
     {
-        return await _orderService.GetOrderDetailsAsync(orderId, customerId);
+        return await _orderService.GetOrderDetailsAsync(orderId, customerId, cultureId ?? "en");
     }
 
     [McpServerTool]
-    [Description("Find products that are frequently purchased together with a specific product. Great for product recommendations.")]
-    public async Task<string> FindComplementaryProducts(int productId, int limit = 5)
+    [Description("Find products that are frequently purchased together with a specific product. Great for product recommendations. Supports multiple languages.")]
+    public async Task<string> FindComplementaryProducts(int productId, int limit = 5, string? cultureId = null)
     {
-        return await _orderService.FindComplementaryProductsAsync(productId, limit);
+        return await _orderService.FindComplementaryProductsAsync(productId, limit, cultureId ?? "en");
     }
 
     [McpServerTool]
@@ -184,23 +184,23 @@ public class AdventureWorksMcpTools
     }
 
     [McpServerTool]
-    [Description("Get personalized product recommendations for a customer based on their purchase history, preferences, and buying patterns. Returns products the customer might like.")]
-    public async Task<string> GetPersonalizedRecommendations(int customerId, int limit = 5)
+    [Description("Get personalized product recommendations for a customer based on their purchase history, preferences, and buying patterns. Returns products the customer might like. Supports multiple languages.")]
+    public async Task<string> GetPersonalizedRecommendations(int customerId, int limit = 5, string? cultureId = null)
     {
-        return await _orderService.GetPersonalizedRecommendationsAsync(customerId, limit);
+        return await _orderService.GetPersonalizedRecommendationsAsync(customerId, limit, cultureId ?? "en");
     }
 
     [McpServerTool]
-    [Description("Analyze and summarize customer reviews for a product. Returns average rating, review count, sentiment analysis, and common themes from customer feedback.")]
-    public async Task<string> AnalyzeProductReviews(int productId)
+    [Description("Analyze and summarize customer reviews for a product. Returns average rating, review count, sentiment analysis, and common themes from customer feedback. Supports multiple languages.")]
+    public async Task<string> AnalyzeProductReviews(int productId, string? cultureId = null)
     {
-        return await _reviewService.AnalyzeProductReviewsAsync(productId);
+        return await _reviewService.AnalyzeProductReviewsAsync(productId, cultureId ?? "en");
     }
 
     [McpServerTool]
-    [Description("Check real-time inventory availability for a product across all warehouse locations. Returns stock levels, locations, and availability status.")]
-    public async Task<string> CheckInventoryAvailability(int productId)
+    [Description("Check real-time inventory availability for a product across all warehouse locations. Returns stock levels, locations, and availability status. Supports multiple languages.")]
+    public async Task<string> CheckInventoryAvailability(int productId, string? cultureId = null)
     {
-        return await _productService.CheckInventoryAvailabilityAsync(productId);
+        return await _productService.CheckInventoryAvailabilityAsync(productId, cultureId ?? "en");
     }
 }
