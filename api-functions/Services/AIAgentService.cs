@@ -35,15 +35,16 @@ public class AIAgentService
         _modelDeployment = configuration["chatGptDeploymentName"] ?? "chat";
 
         // Get MCP server URL (external api-mcp service)
+        // URL should already include /mcp endpoint: https://av-mcp-xxx.azurecontainerapps.io/mcp
         var mcpServiceUrl = configuration["MCP_SERVICE_URL"];
         if (!string.IsNullOrEmpty(mcpServiceUrl))
         {
-            _mcpServerUrl = mcpServiceUrl.TrimEnd('/') + "/api/mcp/call";
+            _mcpServerUrl = mcpServiceUrl.TrimEnd('/');
         }
         else
         {
             // For local development, point to the api-mcp service
-            _mcpServerUrl = "http://localhost:5001/api/mcp/call";
+            _mcpServerUrl = "http://localhost:5000/mcp";
         }
 
         _logger.LogInformation($"AI Agent configured with endpoint: {_endpoint}, model: {_modelDeployment}, MCP: {_mcpServerUrl}");
@@ -351,23 +352,90 @@ Guidelines:
     }
 
     /// <summary>
-    /// Call the MCP server to execute a tool
+    /// Call the MCP server to execute a tool using JSON-RPC 2.0 protocol
     /// </summary>
     private async Task<string> CallMCPToolAsync(string toolName, string argumentsJson)
     {
         var httpClient = _httpClientFactory.CreateClient();
 
+        // MCP server uses JSON-RPC 2.0 format
         var mcpRequest = new
         {
-            name = toolName,  // MCP server expects "name", not "tool"
-            arguments = JsonSerializer.Deserialize<Dictionary<string, object>>(argumentsJson)
+            jsonrpc = "2.0",
+            method = "tools/call",
+            @params = new
+            {
+                name = toolName,
+                arguments = JsonSerializer.Deserialize<Dictionary<string, object>>(argumentsJson)
+            },
+            id = Guid.NewGuid().GetHashCode()
         };
 
+        _logger.LogDebug($"Calling MCP endpoint: {_mcpServerUrl} with tool: {toolName}");
+
         var response = await httpClient.PostAsJsonAsync(_mcpServerUrl, mcpRequest);
-        response.EnsureSuccessStatusCode();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = await response.Content.ReadAsStringAsync();
+            _logger.LogError($"MCP call failed: {response.StatusCode} - {errorContent}");
+            throw new HttpRequestException($"MCP server returned {response.StatusCode}: {errorContent}");
+        }
 
         var result = await response.Content.ReadAsStringAsync();
-        return result;
+
+        // MCP server returns SSE format: "event: message\ndata: {...}"
+        // Parse the JSON-RPC response from the data line
+        try
+        {
+            var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var dataLine = lines.FirstOrDefault(l => l.StartsWith("data: "));
+
+            if (dataLine != null)
+            {
+                var jsonData = dataLine.Substring(6); // Remove "data: " prefix
+                using var doc = JsonDocument.Parse(jsonData);
+                var root = doc.RootElement;
+
+                // Check for JSON-RPC error
+                if (root.TryGetProperty("error", out var error))
+                {
+                    var errorMessage = error.GetProperty("message").GetString();
+                    _logger.LogError($"MCP tool {toolName} returned error: {errorMessage}");
+                    return $"Error: {errorMessage}";
+                }
+
+                // Check if result contains isError flag
+                if (root.TryGetProperty("result", out var resultProp) &&
+                    resultProp.TryGetProperty("isError", out var isError) &&
+                    isError.GetBoolean())
+                {
+                    var errorText = resultProp.GetProperty("content")[0].GetProperty("text").GetString();
+                    _logger.LogWarning($"MCP tool {toolName} returned isError=true: {errorText}");
+                    return errorText ?? "Tool execution failed";
+                }
+
+                // Extract the actual tool result text from content array
+                if (resultProp.TryGetProperty("content", out var content) &&
+                    content.GetArrayLength() > 0)
+                {
+                    var text = content[0].GetProperty("text").GetString();
+                    return text ?? "No result";
+                }
+
+                _logger.LogWarning($"Unexpected MCP response format for tool {toolName}");
+                return jsonData; // Return raw JSON if format is unexpected
+            }
+
+            // If no data line found, return raw result
+            _logger.LogWarning($"No SSE data line found in MCP response for tool {toolName}");
+            return result;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, $"Failed to parse MCP response for tool {toolName}");
+            return $"Error parsing tool response: {ex.Message}";
+        }
     }
 
     private async Task<List<string>> GenerateSuggestedQuestionsAsync(

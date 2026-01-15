@@ -128,6 +128,6 @@ resource apiMcp 'Microsoft.App/containerApps@2025-10-02-preview' = {
   }
 }
 
-output apiMcpUrl string = 'https://${apiMcp.properties.configuration.ingress.fqdn}'
+output apiMcpUrl string = 'https://${apiMcp.properties.configuration.ingress.fqdn}/mcp'
 output apiMcpFqdn string = apiMcp.properties.configuration.ingress.fqdn
 output apiMcpName string = apiMcp.name
