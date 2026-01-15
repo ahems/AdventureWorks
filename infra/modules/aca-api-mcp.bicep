@@ -15,6 +15,7 @@ param maxReplica int = 3
 param revisionSuffix string
 @secure()
 param sqlConnectionString string
+param aiFoundryEndpoint string
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -102,6 +103,10 @@ resource apiMcp 'Microsoft.App/containerApps@2025-10-02-preview' = {
             {
               name: 'AZURE_CLIENT_ID'
               value: azidentity.properties.clientId
+            }
+            {
+              name: 'AZURE_OPENAI_ENDPOINT'
+              value: aiFoundryEndpoint
             }
             {
               name: 'ASPNETCORE_URLS'

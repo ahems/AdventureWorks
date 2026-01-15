@@ -49,3 +49,16 @@ public class SemanticSearchResult
     public string MatchSource { get; set; } = string.Empty; // "Description" or "Review"
     public string? MatchText { get; set; }
 }
+
+public class ProductSearchResult
+{
+    public int ProductID { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public decimal? ListPrice { get; set; }
+    public string? Color { get; set; }
+    public string? Size { get; set; }
+    public string? ProductCategoryName { get; set; }
+    public string? ProductSubcategoryName { get; set; }
+    public double SimilarityScore { get; set; }
+}

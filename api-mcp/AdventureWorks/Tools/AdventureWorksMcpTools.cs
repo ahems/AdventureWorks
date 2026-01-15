@@ -14,15 +14,18 @@ public class AdventureWorksMcpTools
     private readonly OrderService _orderService;
     private readonly ProductService _productService;
     private readonly ReviewService _reviewService;
+    private readonly AIService _aiService;
 
     public AdventureWorksMcpTools(
         OrderService orderService,
         ProductService productService,
-        ReviewService reviewService)
+        ReviewService reviewService,
+        AIService aiService)
     {
         _orderService = orderService;
         _productService = productService;
         _reviewService = reviewService;
+        _aiService = aiService;
     }
 
     [McpServerTool]
@@ -47,38 +50,94 @@ public class AdventureWorksMcpTools
     }
 
     [McpServerTool]
-    [Description("Search for products by name, category, or attributes. Returns matching products with details.")]
-    public async Task<string> SearchProducts(string searchTerm, int? categoryId = null)
+    [Description("Search for products by name, category, or attributes. Returns matching products with details. Supports multiple languages: ar, en (default), es, fr, he, th, zh-cht, en-gb, en-ca, en-au, ja, ko, de.")]
+    public async Task<string> SearchProducts(string searchTerm, string? cultureId = null, int? categoryId = null)
     {
-        // Get all products and filter by search term
-        var products = await _productService.GetFinishedGoodsProductsAsync();
-        var filtered = products.Where(p =>
-            p.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-            (p.Description?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
-            (p.ProductCategoryName?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false)
-        ).Take(10).ToList();
+        // Default to English if not specified
+        var culture = cultureId ?? "en";
 
-        if (!filtered.Any())
+        // Generate embedding for the search query
+        var queryEmbedding = await _aiService.GenerateQueryEmbeddingAsync(searchTerm);
+
+        // Search both descriptions and reviews in parallel
+        // Both already filter for FinishedGoodsFlag = true
+        var descriptionSearchTask = _productService.SearchProductsByDescriptionEmbeddingAsync(queryEmbedding, 10, culture);
+        var reviewSearchTask = _reviewService.SearchProductsByReviewEmbeddingAsync(queryEmbedding, 10, culture);
+
+        await Task.WhenAll(descriptionSearchTask, reviewSearchTask);
+
+        var descriptionResults = await descriptionSearchTask;
+        var reviewResults = await reviewSearchTask;
+
+        // Combine and deduplicate results, keeping the best match per product
+        var combinedResults = new Dictionary<int, (string Name, decimal? Price, string? Description, string? Category, double Score, string Source, string? MatchText)>();
+
+        foreach (var descResult in descriptionResults)
+        {
+            combinedResults[descResult.ProductID] = (
+                descResult.Name,
+                descResult.ListPrice,
+                descResult.Description,
+                descResult.ProductCategoryName,
+                descResult.SimilarityScore,
+                "Description",
+                descResult.Description
+            );
+        }
+
+        foreach (var reviewResult in reviewResults)
+        {
+            if (!combinedResults.ContainsKey(reviewResult.ProductID) ||
+                reviewResult.SimilarityScore < combinedResults[reviewResult.ProductID].Score)
+            {
+                combinedResults[reviewResult.ProductID] = (
+                    reviewResult.Name,
+                    reviewResult.ListPrice,
+                    reviewResult.Description,
+                    null,
+                    reviewResult.SimilarityScore,
+                    "Review",
+                    reviewResult.MatchText
+                );
+            }
+        }
+
+        if (!combinedResults.Any())
         {
             return $"No products found matching '{searchTerm}'";
         }
 
+        // Sort by similarity score (lower is better for distance)
+        var sortedResults = combinedResults
+            .OrderBy(r => r.Value.Score)
+            .Take(10)
+            .ToList();
+
         var result = new System.Text.StringBuilder();
-        result.AppendLine($"Found {filtered.Count} products matching '{searchTerm}':");
+        result.AppendLine($"Found {sortedResults.Count} products matching '{searchTerm}' (using semantic search on descriptions and reviews):");
         result.AppendLine();
 
-        foreach (var product in filtered)
+        foreach (var item in sortedResults)
         {
-            result.AppendLine($"{product.Name} (ID: {product.ProductID})");
-            result.AppendLine($"  Category: {product.ProductCategoryName}");
-            result.AppendLine($"  Price: ${product.ListPrice:N2}");
-            if (!string.IsNullOrEmpty(product.Description))
+            var (name, price, description, category, score, source, matchText) = item.Value;
+
+            result.AppendLine($"{name} (ID: {item.Key})");
+            if (!string.IsNullOrEmpty(category))
             {
-                var shortDesc = product.Description.Length > 100
-                    ? product.Description.Substring(0, 97) + "..."
-                    : product.Description;
-                result.AppendLine($"  Description: {shortDesc}");
+                result.AppendLine($"  Category: {category}");
             }
+            result.AppendLine($"  Price: ${price:N2}");
+            result.AppendLine($"  Match: Found in {source}");
+
+            if (!string.IsNullOrEmpty(matchText))
+            {
+                var shortText = matchText.Length > 100
+                    ? matchText.Substring(0, 97) + "..."
+                    : matchText;
+                result.AppendLine($"  {(source == "Review" ? "Review" : "Description")}: {shortText}");
+            }
+
+            result.AppendLine($"  Relevance: {(1 - score):P1}"); // Convert distance to similarity percentage
             result.AppendLine();
         }
 

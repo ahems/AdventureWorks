@@ -208,6 +208,7 @@ module containerAppApiMcp 'modules/aca-api-mcp.bicep' = {
     containerRegistryName: acrName
     identityName: identityName
     sqlConnectionString: database.outputs.connectionString
+    aiFoundryEndpoint: cognitiveservices.outputs.endpoint
     minReplica: 0
     maxReplica: 3
     revisionSuffix: revisionSuffix

@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text.Json;
 using Dapper;
 using Microsoft.Data.SqlClient;
 using AdventureWorks.Models;
@@ -129,5 +130,58 @@ public class ReviewService
         return new string('⭐', fullStars) +
                (hasHalfStar ? "½" : "") +
                new string('☆', emptyStars);
+    }
+
+    private static readonly HashSet<string> SupportedCultures = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "ar", "en", "es", "fr", "he", "th", "zh-cht",
+        "en-gb", "en-ca", "en-au", "ja", "ko", "de"
+    };
+
+    public async Task<List<SemanticSearchResult>> SearchProductsByReviewEmbeddingAsync(float[] queryEmbedding, int topN = 10, string cultureId = "en")
+    {
+        // Validate culture ID
+        if (!SupportedCultures.Contains(cultureId))
+        {
+            throw new ArgumentException($"Unsupported culture '{cultureId}'. Supported cultures: {string.Join(", ", SupportedCultures)}", nameof(cultureId));
+        }
+
+        using var connection = await GetConnectionAsync();
+
+        // Use VECTOR_DISTANCE for semantic similarity search with native VECTOR columns
+        // Returns products with reviews that are most similar to the query
+        // Convert float array to JSON for CAST to VECTOR
+        var embeddingJson = JsonSerializer.Serialize(queryEmbedding);
+
+        var sql = @"
+            SELECT TOP (@TopN)
+                p.ProductID,
+                p.Name,
+                pd.Description,
+                p.ListPrice,
+                p.Color,
+                VECTOR_DISTANCE('cosine', pr.CommentsEmbedding, CAST(@QueryEmbedding AS VECTOR(1536))) AS SimilarityScore,
+                'Review' AS MatchSource,
+                pr.Comments AS MatchText
+            FROM Production.Product p
+            INNER JOIN Production.ProductReview pr ON p.ProductID = pr.ProductID
+            LEFT JOIN Production.ProductModel pm ON p.ProductModelID = pm.ProductModelID
+            LEFT JOIN Production.ProductModelProductDescriptionCulture pmpdc 
+                ON pm.ProductModelID = pmpdc.ProductModelID AND pmpdc.CultureID = 'en'
+            LEFT JOIN Production.ProductDescription pd 
+                ON pmpdc.ProductDescriptionID = pd.ProductDescriptionID
+            WHERE p.FinishedGoodsFlag = 1
+              AND pr.CommentsEmbedding IS NOT NULL
+              AND pmpdc.CultureID = @CultureId
+            ORDER BY VECTOR_DISTANCE('cosine', pr.CommentsEmbedding, CAST(@QueryEmbedding AS VECTOR(1536)))";
+
+        var results = await connection.QueryAsync<SemanticSearchResult>(sql, new
+        {
+            TopN = topN,
+            QueryEmbedding = embeddingJson,
+            CultureId = cultureId
+        });
+
+        return results.ToList();
     }
 }

@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text.Json;
 using Dapper;
 using Microsoft.Data.SqlClient;
 using AdventureWorks.Models;
@@ -74,9 +75,9 @@ public class ProductService
     {
         using var connection = await GetConnectionAsync();
 
-        // Get product name
+        // Get product name (only for finished goods)
         var productName = await connection.QueryFirstOrDefaultAsync<string>(
-            "SELECT Name FROM Production.Product WHERE ProductID = @ProductId",
+            "SELECT Name FROM Production.Product WHERE ProductID = @ProductId AND FinishedGoodsFlag = 1",
             new { ProductId = productId });
 
         if (string.IsNullOrEmpty(productName))
@@ -84,7 +85,7 @@ public class ProductService
             return $"Product #{productId} not found.";
         }
 
-        // Get inventory across all locations
+        // Get inventory across all locations (only for finished goods)
         var inventory = await connection.QueryAsync<dynamic>(@"
             SELECT 
                 pi.LocationID,
@@ -93,8 +94,10 @@ public class ProductService
                 pi.Shelf,
                 pi.Bin
             FROM Production.ProductInventory pi
+            INNER JOIN Production.Product p ON pi.ProductID = p.ProductID
             INNER JOIN Production.Location l ON pi.LocationID = l.LocationID
             WHERE pi.ProductID = @ProductId
+            AND p.FinishedGoodsFlag = 1
             AND pi.Quantity > 0
             ORDER BY pi.Quantity DESC",
             new { ProductId = productId });
@@ -132,5 +135,60 @@ public class ProductService
         }
 
         return result.ToString();
+    }
+
+    private static readonly HashSet<string> SupportedCultures = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "ar", "en", "es", "fr", "he", "th", "zh-cht",
+        "en-gb", "en-ca", "en-au", "ja", "ko", "de"
+    };
+
+    public async Task<List<ProductSearchResult>> SearchProductsByDescriptionEmbeddingAsync(float[] queryEmbedding, int topN = 10, string cultureId = "en")
+    {
+        // Validate culture ID
+        if (!SupportedCultures.Contains(cultureId))
+        {
+            throw new ArgumentException($"Unsupported culture '{cultureId}'. Supported cultures: {string.Join(", ", SupportedCultures)}", nameof(cultureId));
+        }
+
+        using var connection = await GetConnectionAsync();
+
+        // Use VECTOR_DISTANCE for semantic similarity search with native VECTOR columns
+        // Returns products with the most similar descriptions to the query
+        // Convert float array to JSON for CAST to VECTOR
+        var embeddingJson = JsonSerializer.Serialize(queryEmbedding);
+
+        var sql = @"
+            SELECT TOP (@TopN)
+                p.ProductID,
+                p.Name,
+                pd.Description,
+                p.ListPrice,
+                p.Color,
+                p.Size,
+                pc.Name AS ProductCategoryName,
+                ps.Name AS ProductSubcategoryName,
+                VECTOR_DISTANCE('cosine', pd.DescriptionEmbedding, CAST(@QueryEmbedding AS VECTOR(1536))) AS SimilarityScore
+            FROM Production.Product p
+            INNER JOIN Production.ProductModel pm ON p.ProductModelID = pm.ProductModelID
+            INNER JOIN Production.ProductModelProductDescriptionCulture pmpdc 
+                ON pm.ProductModelID = pmpdc.ProductModelID
+            INNER JOIN Production.ProductDescription pd 
+                ON pmpdc.ProductDescriptionID = pd.ProductDescriptionID
+            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID
+            WHERE p.FinishedGoodsFlag = 1
+              AND pd.DescriptionEmbedding IS NOT NULL
+              AND pmpdc.CultureID = @CultureId
+            ORDER BY VECTOR_DISTANCE('cosine', pd.DescriptionEmbedding, CAST(@QueryEmbedding AS VECTOR(1536)))";
+
+        var results = await connection.QueryAsync<ProductSearchResult>(sql, new
+        {
+            TopN = topN,
+            QueryEmbedding = embeddingJson,
+            CultureId = cultureId
+        });
+
+        return results.ToList();
     }
 }
