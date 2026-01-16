@@ -2,9 +2,17 @@
 # Comprehensive Test Script for AI Chat Feature and MCP Server Tools
 # Tests both the Functions API AI Agent endpoints and all MCP Server tools using Azure-deployed services
 #
+# TEST STRUCTURE:
+# - Part 1: Fetch test data from DAB API
+# - Part 2: Test AI Agent Functions API endpoints
+# - Part 3: Test all MCP Server tools (English)
+# - Part 4: Test MCP tools with internationalization (12 cultures)
+# - Part 5: Test AI Chat with MCP tool integration
+#
 # IMPORTANT TEST FINDINGS:
 # - MCP tools work correctly when called directly (Part 3) ✓
-# - AI Chat fails to use MCP tools successfully (Part 4) ✗
+# - MCP tools support 13 cultures via cultureId parameter (Part 4) ✓
+# - AI Chat fails to use MCP tools successfully (Part 5) ✗
 # 
 # ROOT CAUSE:
 # The AIAgentService in api-functions/Services/AIAgentService.cs is configured to call
@@ -228,8 +236,25 @@ echo "Status Code: $PRODUCT_SEARCH_CODE"
 echo "Response (truncated): $(echo "$PRODUCT_SEARCH_BODY" | jq -c '.' 2>/dev/null | head -c 200)..."
 
 if [ "$PRODUCT_SEARCH_CODE" = "200" ] && validate_json "$PRODUCT_SEARCH_BODY"; then
-    check_result 0 "Product search chat completed successfully"
+    RESPONSE_TEXT=$(echo "$PRODUCT_SEARCH_BODY" | jq -r '.Response // .message // .response // empty' | tr '[:upper:]' '[:lower:]')
+    
+    # Check for error indicators
+    if echo "$RESPONSE_TEXT" | grep -qE "trouble|issue|couldn't|unable to|failed|error|experiencing|problem|difficult"; then
+        echo -e "${RED}DEBUG: Test Failed - AI reported technical issue${NC}"
+        echo -e "${RED}Request Body:${NC}"
+        echo "$PRODUCT_SEARCH_REQUEST" | jq '.'
+        echo -e "${RED}Full Response:${NC}"
+        echo "$PRODUCT_SEARCH_BODY" | jq '.'
+        check_result 1 "Product search chat failed - AI reported: $(echo "$RESPONSE_TEXT" | head -c 100)..."
+    else
+        check_result 0 "Product search chat completed successfully"
+    fi
 else
+    echo -e "${RED}DEBUG: HTTP request failed or invalid JSON${NC}"
+    echo -e "${RED}Request:${NC}"
+    echo "$PRODUCT_SEARCH_REQUEST" | jq '.'
+    echo -e "${RED}Full Response:${NC}"
+    echo "$PRODUCT_SEARCH_BODY"
     check_result 1 "Product search chat failed (HTTP $PRODUCT_SEARCH_CODE)"
 fi
 
@@ -255,8 +280,25 @@ echo "Status Code: $ORDER_INQUIRY_CODE"
 echo "Response (truncated): $(echo "$ORDER_INQUIRY_BODY" | jq -c '.' 2>/dev/null | head -c 200)..."
 
 if [ "$ORDER_INQUIRY_CODE" = "200" ] && validate_json "$ORDER_INQUIRY_BODY"; then
-    check_result 0 "Order inquiry chat completed successfully"
+    RESPONSE_TEXT=$(echo "$ORDER_INQUIRY_BODY" | jq -r '.Response // .message // .response // empty' | tr '[:upper:]' '[:lower:]')
+    
+    # Check for error indicators
+    if echo "$RESPONSE_TEXT" | grep -qE "trouble|issue|couldn't|unable to|failed|error|experiencing|problem|difficult"; then
+        echo -e "${RED}DEBUG: Test Failed - AI reported technical issue${NC}"
+        echo -e "${RED}Request Body:${NC}"
+        echo "$ORDER_INQUIRY_REQUEST" | jq '.'
+        echo -e "${RED}Full Response:${NC}"
+        echo "$ORDER_INQUIRY_BODY" | jq '.'
+        check_result 1 "Order inquiry chat failed - AI reported: $(echo "$RESPONSE_TEXT" | head -c 100)..."
+    else
+        check_result 0 "Order inquiry chat completed successfully"
+    fi
 else
+    echo -e "${RED}DEBUG: HTTP request failed or invalid JSON${NC}"
+    echo -e "${RED}Request:${NC}"
+    echo "$ORDER_INQUIRY_REQUEST" | jq '.'
+    echo -e "${RED}Full Response:${NC}"
+    echo "$ORDER_INQUIRY_BODY"
     check_result 1 "Order inquiry chat failed (HTTP $ORDER_INQUIRY_CODE)"
 fi
 
@@ -293,11 +335,27 @@ EOF
     
     # Call MCP server endpoint (returns SSE format with event: and data: lines)
     # Note: MCP_SERVICE_URL already includes /mcp endpoint
-    local response=$(curl -s -X POST "${MCP_SERVICE_URL}" \
+    local full_response=$(curl -s -w "\n%{http_code}" -X POST "${MCP_SERVICE_URL}" \
         -H "Content-Type: application/json" \
-        -d "$request" | grep "^data:" | sed 's/^data: //')
+        -d "$request")
     
-    echo "Response (truncated): $(echo "$response" | head -c 300)..."
+    local http_code=$(echo "$full_response" | tail -n 1)
+    local raw_response=$(echo "$full_response" | head -n -1)
+    
+    echo "HTTP Status: $http_code"
+    echo "Raw Response (first 300 chars): $(echo "$raw_response" | head -c 300)..."
+    
+    # Extract data from SSE format
+    local response=$(echo "$raw_response" | grep "^data:" | sed 's/^data: //')
+    
+    if [ -z "$response" ]; then
+        echo "DEBUG: No SSE data found in response"
+        echo "DEBUG: Full raw response: $raw_response"
+        check_result 1 "$description failed - no SSE data in response (HTTP $http_code)"
+        return 1
+    fi
+    
+    echo "Parsed Response (truncated): $(echo "$response" | head -c 300)..."
     
     if [ -n "$response" ] && echo "$response" | jq empty 2>/dev/null; then
         # Check for isError field first
@@ -313,7 +371,12 @@ EOF
         if [ -n "$result" ]; then
             check_result 0 "$description completed successfully"
             return 0
+        else
+            echo "DEBUG: No result found in response JSON"
+            echo "DEBUG: Full parsed response: $response"
         fi
+    else
+        echo "DEBUG: Response is not valid JSON"
     fi
     
     check_result 1 "$description failed - no valid response"
@@ -371,12 +434,143 @@ test_mcp_tool "check_inventory_availability" \
     "check_inventory_availability - Check inventory for product $PRODUCT_ID"
 
 # ==============================================================================
-# PART 4: TEST MCP INTEGRATION IN AI CHAT
+# PART 4: TEST MCP TOOLS WITH DIFFERENT LANGUAGES
 # ==============================================================================
 
-print_test_header "PART 4: Testing AI Chat with MCP Tool Integration"
+print_test_header "PART 4: Testing MCP Tools with Internationalization"
 
-echo -e "${YELLOW}Test 4.1: Chat that should trigger GetCustomerOrders tool${NC}"
+# Test helper for language-specific MCP calls
+test_mcp_tool_i18n() {
+    local tool_name="$1"
+    local params="$2"
+    local culture_id="$3"
+    local culture_name="$4"
+    local expected_pattern="$5"
+    
+    echo -e "${YELLOW}Test 4.x: $tool_name in $culture_name ($culture_id)${NC}"
+    
+    # Add cultureId to params
+    local params_with_culture=$(echo "$params" | jq --arg cid "$culture_id" '. + {cultureId: $cid}')
+    
+    # Create JSON-RPC 2.0 request
+    local request=$(cat <<EOF
+{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+        "name": "$tool_name",
+        "arguments": $params_with_culture
+    },
+    "id": $RANDOM
+}
+EOF
+)
+    
+    echo "Culture: $culture_id ($culture_name)"
+    echo "Tool: $tool_name"
+    
+    # Call MCP server
+    local response=$(curl -s -X POST "${MCP_SERVICE_URL}" \
+        -H "Content-Type: application/json" \
+        -d "$request" | grep "^data:" | sed 's/^data: //')
+    
+    echo "Response (truncated): $(echo "$response" | head -c 200)..."
+    
+    if [ -n "$response" ] && echo "$response" | jq empty 2>/dev/null; then
+        local is_error=$(echo "$response" | jq -r '.result.isError // false' 2>/dev/null)
+        if [ "$is_error" = "true" ]; then
+            local error_msg=$(echo "$response" | jq -r '.result.content[0].text // "Unknown error"' 2>/dev/null)
+            check_result 1 "$tool_name in $culture_name failed: $error_msg"
+            return 1
+        fi
+        
+        local result=$(echo "$response" | jq -r '.result.content[0].text // .result // empty' 2>/dev/null)
+        if [ -n "$result" ]; then
+            # Check for expected pattern if provided
+            if [ -n "$expected_pattern" ]; then
+                if echo "$result" | grep -q "$expected_pattern"; then
+                    check_result 0 "$tool_name in $culture_name returned expected content"
+                else
+                    check_result 1 "$tool_name in $culture_name succeeded but missing expected pattern"
+                fi
+            else
+                check_result 0 "$tool_name in $culture_name completed successfully"
+            fi
+            return 0
+        fi
+    fi
+    
+    check_result 1 "$tool_name in $culture_name failed - no valid response"
+    return 1
+}
+
+# Test key cultures with inventory check (has localized strings)
+echo -e "${BLUE}Testing check_inventory_availability in different languages${NC}"
+test_mcp_tool_i18n "check_inventory_availability" \
+    "{\"productId\": $PRODUCT_ID}" \
+    "es" "Spanish" "Inventario"
+
+test_mcp_tool_i18n "check_inventory_availability" \
+    "{\"productId\": $PRODUCT_ID}" \
+    "fr" "French" ""
+
+test_mcp_tool_i18n "check_inventory_availability" \
+    "{\"productId\": $PRODUCT_ID}" \
+    "de" "German" ""
+
+test_mcp_tool_i18n "check_inventory_availability" \
+    "{\"productId\": $PRODUCT_ID}" \
+    "ja" "Japanese" ""
+
+test_mcp_tool_i18n "check_inventory_availability" \
+    "{\"productId\": $PRODUCT_ID}" \
+    "zh-cht" "Chinese Traditional" ""
+
+test_mcp_tool_i18n "check_inventory_availability" \
+    "{\"productId\": $PRODUCT_ID}" \
+    "ar" "Arabic" ""
+
+# Test search in different languages
+echo -e "${BLUE}Testing search_products in different languages${NC}"
+test_mcp_tool_i18n "search_products" \
+    "{\"searchTerm\": \"bike\"}" \
+    "en-gb" "English UK" ""
+
+test_mcp_tool_i18n "search_products" \
+    "{\"searchTerm\": \"bike\"}" \
+    "en-au" "English Australia" ""
+
+# Test order details with localization
+echo -e "${BLUE}Testing get_order_details in different languages${NC}"
+test_mcp_tool_i18n "get_order_details" \
+    "{\"orderId\": $ORDER_ID, \"customerId\": $CUSTOMER_ID}" \
+    "ko" "Korean" ""
+
+test_mcp_tool_i18n "get_order_details" \
+    "{\"orderId\": $ORDER_ID, \"customerId\": $CUSTOMER_ID}" \
+    "he" "Hebrew" ""
+
+test_mcp_tool_i18n "get_order_details" \
+    "{\"orderId\": $ORDER_ID, \"customerId\": $CUSTOMER_ID}" \
+    "th" "Thai" ""
+
+# Test personalized recommendations with localization
+echo -e "${BLUE}Testing get_personalized_recommendations in different languages${NC}"
+test_mcp_tool_i18n "get_personalized_recommendations" \
+    "{\"customerId\": $CUSTOMER_ID, \"limit\": 3}" \
+    "es" "Spanish" ""
+
+test_mcp_tool_i18n "get_personalized_recommendations" \
+    "{\"customerId\": $CUSTOMER_ID, \"limit\": 3}" \
+    "fr" "French" ""
+
+# ==============================================================================
+# PART 5: TEST MCP INTEGRATION IN AI CHAT
+# ==============================================================================
+
+print_test_header "PART 5: Testing AI Chat with MCP Tool Integration"
+
+echo -e "${YELLOW}Test 5.1: Chat that should trigger GetCustomerOrders tool${NC}"
 TOOL_TEST_REQUEST=$(cat <<EOF
 {
     "message": "What orders have I placed recently?",
@@ -402,17 +596,29 @@ if [ "$TOOL_TEST_CODE" = "200" ] && validate_json "$TOOL_TEST_BODY"; then
     
     # Check for error indicators
     if echo "$RESPONSE_TEXT" | grep -qE "having trouble|issue with|couldn't|unable to|failed to|error occurred"; then
+        echo -e "${RED}DEBUG: Test Failed - AI reported error${NC}"
+        echo -e "${RED}Request Body:${NC}"
+        echo "$TOOL_TEST_REQUEST" | jq '.'
+        echo -e "${RED}Full Response:${NC}"
+        echo "$TOOL_TEST_BODY" | jq '.'
         check_result 1 "Chat with order query failed - AI reported: $(echo "$RESPONSE_TEXT" | head -c 100)..."
     elif echo "$RESPONSE_TEXT" | grep -qE "order|purchase|bought"; then
         check_result 0 "Chat with order query returned order-related information"
     else
+        echo -e "${YELLOW}DEBUG: Unexpected response - no order info and no error${NC}"
+        echo -e "${YELLOW}Response text:${NC} $(echo "$RESPONSE_TEXT" | head -c 200)..."
         check_result 1 "Chat succeeded but didn't return order information"
     fi
 else
+    echo -e "${RED}DEBUG: HTTP request failed or invalid JSON${NC}"
+    echo -e "${RED}Request:${NC}"
+    echo "$TOOL_TEST_REQUEST" | jq '.'
+    echo -e "${RED}Full Response:${NC}"
+    echo "$TOOL_TEST_BODY"
     check_result 1 "Chat with order query failed (HTTP $TOOL_TEST_CODE)"
 fi
 
-echo -e "${YELLOW}Test 4.2: Chat that should trigger SearchProducts tool${NC}"
+echo -e "${YELLOW}Test 5.2: Chat that should trigger SearchProducts tool${NC}"
 SEARCH_TEST_REQUEST=$(cat <<EOF
 {
     "message": "Show me some mountain bikes",
@@ -436,16 +642,26 @@ if [ "$SEARCH_TEST_CODE" = "200" ] && validate_json "$SEARCH_TEST_BODY"; then
     SEARCH_RESPONSE_TEXT=$(echo "$SEARCH_TEST_BODY" | jq -r '.Response // .message // .response // empty' | tr '[:upper:]' '[:lower:]')
     
     # Check for error indicators
-    if echo "$SEARCH_RESPONSE_TEXT" | grep -qE "having trouble|issue with|couldn't|unable to|failed to|error occurred|problem with accessing"; then
+    if echo "$SEARCH_RESPONSE_TEXT" | grep -qE "trouble|issue|couldn't|unable to|failed|error|experiencing|problem|difficult"; then
+        echo -e "${RED}DEBUG: Test Failed - AI reported technical issue${NC}"
+        echo -e "${RED}Request Body:${NC}"
+        echo "$SEARCH_TEST_REQUEST" | jq '.'
+        echo -e "${RED}Full Response:${NC}"
+        echo "$SEARCH_TEST_BODY" | jq '.'
         check_result 1 "Chat with product search failed - AI reported: $(echo "$SEARCH_RESPONSE_TEXT" | head -c 100)..."
     else
         check_result 0 "Chat with product search completed successfully"
     fi
 else
+    echo -e "${RED}DEBUG: HTTP request failed or invalid JSON${NC}"
+    echo -e "${RED}Request:${NC}"
+    echo "$SEARCH_TEST_REQUEST" | jq '.'
+    echo -e "${RED}Full Response:${NC}"
+    echo "$SEARCH_TEST_BODY"
     check_result 1 "Chat with product search failed (HTTP $SEARCH_TEST_CODE)"
 fi
 
-echo -e "${YELLOW}Test 4.3: Chat that should trigger GetProductDetails tool${NC}"
+echo -e "${YELLOW}Test 5.3: Chat that should trigger GetProductDetails tool${NC}"
 DETAILS_TEST_REQUEST=$(cat <<EOF
 {
     "message": "Tell me more about product $PRODUCT_ID",
@@ -469,12 +685,22 @@ if [ "$DETAILS_TEST_CODE" = "200" ] && validate_json "$DETAILS_TEST_BODY"; then
     DETAILS_RESPONSE_TEXT=$(echo "$DETAILS_TEST_BODY" | jq -r '.Response // .message // .response // empty' | tr '[:upper:]' '[:lower:]')
     
     # Check for error indicators
-    if echo "$DETAILS_RESPONSE_TEXT" | grep -qE "couldn't find|unable to|failed to|error occurred|verify the product"; then
+    if echo "$DETAILS_RESPONSE_TEXT" | grep -qE "trouble|issue|couldn't|unable to|failed|error|experiencing|problem|difficult"; then
+        echo -e "${RED}DEBUG: Test Failed - AI reported technical issue${NC}"
+        echo -e "${RED}Request Body:${NC}"
+        echo "$DETAILS_TEST_REQUEST" | jq '.'
+        echo -e "${RED}Full Response:${NC}"
+        echo "$DETAILS_TEST_BODY" | jq '.'
         check_result 1 "Chat with product details failed - AI reported: $(echo "$DETAILS_RESPONSE_TEXT" | head -c 100)..."
     else
         check_result 0 "Chat with product details query completed successfully"
     fi
 else
+    echo -e "${RED}DEBUG: HTTP request failed or invalid JSON${NC}"
+    echo -e "${RED}Request:${NC}"
+    echo "$DETAILS_TEST_REQUEST" | jq '.'
+    echo -e "${RED}Full Response:${NC}"
+    echo "$DETAILS_TEST_BODY"
     check_result 1 "Chat with product details query failed (HTTP $DETAILS_TEST_CODE)"
 fi
 

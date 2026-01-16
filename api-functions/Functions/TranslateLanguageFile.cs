@@ -375,8 +375,8 @@ public class TranslateLanguageFile
 
                 // Extract the last key from the path for nested objects
                 var pathParts = currentPath.Split('.');
-                var lastKey = pathParts.Length > 0 && !string.IsNullOrEmpty(currentPath)
-                    ? pathParts[pathParts.Length - 1]
+                var lastKey = !string.IsNullOrEmpty(currentPath) && pathParts.Length > 0
+                    ? pathParts[^1]  // Use C# 8 index from end operator
                     : currentPath;
 
                 if (!string.IsNullOrEmpty(lastKey))
@@ -410,16 +410,16 @@ public class TranslateLanguageFile
                     var translated = await TranslateValueWithRetry(translationInput, logger);
 
                     var pathPartsStr = currentPath.Split('.');
-                    var lastKeyString = pathPartsStr.Length > 0 && !string.IsNullOrEmpty(currentPath)
-                        ? pathPartsStr[pathPartsStr.Length - 1]
+                    var lastKeyString = !string.IsNullOrEmpty(currentPath) && pathPartsStr.Length > 0
+                        ? pathPartsStr[^1]
                         : currentPath;
                     result[lastKeyString] = translated;
                 }
                 else
                 {
                     var pathPartsEmpty = currentPath.Split('.');
-                    var lastKeyEmpty = pathPartsEmpty.Length > 0 && !string.IsNullOrEmpty(currentPath)
-                        ? pathPartsEmpty[pathPartsEmpty.Length - 1]
+                    var lastKeyEmpty = !string.IsNullOrEmpty(currentPath) && pathPartsEmpty.Length > 0
+                        ? pathPartsEmpty[^1]
                         : currentPath;
                     result[lastKeyEmpty] = stringValue;
                 }
@@ -430,8 +430,8 @@ public class TranslateLanguageFile
             case JsonValueKind.False:
             case JsonValueKind.Null:
                 var pathPartsSimple = currentPath.Split('.');
-                var lastKeySimple = pathPartsSimple.Length > 0 && !string.IsNullOrEmpty(currentPath)
-                    ? pathPartsSimple[pathPartsSimple.Length - 1]
+                var lastKeySimple = !string.IsNullOrEmpty(currentPath) && pathPartsSimple.Length > 0
+                    ? pathPartsSimple[^1]
                     : currentPath;
                 result[lastKeySimple] = JsonSerializer.Deserialize<object>(element.GetRawText()) ?? "";
                 break;
@@ -445,8 +445,8 @@ public class TranslateLanguageFile
                     array.Add(arrayItem.Count == 1 ? arrayItem.Values.First() : arrayItem);
                 }
                 var pathPartsArray = currentPath.Split('.');
-                var lastKeyArray = pathPartsArray.Length > 0 && !string.IsNullOrEmpty(currentPath)
-                    ? pathPartsArray[pathPartsArray.Length - 1]
+                var lastKeyArray = !string.IsNullOrEmpty(currentPath) && pathPartsArray.Length > 0
+                    ? pathPartsArray[^1]
                     : currentPath;
                 result[lastKeyArray] = array;
                 break;

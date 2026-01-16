@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ProductNotFound" xml:space="preserve">
+    <value>Producto #{0} no encontrado.</value>
+  </data>
+  <data name="InventoryAvailability" xml:space="preserve">
+    <value>📦 Disponibilidad de inventario para: {0}</value>
+  </data>
+  <data name="ProductId" xml:space="preserve">
+    <value>ID de producto: {0}</value>
+  </data>
+  <data name="OutOfStock" xml:space="preserve">
+    <value>❌ AGOTADO en todas las ubicaciones</value>
+  </data>
+  <data name="OutOfStockMessage" xml:space="preserve">
+    <value>Este producto no está disponible actualmente. Por favor, vuelva a consultar más tarde o contacte con soporte.</value>
+  </data>
+  <data name="InStock" xml:space="preserve">
+    <value>✅ EN STOCK - Total Disponible: {0} unidades</value>
+  </data>
+  <data name="AvailableAt" xml:space="preserve">
+    <value>Disponible en:</value>
+  </data>
+  <data name="LocationIcon" xml:space="preserve">
+    <value>📍 {0}</value>
+  </data>
+  <data name="Quantity" xml:space="preserve">
+    <value>Cantidad: {0} unidades</value>
+  </data>
+  <data name="Location" xml:space="preserve">
+    <value>Ubicación: Estante {0}, Contenedor {1}</value>
+  </data>
+  <data name="Recommended" xml:space="preserve">
+    <value>💡 Recomendado: Pedido desde {0} ({1} unidades disponibles)</value>
+  </data>
+  <data name="NoProductsFound" xml:space="preserve">
+    <value>No se encontraron productos que coincidan con '{0}'</value>
+  </data>
+  <data name="FoundProducts" xml:space="preserve">
+    <value>Se encontraron {0} productos que coinciden con '{1}' (utilizando búsqueda semántica en descripciones y reseñas):</value>
+  </data>
+  <data name="Category" xml:space="preserve">
+    <value>Categoría: {0}</value>
+  </data>
+  <data name="Price" xml:space="preserve">
+    <value>Precio: ${0:N2}</value>
+  </data>
+  <data name="Match" xml:space="preserve">
+    <value>Partido: Encontrado en {0}</value>
+  </data>
+  <data name="Review" xml:space="preserve">
+    <value>Reseña: {0}</value>
+  </data>
+  <data name="Description" xml:space="preserve">
+    <value>Descripción: {0}</value>
+  </data>
+  <data name="Relevance" xml:space="preserve">
+    <value>Relevancia: {0:P1}</value>
+  </data>
+  <data name="NoOrdersFound" xml:space="preserve">
+    <value>No se encontraron pedidos para el cliente #{0}.</value>
+  </data>
+  <data name="OrderHistory" xml:space="preserve">
+    <value>📋 Historial de pedidos del cliente #{0}</value>
+  </data>
+  <data name="RecentOrders" xml:space="preserve">
+    <value>Mostrando los {0} pedidos más recientes:</value>
+  </data>
+  <data name="OrderNumber" xml:space="preserve">
+    <value>Pedido #{0}</value>
+  </data>
+  <data name="OrderDate" xml:space="preserve">
+    <value>Fecha: {0:yyyy-MM-dd}</value>
+  </data>
+  <data name="Status" xml:space="preserve">
+    <value>Estado: {0}</value>
+  </data>
+  <data name="Total" xml:space="preserve">
+    <value>Total: ${0:N2}</value>
+  </data>
+  <data name="Items" xml:space="preserve">
+    <value>Artículos: {0}</value>
+  </data>
+  <data name="ShipDate" xml:space="preserve">
+    <value>Enviado: {0:yyyy-MM-dd}</value>
+  </data>
+  <data name="OrderNotFound" xml:space="preserve">
+    <value>Pedido #{0} no encontrado.</value>
+  </data>
+  <data name="OrderDoesNotBelongToCustomer" xml:space="preserve">
+    <value>El pedido #{0} no pertenece al cliente #{1}.</value>
+  </data>
+  <data name="OrderDetails" xml:space="preserve">
+    <value>📦 Detalles del pedido - Pedido #{0}</value>
+  </data>
+  <data name="Customer" xml:space="preserve">
+    <value>ID de cliente: {0}</value>
+  </data>
+  <data name="ShipTo" xml:space="preserve">
+    <value>Enviar a:</value>
+  </data>
+  <data name="Subtotal" xml:space="preserve">
+    <value>Subtotal: ${0:N2}</value>
+  </data>
+  <data name="Tax" xml:space="preserve">
+    <value>Impuesto: ${0:N2}</value>
+  </data>
+  <data name="Shipping" xml:space="preserve">
+    <value>Envío: ${0:N2}</value>
+  </data>
+  <data name="OrderItems" xml:space="preserve">
+    <value>Artículos del pedido:</value>
+  </data>
+  <data name="Qty" xml:space="preserve">
+    <value>Cantidad: {0}</value>
+  </data>
+  <data name="UnitPrice" xml:space="preserve">
+    <value>Precio unitario: ${0:N2}</value>
+  </data>
+  <data name="LineTotal" xml:space="preserve">
+    <value>Total de la línea: ${0:N2}</value>
+  </data>
+  <data name="NoComplementaryProducts" xml:space="preserve">
+    <value>No se encontraron productos complementarios para el producto #{0}.</value>
+  </data>
+  <data name="ComplementaryProducts" xml:space="preserve">
+    <value>🛍️ Clientes que compraron este producto también compraron:</value>
+  </data>
+  <data name="PurchasedTogether" xml:space="preserve">
+    <value>Comprado junto {0} veces</value>
+  </data>
+  <data name="NoRecommendations" xml:space="preserve">
+    <value>No se encontró historial de compras para el cliente #{0} para generar recomendaciones.</value>
+  </data>
+  <data name="PersonalizedRecommendations" xml:space="preserve">
+    <value>✨ Recomendaciones Personalizadas para el Cliente #{0}</value>
+  </data>
+  <data name="BasedOnPurchaseHistory" xml:space="preserve">
+    <value>Basado en su historial de compras:</value>
+  </data>
+  <data name="SimilarTo" xml:space="preserve">
+    <value>Similar a: {0}</value>
+  </data>
+  <data name="NoReviews" xml:space="preserve">
+    <value>No se encontraron opiniones para el producto #{0}.</value>
+  </data>
+  <data name="ReviewAnalysis" xml:space="preserve">
+    <value>⭐ Análisis de Opiniones de Producto para: {0}</value>
+  </data>
+  <data name="OverallRating" xml:space="preserve">
+    <value>Calificación general: {0:F1}/5.0 ({1})</value>
+  </data>
+  <data name="TotalReviews" xml:space="preserve">
+    <value>Reseñas totales: {0}</value>
+  </data>
+  <data name="RatingDistribution" xml:space="preserve">
+    <value>Distribución de Calificaciones:</value>
+  </data>
+  <data name="StarReviews" xml:space="preserve">
+    <value>{0}⭐: {1} reseñas ({2:F1}%)</value>
+  </data>
+  <data name="WhatCustomersLove" xml:space="preserve">
+    <value>👍 Lo que encantan a los clientes:</value>
+  </data>
+  <data name="CommonConcerns" xml:space="preserve">
+    <value>👎 Preocupaciones comunes:</value>
+  </data>
+  <data name="LatestReview" xml:space="preserve">
+    <value>Última reseña: {0:yyyy-MM-dd} por {1}</value>
+  </data>
+  <data name="Anonymous" xml:space="preserve">
+    <value>Anónimo</value>
+  </data>
+</root>

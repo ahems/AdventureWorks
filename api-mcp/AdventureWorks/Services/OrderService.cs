@@ -4,6 +4,7 @@ using System.Globalization;
 using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Localization;
+using AdventureWorks.Resources;
 
 namespace AdventureWorks.Services;
 
@@ -13,9 +14,9 @@ namespace AdventureWorks.Services;
 public class OrderService
 {
     private readonly string _connectionString;
-    private readonly IStringLocalizer<OrderService> _localizer;
+    private readonly IStringLocalizer<Strings> _localizer;
 
-    public OrderService(string connectionString, IStringLocalizer<OrderService> localizer)
+    public OrderService(string connectionString, IStringLocalizer<Strings> localizer)
     {
         _connectionString = connectionString;
         _localizer = localizer;
@@ -71,23 +72,23 @@ public class OrderService
 
         if (!orders.Any())
         {
-            return _localizer["NoOrdersFound", customerId];
+            return _localizer["NoOrdersFound", customerId].Value;
         }
 
         var result = new StringBuilder();
-        result.AppendLine(_localizer["OrderHistory", customerId]);
-        result.AppendLine(_localizer["RecentOrders", orders.Count()]);
+        result.AppendLine(_localizer["OrderHistory", customerId].Value);
+        result.AppendLine(_localizer["RecentOrders", orders.Count()].Value);
         result.AppendLine();
 
         foreach (var order in orders)
         {
-            result.AppendLine(_localizer["OrderNumber", order.SalesOrderID]);
-            result.AppendLine($"  {_localizer["OrderDate", order.OrderDate]}");
-            result.AppendLine($"  {_localizer["Status", order.StatusText]}");
-            result.AppendLine($"  {_localizer["Total", order.TotalDue]}");
+            result.AppendLine(_localizer["OrderNumber", order.SalesOrderID].Value);
+            result.AppendLine($"  {_localizer["OrderDate", order.OrderDate].Value}");
+            result.AppendLine($"  {_localizer["Status", order.StatusText].Value}");
+            result.AppendLine($"  {_localizer["Total", order.TotalDue].Value}");
             if (order.ShipDate != null)
             {
-                result.AppendLine($"  {_localizer["ShipDate", order.ShipDate]}");
+                result.AppendLine($"  {_localizer["ShipDate", order.ShipDate].Value}");
             }
             result.AppendLine();
         }
@@ -142,9 +143,9 @@ public class OrderService
         {
             if (customerId.HasValue)
             {
-                return _localizer["OrderDoesNotBelongToCustomer", orderId, customerId.Value];
+                return _localizer["OrderDoesNotBelongToCustomer", orderId, customerId.Value].Value;
             }
-            return _localizer["OrderNotFound", orderId];
+            return _localizer["OrderNotFound", orderId].Value;
         }
 
         // Get order details
@@ -164,27 +165,27 @@ public class OrderService
         var details = await connection.QueryAsync(detailsSql, new { OrderId = orderId });
 
         var result = new StringBuilder();
-        result.AppendLine(_localizer["OrderDetails", header.SalesOrderID]);
-        result.AppendLine($"{_localizer["Status", header.StatusText]}");
-        result.AppendLine($"{_localizer["OrderDate", header.OrderDate]}");
+        result.AppendLine(_localizer["OrderDetails", header.SalesOrderID].Value);
+        result.AppendLine($"{_localizer["Status", header.StatusText].Value}");
+        result.AppendLine($"{_localizer["OrderDate", header.OrderDate].Value}");
         if (header.ShipDate != null)
         {
-            result.AppendLine($"{_localizer["ShipDate", header.ShipDate]}");
+            result.AppendLine($"{_localizer["ShipDate", header.ShipDate].Value}");
         }
         result.AppendLine();
-        result.AppendLine(_localizer["OrderItems"]);
+        result.AppendLine(_localizer["OrderItems"].Value);
 
         foreach (var item in details)
         {
             result.AppendLine($"  {item.ProductName}");
-            result.AppendLine($"    {_localizer["Qty", item.OrderQty]} - {_localizer["UnitPrice", item.UnitPrice]} - {_localizer["LineTotal", item.LineTotal]}");
+            result.AppendLine($"    {_localizer["Qty", item.OrderQty].Value} - {_localizer["UnitPrice", item.UnitPrice].Value} - {_localizer["LineTotal", item.LineTotal].Value}");
         }
 
         result.AppendLine();
-        result.AppendLine(_localizer["Subtotal", header.SubTotal]);
-        result.AppendLine(_localizer["Tax", header.TaxAmt]);
-        result.AppendLine(_localizer["Shipping", header.Freight]);
-        result.AppendLine(_localizer["Total", header.TotalDue]);
+        result.AppendLine(_localizer["Subtotal", header.SubTotal].Value);
+        result.AppendLine(_localizer["Tax", header.TaxAmt].Value);
+        result.AppendLine(_localizer["Shipping", header.Freight].Value);
+        result.AppendLine(_localizer["Total", header.TotalDue].Value);
 
         return result.ToString();
     }
@@ -235,7 +236,7 @@ public class OrderService
 
         if (!products.Any())
         {
-            return _localizer["NoComplementaryProducts", productId];
+            return _localizer["NoComplementaryProducts", productId].Value;
         }
 
         // Get the original product name
@@ -243,14 +244,14 @@ public class OrderService
         var originalProduct = await connection.QuerySingleOrDefaultAsync<string>(originalProductSql, new { ProductId = productId });
 
         var result = new StringBuilder();
-        result.AppendLine(_localizer["ComplementaryProducts"]);
+        result.AppendLine(_localizer["ComplementaryProducts"].Value);
         result.AppendLine();
 
         foreach (var product in products)
         {
             result.AppendLine($"  {product.ProductName}");
-            result.AppendLine($"    {_localizer["Price", product.ListPrice]}");
-            result.AppendLine($"    {_localizer["PurchasedTogether", product.TimesOrderedTogether]}");
+            result.AppendLine($"    {_localizer["Price", product.ListPrice].Value}");
+            result.AppendLine($"    {_localizer["PurchasedTogether", product.TimesOrderedTogether].Value}");
             result.AppendLine();
         }
 
@@ -279,7 +280,7 @@ public class OrderService
 
         if (!purchasedCategories.Any())
         {
-            return _localizer["NoRecommendations", customerId];
+            return _localizer["NoRecommendations", customerId].Value;
         }
 
         // Get products from same categories that customer hasn't purchased yet
@@ -306,9 +307,9 @@ public class OrderService
             });
 
         var result = new StringBuilder();
-        result.AppendLine(_localizer["PersonalizedRecommendations", customerId]);
+        result.AppendLine(_localizer["PersonalizedRecommendations", customerId].Value);
         result.AppendLine();
-        result.AppendLine(_localizer["BasedOnPurchaseHistory"]);
+        result.AppendLine(_localizer["BasedOnPurchaseHistory"].Value);
         foreach (var category in purchasedCategories)
         {
             result.AppendLine($"  • {category.CategoryName}");
@@ -317,14 +318,14 @@ public class OrderService
 
         if (!recommendations.Any())
         {
-            result.AppendLine(_localizer["NoRecommendations", customerId]);
+            result.AppendLine(_localizer["NoRecommendations", customerId].Value);
         }
         else
         {
             foreach (var product in recommendations)
             {
                 result.AppendLine($"  {product.Name}");
-                result.AppendLine($"    {_localizer["Category", product.CategoryName]} - {_localizer["Price", product.ListPrice]}");
+                result.AppendLine($"    {_localizer["Category", product.CategoryName].Value} - {_localizer["Price", product.ListPrice].Value}");
             }
         }
 

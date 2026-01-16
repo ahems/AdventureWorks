@@ -5,15 +5,16 @@ using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Localization;
 using AdventureWorks.Models;
+using AdventureWorks.Resources;
 
 namespace AdventureWorks.Services;
 
 public class ProductService
 {
     private readonly string _connectionString;
-    private readonly IStringLocalizer<ProductService> _localizer;
+    private readonly IStringLocalizer<Strings> _localizer;
 
-    public ProductService(string connectionString, IStringLocalizer<ProductService> localizer)
+    public ProductService(string connectionString, IStringLocalizer<Strings> localizer)
     {
         _connectionString = connectionString;
         _localizer = localizer;
@@ -89,7 +90,7 @@ public class ProductService
 
         if (string.IsNullOrEmpty(productName))
         {
-            return _localizer["ProductNotFound", productId];
+            return _localizer["ProductNotFound", productId].Value;
         }
 
         // Get inventory across all locations (only for finished goods)
@@ -112,33 +113,33 @@ public class ProductService
         var inventoryList = inventory.ToList();
 
         var result = new System.Text.StringBuilder();
-        result.AppendLine(_localizer["InventoryAvailability", productName]);
-        result.AppendLine(_localizer["ProductId", productId]);
+        result.AppendLine(_localizer["InventoryAvailability", productName].Value);
+        result.AppendLine(_localizer["ProductId", productId].Value);
         result.AppendLine();
 
         if (!inventoryList.Any())
         {
-            result.AppendLine(_localizer["OutOfStock"]);
-            result.AppendLine(_localizer["OutOfStockMessage"]);
+            result.AppendLine(_localizer["OutOfStock"].Value);
+            result.AppendLine(_localizer["OutOfStockMessage"].Value);
         }
         else
         {
             var totalStock = inventoryList.Sum(i => (int)i.Quantity);
-            result.AppendLine(_localizer["InStock", totalStock]);
+            result.AppendLine(_localizer["InStock", totalStock].Value);
             result.AppendLine();
-            result.AppendLine(_localizer["AvailableAt"]);
+            result.AppendLine(_localizer["AvailableAt"].Value);
 
             foreach (var location in inventoryList)
             {
-                result.AppendLine($"  {_localizer["LocationIcon", location.LocationName]}");
-                result.AppendLine($"     {_localizer["Quantity", location.Quantity]}");
-                result.AppendLine($"     {_localizer["Location", location.Shelf, location.Bin]}");
+                result.AppendLine($"  {_localizer["LocationIcon", location.LocationName].Value}");
+                result.AppendLine($"     {_localizer["Quantity", location.Quantity].Value}");
+                result.AppendLine($"     {_localizer["Location", location.Shelf, location.Bin].Value}");
                 result.AppendLine();
             }
 
             // Suggest best location (highest stock)
             var bestLocation = inventoryList.First();
-            result.AppendLine(_localizer["Recommended", bestLocation.LocationName, bestLocation.Quantity]);
+            result.AppendLine(_localizer["Recommended", bestLocation.LocationName, bestLocation.Quantity].Value);
         }
 
         return result.ToString();

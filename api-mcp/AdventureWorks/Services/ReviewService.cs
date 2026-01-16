@@ -5,15 +5,16 @@ using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Localization;
 using AdventureWorks.Models;
+using AdventureWorks.Resources;
 
 namespace AdventureWorks.Services;
 
 public class ReviewService
 {
     private readonly string _connectionString;
-    private readonly IStringLocalizer<ReviewService> _localizer;
+    private readonly IStringLocalizer<Strings> _localizer;
 
-    public ReviewService(string connectionString, IStringLocalizer<ReviewService> localizer)
+    public ReviewService(string connectionString, IStringLocalizer<Strings> localizer)
     {
         _connectionString = connectionString;
         _localizer = localizer;
@@ -51,7 +52,7 @@ public class ReviewService
 
         if (!reviews.Any())
         {
-            return _localizer["NoReviews", productId];
+            return _localizer["NoReviews", productId].Value;
         }
 
         // Get product name
@@ -80,22 +81,22 @@ public class ReviewService
 
         // Build result
         var result = new System.Text.StringBuilder();
-        result.AppendLine(_localizer["ReviewAnalysis", productName ?? $"Product #{productId}"]);
+        result.AppendLine(_localizer["ReviewAnalysis", productName ?? $"Product #{productId}"].Value);
         result.AppendLine();
-        result.AppendLine(_localizer["OverallRating", averageRating, GetStarDisplay(averageRating)]);
-        result.AppendLine(_localizer["TotalReviews", totalReviews]);
+        result.AppendLine(_localizer["OverallRating", averageRating, GetStarDisplay(averageRating)].Value);
+        result.AppendLine(_localizer["TotalReviews", totalReviews].Value);
         result.AppendLine();
-        result.AppendLine(_localizer["RatingDistribution"]);
+        result.AppendLine(_localizer["RatingDistribution"].Value);
         foreach (var dist in ratingDistribution)
         {
             var percentage = (dist.Count * 100.0 / totalReviews);
-            result.AppendLine($"  {_localizer["StarReviews", dist.Rating, dist.Count, percentage]}");
+            result.AppendLine($"  {_localizer["StarReviews", dist.Rating, dist.Count, percentage].Value}");
         }
 
         if (positiveReviews.Any())
         {
             result.AppendLine();
-            result.AppendLine(_localizer["WhatCustomersLove"]);
+            result.AppendLine(_localizer["WhatCustomersLove"].Value);
             foreach (var comment in positiveReviews)
             {
                 if (!string.IsNullOrWhiteSpace(comment))
@@ -109,7 +110,7 @@ public class ReviewService
         if (negativeReviews.Any())
         {
             result.AppendLine();
-            result.AppendLine(_localizer["CommonConcerns"]);
+            result.AppendLine(_localizer["CommonConcerns"].Value);
             foreach (var comment in negativeReviews)
             {
                 if (!string.IsNullOrWhiteSpace(comment))
@@ -122,7 +123,7 @@ public class ReviewService
 
         result.AppendLine();
         var latestReview = reviewList.First();
-        result.AppendLine(_localizer["LatestReview", latestReview.ReviewDate, latestReview.ReviewerName ?? _localizer["Anonymous"]]);
+        result.AppendLine(_localizer["LatestReview", latestReview.ReviewDate, latestReview.ReviewerName ?? _localizer["Anonymous"].Value].Value);
 
         return result.ToString();
     }

@@ -913,7 +913,10 @@ CRITICAL INSTRUCTIONS:
             MaxOutputTokenCount = 1000
         });
 
-        var translatedText = response.Value.Content[0].Text?.Trim() ?? text;
+        // Safely extract the translated text
+        var translatedText = response?.Value?.Content?.Count > 0
+            ? response.Value.Content[0].Text?.Trim() ?? text
+            : text;
 
         if (string.IsNullOrWhiteSpace(translatedText))
         {

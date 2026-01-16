@@ -10,7 +10,7 @@ builder.Logging.AddConsole(consoleLogOptions =>
 });
 
 // Configure localization
-builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
+builder.Services.AddLocalization();
 
 // Get database connection string from configuration
 var connectionString = builder.Configuration.GetConnectionString("AdventureWorks");
@@ -22,17 +22,17 @@ var openAiEndpoint = builder.Configuration["AZURE_OPENAI_ENDPOINT"]
 // Register AdventureWorks services with localization
 builder.Services.AddScoped<OrderService>(sp =>
 {
-	var localizer = sp.GetRequiredService<IStringLocalizer<OrderService>>();
+	var localizer = sp.GetRequiredService<IStringLocalizer<AdventureWorks.Resources.Strings>>();
 	return new OrderService(connectionString!, localizer);
 });
 builder.Services.AddScoped<ProductService>(sp =>
 {
-	var localizer = sp.GetRequiredService<IStringLocalizer<ProductService>>();
+	var localizer = sp.GetRequiredService<IStringLocalizer<AdventureWorks.Resources.Strings>>();
 	return new ProductService(connectionString!, localizer);
 });
 builder.Services.AddScoped<ReviewService>(sp =>
 {
-	var localizer = sp.GetRequiredService<IStringLocalizer<ReviewService>>();
+	var localizer = sp.GetRequiredService<IStringLocalizer<AdventureWorks.Resources.Strings>>();
 	return new ReviewService(connectionString!, localizer);
 });
 builder.Services.AddScoped<AIService>(sp =>

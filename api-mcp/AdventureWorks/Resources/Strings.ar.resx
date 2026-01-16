@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ProductNotFound" xml:space="preserve">
+    <value>المنتج رقم #{0} غير موجود.</value>
+  </data>
+  <data name="InventoryAvailability" xml:space="preserve">
+    <value>📦 توفر المخزون لـ: {0}</value>
+  </data>
+  <data name="ProductId" xml:space="preserve">
+    <value>معرّف المنتج: {0}</value>
+  </data>
+  <data name="OutOfStock" xml:space="preserve">
+    <value>❌ غير متوفر في جميع المواقع</value>
+  </data>
+  <data name="OutOfStockMessage" xml:space="preserve">
+    <value>هذا المنتج غير متوفر حالياً. يرجى العودة لاحقاً أو الاتصال بالدعم.</value>
+  </data>
+  <data name="InStock" xml:space="preserve">
+    <value>✅ متوفر في المخزون - الإجمالي المتاح: {0} وحدة</value>
+  </data>
+  <data name="AvailableAt" xml:space="preserve">
+    <value>متوفر في:</value>
+  </data>
+  <data name="LocationIcon" xml:space="preserve">
+    <value>📍 {0}</value>
+  </data>
+  <data name="Quantity" xml:space="preserve">
+    <value>الكمية: {0} وحدات</value>
+  </data>
+  <data name="Location" xml:space="preserve">
+    <value>الموقع: الرف {0}، الصندوق {1}</value>
+  </data>
+  <data name="Recommended" xml:space="preserve">
+    <value>💡 موصى به: الطلب من {0} (متوفر {1} وحدة)</value>
+  </data>
+  <data name="NoProductsFound" xml:space="preserve">
+    <value>لم يتم العثور على منتجات تطابق '{0}'</value>
+  </data>
+  <data name="FoundProducts" xml:space="preserve">
+    <value>تم العثور على {0} منتجات تطابق '{1}' (باستخدام البحث الدلالي في الوصف والتقييمات):</value>
+  </data>
+  <data name="Category" xml:space="preserve">
+    <value>الفئة: {0}</value>
+  </data>
+  <data name="Price" xml:space="preserve">
+    <value>السعر: ${0:N2}</value>
+  </data>
+  <data name="Match" xml:space="preserve">
+    <value>المطابقة: وجدت في {0}</value>
+  </data>
+  <data name="Review" xml:space="preserve">
+    <value>مراجعة: {0}</value>
+  </data>
+  <data name="Description" xml:space="preserve">
+    <value>الوصف: {0}</value>
+  </data>
+  <data name="Relevance" xml:space="preserve">
+    <value>الأهمية: {0:P1}</value>
+  </data>
+  <data name="NoOrdersFound" xml:space="preserve">
+    <value>لم يتم العثور على طلبات للعميل #{0}.</value>
+  </data>
+  <data name="OrderHistory" xml:space="preserve">
+    <value>📋 سجل الطلبات للعميل #{0}</value>
+  </data>
+  <data name="RecentOrders" xml:space="preserve">
+    <value>عرض {0} من أحدث الطلبات:</value>
+  </data>
+  <data name="OrderNumber" xml:space="preserve">
+    <value>طلب رقم #{0}</value>
+  </data>
+  <data name="OrderDate" xml:space="preserve">
+    <value>التاريخ: {0:yyyy-MM-dd}</value>
+  </data>
+  <data name="Status" xml:space="preserve">
+    <value>الحالة: {0}</value>
+  </data>
+  <data name="Total" xml:space="preserve">
+    <value>الإجمالي: ${0:N2}</value>
+  </data>
+  <data name="Items" xml:space="preserve">
+    <value>العناصر: {0}</value>
+  </data>
+  <data name="ShipDate" xml:space="preserve">
+    <value>تم الشحن: {0:yyyy-MM-dd}</value>
+  </data>
+  <data name="OrderNotFound" xml:space="preserve">
+    <value>الطلب رقم #{0} غير موجود.</value>
+  </data>
+  <data name="OrderDoesNotBelongToCustomer" xml:space="preserve">
+    <value>الطلب رقم #{0} لا يخص العميل رقم #{1}.</value>
+  </data>
+  <data name="OrderDetails" xml:space="preserve">
+    <value>📦 تفاصيل الطلب - الطلب رقم #{0}</value>
+  </data>
+  <data name="Customer" xml:space="preserve">
+    <value>معرّف العميل: {0}</value>
+  </data>
+  <data name="ShipTo" xml:space="preserve">
+    <value>الشحن إلى:</value>
+  </data>
+  <data name="Subtotal" xml:space="preserve">
+    <value>المجموع الفرعي: ${0:N2}</value>
+  </data>
+  <data name="Tax" xml:space="preserve">
+    <value>الضريبة: ${0:N2}</value>
+  </data>
+  <data name="Shipping" xml:space="preserve">
+    <value>الشحن: ${0:N2}</value>
+  </data>
+  <data name="OrderItems" xml:space="preserve">
+    <value>عناصر الطلب:</value>
+  </data>
+  <data name="Qty" xml:space="preserve">
+    <value>الكمية: {0}</value>
+  </data>
+  <data name="UnitPrice" xml:space="preserve">
+    <value>سعر الوحدة: ${0:N2}</value>
+  </data>
+  <data name="LineTotal" xml:space="preserve">
+    <value>إجمالي السطر: ${0:N2}</value>
+  </data>
+  <data name="NoComplementaryProducts" xml:space="preserve">
+    <value>لم يتم العثور على منتجات تكميلية للمنتج #{0}.</value>
+  </data>
+  <data name="ComplementaryProducts" xml:space="preserve">
+    <value>🛍️ العملاء الذين اشتروا هذا المنتج اشتروا أيضًا:</value>
+  </data>
+  <data name="PurchasedTogether" xml:space="preserve">
+    <value>تم شراؤها معًا {0} مرات</value>
+  </data>
+  <data name="NoRecommendations" xml:space="preserve">
+    <value>لم يتم العثور على سجل مشتريات للعميل #{0} لتوليد التوصيات.</value>
+  </data>
+  <data name="PersonalizedRecommendations" xml:space="preserve">
+    <value>✨ توصيات مخصصة للعميل #{0}</value>
+  </data>
+  <data name="BasedOnPurchaseHistory" xml:space="preserve">
+    <value>استنادًا إلى سجل مشترياتك:</value>
+  </data>
+  <data name="SimilarTo" xml:space="preserve">
+    <value>مماثل لـ: {0}</value>
+  </data>
+  <data name="NoReviews" xml:space="preserve">
+    <value>لم يتم العثور على تقييمات للمنتج رقم #{0}.</value>
+  </data>
+  <data name="ReviewAnalysis" xml:space="preserve">
+    <value>⭐ تحليل مراجعة المنتج لـ: {0}</value>
+  </data>
+  <data name="OverallRating" xml:space="preserve">
+    <value>التقييم العام: {0:F1}/5.0 ({1})</value>
+  </data>
+  <data name="TotalReviews" xml:space="preserve">
+    <value>إجمالي التقييمات: {0}</value>
+  </data>
+  <data name="RatingDistribution" xml:space="preserve">
+    <value>توزيع التقييمات:</value>
+  </data>
+  <data name="StarReviews" xml:space="preserve">
+    <value>{0}⭐: {1} تقييمات ({2:F1}%)</value>
+  </data>
+  <data name="WhatCustomersLove" xml:space="preserve">
+    <value>👍 ما يحبه العملاء:</value>
+  </data>
+  <data name="CommonConcerns" xml:space="preserve">
+    <value>👎 المخاوف الشائعة:</value>
+  </data>
+  <data name="LatestReview" xml:space="preserve">
+    <value>أحدث تقييم: {0:yyyy-MM-dd} بواسطة {1}</value>
+  </data>
+  <data name="Anonymous" xml:space="preserve">
+    <value>مجهول</value>
+  </data>
+</root>
