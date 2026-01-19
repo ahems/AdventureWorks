@@ -39,7 +39,6 @@ public class ProductService
                 p.Name,
                 p.ProductNumber,
                 p.Color,
-                p.StandardCost,
                 p.ListPrice,
                 p.Size,
                 p.SizeUnitMeasureCode,
@@ -93,53 +92,31 @@ public class ProductService
             return _localizer["ProductNotFound", productId].Value;
         }
 
-        // Get inventory across all locations (only for finished goods)
-        var inventory = await connection.QueryAsync<dynamic>(@"
-            SELECT 
-                pi.LocationID,
-                l.Name as LocationName,
-                pi.Quantity,
-                pi.Shelf,
-                pi.Bin
+        // Get total inventory from finished goods locations only
+        var totalStock = await connection.QueryFirstOrDefaultAsync<int?>(@"
+            SELECT SUM(pi.Quantity)
             FROM Production.ProductInventory pi
             INNER JOIN Production.Product p ON pi.ProductID = p.ProductID
             INNER JOIN Production.Location l ON pi.LocationID = l.LocationID
             WHERE pi.ProductID = @ProductId
             AND p.FinishedGoodsFlag = 1
-            AND pi.Quantity > 0
-            ORDER BY pi.Quantity DESC",
+            AND l.Name LIKE 'Finished Goods%'
+            AND pi.Quantity > 0",
             new { ProductId = productId });
-
-        var inventoryList = inventory.ToList();
 
         var result = new System.Text.StringBuilder();
         result.AppendLine(_localizer["InventoryAvailability", productName].Value);
         result.AppendLine(_localizer["ProductId", productId].Value);
         result.AppendLine();
 
-        if (!inventoryList.Any())
+        if (!totalStock.HasValue || totalStock.Value == 0)
         {
             result.AppendLine(_localizer["OutOfStock"].Value);
             result.AppendLine(_localizer["OutOfStockMessage"].Value);
         }
         else
         {
-            var totalStock = inventoryList.Sum(i => (int)i.Quantity);
-            result.AppendLine(_localizer["InStock", totalStock].Value);
-            result.AppendLine();
-            result.AppendLine(_localizer["AvailableAt"].Value);
-
-            foreach (var location in inventoryList)
-            {
-                result.AppendLine($"  {_localizer["LocationIcon", location.LocationName].Value}");
-                result.AppendLine($"     {_localizer["Quantity", location.Quantity].Value}");
-                result.AppendLine($"     {_localizer["Location", location.Shelf, location.Bin].Value}");
-                result.AppendLine();
-            }
-
-            // Suggest best location (highest stock)
-            var bestLocation = inventoryList.First();
-            result.AppendLine(_localizer["Recommended", bestLocation.LocationName, bestLocation.Quantity].Value);
+            result.AppendLine(_localizer["InStock", totalStock.Value].Value);
         }
 
         return result.ToString();

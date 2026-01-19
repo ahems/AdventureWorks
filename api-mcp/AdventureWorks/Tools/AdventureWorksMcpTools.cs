@@ -281,7 +281,6 @@ public class AdventureWorksMcpTools
             result.AppendLine($"Product Number: {product.ProductNumber}");
             result.AppendLine($"Category: {product.ProductCategoryName} / {product.ProductSubcategoryName}");
             result.AppendLine($"Price: ${product.ListPrice:N2}");
-            result.AppendLine($"Cost: ${product.StandardCost:N2}");
 
             if (!string.IsNullOrEmpty(product.Color))
                 result.AppendLine($"Color: {product.Color}");
@@ -388,7 +387,7 @@ public class AdventureWorksMcpTools
     }
 
     [McpServerTool]
-    [Description("Check real-time inventory availability for a product across all warehouse locations. Returns stock levels, locations, and availability status. Supports multiple languages.")]
+    [Description("Check real-time inventory availability for a product in finished goods locations. Returns stock levels, finished goods storage locations, and availability status. Supports multiple languages.")]
     public async Task<string> CheckInventoryAvailability(int productId, string? cultureId = null)
     {
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_CheckInventoryAvailability");

@@ -59,11 +59,10 @@ public class OrderService
                 END AS StatusText,
                 c.FirstName,
                 c.LastName,
-                ea.EmailAddress
+                (SELECT TOP 1 EmailAddress FROM Person.EmailAddress WHERE BusinessEntityID = c.BusinessEntityID) AS EmailAddress
             FROM Sales.SalesOrderHeader soh
             INNER JOIN Sales.Customer cust ON soh.CustomerID = cust.CustomerID
             INNER JOIN Person.Person c ON cust.PersonID = c.BusinessEntityID
-            LEFT JOIN Person.EmailAddress ea ON c.BusinessEntityID = ea.BusinessEntityID
             LEFT JOIN Purchasing.ShipMethod sm ON soh.ShipMethodID = sm.ShipMethodID
             WHERE cust.CustomerID = @CustomerId
             ORDER BY soh.OrderDate DESC";
@@ -128,11 +127,10 @@ public class OrderService
                     ELSE 'Unknown'
                 END AS StatusText,
                 c.FirstName + ' ' + c.LastName AS CustomerName,
-                ea.EmailAddress
+                (SELECT TOP 1 EmailAddress FROM Person.EmailAddress WHERE BusinessEntityID = c.BusinessEntityID) AS EmailAddress
             FROM Sales.SalesOrderHeader soh
             INNER JOIN Sales.Customer cust ON soh.CustomerID = cust.CustomerID
             INNER JOIN Person.Person c ON cust.PersonID = c.BusinessEntityID
-            LEFT JOIN Person.EmailAddress ea ON c.BusinessEntityID = ea.BusinessEntityID
             LEFT JOIN Purchasing.ShipMethod sm ON soh.ShipMethodID = sm.ShipMethodID
             WHERE soh.SalesOrderID = @OrderId
                 AND (@CustomerId IS NULL OR cust.CustomerID = @CustomerId)";
