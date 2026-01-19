@@ -163,7 +163,7 @@ class RecommendationEngine:
             recommendation = json.loads(result) if isinstance(result, str) else []
         except Exception as e:
             print(f"Error loading recommendations: {e}")
-            recommendation = [{"title": "Sorry, unable to recommendation at this time", "link": ""}]
+            recommendation = [{"title": "Sorry, unable to provide recommendations at this time", "link": ""}]
 
         return recommendation
 
