@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Net.Http.Json;
 using Azure.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -151,27 +150,41 @@ public class AIAgentService
         {
             // Get or create the agent
             var agent = await GetOrCreateAgentAsync(customerId, cultureId);
+            var chatAgent = (ChatClientAgent)agent; // Cast to access ChatClientAgent-specific methods
 
-            // Create or reuse thread for conversation persistence
-            var threadId = sessionId; // Use session ID as thread identifier
-            AgentThread thread = agent.GetNewThread(); // Create a new thread for this conversation
+            // Create thread for conversation
+            AgentThread thread = agent.GetNewThread();
 
-            // Add conversation history to thread if provided
-            foreach (var msg in conversationHistory)
+            // Build all messages to send to agent (history + new user message)
+            var allMessages = new List<Microsoft.Extensions.AI.ChatMessage>();
+
+            // Add conversation history first
+            foreach (var h in conversationHistory)
             {
-                // History already exists in the thread context from previous calls
-                // Agent Framework maintains thread state internally
+                var role = h.Role.ToLowerInvariant() switch
+                {
+                    "user" => ChatRole.User,
+                    "assistant" => ChatRole.Assistant,
+                    "system" => ChatRole.System,
+                    _ => ChatRole.User
+                };
+                allMessages.Add(new Microsoft.Extensions.AI.ChatMessage(role, h.Content));
             }
+
+            // Add the new user message
+            allMessages.Add(new Microsoft.Extensions.AI.ChatMessage(ChatRole.User, message));
+
+            _logger.LogInformation("Processing message with {HistoryCount} historical messages for customer {CustomerId}",
+                conversationHistory.Count, customerId);
 
             // Track which tools were used
             var toolsUsed = new List<string>();
             var totalTokens = 0;
             var responseBuilder = new System.Text.StringBuilder();
 
-            _logger.LogInformation($"Processing message for customer {customerId}: {message}");
-
-            // Run agent in streaming mode with observability
-            await foreach (var update in agent.RunStreamingAsync(message, thread))
+            // Run agent in streaming mode with ALL messages (history + new)
+            // The Agent Framework processes all messages and maintains context
+            await foreach (var update in agent.RunStreamingAsync(allMessages, thread))
             {
                 if (!string.IsNullOrEmpty(update.Text))
                 {
