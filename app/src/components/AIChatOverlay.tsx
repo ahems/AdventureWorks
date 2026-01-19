@@ -5,6 +5,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
+import { useTranslation } from "react-i18next";
 import { chatWithAgent } from "@/lib/mcpService";
 
 interface Message {
@@ -14,25 +16,15 @@ interface Message {
   timestamp: Date;
 }
 
-// Initial suggested questions to showcase AI capabilities
-const INITIAL_SUGGESTED_QUESTIONS = [
-  "Show me my order history",
-  "What products would you recommend for me?",
-  "Find bike accessories",
-  "What are people saying about product 937?",
-  "Is product 680 in stock?",
-  "Tell me about my recent orders",
-];
-
 export const AIChatOverlay = () => {
   const { user, isAuthenticated } = useAuth();
+  const { selectedLanguage } = useLanguage();
+  const { t } = useTranslation("chat");
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>(
-    INITIAL_SUGGESTED_QUESTIONS
-  );
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -44,6 +36,18 @@ export const AIChatOverlay = () => {
     scrollToBottom();
   }, [messages]);
 
+  // Update suggested questions when language changes
+  useEffect(() => {
+    setSuggestedQuestions([
+      t("chat.suggestedQuestions.orderHistory"),
+      t("chat.suggestedQuestions.recommendations"),
+      t("chat.suggestedQuestions.findAccessories"),
+      t("chat.suggestedQuestions.productReviews", { productId: "937" }),
+      t("chat.suggestedQuestions.checkStock", { productId: "680" }),
+      t("chat.suggestedQuestions.recentOrders"),
+    ]);
+  }, [selectedLanguage, t]);
+
   // Welcome message when first opened
   useEffect(() => {
     if (isOpen && messages.length === 0) {
@@ -51,20 +55,36 @@ export const AIChatOverlay = () => {
         {
           id: "1",
           role: "assistant",
-          content: `Hello ${user?.firstName}! I'm your AdventureWorks AI assistant. I can help you:
-
-• Track your orders and get details
-• Get personalized product recommendations
-• Check real-time inventory availability
-• Read product reviews and ratings
-• Find complementary products
-
-What can I help you with today?`,
+          content: t("chat.welcomeMessage", {
+            name: user?.firstName || "there",
+          }),
           timestamp: new Date(),
         },
       ]);
     }
-  }, [isOpen, messages.length, user?.firstName]);
+  }, [isOpen, messages.length, user?.firstName, t]);
+
+  // Update welcome message when language changes (if it's still the first message)
+  useEffect(() => {
+    if (
+      isOpen &&
+      messages.length === 1 &&
+      messages[0].id === "1" &&
+      messages[0].role === "assistant"
+    ) {
+      setMessages([
+        {
+          id: "1",
+          role: "assistant",
+          content: t("chat.welcomeMessage", {
+            name: user?.firstName || "there",
+          }),
+          timestamp: new Date(),
+        },
+      ]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLanguage, t, user?.firstName, isOpen]);
 
   // Only show for authenticated users
   if (!isAuthenticated) {
@@ -105,7 +125,8 @@ What can I help you with today?`,
       const agentResponse = await chatWithAgent(
         textToSend,
         conversationHistory,
-        user?.businessEntityId
+        user?.businessEntityId,
+        selectedLanguage,
       );
       console.log("[AI Chat] Received response:", agentResponse);
 
@@ -126,7 +147,7 @@ What can I help you with today?`,
       ) {
         console.log(
           "[AI Chat] Updating suggestions:",
-          agentResponse.suggestedQuestions
+          agentResponse.suggestedQuestions,
         );
         setSuggestedQuestions(agentResponse.suggestedQuestions);
       }
@@ -134,8 +155,7 @@ What can I help you with today?`,
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content:
-          "Sorry, I encountered an error processing your request. Please try again.",
+        content: t("chat.errorMessage"),
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -171,7 +191,7 @@ What can I help you with today?`,
           <div className="flex items-center justify-between p-4 border-b bg-primary text-primary-foreground rounded-t-lg">
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5" />
-              <h3 className="font-semibold">AI Assistant</h3>
+              <h3 className="font-semibold">{t("chat.title")}</h3>
             </div>
             <Button
               variant="ghost"
@@ -186,7 +206,7 @@ What can I help you with today?`,
           {/* Suggested Questions */}
           <div className="p-3 border-b bg-muted/30">
             <p className="text-xs text-muted-foreground mb-2">
-              Quick questions:
+              {t("chat.quickQuestions")}
             </p>
             <div className="flex flex-wrap gap-2">
               {suggestedQuestions.map((question, idx) => (
@@ -210,7 +230,7 @@ What can I help you with today?`,
                   key={message.id}
                   className={cn(
                     "flex",
-                    message.role === "user" ? "justify-end" : "justify-start"
+                    message.role === "user" ? "justify-end" : "justify-start",
                   )}
                 >
                   <div
@@ -218,7 +238,7 @@ What can I help you with today?`,
                       "max-w-[80%] rounded-lg p-3 whitespace-pre-wrap",
                       message.role === "user"
                         ? "bg-primary text-primary-foreground"
-                        : "bg-muted"
+                        : "bg-muted",
                     )}
                   >
                     <p className="text-sm">{message.content}</p>
@@ -250,7 +270,7 @@ What can I help you with today?`,
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask me anything..."
+                placeholder={t("chat.messagePlaceholder")}
                 className="min-h-[60px] max-h-[120px] resize-none"
                 disabled={isLoading}
               />
@@ -264,7 +284,7 @@ What can I help you with today?`,
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Press Enter to send, Shift+Enter for new line
+              {t("chat.sendHint")}
             </p>
           </div>
         </div>

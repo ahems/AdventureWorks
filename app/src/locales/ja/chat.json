@@ -1,0 +1,3 @@
+{
+  "chat": {"title":"AIアシスタント","quickQuestions":"簡単な質問です：","messagePlaceholder":"何でも聞いてください…","sendHint":"送信するにはEnterキーを押し、新しい行を作成するにはShift+Enterキーを押してください","welcomeMessage":"こんにちは、{{name}}さん！私はあなたのAdventureWorks AIアシスタントです。以下のお手伝いができます：\n\n• ご注文の追跡と詳細の確認\n• あなたに合わせた商品おすすめのご提案\n• 在庫のリアルタイム確認\n• 商品レビューと評価の閲覧\n• 関連商品を探す\n\n今日は何をお手伝いしましょうか？","errorMessage":"申し訳ございません。リクエストの処理中にエラーが発生しました。もう一度お試しください。","suggestedQuestions":{"orderHistory":"注文履歴を表示してください","recommendations":"私におすすめの商品は何ですか？","findAccessories":"自転車アクセサリーを探す","productReviews":"製品{{productId}}について人々は何と言っていますか？","checkStock":"製品{{productId}}は在庫がありますか？","recentOrders":"最近の注文について教えてください"}}
+}

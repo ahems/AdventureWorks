@@ -126,6 +126,31 @@ import viFooter from "./locales/vi/footer.json";
 import thFooter from "./locales/th/footer.json";
 import idFooter from "./locales/id/footer.json";
 
+// Chat namespace
+import enChat from "./locales/en/chat.json";
+import enGbChat from "./locales/en-gb/chat.json";
+import enCaChat from "./locales/en-ca/chat.json";
+import enAuChat from "./locales/en-au/chat.json";
+import enNzChat from "./locales/en-nz/chat.json";
+import enIeChat from "./locales/en-ie/chat.json";
+import esChat from "./locales/es/chat.json";
+import frChat from "./locales/fr/chat.json";
+import deChat from "./locales/de/chat.json";
+import ptChat from "./locales/pt/chat.json";
+import itChat from "./locales/it/chat.json";
+import nlChat from "./locales/nl/chat.json";
+import ruChat from "./locales/ru/chat.json";
+import zhChat from "./locales/zh/chat.json";
+import zhChtChat from "./locales/zh-cht/chat.json";
+import jaChat from "./locales/ja/chat.json";
+import koChat from "./locales/ko/chat.json";
+import arChat from "./locales/ar/chat.json";
+import heChat from "./locales/he/chat.json";
+import trChat from "./locales/tr/chat.json";
+import viChat from "./locales/vi/chat.json";
+import thChat from "./locales/th/chat.json";
+import idChat from "./locales/id/chat.json";
+
 const resources = {
   en: {
     common: enCommon,
@@ -133,6 +158,7 @@ const resources = {
     cart: enCart,
     account: enAccount,
     footer: enFooter,
+    chat: enChat,
   },
   "en-gb": {
     common: enGbCommon,
@@ -140,6 +166,7 @@ const resources = {
     cart: enGbCart,
     account: enGbAccount,
     footer: enGbFooter,
+    chat: enGbChat,
   },
   "en-ca": {
     common: enCaCommon,
@@ -147,6 +174,7 @@ const resources = {
     cart: enCaCart,
     account: enCaAccount,
     footer: enCaFooter,
+    chat: enCaChat,
   },
   "en-au": {
     common: enAuCommon,
@@ -154,6 +182,7 @@ const resources = {
     cart: enAuCart,
     account: enAuAccount,
     footer: enAuFooter,
+    chat: enAuChat,
   },
   "en-nz": {
     common: enNzCommon,
@@ -161,6 +190,7 @@ const resources = {
     cart: enNzCart,
     account: enNzAccount,
     footer: enNzFooter,
+    chat: enNzChat,
   },
   "en-ie": {
     common: enIeCommon,
@@ -168,6 +198,7 @@ const resources = {
     cart: enIeCart,
     account: enIeAccount,
     footer: enIeFooter,
+    chat: enIeChat,
   },
   es: {
     common: esCommon,
@@ -175,6 +206,7 @@ const resources = {
     cart: esCart,
     account: esAccount,
     footer: esFooter,
+    chat: esChat,
   },
   fr: {
     common: frCommon,
@@ -182,6 +214,7 @@ const resources = {
     cart: frCart,
     account: frAccount,
     footer: frFooter,
+    chat: frChat,
   },
   de: {
     common: deCommon,
@@ -189,6 +222,7 @@ const resources = {
     cart: deCart,
     account: deAccount,
     footer: deFooter,
+    chat: deChat,
   },
   pt: {
     common: ptCommon,
@@ -196,6 +230,7 @@ const resources = {
     cart: ptCart,
     account: ptAccount,
     footer: ptFooter,
+    chat: ptChat,
   },
   it: {
     common: itCommon,
@@ -203,6 +238,7 @@ const resources = {
     cart: itCart,
     account: itAccount,
     footer: itFooter,
+    chat: itChat,
   },
   nl: {
     common: nlCommon,
@@ -210,6 +246,7 @@ const resources = {
     cart: nlCart,
     account: nlAccount,
     footer: nlFooter,
+    chat: nlChat,
   },
   ru: {
     common: ruCommon,
@@ -217,6 +254,7 @@ const resources = {
     cart: ruCart,
     account: ruAccount,
     footer: ruFooter,
+    chat: ruChat,
   },
   zh: {
     common: zhCommon,
@@ -224,6 +262,7 @@ const resources = {
     cart: zhCart,
     account: zhAccount,
     footer: zhFooter,
+    chat: zhChat,
   },
   "zh-cht": {
     common: zhChtCommon,
@@ -231,6 +270,7 @@ const resources = {
     cart: zhChtCart,
     account: zhChtAccount,
     footer: zhChtFooter,
+    chat: zhChtChat,
   },
   ja: {
     common: jaCommon,
@@ -238,6 +278,7 @@ const resources = {
     cart: jaCart,
     account: jaAccount,
     footer: jaFooter,
+    chat: jaChat,
   },
   ko: {
     common: koCommon,
@@ -245,6 +286,7 @@ const resources = {
     cart: koCart,
     account: koAccount,
     footer: koFooter,
+    chat: koChat,
   },
   ar: {
     common: arCommon,
@@ -252,6 +294,7 @@ const resources = {
     cart: arCart,
     account: arAccount,
     footer: arFooter,
+    chat: arChat,
   },
   he: {
     common: heCommon,
@@ -259,6 +302,7 @@ const resources = {
     cart: heCart,
     account: heAccount,
     footer: heFooter,
+    chat: heChat,
   },
   tr: {
     common: trCommon,
@@ -266,6 +310,7 @@ const resources = {
     cart: trCart,
     account: trAccount,
     footer: trFooter,
+    chat: trChat,
   },
   vi: {
     common: viCommon,
@@ -273,6 +318,7 @@ const resources = {
     cart: viCart,
     account: viAccount,
     footer: viFooter,
+    chat: viChat,
   },
   th: {
     common: thCommon,
@@ -280,6 +326,7 @@ const resources = {
     cart: thCart,
     account: thAccount,
     footer: thFooter,
+    chat: thChat,
   },
   id: {
     common: idCommon,
@@ -287,6 +334,7 @@ const resources = {
     cart: idCart,
     account: idAccount,
     footer: idFooter,
+    chat: idChat,
   },
 };
 
@@ -294,7 +342,7 @@ i18n.use(initReactI18next).init({
   resources,
   lng: "en", // default language
   fallbackLng: "en",
-  ns: ["common", "product", "cart", "account", "footer"], // namespaces
+  ns: ["common", "product", "cart", "account", "footer", "chat"], // namespaces
   defaultNS: "common",
   interpolation: {
     escapeValue: false, // React already escapes

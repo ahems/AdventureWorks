@@ -28,6 +28,7 @@ interface AgentChatRequest {
   message: string;
   conversationHistory: ChatMessage[];
   customerId?: number;
+  cultureId?: string;
 }
 
 interface AgentChatResponse {
@@ -42,7 +43,8 @@ interface AgentChatResponse {
 export const chatWithAgent = async (
   message: string,
   conversationHistory: ChatMessage[],
-  customerId?: number
+  customerId?: number,
+  cultureId?: string,
 ): Promise<AgentChatResponse> => {
   const endpoint = getAgentEndpoint();
 
@@ -50,6 +52,7 @@ export const chatWithAgent = async (
     message,
     conversationHistory,
     customerId,
+    cultureId,
   };
 
   try {
@@ -144,7 +147,7 @@ interface McpToolResponse {
  */
 export const callMCPTool = async (
   toolName: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
 ): Promise<string> => {
   const endpoint = getMCPEndpoint();
 

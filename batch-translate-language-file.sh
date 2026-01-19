@@ -3,10 +3,27 @@
 # Batch Language File Translation Script
 # Translates all English language files to all supported languages using the Azure Function
 #
-# Usage: ./batch-translate-language-file.sh
+# Usage: ./batch-translate-language-file.sh [--missing-only]
+#   --missing-only: Only translate files that don't exist yet (skip existing translations)
 # This script automatically uses the deployed Azure Function URL from azd
 
 set -e  # Exit on error
+
+# Parse command line arguments
+MISSING_ONLY=false
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --missing-only)
+      MISSING_ONLY=true
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      echo "Usage: ./batch-translate-language-file.sh [--missing-only]"
+      exit 1
+      ;;
+  esac
+done
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -84,6 +101,7 @@ fi
 echo "========================================="
 echo "Batch Language File Translation"
 echo "========================================="
+echo "Mode: $([ "$MISSING_ONLY" = true ] && echo "Missing files only" || echo "All files (overwrite)")"
 echo "Source Directory: $SOURCE_DIR"
 echo "Output Directory: $LOCALES_DIR"
 echo "Function URL: $FUNCTION_URL"
@@ -94,8 +112,10 @@ for file in "${SOURCE_FILES[@]}"; do
 done
 echo ""
 echo "Will translate to ${#LANGUAGES[@]} languages."
-# Count how many translations are needed (skip existing files)
+
+# Count how many translations are needed (skip existing files if --missing-only)
 NEEDED_TRANSLATIONS=0
+SKIPPED_TRANSLATIONS=0
 for SOURCE_FILE in "${SOURCE_FILES[@]}"; do
   FILE_NAME=$(basename "$SOURCE_FILE")
   for lang_info in "${LANGUAGES[@]}"; do
@@ -103,14 +123,23 @@ for SOURCE_FILE in "${SOURCE_FILES[@]}"; do
     OUTPUT_FILE="$LOCALES_DIR/$lang_code/$FILE_NAME"
     if [ ! -f "$OUTPUT_FILE" ]; then
       NEEDED_TRANSLATIONS=$((NEEDED_TRANSLATIONS + 1))
+    elif [ "$MISSING_ONLY" = true ]; then
+      SKIPPED_TRANSLATIONS=$((SKIPPED_TRANSLATIONS + 1))
     fi
   done
 done
 
 echo ""
-echo "Total translations to create: $((${#SOURCE_FILES[@]} * ${#LANGUAGES[@]}))"
-echo ""
-echo "Note: This will overwrite any existing translation files."
+if [ "$MISSING_ONLY" = true ]; then
+  echo "Translations to create: $NEEDED_TRANSLATIONS"
+  echo "Existing translations to skip: $SKIPPED_TRANSLATIONS"
+  echo ""
+  echo "Note: Only missing translation files will be created."
+else
+  echo "Total translations to create: $((${#SOURCE_FILES[@]} * ${#LANGUAGES[@]}))"
+  echo ""
+  echo "Note: This will overwrite any existing translation files."
+fi
 echo ""
 
 read -p "Continue? (y/n) " -n 1 -r
@@ -282,6 +311,13 @@ for SOURCE_FILE in "${SOURCE_FILES[@]}"; do
   
   for lang_info in "${LANGUAGES[@]}"; do
     IFS=':' read -r lang_code lang_name <<< "$lang_info"
+    
+    # Check if output file already exists and skip if --missing-only is set
+    OUTPUT_FILE="$LOCALES_DIR/$lang_code/$FILE_NAME"
+    if [ "$MISSING_ONLY" = true ] && [ -f "$OUTPUT_FILE" ]; then
+      echo "[$FILE_NAME → $lang_name] ⊘ Skipping (file exists)"
+      continue
+    fi
     
     # Wait if we've reached max concurrent jobs
     while [ $ACTIVE_JOBS -ge $MAX_CONCURRENT_JOBS ]; do

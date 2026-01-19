@@ -56,7 +56,8 @@ public class AIAgentService
     public async Task<AgentResponse> ProcessMessageAsync(
         string message,
         List<AgentChatMessage> conversationHistory,
-        int? customerId = null)
+        int? customerId = null,
+        string? cultureId = null)
     {
         try
         {
@@ -65,7 +66,7 @@ public class AIAgentService
             var chatClient = client.GetChatClient(_modelDeployment);
 
             // Build system prompt with MCP tool descriptions
-            var systemPrompt = BuildSystemPrompt(customerId);
+            var systemPrompt = BuildSystemPrompt(customerId, cultureId);
 
             // Add system message and conversation history
             var messages = new List<ChatMessage>
@@ -168,11 +169,15 @@ public class AIAgentService
         }
     }
 
-    private string BuildSystemPrompt(int? customerId)
+    private string BuildSystemPrompt(int? customerId, string? cultureId = null)
     {
+        var cultureInfo = !string.IsNullOrEmpty(cultureId)
+            ? $"\n\nIMPORTANT: The customer's preferred language/culture is '{cultureId}'. All responses and product information should be in this language when available. When calling MCP tools, pass the cultureId parameter to retrieve localized content."
+            : "";
+
         return $@"You are a helpful customer service assistant for AdventureWorks, an outdoor and sporting goods retailer.
 
-{(customerId.HasValue ? $"You are currently helping Customer ID: {customerId.Value}" : "You are helping a customer")}
+{(customerId.HasValue ? $"You are currently helping Customer ID: {customerId.Value}" : "You are helping a customer")}{cultureInfo}
 
 You have access to the following tools via MCP server at {_mcpServerUrl}:
 

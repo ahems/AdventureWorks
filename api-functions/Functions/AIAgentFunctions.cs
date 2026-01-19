@@ -56,7 +56,8 @@ public class AIAgentFunctions
             var result = await _agentService.ProcessMessageAsync(
                 chatRequest.Message,
                 chatRequest.ConversationHistory ?? new List<AgentChatMessage>(),
-                chatRequest.CustomerId
+                chatRequest.CustomerId,
+                chatRequest.CultureId
             );
 
             // Return response
@@ -115,4 +116,5 @@ public class AgentChatRequest
     public string Message { get; set; } = string.Empty;
     public List<AgentChatMessage>? ConversationHistory { get; set; }
     public int? CustomerId { get; set; }
+    public string? CultureId { get; set; }
 }
