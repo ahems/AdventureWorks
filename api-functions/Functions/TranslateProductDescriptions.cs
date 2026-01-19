@@ -102,7 +102,7 @@ public class TranslateProductDescriptions
 
                 var translations = await context.CallActivityAsync<List<TranslatedDescription>>(
                     nameof(TranslateSingleProductActivity),
-                    new TranslationActivityInput
+                    (object)new TranslationActivityInput
                     {
                         Products = new List<TranslationRequest> { product },
                         Cultures = cultures
@@ -155,7 +155,7 @@ public class TranslateProductDescriptions
 
     [Function(nameof(GetSupportedCulturesActivity))]
     public async Task<List<CultureInfo>> GetSupportedCulturesActivity(
-        [ActivityTrigger] object input)
+        FunctionContext context)
     {
         _logger.LogInformation("Fetching supported cultures from database");
 

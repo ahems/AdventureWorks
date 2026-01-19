@@ -11,34 +11,15 @@ using api_functions.Services;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Metrics;
 using Microsoft.OpenApi.Models;
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Hosting.AzureFunctions;
+using Microsoft.Extensions.AI;
+using Azure.AI.OpenAI;
+using ModelContextProtocol.Client;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
 builder.ConfigureFunctionsWebApplication();
-
-// Configure Swashbuckle for OpenAPI documentation
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Version = "v1",
-        Title = "AdventureWorks Azure Functions API",
-        Description = "API endpoints for AdventureWorks e-commerce platform including addresses, semantic search, and SEO",
-        Contact = new OpenApiContact
-        {
-            Name = "AdventureWorks Support",
-            Url = new Uri("https://github.com/ahems/AdventureWorks")
-        }
-    });
-
-    // Include XML comments if available
-    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
-    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
-    if (File.Exists(xmlPath))
-    {
-        c.IncludeXmlComments(xmlPath);
-    }
-});
 
 // Configure Application Insights + OpenTelemetry for enhanced observability
 builder.Services
@@ -188,5 +169,59 @@ builder.Services.AddScoped<EmailService>(sp =>
         storageAccountName,
         sp.GetRequiredService<ILogger<EmailService>>());
 });
+
+// Create and register Durable Agent with MCP tools
+// Note: This runs synchronously at startup, so MCP initialization happens before agent registration
+var config = builder.Configuration;
+var mcpServerUrl = config["MCP_SERVICE_URL"];
+if (string.IsNullOrEmpty(mcpServerUrl))
+{
+    mcpServerUrl = "http://localhost:5000/mcp";
+}
+
+// Initialize MCP client synchronously (required for durable agent registration)
+var mcpClient = McpClient.CreateAsync(
+    new HttpClientTransport(
+        new()
+        {
+            Name = "AdventureWorks MCP",
+            Endpoint = new Uri(mcpServerUrl.TrimEnd('/'))
+        }
+    )
+).GetAwaiter().GetResult();
+
+var mcpTools = mcpClient.ListToolsAsync().GetAwaiter().GetResult();
+Console.WriteLine($"Loaded {mcpTools.Count} MCP tools for durable agent from {mcpServerUrl}");
+
+// Create the durable agent with Azure OpenAI and MCP tools
+var endpoint = config["AZURE_OPENAI_ENDPOINT"]
+    ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT environment variable is not set");
+var deploymentName = config["chatGptDeploymentName"] ?? "chat";
+
+var durableAgent = new AzureOpenAIClient(new Uri(endpoint), defaultCredential)
+    .GetChatClient(deploymentName)
+    .AsIChatClient()
+    .CreateAIAgent(
+        instructions: @"You are a helpful customer service assistant for AdventureWorks, an outdoor and sporting goods retailer.
+
+You have access to tools that allow you to:
+- Retrieve customer order history and order details
+- Search for products and get detailed product information
+- Find complementary products and personalized recommendations
+- Analyze product reviews and customer sentiment
+- Check real-time inventory availability across warehouses
+
+Guidelines:
+- Be friendly, professional, and helpful
+- When you need to use a tool, tell the customer what you're checking
+- Provide clear, concise answers
+- If you need more information (like order number or product ID), ask for it
+- Suggest relevant products and help with purchase decisions
+- Always maintain customer context throughout the conversation",
+        name: "AdventureWorksAgent",
+        tools: mcpTools.ToArray());
+
+// Configure as durable agent for Azure Functions
+builder.ConfigureDurableAgents(options => options.AddAIAgent(durableAgent));
 
 builder.Build().Run();

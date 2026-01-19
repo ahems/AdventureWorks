@@ -96,7 +96,7 @@ public class GenerateProductReviewEmbeddings
 
     [Function(nameof(FetchProductReviewsActivity))]
     public async Task<List<ProductReviewData>> FetchProductReviewsActivity(
-        [ActivityTrigger] FunctionContext context)
+        FunctionContext context)
     {
         _logger.LogInformation("Fetching product reviews from database");
         var reviews = await _reviewService.GetProductReviewsForEmbeddingAsync();
