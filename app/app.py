@@ -819,6 +819,10 @@ async def recommend(id, refresh=False):
     session["selectedTab"] = Tab.RECOMMENDATIONS
     recommendation_engine = RecommendationEngine()
     
+    # Get the user's current culture
+    user_culture = get_user_culture()
+    logger.info("[recommend] Using culture '%s' for recommendations", user_culture)
+    
     todo = get_todo_by_id(id, api_url)
 
     if todo is None:
@@ -843,7 +847,7 @@ async def recommend(id, refresh=False):
         # Convert list of links to a single string
         previous_links_str = ", ".join(links)
 
-    session["todo"]['recommendations'] = await recommendation_engine.get_recommendations(session["todo"]['name'], previous_links_str)
+    session["todo"]['recommendations'] = await recommendation_engine.get_recommendations(session["todo"]['name'], previous_links_str, user_culture)
 
     # Prepare the GraphQL mutation to save the recommendations
     mutation = """
@@ -971,6 +975,41 @@ def logout():
     session.pop('todo', None)
 
     return redirect(auth.log_out(url_for("index", _external=True)))
+
+
+def get_user_culture():
+    """
+    Extract the user's culture/locale from available sources.
+    Attempts to get it from:
+    1. Azure AD user profile (preferred_language claim if available)
+    2. HTTP Accept-Language header from the browser
+    3. Falls back to 'en-US' if no culture info is available
+    """
+    culture = None
+    
+    # Try to get culture from Azure AD user profile
+    user = auth.get_user()
+    if user and isinstance(user, dict):
+        # Azure AD may provide preferred_language, locale, or lang claims
+        culture = user.get('preferred_language') or user.get('locale') or user.get('lang')
+    
+    # Fallback to browser Accept-Language header
+    if not culture and request.headers.get('Accept-Language'):
+        accept_language = request.headers.get('Accept-Language', '')
+        # Parse Accept-Language header (e.g., "en-US,en;q=0.9,es;q=0.8")
+        # Take the first (highest priority) language
+        if accept_language:
+            parts = accept_language.split(',')
+            if parts:
+                # Extract just the language code, remove quality values
+                culture = parts[0].split(';')[0].strip()
+    
+    # Default fallback
+    if not culture:
+        culture = 'en-US'
+    
+    logger.debug("[get_user_culture] Detected culture: %s", culture)
+    return culture
 
 
 def get_todo_by_id(id, api_url):

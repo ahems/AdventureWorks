@@ -114,12 +114,18 @@ class RecommendationEngine:
                         azure_ad_token=self._token_value,
                     )
 
-    async def get_recommendations(self, keyword_phrase, previous_links_str=None):
+    async def get_recommendations(self, keyword_phrase, previous_links_str=None, culture=None):
         # Refresh token if in token auth mode
         if self._token_value:
             self._ensure_token_client()
         prompt = f"""Please return 5 recommendations based on the input string: '{keyword_phrase}' using correct JSON syntax that contains a title and a hyperlink back to the supporting website. RETURN ONLY JSON AND NOTHING ELSE"""
-        system_prompt = """You are an administrative assistant bot who is good at giving 
+        
+        # Add culture context to the system prompt if provided
+        culture_context = ""
+        if culture:
+            culture_context = f"\n\nIMPORTANT: The user's culture/locale is '{culture}'. Please provide recommendations that are appropriate for this culture and locale, using culturally relevant sources and considering regional preferences."
+        
+        system_prompt = f"""You are an administrative assistant bot who is good at giving 
         recommendations for tasks that need to be done by referencing website links that can provide 
         assistance to helping complete the task. 
 
@@ -127,9 +133,9 @@ class RecommendationEngine:
 
         EXPECTED OUTPUT:
         Provide your response as a JSON object with the following schema:
-        [{"title": "...", "link": "..."},
-        {"title": "...", "link": "..."},
-        {"title": "...", "link": "..."}]
+        [{{"title": "...", "link": "..."}},
+        {{"title": "...", "link": "..."}},
+        {{"title": "...", "link": "..."}}]{culture_context}
         """
         
         if previous_links_str is not None:
@@ -163,7 +169,7 @@ class RecommendationEngine:
 
 async def test_recommendation_engine():
     engine = RecommendationEngine()
-    recommendations = await engine.get_recommendations("Buy a birthday gift for mom")
+    recommendations = await engine.get_recommendations("Buy a birthday gift for mom", culture="en-US")
     count = 1
     for recommendation in recommendations:
         print(f"{count} - {recommendation['title']}: {recommendation['link']}")
