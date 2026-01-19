@@ -34,7 +34,6 @@
     <PackageReference Include="QuestPDF" Version="2024.12.3" />
     
     <!-- Microsoft Agent Framework for MCP Server -->
-    <PackageReference Include="Microsoft.Agents.AI.AzureAI" Version="1.0.0-preview.251219.1" />
     <PackageReference Include="ModelContextProtocol" Version="0.5.0-preview.1" />
     
     <!-- Aspire Component Integrations (updated for compatibility) -->
