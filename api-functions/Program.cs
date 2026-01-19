@@ -106,6 +106,15 @@ builder.Services.AddScoped<ReceiptService>(sp =>
     return new ReceiptService(connectionString);
 });
 
+// Register PasswordService for password hashing and verification
+builder.Services.AddScoped<PasswordService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new PasswordService(connectionString);
+});
+
 // Register PdfReceiptGenerator for PDF receipt generation
 builder.Services.AddScoped<PdfReceiptGenerator>();
 
