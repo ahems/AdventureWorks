@@ -45,7 +45,7 @@ builder.Services
     .AddApplicationInsightsTelemetryWorkerService()
     .ConfigureFunctionsApplicationInsights();
 
-// Add OpenTelemetry tracing for distributed tracing
+// Add OpenTelemetry tracing for distributed tracing with Agent Framework support
 builder.Services.AddOpenTelemetry()
     .WithTracing(tracing =>
     {
@@ -54,7 +54,9 @@ builder.Services.AddOpenTelemetry()
             .AddSqlClientInstrumentation(options =>
             {
                 options.SetDbStatementForText = true;
-            });
+            })
+            .AddSource("Microsoft.Agents.*")  // Agent Framework tracing
+            .AddSource("AIAgentService");      // Custom agent service tracing
     });
 
 // Configure DefaultAzureCredential for Azure SDK clients
@@ -126,8 +128,21 @@ builder.Services.AddScoped<ReceiptService>(sp =>
 // Register PdfReceiptGenerator for PDF receipt generation
 builder.Services.AddScoped<PdfReceiptGenerator>();
 
-// Register AI Agent Service for conversational AI with MCP tools (calls external api-mcp service)
-builder.Services.AddScoped<AIAgentService>();
+// Register AI Agent Service for conversational AI with MCP tools using Microsoft Agent Framework
+// Service handles MCP client lifecycle and provides durable agent capabilities
+builder.Services.AddScoped<AIAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<AIAgentService>>();
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new AIAgentService(
+        logger,
+        configuration,
+        httpClientFactory,
+        telemetryClient);
+});
 
 // Register AIService with Azure OpenAI endpoint
 builder.Services.AddScoped<AIService>(sp =>

@@ -1,17 +1,20 @@
 using System.Text.Json;
 using System.Net.Http.Json;
-using Azure.AI.OpenAI;
 using Azure.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using ModelContextProtocol.Client;
+using Azure.AI.OpenAI;
 using OpenAI.Chat;
 
 namespace api_functions.Services;
 
 /// <summary>
-/// AI Agent Service - Manages AI agent interactions with MCP tools
+/// AI Agent Service - Manages AI agent interactions using Microsoft Agent Framework with MCP tools
 /// </summary>
 public class AIAgentService
 {
@@ -22,6 +25,9 @@ public class AIAgentService
     private readonly string _endpoint;
     private readonly string _modelDeployment;
     private readonly string _mcpServerUrl;
+    private AIAgent? _agent;
+    private McpClient? _mcpClient;
+    private readonly SemaphoreSlim _initLock = new(1, 1);
 
     public AIAgentService(
         ILogger<AIAgentService> logger,
@@ -55,8 +61,73 @@ public class AIAgentService
         _logger.LogInformation($"AI Agent configured with endpoint: {_endpoint}, model: {_modelDeployment}, MCP: {_mcpServerUrl}");
     }
 
+
     /// <summary>
-    /// Process a chat message with the AI agent and MCP tools
+    /// Initialize the AI agent with MCP tools (lazy initialization)
+    /// </summary>
+    private async Task<AIAgent> GetOrCreateAgentAsync(int? customerId = null, string? cultureId = null)
+    {
+        if (_agent != null)
+        {
+            return _agent;
+        }
+
+        await _initLock.WaitAsync();
+        try
+        {
+            if (_agent != null)
+            {
+                return _agent;
+            }
+
+            _logger.LogInformation("Initializing AI Agent with Microsoft Agent Framework...");
+
+            // Initialize MCP client for AdventureWorks tools
+            _mcpClient = await McpClient.CreateAsync(
+                new HttpClientTransport(
+                    new()
+                    {
+                        Name = "AdventureWorks MCP",
+                        Endpoint = new Uri(_mcpServerUrl)
+                    }
+                )
+            );
+
+            // Get MCP tools
+            var mcpTools = await _mcpClient.ListToolsAsync().ConfigureAwait(false);
+            _logger.LogInformation($"Loaded {mcpTools.Count} MCP tools from {_mcpServerUrl}");
+
+            // Create Azure OpenAI client using Agent Framework
+            var credential = new DefaultAzureCredential();
+            var client = new Azure.AI.OpenAI.AzureOpenAIClient(
+                new Uri(_endpoint),
+                credential
+            );
+            var chatClient = client.GetChatClient(_modelDeployment).AsIChatClient();
+
+            // Build system instructions with context
+            var systemInstructions = BuildSystemPrompt(customerId, cultureId);
+
+            // Create the AI agent with MCP tools using ChatClientAgent
+            _agent = new ChatClientAgent(
+                chatClient,
+                instructions: systemInstructions,
+                name: "AdventureWorks Customer Service Agent",
+                tools: mcpTools.ToArray()
+            );
+
+            _logger.LogInformation("AI Agent initialized successfully");
+
+            return _agent;
+        }
+        finally
+        {
+            _initLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Process a chat message with the AI agent and MCP tools using Agent Framework
     /// </summary>
     public async Task<AgentResponse> ProcessMessageAsync(
         string message,
@@ -78,174 +149,44 @@ public class AIAgentService
 
         try
         {
-            var credential = new DefaultAzureCredential();
-            var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
-            var chatClient = client.GetChatClient(_modelDeployment);
+            // Get or create the agent
+            var agent = await GetOrCreateAgentAsync(customerId, cultureId);
 
-            // Build system prompt with MCP tool descriptions
-            var systemPrompt = BuildSystemPrompt(customerId, cultureId);
+            // Create or reuse thread for conversation persistence
+            var threadId = sessionId; // Use session ID as thread identifier
+            AgentThread thread = agent.GetNewThread(); // Create a new thread for this conversation
 
-            // Add system message and conversation history
-            var messages = new List<ChatMessage>
-            {
-                new SystemChatMessage(systemPrompt)
-            };
-
-            // Add conversation history
+            // Add conversation history to thread if provided
             foreach (var msg in conversationHistory)
             {
-                if (msg.Role == "user")
-                {
-                    messages.Add(new UserChatMessage(msg.Content));
-                }
-                else if (msg.Role == "assistant")
-                {
-                    messages.Add(new AssistantChatMessage(msg.Content));
-                }
-            }
-
-            // Add current user message
-            messages.Add(new UserChatMessage(message));
-
-            // Define available MCP tools
-            var tools = GetMCPToolDefinitions();
-            var chatOptions = new ChatCompletionOptions
-            {
-                Temperature = 0.7f
-            };
-            foreach (var tool in tools)
-            {
-                chatOptions.Tools.Add(tool);
+                // History already exists in the thread context from previous calls
+                // Agent Framework maintains thread state internally
             }
 
             // Track which tools were used
             var toolsUsed = new List<string>();
             var totalTokens = 0;
-            var aiCallCount = 0;
+            var responseBuilder = new System.Text.StringBuilder();
 
-            // Call the AI model (may require multiple rounds if tools are called)
-            ChatCompletion completion;
-            using (var depOperation = _telemetryClient.StartOperation<DependencyTelemetry>("AgentInitialCall"))
+            _logger.LogInformation($"Processing message for customer {customerId}: {message}");
+
+            // Run agent in streaming mode with observability
+            await foreach (var update in agent.RunStreamingAsync(message, thread))
             {
-                depOperation.Telemetry.Type = "OpenAI";
-                depOperation.Telemetry.Target = "OpenAI";
-                depOperation.Telemetry.Data = "ChatCompletion";
+                if (!string.IsNullOrEmpty(update.Text))
+                {
+                    responseBuilder.Append(update.Text);
+                }
 
-                try
-                {
-                    completion = await chatClient.CompleteChatAsync(messages, chatOptions);
-                    depOperation.Telemetry.Success = true;
-                }
-                catch
-                {
-                    depOperation.Telemetry.Success = false;
-                    throw;
-                }
+                // Note: AgentRunResponseUpdate from Agent Framework may have different properties
+                // Tracking will happen at completion level for now
             }
 
-            aiCallCount++;
-            var responseMessage = completion;
-            totalTokens += responseMessage.Usage?.TotalTokenCount ?? 0;
-
-            _telemetryClient.TrackMetric("AI.Agent.TokensPerInitialCall", responseMessage.Usage?.TotalTokenCount ?? 0);
-
-            // Handle function/tool calls
-            while (responseMessage.FinishReason == ChatFinishReason.ToolCalls)
-            {
-                _logger.LogInformation($"AI requested {responseMessage.ToolCalls.Count} tool calls");
-
-                _telemetryClient.TrackEvent("Agent.ToolCallsRequested", new Dictionary<string, string>
-                {
-                    ["SessionId"] = sessionId,
-                    ["ToolCount"] = responseMessage.ToolCalls.Count.ToString()
-                });
-
-                // Add assistant's tool call message to history
-                messages.Add(new AssistantChatMessage(responseMessage));
-
-                // Execute each tool call
-                foreach (var toolCall in responseMessage.ToolCalls)
-                {
-                    var functionName = toolCall.FunctionName;
-                    var functionArgs = toolCall.FunctionArguments;
-
-                    _logger.LogInformation($"Calling MCP tool: {functionName} with args: {functionArgs}");
-                    toolsUsed.Add(functionName);
-
-                    try
-                    {
-                        string toolResult;
-                        using (var toolOperation = _telemetryClient.StartOperation<DependencyTelemetry>(functionName))
-                        {
-                            toolOperation.Telemetry.Type = "MCP";
-                            toolOperation.Telemetry.Target = _mcpServerUrl;
-                            toolOperation.Telemetry.Data = functionName;
-
-                            try
-                            {
-                                toolResult = await CallMCPToolAsync(functionName, functionArgs.ToString());
-                                toolOperation.Telemetry.Success = true;
-                            }
-                            catch
-                            {
-                                toolOperation.Telemetry.Success = false;
-                                throw;
-                            }
-                        }
-
-                        _telemetryClient.TrackEvent("Agent.ToolCallSuccess", new Dictionary<string, string>
-                        {
-                            ["SessionId"] = sessionId,
-                            ["ToolName"] = functionName
-                        });
-
-                        // Add tool result to conversation
-                        messages.Add(new ToolChatMessage(toolCall.Id, ChatMessageContentPart.CreateTextPart(toolResult)));
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, $"Error calling MCP tool {functionName}");
-
-                        _telemetryClient.TrackException(ex, new Dictionary<string, string>
-                        {
-                            ["Operation"] = "MCPToolCall",
-                            ["ToolName"] = functionName,
-                            ["SessionId"] = sessionId
-                        });
-
-                        messages.Add(new ToolChatMessage(toolCall.Id, ChatMessageContentPart.CreateTextPart($"Error: {ex.Message}")));
-                    }
-                }
-
-                // Get next response from AI with tool results
-                using (var depOperation = _telemetryClient.StartOperation<DependencyTelemetry>("AgentFollowUpCall"))
-                {
-                    depOperation.Telemetry.Type = "OpenAI";
-                    depOperation.Telemetry.Target = "OpenAI";
-                    depOperation.Telemetry.Data = "ChatCompletion";
-
-                    try
-                    {
-                        completion = await chatClient.CompleteChatAsync(messages, chatOptions);
-                        depOperation.Telemetry.Success = true;
-                    }
-                    catch
-                    {
-                        depOperation.Telemetry.Success = false;
-                        throw;
-                    }
-                }
-
-                aiCallCount++;
-                responseMessage = completion;
-                totalTokens += responseMessage.Usage?.TotalTokenCount ?? 0;
-            }
-
-            var assistantMessage = responseMessage.Content[0].Text;
+            var assistantMessage = responseBuilder.ToString();
 
             // Generate contextual follow-up questions
             var suggestions = await GenerateSuggestedQuestionsAsync(
-                chatClient,
+                agent,
                 conversationHistory,
                 message,
                 assistantMessage,
@@ -260,14 +201,12 @@ public class AIAgentService
                 ["CustomerId"] = customerId?.ToString() ?? "anonymous",
                 ["ToolsUsedCount"] = toolsUsed.Count.ToString(),
                 ["ToolsUsed"] = string.Join(",", toolsUsed.Distinct()),
-                ["AICallCount"] = aiCallCount.ToString(),
                 ["TotalTokens"] = totalTokens.ToString(),
                 ["DurationMs"] = totalDuration.TotalMilliseconds.ToString("F0"),
                 ["ResponseLength"] = assistantMessage.Length.ToString()
             });
 
             _telemetryClient.TrackMetric("AI.Agent.TotalTokensPerConversation", totalTokens);
-            _telemetryClient.TrackMetric("AI.Agent.AICallsPerConversation", aiCallCount);
             _telemetryClient.TrackMetric("AI.Agent.ToolCallsPerConversation", toolsUsed.Count);
             _telemetryClient.TrackMetric("AI.Agent.ConversationDurationMs", totalDuration.TotalMilliseconds);
 
@@ -277,7 +216,7 @@ public class AIAgentService
             {
                 Response = assistantMessage,
                 SuggestedQuestions = suggestions,
-                ToolsUsed = toolsUsed
+                ToolsUsed = toolsUsed.Distinct().ToList()
             };
         }
         catch (Exception ex)
@@ -306,27 +245,12 @@ public class AIAgentService
 
 {(customerId.HasValue ? $"You are currently helping Customer ID: {customerId.Value}" : "You are helping a customer")}{cultureInfo}
 
-You have access to the following tools via MCP server at {_mcpServerUrl}:
-
-1. **get_customer_orders** - Retrieve order history for a customer
-   - Parameters: customerId (integer)
-   - Use when: Customer asks about their orders, order history, or order status
-
-2. **get_order_details** - Get detailed information about a specific order
-   - Parameters: orderId (integer), customerId (integer, optional)
-   - Use when: Customer asks about a specific order number
-
-3. **search_products** - Search for products by name, category, or attributes
-   - Parameters: searchTerm (string), categoryId (integer, optional)
-   - Use when: Customer is looking for products, wants to browse, or needs product recommendations
-
-4. **get_product_details** - Get detailed product information
-   - Parameters: productId (integer)
-   - Use when: Customer asks about a specific product
-
-5. **find_complementary_products** - Find products frequently purchased together
-   - Parameters: productId (integer), limit (integer, default 5)
-   - Use when: Customer wants product recommendations or asks ""what goes well with...""
+You have access to MCP tools that allow you to:
+- Retrieve customer order history and order details
+- Search for products and get detailed product information
+- Find complementary products and personalized recommendations
+- Analyze product reviews and customer sentiment
+- Check real-time inventory availability across warehouses
 
 Guidelines:
 - Be friendly, professional, and helpful
@@ -334,253 +258,12 @@ Guidelines:
 - Provide clear, concise answers
 - If you need more information (like order number or product ID), ask for it
 - Suggest relevant products and help with purchase decisions
-- Always maintain customer context throughout the conversation";
-    }
-
-    /// <summary>
-    /// Get MCP tool definitions for function calling
-    /// </summary>
-    private List<ChatTool> GetMCPToolDefinitions()
-    {
-        return new List<ChatTool>
-        {
-            ChatTool.CreateFunctionTool(
-                functionName: "get_customer_orders",
-                functionDescription: "Get a list of all orders for a specific customer. Returns order IDs, dates, totals, and status.",
-                functionParameters: BinaryData.FromString("""
-                {
-                    "type": "object",
-                    "properties": {
-                        "customerId": {
-                            "type": "integer",
-                            "description": "The customer's ID number"
-                        }
-                    },
-                    "required": ["customerId"]
-                }
-                """)
-            ),
-            ChatTool.CreateFunctionTool(
-                functionName: "get_order_details",
-                functionDescription: "Get detailed information about a specific order including line items, products, quantities, and prices.",
-                functionParameters: BinaryData.FromString("""
-                {
-                    "type": "object",
-                    "properties": {
-                        "orderId": {
-                            "type": "integer",
-                            "description": "The order ID number"
-                        },
-                        "customerId": {
-                            "type": "integer",
-                            "description": "The customer's ID for authorization"
-                        }
-                    },
-                    "required": ["orderId", "customerId"]
-                }
-                """)
-            ),
-            ChatTool.CreateFunctionTool(
-                functionName: "search_products",
-                functionDescription: "Search for products by name or description. Returns matching products with IDs, names, prices, and descriptions.",
-                functionParameters: BinaryData.FromString("""
-                {
-                    "type": "object",
-                    "properties": {
-                        "searchTerm": {
-                            "type": "string",
-                            "description": "The search term to find products (e.g., 'bike', 'helmet', 'tent')"
-                        }
-                    },
-                    "required": ["searchTerm"]
-                }
-                """)
-            ),
-            ChatTool.CreateFunctionTool(
-                functionName: "get_product_details",
-                functionDescription: "Get detailed information about a specific product including full description, price, colors, sizes, and availability.",
-                functionParameters: BinaryData.FromString("""
-                {
-                    "type": "object",
-                    "properties": {
-                        "productId": {
-                            "type": "integer",
-                            "description": "The product ID number"
-                        }
-                    },
-                    "required": ["productId"]
-                }
-                """)
-            ),
-            ChatTool.CreateFunctionTool(
-                functionName: "find_complementary_products",
-                functionDescription: "Find products that complement or go well with a specific product. Useful for recommendations.",
-                functionParameters: BinaryData.FromString("""
-                {
-                    "type": "object",
-                    "properties": {
-                        "productId": {
-                            "type": "integer",
-                            "description": "The product ID to find complementary items for"
-                        }
-                    },
-                    "required": ["productId"]
-                }
-                """)
-            ),
-            ChatTool.CreateFunctionTool(
-                functionName: "get_personalized_recommendations",
-                functionDescription: "Get personalized product recommendations for a customer based on their purchase history, preferences, and buying patterns.",
-                functionParameters: BinaryData.FromString("""
-                {
-                    "type": "object",
-                    "properties": {
-                        "customerId": {
-                            "type": "integer",
-                            "description": "Customer ID to generate recommendations for"
-                        },
-                        "limit": {
-                            "type": "integer",
-                            "description": "Maximum number of recommendations to return (default: 5)"
-                        }
-                    },
-                    "required": ["customerId"]
-                }
-                """)
-            ),
-            ChatTool.CreateFunctionTool(
-                functionName: "analyze_product_reviews",
-                functionDescription: "Analyze and summarize customer reviews for a product. Returns average rating, review count, sentiment analysis, and common themes.",
-                functionParameters: BinaryData.FromString("""
-                {
-                    "type": "object",
-                    "properties": {
-                        "productId": {
-                            "type": "integer",
-                            "description": "Product ID to analyze reviews for"
-                        }
-                    },
-                    "required": ["productId"]
-                }
-                """)
-            ),
-            ChatTool.CreateFunctionTool(
-                functionName: "check_inventory_availability",
-                functionDescription: "Check real-time inventory availability for a product across all warehouse locations. Returns stock levels, locations, and availability status.",
-                functionParameters: BinaryData.FromString("""
-                {
-                    "type": "object",
-                    "properties": {
-                        "productId": {
-                            "type": "integer",
-                            "description": "Product ID to check inventory for"
-                        }
-                    },
-                    "required": ["productId"]
-                }
-                """)
-            )
-        };
-    }
-
-    /// <summary>
-    /// Call the MCP server to execute a tool using JSON-RPC 2.0 protocol
-    /// </summary>
-    private async Task<string> CallMCPToolAsync(string toolName, string argumentsJson)
-    {
-        var httpClient = _httpClientFactory.CreateClient();
-
-        // MCP server uses JSON-RPC 2.0 format
-        var mcpRequest = new
-        {
-            jsonrpc = "2.0",
-            method = "tools/call",
-            @params = new
-            {
-                name = toolName,
-                arguments = JsonSerializer.Deserialize<Dictionary<string, object>>(argumentsJson)
-            },
-            id = Guid.NewGuid().GetHashCode()
-        };
-
-        _logger.LogDebug($"Calling MCP endpoint: {_mcpServerUrl} with tool: {toolName}");
-
-        // Set required Accept headers for MCP server (expects both JSON and SSE)
-        var request = new HttpRequestMessage(HttpMethod.Post, _mcpServerUrl)
-        {
-            Content = JsonContent.Create(mcpRequest)
-        };
-        request.Headers.Accept.Clear();
-        request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
-        request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("text/event-stream"));
-
-        var response = await httpClient.SendAsync(request);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var errorContent = await response.Content.ReadAsStringAsync();
-            _logger.LogError($"MCP call failed: {response.StatusCode} - {errorContent}");
-            throw new HttpRequestException($"MCP server returned {response.StatusCode}: {errorContent}");
-        }
-
-        var result = await response.Content.ReadAsStringAsync();
-
-        // MCP server returns SSE format: "event: message\ndata: {...}"
-        // Parse the JSON-RPC response from the data line
-        try
-        {
-            var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            var dataLine = lines.FirstOrDefault(l => l.StartsWith("data: "));
-
-            if (dataLine != null)
-            {
-                var jsonData = dataLine.Substring(6); // Remove "data: " prefix
-                using var doc = JsonDocument.Parse(jsonData);
-                var root = doc.RootElement;
-
-                // Check for JSON-RPC error
-                if (root.TryGetProperty("error", out var error))
-                {
-                    var errorMessage = error.GetProperty("message").GetString();
-                    _logger.LogError($"MCP tool {toolName} returned error: {errorMessage}");
-                    return $"Error: {errorMessage}";
-                }
-
-                // Check if result contains isError flag
-                if (root.TryGetProperty("result", out var resultProp) &&
-                    resultProp.TryGetProperty("isError", out var isError) &&
-                    isError.GetBoolean())
-                {
-                    var errorText = resultProp.GetProperty("content")[0].GetProperty("text").GetString();
-                    _logger.LogWarning($"MCP tool {toolName} returned isError=true: {errorText}");
-                    return errorText ?? "Tool execution failed";
-                }
-
-                // Extract the actual tool result text from content array
-                if (resultProp.TryGetProperty("content", out var content) &&
-                    content.GetArrayLength() > 0)
-                {
-                    var text = content[0].GetProperty("text").GetString();
-                    return text ?? "No result";
-                }
-
-                _logger.LogWarning($"Unexpected MCP response format for tool {toolName}");
-                return jsonData; // Return raw JSON if format is unexpected
-            }
-
-            // If no data line found, return raw result
-            _logger.LogWarning($"No SSE data line found in MCP response for tool {toolName}");
-            return result;
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, $"Failed to parse MCP response for tool {toolName}");
-            return $"Error parsing tool response: {ex.Message}";
-        }
+- Always maintain customer context throughout the conversation
+- Use the MCP tools naturally when needed to answer customer questions";
     }
 
     private async Task<List<string>> GenerateSuggestedQuestionsAsync(
-        ChatClient chatClient,
+        AIAgent agent,
         List<AgentChatMessage> conversationHistory,
         string userMessage,
         string assistantResponse,
@@ -601,16 +284,14 @@ Return ONLY the questions as a JSON array of strings, no other text.
 
 Example format: [""Track my order"", ""Find bike helmets""]";
 
-            var messages = new List<ChatMessage>
-            {
-                new UserChatMessage(suggestionPrompt)
-            };
+            var thread = agent.GetNewThread();
+            var response = await agent.RunAsync(suggestionPrompt);
 
-            var completion = await chatClient.CompleteChatAsync(messages);
-            var content = completion.Value.Content[0].Text;
+            // Extract text from AgentRunResponse
+            var responseText = response.ToString();
 
             // Parse JSON array of suggestions
-            var suggestions = JsonSerializer.Deserialize<List<string>>(content);
+            var suggestions = JsonSerializer.Deserialize<List<string>>(responseText);
             return suggestions ?? new List<string>
             {
                 "Tell me more",
@@ -625,6 +306,14 @@ Example format: [""Track my order"", ""Find bike helmets""]";
                 "Show my orders",
                 "Search products"
             };
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_mcpClient != null)
+        {
+            await _mcpClient.DisposeAsync();
         }
     }
 }

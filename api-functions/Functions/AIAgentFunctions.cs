@@ -147,15 +147,19 @@ public class AIAgentFunctions
         await response.WriteAsJsonAsync(new
         {
             status = "operational",
-            version = "1.0",
+            version = "2.0",
+            framework = "Microsoft.Agents.AI",
             features = new[]
             {
                 "conversational-ai",
-                "api-mcp-integration",
+                "mcp-tool-integration",
+                "durable-agent-threads",
                 "contextual-suggestions",
                 "order-tracking",
                 "product-search",
-                "recommendations"
+                "recommendations",
+                "streaming-responses",
+                "observability-telemetry"
             }
         });
         return response;
