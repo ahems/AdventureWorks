@@ -3,6 +3,8 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.ApplicationInsights;
 using api_functions.Models;
 using api_functions.Services;
 using System.Text.Json;
@@ -13,11 +15,13 @@ public class EmbellishProductsUsingAI
 {
     private readonly ILogger<EmbellishProductsUsingAI> _logger;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly IServiceProvider _serviceProvider;
 
-    public EmbellishProductsUsingAI(ILogger<EmbellishProductsUsingAI> logger, ILoggerFactory loggerFactory)
+    public EmbellishProductsUsingAI(ILogger<EmbellishProductsUsingAI> logger, ILoggerFactory loggerFactory, IServiceProvider serviceProvider)
     {
         _logger = logger;
         _loggerFactory = loggerFactory;
+        _serviceProvider = serviceProvider;
     }
 
     [Function(nameof(EmbellishProductsUsingAI_HttpStart))]
@@ -179,7 +183,8 @@ public class EmbellishProductsUsingAI
             ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
 
         var aiServiceLogger = _loggerFactory.CreateLogger<AIService>();
-        var aiService = new AIService(endpoint, aiServiceLogger);
+        var telemetryClient = _serviceProvider.GetRequiredService<TelemetryClient>();
+        var aiService = new AIService(endpoint, aiServiceLogger, telemetryClient);
         var enhancedProducts = await aiService.EnhanceProductsAsync(products);
 
         _logger.LogInformation("AI enhanced {count} products", enhancedProducts.Count);

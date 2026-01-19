@@ -1,6 +1,8 @@
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using api_functions.Models;
+using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.Extensions.Logging;
 using OpenAI.Chat;
 using OpenAI.Embeddings;
@@ -22,35 +24,65 @@ public class AIService
     private readonly string _embeddingDeploymentName = "embedding";
     private readonly string _imageDeploymentName = "gpt-image-1";
     private readonly ILogger<AIService> _logger;
+    private readonly TelemetryClient _telemetryClient;
 
-    public AIService(string endpoint, ILogger<AIService> logger)
+    public AIService(string endpoint, ILogger<AIService> logger, TelemetryClient telemetryClient)
     {
         _endpoint = endpoint;
         _logger = logger;
+        _telemetryClient = telemetryClient;
     }
 
     public async Task<List<EnhancedProductData>> EnhanceProductsAsync(List<ProductData> products)
     {
-        var credential = new DefaultAzureCredential();
-        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
-        var chatClient = client.GetChatClient(_deploymentName);
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("EnhanceProducts");
+        operation.Telemetry.Properties["ProductCount"] = products.Count.ToString();
 
-        var enhancedProducts = new List<EnhancedProductData>();
-
-        // Process products in batches of 10 to avoid token limits
-        const int batchSize = 10;
-        for (int i = 0; i < products.Count; i += batchSize)
+        try
         {
-            var batch = products.Skip(i).Take(batchSize).ToList();
-            var batchResults = await ProcessBatchAsync(chatClient, batch);
-            enhancedProducts.AddRange(batchResults);
-        }
+            var credential = new DefaultAzureCredential();
+            var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+            var chatClient = client.GetChatClient(_deploymentName);
 
-        return enhancedProducts;
+            var enhancedProducts = new List<EnhancedProductData>();
+
+            // Process products in batches of 10 to avoid token limits
+            const int batchSize = 10;
+            var batchCount = (int)Math.Ceiling(products.Count / (double)batchSize);
+
+            for (int i = 0; i < products.Count; i += batchSize)
+            {
+                var batch = products.Skip(i).Take(batchSize).ToList();
+                var batchResults = await ProcessBatchAsync(chatClient, batch);
+                enhancedProducts.AddRange(batchResults);
+            }
+
+            _telemetryClient.TrackEvent("ProductEnhancementCompleted", new Dictionary<string, string>
+            {
+                ["TotalProducts"] = products.Count.ToString(),
+                ["BatchCount"] = batchCount.ToString(),
+                ["EnhancedCount"] = enhancedProducts.Count.ToString()
+            });
+
+            operation.Telemetry.Success = true;
+            return enhancedProducts;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string>
+            {
+                ["Operation"] = "EnhanceProducts",
+                ["ProductCount"] = products.Count.ToString()
+            });
+            throw;
+        }
     }
 
     private async Task<List<EnhancedProductData>> ProcessBatchAsync(ChatClient chatClient, List<ProductData> products)
     {
+        var startTime = DateTimeOffset.UtcNow;
+
         var systemPrompt = @"You are a creative product description writer for an outdoor adventure equipment retailer called AdventureWorks.
 Your task is to enhance product descriptions and fill in missing product data.
 
@@ -102,13 +134,42 @@ Important constraints:
             new UserChatMessage(userPrompt)
         };
 
-        var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+        ChatCompletion response;
+        using (var depOperation = _telemetryClient.StartOperation<DependencyTelemetry>("EnhanceProducts"))
         {
-            Temperature = 0.7f,
-            MaxOutputTokenCount = 4000
-        });
+            depOperation.Telemetry.Type = "OpenAI";
+            depOperation.Telemetry.Target = "OpenAI";
+            depOperation.Telemetry.Data = "ChatCompletion";
 
-        var content = response.Value.Content[0].Text;
+            try
+            {
+                response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+                {
+                    Temperature = 0.7f,
+                    MaxOutputTokenCount = 4000
+                });
+                depOperation.Telemetry.Success = true;
+            }
+            catch
+            {
+                depOperation.Telemetry.Success = false;
+                throw;
+            }
+        }
+
+        var tokenMetrics = new Dictionary<string, double>
+        {
+            ["InputTokens"] = response.Usage?.InputTokenCount ?? 0,
+            ["OutputTokens"] = response.Usage?.OutputTokenCount ?? 0,
+            ["TotalTokens"] = response.Usage?.TotalTokenCount ?? 0
+        };
+
+        foreach (var metric in tokenMetrics)
+        {
+            _telemetryClient.TrackMetric($"AI.ProductEnhancement.{metric.Key}", metric.Value);
+        }
+
+        var content = response.Content[0].Text;
 
         // Extract JSON from response (may be wrapped in markdown code blocks)
         var jsonStart = content.IndexOf('[');
@@ -137,11 +198,38 @@ Important constraints:
         TranslationRequest request,
         List<CultureInfo> targetCultures)
     {
-        var credential = new DefaultAzureCredential();
-        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
-        var chatClient = client.GetChatClient(_deploymentName);
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("TranslateProduct");
+        operation.Telemetry.Properties["ProductModelID"] = request.ProductModelID.ToString();
+        operation.Telemetry.Properties["TargetCultureCount"] = targetCultures.Count.ToString();
 
-        return await TranslateProductAsync(chatClient, request, targetCultures);
+        try
+        {
+            var credential = new DefaultAzureCredential();
+            var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+            var chatClient = client.GetChatClient(_deploymentName);
+
+            var result = await TranslateProductAsync(chatClient, request, targetCultures);
+
+            operation.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("ProductTranslated", new Dictionary<string, string>
+            {
+                ["ProductModelID"] = request.ProductModelID.ToString(),
+                ["CultureCount"] = targetCultures.Count.ToString(),
+                ["TranslationsGenerated"] = result.Count.ToString()
+            });
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string>
+            {
+                ["Operation"] = "TranslateProduct",
+                ["ProductModelID"] = request.ProductModelID.ToString()
+            });
+            throw;
+        }
     }
 
     public async Task<List<TranslatedDescription>> TranslateDescriptionsAsync(
@@ -291,60 +379,105 @@ Translate the description into each target language. Return ONLY a valid JSON ob
 
     public async Task<List<ProductDescriptionEmbedding>> GenerateEmbeddingsAsync(List<ProductDescriptionData> descriptions)
     {
-        var credential = new DefaultAzureCredential();
-        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
-        var embeddingClient = client.GetEmbeddingClient(_embeddingDeploymentName);
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("GenerateEmbeddings");
+        operation.Telemetry.Properties["DescriptionCount"] = descriptions.Count.ToString();
 
-        var embeddings = new List<ProductDescriptionEmbedding>();
-
-        foreach (var description in descriptions)
+        try
         {
-            // Create enriched text for embedding that includes variant information
-            // This allows semantic search to find products by color, size, style, etc.
-            var enrichedText = BuildEnrichedTextForEmbedding(description);
+            var credential = new DefaultAzureCredential();
+            var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+            var embeddingClient = client.GetEmbeddingClient(_embeddingDeploymentName);
 
-            _logger.LogInformation(
-                "Generating embedding for ProductDescriptionID {id} (Culture: {culture}, Original: {length} chars, Enriched: {enrichedLength} chars)",
-                description.ProductDescriptionID,
-                description.CultureID,
-                description.Description.Length,
-                enrichedText.Length
-            );
+            var embeddings = new List<ProductDescriptionEmbedding>();
+            var startTime = DateTimeOffset.UtcNow;
 
-            try
+            foreach (var description in descriptions)
             {
-                // Generate embedding for the enriched description text (includes variants)
-                var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(enrichedText);
-                var embeddingVector = embeddingResponse.Value.ToFloats();
-
-                // Store as float array for VECTOR column
-                var floatArray = embeddingVector.ToArray();
-
-                embeddings.Add(new ProductDescriptionEmbedding
-                {
-                    ProductDescriptionID = description.ProductDescriptionID,
-                    Embedding = floatArray,
-                    ProductModelID = description.ProductModelID
-                });
+                // Create enriched text for embedding that includes variant information
+                // This allows semantic search to find products by color, size, style, etc.
+                var enrichedText = BuildEnrichedTextForEmbedding(description);
 
                 _logger.LogInformation(
-                    "Generated embedding for ProductDescriptionID {id}: {dimensions} dimensions",
+                    "Generating embedding for ProductDescriptionID {id} (Culture: {culture}, Original: {length} chars, Enriched: {enrichedLength} chars)",
                     description.ProductDescriptionID,
-                    floatArray.Length
+                    description.CultureID,
+                    description.Description.Length,
+                    enrichedText.Length
                 );
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "Failed to generate embedding for ProductDescriptionID {id}",
-                    description.ProductDescriptionID
-                );
-                throw;
-            }
-        }
 
-        return embeddings;
+                try
+                {
+                    ReadOnlyMemory<float> embeddingVector;
+                    using (var embeddingOperation = _telemetryClient.StartOperation<DependencyTelemetry>("ProductDescription"))
+                    {
+                        embeddingOperation.Telemetry.Type = "OpenAI";
+                        embeddingOperation.Telemetry.Target = "OpenAI";
+                        embeddingOperation.Telemetry.Data = "EmbeddingGeneration";
+
+                        try
+                        {
+                            var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(enrichedText);
+                            embeddingVector = embeddingResponse.Value.ToFloats();
+                            embeddingOperation.Telemetry.Success = true;
+                        }
+                        catch
+                        {
+                            embeddingOperation.Telemetry.Success = false;
+                            throw;
+                        }
+                    }
+
+                    // Store as float array for VECTOR column
+                    var floatArray = embeddingVector.ToArray();
+
+                    embeddings.Add(new ProductDescriptionEmbedding
+                    {
+                        ProductDescriptionID = description.ProductDescriptionID,
+                        Embedding = floatArray,
+                        ProductModelID = description.ProductModelID
+                    });
+
+                    _logger.LogInformation(
+                        "Generated embedding for ProductDescriptionID {id}: {dimensions} dimensions",
+                        description.ProductDescriptionID,
+                        floatArray.Length
+                    );
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Failed to generate embedding for ProductDescriptionID {id}",
+                        description.ProductDescriptionID
+                    );
+                    throw;
+                }
+            }
+
+            var totalDuration = DateTimeOffset.UtcNow - startTime;
+
+            _telemetryClient.TrackEvent("EmbeddingsGenerated", new Dictionary<string, string>
+            {
+                ["Count"] = embeddings.Count.ToString(),
+                ["DurationMs"] = totalDuration.TotalMilliseconds.ToString("F0")
+            });
+
+            _telemetryClient.TrackMetric("AI.Embeddings.AverageDurationMs",
+                totalDuration.TotalMilliseconds / embeddings.Count);
+
+            operation.Telemetry.Success = true;
+            return embeddings;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string>
+            {
+                ["Operation"] = "GenerateEmbeddings",
+                ["DescriptionCount"] = descriptions.Count.ToString()
+            });
+            throw;
+        }
     }
 
     /// <summary>

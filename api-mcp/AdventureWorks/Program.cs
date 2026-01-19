@@ -1,5 +1,6 @@
 using AdventureWorks.Tools;
 using AdventureWorks.Services;
+using Microsoft.ApplicationInsights;
 using Microsoft.Extensions.Localization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,6 +9,9 @@ builder.Logging.AddConsole(consoleLogOptions =>
 	// Configure all logs to go to stderr
 	consoleLogOptions.LogToStandardErrorThreshold = LogLevel.Trace;
 });
+
+// Add Application Insights telemetry
+builder.Services.AddApplicationInsightsTelemetry();
 
 // Configure localization
 builder.Services.AddLocalization();
@@ -38,7 +42,8 @@ builder.Services.AddScoped<ReviewService>(sp =>
 builder.Services.AddScoped<AIService>(sp =>
 {
 	var logger = sp.GetRequiredService<ILogger<AIService>>();
-	return new AIService(openAiEndpoint, logger);
+	var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+	return new AIService(openAiEndpoint, logger, telemetryClient);
 });
 
 // Register MCP server with SSE transport and AdventureWorks tools

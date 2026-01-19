@@ -3,6 +3,8 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.ApplicationInsights;
 using api_functions.Models;
 using api_functions.Services;
 using System.Net;
@@ -16,12 +18,14 @@ public class GenerateProductReviewsUsingAI
 {
     private readonly ILogger<GenerateProductReviewsUsingAI> _logger;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly IServiceProvider _serviceProvider;
     private const string QUEUE_NAME = "product-review-generation";
 
-    public GenerateProductReviewsUsingAI(ILogger<GenerateProductReviewsUsingAI> logger, ILoggerFactory loggerFactory)
+    public GenerateProductReviewsUsingAI(ILogger<GenerateProductReviewsUsingAI> logger, ILoggerFactory loggerFactory, IServiceProvider serviceProvider)
     {
         _logger = logger;
         _loggerFactory = loggerFactory;
+        _serviceProvider = serviceProvider;
     }
 
     [Function(nameof(GenerateProductReviewsUsingAI_HttpStart))]
@@ -139,7 +143,8 @@ public class GenerateProductReviewsUsingAI
                 ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
 
             var aiServiceLogger = _loggerFactory.CreateLogger<AIService>();
-            var aiService = new AIService(endpoint, aiServiceLogger);
+            var telemetryClient = _serviceProvider.GetRequiredService<TelemetryClient>();
+            var aiService = new AIService(endpoint, aiServiceLogger, telemetryClient);
             var generatedReviews = await aiService.GenerateProductReviewsAsync(products);
 
             _logger.LogInformation("Batch {batch}: AI generated {count} total reviews", batchNumber, generatedReviews.Count);

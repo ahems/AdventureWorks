@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.ApplicationInsights;
 using Azure.Identity;
 using AddressFunctions.Services;
 using api_functions.Services;
@@ -134,7 +135,8 @@ builder.Services.AddScoped<AIService>(sp =>
     var configuration = sp.GetRequiredService<IConfiguration>();
     var endpoint = configuration["AZURE_OPENAI_ENDPOINT"]
         ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT environment variable is not set");
-    return new AIService(endpoint, sp.GetRequiredService<ILogger<AIService>>());
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+    return new AIService(endpoint, sp.GetRequiredService<ILogger<AIService>>(), telemetryClient);
 });
 
 // Register EmailService for sending emails via Azure Communication Services

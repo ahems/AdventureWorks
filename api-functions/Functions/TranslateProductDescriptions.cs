@@ -3,6 +3,8 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.ApplicationInsights;
 using api_functions.Models;
 using api_functions.Services;
 
@@ -12,11 +14,13 @@ public class TranslateProductDescriptions
 {
     private readonly ILogger<TranslateProductDescriptions> _logger;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly IServiceProvider _serviceProvider;
 
-    public TranslateProductDescriptions(ILogger<TranslateProductDescriptions> logger, ILoggerFactory loggerFactory)
+    public TranslateProductDescriptions(ILogger<TranslateProductDescriptions> logger, ILoggerFactory loggerFactory, IServiceProvider serviceProvider)
     {
         _logger = logger;
         _loggerFactory = loggerFactory;
+        _serviceProvider = serviceProvider;
     }
 
     [Function(nameof(TranslateProductDescriptions_HttpStart))]
@@ -187,7 +191,8 @@ public class TranslateProductDescriptions
             ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
 
         var aiServiceLogger = _loggerFactory.CreateLogger<AIService>();
-        var aiService = new AIService(endpoint, aiServiceLogger);
+        var telemetryClient = _serviceProvider.GetRequiredService<TelemetryClient>();
+        var aiService = new AIService(endpoint, aiServiceLogger, telemetryClient);
 
         // Translate just this one product
         var translations = await aiService.TranslateProductAsync(product, data.Cultures);
@@ -208,7 +213,8 @@ public class TranslateProductDescriptions
             ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
 
         var aiServiceLogger = _loggerFactory.CreateLogger<AIService>();
-        var aiService = new AIService(endpoint, aiServiceLogger);
+        var telemetryClient = _serviceProvider.GetRequiredService<TelemetryClient>();
+        var aiService = new AIService(endpoint, aiServiceLogger, telemetryClient);
         var translations = await aiService.TranslateDescriptionsAsync(input.Products, input.Cultures);
 
         _logger.LogInformation("AI translated {count} descriptions", translations.Count);

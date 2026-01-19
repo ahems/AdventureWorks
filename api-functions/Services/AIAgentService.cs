@@ -4,6 +4,8 @@ using Azure.AI.OpenAI;
 using Azure.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.DataContracts;
 using OpenAI.Chat;
 
 namespace api_functions.Services;
@@ -16,6 +18,7 @@ public class AIAgentService
     private readonly ILogger<AIAgentService> _logger;
     private readonly IConfiguration _configuration;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly TelemetryClient _telemetryClient;
     private readonly string _endpoint;
     private readonly string _modelDeployment;
     private readonly string _mcpServerUrl;
@@ -23,11 +26,13 @@ public class AIAgentService
     public AIAgentService(
         ILogger<AIAgentService> logger,
         IConfiguration configuration,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        TelemetryClient telemetryClient)
     {
         _logger = logger;
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
+        _telemetryClient = telemetryClient;
 
         // Get AI Foundry configuration
         _endpoint = configuration["AZURE_OPENAI_ENDPOINT"]
@@ -59,6 +64,18 @@ public class AIAgentService
         int? customerId = null,
         string? cultureId = null)
     {
+        // Generate conversation session ID for correlation
+        var sessionId = customerId.HasValue ? $"customer-{customerId.Value}" : Guid.NewGuid().ToString();
+
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("AgentChat");
+        operation.Telemetry.Properties["SessionId"] = sessionId;
+        operation.Telemetry.Properties["CustomerId"] = customerId?.ToString() ?? "anonymous";
+        operation.Telemetry.Properties["CultureId"] = cultureId ?? "default";
+        operation.Telemetry.Properties["MessageLength"] = message.Length.ToString();
+        operation.Telemetry.Properties["HistoryLength"] = conversationHistory.Count.ToString();
+
+        var startTime = DateTimeOffset.UtcNow;
+
         try
         {
             var credential = new DefaultAzureCredential();
@@ -103,15 +120,45 @@ public class AIAgentService
 
             // Track which tools were used
             var toolsUsed = new List<string>();
+            var totalTokens = 0;
+            var aiCallCount = 0;
 
             // Call the AI model (may require multiple rounds if tools are called)
-            var completion = await chatClient.CompleteChatAsync(messages, chatOptions);
-            var responseMessage = completion.Value;
+            ChatCompletion completion;
+            using (var depOperation = _telemetryClient.StartOperation<DependencyTelemetry>("AgentInitialCall"))
+            {
+                depOperation.Telemetry.Type = "OpenAI";
+                depOperation.Telemetry.Target = "OpenAI";
+                depOperation.Telemetry.Data = "ChatCompletion";
+
+                try
+                {
+                    completion = await chatClient.CompleteChatAsync(messages, chatOptions);
+                    depOperation.Telemetry.Success = true;
+                }
+                catch
+                {
+                    depOperation.Telemetry.Success = false;
+                    throw;
+                }
+            }
+
+            aiCallCount++;
+            var responseMessage = completion;
+            totalTokens += responseMessage.Usage?.TotalTokenCount ?? 0;
+
+            _telemetryClient.TrackMetric("AI.Agent.TokensPerInitialCall", responseMessage.Usage?.TotalTokenCount ?? 0);
 
             // Handle function/tool calls
             while (responseMessage.FinishReason == ChatFinishReason.ToolCalls)
             {
                 _logger.LogInformation($"AI requested {responseMessage.ToolCalls.Count} tool calls");
+
+                _telemetryClient.TrackEvent("Agent.ToolCallsRequested", new Dictionary<string, string>
+                {
+                    ["SessionId"] = sessionId,
+                    ["ToolCount"] = responseMessage.ToolCalls.Count.ToString()
+                });
 
                 // Add assistant's tool call message to history
                 messages.Add(new AssistantChatMessage(responseMessage));
@@ -127,22 +174,71 @@ public class AIAgentService
 
                     try
                     {
-                        // Call MCP server
-                        var toolResult = await CallMCPToolAsync(functionName, functionArgs.ToString());
+                        string toolResult;
+                        using (var toolOperation = _telemetryClient.StartOperation<DependencyTelemetry>(functionName))
+                        {
+                            toolOperation.Telemetry.Type = "MCP";
+                            toolOperation.Telemetry.Target = _mcpServerUrl;
+                            toolOperation.Telemetry.Data = functionName;
+
+                            try
+                            {
+                                toolResult = await CallMCPToolAsync(functionName, functionArgs.ToString());
+                                toolOperation.Telemetry.Success = true;
+                            }
+                            catch
+                            {
+                                toolOperation.Telemetry.Success = false;
+                                throw;
+                            }
+                        }
+
+                        _telemetryClient.TrackEvent("Agent.ToolCallSuccess", new Dictionary<string, string>
+                        {
+                            ["SessionId"] = sessionId,
+                            ["ToolName"] = functionName
+                        });
 
                         // Add tool result to conversation
-                        messages.Add(new ToolChatMessage(toolCall.Id, toolResult));
+                        messages.Add(new ToolChatMessage(toolCall.Id, ChatMessageContentPart.CreateTextPart(toolResult)));
                     }
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, $"Error calling MCP tool {functionName}");
-                        messages.Add(new ToolChatMessage(toolCall.Id, $"Error: {ex.Message}"));
+
+                        _telemetryClient.TrackException(ex, new Dictionary<string, string>
+                        {
+                            ["Operation"] = "MCPToolCall",
+                            ["ToolName"] = functionName,
+                            ["SessionId"] = sessionId
+                        });
+
+                        messages.Add(new ToolChatMessage(toolCall.Id, ChatMessageContentPart.CreateTextPart($"Error: {ex.Message}")));
                     }
                 }
 
                 // Get next response from AI with tool results
-                completion = await chatClient.CompleteChatAsync(messages, chatOptions);
-                responseMessage = completion.Value;
+                using (var depOperation = _telemetryClient.StartOperation<DependencyTelemetry>("AgentFollowUpCall"))
+                {
+                    depOperation.Telemetry.Type = "OpenAI";
+                    depOperation.Telemetry.Target = "OpenAI";
+                    depOperation.Telemetry.Data = "ChatCompletion";
+
+                    try
+                    {
+                        completion = await chatClient.CompleteChatAsync(messages, chatOptions);
+                        depOperation.Telemetry.Success = true;
+                    }
+                    catch
+                    {
+                        depOperation.Telemetry.Success = false;
+                        throw;
+                    }
+                }
+
+                aiCallCount++;
+                responseMessage = completion;
+                totalTokens += responseMessage.Usage?.TotalTokenCount ?? 0;
             }
 
             var assistantMessage = responseMessage.Content[0].Text;
@@ -155,6 +251,28 @@ public class AIAgentService
                 assistantMessage,
                 customerId);
 
+            var totalDuration = DateTimeOffset.UtcNow - startTime;
+
+            // Track comprehensive agent metrics
+            _telemetryClient.TrackEvent("Agent.ConversationCompleted", new Dictionary<string, string>
+            {
+                ["SessionId"] = sessionId,
+                ["CustomerId"] = customerId?.ToString() ?? "anonymous",
+                ["ToolsUsedCount"] = toolsUsed.Count.ToString(),
+                ["ToolsUsed"] = string.Join(",", toolsUsed.Distinct()),
+                ["AICallCount"] = aiCallCount.ToString(),
+                ["TotalTokens"] = totalTokens.ToString(),
+                ["DurationMs"] = totalDuration.TotalMilliseconds.ToString("F0"),
+                ["ResponseLength"] = assistantMessage.Length.ToString()
+            });
+
+            _telemetryClient.TrackMetric("AI.Agent.TotalTokensPerConversation", totalTokens);
+            _telemetryClient.TrackMetric("AI.Agent.AICallsPerConversation", aiCallCount);
+            _telemetryClient.TrackMetric("AI.Agent.ToolCallsPerConversation", toolsUsed.Count);
+            _telemetryClient.TrackMetric("AI.Agent.ConversationDurationMs", totalDuration.TotalMilliseconds);
+
+            operation.Telemetry.Success = true;
+
             return new AgentResponse
             {
                 Response = assistantMessage,
@@ -165,6 +283,15 @@ public class AIAgentService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing agent message");
+
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string>
+            {
+                ["Operation"] = "AgentChat",
+                ["SessionId"] = sessionId,
+                ["CustomerId"] = customerId?.ToString() ?? "anonymous"
+            });
+
             throw;
         }
     }
