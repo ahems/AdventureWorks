@@ -378,7 +378,16 @@ Guidelines:
 
         _logger.LogDebug($"Calling MCP endpoint: {_mcpServerUrl} with tool: {toolName}");
 
-        var response = await httpClient.PostAsJsonAsync(_mcpServerUrl, mcpRequest);
+        // Set required Accept headers for MCP server (expects both JSON and SSE)
+        var request = new HttpRequestMessage(HttpMethod.Post, _mcpServerUrl)
+        {
+            Content = JsonContent.Create(mcpRequest)
+        };
+        request.Headers.Accept.Clear();
+        request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("text/event-stream"));
+
+        var response = await httpClient.SendAsync(request);
 
         if (!response.IsSuccessStatusCode)
         {
