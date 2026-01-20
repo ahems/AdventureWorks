@@ -97,7 +97,7 @@ public class GenerateProductEmbeddings
 
     [Function(nameof(FetchProductDescriptionsActivity))]
     public async Task<List<ProductDescriptionData>> FetchProductDescriptionsActivity(
-        FunctionContext context)
+        [ActivityTrigger] FunctionContext context)
     {
         _logger.LogInformation("Fetching product descriptions from database");
         var descriptions = await _productService.GetProductDescriptionsForEmbeddingAsync();

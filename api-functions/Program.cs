@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.ApplicationInsights;
 using Azure.Identity;
+using Azure.Core.Serialization;
 using AddressFunctions.Services;
 using api_functions.Services;
 using OpenTelemetry.Trace;
@@ -16,10 +17,22 @@ using Microsoft.Agents.AI.Hosting.AzureFunctions;
 using Microsoft.Extensions.AI;
 using Azure.AI.OpenAI;
 using ModelContextProtocol.Client;
+using System.Text.Json;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
 builder.ConfigureFunctionsWebApplication();
+
+// Configure JSON serialization to use camelCase for API responses  
+builder.Services.Configure<WorkerOptions>(options =>
+{
+    var settings = System.Text.Json.JsonSerializerDefaults.Web;
+    options.Serializer = new Azure.Core.Serialization.JsonObjectSerializer(
+        new System.Text.Json.JsonSerializerOptions(settings)
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+        });
+});
 
 // Configure Application Insights + OpenTelemetry for enhanced observability
 builder.Services
@@ -42,10 +55,13 @@ builder.Services.AddOpenTelemetry()
 
 // Configure DefaultAzureCredential for Azure SDK clients
 // This will use: Azure CLI > Environment > Workload Identity > Managed Identity
+// When AZURE_CLIENT_ID is set (user-assigned MI), it will use that specific identity
+var managedIdentityClientId = builder.Configuration["AZURE_CLIENT_ID"];
 var defaultCredential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
 {
     ExcludeManagedIdentityCredential = false,
-    ExcludeEnvironmentCredential = false
+    ExcludeEnvironmentCredential = false,
+    ManagedIdentityClientId = managedIdentityClientId // Use user-assigned MI when specified
 });
 builder.Services.AddSingleton(defaultCredential);
 

@@ -155,7 +155,7 @@ public class TranslateProductDescriptions
 
     [Function(nameof(GetSupportedCulturesActivity))]
     public async Task<List<CultureInfo>> GetSupportedCulturesActivity(
-        FunctionContext context)
+        [ActivityTrigger] FunctionContext context)
     {
         _logger.LogInformation("Fetching supported cultures from database");
 

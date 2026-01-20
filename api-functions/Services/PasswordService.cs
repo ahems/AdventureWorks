@@ -12,7 +12,7 @@ namespace AddressFunctions.Services;
 public class PasswordService
 {
     private readonly string _connectionString;
-    private const int SaltSize = 10; // 10 bytes as per database schema (varchar(10) stores base64)
+    private const int SaltSize = 6; // 6 bytes -> 8 chars base64 (fits varchar(10))
     private const int HashSize = 96; // 96 bytes to fit in varchar(128) when base64 encoded
     private const int Iterations = 100000; // OWASP recommended minimum
 

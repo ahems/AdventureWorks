@@ -194,6 +194,38 @@ agent.RunStreamingAsync() → Streaming responses
 - ✅ Clear separation of concerns
 - ✅ Extensible tool integration
 
+## Local Development Setup
+
+### Prerequisites
+
+The Azure Functions require connection to the MCP (Model Context Protocol) server for AI agent tool integration.
+
+**Use Azure-Hosted MCP Server (Recommended for Local Dev):**
+
+1. Get the Azure MCP service URL:
+
+   ```bash
+   azd env get-values | grep MCP_SERVICE_URL
+   ```
+
+2. Add to `api-functions/local.settings.json`:
+   ```json
+   {
+     "Values": {
+       "MCP_SERVICE_URL": "https://av-mcp-xxxxx.azurecontainerapps.io/mcp"
+     }
+   }
+   ```
+
+**Run Local MCP Server (Optional - for MCP Development):**
+
+Only needed if you're developing the MCP server itself:
+
+```bash
+cd api-mcp && dotnet run
+# Then set: "MCP_SERVICE_URL": "http://localhost:5000/mcp"
+```
+
 ## Testing
 
 Build verification:
