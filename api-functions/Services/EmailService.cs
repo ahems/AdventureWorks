@@ -401,4 +401,47 @@ public class EmailService
             return false;
         }
     }
+
+    /// <summary>
+    /// Send email directly to any email address (for password reset, etc.)
+    /// </summary>
+    public async Task<bool> SendEmailDirectAsync(string toEmail, string subject, string htmlContent)
+    {
+        try
+        {
+            var emailClient = new EmailClient(
+                new Uri(_communicationServiceEndpoint),
+                _credential);
+
+            var senderAddress = $"donotreply@{_senderDomain}";
+
+            var emailMessage = new EmailMessage(
+                senderAddress: senderAddress,
+                content: new EmailContent(subject)
+                {
+                    Html = htmlContent
+                },
+                recipients: new EmailRecipients(new List<EmailAddress>
+                {
+                    new EmailAddress(toEmail)
+                }));
+
+            var emailSendOperation = await emailClient.SendAsync(
+                Azure.WaitUntil.Started,
+                emailMessage);
+
+            _logger.LogInformation(
+                "Direct email sent to {EmailAddress}. Subject: {Subject}, Message ID: {MessageId}",
+                toEmail,
+                subject,
+                emailSendOperation.Id);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending direct email to {EmailAddress}", toEmail);
+            return false;
+        }
+    }
 }

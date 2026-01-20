@@ -723,3 +723,107 @@ export async function deleteAccount(
     };
   }
 }
+
+/**
+ * Request password reset - sends email with reset link
+ */
+export async function requestPasswordReset(email: string): Promise<AuthResult> {
+  try {
+    const functionsUrl = getFunctionsApiUrl();
+    const response = await fetch(`${functionsUrl}/api/password/reset/request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: "An error occurred processing your request.",
+      };
+    }
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error("Request password reset error:", error);
+    return {
+      success: false,
+      error: "An error occurred processing your request. Please try again.",
+    };
+  }
+}
+
+/**
+ * Validate password reset token
+ */
+export async function validateResetToken(
+  businessEntityId: number,
+  token: string,
+): Promise<{ isValid: boolean }> {
+  try {
+    const functionsUrl = getFunctionsApiUrl();
+    const response = await fetch(
+      `${functionsUrl}/api/password/reset/validate`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessEntityID: businessEntityId, token }),
+      },
+    );
+
+    if (!response.ok) {
+      return { isValid: false };
+    }
+
+    const result = await response.json();
+    return { isValid: result.isValid };
+  } catch (error) {
+    console.error("Validate reset token error:", error);
+    return { isValid: false };
+  }
+}
+
+/**
+ * Reset password using token
+ */
+export async function resetPassword(
+  businessEntityId: number,
+  token: string,
+  newPassword: string,
+): Promise<AuthResult> {
+  try {
+    const functionsUrl = getFunctionsApiUrl();
+    const response = await fetch(
+      `${functionsUrl}/api/password/reset/complete`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessEntityID: businessEntityId,
+          token,
+          newPassword,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      return {
+        success: false,
+        error: error.error || "Failed to reset password.",
+      };
+    }
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error("Reset password error:", error);
+    return {
+      success: false,
+      error: "An error occurred resetting your password. Please try again.",
+    };
+  }
+}

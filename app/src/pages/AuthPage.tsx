@@ -1,11 +1,13 @@
 import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Loader2, Eye, EyeOff, Bike } from "lucide-react";
+import { ArrowLeft, Loader2, Eye, EyeOff, Bike, Mail, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import { z } from "zod";
 import { Twemoji } from "@/components/Twemoji";
 import { TwemojiText } from "@/components/TwemojiText";
+import { requestPasswordReset } from "@/lib/authService";
+import { toast } from "@/hooks/use-toast";
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email" }),
@@ -31,6 +33,7 @@ const signupSchema = z
 
 const AuthPage: React.FC = () => {
   const { t } = useTranslation("account");
+  const { t: tCommon } = useTranslation("common");
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -41,12 +44,49 @@ const AuthPage: React.FC = () => {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
 
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
+
   const { login, signup, isLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   const from =
     (location.state as { from?: { pathname: string } })?.from?.pathname || "/";
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!resetEmail || !resetEmail.includes("@")) {
+      toast({
+        title: "Invalid Email",
+        description: "Please enter a valid email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsResetting(true);
+    const result = await requestPasswordReset(resetEmail);
+    setIsResetting(false);
+
+    if (result.success) {
+      toast({
+        title: "Email Sent",
+        description:
+          "If an account exists with this email, you will receive password reset instructions.",
+      });
+      setShowForgotPassword(false);
+      setResetEmail("");
+    } else {
+      toast({
+        title: "Error",
+        description: result.error || "Failed to send reset email.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -246,6 +286,15 @@ const AuthPage: React.FC = () => {
                     {errors.password}
                   </p>
                 )}
+                {isLogin && (
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="text-xs text-doodle-primary hover:text-doodle-primary/80 font-doodle mt-1"
+                  >
+                    {t("auth.forgotPassword")}
+                  </button>
+                )}
               </div>
 
               {/* Confirm Password (Signup only) */}
@@ -314,6 +363,72 @@ const AuthPage: React.FC = () => {
           </div>
         </div>
       </main>
+
+      {/* Forgot Password Modal */}
+      {showForgotPassword && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-doodle-bg doodle-border rounded-xl p-6 max-w-md w-full">
+            {/* Header */}
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-doodle text-xl text-doodle-text">
+                {t("auth.forgotPasswordTitle")}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowForgotPassword(false);
+                  setResetEmail("");
+                }}
+                className="text-doodle-text/50 hover:text-doodle-text"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Description */}
+            <p className="font-doodle text-sm text-doodle-text/70 mb-4">
+              {t("auth.forgotPasswordDescription")}
+            </p>
+
+            {/* Email Input */}
+            <div className="mb-4">
+              <label className="font-doodle text-sm text-doodle-text block mb-1">
+                {t("auth.email")}
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-text/50" />
+                <input
+                  type="email"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  className="doodle-input w-full pl-11"
+                  placeholder={t("auth.emailPlaceholder")}
+                />
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setShowForgotPassword(false);
+                  setResetEmail("");
+                }}
+                className="flex-1 doodle-button doodle-button-secondary"
+                disabled={isResetting}
+              >
+                {tCommon("cancel")}
+              </button>
+              <button
+                onClick={handleForgotPassword}
+                className="flex-1 doodle-button doodle-button-primary"
+                disabled={isResetting || !resetEmail}
+              >
+                {isResetting ? tCommon("saving") : t("auth.sendResetLink")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

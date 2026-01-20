@@ -23,6 +23,7 @@ import CartPage from "./pages/CartPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import OrderConfirmationPage from "./pages/OrderConfirmationPage";
 import AuthPage from "./pages/AuthPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import AccountPage from "./pages/AccountPage";
 import SalePage from "./pages/SalePage";
 import SearchPage from "./pages/SearchPage";
@@ -80,6 +81,10 @@ const App = () => (
                               element={<OrderConfirmationPage />}
                             />
                             <Route path="/auth" element={<AuthPage />} />
+                            <Route
+                              path="/reset-password"
+                              element={<ResetPasswordPage />}
+                            />
                             <Route path="/account" element={<AccountPage />} />
                             <Route path="/sale" element={<SalePage />} />
                             <Route path="/search" element={<SearchPage />} />

@@ -35,7 +35,10 @@
     "passwordMismatch": "Passwords do not match",
     "weakPassword": "Password is too weak",
     "invalidCredentials": "Invalid email or password",
-    "accountCreated": "Account created successfully!"
+    "accountCreated": "Account created successfully!",
+    "forgotPasswordTitle": "Reset Password",
+    "forgotPasswordDescription": "Enter your email address and we'll send you a link to reset your password.",
+    "sendResetLink": "Send Reset Link"
   },
   "account": {
     "title": "My Account",
