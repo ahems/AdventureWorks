@@ -1,5 +1,6 @@
 import { graphqlClient } from "./graphql-client";
 import { gql } from "graphql-request";
+import { getFunctionsApiUrl, getRestApiUrl } from "./utils";
 
 export interface AuthUser {
   businessEntityId: number;
@@ -175,21 +176,19 @@ const UPDATE_EMAIL_ADDRESS = gql`
 `;
 
 /**
- * Login user - checks if user exists with given email
- * Note: This is a simplified auth - in production, you'd use proper password hashing
+ * Login user - checks if user exists with given email and verifies password
  */
 export async function loginUser(
   email: string,
-  password: string
+  password: string,
 ): Promise<AuthResult> {
   try {
-    // For demo purposes, we're just checking if the user exists
-    // In production, you'd verify password hash
+    // Check if user exists
     const response = await graphqlClient.request<CheckUserLoginResponse>(
       CHECK_USER_LOGIN,
       {
         email,
-      }
+      },
     );
 
     const emailAddresses = response.emailAddresses?.items || [];
@@ -203,12 +202,39 @@ export async function loginUser(
 
     const emailAddress = emailAddresses[0];
 
+    // Verify password using password functions API
+    const functionsUrl = getFunctionsApiUrl();
+    const verifyResponse = await fetch(`${functionsUrl}/api/password/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        businessEntityID: emailAddress.BusinessEntityID,
+        password: password,
+      }),
+    });
+
+    if (!verifyResponse.ok) {
+      return {
+        success: false,
+        error: "An error occurred during login. Please try again.",
+      };
+    }
+
+    const verifyResult = await verifyResponse.json();
+
+    if (!verifyResult.isValid) {
+      return {
+        success: false,
+        error: "Invalid email or password.",
+      };
+    }
+
     // Get person details
     const personResponse = await graphqlClient.request<GetPersonByIdResponse>(
       GET_PERSON_BY_ID,
       {
         businessEntityId: emailAddress.BusinessEntityID,
-      }
+      },
     );
 
     const person = personResponse.people?.items?.[0];
@@ -246,7 +272,7 @@ export async function signupUser(
   email: string,
   password: string,
   firstName: string,
-  lastName: string
+  lastName: string,
 ): Promise<AuthResult> {
   try {
     // Check if user already exists
@@ -254,7 +280,7 @@ export async function signupUser(
       CHECK_USER_LOGIN,
       {
         email,
-      }
+      },
     );
     const existingEmails = checkResponse.emailAddresses?.items || [];
 
@@ -268,7 +294,7 @@ export async function signupUser(
     // Create business entity first (required by Person table)
     const businessEntityResponse =
       await graphqlClient.request<CreateBusinessEntityResponse>(
-        CREATE_BUSINESS_ENTITY
+        CREATE_BUSINESS_ENTITY,
       );
 
     const businessEntityId =
@@ -281,7 +307,7 @@ export async function signupUser(
         businessEntityId,
         firstName,
         lastName,
-      }
+      },
     );
 
     const newPerson = personResponse.createPerson;
@@ -300,10 +326,28 @@ export async function signupUser(
         {
           businessEntityId: newPerson.BusinessEntityID,
           emailAddress: email,
-        }
+        },
       );
 
     const newEmailAddress = emailResponse.createEmailAddress;
+
+    // Create password using password functions API
+    const functionsUrl = getFunctionsApiUrl();
+    const passwordResponse = await fetch(`${functionsUrl}/api/password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        businessEntityID: newPerson.BusinessEntityID,
+        password: password,
+      }),
+    });
+
+    if (!passwordResponse.ok) {
+      return {
+        success: false,
+        error: "Failed to create account password. Please try again.",
+      };
+    }
 
     return {
       success: true,
@@ -333,7 +377,7 @@ export async function updateUserProfile(
   firstName: string,
   lastName: string,
   newEmail: string,
-  oldEmail: string
+  oldEmail: string,
 ): Promise<AuthResult> {
   try {
     // Update person record
@@ -366,6 +410,316 @@ export async function updateUserProfile(
     return {
       success: false,
       error: "An error occurred while updating your profile. Please try again.",
+    };
+  }
+}
+
+/**
+ * Change user password
+ */
+export async function changePassword(
+  businessEntityId: number,
+  currentPassword: string,
+  newPassword: string,
+): Promise<AuthResult> {
+  try {
+    const functionsUrl = getFunctionsApiUrl();
+
+    // First verify the current password
+    const verifyResponse = await fetch(`${functionsUrl}/api/password/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        businessEntityID: businessEntityId,
+        password: currentPassword,
+      }),
+    });
+
+    if (!verifyResponse.ok) {
+      return {
+        success: false,
+        error: "An error occurred while verifying your password.",
+      };
+    }
+
+    const verifyResult = await verifyResponse.json();
+
+    if (!verifyResult.isValid) {
+      return {
+        success: false,
+        error: "Current password is incorrect.",
+      };
+    }
+
+    // Update to new password
+    const updateResponse = await fetch(`${functionsUrl}/api/password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        businessEntityID: businessEntityId,
+        password: newPassword,
+      }),
+    });
+
+    if (!updateResponse.ok) {
+      return {
+        success: false,
+        error: "Failed to update password. Please try again.",
+      };
+    }
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error("Change password error:", error);
+    return {
+      success: false,
+      error:
+        "An error occurred while changing your password. Please try again.",
+    };
+  }
+}
+
+/**
+ * Delete user account and all associated data
+ * This includes: Person, EmailAddresses, Addresses, Orders, Shopping Cart, Password
+ */
+export async function deleteAccount(
+  businessEntityId: number,
+): Promise<AuthResult> {
+  try {
+    const functionsUrl = getFunctionsApiUrl();
+    const restApiUrl = getRestApiUrl();
+
+    console.log(
+      "[deleteAccount] Starting deletion for businessEntityId:",
+      businessEntityId,
+    );
+
+    // Delete in order to handle foreign key constraints
+
+    // 1. Delete shopping cart items
+    try {
+      const cartResponse = await fetch(
+        `${restApiUrl}/ShoppingCartItem?$filter=ShoppingCartID eq '${businessEntityId}'`,
+      );
+      if (cartResponse.ok) {
+        const cartData = await cartResponse.json();
+        const cartItems = cartData.value || [];
+        console.log(
+          "[deleteAccount] Deleting",
+          cartItems.length,
+          "shopping cart items",
+        );
+        for (const item of cartItems) {
+          await fetch(
+            `${restApiUrl}/ShoppingCartItem/ShoppingCartItemID/${item.ShoppingCartItemID}`,
+            { method: "DELETE" },
+          );
+        }
+      }
+    } catch (error) {
+      console.error("[deleteAccount] Error deleting cart items:", error);
+    }
+
+    // 2. Delete sales order details, then orders (if customer exists)
+    try {
+      // First get Customer ID
+      const customerResponse = await fetch(
+        `${restApiUrl}/Customer?$filter=PersonID eq ${businessEntityId}`,
+      );
+      if (customerResponse.ok) {
+        const customerData = await customerResponse.json();
+        const customer = customerData.value?.[0];
+        if (customer) {
+          console.log("[deleteAccount] Found customer:", customer.CustomerID);
+
+          // Get all orders for this customer
+          const ordersResponse = await fetch(
+            `${restApiUrl}/SalesOrderHeader?$filter=CustomerID eq ${customer.CustomerID}`,
+          );
+          if (ordersResponse.ok) {
+            const ordersData = await ordersResponse.json();
+            const orders = ordersData.value || [];
+            console.log("[deleteAccount] Deleting", orders.length, "orders");
+
+            for (const order of orders) {
+              // Delete order details first
+              const detailsResponse = await fetch(
+                `${restApiUrl}/SalesOrderDetail?$filter=SalesOrderID eq ${order.SalesOrderID}`,
+              );
+              if (detailsResponse.ok) {
+                const detailsData = await detailsResponse.json();
+                const details = detailsData.value || [];
+                for (const detail of details) {
+                  await fetch(
+                    `${restApiUrl}/SalesOrderDetail/SalesOrderID/${detail.SalesOrderID}/SalesOrderDetailID/${detail.SalesOrderDetailID}`,
+                    { method: "DELETE" },
+                  );
+                }
+              }
+
+              // Delete order header
+              await fetch(
+                `${restApiUrl}/SalesOrderHeader/SalesOrderID/${order.SalesOrderID}`,
+                { method: "DELETE" },
+              );
+            }
+          }
+
+          // Delete customer
+          await fetch(
+            `${restApiUrl}/Customer/CustomerID/${customer.CustomerID}`,
+            { method: "DELETE" },
+          );
+        }
+      }
+    } catch (error) {
+      console.error("[deleteAccount] Error deleting orders/customer:", error);
+    }
+
+    // 3. Delete addresses
+    try {
+      // Get BusinessEntityAddress links
+      const beaResponse = await fetch(
+        `${restApiUrl}/BusinessEntityAddress?$filter=BusinessEntityID eq ${businessEntityId}`,
+      );
+      if (beaResponse.ok) {
+        const beaData = await beaResponse.json();
+        const beaLinks = beaData.value || [];
+        console.log("[deleteAccount] Deleting", beaLinks.length, "addresses");
+
+        for (const link of beaLinks) {
+          // Delete BusinessEntityAddress link
+          await fetch(
+            `${restApiUrl}/BusinessEntityAddress/BusinessEntityID/${link.BusinessEntityID}/AddressID/${link.AddressID}/AddressTypeID/${link.AddressTypeID}`,
+            { method: "DELETE" },
+          );
+
+          // Delete the address itself from Functions API
+          try {
+            await fetch(`${functionsUrl}/api/addresses/${link.AddressID}`, {
+              method: "DELETE",
+            });
+          } catch (error) {
+            console.error("[deleteAccount] Error deleting address:", error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("[deleteAccount] Error deleting addresses:", error);
+    }
+
+    // 4. Delete phone numbers
+    try {
+      const phoneResponse = await fetch(
+        `${restApiUrl}/PersonPhone?$filter=BusinessEntityID eq ${businessEntityId}`,
+      );
+      if (phoneResponse.ok) {
+        const phoneData = await phoneResponse.json();
+        const phones = phoneData.value || [];
+        console.log("[deleteAccount] Deleting", phones.length, "phone numbers");
+        for (const phone of phones) {
+          await fetch(
+            `${restApiUrl}/PersonPhone/BusinessEntityID/${phone.BusinessEntityID}/PhoneNumber/${encodeURIComponent(phone.PhoneNumber)}/PhoneNumberTypeID/${phone.PhoneNumberTypeID}`,
+            { method: "DELETE" },
+          );
+        }
+      }
+    } catch (error) {
+      console.error("[deleteAccount] Error deleting phone numbers:", error);
+    }
+
+    // 5. Delete email addresses
+    try {
+      const emailResponse = await fetch(
+        `${restApiUrl}/EmailAddress?$filter=BusinessEntityID eq ${businessEntityId}`,
+      );
+      if (emailResponse.ok) {
+        const emailData = await emailResponse.json();
+        const emails = emailData.value || [];
+        console.log(
+          "[deleteAccount] Deleting",
+          emails.length,
+          "email addresses",
+        );
+        for (const email of emails) {
+          // Use GraphQL mutation for delete to handle composite keys properly
+          const DELETE_EMAIL = gql`
+            mutation DeleteEmail(
+              $businessEntityId: Int!
+              $emailAddressId: Int!
+            ) {
+              deleteEmailAddress(
+                BusinessEntityID: $businessEntityId
+                EmailAddressID: $emailAddressId
+              ) {
+                EmailAddressID
+              }
+            }
+          `;
+          await graphqlClient.request(DELETE_EMAIL, {
+            businessEntityId: businessEntityId,
+            emailAddressId: email.EmailAddressID,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("[deleteAccount] Error deleting email addresses:", error);
+    }
+
+    // 6. Delete password
+    try {
+      await fetch(
+        `${restApiUrl}/Password/BusinessEntityID/${businessEntityId}`,
+        { method: "DELETE" },
+      );
+    } catch (error) {
+      console.error("[deleteAccount] Error deleting password:", error);
+    }
+
+    // 7. Delete Person record (use GraphQL to ensure proper key handling)
+    try {
+      const DELETE_PERSON = gql`
+        mutation DeletePerson($businessEntityId: Int!) {
+          deletePerson(BusinessEntityID: $businessEntityId) {
+            BusinessEntityID
+          }
+        }
+      `;
+      await graphqlClient.request(DELETE_PERSON, {
+        businessEntityId: businessEntityId,
+      });
+    } catch (error) {
+      console.error("[deleteAccount] Error deleting person:", error);
+    }
+
+    // 8. Delete BusinessEntity (use GraphQL to ensure proper key handling)
+    try {
+      const DELETE_BUSINESS_ENTITY = gql`
+        mutation DeleteBusinessEntity($businessEntityId: Int!) {
+          deleteBusinessEntity(BusinessEntityID: $businessEntityId) {
+            BusinessEntityID
+          }
+        }
+      `;
+      await graphqlClient.request(DELETE_BUSINESS_ENTITY, {
+        businessEntityId: businessEntityId,
+      });
+    } catch (error) {
+      console.error("[deleteAccount] Error deleting business entity:", error);
+    }
+
+    console.log("[deleteAccount] Account deletion completed");
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error("Delete account error:", error);
+    return {
+      success: false,
+      error: "An error occurred while deleting your account. Please try again.",
     };
   }
 }

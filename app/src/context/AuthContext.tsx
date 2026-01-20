@@ -32,13 +32,13 @@ interface AuthContextType {
     email: string,
     password: string,
     firstName: string,
-    lastName: string
+    lastName: string,
   ) => Promise<boolean>;
   logout: () => void;
   updateProfile: (
     firstName: string,
     lastName: string,
-    email: string
+    email: string,
   ) => Promise<boolean>;
   isAuthenticated: boolean;
 }
@@ -111,7 +111,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
       return true;
     },
-    []
+    [],
   );
 
   const signup = useCallback(
@@ -119,7 +119,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       email: string,
       password: string,
       firstName: string,
-      lastName: string
+      lastName: string,
     ): Promise<boolean> => {
       setIsLoading(true);
 
@@ -158,7 +158,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
       return true;
     },
-    []
+    [],
   );
 
   const logout = useCallback(() => {
@@ -173,6 +173,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     }
     clearUserContext();
 
+    // Clear user state and localStorage
+    setUser(null);
+    localStorage.removeItem(CURRENT_USER_KEY);
+
     toast({
       title: "Logged Out",
       description: `See you on the trails, ${userName}!`,
@@ -183,7 +187,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     async (
       firstName: string,
       lastName: string,
-      newEmail: string
+      newEmail: string,
     ): Promise<boolean> => {
       if (!user) return false;
 
@@ -195,7 +199,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         firstName,
         lastName,
         newEmail,
-        user.email
+        user.email,
       );
 
       if (!result.success) {
@@ -227,7 +231,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
       return true;
     },
-    [user]
+    [user],
   );
 
   return (

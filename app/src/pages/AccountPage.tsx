@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
@@ -22,6 +22,11 @@ import {
   Trash2,
   Phone,
   Mail,
+  Eye,
+  EyeOff,
+  Loader2,
+  Lock,
+  AlertTriangle,
 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -43,6 +48,7 @@ import {
   useDeleteEmailAddress,
 } from "@/hooks/useEmailAddresses";
 import { getCustomerByPersonId } from "@/lib/customerService";
+import { changePassword, deleteAccount } from "@/lib/authService";
 import { AddressForm } from "@/components/AddressForm";
 import { AddressCard } from "@/components/AddressCard";
 import { toast } from "@/hooks/use-toast";
@@ -86,6 +92,7 @@ const profileSchema = z.object({
 const AccountPage: React.FC = () => {
   const { user, isAuthenticated, logout, updateProfile, isLoading } = useAuth();
   const { t } = useTranslation("common");
+  const navigate = useNavigate();
   const { items: wishlistItems, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
   const { formatPrice } = useCurrency();
@@ -104,10 +111,10 @@ const AccountPage: React.FC = () => {
   } = usePaymentMethods();
   const [customerId, setCustomerId] = useState<number | null>(null);
   const { data: orders = [], isLoading: ordersLoading } = useOrders(
-    customerId || 0
+    customerId || 0,
   );
   const { data: profileData, isLoading: profileLoading } = useProfile(
-    user?.businessEntityId || 0
+    user?.businessEntityId || 0,
   );
   const updateProfileMutation = useUpdateProfile();
   const { data: emailAddresses = [], isLoading: emailAddressesLoading } =
@@ -129,7 +136,7 @@ const AccountPage: React.FC = () => {
     phoneNumberTypeId: 1,
   });
   const [profileErrors, setProfileErrors] = useState<Record<string, string>>(
-    {}
+    {},
   );
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [editingAddress, setEditingAddress] = useState<Address | null>(null);
@@ -140,6 +147,24 @@ const AccountPage: React.FC = () => {
   const [emailError, setEmailError] = useState("");
 
   const [memberSinceDate, setMemberSinceDate] = useState<string>("Recently");
+
+  // Password change state
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>(
+    {},
+  );
+
+  // Delete account state
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -162,14 +187,14 @@ const AccountPage: React.FC = () => {
               "http://localhost:5000/api";
 
             const response = await fetch(
-              `${apiUrl}/Person/BusinessEntityID/${user.businessEntityId}`
+              `${apiUrl}/Person/BusinessEntityID/${user.businessEntityId}`,
             );
             if (response.ok) {
               const result = await response.json();
               const personData = result.value?.[0];
               if (personData?.ModifiedDate) {
                 const date = new Date(
-                  personData.ModifiedDate
+                  personData.ModifiedDate,
                 ).toLocaleDateString("en-US", {
                   month: "long",
                   year: "numeric",
@@ -497,7 +522,7 @@ const AccountPage: React.FC = () => {
                           setExpandedOrder(
                             expandedOrder === order.SalesOrderID
                               ? null
-                              : order.SalesOrderID
+                              : order.SalesOrderID,
                           )
                         }
                         className="w-full flex items-center justify-between"
@@ -510,7 +535,7 @@ const AccountPage: React.FC = () => {
                               </p>
                               <span
                                 className={`text-xs px-2 py-1 rounded-full border ${getOrderStatusColor(
-                                  order.Status
+                                  order.Status,
                                 )}`}
                               >
                                 {getOrderStatusText(order.Status)}
@@ -523,7 +548,7 @@ const AccountPage: React.FC = () => {
                                   month: "long",
                                   day: "numeric",
                                   year: "numeric",
-                                }
+                                },
                               )}
                             </p>
                           </div>
@@ -555,7 +580,7 @@ const AccountPage: React.FC = () => {
                                   </span>
                                   <span>{formatPrice(item.LineTotal)}</span>
                                 </div>
-                              )
+                              ),
                             )}
                           </div>
 
@@ -931,7 +956,7 @@ const AccountPage: React.FC = () => {
                             onChange={(e) => {
                               const formatted = formatPhoneNumber(
                                 e.target.value,
-                                editProfileData.countryCode
+                                editProfileData.countryCode,
                               );
                               setEditProfileData((prev) => ({
                                 ...prev,
@@ -984,7 +1009,7 @@ const AccountPage: React.FC = () => {
                             if (profileData) {
                               // Strip formatting from phone number before saving
                               const cleanPhoneNumber = parsePhoneNumber(
-                                editProfileData.phoneNumber
+                                editProfileData.phoneNumber,
                               );
                               const fullPhoneNumber = cleanPhoneNumber
                                 ? `${editProfileData.countryCode} ${cleanPhoneNumber}`
@@ -1009,7 +1034,7 @@ const AccountPage: React.FC = () => {
                               await updateProfile(
                                 editProfileData.firstName.trim(),
                                 editProfileData.lastName.trim(),
-                                editProfileData.email.trim()
+                                editProfileData.email.trim(),
                               );
 
                               setIsEditingProfile(false);
@@ -1122,7 +1147,7 @@ const AccountPage: React.FC = () => {
 
                             const formatted = formatPhoneNumber(
                               phoneNumber,
-                              countryCode
+                              countryCode,
                             );
                             return `${countryCode} ${formatted}`;
                           })()}
@@ -1131,8 +1156,8 @@ const AccountPage: React.FC = () => {
                             {profileData.PhoneNumberTypeID === 1
                               ? t("account.cell")
                               : profileData.PhoneNumberTypeID === 2
-                              ? t("account.home")
-                              : t("account.work")}
+                                ? t("account.home")
+                                : t("account.work")}
                             )
                           </span>
                         </span>
@@ -1235,7 +1260,7 @@ const AccountPage: React.FC = () => {
                             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                             if (!emailRegex.test(trimmedEmail)) {
                               setEmailError(
-                                "Please enter a valid email address"
+                                "Please enter a valid email address",
                               );
                               return;
                             }
@@ -1244,11 +1269,11 @@ const AccountPage: React.FC = () => {
                               emailAddresses.some(
                                 (e) =>
                                   e.EmailAddress.toLowerCase() ===
-                                  trimmedEmail.toLowerCase()
+                                  trimmedEmail.toLowerCase(),
                               )
                             ) {
                               setEmailError(
-                                "This email address is already in your account"
+                                "This email address is already in your account",
                               );
                               return;
                             }
@@ -1366,7 +1391,7 @@ const AccountPage: React.FC = () => {
                                     /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                                   if (!emailRegex.test(trimmedEmail)) {
                                     setEmailError(
-                                      "Please enter a valid email address"
+                                      "Please enter a valid email address",
                                     );
                                     return;
                                   }
@@ -1377,11 +1402,11 @@ const AccountPage: React.FC = () => {
                                         e.EmailAddressID !==
                                           email.EmailAddressID &&
                                         e.EmailAddress.toLowerCase() ===
-                                          trimmedEmail.toLowerCase()
+                                          trimmedEmail.toLowerCase(),
                                     )
                                   ) {
                                     setEmailError(
-                                      "This email address is already in your account"
+                                      "This email address is already in your account",
                                     );
                                     return;
                                   }
@@ -1396,7 +1421,7 @@ const AccountPage: React.FC = () => {
                                     setEditEmailAddress("");
                                   } catch (error) {
                                     setEmailError(
-                                      "Failed to update email address"
+                                      "Failed to update email address",
                                     );
                                   }
                                 }}
@@ -1455,7 +1480,7 @@ const AccountPage: React.FC = () => {
                                     onClick={async () => {
                                       if (
                                         window.confirm(
-                                          "Are you sure you want to remove this email address?"
+                                          "Are you sure you want to remove this email address?",
                                         )
                                       ) {
                                         try {
@@ -1465,7 +1490,7 @@ const AccountPage: React.FC = () => {
                                                 user!.businessEntityId,
                                               emailAddressId:
                                                 email.EmailAddressID,
-                                            }
+                                            },
                                           );
                                         } catch (error) {
                                           toast({
@@ -1635,7 +1660,7 @@ const AccountPage: React.FC = () => {
                             toast({
                               title: t("account.defaultAddressUpdated"),
                               description: t(
-                                "account.defaultAddressUpdatedDesc"
+                                "account.defaultAddressUpdatedDesc",
                               ),
                             });
                           } catch (error) {
@@ -1726,7 +1751,7 @@ const AccountPage: React.FC = () => {
                                 toast({
                                   title: t("account.paymentMethodRemoved"),
                                   description: t(
-                                    "account.paymentMethodRemovedDesc"
+                                    "account.paymentMethodRemovedDesc",
                                   ),
                                 });
                               } catch (error) {
@@ -1749,21 +1774,358 @@ const AccountPage: React.FC = () => {
                 )}
               </div>
               {/* Account Settings */}
-              <div className="doodle-card p-6 group cursor-pointer">
-                <div className="flex items-start gap-4">
+              <div className="doodle-card p-6">
+                <div
+                  className="flex items-start gap-4 cursor-pointer group"
+                  onClick={() => setShowPasswordForm(!showPasswordForm)}
+                >
                   <div className="w-12 h-12 doodle-border-light flex items-center justify-center group-hover:rotate-6 transition-transform">
                     <Settings className="w-6 h-6 text-doodle-text" />
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <h2 className="font-doodle text-xl font-bold text-doodle-text group-hover:text-doodle-accent transition-colors">
                       {t("account.accountSettings")}
                     </h2>
                     <p className="font-doodle text-sm text-doodle-text/70 mt-1">
                       {t("account.passwordAndSecurity")}
                     </p>
-                    <span className="font-doodle text-xs text-doodle-accent mt-2 inline-block">
-                      {t("account.comingSoon")}
-                    </span>
+                  </div>
+                  {showPasswordForm ? (
+                    <ChevronUp className="w-5 h-5 text-doodle-text" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-doodle-text" />
+                  )}
+                </div>
+
+                {showPasswordForm && (
+                  <div className="mt-6 pt-6 border-t-2 border-dashed border-doodle-text/20">
+                    <h3 className="font-doodle text-lg font-bold text-doodle-text mb-4 flex items-center gap-2">
+                      <Lock className="w-5 h-5" />
+                      Change Password
+                    </h3>
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        setPasswordErrors({});
+
+                        // Validation
+                        const errors: Record<string, string> = {};
+                        if (!currentPassword) {
+                          errors.currentPassword =
+                            "Current password is required";
+                        }
+                        if (!newPassword) {
+                          errors.newPassword = "New password is required";
+                        } else if (newPassword.length < 8) {
+                          errors.newPassword =
+                            "Password must be at least 8 characters";
+                        }
+                        if (newPassword !== confirmNewPassword) {
+                          errors.confirmNewPassword = "Passwords don't match";
+                        }
+                        if (
+                          currentPassword &&
+                          newPassword &&
+                          currentPassword === newPassword
+                        ) {
+                          errors.newPassword =
+                            "New password must be different from current password";
+                        }
+
+                        if (Object.keys(errors).length > 0) {
+                          setPasswordErrors(errors);
+                          return;
+                        }
+
+                        setIsChangingPassword(true);
+                        const result = await changePassword(
+                          user!.businessEntityId,
+                          currentPassword,
+                          newPassword,
+                        );
+                        setIsChangingPassword(false);
+
+                        if (result.success) {
+                          toast({
+                            title: "Password Changed",
+                            description:
+                              "Your password has been updated successfully.",
+                          });
+                          // Reset form
+                          setCurrentPassword("");
+                          setNewPassword("");
+                          setConfirmNewPassword("");
+                          setShowPasswordForm(false);
+                        } else {
+                          toast({
+                            title: "Error",
+                            description:
+                              result.error || "Failed to change password.",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                      className="space-y-4"
+                    >
+                      {/* Current Password */}
+                      <div>
+                        <label className="font-doodle text-sm text-doodle-text block mb-1">
+                          Current Password
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showCurrentPassword ? "text" : "password"}
+                            value={currentPassword}
+                            onChange={(e) => setCurrentPassword(e.target.value)}
+                            className={`doodle-input w-full pr-10 ${
+                              passwordErrors.currentPassword
+                                ? "border-doodle-accent"
+                                : ""
+                            }`}
+                            placeholder="Enter current password"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShowCurrentPassword(!showCurrentPassword)
+                            }
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-doodle-text/50 hover:text-doodle-text"
+                          >
+                            {showCurrentPassword ? (
+                              <EyeOff className="w-5 h-5" />
+                            ) : (
+                              <Eye className="w-5 h-5" />
+                            )}
+                          </button>
+                        </div>
+                        {passwordErrors.currentPassword && (
+                          <p className="font-doodle text-xs text-doodle-accent mt-1">
+                            {passwordErrors.currentPassword}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* New Password */}
+                      <div>
+                        <label className="font-doodle text-sm text-doodle-text block mb-1">
+                          New Password
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showNewPassword ? "text" : "password"}
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            className={`doodle-input w-full pr-10 ${
+                              passwordErrors.newPassword
+                                ? "border-doodle-accent"
+                                : ""
+                            }`}
+                            placeholder="Enter new password (min 8 characters)"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowNewPassword(!showNewPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-doodle-text/50 hover:text-doodle-text"
+                          >
+                            {showNewPassword ? (
+                              <EyeOff className="w-5 h-5" />
+                            ) : (
+                              <Eye className="w-5 h-5" />
+                            )}
+                          </button>
+                        </div>
+                        {passwordErrors.newPassword && (
+                          <p className="font-doodle text-xs text-doodle-accent mt-1">
+                            {passwordErrors.newPassword}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Confirm New Password */}
+                      <div>
+                        <label className="font-doodle text-sm text-doodle-text block mb-1">
+                          Confirm New Password
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showConfirmPassword ? "text" : "password"}
+                            value={confirmNewPassword}
+                            onChange={(e) =>
+                              setConfirmNewPassword(e.target.value)
+                            }
+                            className={`doodle-input w-full pr-10 ${
+                              passwordErrors.confirmNewPassword
+                                ? "border-doodle-accent"
+                                : ""
+                            }`}
+                            placeholder="Confirm new password"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShowConfirmPassword(!showConfirmPassword)
+                            }
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-doodle-text/50 hover:text-doodle-text"
+                          >
+                            {showConfirmPassword ? (
+                              <EyeOff className="w-5 h-5" />
+                            ) : (
+                              <Eye className="w-5 h-5" />
+                            )}
+                          </button>
+                        </div>
+                        {passwordErrors.confirmNewPassword && (
+                          <p className="font-doodle text-xs text-doodle-accent mt-1">
+                            {passwordErrors.confirmNewPassword}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Submit Buttons */}
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          type="submit"
+                          disabled={isChangingPassword}
+                          className="doodle-button doodle-button-primary flex items-center gap-2"
+                        >
+                          {isChangingPassword ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Changing...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-4 h-4" />
+                              Change Password
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowPasswordForm(false);
+                            setCurrentPassword("");
+                            setNewPassword("");
+                            setConfirmNewPassword("");
+                            setPasswordErrors({});
+                          }}
+                          className="doodle-button"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {/* Delete Account Section */}
+                <div className="mt-6 pt-6 border-t-2 border-dashed border-doodle-accent/20">
+                  <div className="bg-doodle-accent/10 border-2 border-dashed border-doodle-accent/30 p-4 rounded-lg">
+                    <div className="flex items-start gap-3 mb-3">
+                      <AlertTriangle className="w-5 h-5 text-doodle-accent flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h3 className="font-doodle text-lg font-bold text-doodle-accent">
+                          Delete Account
+                        </h3>
+                        <p className="font-doodle text-sm text-doodle-text/70 mt-1">
+                          This will permanently delete your account and all
+                          associated data including orders, addresses, and saved
+                          information. This action cannot be undone.
+                        </p>
+                      </div>
+                    </div>
+
+                    {!showDeleteConfirmation ? (
+                      <button
+                        onClick={() => setShowDeleteConfirmation(true)}
+                        className="doodle-button border-doodle-accent text-doodle-accent hover:bg-doodle-accent hover:text-white transition-colors"
+                      >
+                        Delete My Account
+                      </button>
+                    ) : (
+                      <div className="mt-4 space-y-4">
+                        <div>
+                          <label className="font-doodle text-sm text-doodle-text block mb-2">
+                            Type <strong>DELETE</strong> to confirm:
+                          </label>
+                          <input
+                            type="text"
+                            value={deleteConfirmText}
+                            onChange={(e) =>
+                              setDeleteConfirmText(e.target.value)
+                            }
+                            className="doodle-input w-full max-w-xs"
+                            placeholder="DELETE"
+                          />
+                        </div>
+                        <div className="flex gap-3">
+                          <button
+                            onClick={async () => {
+                              if (deleteConfirmText !== "DELETE") {
+                                toast({
+                                  title: "Confirmation Required",
+                                  description: "Please type DELETE to confirm.",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+
+                              setIsDeletingAccount(true);
+                              const result = await deleteAccount(
+                                user!.businessEntityId,
+                              );
+                              setIsDeletingAccount(false);
+
+                              if (result.success) {
+                                toast({
+                                  title: "Account Deleted",
+                                  description:
+                                    "Your account has been permanently deleted.",
+                                });
+                                logout();
+                                navigate("/");
+                              } else {
+                                toast({
+                                  title: "Error",
+                                  description:
+                                    result.error || "Failed to delete account.",
+                                  variant: "destructive",
+                                });
+                                setShowDeleteConfirmation(false);
+                                setDeleteConfirmText("");
+                              }
+                            }}
+                            disabled={
+                              isDeletingAccount ||
+                              deleteConfirmText !== "DELETE"
+                            }
+                            className="doodle-button bg-doodle-accent border-doodle-accent text-white hover:bg-doodle-accent/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          >
+                            {isDeletingAccount ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Deleting...
+                              </>
+                            ) : (
+                              <>
+                                <Trash2 className="w-4 h-4" />
+                                Permanently Delete Account
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowDeleteConfirmation(false);
+                              setDeleteConfirmText("");
+                            }}
+                            disabled={isDeletingAccount}
+                            className="doodle-button"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1772,7 +2134,10 @@ const AccountPage: React.FC = () => {
             {/* Sign Out */}
             <div className="mt-8 text-center">
               <button
-                onClick={logout}
+                onClick={() => {
+                  logout();
+                  navigate("/");
+                }}
                 className="doodle-button inline-flex items-center gap-2"
               >
                 <LogOut className="w-4 h-4" />

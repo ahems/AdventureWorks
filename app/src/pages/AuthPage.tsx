@@ -11,7 +11,7 @@ const loginSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email" }),
   password: z
     .string()
-    .min(6, { message: "Password must be at least 6 characters" }),
+    .min(8, { message: "Password must be at least 8 characters" }),
 });
 
 const signupSchema = z
@@ -21,7 +21,7 @@ const signupSchema = z
     email: z.string().email({ message: "Please enter a valid email" }),
     password: z
       .string()
-      .min(6, { message: "Password must be at least 6 characters" }),
+      .min(8, { message: "Password must be at least 8 characters" }),
     confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {
