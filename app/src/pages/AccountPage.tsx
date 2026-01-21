@@ -1535,6 +1535,7 @@ const AccountPage: React.FC = () => {
                   </div>
                   {!showAddressForm && !editingAddress && (
                     <button
+                      data-testid="add-address-button"
                       onClick={() => setShowAddressForm(true)}
                       className="doodle-button text-sm py-1 px-3 flex items-center gap-2"
                     >
@@ -1625,6 +1626,7 @@ const AccountPage: React.FC = () => {
                       {t("account.noAddressesYet")}
                     </p>
                     <button
+                      data-testid="add-address-button"
                       onClick={() => setShowAddressForm(true)}
                       className="doodle-button doodle-button-primary inline-flex items-center gap-2"
                     >
@@ -1776,6 +1778,7 @@ const AccountPage: React.FC = () => {
               {/* Account Settings */}
               <div className="doodle-card p-6">
                 <div
+                  data-testid="account-settings-toggle"
                   className="flex items-start gap-4 cursor-pointer group"
                   onClick={() => setShowPasswordForm(!showPasswordForm)}
                 >

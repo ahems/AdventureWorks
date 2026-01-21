@@ -42,7 +42,7 @@ export const AddressForm: React.FC<AddressFormProps> = ({
   });
 
   const [selectedCountry, setSelectedCountry] = useState(
-    address?.countryRegionCode || "US"
+    address?.countryRegionCode || "US",
   );
   const {
     countries,
@@ -111,7 +111,11 @@ export const AddressForm: React.FC<AddressFormProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form
+      data-testid="address-form"
+      onSubmit={handleSubmit}
+      className="space-y-4"
+    >
       <div>
         <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
           {t("addressForm.addressType")} *

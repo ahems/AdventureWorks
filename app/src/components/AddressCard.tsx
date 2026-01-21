@@ -31,6 +31,7 @@ export const AddressCard: React.FC<AddressCardProps> = ({
 
   return (
     <div
+      data-testid="address-card"
       onClick={handleClick}
       className={`border-2 p-4 transition-all ${
         selectable ? "cursor-pointer hover:border-doodle-accent" : ""
@@ -78,6 +79,7 @@ export const AddressCard: React.FC<AddressCardProps> = ({
         {!selectable && (
           <div className="flex flex-col gap-2">
             <button
+              data-testid="address-edit-button"
               onClick={(e) => {
                 e.stopPropagation();
                 onEdit(address);
@@ -89,6 +91,7 @@ export const AddressCard: React.FC<AddressCardProps> = ({
             </button>
             {!address.isDefault && (
               <button
+                data-testid="address-set-default-button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onSetDefault(address.id);
@@ -100,6 +103,7 @@ export const AddressCard: React.FC<AddressCardProps> = ({
               </button>
             )}
             <button
+              data-testid="address-delete-button"
               onClick={(e) => {
                 e.stopPropagation();
                 if (confirm(t("addressCard.confirmDeleteAddress"))) {

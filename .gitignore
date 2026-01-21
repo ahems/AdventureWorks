@@ -187,6 +187,13 @@ AI_AGENT_CONFIG.json
 node_modules/
 config.json
 
+# Playwright test artifacts
+playwright-report/
+blob-report/
+test-results/
+tests/playwright-report/
+tests/test-results/
+
 # api-mcp .NET build outputs
 api-mcp/**/bin/
 api-mcp/**/obj/
