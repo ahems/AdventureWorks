@@ -36,9 +36,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Bun globally
-RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash
-
 # Install Azure Static Web Apps CLI
 RUN npm install -g @azure/static-web-apps-cli
 

@@ -30,7 +30,8 @@
         "ms-vscode.vscode-node-azure-pack",
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
-        "bradlc.vscode-tailwindcss"
+        "bradlc.vscode-tailwindcss",
+        "ms-playwright.playwright"
       ],
       "settings": {
         // PowerShell settings
@@ -52,22 +53,7 @@
       }
     }
   },
-  "forwardPorts": [5000, 5173, 7071],
-  "portsAttributes": {
-    "5000": {
-      "label": "DAB API",
-      "onAutoForward": "notify"
-    },
-    "5173": {
-      "label": "Vite Dev Server",
-      "onAutoForward": "notify"
-    },
-    "7071": {
-      "label": "Azure Functions",
-      "onAutoForward": "notify"
-    }
-  },
-  "postCreateCommand": "az bicep install && dotnet restore api-functions/api-functions.csproj && cd app && bun install",
+  "postCreateCommand": "az bicep install && (cd app && npm ci) && npm install --prefix app @playwright/test faker csv-parse csv-writer && (cd app && npx --yes playwright install --with-deps)",
   "hostRequirements": {
     "memory": "8gb"
   }
