@@ -246,4 +246,10 @@
 
 
 ════════════════════════════════════════════════════════════════════════════════
+
+## Related docs
+
+- High-level receipt generation overview: [docs/RECEIPT_GENERATION.md](RECEIPT_GENERATION.md)
+- Customer email and attachment sending: [docs/SEND_EMAIL_FUNCTION.md](SEND_EMAIL_FUNCTION.md)
+- Azure Functions implementation reference: [api-functions/README.md](../api-functions/README.md)
 ```

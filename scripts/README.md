@@ -398,6 +398,16 @@ API_URL=https://av-api-abc123.azurecontainerapps.io/graphql
 - **Idempotent:** Safe to run multiple times
 - **Defensive:** Continues if resources already deleted
 - **Logging:** Provides detailed feedback on each deletion step
+
+---
+
+## Related project documentation
+
+- Overall solution overview and architecture: [README.md](../README.md)
+- Azure infrastructure and Bicep modules: [infra/README.md](../infra/README.md)
+- SQL schema, seed data, and AI-augmented CSVs: [scripts/sql/README.md](sql/README.md)
+- AI agent automation and MCP integration: [docs/AI_AGENT_AUTOMATION.md](../docs/AI_AGENT_AUTOMATION.md), [docs/AI_AGENT_DEPLOYMENT_SUMMARY.md](../docs/AI_AGENT_DEPLOYMENT_SUMMARY.md), [docs/AGENT_FRAMEWORK_MIGRATION.md](../docs/AGENT_FRAMEWORK_MIGRATION.md)
+- Application Insights integration and connection string flow: [docs/APP_INSIGHTS_INTEGRATION.md](../docs/APP_INSIGHTS_INTEGRATION.md), [docs/APP_INSIGHTS_CONNECTION_STRING_FLOW.md](../docs/APP_INSIGHTS_CONNECTION_STRING_FLOW.md)
 - **Fallback:** Tries display name if client ID lookup fails
 
 ### When to Use

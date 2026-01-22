@@ -258,6 +258,14 @@ Same as before:
 ### For API Callers
 
 1. Same request format
+
+## Related docs
+
+- HTTP endpoint and request/response examples: [docs/LANGUAGE_FILE_TRANSLATION.md](LANGUAGE_FILE_TRANSLATION.md)
+- Blob storage output and SAS URLs: [docs/TRANSLATION_BLOB_STORAGE.md](TRANSLATION_BLOB_STORAGE.md)
+- Emoji handling in translated strings: [docs/EMOJI_IN_TRANSLATIONS.md](EMOJI_IN_TRANSLATIONS.md)
+- Azure Functions implementation overview: [api-functions/README.md](../api-functions/README.md)
+
 2. Response now includes Durable Functions tracking URLs
 3. Poll `statusQueryGetUri` for completion instead of waiting for synchronous response
 4. Extract result from `output` field in status response

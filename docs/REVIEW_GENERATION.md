@@ -20,13 +20,11 @@ The `GenerateProductReviewsUsingAI` function creates between 0 and 10 reviews pe
 Each product is randomly assigned a sentiment ratio:
 
 1. **Ratio 1 - Mostly Positive** (70-80% positive)
-
    - Most reviews: 4-5 stars
    - Some reviews: 3 stars (mixed)
    - Few reviews: 1-2 stars
 
 2. **Ratio 2 - Mixed** (50/50 split)
-
    - Evenly distributed between positive (4-5 stars) and negative (1-2 stars)
    - Some 3-star reviews for balance
 
@@ -95,13 +93,11 @@ curl -X POST http://localhost:7071/api/GenerateProductReviewEmbeddings_HttpStart
 ### Activities
 
 1. **FetchProductsActivity**
-
    - Retrieves all finished goods products
    - Includes product name and English description
    - Counts existing reviews per product
 
 2. **GenerateReviewsWithAIActivity**
-
    - Uses Azure OpenAI (GPT model) for generation
    - High temperature (0.9) for creative variety
    - Processes each product individually for better control
@@ -193,3 +189,10 @@ Potential improvements:
 - Image uploads in reviews
 - Review filtering by rating
 - Sentiment analysis display
+
+## Related docs
+
+- Review workflow details: [docs/REVIEW_GENERATION_WORKFLOW.md](REVIEW_GENERATION_WORKFLOW.md)
+- Shell scripts for running the flows: [docs/REVIEW_GENERATION_SCRIPTS.md](REVIEW_GENERATION_SCRIPTS.md)
+- Azure Functions implementation overview: [api-functions/README.md](../api-functions/README.md)
+- Semantic search and embeddings export scripts: [scripts/EMBEDDING_EXPORT.md](../scripts/EMBEDDING_EXPORT.md)

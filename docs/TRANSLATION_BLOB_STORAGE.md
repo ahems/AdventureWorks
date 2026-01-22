@@ -161,3 +161,10 @@ See `/tmp/test-translation-with-filename.sh` for complete example that:
 - Polls for completion
 - Downloads result via SAS URL
 - Displays translated JSON
+
+## Related docs
+
+- Durable Functions orchestration design: [docs/LANGUAGE_TRANSLATION_DURABLE_FUNCTIONS.md](LANGUAGE_TRANSLATION_DURABLE_FUNCTIONS.md)
+- Language file translation HTTP endpoint: [docs/LANGUAGE_FILE_TRANSLATION.md](LANGUAGE_FILE_TRANSLATION.md)
+- Emoji handling in translations: [docs/EMOJI_IN_TRANSLATIONS.md](EMOJI_IN_TRANSLATIONS.md)
+- Azure Functions implementation overview: [api-functions/README.md](../api-functions/README.md)

@@ -258,6 +258,13 @@ To integrate with the React frontend:
    - Password history to prevent reuse
    - Rate limiting on verification endpoint
    - Multi-factor authentication
+
+## Related docs
+
+- Functions implementation and endpoints: [../api-functions/README.md](../api-functions/README.md)
+- Overall application architecture and flows: [../README.md](../README.md)
+- Azure deployment and hooks: [../QUICKSTART.md](../QUICKSTART.md), [../scripts/README.md](../scripts/README.md)
+
 3. **Authentication**: The current implementation uses `AuthorizationLevel.Anonymous` for demo purposes. In production, consider adding proper authentication to the Function endpoints.
 
 ## Password Hashing Process

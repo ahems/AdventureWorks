@@ -258,6 +258,15 @@ The script returns appropriate exit codes:
 - **0**: All tests passed
 - **1**: One or more tests failed
 
+## Related docs
+
+- Complete end-to-end AI + MCP test flow: [AI_AND_MCP_TESTING_GUIDE.md](AI_AND_MCP_TESTING_GUIDE.md)
+- AI agent automation and deployment: [AI_AGENT_AUTOMATION.md](AI_AGENT_AUTOMATION.md), [AI_AGENT_DEPLOYMENT_SUMMARY.md](AI_AGENT_DEPLOYMENT_SUMMARY.md)
+- Migration and architecture of the agent: [AGENT_FRAMEWORK_MIGRATION.md](AGENT_FRAMEWORK_MIGRATION.md)
+- Telemetry and App Insights dashboards: [AI_AGENT_TELEMETRY_IMPLEMENTATION.md](AI_AGENT_TELEMETRY_IMPLEMENTATION.md), [APP_INSIGHTS_INTEGRATION.md](APP_INSIGHTS_INTEGRATION.md), [APP_INSIGHTS_CONNECTION_STRING_FLOW.md](APP_INSIGHTS_CONNECTION_STRING_FLOW.md)
+- MCP server tools and implementation: [../api-mcp/README.md](../api-mcp/README.md)
+- Functions API that exposes the chat endpoints: [../api-functions/README.md](../api-functions/README.md)
+
 Use in Azure Pipelines:
 
 ```yaml

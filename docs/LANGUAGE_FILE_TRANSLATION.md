@@ -288,7 +288,6 @@ done
 ### Function Components
 
 1. **TranslateLanguageFile.cs**: HTTP trigger function
-
    - Validates input
    - Handles HTTP request/response
    - Calls AIService for translation
@@ -359,3 +358,10 @@ Potential improvements:
 - Diff-based translation (only translate changed keys)
 - Batch processing endpoint for multiple language files
 - Quality scoring and validation
+
+## Related docs
+
+- Durable Functions orchestration backing this endpoint: [LANGUAGE_TRANSLATION_DURABLE_FUNCTIONS.md](LANGUAGE_TRANSLATION_DURABLE_FUNCTIONS.md)
+- Blob storage usage for translated assets: [TRANSLATION_BLOB_STORAGE.md](TRANSLATION_BLOB_STORAGE.md)
+- Emoji handling and localization notes: [EMOJI_IN_TRANSLATIONS.md](EMOJI_IN_TRANSLATIONS.md)
+- Functions project where this endpoint lives: [../api-functions/README.md](../api-functions/README.md)

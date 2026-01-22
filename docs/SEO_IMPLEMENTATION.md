@@ -184,18 +184,15 @@ curl -s https://yourdomain.com | grep -E '<title>|<meta.*description'
 ## 📈 Next Steps
 
 1. **Submit to Search Engines**:
-
    - Google Search Console: https://search.google.com/search-console
    - Bing Webmaster Tools: https://www.bing.com/webmasters
 
 2. **Monitor Performance**:
-
    - Set up Core Web Vitals monitoring
    - Track keyword rankings
    - Monitor click-through rates (CTR) from search results
 
 3. **Content Optimization**:
-
    - Write unique descriptions for each product
    - Add customer reviews (schema markup)
    - Create blog content for long-tail keywords
@@ -213,3 +210,9 @@ curl -s https://yourdomain.com | grep -E '<title>|<meta.*description'
 - [Schema.org Documentation](https://schema.org/)
 - [Web.dev SEO Guide](https://web.dev/learn/seo/)
 - [Lighthouse CI](https://github.com/GoogleChrome/lighthouse-ci)
+
+## Related docs
+
+- Implementation details for SEO components and helpers: [SEO_COMPONENTS_IMPLEMENTATION.md](SEO_COMPONENTS_IMPLEMENTATION.md)
+- Functions that serve SEO-related endpoints (sitemap, OpenAPI, Swagger UI): [../api-functions/README.md](../api-functions/README.md)
+- Overall frontend and backend architecture: [../README.md](../README.md)

@@ -187,3 +187,10 @@ Remember to import the component:
 ```tsx
 import { TwemojiText } from "@/components/TwemojiText";
 ```
+
+## Related docs
+
+- Durable Functions implementation for language translation: [docs/LANGUAGE_TRANSLATION_DURABLE_FUNCTIONS.md](LANGUAGE_TRANSLATION_DURABLE_FUNCTIONS.md)
+- HTTP endpoint and payload format: [docs/LANGUAGE_FILE_TRANSLATION.md](LANGUAGE_FILE_TRANSLATION.md)
+- Blob storage + SAS URL behavior: [docs/TRANSLATION_BLOB_STORAGE.md](TRANSLATION_BLOB_STORAGE.md)
+- Azure Functions implementation reference: [api-functions/README.md](../api-functions/README.md)

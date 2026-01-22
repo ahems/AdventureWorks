@@ -338,6 +338,15 @@ This script can be integrated into CI/CD pipelines:
 - `0`: All tests passed
 - `1`: One or more tests failed
 
+## Related Documentation
+
+- AI agent automation and deployment: [AI_AGENT_AUTOMATION.md](AI_AGENT_AUTOMATION.md), [AI_AGENT_DEPLOYMENT_SUMMARY.md](AI_AGENT_DEPLOYMENT_SUMMARY.md)
+- Agent migration to Microsoft Agents Framework: [AGENT_FRAMEWORK_MIGRATION.md](AGENT_FRAMEWORK_MIGRATION.md)
+- Detailed telemetry implementation and queries: [AI_AGENT_TELEMETRY_IMPLEMENTATION.md](AI_AGENT_TELEMETRY_IMPLEMENTATION.md), [APP_INSIGHTS_INTEGRATION.md](APP_INSIGHTS_INTEGRATION.md), [APP_INSIGHTS_CONNECTION_STRING_FLOW.md](APP_INSIGHTS_CONNECTION_STRING_FLOW.md)
+- MCP server implementation and tools: [../api-mcp/README.md](../api-mcp/README.md)
+- Functions hosting the agent endpoints: [../api-functions/README.md](../api-functions/README.md)
+- Focused chat/MCP test script guide: [AI_CHAT_MCP_TESTING.md](AI_CHAT_MCP_TESTING.md)
+
 Use this in scripts:
 
 ```bash

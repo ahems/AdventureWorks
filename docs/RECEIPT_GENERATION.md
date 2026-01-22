@@ -290,3 +290,10 @@ Potential improvements for the future:
 ## License
 
 QuestPDF Community License is used (free for community projects).
+
+## Related docs
+
+- Functions and endpoints that generate receipts and send emails: [../api-functions/README.md](../api-functions/README.md)
+- Detailed end-to-end receipt flow: [RECEIPT_GENERATION_FLOW.md](RECEIPT_GENERATION_FLOW.md)
+- Email sending implementation and configuration: [SEND_EMAIL_FUNCTION.md](SEND_EMAIL_FUNCTION.md)
+- Overall solution architecture and capabilities: [../README.md](../README.md)

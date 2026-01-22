@@ -13,13 +13,11 @@ During `azd provision`, the deployment automatically creates an AI Agent that in
 When you run `azd up` or `azd provision`, the system automatically:
 
 1. **Deploys Infrastructure** (via Bicep templates)
-
    - Azure AI Foundry (Cognitive Services)
    - Azure Functions Container App with MCP Server
    - All supporting Azure resources
 
 2. **Configures AI Agent** (via postprovision.ps1)
-
    - Installs `agent-framework-azure-ai` Python package
    - Creates AI Agent with MCP tools
    - Configures agent instructions for customer service
@@ -254,6 +252,15 @@ pwsh scripts/postprovision.ps1
 3. **Build UI:** Create a chat interface that uses the agent
 4. **Add Auth:** Implement user authentication to pass CustomerID from logged-in users
 5. **Monitor:** Use Application Insights to track agent usage and performance
+
+## Related docs
+
+- High-level overview of automation: [AI_AGENT_DEPLOYMENT_SUMMARY.md](AI_AGENT_DEPLOYMENT_SUMMARY.md)
+- Migration to Microsoft Agents Framework: [AGENT_FRAMEWORK_MIGRATION.md](AGENT_FRAMEWORK_MIGRATION.md)
+- Telemetry implementation and Kusto queries: [AI_AGENT_TELEMETRY_IMPLEMENTATION.md](AI_AGENT_TELEMETRY_IMPLEMENTATION.md), [APP_INSIGHTS_INTEGRATION.md](APP_INSIGHTS_INTEGRATION.md), [APP_INSIGHTS_CONNECTION_STRING_FLOW.md](APP_INSIGHTS_CONNECTION_STRING_FLOW.md)
+- MCP server and tools: [../api-mcp/README.md](../api-mcp/README.md)
+- Functions that host the agent endpoints: [../api-functions/README.md](../api-functions/README.md)
+- Testing the AI agent and MCP flows: [AI_AND_MCP_TESTING_GUIDE.md](AI_AND_MCP_TESTING_GUIDE.md), [AI_CHAT_MCP_TESTING.md](AI_CHAT_MCP_TESTING.md)
 
 ## Related Documentation
 

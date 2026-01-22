@@ -156,7 +156,7 @@ import { HelmetProvider } from "react-helmet-async";
 createRoot(document.getElementById("root")!).render(
   <HelmetProvider>
     <App />
-  </HelmetProvider>
+  </HelmetProvider>,
 );
 ```
 
@@ -228,18 +228,15 @@ JSON.parse(document.querySelector('script[type="application/ld+json"]').textCont
    ```
 
 2. **Submit Sitemap**:
-
    - Google Search Console: Add sitemap URL
    - Bing Webmaster Tools: Submit sitemap
 
 3. **Monitor Performance**:
-
    - Track keyword rankings
    - Monitor click-through rates
    - Check Core Web Vitals
 
 4. **Content Optimization**:
-
    - Write unique descriptions for top products
    - Add customer reviews (with Review schema)
    - Create category landing page content
@@ -318,3 +315,9 @@ Track these metrics to measure SEO impact:
 - Bounce rate on product/category pages
 - Time on page
 - Conversion rate from organic traffic
+
+## Related docs
+
+- High-level SEO strategy and checklist: [SEO_IMPLEMENTATION.md](SEO_IMPLEMENTATION.md)
+- Functions serving SEO endpoints (sitemap, OpenAPI, Swagger UI): [../api-functions/README.md](../api-functions/README.md)
+- Overall application architecture and routing: [../README.md](../README.md)

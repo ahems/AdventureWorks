@@ -145,3 +145,9 @@ await httpClient.PostAsJsonAsync(
 Emails are sent from: `DoNotReply@{EMAIL_SENDER_DOMAIN}`
 
 The domain is automatically provisioned as an Azure-managed domain during infrastructure deployment.
+
+## Related docs
+
+- Receipt PDF generation and queue flow: [docs/RECEIPT_GENERATION_FLOW.md](RECEIPT_GENERATION_FLOW.md)
+- High-level receipt feature overview: [docs/RECEIPT_GENERATION.md](RECEIPT_GENERATION.md)
+- Azure Functions implementation overview: [api-functions/README.md](../api-functions/README.md)

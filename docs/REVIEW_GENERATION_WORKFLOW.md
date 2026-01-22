@@ -187,3 +187,10 @@ This creates a realistic distribution of reviews over the product's lifetime.
 ### Need to Restart
 
 Simply call the HTTP endpoint again - it clears existing queue messages and starts fresh.
+
+## Related docs
+
+- High-level review generation overview: [docs/REVIEW_GENERATION.md](REVIEW_GENERATION.md)
+- Bash scripts for end-to-end runs: [docs/REVIEW_GENERATION_SCRIPTS.md](REVIEW_GENERATION_SCRIPTS.md)
+- Azure Functions implementation details: [api-functions/README.md](../api-functions/README.md)
+- Embedding export limitations and guidance: [scripts/EMBEDDING_EXPORT_LIMITATION.md](../scripts/EMBEDDING_EXPORT_LIMITATION.md)

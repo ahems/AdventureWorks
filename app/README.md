@@ -20,16 +20,19 @@ This app fetches data from a GraphQL API powered by Microsoft Data API Builder. 
 ### Quick Start
 
 1. Copy the environment template:
+
 ```bash
 cp .env.example .env
 ```
 
 2. Update `.env` with your API URL:
+
 ```env
 VITE_API_URL=https://your-api-url.azurecontainerapps.io/graphql
 ```
 
 3. Install dependencies and run:
+
 ```bash
 npm install
 npm run dev
@@ -106,3 +109,12 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## Related docs
+
+- Overall solution architecture and services: [README.md](../README.md)
+- Azure deployment and azd workflow: [QUICKSTART.md](../QUICKSTART.md)
+- Frontend local development details: [app/LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md)
+- Data API Builder service and container config: [api/README.md](../api/README.md)
+- Azure Functions and AI/MCP workflows: [api-functions/README.md](../api-functions/README.md)
+- GraphQL naming rules from the AdventureWorks schema: [docs/DAB_NAMING_CONVENTIONS.md](../docs/DAB_NAMING_CONVENTIONS.md)

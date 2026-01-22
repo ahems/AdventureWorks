@@ -406,3 +406,11 @@ azd deploy api-functions
 ```
 
 All telemetry is now flowing to Application Insights and available for monitoring in the Azure Portal.
+
+## Related docs
+
+- Overall AI agent automation and deployment: [AI_AGENT_AUTOMATION.md](AI_AGENT_AUTOMATION.md), [AI_AGENT_DEPLOYMENT_SUMMARY.md](AI_AGENT_DEPLOYMENT_SUMMARY.md)
+- Migration to the Microsoft Agents Framework: [AGENT_FRAMEWORK_MIGRATION.md](AGENT_FRAMEWORK_MIGRATION.md)
+- Application Insights wiring and connection flow: [APP_INSIGHTS_INTEGRATION.md](APP_INSIGHTS_INTEGRATION.md), [APP_INSIGHTS_CONNECTION_STRING_FLOW.md](APP_INSIGHTS_CONNECTION_STRING_FLOW.md)
+- MCP server implementation details: [../api-mcp/README.md](../api-mcp/README.md)
+- Functions that emit this telemetry: [../api-functions/README.md](../api-functions/README.md)

@@ -151,14 +151,12 @@ Response will include:
 Running the complete workflow creates:
 
 1. **Product Reviews**
-
    - 0-10 reviews per product (random)
    - Varied sentiment (positive/mixed/negative)
    - Creative, fun commentary
    - Stored in `Production.ProductReview`
 
 2. **Review Embeddings**
-
    - 1536-dimension vectors
    - Enables semantic search
    - Stored in `CommentsEmbedding` column
@@ -224,3 +222,10 @@ If issues persist:
 2. Verify database connectivity
 3. Ensure Azure OpenAI deployment is active
 4. Check Application Insights for detailed telemetry
+
+## Related docs
+
+- Conceptual overview of AI review generation: [docs/REVIEW_GENERATION.md](REVIEW_GENERATION.md)
+- Queue-based orchestration and flow diagram: [docs/REVIEW_GENERATION_WORKFLOW.md](REVIEW_GENERATION_WORKFLOW.md)
+- Azure Functions implementation reference: [api-functions/README.md](../api-functions/README.md)
+- Embedding export scripts and docs: [scripts/EMBEDDING_EXPORT.md](../scripts/EMBEDDING_EXPORT.md)

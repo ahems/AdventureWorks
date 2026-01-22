@@ -259,6 +259,14 @@ curl -X POST http://localhost:7071/api/agent/chat \
 
 ## Migration Notes
 
+## Related docs
+
+- AI agent automation and deployment: [AI_AGENT_AUTOMATION.md](AI_AGENT_AUTOMATION.md), [AI_AGENT_DEPLOYMENT_SUMMARY.md](AI_AGENT_DEPLOYMENT_SUMMARY.md)
+- AI agent telemetry and monitoring: [AI_AGENT_TELEMETRY_IMPLEMENTATION.md](AI_AGENT_TELEMETRY_IMPLEMENTATION.md), [APP_INSIGHTS_INTEGRATION.md](APP_INSIGHTS_INTEGRATION.md), [APP_INSIGHTS_CONNECTION_STRING_FLOW.md](APP_INSIGHTS_CONNECTION_STRING_FLOW.md)
+- MCP server and tools surface: [../api-mcp/README.md](../api-mcp/README.md)
+- Functions project and chat endpoint: [../api-functions/README.md](../api-functions/README.md)
+- AI agent and MCP testing flows: [AI_AND_MCP_TESTING_GUIDE.md](AI_AND_MCP_TESTING_GUIDE.md), [AI_CHAT_MCP_TESTING.md](AI_CHAT_MCP_TESTING.md)
+
 **Breaking Changes:**
 
 - None - external API contract remains unchanged

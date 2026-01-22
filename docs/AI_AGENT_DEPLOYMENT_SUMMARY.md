@@ -9,14 +9,12 @@ Automated AI Agent creation has been fully integrated into the Azure deployment 
 ### New Files
 
 1. **`test_agent.py`** (workspace root)
-
    - Interactive test script for the AI Agent
    - Supports command-line queries
    - Loads configuration from `AI_AGENT_CONFIG.json`
    - Usage: `python3 test_agent.py "your query here"`
 
 2. **`AI_AGENT_AUTOMATION.md`** (workspace root)
-
    - Comprehensive documentation of the automation process
    - Troubleshooting guide
    - Integration examples
@@ -30,7 +28,6 @@ Automated AI Agent creation has been fully integrated into the Azure deployment 
 ### Modified Files
 
 1. **`scripts/postprovision.ps1`**
-
    - Added AI Agent creation logic (150+ lines)
    - Installs `agent-framework-azure-ai` Python package
    - Creates agent with MCP tools
@@ -38,13 +35,11 @@ Automated AI Agent creation has been fully integrated into the Azure deployment 
    - Saves configuration to JSON and azd environment
 
 2. **`api-functions/MCP_SERVER.md`**
-
    - Updated deployment section with automation details
    - Added testing instructions
    - Documented the automated process
 
 3. **`README.md`**
-
    - Added AI Agent feature to key features list
    - Added agent testing instructions after deployment
    - Added links to new documentation
@@ -83,14 +78,12 @@ azd deploy (application code)
 ### What Gets Automated
 
 1. **Agent Creation**
-
    - Name: "AdventureWorks Customer Service Agent"
    - Model: Auto-selected (e.g., gpt-4.1-mini)
    - Authentication: Managed Identity
    - Tools: All 5 MCP Server tools
 
 2. **Configuration Storage**
-
    - `AI_AGENT_CONFIG.json` in workspace root
    - Environment variables:
      - `AI_AGENT_NAME`
@@ -183,6 +176,15 @@ After deployment:
 4. ⏳ Customize agent instructions
 5. ⏳ Add more MCP tools as needed
 6. ⏳ Monitor usage in Application Insights
+
+## Related docs
+
+- End-to-end automation details: [AI_AGENT_AUTOMATION.md](AI_AGENT_AUTOMATION.md)
+- Migration to Microsoft Agents Framework: [AGENT_FRAMEWORK_MIGRATION.md](AGENT_FRAMEWORK_MIGRATION.md)
+- Telemetry implementation and Kusto queries: [AI_AGENT_TELEMETRY_IMPLEMENTATION.md](AI_AGENT_TELEMETRY_IMPLEMENTATION.md), [APP_INSIGHTS_INTEGRATION.md](APP_INSIGHTS_INTEGRATION.md), [APP_INSIGHTS_CONNECTION_STRING_FLOW.md](APP_INSIGHTS_CONNECTION_STRING_FLOW.md)
+- MCP server and tools surface: [../api-mcp/README.md](../api-mcp/README.md)
+- Functions that expose the chat endpoints: [../api-functions/README.md](../api-functions/README.md)
+- AI agent and MCP testing scripts: [AI_AND_MCP_TESTING_GUIDE.md](AI_AND_MCP_TESTING_GUIDE.md), [AI_CHAT_MCP_TESTING.md](AI_CHAT_MCP_TESTING.md)
 
 ## Related Documentation
 
