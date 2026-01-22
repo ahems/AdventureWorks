@@ -1,0 +1,18 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "AzureWebJobsStorage__accountName": "avstoragexxxxxxxxxx",
+    "AzureWebJobsStorage__blobServiceUri": "https://avstoragexxxxxxxxxx.blob.core.windows.net",
+    "AzureWebJobsStorage__queueServiceUri": "https://avstoragexxxxxxxxxx.queue.core.windows.net",
+    "AzureWebJobsStorage__tableServiceUri": "https://avstoragexxxxxxxxxx.table.core.windows.net",
+    "MCP_SERVICE_URL": "https://av-mcp-xxxxxxxxxxxx.purplesky-xxxxxxxx-xxxx.eastus2.azurecontainerapps.io/mcp",
+    "AZURE_OPENAI_ENDPOINT": "https://av-openai-xxxxxxxx.cognitiveservices.azure.com/",
+    "SQL_CONNECTION_STRING": "Server=tcp:av-sql-xxxxxxxxxxxx.database.windows.net;Database=AdventureWorks;Authentication=Active Directory Default;",
+    "COMMUNICATION_SERVICE_ENDPOINT": "https://av-comms-xxxxxxxxxxxx.communication.azure.com",
+    "EMAIL_SENDER_DOMAIN": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.azurecomm.net",
+    "APPLICATIONINSIGHTS_CONNECTION_STRING": "InstrumentationKey=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx;IngestionEndpoint=https://eastus2-3.in.applicationinsights.azure.com/;LiveEndpoint=https://eastus2.livediagnostics.monitor.azure.com/;ApplicationId=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "chatGptDeploymentName": "gpt-4.1-mini",
+    "AZURE_CLIENT_ID": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  }
+}

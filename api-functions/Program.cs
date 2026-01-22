@@ -9,8 +9,6 @@ using Azure.Identity;
 using Azure.Core.Serialization;
 using AddressFunctions.Services;
 using api_functions.Services;
-using OpenTelemetry.Trace;
-using OpenTelemetry.Metrics;
 using Microsoft.OpenApi.Models;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting.AzureFunctions;
@@ -34,25 +32,6 @@ builder.Services.Configure<WorkerOptions>(options =>
         });
 });
 
-// Configure Application Insights + OpenTelemetry for enhanced observability
-builder.Services
-    .AddApplicationInsightsTelemetryWorkerService()
-    .ConfigureFunctionsApplicationInsights();
-
-// Add OpenTelemetry tracing for distributed tracing with Agent Framework support
-builder.Services.AddOpenTelemetry()
-    .WithTracing(tracing =>
-    {
-        tracing
-            .AddHttpClientInstrumentation()
-            .AddSqlClientInstrumentation(options =>
-            {
-                options.SetDbStatementForText = true;
-            })
-            .AddSource("Microsoft.Agents.*")  // Agent Framework tracing
-            .AddSource("AIAgentService");      // Custom agent service tracing
-    });
-
 // Configure DefaultAzureCredential for Azure SDK clients
 // This will use: Azure CLI > Environment > Workload Identity > Managed Identity
 // When AZURE_CLIENT_ID is set (user-assigned MI), it will use that specific identity
@@ -75,8 +54,8 @@ builder.AddSqlServerClient("SQL_CONNECTION_STRING");
 var storageConnectionString = builder.Configuration["AZURE_STORAGE_CONNECTION_STRING"];
 if (!string.IsNullOrEmpty(storageConnectionString))
 {
-    builder.AddAzureBlobClient("AZURE_STORAGE_CONNECTION_STRING");
-    builder.AddAzureQueueClient("AZURE_STORAGE_CONNECTION_STRING");
+    builder.AddAzureBlobServiceClient("AZURE_STORAGE_CONNECTION_STRING");
+    builder.AddAzureQueueServiceClient("AZURE_STORAGE_CONNECTION_STRING");
 }
 
 // Register custom services with connection string from configuration
@@ -223,11 +202,15 @@ var endpoint = config["AZURE_OPENAI_ENDPOINT"]
     ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT environment variable is not set");
 var deploymentName = config["chatGptDeploymentName"] ?? "chat";
 
-var durableAgent = new AzureOpenAIClient(new Uri(endpoint), defaultCredential)
+var chatClient = new AzureOpenAIClient(new Uri(endpoint), defaultCredential)
     .GetChatClient(deploymentName)
-    .AsIChatClient()
-    .CreateAIAgent(
-        instructions: @"You are a helpful customer service assistant for AdventureWorks, an outdoor and sporting goods retailer.
+    .AsIChatClient();
+
+var durableAgent = new ChatClientAgent(
+    chatClient,
+    tools: mcpTools.Cast<Microsoft.Extensions.AI.AITool>().ToList(),
+    name: "AdventureWorksAgent",
+    instructions: @"You are a helpful customer service assistant for AdventureWorks, an outdoor and sporting goods retailer.
 
 You have access to tools that allow you to:
 - Retrieve customer order history and order details
@@ -242,9 +225,7 @@ Guidelines:
 - Provide clear, concise answers
 - If you need more information (like order number or product ID), ask for it
 - Suggest relevant products and help with purchase decisions
-- Always maintain customer context throughout the conversation",
-        name: "AdventureWorksAgent",
-        tools: mcpTools.ToArray());
+- Always maintain customer context throughout the conversation");
 
 // Configure as durable agent for Azure Functions
 builder.ConfigureDurableAgents(options => options.AddAIAgent(durableAgent));

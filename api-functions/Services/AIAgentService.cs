@@ -112,7 +112,7 @@ public class AIAgentService
                 chatClient,
                 instructions: systemInstructions,
                 name: "AdventureWorks Customer Service Agent",
-                tools: mcpTools.ToArray()
+                tools: mcpTools.Cast<Microsoft.Extensions.AI.AITool>().ToList()
             );
 
             _logger.LogInformation("AI Agent initialized successfully");
@@ -152,9 +152,6 @@ public class AIAgentService
             var agent = await GetOrCreateAgentAsync(customerId, cultureId);
             var chatAgent = (ChatClientAgent)agent; // Cast to access ChatClientAgent-specific methods
 
-            // Create thread for conversation
-            AgentThread thread = agent.GetNewThread();
-
             // Build all messages to send to agent (history + new user message)
             var allMessages = new List<Microsoft.Extensions.AI.ChatMessage>();
 
@@ -184,7 +181,7 @@ public class AIAgentService
 
             // Run agent in streaming mode with ALL messages (history + new)
             // The Agent Framework processes all messages and maintains context
-            await foreach (var update in agent.RunStreamingAsync(allMessages, thread))
+            await foreach (var update in agent.RunStreamingAsync(allMessages))
             {
                 if (!string.IsNullOrEmpty(update.Text))
                 {
@@ -297,7 +294,7 @@ Return ONLY the questions as a JSON array of strings, no other text.
 
 Example format: [""Track my order"", ""Find bike helmets""]";
 
-            var thread = agent.GetNewThread();
+
             var response = await agent.RunAsync(suggestionPrompt);
 
             // Extract text from AgentRunResponse
