@@ -6,7 +6,7 @@ const baseAddress = {
   addressLine1: "123 Summit Trail",
   addressLine2: "Suite 200",
   city: "Seattle",
-  stateLabel: "Washington (WA)",
+  stateLabel: "Washington (WA )",
   postalCode: "98101",
   country: "United States",
 };
@@ -15,7 +15,7 @@ const updatedAddress = {
   addressLine1: "456 Ridgecrest Ave",
   addressLine2: "",
   city: "Portland",
-  stateLabel: "Oregon (OR)",
+  stateLabel: "Oregon (OR )",
   postalCode: "97201",
   country: "United States",
 };

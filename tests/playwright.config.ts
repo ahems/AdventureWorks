@@ -4,9 +4,9 @@ import { testEnv } from "./utils/env";
 
 export default defineConfig({
   testDir: "./specs",
-  timeout: 120_000,
+  timeout: 45_000,
   expect: {
-    timeout: 10_000,
+    timeout: 5_000,
   },
   fullyParallel: false,
   workers: 1,

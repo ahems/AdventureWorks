@@ -117,10 +117,14 @@ export const AddressForm: React.FC<AddressFormProps> = ({
       className="space-y-4"
     >
       <div>
-        <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+        <label
+          htmlFor="addressType"
+          className="font-doodle text-sm font-bold text-doodle-text block mb-1"
+        >
           {t("addressForm.addressType")} *
         </label>
         <select
+          id="addressType"
           value={formData.addressType}
           onChange={(e) => handleChange("addressType", e.target.value)}
           className="doodle-input w-full"
@@ -140,10 +144,14 @@ export const AddressForm: React.FC<AddressFormProps> = ({
       </div>
 
       <div>
-        <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+        <label
+          htmlFor="addressLine1"
+          className="font-doodle text-sm font-bold text-doodle-text block mb-1"
+        >
           {t("addressForm.addressLine1")} *
         </label>
         <input
+          id="addressLine1"
           type="text"
           value={formData.addressLine1}
           onChange={(e) => handleChange("addressLine1", e.target.value)}
@@ -158,10 +166,14 @@ export const AddressForm: React.FC<AddressFormProps> = ({
       </div>
 
       <div>
-        <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+        <label
+          htmlFor="addressLine2"
+          className="font-doodle text-sm font-bold text-doodle-text block mb-1"
+        >
           {t("addressForm.addressLine2")}
         </label>
         <input
+          id="addressLine2"
           type="text"
           value={formData.addressLine2}
           onChange={(e) => handleChange("addressLine2", e.target.value)}
@@ -177,10 +189,14 @@ export const AddressForm: React.FC<AddressFormProps> = ({
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+          <label
+            htmlFor="city"
+            className="font-doodle text-sm font-bold text-doodle-text block mb-1"
+          >
             {t("addressForm.city")} *
           </label>
           <input
+            id="city"
             type="text"
             value={formData.city}
             onChange={(e) => handleChange("city", e.target.value)}
@@ -194,10 +210,14 @@ export const AddressForm: React.FC<AddressFormProps> = ({
           )}
         </div>
         <div>
-          <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+          <label
+            htmlFor="country"
+            className="font-doodle text-sm font-bold text-doodle-text block mb-1"
+          >
             {t("addressForm.country")} *
           </label>
           <select
+            id="country"
             value={formData.countryRegionCode}
             onChange={(e) => handleCountryChange(e.target.value)}
             className="doodle-input w-full"
@@ -223,10 +243,14 @@ export const AddressForm: React.FC<AddressFormProps> = ({
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+          <label
+            htmlFor="stateProvince"
+            className="font-doodle text-sm font-bold text-doodle-text block mb-1"
+          >
             {t("addressForm.stateProvince")} *
           </label>
           <select
+            id="stateProvince"
             value={formData.stateProvinceId}
             onChange={(e) =>
               handleChange("stateProvinceId", parseInt(e.target.value))
@@ -248,10 +272,14 @@ export const AddressForm: React.FC<AddressFormProps> = ({
           )}
         </div>
         <div>
-          <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+          <label
+            htmlFor="postalCode"
+            className="font-doodle text-sm font-bold text-doodle-text block mb-1"
+          >
             {t("addressForm.postalCode")} *
           </label>
           <input
+            id="postalCode"
             type="text"
             value={formData.postalCode}
             onChange={(e) => handleChange("postalCode", e.target.value)}

@@ -1872,11 +1872,15 @@ const AccountPage: React.FC = () => {
                     >
                       {/* Current Password */}
                       <div>
-                        <label className="font-doodle text-sm text-doodle-text block mb-1">
+                        <label
+                          htmlFor="currentPassword"
+                          className="font-doodle text-sm text-doodle-text block mb-1"
+                        >
                           Current Password
                         </label>
                         <div className="relative">
                           <input
+                            id="currentPassword"
                             type={showCurrentPassword ? "text" : "password"}
                             value={currentPassword}
                             onChange={(e) => setCurrentPassword(e.target.value)}
@@ -1910,11 +1914,15 @@ const AccountPage: React.FC = () => {
 
                       {/* New Password */}
                       <div>
-                        <label className="font-doodle text-sm text-doodle-text block mb-1">
+                        <label
+                          htmlFor="newPassword"
+                          className="font-doodle text-sm text-doodle-text block mb-1"
+                        >
                           New Password
                         </label>
                         <div className="relative">
                           <input
+                            id="newPassword"
                             type={showNewPassword ? "text" : "password"}
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
@@ -1946,11 +1954,15 @@ const AccountPage: React.FC = () => {
 
                       {/* Confirm New Password */}
                       <div>
-                        <label className="font-doodle text-sm text-doodle-text block mb-1">
+                        <label
+                          htmlFor="confirmNewPassword"
+                          className="font-doodle text-sm text-doodle-text block mb-1"
+                        >
                           Confirm New Password
                         </label>
                         <div className="relative">
                           <input
+                            id="confirmNewPassword"
                             type={showConfirmPassword ? "text" : "password"}
                             value={confirmNewPassword}
                             onChange={(e) =>

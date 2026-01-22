@@ -20,13 +20,13 @@ test.describe("Password Azure Functions", () => {
 
     const newPassword = `Aw${faker.string.alphanumeric(8)}!7`;
     await page.getByLabel(/current password/i).fill(user.password);
-    await page.getByLabel(/new password/i).fill(newPassword);
+    await page.getByLabel(/^new password$/i).fill(newPassword);
     await page.getByLabel(/confirm new password/i).fill(newPassword);
 
     await page.getByRole("button", { name: /change password/i }).click();
 
     await expect(
-      page.getByText(/your password has been updated successfully/i),
+      page.getByText(/your password has been updated successfully/i).first(),
     ).toBeVisible();
 
     await logoutFromAccount(page);

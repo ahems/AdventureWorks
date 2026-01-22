@@ -193,10 +193,14 @@ const AuthPage: React.FC = () => {
               {!isLogin && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="font-doodle text-sm text-doodle-text block mb-1">
+                    <label
+                      htmlFor="firstName"
+                      className="font-doodle text-sm text-doodle-text block mb-1"
+                    >
                       {t("auth.firstName")}
                     </label>
                     <input
+                      id="firstName"
                       type="text"
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
@@ -212,10 +216,14 @@ const AuthPage: React.FC = () => {
                     )}
                   </div>
                   <div>
-                    <label className="font-doodle text-sm text-doodle-text block mb-1">
+                    <label
+                      htmlFor="lastName"
+                      className="font-doodle text-sm text-doodle-text block mb-1"
+                    >
                       {t("auth.lastName")}
                     </label>
                     <input
+                      id="lastName"
                       type="text"
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
@@ -235,10 +243,14 @@ const AuthPage: React.FC = () => {
 
               {/* Email */}
               <div>
-                <label className="font-doodle text-sm text-doodle-text block mb-1">
+                <label
+                  htmlFor="email"
+                  className="font-doodle text-sm text-doodle-text block mb-1"
+                >
                   {t("auth.emailAddress")}
                 </label>
                 <input
+                  id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -256,11 +268,15 @@ const AuthPage: React.FC = () => {
 
               {/* Password */}
               <div>
-                <label className="font-doodle text-sm text-doodle-text block mb-1">
+                <label
+                  htmlFor="password"
+                  className="font-doodle text-sm text-doodle-text block mb-1"
+                >
                   {t("auth.password")}
                 </label>
                 <div className="relative">
                   <input
+                    id="password"
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -300,10 +316,14 @@ const AuthPage: React.FC = () => {
               {/* Confirm Password (Signup only) */}
               {!isLogin && (
                 <div>
-                  <label className="font-doodle text-sm text-doodle-text block mb-1">
+                  <label
+                    htmlFor="confirmPassword"
+                    className="font-doodle text-sm text-doodle-text block mb-1"
+                  >
                     {t("auth.confirmPassword")}
                   </label>
                   <input
+                    id="confirmPassword"
                     type={showPassword ? "text" : "password"}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}

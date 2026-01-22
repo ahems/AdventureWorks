@@ -32,12 +32,15 @@ const seedLocaleStorage = async (
   options: { clearUser?: boolean } = {},
 ) => {
   const { clearUser = false } = options;
+  // Use addInitScript but with a one-time flag to avoid clearing user on subsequent navigations
   await page.addInitScript(
     ({ languageKey, currencyKey, currentUserKey, shouldClearUser }) => {
       localStorage.setItem(languageKey, "en");
       localStorage.setItem(currencyKey, "USD");
-      if (shouldClearUser) {
+      // Only clear user if explicitly requested AND if not already cleared
+      if (shouldClearUser && !sessionStorage.getItem("user_cleared")) {
         localStorage.removeItem(currentUserKey);
+        sessionStorage.setItem("user_cleared", "true");
       }
     },
     {
@@ -68,14 +71,24 @@ export const signupThroughUi = async (
   await page.getByLabel(/^password$/i).fill(creds.password);
   await page.getByLabel(/confirm password/i).fill(creds.password);
 
-  await page.getByRole("button", { name: /sign up/i }).click();
+  await page.getByRole("button", { name: /create account/i }).click();
   await page.waitForURL("**/");
+
+  // Debug: Log current URL
+  console.log("After signup, URL is:", page.url());
+
+  // Wait for user to be stored in localStorage after signup
+  await page.waitForFunction((key) => {
+    const stored = localStorage.getItem(key);
+    return stored !== null;
+  }, APP_STORAGE_KEYS.currentUser);
 
   const storedUser = await page.evaluate((key) => {
     return localStorage.getItem(key);
   }, APP_STORAGE_KEYS.currentUser);
 
   expect(storedUser, "User should be persisted after signup").toBeTruthy();
+  console.log("Stored user after signup:", storedUser);
   const parsedUser = JSON.parse(storedUser!);
 
   return {
@@ -85,8 +98,10 @@ export const signupThroughUi = async (
 };
 
 export const logoutFromAccount = async (page: Page) => {
-  await page.getByRole("button", { name: /sign out/i }).click();
-  await page.waitForURL("**/");
+  await Promise.all([
+    page.waitForURL("**/", { timeout: 10000 }),
+    page.getByRole("button", { name: /sign out/i }).click(),
+  ]);
 };
 
 export const loginThroughUi = async (
