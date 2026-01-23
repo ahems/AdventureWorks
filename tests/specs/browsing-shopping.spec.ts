@@ -1,13 +1,34 @@
 import { test, expect } from "@playwright/test";
 import { signupThroughUi } from "../utils/testUser";
 import { testEnv } from "../utils/env";
+import { warmupEndpoint } from "../utils/warmup";
 
 test.describe("User Browsing and Shopping", () => {
-  test.skip("user can browse categories, view products, and add items to cart", async ({
+  // Warm up services before running tests to avoid cold start delays
+  test.beforeAll(async () => {
+    console.log("🔥 Warming up services for browsing tests...");
+    await Promise.all([
+      warmupEndpoint({
+        url: `${testEnv.restApiBaseUrl}/Product`,
+        name: "DAB API",
+        maxRetries: 3,
+        retryDelayMs: 2000,
+        timeoutMs: 20000,
+      }),
+      warmupEndpoint({
+        url: testEnv.webBaseUrl,
+        name: "Web App",
+        maxRetries: 3,
+        retryDelayMs: 2000,
+        timeoutMs: 20000,
+      }),
+    ]);
+    console.log("✅ Services ready for browsing tests\n");
+  });
+
+  test("user can browse categories, view products, and add items to cart", async ({
     page,
   }) => {
-    // SKIPPED: Category pages are not displaying products
-    // This test can be re-enabled once category product listings are fixed
     // Create a test user
     await signupThroughUi(page);
 
@@ -27,22 +48,38 @@ test.describe("User Browsing and Shopping", () => {
     // Verify we're on a category page
     await expect(page).toHaveURL(/\/category\//);
 
-    // Wait for products to load - increase timeout significantly
-    await page.waitForTimeout(3000);
+    // Wait for products to load - Azure services may need time to wake up
+    // Loading skeletons can appear for several seconds on cold start
+    console.log(
+      "⏳ Waiting for category products to load (cold start may take time)...",
+    );
+    await page.waitForTimeout(8000); // Increased from 3s to 8s for cold starts
 
-    // Check if products loaded, if not skip this test
+    // Check if products loaded
     const productCards = page.locator('[data-testid*="product-card"]');
     const productCount = await productCards.count();
 
     if (productCount === 0) {
+      // Products still not loaded - try waiting a bit longer
       console.log(
-        "⚠️  No products found in category - skipping add to cart test",
+        "⏳ Products not visible yet, waiting additional 5 seconds...",
       );
-      // Go directly to a known product page instead
-      await page.goto(`${testEnv.webBaseUrl}/product/680`);
-      await page.waitForLoadState("domcontentloaded");
-      await page.waitForTimeout(2000);
-    } else {
+      await page.waitForTimeout(5000);
+      const retryCount = await productCards.count();
+
+      if (retryCount === 0) {
+        console.log(
+          "⚠️  No products found in category after extended wait - database may still be waking up",
+        );
+        // Go directly to a known product page instead
+        await page.goto(`${testEnv.webBaseUrl}/product/680`);
+        await page.waitForLoadState("domcontentloaded");
+        await page.waitForTimeout(3000);
+      }
+    }
+
+    if (productCount > 0) {
+      console.log(`✅ Found ${productCount} products in category`);
       // Find and click on a product using data-testid
       const productCard = productCards.first();
       await expect(productCard).toBeVisible();
@@ -194,16 +231,20 @@ test.describe("User Browsing and Shopping", () => {
     console.log("✅ Successfully browsed categories and added items to cart");
   });
 
-  test.skip("user can view product details and images", async ({ page }) => {
-    // SKIPPED: Product pages are not displaying images
-    // This test can be re-enabled once product image gallery is fixed
+  test("user can view product details and images", async ({ page }) => {
     // Create a test user
     await signupThroughUi(page);
 
     // Go directly to a known product page to test product details
     await page.goto(`${testEnv.webBaseUrl}/product/680`); // Mountain-100 Silver, 38
     await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(2000);
+
+    // Wait longer for images to load on cold start
+    console.log(
+      "⏳ Waiting for product page to fully load (including images)...",
+    );
+    await page.waitForTimeout(5000); // Increased from 2s to 5s
+
     // Verify product name is visible
     const productName = page
       .locator("h1, h2, [data-testid='product-name']")
@@ -216,14 +257,28 @@ test.describe("User Browsing and Shopping", () => {
       .first();
     await expect(price).toBeVisible();
 
-    // Verify product image gallery exists
+    // Verify product image gallery exists - wait longer for images to load
     const images = page.locator("img[alt*='product'], img[src*='photo']");
-    const imageCount = await images.count();
-    expect(imageCount).toBeGreaterThan(0);
 
-    // Verify at least one image is loaded
-    const firstImage = images.first();
-    await expect(firstImage).toBeVisible();
+    // Wait for images to appear
+    try {
+      await page.waitForSelector("img[alt*='product'], img[src*='photo']", {
+        timeout: 10000,
+        state: "visible",
+      });
+      const imageCount = await images.count();
+      expect(imageCount).toBeGreaterThan(0);
+      console.log(`✅ Found ${imageCount} product images`);
+
+      // Verify at least one image is loaded
+      const firstImage = images.first();
+      await expect(firstImage).toBeVisible();
+    } catch (error) {
+      console.log(
+        "⚠️  Product images did not load within timeout - possible cold start issue",
+      );
+      throw error;
+    }
 
     // Check if product description exists
     const description = page.locator(
