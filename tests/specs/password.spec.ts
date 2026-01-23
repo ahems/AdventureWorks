@@ -4,9 +4,9 @@ import {
   signupThroughUi,
   logoutFromAccount,
   expectLoginFailure,
-  loginThroughUi,
 } from "../utils/testUser";
 import { AccountPage } from "../utils/accountPage";
+import { testEnv } from "../utils/env";
 
 test.describe("Password Azure Functions", () => {
   test("user can change password and authenticate with the new secret", async ({
@@ -37,7 +37,15 @@ test.describe("Password Azure Functions", () => {
 
     await expectLoginFailure(page, user.email, user.password);
 
-    await loginThroughUi(page, user.email, newPassword);
+    // Login with new password - should redirect back to /account (where we came from)
+    await page.goto(`${testEnv.webBaseUrl}/auth`);
+    await page.getByLabel(/email address/i).fill(user.email);
+    await page.getByLabel(/^password$/i).fill(newPassword);
+    await page.getByRole("button", { name: /sign in/i }).click();
+
+    // Verify we're logged in (redirected away from /auth)
     await expect(page).not.toHaveURL(/auth/);
+    // Should redirect to /account (where we logged out from)
+    await expect(page).toHaveURL(/\/account/);
   });
 });
