@@ -16,16 +16,16 @@ export interface Address {
   isDefault: boolean;
 }
 
-// API response type from Functions API
+// API response type from Functions API (camelCase from C# JSON serialization)
 interface ApiAddress {
-  AddressID: number;
-  AddressLine1: string;
-  AddressLine2: string | null;
-  City: string;
-  StateProvinceID: number;
-  PostalCode: string;
+  addressID: number;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  stateProvinceID: number;
+  postalCode: string;
   rowguid: string;
-  ModifiedDate: string;
+  modifiedDate: string;
 }
 
 // BusinessEntityAddress from DAB
@@ -108,13 +108,13 @@ export const useAddresses = () => {
           const apiAddress: ApiAddress = await addrResponse.json();
 
           // Fetch StateProvince to get the code and country
-          let stateCode = apiAddress.StateProvinceID.toString();
+          let stateCode = apiAddress.stateProvinceID.toString();
           let countryCode: string | undefined;
           let countryName: string | undefined;
 
           try {
             const stateResponse = await fetch(
-              `${dabApiUrl}/StateProvince/StateProvinceID/${apiAddress.StateProvinceID}`,
+              `${dabApiUrl}/StateProvince/StateProvinceID/${apiAddress.stateProvinceID}`,
             );
             if (stateResponse.ok) {
               const stateData = await stateResponse.json();
@@ -147,22 +147,22 @@ export const useAddresses = () => {
             }
           } catch (error) {
             console.error(
-              `Failed to fetch StateProvince ${apiAddress.StateProvinceID}:`,
+              `Failed to fetch StateProvince ${apiAddress.stateProvinceID}:`,
               error,
             );
           }
 
           // Map to frontend format
           return {
-            id: apiAddress.AddressID.toString(),
-            addressLine1: apiAddress.AddressLine1,
-            addressLine2: apiAddress.AddressLine2 || undefined,
-            city: apiAddress.City,
-            stateProvinceId: apiAddress.StateProvinceID,
+            id: apiAddress.addressID.toString(),
+            addressLine1: apiAddress.addressLine1,
+            addressLine2: apiAddress.addressLine2 || undefined,
+            city: apiAddress.city,
+            stateProvinceId: apiAddress.stateProvinceID,
             stateProvinceCode: stateCode,
             countryRegionCode: countryCode,
             countryName: countryName,
-            postalCode: apiAddress.PostalCode,
+            postalCode: apiAddress.postalCode,
             addressType: ADDRESS_TYPE_MAP[bea.AddressTypeID] || "Other",
             isDefault: bea.AddressTypeID === 2, // Home is default
           } as Address;
