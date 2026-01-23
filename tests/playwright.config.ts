@@ -10,7 +10,10 @@ export default defineConfig({
   },
   fullyParallel: false,
   workers: 1,
-  reporter: [["list"], ["html", { outputFolder: "./playwright-report" }]],
+  reporter: [
+    ["list"],
+    ["html", { outputFolder: "./playwright-report", open: "never" }],
+  ],
   outputDir: path.join(__dirname, "test-results"),
   use: {
     baseURL: testEnv.webBaseUrl,

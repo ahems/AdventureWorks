@@ -37,3 +37,7 @@ npm run test:e2e
 - Tests run in Chromium only and target desktop viewport.
 - Report output lives under `tests/playwright-report/` (HTML) and `tests/test-results/`.
 - Each test signs up a fresh user via the public UI using Faker-generated data.
+- The HTML report is not automatically opened after tests complete. To view it manually, run:
+  ```bash
+  npx playwright show-report tests/playwright-report
+  ```
