@@ -15,27 +15,7 @@ export class AccountPage {
   constructor(private readonly page: Page) {}
 
   async goto() {
-    // Debug: check localStorage before navigation
-    const userBeforeNav = await this.page.evaluate(() => {
-      return localStorage.getItem("adventureworks_current_user");
-    });
-    console.log(
-      "User in localStorage before /account navigation:",
-      userBeforeNav,
-    );
-
     await this.page.goto(`${testEnv.webBaseUrl}/account`);
-
-    // Debug: check URL after navigation and localStorage
-    console.log("URL after /account navigation:", this.page.url());
-    const userAfterNav = await this.page.evaluate(() => {
-      return localStorage.getItem("adventureworks_current_user");
-    });
-    console.log(
-      "User in localStorage after /account navigation:",
-      userAfterNav,
-    );
-
     await expect(
       this.page.getByRole("heading", { name: /saved addresses/i }),
     ).toBeVisible();
@@ -80,14 +60,6 @@ export class AccountPage {
       { timeout: 5000 },
     );
 
-    // Debug: log available state options
-    const availableStates = await stateSelect.evaluate(
-      (select: HTMLSelectElement) =>
-        Array.from(select.options).map((o) => o.text),
-    );
-    console.log("Available states:", availableStates);
-    console.log("Looking for:", data.stateLabel);
-
     await stateSelect.selectOption({ label: data.stateLabel });
     await form.getByLabel(/postal code/i).fill(data.postalCode);
   }
@@ -95,8 +67,10 @@ export class AccountPage {
   async submitAddressForm(action: "save" | "update" = "save") {
     const buttonLabel = action === "save" ? /save address/i : /update address/i;
     await this.addressForm().getByRole("button", { name: buttonLabel }).click();
-    // Wait for form to close after submission
-    await expect(this.addressForm()).not.toBeVisible({ timeout: 10000 });
+    // Wait for form to close after submission (with longer timeout for Azure cold starts)
+    await expect(this.addressForm()).not.toBeVisible({ timeout: 20000 });
+    // Small wait for UI to update after form closes
+    await this.page.waitForTimeout(1000);
   }
 
   findAddressCard(matcher: string): Locator {
@@ -107,7 +81,7 @@ export class AccountPage {
   }
 
   async expectAddressVisible(matcher: string) {
-    await expect(this.findAddressCard(matcher)).toBeVisible();
+    await expect(this.findAddressCard(matcher)).toBeVisible({ timeout: 10000 });
   }
 
   async editAddress(matcher: string) {

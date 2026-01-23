@@ -1622,17 +1622,9 @@ const AccountPage: React.FC = () => {
                 ) : addresses.length === 0 && !showAddressForm ? (
                   <div className="text-center py-8">
                     <MapPin className="w-16 h-16 mx-auto mb-4 text-doodle-text/30" />
-                    <p className="font-doodle text-doodle-text/70 mb-4">
+                    <p className="font-doodle text-doodle-text/70">
                       {t("account.noAddressesYet")}
                     </p>
-                    <button
-                      data-testid="add-address-button"
-                      onClick={() => setShowAddressForm(true)}
-                      className="doodle-button doodle-button-primary inline-flex items-center gap-2"
-                    >
-                      <Plus className="w-4 h-4" />
-                      {t("account.addFirstAddress")}
-                    </button>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

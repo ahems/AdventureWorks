@@ -34,9 +34,30 @@ The helper in `tests/utils/env.ts` automatically pulls remote URLs from `azd env
 npm run test:e2e
 ```
 
+The test suite automatically warms up Azure services before running tests to avoid cold-start timeouts. The warm-up process:
+
+- Calls the DAB API REST endpoint (`/api/Product`)
+- Calls the Azure Functions addresses endpoint (`/api/addresses`)
+- Retries up to 5 times with 3-second delays if services are waking up
+- Runs both warm-up calls in parallel for faster startup
+
+You can also run the warm-up independently:
+
+```bash
+npm run test:e2e:warmup
+```
+
+**Test execution details:**
+
 - Tests run in Chromium only and target desktop viewport.
 - Report output lives under `tests/playwright-report/` (HTML) and `tests/test-results/`.
 - Each test signs up a fresh user via the public UI using Faker-generated data.
+- **Test credentials are logged to console** for manual reproduction:
+  ```
+  📧 Test User Created:
+     Email: user@example.com
+     Password: AwXyZ123!9
+  ```
 - The HTML report is not automatically opened after tests complete. To view it manually, run:
   ```bash
   npx playwright show-report tests/playwright-report

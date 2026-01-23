@@ -19,6 +19,10 @@ test.describe("Password Azure Functions", () => {
     await page.getByTestId("account-settings-toggle").click();
 
     const newPassword = `Aw${faker.string.alphanumeric(8)}!7`;
+    console.log(
+      `\n🔐 Changing Password:\n   Email: ${user.email}\n   Old Password: ${user.password}\n   New Password: ${newPassword}\n`,
+    );
+
     await page.getByLabel(/current password/i).fill(user.password);
     await page.getByLabel(/^new password$/i).fill(newPassword);
     await page.getByLabel(/confirm new password/i).fill(newPassword);

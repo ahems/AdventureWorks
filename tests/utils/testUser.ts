@@ -74,9 +74,6 @@ export const signupThroughUi = async (
   await page.getByRole("button", { name: /create account/i }).click();
   await page.waitForURL("**/");
 
-  // Debug: Log current URL
-  console.log("After signup, URL is:", page.url());
-
   // Wait for user to be stored in localStorage after signup
   await page.waitForFunction((key) => {
     const stored = localStorage.getItem(key);
@@ -88,8 +85,11 @@ export const signupThroughUi = async (
   }, APP_STORAGE_KEYS.currentUser);
 
   expect(storedUser, "User should be persisted after signup").toBeTruthy();
-  console.log("Stored user after signup:", storedUser);
   const parsedUser = JSON.parse(storedUser!);
+
+  console.log(
+    `\n📧 Test User Created:\n   Email: ${creds.email}\n   Password: ${creds.password}\n`,
+  );
 
   return {
     ...creds,
@@ -127,6 +127,8 @@ export const expectLoginFailure = async (
   await page.getByLabel(/email address/i).fill(email);
   await page.getByLabel(/^password$/i).fill(password);
   await page.getByRole("button", { name: /sign in/i }).click();
-  await expect(page.getByText(/invalid email or password/i)).toBeVisible();
+  await expect(
+    page.getByText(/invalid email or password/i).first(),
+  ).toBeVisible();
   await expect(page).toHaveURL(/\/auth/);
 };

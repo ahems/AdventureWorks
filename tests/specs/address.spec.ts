@@ -1,23 +1,30 @@
 import { test, expect } from "@playwright/test";
+import { faker } from "@faker-js/faker";
 import { signupThroughUi } from "../utils/testUser";
 import { AccountPage } from "../utils/accountPage";
 
-const baseAddress = {
-  addressLine1: "123 Summit Trail",
-  addressLine2: "Suite 200",
-  city: "Seattle",
-  stateLabel: "Washington (WA )",
-  postalCode: "98101",
-  country: "United States",
-};
+const US_STATES = [
+  { label: "Washington (WA )", abbrev: "WA" },
+  { label: "Oregon (OR )", abbrev: "OR" },
+  { label: "California (CA )", abbrev: "CA" },
+  { label: "Texas (TX )", abbrev: "TX" },
+  { label: "New York (NY )", abbrev: "NY" },
+];
 
-const updatedAddress = {
-  addressLine1: "456 Ridgecrest Ave",
-  addressLine2: "",
-  city: "Portland",
-  stateLabel: "Oregon (OR )",
-  postalCode: "97201",
-  country: "United States",
+const createRandomAddress = () => {
+  const state = faker.helpers.arrayElement(US_STATES);
+  return {
+    addressLine1: `${faker.location.buildingNumber()} ${faker.location.street()}`,
+    addressLine2:
+      faker.helpers.maybe(
+        () => `Suite ${faker.number.int({ min: 100, max: 999 })}`,
+        { probability: 0.5 },
+      ) || "",
+    city: faker.location.city(),
+    stateLabel: state.label,
+    postalCode: faker.location.zipCode("#####"),
+    country: "United States",
+  };
 };
 
 test.describe("Address Azure Functions", () => {
@@ -26,6 +33,10 @@ test.describe("Address Azure Functions", () => {
   }) => {
     await signupThroughUi(page);
     const accountPage = new AccountPage(page);
+
+    // Generate unique addresses for this test run
+    const baseAddress = createRandomAddress();
+    const updatedAddress = createRandomAddress();
 
     await accountPage.goto();
     await accountPage.openAddressForm();
