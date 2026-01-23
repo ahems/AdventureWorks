@@ -55,18 +55,18 @@ const ProductPage: React.FC = () => {
   const { formatWeight, formatSize } = useUnitMeasure();
   const [quantity, setQuantity] = React.useState(1);
   const [selectedSize, setSelectedSize] = React.useState<string | undefined>(
-    undefined
+    undefined,
   );
   const [selectedColor, setSelectedColor] = React.useState<string | undefined>(
-    undefined
+    undefined,
   );
 
   const { data: product, isLoading: productLoading } = useProduct(
     productId ? parseInt(productId) : 0,
-    selectedLanguage
+    selectedLanguage,
   );
   const { data: subcategory } = useSubcategory(
-    product?.ProductSubcategoryID || 0
+    product?.ProductSubcategoryID || 0,
   );
   const { data: category } = useCategory(subcategory?.ProductCategoryID || 0);
 
@@ -364,7 +364,10 @@ const ProductPage: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <h1 className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text mt-1">
+                <h1
+                  className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text mt-1"
+                  data-testid="product-name"
+                >
                   {product.Name}
                 </h1>
                 <div className="flex items-center gap-3 mt-2">
@@ -392,7 +395,10 @@ const ProductPage: React.FC = () => {
               </div>
 
               {/* Price */}
-              <div className="doodle-border-light inline-block px-6 py-3">
+              <div
+                className="doodle-border-light inline-block px-6 py-3"
+                data-testid="product-price"
+              >
                 {salePrice ? (
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-3">
@@ -417,7 +423,10 @@ const ProductPage: React.FC = () => {
               </div>
 
               {/* Description */}
-              <p className="font-doodle text-lg text-doodle-text/80 leading-relaxed">
+              <p
+                className="font-doodle text-lg text-doodle-text/80 leading-relaxed"
+                data-testid="product-description"
+              >
                 {product.Description || t("product:productPage.defaultDesc")}
               </p>
 
@@ -502,7 +511,7 @@ const ProductPage: React.FC = () => {
                       <span className="text-doodle-text">
                         {formatWeight(
                           product.Weight,
-                          product.WeightUnitMeasureCode
+                          product.WeightUnitMeasureCode,
                         )}
                       </span>
                     </>
@@ -545,7 +554,7 @@ const ProductPage: React.FC = () => {
                             year: "numeric",
                             month: "long",
                             day: "numeric",
-                          }
+                          },
                         )}
                       </span>
                     </>
@@ -564,7 +573,7 @@ const ProductPage: React.FC = () => {
                     <SelectTrigger className="w-full max-w-xs font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent">
                       <SelectValue
                         placeholder={t(
-                          "product:productPage.selectSizePlaceholder"
+                          "product:productPage.selectSizePlaceholder",
                         )}
                       />
                     </SelectTrigger>
@@ -676,16 +685,17 @@ const ProductPage: React.FC = () => {
                       ? "doodle-button bg-doodle-text/20 text-doodle-text/50 cursor-not-allowed border-doodle-text/30"
                       : "doodle-button doodle-button-primary"
                   }`}
+                  data-testid="add-to-cart-button"
                 >
                   <ShoppingCart className="w-5 h-5" />
                   {!product.inStock
                     ? t("product:productPage.outOfStock")
                     : hasVariants &&
-                      selectedSize &&
-                      selectedColor &&
-                      !currentVariantAvailable
-                    ? t("product:productPage.unavailable")
-                    : t("product:productPage.addToCart")}
+                        selectedSize &&
+                        selectedColor &&
+                        !currentVariantAvailable
+                      ? t("product:productPage.unavailable")
+                      : t("product:productPage.addToCart")}
                 </button>
 
                 <button

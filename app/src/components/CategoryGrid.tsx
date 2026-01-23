@@ -56,6 +56,7 @@ const CategoryGrid: React.FC = () => {
                 to={`/category/${category.ProductCategoryID}`}
                 className="doodle-card p-6 text-center group"
                 style={{ animationDelay: `${index * 100}ms` }}
+                data-testid={`category-card-${category.ProductCategoryID}`}
               >
                 <div className="w-16 h-16 mx-auto mb-4 doodle-border-light flex items-center justify-center group-hover:rotate-6 transition-transform">
                   <IconComponent className="w-8 h-8 text-doodle-text group-hover:text-doodle-accent transition-colors" />

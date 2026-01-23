@@ -122,6 +122,7 @@ const Header: React.FC = () => {
                         ? "squiggle"
                         : ""
                     }`}
+                    data-testid={`category-link-${category.ProductCategoryID}`}
                   >
                     {category.Name}
                   </Link>
@@ -145,6 +146,7 @@ const Header: React.FC = () => {
               onClick={() => setShowSearch(!showSearch)}
               className="doodle-button p-2"
               aria-label={t("headerAria.search")}
+              data-testid="search-toggle-button"
             >
               <Search className="w-5 h-5" />
             </button>
@@ -219,7 +221,10 @@ const Header: React.FC = () => {
 
             {/* Language Selector */}
             <DropdownMenu>
-              <DropdownMenuTrigger className="doodle-button flex items-center gap-2 py-2 px-3">
+              <DropdownMenuTrigger
+                className="doodle-button flex items-center gap-2 py-2 px-3"
+                data-testid="language-selector"
+              >
                 <Twemoji
                   emoji={currentLanguage.flag}
                   size="1.25rem"
@@ -240,6 +245,7 @@ const Header: React.FC = () => {
                         ? "bg-doodle-accent/20"
                         : ""
                     }`}
+                    data-testid={`language-option-${lang.code}`}
                   >
                     <Twemoji
                       emoji={lang.flag}
@@ -256,13 +262,17 @@ const Header: React.FC = () => {
             <Link
               to="/cart"
               className="doodle-button relative flex items-center gap-2 py-2 px-3"
+              data-testid="cart-link"
             >
               <ShoppingCart className="w-5 h-5" />
               <span className="hidden sm:inline font-doodle">
                 {t("header.cart")}
               </span>
               {totalItems > 0 && (
-                <span className="absolute -top-2 -right-2 bg-doodle-accent text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-doodle-text">
+                <span
+                  className="absolute -top-2 -right-2 bg-doodle-accent text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-doodle-text"
+                  data-testid="cart-count"
+                >
                   {totalItems}
                 </span>
               )}
@@ -345,11 +355,13 @@ const Header: React.FC = () => {
                   placeholder={t("header.aiSearchPlaceholder")}
                   className="w-full pl-10 pr-4 py-2 font-doodle border-2 border-doodle-accent bg-white focus:border-doodle-accent focus:outline-none placeholder:text-doodle-text/50"
                   autoFocus
+                  data-testid="search-input"
                 />
               </div>
               <button
                 type="submit"
                 className="doodle-button doodle-button-primary px-4 flex items-center gap-2"
+                data-testid="search-submit-button"
               >
                 <Sparkles className="w-4 h-4" />
                 {t("buttons.search")}

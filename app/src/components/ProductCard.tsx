@@ -71,6 +71,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
       <Link
         to={`/product/${product.ProductID}`}
         className="doodle-card block p-4 group relative"
+        data-testid={`product-card-${product.ProductID}`}
       >
         {/* Sale Badge */}
         {product.DiscountPct && (
@@ -133,7 +134,10 @@ const ProductCard: React.FC<ProductCardProps> = ({
         </div>
 
         {/* Product Image */}
-        <div className="aspect-square mb-4 bg-doodle-bg border-2 border-doodle-text border-dashed flex items-center justify-center overflow-hidden relative">
+        <div
+          className="aspect-square mb-4 bg-doodle-bg border-2 border-doodle-text border-dashed flex items-center justify-center overflow-hidden relative"
+          data-testid={`product-image-${product.ProductID}`}
+        >
           {product.ThumbNailPhoto ? (
             <OptimizedImage
               src={`data:image/gif;base64,${product.ThumbNailPhoto}`}
@@ -165,7 +169,10 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
         {/* Product Info */}
         <div className="space-y-2">
-          <h3 className="font-doodle text-lg font-bold text-doodle-text group-hover:text-doodle-accent transition-colors line-clamp-2">
+          <h3
+            className="font-doodle text-lg font-bold text-doodle-text group-hover:text-doodle-accent transition-colors line-clamp-2"
+            data-testid={`product-name-${product.ProductID}`}
+          >
             {product.Name}
           </h3>
 
@@ -206,7 +213,10 @@ const ProductCard: React.FC<ProductCardProps> = ({
           </div>
 
           <div className="flex items-end justify-between pt-2">
-            <div className="flex flex-col">
+            <div
+              className="flex flex-col"
+              data-testid={`product-price-${product.ProductID}`}
+            >
               {salePrice ? (
                 <>
                   <span className="font-doodle text-sm text-doodle-text/50 line-through">
@@ -241,6 +251,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
                   : "doodle-button bg-doodle-text/20 text-doodle-text/50 cursor-not-allowed border-doodle-text/30"
               }`}
               aria-label={t("productCard.addToCart")}
+              data-testid={`add-to-cart-${product.ProductID}`}
             >
               <ShoppingCart className="w-4 h-4" />
               <span className="hidden sm:inline">

@@ -38,10 +38,10 @@ const CategoryPage: React.FC = () => {
   const [sortBy, setSortBy] = React.useState("name-asc");
 
   const { data: category, isLoading: categoryLoading } = useCategory(
-    categoryId ? parseInt(categoryId) : 0
+    categoryId ? parseInt(categoryId) : 0,
   );
   const { data: subcategories = [] } = useSubcategoriesByCategory(
-    categoryId ? parseInt(categoryId) : 0
+    categoryId ? parseInt(categoryId) : 0,
   );
   const { data: allCategoryProducts = [], isLoading: categoryProductsLoading } =
     useProductsByCategory(categoryId ? parseInt(categoryId) : 0);
@@ -154,7 +154,7 @@ const CategoryPage: React.FC = () => {
         totalPages - 3,
         totalPages - 2,
         totalPages - 1,
-        totalPages
+        totalPages,
       );
     } else {
       pages.push(
@@ -164,7 +164,7 @@ const CategoryPage: React.FC = () => {
         currentPage,
         currentPage + 1,
         "...",
-        totalPages
+        totalPages,
       );
     }
 
@@ -382,6 +382,7 @@ const CategoryPage: React.FC = () => {
                           ? "bg-doodle-accent text-white"
                           : "hover:bg-doodle-text/10 text-doodle-text"
                       }`}
+                      data-testid={`subcategory-filter-${sub.ProductSubcategoryID}`}
                     >
                       * {sub.Name}
                     </button>
@@ -528,7 +529,7 @@ const CategoryPage: React.FC = () => {
                           key={`product-${item.ProductID}`}
                           product={item}
                         />
-                      )
+                      ),
                     )}
                   </div>
 

@@ -310,7 +310,7 @@ const CheckoutPage: React.FC = () => {
   const { paymentMethods, getDefaultPaymentMethod, addPaymentMethod } =
     usePaymentMethods();
   const { data: emailAddresses = [] } = useEmailAddresses(
-    user?.businessEntityId || 0
+    user?.businessEntityId || 0,
   );
   const createEmailAddress = useCreateEmailAddress();
   const [selectedEmailId, setSelectedEmailId] = useState<number | null>(() => {
@@ -325,13 +325,13 @@ const CheckoutPage: React.FC = () => {
   const [countryCode, setCountryCode] = useState("+1");
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(
-    null
+    null,
   );
   const [useNewAddress, setUseNewAddress] = useState(false);
   const [saveNewAddress, setSaveNewAddress] = useState(false);
   const [addressLabel, setAddressLabel] = useState("");
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(
-    null
+    null,
   );
   const [useNewPayment, setUseNewPayment] = useState(false);
   const [saveNewPayment, setSaveNewPayment] = useState(false);
@@ -386,7 +386,7 @@ const CheckoutPage: React.FC = () => {
 
         const formattedPhone = formatPhoneNumber(
           phoneNumber,
-          parsedCountryCode
+          parsedCountryCode,
         );
         setCountryCode(parsedCountryCode);
         setShippingData((prev) => ({ ...prev, phone: formattedPhone }));
@@ -420,7 +420,7 @@ const CheckoutPage: React.FC = () => {
         country: "United States",
       });
     },
-    [user]
+    [user],
   );
 
   // Initialize with default address if available
@@ -475,11 +475,11 @@ const CheckoutPage: React.FC = () => {
     const domain = email.toLowerCase().split("@")[1];
     if (domain === "yahoo.com" || domain?.includes("yahoo")) {
       setEmailWarning(
-        "⚠️ Yahoo emails may not receive order confirmations. Consider using a different email address."
+        "⚠️ Yahoo emails may not receive order confirmations. Consider using a different email address.",
       );
     } else if (domain === "gmail.com") {
       setEmailWarning(
-        "⚠️ Gmail users: Check your spam folder for order confirmations."
+        "⚠️ Gmail users: Check your spam folder for order confirmations.",
       );
     } else {
       setEmailWarning("");
@@ -539,7 +539,7 @@ const CheckoutPage: React.FC = () => {
               if (rateResponse.currencyRates.items.length > 0) {
                 // Use AverageRate for conversion
                 setExchangeRate(
-                  rateResponse.currencyRates.items[0].AverageRate
+                  rateResponse.currencyRates.items[0].AverageRate,
                 );
               } else {
                 setExchangeRate(1); // Default to 1 if no rate found
@@ -608,7 +608,7 @@ const CheckoutPage: React.FC = () => {
 
   // Get selected shipping method's price
   const selectedShipMethod = shipMethods.find(
-    (method) => method.ShipMethodID === selectedShipMethodId
+    (method) => method.ShipMethodID === selectedShipMethodId,
   );
   const baseShipping =
     priceAfterCodeDiscount > 50 * exchangeRate
@@ -848,7 +848,7 @@ const CheckoutPage: React.FC = () => {
       // Step 3: Create SalesOrderHeader
       const orderDate = new Date().toISOString();
       const dueDate = new Date(
-        Date.now() + 7 * 24 * 60 * 60 * 1000
+        Date.now() + 7 * 24 * 60 * 60 * 1000,
       ).toISOString(); // 7 days from now
 
       const orderHeaderResponse = await graphqlClient.request<{
@@ -904,7 +904,7 @@ const CheckoutPage: React.FC = () => {
           console.error(
             "Error updating stock for product",
             item.ProductID,
-            stockError
+            stockError,
           );
           // Continue even if stock update fails
         }
@@ -921,7 +921,7 @@ const CheckoutPage: React.FC = () => {
             console.error(
               "Error deleting cart item",
               item.ShoppingCartItemID,
-              deleteError
+              deleteError,
             );
             // Continue even if delete fails
           }
@@ -933,7 +933,7 @@ const CheckoutPage: React.FC = () => {
 
       // Get shipping method name
       const selectedShipMethod = shipMethods.find(
-        (m) => m.ShipMethodID === selectedShipMethodId
+        (m) => m.ShipMethodID === selectedShipMethodId,
       );
       const shippingMethodName =
         selectedShipMethod?.Name || "Standard Shipping";
@@ -971,7 +971,7 @@ const CheckoutPage: React.FC = () => {
 
       // Navigate to order confirmation with email info
       navigate(
-        `/order-confirmation?orderId=${orderId}&emailId=${selectedEmailId}`
+        `/order-confirmation?orderId=${orderId}&emailId=${selectedEmailId}`,
       );
     } catch (error) {
       console.error("Order creation error:", error);
@@ -1083,7 +1083,7 @@ const CheckoutPage: React.FC = () => {
                             const emailId = Number(e.target.value);
                             setSelectedEmailId(emailId);
                             const selectedEmail = emailAddresses.find(
-                              (em) => em.EmailAddressID === emailId
+                              (em) => em.EmailAddressID === emailId,
                             );
                             if (selectedEmail) {
                               setShippingData((prev) => ({
@@ -1137,14 +1137,14 @@ const CheckoutPage: React.FC = () => {
                               // Reset to first email
                               if (emailAddresses[0]) {
                                 setSelectedEmailId(
-                                  emailAddresses[0].EmailAddressID
+                                  emailAddresses[0].EmailAddressID,
                                 );
                                 setShippingData((prev) => ({
                                   ...prev,
                                   email: emailAddresses[0].EmailAddress,
                                 }));
                                 checkEmailWarning(
-                                  emailAddresses[0].EmailAddress
+                                  emailAddresses[0].EmailAddress,
                                 );
                               }
                             }}
@@ -1492,7 +1492,7 @@ const CheckoutPage: React.FC = () => {
                                 }}
                                 className="doodle-input w-full pr-16"
                                 placeholder={t(
-                                  "checkout.placeholders.cardNumber"
+                                  "checkout.placeholders.cardNumber",
                                 )}
                                 maxLength={19}
                               />
@@ -1571,7 +1571,7 @@ const CheckoutPage: React.FC = () => {
                                   if (value.length >= 2) {
                                     const month = parseInt(
                                       value.slice(0, 2),
-                                      10
+                                      10,
                                     );
                                     if (month > 12)
                                       value = "12" + value.slice(2);
@@ -1666,7 +1666,7 @@ const CheckoutPage: React.FC = () => {
                                     }
                                     className="doodle-input w-full md:w-1/2"
                                     placeholder={t(
-                                      "checkout.cardLabelPlaceholder"
+                                      "checkout.cardLabelPlaceholder",
                                     )}
                                   />
                                 </div>
@@ -1705,6 +1705,7 @@ const CheckoutPage: React.FC = () => {
                           onClick={handlePlaceOrder}
                           disabled={isProcessing || cardInvalid}
                           className="doodle-button doodle-button-primary flex-1 py-3 text-lg disabled:opacity-50"
+                          data-testid="place-order-button"
                         >
                           {isProcessing
                             ? t("checkout.processing")
@@ -1750,8 +1751,8 @@ const CheckoutPage: React.FC = () => {
                                 item.selectedColor
                                   ? ` - ${item.selectedColor}`
                                   : item.Color
-                                  ? ` - ${item.Color}`
-                                  : ""
+                                    ? ` - ${item.Color}`
+                                    : ""
                               }`}
                               className="!aspect-square"
                               aspectRatio="1/1"
@@ -1943,7 +1944,7 @@ const CheckoutPage: React.FC = () => {
                       <span>
                         {(() => {
                           const selectedMethod = shipMethods.find(
-                            (m) => m.ShipMethodID === selectedShipMethodId
+                            (m) => m.ShipMethodID === selectedShipMethodId,
                           );
                           if (!selectedMethod) return t("checkout.loading");
 

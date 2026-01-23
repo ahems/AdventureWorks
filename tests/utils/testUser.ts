@@ -72,13 +72,20 @@ export const signupThroughUi = async (
   await page.getByLabel(/confirm password/i).fill(creds.password);
 
   await page.getByRole("button", { name: /create account/i }).click();
-  await page.waitForURL("**/");
 
   // Wait for user to be stored in localStorage after signup
-  await page.waitForFunction((key) => {
-    const stored = localStorage.getItem(key);
-    return stored !== null;
-  }, APP_STORAGE_KEYS.currentUser);
+  await page.waitForFunction(
+    (key) => {
+      const stored = localStorage.getItem(key);
+      return stored !== null;
+    },
+    APP_STORAGE_KEYS.currentUser,
+    { timeout: 10000 },
+  );
+
+  // Navigate to home page after successful signup
+  await page.goto(testEnv.webBaseUrl);
+  await page.waitForLoadState("domcontentloaded");
 
   const storedUser = await page.evaluate((key) => {
     return localStorage.getItem(key);

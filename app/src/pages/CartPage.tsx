@@ -157,6 +157,7 @@ const CartPage: React.FC = () => {
                 <div
                   key={`${item.ProductID}-${item.selectedSize}-${item.selectedColor}-${index}`}
                   className="doodle-card p-4 md:p-6"
+                  data-testid={`cart-item-${item.ProductID}`}
                 >
                   <div className="flex gap-4">
                     {/* Product Image */}
@@ -168,8 +169,8 @@ const CartPage: React.FC = () => {
                             item.selectedColor
                               ? ` - ${item.selectedColor}`
                               : item.Color
-                              ? ` - ${item.Color}`
-                              : ""
+                                ? ` - ${item.Color}`
+                                : ""
                           }`}
                           className="!aspect-square"
                           aspectRatio="1/1"
@@ -227,7 +228,7 @@ const CartPage: React.FC = () => {
                             </span>
                             <span className="font-doodle text-lg font-bold text-doodle-accent">
                               {formatPrice(
-                                getSalePrice(item) || item.ListPrice
+                                getSalePrice(item) || item.ListPrice,
                               )}
                             </span>
                           </div>
@@ -257,7 +258,7 @@ const CartPage: React.FC = () => {
                             removeFromCart(
                               item.ProductID,
                               item.selectedSize,
-                              item.selectedColor
+                              item.selectedColor,
                             );
                           }}
                           className="text-doodle-text/50 hover:text-doodle-accent transition-colors p-1"
@@ -271,7 +272,7 @@ const CartPage: React.FC = () => {
                             removeFromCart(
                               item.ProductID,
                               item.selectedSize,
-                              item.selectedColor
+                              item.selectedColor,
                             )
                           }
                           className="text-doodle-text/50 hover:text-doodle-accent transition-colors p-1"
@@ -288,7 +289,7 @@ const CartPage: React.FC = () => {
                               item.ProductID,
                               item.quantity - 1,
                               item.selectedSize,
-                              item.selectedColor
+                              item.selectedColor,
                             )
                           }
                           className="p-1.5 hover:bg-doodle-text/10 transition-colors"
@@ -305,7 +306,7 @@ const CartPage: React.FC = () => {
                               item.ProductID,
                               item.quantity + 1,
                               item.selectedSize,
-                              item.selectedColor
+                              item.selectedColor,
                             )
                           }
                           className="p-1.5 hover:bg-doodle-text/10 transition-colors"
@@ -320,7 +321,7 @@ const CartPage: React.FC = () => {
                         <span className="font-bold">
                           {formatPrice(
                             (getSalePrice(item) || item.ListPrice) *
-                              item.quantity
+                              item.quantity,
                           )}
                         </span>
                       </p>
@@ -419,6 +420,7 @@ const CartPage: React.FC = () => {
                 <Link
                   to="/checkout"
                   className="doodle-button doodle-button-primary w-full mt-6 py-3 text-lg block text-center"
+                  data-testid="checkout-button"
                 >
                   Proceed to Checkout
                 </Link>
