@@ -195,7 +195,7 @@ test.describe("Internationalization", () => {
       'select[name*="country"], [id*="country"]',
     );
     if ((await countrySelect.count()) > 0) {
-      await countrySelect.selectOption({ label: /United States/i });
+      await countrySelect.selectOption({ label: "United States" });
       await page.waitForTimeout(1000);
 
       // Verify prices changed to USD despite French language
