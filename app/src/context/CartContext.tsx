@@ -25,18 +25,18 @@ interface CartContextType {
     product: Product,
     quantity?: number,
     selectedSize?: string,
-    selectedColor?: string
+    selectedColor?: string,
   ) => void;
   removeFromCart: (
     productId: number,
     selectedSize?: string,
-    selectedColor?: string
+    selectedColor?: string,
   ) => void;
   updateQuantity: (
     productId: number,
     quantity: number,
     selectedSize?: string,
-    selectedColor?: string
+    selectedColor?: string,
   ) => void;
   clearCart: () => void;
   getTotalItems: () => number;
@@ -73,7 +73,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
     return cartItems
       .map((cartItem) => {
         const product = allProducts.find(
-          (p) => p.ProductID === cartItem.ProductID
+          (p) => p.ProductID === cartItem.ProductID,
         );
         if (!product) return null;
 
@@ -85,7 +85,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
       })
       .filter(
         (item): item is CartItem & { ShoppingCartItemID: number } =>
-          item !== null
+          item !== null,
       );
   }, [cartItems, allProducts]);
 
@@ -93,7 +93,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
     product: Product,
     quantity: number = 1,
     selectedSize?: string,
-    selectedColor?: string
+    selectedColor?: string,
   ) => {
     if (!shoppingCartId) {
       toast({
@@ -116,63 +116,81 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
       (item) =>
         item.ProductID === product.ProductID &&
         item.selectedSize === selectedSize &&
-        item.selectedColor === selectedColor
+        item.selectedColor === selectedColor,
     );
 
     if (existingItem && "ShoppingCartItemID" in existingItem) {
       // Update existing item quantity
       const newQuantity = existingItem.quantity + quantity;
-      await updateCartMutation.mutateAsync({
-        shoppingCartItemId: (
-          existingItem as CartItem & { ShoppingCartItemID: number }
-        ).ShoppingCartItemID,
-        quantity: newQuantity,
-        shoppingCartId,
-      });
+      try {
+        await updateCartMutation.mutateAsync({
+          shoppingCartItemId: (
+            existingItem as CartItem & { ShoppingCartItemID: number }
+          ).ShoppingCartItemID,
+          quantity: newQuantity,
+          shoppingCartId,
+        });
 
-      toast({
-        title: "Cart Updated!",
-        description: `Added another ${displayName} to your cart`,
-        action: (
-          <ToastAction altText="View cart" asChild>
-            <a href="/cart">View Cart</a>
-          </ToastAction>
-        ),
-      });
+        toast({
+          title: "Cart Updated!",
+          description: `Added another ${displayName} to your cart`,
+          action: (
+            <ToastAction altText="View cart" asChild>
+              <a href="/cart">View Cart</a>
+            </ToastAction>
+          ),
+        });
+      } catch (error) {
+        console.error("Failed to update cart item:", error);
+        toast({
+          title: "Error",
+          description: "Failed to update cart. Please try again.",
+          variant: "destructive",
+        });
+      }
     } else {
       // Add new item to cart
-      await addToCartMutation.mutateAsync({
-        shoppingCartId,
-        productId: product.ProductID,
-        quantity,
-      });
+      try {
+        await addToCartMutation.mutateAsync({
+          shoppingCartId,
+          productId: product.ProductID,
+          quantity,
+        });
 
-      // Track add to cart event in Application Insights
-      trackEvent("Product_AddToCart", {
-        productId: product.ProductID,
-        productName: product.Name,
-        quantity: quantity,
-        price: product.ListPrice,
-        size: selectedSize,
-        color: selectedColor,
-      });
+        // Track add to cart event in Application Insights
+        trackEvent("Product_AddToCart", {
+          productId: product.ProductID,
+          productName: product.Name,
+          quantity: quantity,
+          price: product.ListPrice,
+          size: selectedSize,
+          color: selectedColor,
+        });
 
-      toast({
-        title: "Added to Cart!",
-        description: `${displayName} is now in your cart`,
-        action: (
-          <ToastAction altText="View cart" asChild>
-            <a href="/cart">View Cart</a>
-          </ToastAction>
-        ),
-      });
+        toast({
+          title: "Added to Cart!",
+          description: `${displayName} is now in your cart`,
+          action: (
+            <ToastAction altText="View cart" asChild>
+              <a href="/cart">View Cart</a>
+            </ToastAction>
+          ),
+        });
+      } catch (error) {
+        console.error("Failed to add item to cart:", error);
+        toast({
+          title: "Error",
+          description: "Failed to add item to cart. Please try again.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
   const removeFromCart = async (
     productId: number,
     selectedSize?: string,
-    selectedColor?: string
+    selectedColor?: string,
   ) => {
     if (!shoppingCartId) return;
 
@@ -180,7 +198,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
       (i) =>
         i.ProductID === productId &&
         i.selectedSize === selectedSize &&
-        i.selectedColor === selectedColor
+        i.selectedColor === selectedColor,
     );
 
     if (item && "ShoppingCartItemID" in item) {
@@ -208,7 +226,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
     productId: number,
     quantity: number,
     selectedSize?: string,
-    selectedColor?: string
+    selectedColor?: string,
   ) => {
     if (!shoppingCartId) return;
 
@@ -221,7 +239,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
       (i) =>
         i.ProductID === productId &&
         i.selectedSize === selectedSize &&
-        i.selectedColor === selectedColor
+        i.selectedColor === selectedColor,
     );
 
     if (item && "ShoppingCartItemID" in item) {
@@ -262,7 +280,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
   const getOriginalPrice = () => {
     return items.reduce(
       (total, item) => total + item.ListPrice * item.quantity,
-      0
+      0,
     );
   };
 
