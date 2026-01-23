@@ -95,4 +95,29 @@ export class AccountPage {
     await card.getByTestId("address-delete-button").click();
     await expect(card).toBeHidden();
   }
+
+  async setDefaultAddress(matcher: string) {
+    const card = this.findAddressCard(matcher);
+
+    // Wait for any pending operations
+    await this.page.waitForLoadState("networkidle");
+
+    await card.getByTestId("address-set-default-button").click();
+
+    // Wait for the API call to complete and UI to update
+    await this.page.waitForTimeout(5000);
+
+    // Wait for addresses to refetch
+    await this.page.waitForLoadState("networkidle");
+  }
+
+  async expectAddressIsDefault(matcher: string) {
+    const card = this.findAddressCard(matcher);
+    await expect(card.getByText(/default/i)).toBeVisible();
+  }
+
+  async expectAddressIsNotDefault(matcher: string) {
+    const card = this.findAddressCard(matcher);
+    await expect(card.getByText(/default/i)).not.toBeVisible();
+  }
 }

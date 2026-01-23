@@ -195,12 +195,42 @@ export const useAddresses = () => {
       setIsLoading(true);
       try {
         const functionsApiUrl = getFunctionsApiUrl();
+        const dabApiUrl = getRestApiUrl();
 
-        // Parse address type from addressType
-        const addressTypeId =
-          Object.entries(ADDRESS_TYPE_MAP).find(
-            ([_, label]) => label === address.addressType,
-          )?.[0] || "2"; // Default to Home
+        // Check if there's already a default address by querying the database
+        const beaResponse = await fetch(
+          `${dabApiUrl}/BusinessEntityAddress?$filter=BusinessEntityID eq ${user.businessEntityId} and AddressTypeID eq 2`,
+        );
+        const beaData = await beaResponse.json();
+        const hasDefaultAddress = beaData.value && beaData.value.length > 0;
+
+        console.log(
+          `[addAddress] Checking for existing default: hasDefaultAddress=${hasDefaultAddress}`,
+        );
+
+        // Parse address type from addressType, but enforce single default rule
+        let addressTypeId: string;
+        const requestedTypeId = Object.entries(ADDRESS_TYPE_MAP).find(
+          ([_, label]) => label === address.addressType,
+        )?.[0];
+
+        if (requestedTypeId === "2" && hasDefaultAddress) {
+          // User requested Home (default) but there's already a default, use Shipping instead
+          console.log(
+            "[addAddress] Default already exists, using Shipping (3) instead of Home (2)",
+          );
+          addressTypeId = "3";
+        } else if (requestedTypeId) {
+          // Use the requested type
+          addressTypeId = requestedTypeId;
+        } else {
+          // No type specified, use Home (2) for first address, Shipping (3) otherwise
+          addressTypeId = hasDefaultAddress ? "3" : "2";
+        }
+
+        console.log(
+          `[addAddress] Creating address with AddressTypeID=${addressTypeId}`,
+        );
 
         // Create address via Functions API (with BusinessEntityID to create link automatically)
         const response = await fetch(`${functionsApiUrl}/api/addresses`, {
@@ -363,12 +393,151 @@ export const useAddresses = () => {
 
   const setDefaultAddress = useCallback(
     async (id: string) => {
-      // In this implementation, we use AddressTypeID = 2 (Home) as the default
-      // To change default, we could update the AddressTypeID of the addresses
-      // For now, just refresh to re-sort
-      await fetchAddresses();
+      if (!user?.businessEntityId) return;
+
+      setIsLoading(true);
+      try {
+        const dabApiUrl = getRestApiUrl();
+        const addressId = parseInt(id);
+
+        // Find the current default address (AddressTypeID = 2 means Home/Default)
+        const currentDefault = addresses.find((addr) => addr.isDefault);
+
+        // Find the BusinessEntityAddress for the new default address
+        const beaResponse = await fetch(
+          `${dabApiUrl}/BusinessEntityAddress?$filter=BusinessEntityID eq ${user.businessEntityId} and AddressID eq ${addressId}`,
+        );
+
+        if (!beaResponse.ok) {
+          throw new Error("Failed to fetch BusinessEntityAddress");
+        }
+
+        const beaData = await beaResponse.json();
+        const newDefaultBea = beaData.value?.[0] as BusinessEntityAddress;
+
+        if (!newDefaultBea) {
+          throw new Error("Address not found");
+        }
+
+        // If there's a current default that's different, change it away from Home (2)
+        if (currentDefault && currentDefault.id !== id) {
+          const currentAddressId = parseInt(currentDefault.id);
+          const currentBeaResponse = await fetch(
+            `${dabApiUrl}/BusinessEntityAddress?$filter=BusinessEntityID eq ${user.businessEntityId} and AddressID eq ${currentAddressId}`,
+          );
+
+          if (currentBeaResponse.ok) {
+            const currentBeaData = await currentBeaResponse.json();
+            const currentBea = currentBeaData
+              .value?.[0] as BusinessEntityAddress;
+
+            if (currentBea && currentBea.AddressTypeID === 2) {
+              console.log(
+                "[setDefaultAddress] Removing default from address:",
+                currentAddressId,
+              );
+              // Delete the old Home (2) record
+              const deleteResponse = await fetch(
+                `${dabApiUrl}/BusinessEntityAddress/BusinessEntityID/${user.businessEntityId}/AddressID/${currentAddressId}/AddressTypeID/2`,
+                {
+                  method: "DELETE",
+                },
+              );
+
+              if (!deleteResponse.ok) {
+                console.error(
+                  "[setDefaultAddress] Failed to delete old default:",
+                  await deleteResponse.text(),
+                );
+                throw new Error("Failed to remove old default address");
+              }
+
+              // Create new record with Shipping (3) type
+              const createResponse = await fetch(
+                `${dabApiUrl}/BusinessEntityAddress`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    BusinessEntityID: user.businessEntityId,
+                    AddressID: currentAddressId,
+                    AddressTypeID: 3, // Shipping
+                  }),
+                },
+              );
+
+              if (!createResponse.ok) {
+                console.error(
+                  "[setDefaultAddress] Failed to create new record:",
+                  await createResponse.text(),
+                );
+                throw new Error("Failed to update old default address");
+              }
+              console.log(
+                "[setDefaultAddress] Successfully changed old default to Shipping",
+              );
+            }
+          }
+        }
+
+        // Change the new default address to Home (2) if it's not already
+        if (newDefaultBea.AddressTypeID !== 2) {
+          console.log(
+            "[setDefaultAddress] Setting address as default:",
+            addressId,
+          );
+          // Delete the old record
+          const deleteResponse = await fetch(
+            `${dabApiUrl}/BusinessEntityAddress/BusinessEntityID/${user.businessEntityId}/AddressID/${addressId}/AddressTypeID/${newDefaultBea.AddressTypeID}`,
+            {
+              method: "DELETE",
+            },
+          );
+
+          if (!deleteResponse.ok) {
+            console.error(
+              "[setDefaultAddress] Failed to delete old record:",
+              await deleteResponse.text(),
+            );
+            throw new Error("Failed to delete old address record");
+          }
+
+          // Create new record with Home (2) type
+          const createResponse = await fetch(
+            `${dabApiUrl}/BusinessEntityAddress`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                BusinessEntityID: user.businessEntityId,
+                AddressID: addressId,
+                AddressTypeID: 2, // Home (default)
+              }),
+            },
+          );
+
+          if (!createResponse.ok) {
+            console.error(
+              "[setDefaultAddress] Failed to create new default:",
+              await createResponse.text(),
+            );
+            throw new Error("Failed to set new default address");
+          }
+          console.log(
+            "[setDefaultAddress] Successfully set new default to Home",
+          );
+        }
+
+        // Refresh addresses to reflect changes
+        await fetchAddresses();
+      } catch (error) {
+        console.error("Error setting default address:", error);
+        throw error;
+      } finally {
+        setIsLoading(false);
+      }
     },
-    [fetchAddresses],
+    [user?.businessEntityId, addresses, fetchAddresses],
   );
 
   const getDefaultAddress = useCallback(() => {
