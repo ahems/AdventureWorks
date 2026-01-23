@@ -25,6 +25,10 @@ public class CreateAddressRequest
     public string City { get; set; } = string.Empty;
     public int StateProvinceID { get; set; }
     public string PostalCode { get; set; } = string.Empty;
+
+    // Optional: For creating BusinessEntityAddress link
+    public int? BusinessEntityID { get; set; }
+    public int? AddressTypeID { get; set; }
 }
 
 /// <summary>

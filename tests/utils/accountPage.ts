@@ -69,8 +69,8 @@ export class AccountPage {
     await this.addressForm().getByRole("button", { name: buttonLabel }).click();
     // Wait for form to close after submission (with longer timeout for Azure cold starts)
     await expect(this.addressForm()).not.toBeVisible({ timeout: 20000 });
-    // Small wait for UI to update after form closes
-    await this.page.waitForTimeout(1000);
+    // Force reload the page to ensure we get fresh address data
+    await this.page.reload({ waitUntil: "networkidle" });
   }
 
   findAddressCard(matcher: string): Locator {

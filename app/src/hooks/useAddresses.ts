@@ -61,7 +61,7 @@ export const useAddresses = () => {
 
     console.log(
       "[useAddresses] Fetching addresses for businessEntityId:",
-      user.businessEntityId
+      user.businessEntityId,
     );
     setIsLoading(true);
     try {
@@ -75,7 +75,7 @@ export const useAddresses = () => {
       if (!response.ok) {
         console.error(
           "[useAddresses] Failed to fetch business entity addresses, status:",
-          response.status
+          response.status,
         );
         setAddresses([]);
         return;
@@ -94,14 +94,14 @@ export const useAddresses = () => {
       console.log(
         "[useAddresses] Found",
         businessEntityAddresses.length,
-        "linked addresses"
+        "linked addresses",
       );
       // Fetch each address from Functions API
       const functionsApiUrl = getFunctionsApiUrl();
       const addressPromises = businessEntityAddresses.map(async (bea) => {
         try {
           const addrResponse = await fetch(
-            `${functionsApiUrl}/api/addresses/${bea.AddressID}`
+            `${functionsApiUrl}/api/addresses/${bea.AddressID}`,
           );
           if (!addrResponse.ok) return null;
 
@@ -114,7 +114,7 @@ export const useAddresses = () => {
 
           try {
             const stateResponse = await fetch(
-              `${dabApiUrl}/StateProvince/StateProvinceID/${apiAddress.StateProvinceID}`
+              `${dabApiUrl}/StateProvince/StateProvinceID/${apiAddress.StateProvinceID}`,
             );
             if (stateResponse.ok) {
               const stateData = await stateResponse.json();
@@ -128,7 +128,7 @@ export const useAddresses = () => {
                 // Fetch CountryRegion to get the name
                 try {
                   const countryResponse = await fetch(
-                    `${dabApiUrl}/CountryRegion/CountryRegionCode/${countryCode}`
+                    `${dabApiUrl}/CountryRegion/CountryRegionCode/${countryCode}`,
                   );
                   if (countryResponse.ok) {
                     const countryData = await countryResponse.json();
@@ -140,7 +140,7 @@ export const useAddresses = () => {
                 } catch (error) {
                   console.error(
                     `Failed to fetch CountryRegion ${countryCode}:`,
-                    error
+                    error,
                   );
                 }
               }
@@ -148,7 +148,7 @@ export const useAddresses = () => {
           } catch (error) {
             console.error(
               `Failed to fetch StateProvince ${apiAddress.StateProvinceID}:`,
-              error
+              error,
             );
           }
 
@@ -173,7 +173,7 @@ export const useAddresses = () => {
       });
 
       const fetchedAddresses = (await Promise.all(addressPromises)).filter(
-        (addr): addr is Address => addr !== null
+        (addr): addr is Address => addr !== null,
       );
       setAddresses(fetchedAddresses);
     } catch (error) {
@@ -199,10 +199,10 @@ export const useAddresses = () => {
         // Parse address type from addressType
         const addressTypeId =
           Object.entries(ADDRESS_TYPE_MAP).find(
-            ([_, label]) => label === address.addressType
+            ([_, label]) => label === address.addressType,
           )?.[0] || "2"; // Default to Home
 
-        // Create address via Functions API
+        // Create address via Functions API (with BusinessEntityID to create link automatically)
         const response = await fetch(`${functionsApiUrl}/api/addresses`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -212,29 +212,26 @@ export const useAddresses = () => {
             City: address.city,
             StateProvinceID: address.stateProvinceId,
             PostalCode: address.postalCode,
-          }),
-        });
-
-        if (!response.ok) throw new Error("Failed to create address");
-        const createdAddress: ApiAddress = await response.json();
-
-        // Create BusinessEntityAddress link via DAB
-        const dabApiUrl = getRestApiUrl();
-        const linkResponse = await fetch(`${dabApiUrl}/BusinessEntityAddress`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
             BusinessEntityID: user.businessEntityId,
-            AddressID: createdAddress.AddressID,
             AddressTypeID: parseInt(addressTypeId),
           }),
         });
 
-        if (!linkResponse.ok) {
-          console.error("Failed to create address link");
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(
+            "Failed to create address:",
+            response.status,
+            errorText,
+          );
+          throw new Error(
+            `Failed to create address: ${response.status} ${errorText}`,
+          );
         }
 
-        // Refresh addresses
+        const createdAddress: ApiAddress = await response.json();
+
+        // Refresh addresses to show the newly created address
         await fetchAddresses();
       } catch (error) {
         console.error("Error adding address:", error);
@@ -243,7 +240,7 @@ export const useAddresses = () => {
         setIsLoading(false);
       }
     },
-    [user?.businessEntityId, fetchAddresses]
+    [user?.businessEntityId, fetchAddresses],
   );
 
   const updateAddress = useCallback(
@@ -280,7 +277,7 @@ export const useAddresses = () => {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(updatePayload),
-            }
+            },
           );
 
           if (!response.ok) throw new Error("Failed to update address");
@@ -289,7 +286,7 @@ export const useAddresses = () => {
         // If addressType changed, update AddressTypeID via DAB
         if (updates.addressType) {
           const newAddressTypeId = Object.entries(ADDRESS_TYPE_MAP).find(
-            ([_, label]) => label === updates.addressType
+            ([_, label]) => label === updates.addressType,
           )?.[0];
 
           if (newAddressTypeId) {
@@ -302,7 +299,7 @@ export const useAddresses = () => {
                 body: JSON.stringify({
                   AddressTypeID: parseInt(newAddressTypeId),
                 }),
-              }
+              },
             );
           }
         }
@@ -316,7 +313,7 @@ export const useAddresses = () => {
         setIsLoading(false);
       }
     },
-    [user?.businessEntityId, fetchAddresses]
+    [user?.businessEntityId, fetchAddresses],
   );
 
   const deleteAddress = useCallback(
@@ -330,7 +327,7 @@ export const useAddresses = () => {
 
         // First, find the AddressTypeID for this BusinessEntityAddress
         const beaResponse = await fetch(
-          `${dabApiUrl}/BusinessEntityAddress?$filter=BusinessEntityID eq ${user.businessEntityId} and AddressID eq ${addressId}`
+          `${dabApiUrl}/BusinessEntityAddress?$filter=BusinessEntityID eq ${user.businessEntityId} and AddressID eq ${addressId}`,
         );
 
         if (beaResponse.ok) {
@@ -341,7 +338,7 @@ export const useAddresses = () => {
             // Delete BusinessEntityAddress link
             await fetch(
               `${dabApiUrl}/BusinessEntityAddress/BusinessEntityID/${user.businessEntityId}/AddressID/${addressId}/AddressTypeID/${bea.AddressTypeID}`,
-              { method: "DELETE" }
+              { method: "DELETE" },
             );
           }
         }
@@ -361,7 +358,7 @@ export const useAddresses = () => {
         setIsLoading(false);
       }
     },
-    [user?.businessEntityId, fetchAddresses]
+    [user?.businessEntityId, fetchAddresses],
   );
 
   const setDefaultAddress = useCallback(
@@ -371,7 +368,7 @@ export const useAddresses = () => {
       // For now, just refresh to re-sort
       await fetchAddresses();
     },
-    [fetchAddresses]
+    [fetchAddresses],
   );
 
   const getDefaultAddress = useCallback(() => {

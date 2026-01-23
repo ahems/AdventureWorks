@@ -76,13 +76,16 @@ public class AddressService
     }
 
     /// <summary>
-    /// Create a new address
+    /// Create a new address and optionally link it to a BusinessEntity
     /// </summary>
     public async Task<Address> CreateAddressAsync(CreateAddressRequest request)
     {
         using var connection = await CreateConnectionAsync();
+        using var transaction = connection.BeginTransaction();
 
-        var sql = @"
+        try
+        {
+            var sql = @"
             INSERT INTO [Person].[Address] 
                 (AddressLine1, AddressLine2, City, StateProvinceID, PostalCode, rowguid, ModifiedDate)
             OUTPUT 
@@ -97,17 +100,45 @@ public class AddressService
             VALUES 
                 (@AddressLine1, @AddressLine2, @City, @StateProvinceID, @PostalCode, NEWID(), GETDATE())";
 
-        try
-        {
-            var address = await connection.QuerySingleAsync<Address>(sql, request);
+            var address = await connection.QuerySingleAsync<Address>(sql, request, transaction);
+
+            // If BusinessEntityID is provided, create the link in BusinessEntityAddress
+            if (request.BusinessEntityID.HasValue)
+            {
+                var addressTypeId = request.AddressTypeID ?? 2; // Default to Home (2)
+                var linkSql = @"
+                    INSERT INTO [Person].[BusinessEntityAddress]
+                        (BusinessEntityID, AddressID, AddressTypeID, rowguid, ModifiedDate)
+                    VALUES
+                        (@BusinessEntityID, @AddressID, @AddressTypeID, NEWID(), GETDATE())";
+
+                await connection.ExecuteAsync(linkSql, new
+                {
+                    BusinessEntityID = request.BusinessEntityID.Value,
+                    AddressID = address.AddressID,
+                    AddressTypeID = addressTypeId
+                }, transaction);
+            }
+
+            transaction.Commit();
             return address;
         }
         catch (SqlException ex)
         {
+            transaction.Rollback();
+
             // Check for foreign key constraint violation (error 547)
             if (ex.Number == 547)
             {
-                throw new InvalidOperationException($"Invalid StateProvinceID: {request.StateProvinceID}. The StateProvinceID must reference a valid state/province.", ex);
+                if (ex.Message.Contains("StateProvince"))
+                {
+                    throw new InvalidOperationException($"Invalid StateProvinceID: {request.StateProvinceID}. The StateProvinceID must reference a valid state/province.", ex);
+                }
+                else if (ex.Message.Contains("BusinessEntity"))
+                {
+                    throw new InvalidOperationException($"Invalid BusinessEntityID: {request.BusinessEntityID}. The BusinessEntityID must reference a valid business entity.", ex);
+                }
+                throw new InvalidOperationException("Foreign key constraint violation. Please check your input values.", ex);
             }
             throw;
         }

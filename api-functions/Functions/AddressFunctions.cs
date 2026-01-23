@@ -98,7 +98,7 @@ public class AddressFunctions
     /// <summary>
     /// Create a new address
     /// </summary>
-    /// <param name="req">HTTP request with address data in body</param>
+    /// <param name="req">HTTP request with address data in body. Optionally include BusinessEntityID and AddressTypeID to automatically link the address.</param>
     /// <returns>Created address</returns>
     /// <response code="201">Address created successfully</response>
     /// <response code="400">Invalid request body or missing required fields</response>
@@ -122,8 +122,9 @@ public class AddressFunctions
             }
 
             // Log the incoming request for debugging
-            _logger.LogInformation("CreateAddress request: AddressLine1={AddressLine1}, City={City}, StateProvinceID={StateProvinceID}, PostalCode={PostalCode}",
-                createRequest.AddressLine1, createRequest.City, createRequest.StateProvinceID, createRequest.PostalCode);
+            _logger.LogInformation("CreateAddress request: AddressLine1={AddressLine1}, City={City}, StateProvinceID={StateProvinceID}, PostalCode={PostalCode}, BusinessEntityID={BusinessEntityID}, AddressTypeID={AddressTypeID}",
+                createRequest.AddressLine1, createRequest.City, createRequest.StateProvinceID, createRequest.PostalCode,
+                createRequest.BusinessEntityID, createRequest.AddressTypeID);
 
             // Validate required fields
             if (string.IsNullOrWhiteSpace(createRequest.AddressLine1) ||
