@@ -92,11 +92,7 @@ export class AccountPage {
 
   async deleteAddress(matcher: string) {
     const card = this.findAddressCard(matcher);
-    const [dialog] = await Promise.all([
-      this.page.waitForEvent("dialog"),
-      card.getByTestId("address-delete-button").click(),
-    ]);
-    await dialog.accept();
+    await card.getByTestId("address-delete-button").click();
     await expect(card).toBeHidden();
   }
 }

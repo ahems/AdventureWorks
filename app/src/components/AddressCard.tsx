@@ -106,9 +106,7 @@ export const AddressCard: React.FC<AddressCardProps> = ({
               data-testid="address-delete-button"
               onClick={(e) => {
                 e.stopPropagation();
-                if (confirm(t("addressCard.confirmDeleteAddress"))) {
-                  onDelete(address.id);
-                }
+                onDelete(address.id);
               }}
               className="p-2 hover:bg-doodle-accent/10 rounded transition-colors"
               title={t("addressCard.deleteAddress")}
