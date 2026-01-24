@@ -6,20 +6,20 @@ This app (./app) needs a full suite of Playwright tests under ./tests to validat
 
 **Last Updated:** January 24, 2026
 
-**Overall:** 15/29 passing (52%) | 4 failing | 10 skipped
+**Overall:** 16/29 passing (55%) | 3 failing | 10 skipped
 
 ### Summary of Issues
 
 **Failing Tests:**
 
-1. Address default validation - Test timeout (30s)
-2. AI search with embeddings - Search input selector finds button instead of input
-3. AI search product descriptions - Product link doesn't navigate
-4. AI search query types - Search input not visible
+1. AI search with embeddings - Search input selector finds button instead of input
+2. AI search product descriptions - Product link doesn't navigate
+3. AI search query types - Search input not visible
 
-**Recent Fix:**
+**Recent Fixes:**
 
 - ✅ Database products validation now passing (filters for ListPrice > 0)
+- ✅ Address default validation now passing (increased timeout to 60s)
 
 ## Test Categories
 
@@ -32,12 +32,12 @@ This app (./app) needs a full suite of Playwright tests under ./tests to validat
 
 **Status:** All passing. Tests handle cold starts gracefully, fallback images work correctly.
 
-### ✅/❌ Address Management - Azure Functions (1/2 passing, 1 failing)
+### ✅ Address Management - Azure Functions (2/2 passing)
 
 - [x] Create, update, and delete addresses via Azure Functions
-- [ ] Only one address can be set as default at a time (failing - test timeout after 30s)
+- [x] Only one address can be set as default at a time ✅ **FIXED Jan 24, 2026** - increased timeout to 60s
 
-**Status:** Basic address CRUD working. Default address test experiencing timeout issues.
+**Status:** All passing. Tests involve multiple API calls requiring extended timeout (60s) due to Azure Functions cold starts and multiple address operations.
 
 ### ✅ Checkout Flow (1/3 passing, 2 failing)
 
