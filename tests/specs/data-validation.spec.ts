@@ -320,10 +320,10 @@ test.describe("Data Validation - AI-Enhanced CSV Imports", () => {
   });
 
   test("database has products available for display", async () => {
-    // Query first page of products (DAB paginates at 100)
+    // Query for products with prices (displayable items) - DAB paginates at 100
     const query = `
       query {
-        products(first: 100) {
+        products(filter: { ListPrice: { gt: 0 } }, first: 100) {
           items {
             ProductID
             Name
@@ -337,27 +337,32 @@ test.describe("Data Validation - AI-Enhanced CSV Imports", () => {
     const data = await queryGraphQL(query);
     const products = data.products?.items || [];
 
-    console.log(`📊 Found ${products.length} products (first page)`);
+    console.log(
+      `📊 Found ${products.length} products with prices (first page)`,
+    );
 
     expect(products.length).toBeGreaterThan(0);
 
-    // Verify products have required fields
+    // Verify all returned products have required fields and prices
     const productsWithPrice = products.filter(
       (p: any) => p.ListPrice && p.ListPrice > 0,
     );
     const productsWithName = products.filter((p: any) => p.Name);
 
-    expect(productsWithPrice.length).toBeGreaterThan(0);
+    expect(productsWithPrice.length).toBe(products.length);
     expect(productsWithName.length).toBe(products.length);
 
-    console.log("✅ Products have required data fields");
+    console.log(
+      `✅ All ${products.length} products have required data fields and prices > 0`,
+    );
 
-    // Check if there are more products beyond first page
+    // Check if there are more displayable products beyond first page
     const queryPage2 = `
       query {
-        products(filter: { ProductID: { gt: ${products[products.length - 1].ProductID} } }, first: 10) {
+        products(filter: { ListPrice: { gt: 0 }, ProductID: { gt: ${products[products.length - 1].ProductID} } }, first: 10) {
           items {
             ProductID
+            ListPrice
           }
         }
       }
@@ -367,7 +372,9 @@ test.describe("Data Validation - AI-Enhanced CSV Imports", () => {
     const hasMoreProducts = page2Data.products?.items?.length > 0;
 
     if (hasMoreProducts) {
-      console.log("✅ Database has more than 100 products (paginated)");
+      console.log(
+        "✅ Database has more than 100 displayable products (paginated)",
+      );
     }
   });
 
