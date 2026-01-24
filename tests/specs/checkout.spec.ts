@@ -53,15 +53,15 @@ test.describe("Checkout Flow", () => {
         url: `${testEnv.restApiBaseUrl}/Product`,
         name: "DAB API",
         maxRetries: 3,
-        retryDelayMs: 2000,
-        timeoutMs: 20000,
+        retryDelayMs: 5000,
+        timeoutMs: 60000,
       }),
       warmupEndpoint({
         url: testEnv.webBaseUrl,
         name: "Web App",
         maxRetries: 3,
-        retryDelayMs: 2000,
-        timeoutMs: 20000,
+        retryDelayMs: 5000,
+        timeoutMs: 60000,
       }),
     ]);
     console.log("✅ Services ready for checkout tests\n");
@@ -70,6 +70,17 @@ test.describe("Checkout Flow", () => {
   test("user can complete full checkout process with order confirmation", async ({
     page,
   }) => {
+    // Listen for browser console errors
+    page.on("console", (msg) => {
+      if (msg.type() === "error") {
+        console.log(`🔴 Browser Console Error: ${msg.text()}`);
+      }
+    });
+
+    page.on("pageerror", (error) => {
+      console.log(`🔴 Page Error: ${error.message}`);
+    });
+
     // Verify TEST_EMAIL is configured
     const testEmail = getTestEmail();
     console.log(`📧 Using TEST_EMAIL for order confirmation: ${testEmail}`);
@@ -305,6 +316,30 @@ test.describe("Checkout Flow", () => {
     await page.waitForTimeout(2000);
     console.log("⏳ Waiting for checkout form to load");
 
+    // CRITICAL: Click "Add a different email" to enter TEST_EMAIL for order confirmation
+    const addEmailButton = page.getByRole("button", {
+      name: /add a different email/i,
+    });
+    if ((await addEmailButton.count()) > 0) {
+      await addEmailButton.click();
+      console.log("✅ Clicked 'Add a different email' button");
+      await page.waitForTimeout(500);
+
+      // Now fill in the TEST_EMAIL
+      const emailInput = page
+        .getByLabel(/email/i)
+        .or(page.locator('input[type="email"]'))
+        .last();
+      if ((await emailInput.count()) > 0) {
+        await emailInput.fill(testEmail);
+        console.log(`✅ Set order confirmation email to: ${testEmail}`);
+      }
+    } else {
+      console.log(
+        "⚠️  'Add a different email' button not found - using default email",
+      );
+    }
+
     // Fill shipping address
     const shippingAddress = createCheckoutAddress();
 
@@ -338,6 +373,14 @@ test.describe("Checkout Flow", () => {
       await postalCodeInput.fill(shippingAddress.postalCode);
 
       console.log("✅ Address form filled, looking for Save Address button");
+
+      // Check the "Save address for future orders" checkbox
+      const saveAddressCheckbox = page.getByLabel(/save.*address.*future/i);
+      if ((await saveAddressCheckbox.count()) > 0) {
+        await saveAddressCheckbox.check();
+        console.log("✅ Checked 'Save address for future orders' checkbox");
+      }
+
       // Click Save Address to proceed to payment step
       const saveAddressButton = page.getByRole("button", {
         name: /save address|continue|next/i,
@@ -348,15 +391,27 @@ test.describe("Checkout Flow", () => {
       if (buttonCount > 0) {
         await saveAddressButton.click();
         console.log("✅ Clicked Save Address to proceed to payment");
-        // Wait for payment step to load
-        await page.waitForTimeout(3000);
 
-        // Check if we're on payment step
-        const paymentSection = page.locator("text=Payment");
-        const isPaymentVisible = await paymentSection
-          .isVisible()
-          .catch(() => false);
-        console.log(`💳 Payment section visible: ${isPaymentVisible}`);
+        // Wait for payment step to be ready
+        console.log("⏳ Waiting for payment form to load...");
+
+        // First, wait for the payment section header to be visible
+        await page
+          .locator("text=/payment.*method/i")
+          .waitFor({ state: "visible", timeout: 5000 });
+        console.log("✅ Payment section visible");
+
+        // Wait a moment for the form to fully render
+        await page.waitForTimeout(1000);
+
+        // Try multiple selectors for card number input
+        const cardNumberInput = page
+          .locator(
+            'input[placeholder*="4242"], input[placeholder*="card"], input[type="text"]',
+          )
+          .first();
+        await cardNumberInput.waitFor({ state: "visible", timeout: 5000 });
+        console.log("✅ Payment form loaded");
       } else {
         console.warn(
           "⚠️  Could not find Save Address button - may auto-advance",
@@ -364,52 +419,80 @@ test.describe("Checkout Flow", () => {
       }
     }
 
-    // Fill contact email for order confirmation - MUST use TEST_EMAIL
-    const contactEmailInput = page
-      .getByLabel(/contact email|email for.*confirmation|order.*email/i)
-      .or(page.locator('input[name*="contact"][type="email"]'))
-      .or(page.locator('input[placeholder*="email"]'));
+    // Fill payment information - card is already selected, just fill the fields
+    const cardNumberInput = page
+      .locator(
+        'input[placeholder*="4242"], input[placeholder*="card"], input[type="text"]',
+      )
+      .first();
+    if ((await cardNumberInput.count()) > 0) {
+      console.log("💳 Filling payment information");
 
-    if ((await contactEmailInput.count()) > 0) {
-      await contactEmailInput.fill(testEmail);
-      console.log(`✅ Set order confirmation email to: ${testEmail}`);
+      // Use a valid test card number (Visa)
+      await cardNumberInput.fill("4111111111111111");
+
+      // Fill cardholder name (placeholder is just a name like "John Doe")
+      const cardholderNameInput = page.getByPlaceholder(/john|doe|name/i);
+      if ((await cardholderNameInput.count()) > 0) {
+        await cardholderNameInput.fill("Test User");
+        console.log("✅ Filled cardholder name");
+      }
+
+      // Fill expiry date in the future (12/28) - placeholder is "MM/YY"
+      const expiryInput = page.getByPlaceholder(/mm.*yy/i);
+      await expiryInput.fill("12/28");
+      console.log("✅ Filled expiry date: 12/28");
+
+      // Fill CVV with random 3-digit number - placeholder is "123"
+      const cvvInput = page.getByPlaceholder(/123|cvv/i);
+      const randomCvv = Math.floor(100 + Math.random() * 900).toString();
+      await cvvInput.fill(randomCvv);
+      console.log(`✅ Filled CVV: ${randomCvv}`);
     } else {
-      console.warn(
-        "⚠️ Could not find contact email field - email may use user's primary email",
+      console.log(
+        "⚠️  Card number input not found - payment form may not be visible",
       );
     }
 
-    // Fill payment information (if required)
-    const cardNumberInput = page.getByLabel(/card number/i);
-    if ((await cardNumberInput.count()) > 0) {
-      // Use a test card number
-      await cardNumberInput.fill("4111111111111111");
-
-      const expiryInput = page.getByLabel(/expir/i);
-      await expiryInput.fill("12/25");
-
-      const cvvInput = page.getByLabel(/cvv|security code/i);
-      await cvvInput.fill("123");
-    }
-
-    // Debug: Check current page state before submitting
-    const currentUrl = page.url();
-    console.log(`🔗 Current URL before submitting: ${currentUrl}`);
-    const pageContent = await page.content();
-    const hasPayButton = pageContent.toLowerCase().includes("pay ");
-    const hasPlaceOrderButton = pageContent
-      .toLowerCase()
-      .includes("place order");
-    console.log(
-      `🔍 Page contains 'pay': ${hasPayButton}, 'place order': ${hasPlaceOrderButton}`,
-    );
-
     // Submit order - button shows "Pay $XX.XX" or use data-testid
+    console.log("🔍 Looking for Place Order button...");
     const placeOrderButton = page
       .getByRole("button", { name: /pay|place order|complete order/i })
       .or(page.getByTestId("place-order-button"));
+
+    const isVisible = await placeOrderButton.isVisible();
+    const isEnabled = await placeOrderButton.isEnabled();
+    console.log(
+      `🔍 Place Order button - Visible: ${isVisible}, Enabled: ${isEnabled}`,
+    );
+
+    if (!isEnabled) {
+      // Check card validation
+      const cardNum = await page
+        .locator('input[placeholder*="4242"]')
+        .inputValue();
+      console.log(`🔍 Card number value: ${cardNum}`);
+    }
+
     await expect(placeOrderButton).toBeVisible();
+    await expect(placeOrderButton).toBeEnabled();
     await placeOrderButton.click();
+    console.log("✅ Clicked Place Order button");
+
+    // Wait a moment for any immediate response
+    await page.waitForTimeout(2000);
+
+    // Check for error messages
+    const errorToast = page.locator('[role="alert"], .error, [class*="error"]');
+    const hasError = await errorToast.isVisible().catch(() => false);
+    if (hasError) {
+      const errorText = await errorToast.textContent();
+      console.log(`⚠️  Error message displayed: ${errorText}`);
+    }
+
+    // Check current URL
+    const currentURL = page.url();
+    console.log(`🔍 Current URL after clicking Place Order: ${currentURL}`);
 
     // Wait for order confirmation page
     await expect(page).toHaveURL(/\/order-confirmation|\/order\/|\/thank-you/, {

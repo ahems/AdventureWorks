@@ -156,12 +156,9 @@ const GET_CUSTOMER = gql`
 
 const CREATE_CUSTOMER = gql`
   mutation CreateCustomer($personId: Int!) {
-    createCustomer(
-      item: { PersonID: $personId, TerritoryID: 1, AccountNumber: "" }
-    ) {
+    createCustomer(item: { PersonID: $personId, TerritoryID: 1 }) {
       CustomerID
       PersonID
-      AccountNumber
     }
   }
 `;
@@ -1250,7 +1247,7 @@ const CheckoutPage: React.FC = () => {
                           </p>
                         )}
                         <AddressForm
-                          onSave={(addressData) => {
+                          onSave={async (addressData) => {
                             // Convert AddressForm data to checkout shipping data
                             setShippingData({
                               firstName: user?.firstName || "",
@@ -1264,9 +1261,9 @@ const CheckoutPage: React.FC = () => {
                               country: addressData.countryRegionCode || "US",
                             });
 
-                            // Save address if user wants to
+                            // Save address if user wants to - AWAIT the save
                             if (saveNewAddress && user) {
-                              addAddress({
+                              await addAddress({
                                 addressType: addressData.addressType,
                                 addressLine1: addressData.addressLine1,
                                 addressLine2: addressData.addressLine2,
