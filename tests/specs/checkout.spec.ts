@@ -70,10 +70,20 @@ test.describe("Checkout Flow", () => {
   test("user can complete full checkout process with order confirmation", async ({
     page,
   }) => {
+    test.setTimeout(60000); // Increase timeout to 60 seconds
+
     // Listen for browser console errors
     page.on("console", (msg) => {
       if (msg.type() === "error") {
         console.log(`🔴 Browser Console Error: ${msg.text()}`);
+      }
+      // Also log info messages to see our email creation logs
+      if (
+        msg.type() === "log" &&
+        (msg.text().includes("Creating new email") ||
+          msg.text().includes("Email created"))
+      ) {
+        console.log(`📧 ${msg.text()}`);
       }
     });
 

@@ -1248,11 +1248,53 @@ const CheckoutPage: React.FC = () => {
                         )}
                         <AddressForm
                           onSave={async (addressData) => {
+                            // CRITICAL: Create new email address FIRST if user entered one
+                            if (
+                              useNewEmail &&
+                              newEmailInput &&
+                              user?.businessEntityId
+                            ) {
+                              if (!newEmailInput.includes("@")) {
+                                toast({
+                                  title: "Email Required",
+                                  description:
+                                    "Please enter a valid email address",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+                              try {
+                                console.log(
+                                  `🔑 Creating new email address for order confirmation: ${newEmailInput}`,
+                                );
+                                const result =
+                                  await createEmailAddress.mutateAsync({
+                                    businessEntityId: user.businessEntityId,
+                                    emailAddress: newEmailInput,
+                                  });
+                                console.log(
+                                  `✅ Email created successfully with ID: ${result.EmailAddressID}`,
+                                );
+                                setSelectedEmailId(result.EmailAddressID);
+                                checkEmailWarning(newEmailInput);
+                                setUseNewEmail(false);
+                              } catch (error) {
+                                console.error("Error creating email:", error);
+                                toast({
+                                  title: "Email Error",
+                                  description:
+                                    "Failed to save email address. Please try again.",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+                            }
+
                             // Convert AddressForm data to checkout shipping data
                             setShippingData({
                               firstName: user?.firstName || "",
                               lastName: user?.lastName || "",
-                              email: user?.email || "",
+                              email: newEmailInput || user?.email || "",
                               phone: shippingData.phone,
                               address: addressData.addressLine1,
                               city: addressData.city,
