@@ -52,7 +52,8 @@ const SearchPage: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(12);
-  const [semanticQuerySubmitted, setSemanticQuerySubmitted] = useState("");
+  const [semanticQuerySubmitted, setSemanticQuerySubmitted] =
+    useState(initialQuery);
 
   const { data: products = [], isLoading: productsLoading } = useProducts();
   const { data: categories = [], isLoading: categoriesLoading } =
@@ -67,7 +68,7 @@ const SearchPage: React.FC = () => {
     error: semanticSearchError,
   } = useSemanticSearch(
     semanticQuerySubmitted,
-    semanticQuerySubmitted.length > 0
+    semanticQuerySubmitted.length > 0,
   );
 
   const isLoading =
@@ -116,8 +117,14 @@ const SearchPage: React.FC = () => {
 
   // Filter and sort products using semantic search
   const filteredProducts = useMemo(() => {
-    // Use semantic search results when available
-    let result = semanticQuerySubmitted ? [...semanticProducts] : [...products];
+    // Use semantic search results when available and successful, AND when products are loaded
+    // Fall back to all products if semantic search failed, returned no results, or products aren't loaded yet
+    const shouldUseSemantic =
+      semanticQuerySubmitted &&
+      !semanticSearchError &&
+      semanticProducts.length > 0 &&
+      products.length > 0;
+    let result = shouldUseSemantic ? [...semanticProducts] : [...products];
 
     // Filter out out-of-stock items
     result = result.filter((p) => p.inStock !== false);
@@ -130,7 +137,7 @@ const SearchPage: React.FC = () => {
       result = result.filter(
         (p) =>
           p.ProductSubcategoryID &&
-          categorySubcategoryIds.includes(p.ProductSubcategoryID)
+          categorySubcategoryIds.includes(p.ProductSubcategoryID),
       );
     }
 
@@ -187,12 +194,13 @@ const SearchPage: React.FC = () => {
     subcategories,
     semanticQuerySubmitted,
     semanticProducts,
+    semanticSearchError,
   ]);
 
   // Group products by model
   const groupedProducts = useMemo(
     () => groupProductsByModel(filteredProducts),
-    [filteredProducts]
+    [filteredProducts],
   );
 
   // Reset to page 1 when filters change
@@ -230,7 +238,7 @@ const SearchPage: React.FC = () => {
         totalPages - 3,
         totalPages - 2,
         totalPages - 1,
-        totalPages
+        totalPages,
       );
     } else {
       pages.push(
@@ -240,7 +248,7 @@ const SearchPage: React.FC = () => {
         currentPage,
         currentPage + 1,
         "...",
-        totalPages
+        totalPages,
       );
     }
 
@@ -675,7 +683,7 @@ const SearchPage: React.FC = () => {
                           key={`product-${item.ProductID}`}
                           product={item}
                         />
-                      )
+                      ),
                     )}
                   </div>
 

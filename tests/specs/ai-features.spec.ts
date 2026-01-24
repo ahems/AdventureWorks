@@ -36,8 +36,15 @@ test.describe("AI Features", () => {
       const searchButton = page.locator('[data-testid="search-submit-button"]');
       await searchButton.click();
 
-      // Wait for search results
-      await page.waitForTimeout(2000);
+      // Wait longer for semantic search API call and results to render
+      await page.waitForTimeout(5000);
+
+      // Debug: take screenshot and log page state
+      await page.screenshot({
+        path: `test-results/search-${query.replace(/\s/g, "-")}.png`,
+      });
+      console.log(`URL: ${page.url()}`);
+      console.log(`Page title: ${await page.title()}`);
 
       // Check if we're on search results page or results appeared
       const hasSearchUrl = page.url().includes("/search");

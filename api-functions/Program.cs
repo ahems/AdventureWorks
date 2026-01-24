@@ -21,6 +21,9 @@ var builder = FunctionsApplication.CreateBuilder(args);
 
 builder.ConfigureFunctionsWebApplication();
 
+// Register Application Insights for telemetry
+builder.Services.AddApplicationInsightsTelemetryWorkerService();
+
 // Configure JSON serialization to use camelCase for API responses  
 builder.Services.Configure<WorkerOptions>(options =>
 {
