@@ -102,29 +102,55 @@ const SearchPage: React.FC = () => {
     };
   }, [products]);
 
-  // Map semantic search results to products
+  // Map semantic search results to Product objects
   const semanticProducts = useMemo(() => {
-    if (!semanticSearchData) {
+    if (!semanticSearchData || !semanticSearchData.results) {
       return [];
     }
 
-    // Map semantic search result IDs to actual Product objects
-    const productMap = new Map(products.map((p) => [p.ProductID, p]));
-    return semanticSearchData.results
-      .map((result) => productMap.get(result.ProductID))
-      .filter((p): p is Product => p !== undefined);
-  }, [semanticSearchData, products]);
+    // Convert semantic search results directly to Product objects
+    // No need to fetch from products array - semantic search already has all the data
+    return semanticSearchData.results.map(
+      (result: any) =>
+        ({
+          // Use type any to handle case variations from API
+          ProductID: result.ProductID || result.productID,
+          Name: result.Name || result.name || "",
+          ProductNumber: "",
+          Color: result.Color || result.color,
+          ListPrice: result.ListPrice || result.listPrice || 0,
+          Description: result.Description || result.description,
+          Size: null,
+          SizeUnitMeasureCode: null,
+          Weight: null,
+          WeightUnitMeasureCode: null,
+          ProductSubcategoryID: null,
+          ProductModelID: null,
+          inStock: true,
+        }) as Product,
+    );
+  }, [semanticSearchData]);
 
-  // Filter and sort products using semantic search
+  // Filter and sort products using semantic search ONLY
   const filteredProducts = useMemo(() => {
-    // Use semantic search results when available and successful, AND when products are loaded
-    // Fall back to all products if semantic search failed, returned no results, or products aren't loaded yet
-    const shouldUseSemantic =
+    // ONLY use semantic search results - no fallback to all products
+    // This showcases AI-powered search capabilities
+    let result: Product[] = [];
+
+    if (
       semanticQuerySubmitted &&
       !semanticSearchError &&
-      semanticProducts.length > 0 &&
-      products.length > 0;
-    let result = shouldUseSemantic ? [...semanticProducts] : [...products];
+      semanticProducts.length > 0
+    ) {
+      // Use semantic search results
+      result = [...semanticProducts];
+    } else if (!semanticQuerySubmitted) {
+      // No search submitted yet - show nothing (user needs to search)
+      result = [];
+    } else {
+      // Search was submitted but returned no results or had error
+      result = [];
+    }
 
     // Filter out out-of-stock items
     result = result.filter((p) => p.inStock !== false);
@@ -432,11 +458,11 @@ const SearchPage: React.FC = () => {
                   <Sparkles className="w-5 h-5 text-doodle-accent flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="font-doodle text-sm text-doodle-text font-bold mb-1">
-                      AI-Enhanced Search
+                      AI-Powered Semantic Search
                     </p>
                     <p className="font-doodle text-xs text-doodle-text/80">
-                      Powered by embeddings to understand product descriptions
-                      and reviews. Try: "waterproof gear for rainy hikes" or
+                      Uses AI embeddings to understand natural language queries.
+                      Try: "red bikes", "waterproof gear for rainy hikes", or
                       "lightweight equipment for cyclists"
                     </p>
                     {semanticSearchData && semanticQuerySubmitted && (
@@ -453,8 +479,8 @@ const SearchPage: React.FC = () => {
               {semanticSearchError && (
                 <div className="bg-red-50 border-2 border-red-200 p-3">
                   <p className="font-doodle text-xs text-red-600">
-                    Error performing semantic search. Falling back to keyword
-                    search.
+                    ⚠️ Semantic search service unavailable. Please check that
+                    the AI service is running and embeddings are indexed.
                   </p>
                 </div>
               )}
@@ -738,22 +764,37 @@ const SearchPage: React.FC = () => {
                 <div className="doodle-card p-12 text-center">
                   <span className="text-6xl block mb-4">🔍</span>
                   <h3 className="font-doodle text-xl font-bold text-doodle-text mb-2">
-                    No products found
+                    {semanticQuerySubmitted
+                      ? "No matching products found"
+                      : "Enter a search query to find products"}
                   </h3>
                   <p className="font-doodle text-doodle-text/60 mb-4">
-                    Try adjusting your search or filters to find what you're
-                    looking for.
+                    {semanticQuerySubmitted ? (
+                      <>
+                        Our AI-powered search didn't find products matching "
+                        {semanticQuerySubmitted}". Try different keywords or
+                        phrases.
+                      </>
+                    ) : (
+                      <>
+                        Use the search box above to find products. Our AI
+                        understands natural language like "red bikes" or
+                        "waterproof gear for hiking".
+                      </>
+                    )}
                   </p>
-                  <button
-                    onClick={() => {
-                      setSearchQuery("");
-                      setSemanticQuerySubmitted("");
-                      clearFilters();
-                    }}
-                    className="doodle-button doodle-button-primary"
-                  >
-                    Clear Search
-                  </button>
+                  {semanticQuerySubmitted && (
+                    <button
+                      onClick={() => {
+                        setSearchQuery("");
+                        setSemanticQuerySubmitted("");
+                        clearFilters();
+                      }}
+                      className="doodle-button doodle-button-primary"
+                    >
+                      Clear Search
+                    </button>
+                  )}
                 </div>
               )}
             </div>
