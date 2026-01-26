@@ -86,7 +86,7 @@ interface ProductInventoriesResponse {
 // Helper function to fetch and attach descriptions to products
 const attachDescriptionsToProducts = async (
   products: Product[],
-  cultureId: string = "en"
+  cultureId: string = "en",
 ): Promise<Product[]> => {
   try {
     if (products.length === 0) return products;
@@ -108,7 +108,7 @@ const attachDescriptionsToProducts = async (
           const data =
             await graphqlClient.request<ProductDescriptionMappingResponse>(
               GET_PRODUCT_DESCRIPTION,
-              { productModelId: modelId, cultureId: paddedCultureId }
+              { productModelId: modelId, cultureId: paddedCultureId },
             );
           const descId =
             data.productModelProductDescriptionCultures.items[0]
@@ -117,7 +117,7 @@ const attachDescriptionsToProducts = async (
         } catch {
           return { modelId, descId: null };
         }
-      })
+      }),
     );
 
     // Get unique description IDs
@@ -133,7 +133,7 @@ const attachDescriptionsToProducts = async (
         try {
           const data = await graphqlClient.request<DescriptionTextResponse>(
             GET_DESCRIPTION_TEXT,
-            { descriptionId: descId }
+            { descriptionId: descId },
           );
           return {
             descId,
@@ -142,12 +142,12 @@ const attachDescriptionsToProducts = async (
         } catch {
           return { descId, text: null };
         }
-      })
+      }),
     );
 
     // Create maps
     const modelToDescId = new Map(
-      descriptionMappings.map((m) => [m.modelId, m.descId])
+      descriptionMappings.map((m) => [m.modelId, m.descId]),
     );
     const descIdToText = new Map(descriptions.map((d) => [d.descId, d.text]));
 
@@ -172,14 +172,14 @@ const attachDescriptionsToProducts = async (
 
 // Helper function to fetch and attach discounts to products
 const attachDiscountsToProducts = async (
-  products: Product[]
+  products: Product[],
 ): Promise<Product[]> => {
   try {
     if (products.length === 0) return products;
 
     // Fetch all customer special offers
     const offersData = await graphqlClient.request<SpecialOffersResponse>(
-      GET_CUSTOMER_SPECIAL_OFFERS
+      GET_CUSTOMER_SPECIAL_OFFERS,
     );
     const specialOffers = offersData.specialOffers.items;
 
@@ -194,7 +194,7 @@ const attachDiscountsToProducts = async (
     const mappingsData =
       await graphqlClient.request<SpecialOfferProductsResponse>(
         GET_SPECIAL_OFFER_PRODUCTS,
-        { offerIds }
+        { offerIds },
       );
     const offerProducts = mappingsData.specialOfferProducts.items;
 
@@ -204,10 +204,10 @@ const attachDiscountsToProducts = async (
 
     // Create maps for quick lookups
     const productToOfferId = new Map(
-      offerProducts.map((op) => [op.ProductID, op.SpecialOfferID])
+      offerProducts.map((op) => [op.ProductID, op.SpecialOfferID]),
     );
     const offerIdToOffer = new Map(
-      specialOffers.map((offer) => [offer.SpecialOfferID, offer])
+      specialOffers.map((offer) => [offer.SpecialOfferID, offer]),
     );
 
     // Attach discount info to products
@@ -236,7 +236,7 @@ const attachDiscountsToProducts = async (
 
 // Helper function to fetch and attach photos to products
 const attachPhotosToProducts = async (
-  products: Product[]
+  products: Product[],
 ): Promise<Product[]> => {
   try {
     if (products.length === 0) return products;
@@ -259,7 +259,7 @@ const attachPhotosToProducts = async (
       const photoMappingsData =
         await graphqlClient.request<ProductPhotosResponse>(
           GET_PRODUCT_PHOTOS_BATCH,
-          { productIds: chunk }
+          { productIds: chunk },
         );
       allPhotoMappings.push(...photoMappingsData.productProductPhotos.items);
     }
@@ -281,7 +281,7 @@ const attachPhotosToProducts = async (
     for (const chunk of photoChunks) {
       const photoDataResponse = await graphqlClient.request<PhotoDataResponse>(
         GET_PHOTOS_BY_IDS,
-        { photoIds: chunk }
+        { photoIds: chunk },
       );
       allPhotos.push(...photoDataResponse.productPhotos.items);
     }
@@ -291,7 +291,7 @@ const attachPhotosToProducts = async (
     const photoMap = new Map<number, ProductPhoto>();
     allPhotoMappings.forEach((mapping) => {
       const photo = photos.find(
-        (p) => p.ProductPhotoID === mapping.ProductPhotoID
+        (p) => p.ProductPhotoID === mapping.ProductPhotoID,
       );
       if (photo) {
         photoMap.set(mapping.ProductID, photo);
@@ -318,7 +318,7 @@ const attachPhotosToProducts = async (
 
 // Helper function to fetch and attach inventory to products
 const attachInventoryToProducts = async (
-  products: Product[]
+  products: Product[],
 ): Promise<Product[]> => {
   try {
     if (products.length === 0) return products;
@@ -338,7 +338,7 @@ const attachInventoryToProducts = async (
       const inventoryData =
         await graphqlClient.request<ProductInventoriesResponse>(
           GET_PRODUCTS_INVENTORY,
-          { productIds: chunk }
+          { productIds: chunk },
         );
       allInventories.push(...inventoryData.productInventories.items);
     }
@@ -379,7 +379,7 @@ const attachInventoryToProducts = async (
 
 // Helper function to add icon names to categories (since they're not in the database)
 const addIconsToCategories = (
-  categories: ProductCategory[]
+  categories: ProductCategory[],
 ): ProductCategory[] => {
   const iconMap: Record<string, string> = {
     Bikes: "bike",
@@ -397,9 +397,8 @@ const addIconsToCategories = (
 // Fetch all categories
 export const getCategories = async (): Promise<ProductCategory[]> => {
   try {
-    const data = await graphqlClient.request<CategoriesResponse>(
-      GET_CATEGORIES
-    );
+    const data =
+      await graphqlClient.request<CategoriesResponse>(GET_CATEGORIES);
     return addIconsToCategories(data.productCategories.items);
   } catch (error) {
     console.error("Error fetching categories:", error);
@@ -410,9 +409,8 @@ export const getCategories = async (): Promise<ProductCategory[]> => {
 // Fetch all subcategories
 export const getSubcategories = async (): Promise<ProductSubcategory[]> => {
   try {
-    const data = await graphqlClient.request<SubcategoriesResponse>(
-      GET_SUBCATEGORIES
-    );
+    const data =
+      await graphqlClient.request<SubcategoriesResponse>(GET_SUBCATEGORIES);
     return data.productSubcategories.items;
   } catch (error) {
     console.error("Error fetching subcategories:", error);
@@ -422,12 +420,12 @@ export const getSubcategories = async (): Promise<ProductSubcategory[]> => {
 
 // Fetch subcategories by category ID
 export const getSubcategoriesByCategory = async (
-  categoryId: number
+  categoryId: number,
 ): Promise<ProductSubcategory[]> => {
   try {
     const data = await graphqlClient.request<SubcategoriesResponse>(
       GET_SUBCATEGORIES_BY_CATEGORY,
-      { categoryId }
+      { categoryId },
     );
     return data.productSubcategories.items;
   } catch (error) {
@@ -438,7 +436,7 @@ export const getSubcategoriesByCategory = async (
 
 // Fetch all products (with optional photo fetching)
 export const getProducts = async (
-  includePhotos: boolean = false
+  includePhotos: boolean = false,
 ): Promise<Product[]> => {
   try {
     const data = await graphqlClient.request<ProductsResponse>(GET_PRODUCTS);
@@ -461,12 +459,12 @@ export const getProducts = async (
 // Fetch product by ID
 export const getProductById = async (
   productId: number,
-  cultureId: string = "en"
+  cultureId: string = "en",
 ): Promise<Product | undefined> => {
   try {
     const data = await graphqlClient.request<ProductsResponse>(
       GET_PRODUCT_BY_ID,
-      { id: productId }
+      { id: productId },
     );
     const product = data.products.items[0];
     if (!product) return undefined;
@@ -480,7 +478,7 @@ export const getProductById = async (
           if (a.Primary && !b.Primary) return -1;
           if (!a.Primary && b.Primary) return 1;
           return a.ProductPhotoID - b.ProductPhotoID;
-        }
+        },
       );
 
       // Extract photo data from nested relationship
@@ -503,13 +501,13 @@ export const getProductById = async (
     // Fetch description, discount, and inventory for single product
     let productsWithDescriptions = await attachDescriptionsToProducts(
       [productWithPhotos],
-      cultureId
+      cultureId,
     );
     productsWithDescriptions = await attachDiscountsToProducts(
-      productsWithDescriptions
+      productsWithDescriptions,
     );
     const productsWithInventory = await attachInventoryToProducts(
-      productsWithDescriptions
+      productsWithDescriptions,
     );
     return productsWithInventory[0];
   } catch (error) {
@@ -520,12 +518,12 @@ export const getProductById = async (
 
 // Fetch products by subcategory ID
 export const getProductsBySubcategory = async (
-  subcategoryId: number
+  subcategoryId: number,
 ): Promise<Product[]> => {
   try {
     const data = await graphqlClient.request<ProductsResponse>(
       GET_PRODUCTS_BY_SUBCATEGORY,
-      { subcategoryId }
+      { subcategoryId },
     );
     let products = data.products.items;
     products = await attachDiscountsToProducts(products);
@@ -539,7 +537,7 @@ export const getProductsBySubcategory = async (
 
 // Fetch products by category ID (needs to get subcategories first)
 export const getProductsByCategory = async (
-  categoryId: number
+  categoryId: number,
 ): Promise<Product[]> => {
   try {
     // First, get all subcategory IDs for this category
@@ -554,7 +552,7 @@ export const getProductsByCategory = async (
     // Then fetch products that belong to any of these subcategories using the 'in' filter
     const data = await graphqlClient.request<ProductsResponse>(
       GET_PRODUCTS_BY_SUBCATEGORY_IDS,
-      { subcategoryIds }
+      { subcategoryIds },
     );
     let products = data.products.items;
     products = await attachDiscountsToProducts(products);
@@ -569,12 +567,12 @@ export const getProductsByCategory = async (
 
 // Fetch category by ID
 export const getCategoryById = async (
-  categoryId: number
+  categoryId: number,
 ): Promise<ProductCategory | undefined> => {
   try {
     const data = await graphqlClient.request<CategoriesResponse>(
       GET_CATEGORY_BY_ID,
-      { id: categoryId }
+      { id: categoryId },
     );
     const categories = addIconsToCategories(data.productCategories.items);
     return categories[0];
@@ -586,12 +584,12 @@ export const getCategoryById = async (
 
 // Fetch subcategory by ID
 export const getSubcategoryById = async (
-  subcategoryId: number
+  subcategoryId: number,
 ): Promise<ProductSubcategory | undefined> => {
   try {
     const data = await graphqlClient.request<SubcategoriesResponse>(
       GET_SUBCATEGORY_BY_ID,
-      { id: subcategoryId }
+      { id: subcategoryId },
     );
     return data.productSubcategories.items[0];
   } catch (error) {
@@ -610,10 +608,10 @@ export const getFeaturedProducts = async (): Promise<Product[]> => {
 
     // Separate sale and non-sale products
     const saleProducts = inStockProducts.filter(
-      (p) => p.DiscountPct && p.DiscountPct > 0
+      (p) => p.DiscountPct && p.DiscountPct > 0,
     );
     const nonSaleProducts = inStockProducts.filter(
-      (p) => !p.DiscountPct || p.DiscountPct === 0
+      (p) => !p.DiscountPct || p.DiscountPct === 0,
     );
 
     // Get 1 random sale product
@@ -622,7 +620,7 @@ export const getFeaturedProducts = async (): Promise<Product[]> => {
 
     // Get 5 random non-sale products
     const shuffledNonSale = [...nonSaleProducts].sort(
-      () => Math.random() - 0.5
+      () => Math.random() - 0.5,
     );
     const featuredNonSale = shuffledNonSale.slice(0, 5);
 
@@ -645,7 +643,7 @@ export const getSaleProducts = async (): Promise<Product[]> => {
 
     // Filter to only products with discounts
     const saleProducts = products.filter(
-      (p) => p.DiscountPct && p.DiscountPct > 0
+      (p) => p.DiscountPct && p.DiscountPct > 0,
     );
 
     // NOW attach photos only to the sale products
@@ -701,12 +699,12 @@ interface DeleteCartItemResponse {
 
 // Get shopping cart items for a user
 export const getShoppingCartItems = async (
-  shoppingCartId: string
+  shoppingCartId: string,
 ): Promise<ShoppingCartItem[]> => {
   try {
     const data = await graphqlClient.request<ShoppingCartItemsResponse>(
       GET_SHOPPING_CART_ITEMS,
-      { shoppingCartId }
+      { shoppingCartId },
     );
     return data.shoppingCartItems.items;
   } catch (error) {
@@ -719,7 +717,7 @@ export const getShoppingCartItems = async (
 export const createCartItem = async (
   shoppingCartId: string,
   productId: number,
-  quantity: number
+  quantity: number,
 ): Promise<ShoppingCartItem | null> => {
   try {
     // Use REST API instead of GraphQL to avoid DateTime default value issues
@@ -753,7 +751,7 @@ export const createCartItem = async (
 // Update cart item quantity
 export const updateCartItemQuantity = async (
   shoppingCartItemId: number,
-  quantity: number
+  quantity: number,
 ): Promise<ShoppingCartItem | null> => {
   try {
     const data = await graphqlClient.request<UpdateCartItemResponse>(
@@ -763,7 +761,7 @@ export const updateCartItemQuantity = async (
         item: {
           Quantity: quantity,
         },
-      }
+      },
     );
     return data.updateShoppingCartItem;
   } catch (error) {
@@ -774,7 +772,7 @@ export const updateCartItemQuantity = async (
 
 // Delete a cart item
 export const deleteCartItem = async (
-  shoppingCartItemId: number
+  shoppingCartItemId: number,
 ): Promise<boolean> => {
   try {
     await graphqlClient.request<DeleteCartItemResponse>(DELETE_CART_ITEM, {
@@ -789,12 +787,12 @@ export const deleteCartItem = async (
 
 // Delete all cart items for a user
 export const clearShoppingCart = async (
-  shoppingCartId: string
+  shoppingCartId: string,
 ): Promise<boolean> => {
   try {
     const items = await getShoppingCartItems(shoppingCartId);
     await Promise.all(
-      items.map((item) => deleteCartItem(item.ShoppingCartItemID))
+      items.map((item) => deleteCartItem(item.ShoppingCartItemID)),
     );
     return true;
   } catch (error) {

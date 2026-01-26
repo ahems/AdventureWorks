@@ -161,6 +161,16 @@ The `docs/` folder contains focused deep dives on important parts of the solutio
   - [docs/APP_INSIGHTS_INTEGRATION.md](docs/APP_INSIGHTS_INTEGRATION.md)
   - [docs/APP_INSIGHTS_CONNECTION_STRING_FLOW.md](docs/APP_INSIGHTS_CONNECTION_STRING_FLOW.md)
 
+- **Testing & Telemetry Generation**
+  - [tests/README.md](tests/README.md) - Playwright E2E tests
+  - [tests/TELEMETRY_TESTING.md](tests/TELEMETRY_TESTING.md) - Validating Application Insights telemetry
+  - [docs/TELEMETRY_GENERATION.md](docs/TELEMETRY_GENERATION.md) - Generating demo telemetry data
+  - Quick commands:
+    ```bash
+    ./test-telemetry.sh        # Validate telemetry is working
+    ./generate-telemetry.sh    # Generate demo browsing data
+    ```
+
 If you are exploring the AI and agent pieces specifically, start with the AI Agent docs above and then dive into [api-functions/README.md](api-functions/README.md) for the concrete Functions and endpoints.
 
 ---

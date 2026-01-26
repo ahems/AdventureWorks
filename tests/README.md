@@ -4,6 +4,11 @@ These tests exercise the Azure Functions that power account management flows in 
 
 - Address CRUD (Functions: `GetAddressById`, `CreateAddress`, `UpdateAddress`, `DeleteAddress`)
 - Password management (Functions: `SetPassword`, `VerifyPassword`)
+- Application Insights telemetry validation (network interception + direct queries)
+- User flows: browsing, shopping, checkout
+- AI features integration
+- Internationalization
+- Search functionality
 
 ## Prerequisites
 
@@ -58,6 +63,42 @@ npm run test:e2e:warmup
      Email: user@example.com
      Password: AwXyZ123!9
   ```
+
+## Telemetry Testing
+
+The project includes comprehensive Application Insights telemetry validation:
+
+### Quick Start
+
+```bash
+# From project root
+./test-telemetry.sh
+```
+
+This interactive script offers:
+
+1. **Quick Network Validation (30s)** - Intercepts telemetry requests
+2. **Full E2E Validation (3-4 min)** - Queries Application Insights storage
+3. **Both Tests** - Runs complete validation suite
+4. **Manual Query** - Execute custom Kusto queries
+5. **Recent Telemetry** - View last 30 minutes of events
+
+### Test Files
+
+- [`specs/telemetry.spec.ts`](specs/telemetry.spec.ts) - Network interception tests (fast)
+- [`specs/telemetry-validation.spec.ts`](specs/telemetry-validation.spec.ts) - End-to-end storage validation
+
+### What Gets Validated
+
+- ✅ Telemetry SDK initialization
+- ✅ Page view tracking
+- ✅ Custom events (signup, product views, cart actions, purchases)
+- ✅ Backend request logging
+- ✅ Performance metrics
+- ✅ Event properties and metadata
+
+See [TELEMETRY_TESTING.md](TELEMETRY_TESTING.md) for detailed documentation.
+
 - The HTML report is not automatically opened after tests complete. To view it manually, run:
   ```bash
   npx playwright show-report tests/playwright-report
