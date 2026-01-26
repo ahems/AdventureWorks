@@ -12,6 +12,7 @@ import {
   GET_SUBCATEGORY_BY_ID,
   GET_PRODUCT_PHOTOS_BATCH,
   GET_PHOTOS_BY_IDS,
+  GET_LARGE_PHOTO,
   GET_PRODUCT_DESCRIPTION,
   GET_DESCRIPTION_TEXT,
   GET_CUSTOMER_SPECIAL_OFFERS,
@@ -243,8 +244,9 @@ const attachPhotosToProducts = async (
 
     const productIds = products.map((p) => p.ProductID);
 
-    // Split into chunks of 20 to avoid memory issues with binary photo data
-    const chunkSize = 20;
+    // Split into smaller chunks to avoid memory issues with binary photo data
+    // Even thumbnails can cause OutOfMemoryException with large batches
+    const chunkSize = 10;
     const chunks: number[][] = [];
     for (let i = 0; i < productIds.length; i += chunkSize) {
       chunks.push(productIds.slice(i, i + chunkSize));
@@ -256,12 +258,20 @@ const attachPhotosToProducts = async (
       ProductPhotoID: number;
     }> = [];
     for (const chunk of chunks) {
-      const photoMappingsData =
-        await graphqlClient.request<ProductPhotosResponse>(
-          GET_PRODUCT_PHOTOS_BATCH,
-          { productIds: chunk },
+      try {
+        const photoMappingsData =
+          await graphqlClient.request<ProductPhotosResponse>(
+            GET_PRODUCT_PHOTOS_BATCH,
+            { productIds: chunk },
+          );
+        allPhotoMappings.push(...photoMappingsData.productProductPhotos.items);
+      } catch (chunkError) {
+        console.warn(
+          `Failed to fetch photo mappings for chunk, continuing...`,
+          chunkError,
         );
-      allPhotoMappings.push(...photoMappingsData.productProductPhotos.items);
+        // Continue with other chunks even if one fails
+      }
     }
 
     if (allPhotoMappings.length === 0) return products;
@@ -271,19 +281,28 @@ const attachPhotosToProducts = async (
       ...new Set(allPhotoMappings.map((m) => m.ProductPhotoID)),
     ];
 
-    // Fetch actual photo data (also in chunks if needed)
+    // Fetch actual photo data in even smaller chunks (thumbnails only)
+    const photoChunkSize = 5;
     const photoChunks: number[][] = [];
-    for (let i = 0; i < photoIds.length; i += chunkSize) {
-      photoChunks.push(photoIds.slice(i, i + chunkSize));
+    for (let i = 0; i < photoIds.length; i += photoChunkSize) {
+      photoChunks.push(photoIds.slice(i, i + photoChunkSize));
     }
 
     const allPhotos: ProductPhoto[] = [];
     for (const chunk of photoChunks) {
-      const photoDataResponse = await graphqlClient.request<PhotoDataResponse>(
-        GET_PHOTOS_BY_IDS,
-        { photoIds: chunk },
-      );
-      allPhotos.push(...photoDataResponse.productPhotos.items);
+      try {
+        const photoDataResponse =
+          await graphqlClient.request<PhotoDataResponse>(GET_PHOTOS_BY_IDS, {
+            photoIds: chunk,
+          });
+        allPhotos.push(...photoDataResponse.productPhotos.items);
+      } catch (photoError) {
+        console.warn(
+          `Failed to fetch photos for chunk, continuing...`,
+          photoError,
+        );
+        // Continue with other chunks even if one fails
+      }
     }
     const photos = allPhotos;
 
@@ -298,7 +317,7 @@ const attachPhotosToProducts = async (
       }
     });
 
-    // Attach photos to products
+    // Attach photos to products (thumbnails only to avoid memory issues)
     return products.map((product) => {
       const photo = photoMap.get(product.ProductID);
       if (photo) {
@@ -494,6 +513,8 @@ export const getProductById = async (
     const productWithPhotos = {
       ...product,
       productPhotos: productPhotos.length > 0 ? productPhotos : undefined,
+      LargePhoto: primaryPhoto?.LargePhoto,
+      LargePhotoFileName: primaryPhoto?.LargePhotoFileName,
       ThumbNailPhoto: primaryPhoto?.ThumbNailPhoto,
       ThumbnailPhotoFileName: primaryPhoto?.ThumbnailPhotoFileName,
     };
@@ -798,5 +819,28 @@ export const clearShoppingCart = async (
   } catch (error) {
     console.error("Error clearing shopping cart:", error);
     return false;
+  }
+};
+
+// Fetch a single large photo on-demand (for fullscreen view)
+// This avoids OutOfMemoryException by loading large photos only when needed
+export const getLargePhoto = async (
+  photoId: number,
+): Promise<{ LargePhoto?: string; LargePhotoFileName?: string } | null> => {
+  try {
+    const data = await graphqlClient.request<{
+      productPhotos: { items: ProductPhoto[] };
+    }>(GET_LARGE_PHOTO, { photoId });
+
+    const photo = data.productPhotos.items[0];
+    if (!photo) return null;
+
+    return {
+      LargePhoto: photo.LargePhoto,
+      LargePhotoFileName: photo.LargePhotoFileName,
+    };
+  } catch (error) {
+    console.error("Error fetching large photo:", error);
+    return null;
   }
 };

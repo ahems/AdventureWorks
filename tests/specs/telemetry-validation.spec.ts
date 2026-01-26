@@ -12,18 +12,18 @@ async function queryApplicationInsights(
   timespan: string = "PT30M",
 ): Promise<any> {
   try {
-    // Get App Insights resource name from azd env
-    const appInsightsName = execSync('azd env get-value "SERVICE_APP_NAME"', {
-      encoding: "utf8",
-    })
-      .trim()
-      .replace(/^"|"$/g, "");
-
+    // Get resource group from azd env
     const resourceGroup = execSync('azd env get-value "AZURE_RESOURCE_GROUP"', {
       encoding: "utf8",
     })
       .trim()
       .replace(/^"|"$/g, "");
+
+    // Find Application Insights resource name dynamically
+    const appInsightsName = execSync(
+      `az resource list --resource-group "${resourceGroup}" --resource-type Microsoft.Insights/components --query "[0].name" -o tsv`,
+      { encoding: "utf8" },
+    ).trim();
 
     console.log(
       `\n🔍 Querying Application Insights: ${appInsightsName} in ${resourceGroup}`,
@@ -31,11 +31,12 @@ async function queryApplicationInsights(
     console.log(`📊 Query: ${query}`);
     console.log(`⏱️  Timespan: ${timespan}\n`);
 
+    // Note: --timespan parameter removed due to Azure CLI version compatibility
+    // The query itself filters by timestamp, so timespan is redundant
     const command = `az monitor app-insights query \
       --app "${appInsightsName}" \
       --resource-group "${resourceGroup}" \
       --analytics-query "${query}" \
-      --timespan "${timespan}" \
       --output json`;
 
     const result = execSync(command, {

@@ -245,7 +245,7 @@ test.describe("Telemetry Generator - Anonymous Browsing", () => {
 
       // Interact with image gallery
       // The ProductImageGallery component always shows a gallery with either real photos or mock emojis
-      // Look for thumbnail buttons and navigation arrows
+      // Cycle through every single image one by one and view the full image
       const thumbnailButtons = page.locator(
         'button[aria-label*="View image"], button[aria-label*="View"]',
       );
@@ -253,45 +253,39 @@ test.describe("Telemetry Generator - Anonymous Browsing", () => {
 
       if (thumbnailCount > 1) {
         console.log(
-          `    🖼️  Found image gallery with ${thumbnailCount} images, cycling through them...`,
+          `    🖼️  Found image gallery with ${thumbnailCount} images, viewing all of them...`,
         );
 
-        // Click through 2-4 images using thumbnails
-        const imagesToView = Math.min(
-          thumbnailCount,
-          Math.floor(Math.random() * 3) + 2, // 2-4 images
-        );
-
-        for (let i = 0; i < imagesToView; i++) {
+        // Click through every thumbnail one by one
+        for (let i = 0; i < thumbnailCount; i++) {
           try {
-            // Click on a random thumbnail
-            const randomIndex = Math.floor(Math.random() * thumbnailCount);
-            await thumbnailButtons.nth(randomIndex).click({ timeout: 2000 });
-            await randomWait(1500, 2500); // Look at each image
-            console.log(`      ✓ Viewed image ${randomIndex + 1}`);
-          } catch (e) {
-            console.log(`      ⚠️  Could not click thumbnail ${i + 1}`);
-          }
-        }
+            // Click on each thumbnail in order
+            await thumbnailButtons.nth(i).click({ timeout: 2000 });
+            await randomWait(800, 1200); // Brief pause to view thumbnail
+            console.log(`      ✓ Viewed thumbnail ${i + 1}/${thumbnailCount}`);
 
-        // Maybe use navigation arrows too
-        if (maybe(0.5)) {
-          const nextBtn = page
-            .locator('button[aria-label*="nextImage" i]')
-            .first();
-          if ((await nextBtn.count()) > 0) {
-            try {
-              // Hover to make arrows visible (they have opacity-0 group-hover:opacity-100)
-              const galleryCard = page.locator(".doodle-card").first();
-              await galleryCard.hover();
+            // Click on the main image to view full size (fullscreen modal)
+            const mainImage = page.locator(
+              '.doodle-card img[alt*="product" i], .doodle-card img[src*="data:image"]',
+            );
+            if ((await mainImage.count()) > 0) {
+              await mainImage.first().click({ timeout: 2000 });
+              await randomWait(1500, 2500); // View full image in fullscreen
+              console.log(`        ↗️  Opened fullscreen image ${i + 1}`);
+
+              // Close button MUST exist - fail test if it doesn't
+              const closeButton = page.locator(
+                'button[aria-label="Close fullscreen view"]',
+              );
+              await expect(closeButton).toBeVisible({
+                timeout: 2000,
+              });
+              await closeButton.click();
               await randomWait(300, 500);
-
-              await nextBtn.click({ timeout: 2000 });
-              await randomWait(1500, 2000);
-              console.log("      ✓ Used next arrow");
-            } catch (e) {
-              // Arrow not clickable
+              console.log(`        ✕ Closed fullscreen view`);
             }
+          } catch (e) {
+            console.log(`      ⚠️  Could not view image ${i + 1}`);
           }
         }
       } else {

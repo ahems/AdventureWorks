@@ -32,8 +32,15 @@ if ! az account show &> /dev/null; then
 fi
 
 # Get environment info
-APP_INSIGHTS_NAME=$(azd env get-value "SERVICE_APP_NAME" 2>/dev/null || echo "")
 RESOURCE_GROUP=$(azd env get-value "AZURE_RESOURCE_GROUP" 2>/dev/null || echo "")
+
+# Get App Insights name dynamically from Azure
+if [ -n "$RESOURCE_GROUP" ]; then
+    APP_INSIGHTS_NAME=$(az resource list --resource-group "$RESOURCE_GROUP" --resource-type Microsoft.Insights/components --query "[0].name" -o tsv 2>/dev/null || echo "")
+else
+    APP_INSIGHTS_NAME=""
+fi
+
 WEB_URL=$(azd env get-value "APP_REDIRECT_URI" 2>/dev/null || echo "")
 
 echo -e "${GREEN}Environment Configuration:${NC}"

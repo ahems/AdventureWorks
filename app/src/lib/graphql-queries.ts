@@ -161,6 +161,8 @@ export const GET_PRODUCT_BY_ID = gql`
             Primary
             productPhoto {
               ProductPhotoID
+              LargePhoto
+              LargePhotoFileName
               ThumbNailPhoto
               ThumbnailPhotoFileName
             }
@@ -261,7 +263,7 @@ export const GET_PRODUCTS_BY_SUBCATEGORY_IDS = gql`
   }
 `;
 
-// Query to get photo data by photo ID
+// Query to get photo data by photo ID (thumbnails only)
 export const GET_PHOTO_DATA = gql`
   query GetPhotoData($photoId: Int!) {
     productPhotos(filter: { ProductPhotoID: { eq: $photoId } }) {
@@ -269,6 +271,19 @@ export const GET_PHOTO_DATA = gql`
         ProductPhotoID
         ThumbNailPhoto
         ThumbnailPhotoFileName
+      }
+    }
+  }
+`;
+
+// Query to get a single large photo on-demand (for fullscreen view)
+export const GET_LARGE_PHOTO = gql`
+  query GetLargePhoto($photoId: Int!) {
+    productPhotos(filter: { ProductPhotoID: { eq: $photoId } }) {
+      items {
+        ProductPhotoID
+        LargePhoto
+        LargePhotoFileName
       }
     }
   }
@@ -289,6 +304,7 @@ export const GET_PRODUCT_PHOTOS_BATCH = gql`
 `;
 
 // Query to get photos by photo IDs (batch fetch)
+// Note: Only fetches thumbnails to avoid OutOfMemoryException with large photos
 export const GET_PHOTOS_BY_IDS = gql`
   query GetPhotosByIds($photoIds: [Int!]!) {
     productPhotos(filter: { ProductPhotoID: { in: $photoIds } }) {
