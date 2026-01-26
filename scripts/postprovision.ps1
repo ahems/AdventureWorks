@@ -444,6 +444,8 @@ try {
     $successCount = 0
     $skipCount = 0
     $failCount = 0
+    $alreadyExistsCount = 0
+    $unexpectedErrorCount = 0
     
     foreach ($batch in $batches) {
         $trimmedBatch = $batch.Trim()
@@ -482,30 +484,45 @@ try {
             $cmd.CommandText = $trimmedBatch
             $null = $cmd.ExecuteNonQuery()
             $successCount++
-            if ($batchNum % 100 -eq 0) {
-                Write-Output "  Progress: $successCount successful, $failCount failed, $skipCount skipped..."
-            }
         }
         catch {
-            $failCount++
             $errorMsg = $_.Exception.Message
-            # Only warn on unexpected errors (ignore common expected failures)
-            if ($errorMsg -notmatch 'already exists' -and 
-                $errorMsg -notmatch 'Cannot find the object' -and
-                $errorMsg -notmatch 'Invalid object name' -and
-                $errorMsg -notmatch 'There is already an object named' -and
-                $errorMsg -notmatch 'already has a primary key defined on it' -and
-                $errorMsg -notmatch 'Altering existing schema components is not allowed' -and
-                $errorMsg -notmatch 'A full-text index for table') {
-                Write-Warning "Batch $batchNum failed: $errorMsg"
+            # Categorize failures: expected (already exists) vs unexpected
+            if ($errorMsg -match 'already exists' -or 
+                $errorMsg -match 'Cannot find the object' -or
+                $errorMsg -match 'Invalid object name' -or
+                $errorMsg -match 'There is already an object named' -or
+                $errorMsg -match 'already has a primary key defined on it' -or
+                $errorMsg -match 'Altering existing schema components is not allowed' -or
+                $errorMsg -match 'A full-text index for table') {
+                $alreadyExistsCount++
+            } else {
+                $unexpectedErrorCount++
+                Write-Warning "Unexpected error in batch ${batchNum}: $errorMsg"
             }
+            $failCount++
         }
     }
     
-    Write-Output "Completed SQL script execution:"
-    Write-Output "  - $successCount batches succeeded"
-    Write-Output "  - $failCount batches failed (may be expected)"
-    Write-Output "  - $skipCount batches skipped (unsupported operations)"
+    # Provide clear summary
+    Write-Output "SQL script execution completed:"
+    if ($successCount -gt 0) {
+        Write-Output "  ✓ $successCount objects created/modified"
+    }
+    if ($alreadyExistsCount -gt 0) {
+        Write-Output "  ⊙ $alreadyExistsCount objects already exist (idempotent - OK)"
+    }
+    if ($skipCount -gt 0) {
+        Write-Output "  ⊘ $skipCount batches skipped (unsupported in Azure SQL DB)"
+    }
+    if ($unexpectedErrorCount -gt 0) {
+        Write-Warning "  ✗ $unexpectedErrorCount unexpected errors occurred (see warnings above)"
+    }
+    
+    # Overall assessment
+    if ($unexpectedErrorCount -eq 0) {
+        Write-Output "  Schema is up to date and ready for use"
+    }
     
     # ---------------------------------------------------------------------
     # Apply AI enhancements to schema
@@ -518,6 +535,8 @@ try {
         # Split on GO statements
         $aiBatches = $aiSql -split '(?mi)^\s*GO\s*$'
         
+        $successCount = 0
+        $skipCount = 0
         foreach ($batch in $aiBatches) {
             $trimmedBatch = $batch.Trim()
             if ($trimmedBatch.Length -eq 0) { continue }
@@ -525,12 +544,18 @@ try {
             try {
                 $cmd.CommandText = $trimmedBatch
                 $null = $cmd.ExecuteNonQuery()
-                Write-Output "  AI enhancement applied successfully"
+                # Check if this was a skip message or actual work
+                if ($trimmedBatch -match 'already exists - skipping') {
+                    $skipCount++
+                } else {
+                    $successCount++
+                }
             }
             catch {
                 Write-Warning "AI enhancement batch failed: $($_.Exception.Message)"
             }
         }
+        Write-Output "AI schema enhancements completed: $successCount applied, $skipCount already existed"
     } else {
         Write-Output "`nAI enhancements SQL file not found, skipping..."
     }
@@ -1066,9 +1091,11 @@ ORDER BY c.ORDINAL_POSITION
             $hasIdentityColumn = $columns | Where-Object { $_.IsIdentity } | Measure-Object | Select-Object -ExpandProperty Count
             $hasIdentityColumn = $hasIdentityColumn -gt 0
             
-            # Use different insert method depending on whether table has special columns, hex encoding, or identity columns
-            # SqlBulkCopy does NOT support IDENTITY_INSERT, so we must use batched INSERT for identity columns
-            if ($hasSpecialColumns -or $hasIdentityColumn) {
+            # Use different insert method depending on whether table has special columns, hex encoding, identity columns, or AI CSV files
+            # SqlBulkCopy does NOT support IDENTITY_INSERT or idempotent inserts, so we must use batched INSERT for:
+            # - Identity columns, special columns (hierarchyid, geography, etc.)
+            # - AI CSV files (need IF NOT EXISTS checks to avoid duplicate key errors)
+            if ($hasSpecialColumns -or $hasIdentityColumn -or $isAiCsv) {
                 # Use batched INSERT statements for special tables (hierarchyid, geography, hex-encoded columns)
                 Write-Output "    Inserting $rowCount rows using batched INSERT (special columns)..."
                 
@@ -1298,12 +1325,17 @@ END
                     }
                     
                     $transaction.Commit()
-                    if ($skippedRows -gt 0) {
-                        Write-Output "    Successfully loaded $insertedRows rows ($skippedRows duplicates skipped)"
+                    if ($insertedRows -gt 0) {
+                        if ($skippedRows -gt 0) {
+                            Write-Output "    Successfully loaded $insertedRows rows ($skippedRows duplicates skipped)"
+                        } else {
+                            Write-Output "    Successfully loaded $insertedRows rows"
+                        }
+                        $csvLoadSuccess++
                     } else {
-                        Write-Output "    Successfully loaded $insertedRows rows"
+                        Write-Output "    All $skippedRows rows already exist - Skipping"
+                        $csvLoadSkipped++
                     }
-                    $csvLoadSuccess++
                 }
                 catch {
                     $transaction.Rollback()
@@ -1465,43 +1497,55 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
     $photoMappingFile = Join-Path $csvFolder "ProductProductPhoto-ai.csv"
     if (Test-Path $photoMappingFile) {
         try {
-            $mappingData = Import-Csv -Path $photoMappingFile -Delimiter "`t" -Header @('ProductID', 'ProductPhotoID', 'Primary', 'ModifiedDate')
-            $mappingCount = $mappingData.Count
-            Write-Output "  Loading $mappingCount photo mappings..."
+            # Quick check: if we already have AI photo mappings (ProductPhotoID > 100), skip entirely
+            $cmd = $conn.CreateCommand()
+            $cmd.CommandText = "SELECT COUNT(*) FROM Production.ProductProductPhoto WHERE ProductPhotoID > 100"
+            $existingAiMappings = $cmd.ExecuteScalar()
             
-            $mappingInserted = 0
-            $mappingSkipped = 0
-            
-            foreach ($mapping in $mappingData) {
-                # Check if this mapping already exists (idempotency)
-                $checkCmd = $conn.CreateCommand()
-                $checkCmd.CommandText = "SELECT COUNT(*) FROM Production.ProductProductPhoto WHERE ProductID = @ProductID AND ProductPhotoID = @ProductPhotoID"
-                $checkCmd.Parameters.AddWithValue("@ProductID", [int]$mapping.ProductID) | Out-Null
-                $checkCmd.Parameters.AddWithValue("@ProductPhotoID", [int]$mapping.ProductPhotoID) | Out-Null
-                $exists = [int]$checkCmd.ExecuteScalar()
+            if ($existingAiMappings -gt 0) {
+                Write-Output "  Table already contains $existingAiMappings AI photo mappings - Skipping"
+            }
+            else {
+                $mappingData = Import-Csv -Path $photoMappingFile -Delimiter "`t" -Header @('ProductID', 'ProductPhotoID', 'Primary', 'ModifiedDate')
+                $mappingCount = $mappingData.Count
+                Write-Output "  Loading $mappingCount photo mappings..."
                 
-                if ($exists -eq 0) {
-                    $cmd = $conn.CreateCommand()
-                    $cmd.CommandText = @"
-INSERT INTO Production.ProductProductPhoto 
-    (ProductID, ProductPhotoID, [Primary], ModifiedDate)
-VALUES 
-    (@ProductID, @ProductPhotoID, @Primary, @ModifiedDate)
+                $mappingInserted = 0
+                $transaction = $conn.BeginTransaction()
+                
+                try {
+                    # Use batch INSERT with IF NOT EXISTS for better performance
+                    foreach ($mapping in $mappingData) {
+                        $cmd = $conn.CreateCommand()
+                        $cmd.Transaction = $transaction
+                        $cmd.CommandText = @"
+IF NOT EXISTS (SELECT 1 FROM Production.ProductProductPhoto WHERE ProductID = @ProductID AND ProductPhotoID = @ProductPhotoID)
+BEGIN
+    INSERT INTO Production.ProductProductPhoto 
+        (ProductID, ProductPhotoID, [Primary], ModifiedDate)
+    VALUES 
+        (@ProductID, @ProductPhotoID, @Primary, @ModifiedDate)
+END
 "@
-                    $cmd.Parameters.AddWithValue("@ProductID", [int]$mapping.ProductID) | Out-Null
-                    $cmd.Parameters.AddWithValue("@ProductPhotoID", [int]$mapping.ProductPhotoID) | Out-Null
-                    $cmd.Parameters.AddWithValue("@Primary", [int]$mapping.Primary) | Out-Null
-                    $cmd.Parameters.AddWithValue("@ModifiedDate", [datetime]$mapping.ModifiedDate) | Out-Null
+                        $cmd.Parameters.AddWithValue("@ProductID", [int]$mapping.ProductID) | Out-Null
+                        $cmd.Parameters.AddWithValue("@ProductPhotoID", [int]$mapping.ProductPhotoID) | Out-Null
+                        $cmd.Parameters.AddWithValue("@Primary", [int]$mapping.Primary) | Out-Null
+                        $cmd.Parameters.AddWithValue("@ModifiedDate", [datetime]$mapping.ModifiedDate) | Out-Null
+                        
+                        $affected = $cmd.ExecuteNonQuery()
+                        if ($affected -gt 0) {
+                            $mappingInserted++
+                        }
+                    }
                     
-                    $cmd.ExecuteNonQuery() | Out-Null
-                    $mappingInserted++
+                    $transaction.Commit()
+                    Write-Output "  Successfully loaded $mappingInserted photo mappings"
                 }
-                else {
-                    $mappingSkipped++
+                catch {
+                    $transaction.Rollback()
+                    throw
                 }
             }
-            
-            Write-Output "  Successfully loaded $mappingInserted photo mappings ($mappingSkipped already existed)"
         }
         catch {
             Write-Warning "  Failed to load photo mappings: $($_.Exception.Message)"
@@ -1578,77 +1622,6 @@ if ($apiFunctionsUrl) {
     Write-Warning "API_FUNCTIONS_URL not found in environment. VITE_API_FUNCTIONS_URL will not be set."
 }
 
-## ---------------------------------------------------------------------------
-## AI Agent Configuration (Manual Setup Required)
-## ---------------------------------------------------------------------------
-Write-Output "`n=========================================="
-Write-Output "AI Agent MCP Server Configuration"
-Write-Output "=========================================="
-
-# Get required values for agent configuration
-$openAiEndpoint = (azd env get-value 'AZURE_OPENAI_ENDPOINT' 2>$null)
-if ($openAiEndpoint) {
-    $openAiEndpoint = $openAiEndpoint.Trim()
-    # Check if it's an error message
-    if ($openAiEndpoint -like '*ERROR:*') {
-        $openAiEndpoint = $null
-    }
-}
-
-$chatModelName = (azd env get-value 'chatGptModelName' 2>$null)
-if ($chatModelName) {
-    $chatModelName = $chatModelName.Trim()
-    if ($chatModelName -like '*ERROR:*') {
-        $chatModelName = $null
-    }
-}
-
-$mcpServerUrl = $apiFunctionsUrl
-
-# If endpoint not found, try to construct from account name
-if (-not $openAiEndpoint) {
-    $openAiAccountName = (azd env get-value 'AZURE_OPENAI_ACCOUNT_NAME' 2>$null)
-    if ($openAiAccountName) {
-        $openAiAccountName = $openAiAccountName.Trim()
-        if ($openAiAccountName -and $openAiAccountName -notlike '*ERROR:*') {
-            $openAiEndpoint = "https://$openAiAccountName.cognitiveservices.azure.com/"
-            azd env set 'AZURE_OPENAI_ENDPOINT' $openAiEndpoint
-        }
-    }
-}
-
-if ($openAiEndpoint -and $chatModelName -and $mcpServerUrl) {
-    Write-Output "`n✅ MCP Server deployed successfully!"
-    Write-Output "   AI Foundry Endpoint: $openAiEndpoint"
-    Write-Output "   Model Deployment: $chatModelName"
-    Write-Output "   MCP Server URL: $mcpServerUrl"
-    
-    # Save configuration values to azd environment (only if valid)
-    azd env set 'AI_AGENT_MCP_ENDPOINT' "$mcpServerUrl/api/mcp"
-    azd env set 'AI_AGENT_MODEL' $chatModelName
-    if ($openAiEndpoint -notlike '*ERROR:*') {
-        azd env set 'AI_AGENT_OPENAI_ENDPOINT' $openAiEndpoint
-    }
-    
-    Write-Output "`n📋 MCP Server Tools Available:"
-    Write-Output "   - get_customer_orders: Retrieve customer order history"
-    Write-Output "   - get_order_details: Get detailed order information"
-    Write-Output "   - search_products: Search product catalog"
-    Write-Output "   - get_product_details: Get product specifications"
-    Write-Output "   - find_complementary_products: Find related products"
-    
-    Write-Output "`n📖 To test the AI Agent with the MCP Server:"
-    Write-Output "   1. Install Python dependencies: pip install agent-framework-azure-ai --pre"
-    Write-Output "   2. Run the test script: python3 test_agent.py"
-    Write-Output "   3. See api-functions/MCP_SERVER.md for integration examples"
-    
-} else {
-    Write-Warning "Missing required configuration for AI Agent:"
-    if (-not $openAiEndpoint) { Write-Warning "  - AZURE_OPENAI_ENDPOINT not set" }
-    if (-not $chatModelName) { Write-Warning "  - chatGptModelName not set" }
-    if (-not $mcpServerUrl) { Write-Warning "  - MCP Server URL (API_FUNCTIONS_URL) not set" }
-    Write-Output "`nRefer to api-functions/MCP_SERVER.md for manual setup instructions"
-}
 # Grant current user Contributor role on Container Apps Environment for Aspire Dashboard access
 Write-Output "`n========================================="
 Write-Output "Configuring Aspire Dashboard Access"

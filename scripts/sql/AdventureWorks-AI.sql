@@ -69,10 +69,17 @@ GO
 -- Size: 1536 dimensions × 4 bytes (float32) = 6144 bytes per embedding
 -- Embeddings stored per language - enables multi-language semantic search
 
-ALTER TABLE [Production].[ProductDescription]
-ADD [DescriptionEmbedding] VECTOR(1536) NULL;
-
-PRINT 'ProductDescription.DescriptionEmbedding column added for vector embeddings';
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[Production].[ProductDescription]') AND name = 'DescriptionEmbedding')
+BEGIN
+    ALTER TABLE [Production].[ProductDescription]
+    ADD [DescriptionEmbedding] VECTOR(1536) NULL;
+    
+    PRINT 'ProductDescription.DescriptionEmbedding column added for vector embeddings';
+END
+ELSE
+BEGIN
+    PRINT 'ProductDescription.DescriptionEmbedding column already exists - skipping';
+END;
 
 GO
 
@@ -80,31 +87,40 @@ GO
 -- Joins Product -> ProductModel -> ProductModelProductDescriptionCulture -> ProductDescription
 -- Enables language-specific vector similarity search via DAB API
 
-CREATE VIEW [Production].[vProductSearch]
-AS
-SELECT 
-    p.[ProductID],
-    p.[Name] AS [ProductName],
-    p.[ProductNumber],
-    p.[Color],
-    p.[Size],
-    p.[Weight],
-    p.[ListPrice],
-    p.[ProductModelID],
-    pm.[Name] AS [ProductModelName],
-    pmx.[CultureID],
-    pmx.[ProductDescriptionID],
-    pd.[Description],
-    pd.[DescriptionEmbedding],
-    p.[ModifiedDate]
-FROM [Production].[Product] p
-    LEFT JOIN [Production].[ProductModel] pm 
-        ON p.[ProductModelID] = pm.[ProductModelID]
-    LEFT JOIN [Production].[ProductModelProductDescriptionCulture] pmx 
-        ON pm.[ProductModelID] = pmx.[ProductModelID]
-    LEFT JOIN [Production].[ProductDescription] pd 
-        ON pmx.[ProductDescriptionID] = pd.[ProductDescriptionID]
-WHERE p.[FinishedGoodsFlag] = 1;
+IF NOT EXISTS (SELECT 1 FROM sys.views WHERE object_id = OBJECT_ID(N'[Production].[vProductSearch]'))
+BEGIN
+    EXEC('CREATE VIEW [Production].[vProductSearch]
+    AS
+    SELECT 
+        p.[ProductID],
+        p.[Name] AS [ProductName],
+        p.[ProductNumber],
+        p.[Color],
+        p.[Size],
+        p.[Weight],
+        p.[ListPrice],
+        p.[ProductModelID],
+        pm.[Name] AS [ProductModelName],
+        pmx.[CultureID],
+        pmx.[ProductDescriptionID],
+        pd.[Description],
+        pd.[DescriptionEmbedding],
+        p.[ModifiedDate]
+    FROM [Production].[Product] p
+        LEFT JOIN [Production].[ProductModel] pm 
+            ON p.[ProductModelID] = pm.[ProductModelID]
+        LEFT JOIN [Production].[ProductModelProductDescriptionCulture] pmx 
+            ON pm.[ProductModelID] = pmx.[ProductModelID]
+        LEFT JOIN [Production].[ProductDescription] pd 
+            ON pmx.[ProductDescriptionID] = pd.[ProductDescriptionID]
+    WHERE p.[FinishedGoodsFlag] = 1');
+    
+    PRINT 'Created view Production.vProductSearch for multi-language semantic search';
+END
+ELSE
+BEGIN
+    PRINT 'View Production.vProductSearch already exists - skipping';
+END;
 
 GO
 
@@ -150,10 +166,17 @@ GO
 -- Size: 1536 dimensions × 4 bytes (float32) = 6144 bytes per embedding
 -- Enables semantic search across product review comments
 
-ALTER TABLE [Production].[ProductReview]
-ADD [CommentsEmbedding] VECTOR(1536) NULL;
-
-PRINT 'ProductReview.CommentsEmbedding column added for vector embeddings';
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[Production].[ProductReview]') AND name = 'CommentsEmbedding')
+BEGIN
+    ALTER TABLE [Production].[ProductReview]
+    ADD [CommentsEmbedding] VECTOR(1536) NULL;
+    
+    PRINT 'ProductReview.CommentsEmbedding column added for vector embeddings';
+END
+ELSE
+BEGIN
+    PRINT 'ProductReview.CommentsEmbedding column already exists - skipping';
+END;
 
 GO
 
@@ -162,10 +185,17 @@ GO
 -- Defaults to 0 for all existing and new reviews
 -- Useful for sorting and displaying most helpful reviews
 
-ALTER TABLE [Production].[ProductReview]
-ADD [HelpfulVotes] INT NOT NULL DEFAULT 0;
-
-PRINT 'ProductReview.HelpfulVotes column added for tracking helpful votes';
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[Production].[ProductReview]') AND name = 'HelpfulVotes')
+BEGIN
+    ALTER TABLE [Production].[ProductReview]
+    ADD [HelpfulVotes] INT NOT NULL DEFAULT 0;
+    
+    PRINT 'ProductReview.HelpfulVotes column added for tracking helpful votes';
+END
+ELSE
+BEGIN
+    PRINT 'ProductReview.HelpfulVotes column already exists - skipping';
+END;
 
 GO
 
@@ -174,10 +204,17 @@ GO
 -- Nullable to preserve existing reviews that don't have a UserID
 -- Enables features like: preventing duplicate reviews, edit/delete own reviews, and tracking user activity
 
-ALTER TABLE [Production].[ProductReview]
-ADD [UserID] INT NULL;
-
-PRINT 'ProductReview.UserID column added for linking reviews to user accounts';
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[Production].[ProductReview]') AND name = 'UserID')
+BEGIN
+    ALTER TABLE [Production].[ProductReview]
+    ADD [UserID] INT NULL;
+    
+    PRINT 'ProductReview.UserID column added for linking reviews to user accounts';
+END
+ELSE
+BEGIN
+    PRINT 'ProductReview.UserID column already exists - skipping';
+END;
 
 GO
 
@@ -185,11 +222,18 @@ GO
 -- Links UserID directly to the Person table via BusinessEntityID
 -- This enforces referential integrity - reviews can only reference valid users
 
-ALTER TABLE [Production].[ProductReview]
-ADD CONSTRAINT [FK_ProductReview_Person_UserID]
-FOREIGN KEY ([UserID]) REFERENCES [Person].[Person]([BusinessEntityID]);
-
-PRINT 'Added foreign key constraint linking UserID to Person.BusinessEntityID';
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE object_id = OBJECT_ID(N'[Production].[FK_ProductReview_Person_UserID]'))
+BEGIN
+    ALTER TABLE [Production].[ProductReview]
+    ADD CONSTRAINT [FK_ProductReview_Person_UserID]
+    FOREIGN KEY ([UserID]) REFERENCES [Person].[Person]([BusinessEntityID]);
+    
+    PRINT 'Added foreign key constraint linking UserID to Person.BusinessEntityID';
+END
+ELSE
+BEGIN
+    PRINT 'Foreign key constraint FK_ProductReview_Person_UserID already exists - skipping';
+END;
 
 GO
 
@@ -197,22 +241,36 @@ GO
 -- Ensures each user can only submit one review per product
 -- Filtered to exclude legacy reviews that don't have a UserID
 
-CREATE UNIQUE NONCLUSTERED INDEX [IX_ProductReview_ProductID_UserID_Unique]
-ON [Production].[ProductReview]([ProductID], [UserID])
-WHERE [UserID] IS NOT NULL;
-
-PRINT 'Added unique constraint on (ProductID, UserID) to prevent duplicate reviews';
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[Production].[ProductReview]') AND name = 'IX_ProductReview_ProductID_UserID_Unique')
+BEGIN
+    CREATE UNIQUE NONCLUSTERED INDEX [IX_ProductReview_ProductID_UserID_Unique]
+    ON [Production].[ProductReview]([ProductID], [UserID])
+    WHERE [UserID] IS NOT NULL;
+    
+    PRINT 'Added unique constraint on (ProductID, UserID) to prevent duplicate reviews';
+END
+ELSE
+BEGIN
+    PRINT 'Unique index IX_ProductReview_ProductID_UserID_Unique already exists - skipping';
+END;
 
 GO
 
 -- Step 12c: Add index on UserID for query performance
 -- Enables efficient lookup of all reviews by a specific user
 
-CREATE NONCLUSTERED INDEX [IX_ProductReview_UserID]
-ON [Production].[ProductReview]([UserID])
-WHERE [UserID] IS NOT NULL;
-
-PRINT 'Added index on UserID for improved query performance';
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[Production].[ProductReview]') AND name = 'IX_ProductReview_UserID')
+BEGIN
+    CREATE NONCLUSTERED INDEX [IX_ProductReview_UserID]
+    ON [Production].[ProductReview]([UserID])
+    WHERE [UserID] IS NOT NULL;
+    
+    PRINT 'Added index on UserID for improved query performance';
+END
+ELSE
+BEGIN
+    PRINT 'Index IX_ProductReview_UserID already exists - skipping';
+END;
 
 GO
 
@@ -220,24 +278,33 @@ GO
 -- Enables vector similarity search on product reviews via DAB API
 -- Useful for finding reviews based on semantic meaning rather than keyword matching
 
-CREATE VIEW [Production].[vReviewSearch]
-AS
-SELECT 
-    pr.[ProductReviewID],
-    pr.[ProductID],
-    pr.[ReviewerName],
-    pr.[ReviewDate],
-    pr.[Rating],
-    pr.[Comments],
-    pr.[CommentsEmbedding],
-    pr.[HelpfulVotes],
-    pr.[UserID],
-    pr.[ModifiedDate],
-    p.[Name] AS [ProductName],
-    p.[ProductNumber]
-FROM [Production].[ProductReview] pr
-    INNER JOIN [Production].[Product] p 
-        ON pr.[ProductID] = p.[ProductID];
+IF NOT EXISTS (SELECT 1 FROM sys.views WHERE object_id = OBJECT_ID(N'[Production].[vReviewSearch]'))
+BEGIN
+    EXEC('CREATE VIEW [Production].[vReviewSearch]
+    AS
+    SELECT 
+        pr.[ProductReviewID],
+        pr.[ProductID],
+        pr.[ReviewerName],
+        pr.[ReviewDate],
+        pr.[Rating],
+        pr.[Comments],
+        pr.[CommentsEmbedding],
+        pr.[HelpfulVotes],
+        pr.[UserID],
+        pr.[ModifiedDate],
+        p.[Name] AS [ProductName],
+        p.[ProductNumber]
+    FROM [Production].[ProductReview] pr
+        INNER JOIN [Production].[Product] p 
+            ON pr.[ProductID] = p.[ProductID]');
+    
+    PRINT 'Created view Production.vReviewSearch for semantic review search';
+END
+ELSE
+BEGIN
+    PRINT 'View Production.vReviewSearch already exists - skipping';
+END;
 
 GO
 
