@@ -20,6 +20,7 @@ import { useLanguage } from "@/context/LanguageContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import { useUnitMeasure } from "@/context/UnitMeasureContext";
 import { getUnitSystemForLanguage } from "@/lib/unitMeasureUtils";
+import SearchBar from "@/components/SearchBar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,7 +42,6 @@ const Header: React.FC = () => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [userMenuOpen, setUserMenuOpen] = React.useState(false);
-  const [searchQuery, setSearchQuery] = React.useState("");
   const [showSearch, setShowSearch] = React.useState(false);
   const totalItems = getTotalItems();
 
@@ -60,6 +60,11 @@ const Header: React.FC = () => {
     setUnitSystem(newUnitSystem);
   };
 
+  const handleSearch = (query: string) => {
+    navigate(`/search?q=${encodeURIComponent(query)}`);
+    setShowSearch(false);
+  };
+
   // Close user menu when clicking outside
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -73,15 +78,6 @@ const Header: React.FC = () => {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-      setSearchQuery("");
-      setShowSearch(false);
-    }
-  };
 
   return (
     <header className="sticky top-0 z-50 bg-doodle-bg border-b-4 border-doodle-text">
@@ -342,30 +338,18 @@ const Header: React.FC = () => {
           </nav>
         )}
 
-        {/* Expandable Search Bar */}
+        {/* Expandable Search Bar with AI Suggestions */}
         {showSearch && (
           <div className="py-3 border-t-2 border-doodle-text border-dashed">
-            <form onSubmit={handleSearch} className="flex gap-2">
-              <div className="relative flex-1">
-                <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-accent" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={t("header.aiSearchPlaceholder")}
-                  className="w-full pl-10 pr-4 py-2 font-doodle border-2 border-doodle-accent bg-white focus:border-doodle-accent focus:outline-none placeholder:text-doodle-text/50"
-                  autoFocus
-                  data-testid="search-input"
-                />
-              </div>
-              <button
-                type="submit"
-                className="doodle-button doodle-button-primary px-4 flex items-center gap-2"
-                data-testid="search-submit-button"
-              >
-                <Sparkles className="w-4 h-4" />
-                {t("buttons.search")}
-              </button>
+            <div className="flex gap-2">
+              <SearchBar
+                placeholder={t("header.aiSearchPlaceholder")}
+                onSearch={handleSearch}
+                autoFocus
+                showButton
+                className="flex-1"
+                inputClassName="py-2 border-doodle-accent"
+              />
               <button
                 type="button"
                 onClick={() => setShowSearch(false)}
@@ -373,7 +357,7 @@ const Header: React.FC = () => {
               >
                 <X className="w-5 h-5" />
               </button>
-            </form>
+            </div>
           </div>
         )}
       </div>

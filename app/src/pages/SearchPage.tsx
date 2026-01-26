@@ -1,17 +1,16 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
-  Search,
   SlidersHorizontal,
   X,
   ChevronLeft,
   ChevronRight,
   Sparkles,
-  Loader2,
 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SearchBar from "@/components/SearchBar";
 import ProductCard from "@/components/ProductCard";
 import ProductModelCard from "@/components/ProductModelCard";
 import {
@@ -26,7 +25,6 @@ import {
 import { Product, getSalePrice } from "@/types/product";
 import { useAllReviews } from "@/hooks/useReviews";
 import { useSemanticSearch } from "@/hooks/useSemanticSearch";
-import { useSearchSuggestions } from "@/hooks/useSearchSuggestions";
 import {
   Select,
   SelectContent,
@@ -47,7 +45,6 @@ const SearchPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
 
-  const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 5000]);
   const [sortBy, setSortBy] = useState<SortOption>("rating");
@@ -56,22 +53,12 @@ const SearchPage: React.FC = () => {
   const [itemsPerPage, setItemsPerPage] = useState(12);
   const [semanticQuerySubmitted, setSemanticQuerySubmitted] =
     useState(initialQuery);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const suggestionsRef = useRef<HTMLDivElement>(null);
 
   const { data: products = [], isLoading: productsLoading } = useProducts();
   const { data: categories = [], isLoading: categoriesLoading } =
     useCategories();
   const { data: subcategories = [] } = useSubcategories();
   const { data: allReviews = [] } = useAllReviews();
-
-  // AI-powered search suggestions
-  const { data: suggestionsData, isLoading: suggestionsLoading } =
-    useSearchSuggestions(searchQuery, 300);
-
-  const suggestions = suggestionsData?.suggestions || [];
 
   // Semantic search hook - always enabled when query is submitted
   const {
@@ -132,6 +119,7 @@ const SearchPage: React.FC = () => {
           Color: result.Color || result.color,
           ListPrice: result.ListPrice || result.listPrice || 0,
           Description: result.Description || result.description,
+          ThumbNailPhoto: result.ThumbNailPhoto || result.thumbNailPhoto,
           Size: null,
           SizeUnitMeasureCode: null,
           Weight: null,
@@ -245,7 +233,7 @@ const SearchPage: React.FC = () => {
   React.useEffect(() => {
     setCurrentPage(1);
   }, [
-    searchQuery,
+    initialQuery,
     selectedCategory,
     priceRange,
     sortBy,
@@ -308,79 +296,20 @@ const SearchPage: React.FC = () => {
     setCurrentPage(1);
   };
 
-  // Close suggestions when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        suggestionsRef.current &&
-        !suggestionsRef.current.contains(event.target as Node) &&
-        searchInputRef.current &&
-        !searchInputRef.current.contains(event.target as Node)
-      ) {
-        setShowSuggestions(false);
-        setSelectedSuggestionIndex(-1);
-      }
-    };
+  // Reset to page 1 when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    initialQuery,
+    selectedCategory,
+    priceRange,
+    sortBy,
+    filteredProducts.length,
+  ]);
 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSearchParams(searchQuery ? { q: searchQuery } : {});
-
-    // Trigger semantic search
-    if (searchQuery.trim()) {
-      setSemanticQuerySubmitted(searchQuery.trim());
-    }
-
-    // Hide suggestions after search
-    setShowSuggestions(false);
-    setSelectedSuggestionIndex(-1);
-  };
-
-  const handleSuggestionClick = (suggestion: string) => {
-    setSearchQuery(suggestion);
-    setSemanticQuerySubmitted(suggestion);
-    setSearchParams({ q: suggestion });
-    setShowSuggestions(false);
-    setSelectedSuggestionIndex(-1);
-    searchInputRef.current?.blur();
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchQuery(value);
-    setShowSuggestions(value.length >= 2);
-    setSelectedSuggestionIndex(-1);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!showSuggestions || suggestions.length === 0) return;
-
-    switch (e.key) {
-      case "ArrowDown":
-        e.preventDefault();
-        setSelectedSuggestionIndex((prev) =>
-          prev < suggestions.length - 1 ? prev + 1 : prev,
-        );
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        setSelectedSuggestionIndex((prev) => (prev > 0 ? prev - 1 : -1));
-        break;
-      case "Enter":
-        if (selectedSuggestionIndex >= 0) {
-          e.preventDefault();
-          handleSuggestionClick(suggestions[selectedSuggestionIndex]);
-        }
-        break;
-      case "Escape":
-        setShowSuggestions(false);
-        setSelectedSuggestionIndex(-1);
-        break;
-    }
+  const handleSearch = (query: string) => {
+    setSearchParams({ q: query });
+    setSemanticQuerySubmitted(query);
   };
 
   const clearFilters = () => {
@@ -501,65 +430,14 @@ const SearchPage: React.FC = () => {
               {t("search.pageTitle")}
             </h1>
 
-            {/* Search Form */}
-            <form onSubmit={handleSearch} className="space-y-3">
+            {/* Search Form with AI Suggestions */}
+            <div className="space-y-3">
               <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-text/50 z-10" />
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={handleInputChange}
-                    onKeyDown={handleKeyDown}
-                    onFocus={() =>
-                      searchQuery.length >= 2 && setShowSuggestions(true)
-                    }
-                    placeholder={t("search.placeholder")}
-                    className="w-full pl-10 pr-10 py-3 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
-                    autoComplete="off"
-                  />
-                  {suggestionsLoading && searchQuery.length >= 2 && (
-                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-accent animate-spin" />
-                  )}
-
-                  {/* AI-Powered Suggestions Dropdown */}
-                  {showSuggestions && suggestions.length > 0 && (
-                    <div
-                      ref={suggestionsRef}
-                      className="absolute z-50 w-full mt-1 bg-white border-2 border-doodle-accent shadow-lg max-h-80 overflow-y-auto"
-                    >
-                      <div className="p-2 bg-doodle-accent/10 border-b border-doodle-accent/30 flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-doodle-accent" />
-                        <span className="font-doodle text-xs text-doodle-text font-bold">
-                          AI-Powered Suggestions
-                        </span>
-                      </div>
-                      <ul className="py-1">
-                        {suggestions.map((suggestion, index) => (
-                          <li
-                            key={index}
-                            onClick={() => handleSuggestionClick(suggestion)}
-                            className={`px-4 py-2 font-doodle text-sm cursor-pointer flex items-center gap-2 transition-colors ${
-                              index === selectedSuggestionIndex
-                                ? "bg-doodle-accent/20 text-doodle-text"
-                                : "hover:bg-doodle-accent/10 text-doodle-text/80"
-                            }`}
-                          >
-                            <Search className="w-4 h-4 text-doodle-text/50 flex-shrink-0" />
-                            <span>{suggestion}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="submit"
-                  className="doodle-button doodle-button-primary px-6"
-                >
-                  Search
-                </button>
+                <SearchBar
+                  initialQuery={initialQuery}
+                  onSearch={handleSearch}
+                  className="flex-1"
+                />
                 <button
                   type="button"
                   onClick={() => setShowFilters(!showFilters)}
@@ -604,7 +482,7 @@ const SearchPage: React.FC = () => {
                   </p>
                 </div>
               )}
-            </form>
+            </div>
           </div>
         </section>
 
@@ -906,7 +784,7 @@ const SearchPage: React.FC = () => {
                   {semanticQuerySubmitted && (
                     <button
                       onClick={() => {
-                        setSearchQuery("");
+                        setSearchParams({});
                         setSemanticQuerySubmitted("");
                         clearFilters();
                       }}

@@ -452,6 +452,7 @@ public class ProductService
                 pd.Description,
                 p.ListPrice,
                 p.Color,
+                pp.ThumbNailPhoto,
                 VECTOR_DISTANCE('cosine', pd.DescriptionEmbedding, CAST(@QueryEmbedding AS VECTOR(1536))) AS SimilarityScore,
                 'Description' AS MatchSource,
                 pd.Description AS MatchText
@@ -461,6 +462,8 @@ public class ProductService
                 ON pm.ProductModelID = pmpdc.ProductModelID
             INNER JOIN Production.ProductDescription pd 
                 ON pmpdc.ProductDescriptionID = pd.ProductDescriptionID
+            LEFT JOIN Production.ProductProductPhoto ppp ON p.ProductID = ppp.ProductID AND ppp.[Primary] = 1
+            LEFT JOIN Production.ProductPhoto pp ON ppp.ProductPhotoID = pp.ProductPhotoID
             WHERE p.FinishedGoodsFlag = 1
               AND pd.DescriptionEmbedding IS NOT NULL
               AND pmpdc.CultureID = 'en'

@@ -93,6 +93,7 @@ public class SemanticSearchResult
     public string? Description { get; set; }
     public decimal? ListPrice { get; set; }
     public string? Color { get; set; }
+    public byte[]? ThumbNailPhoto { get; set; }
     public double SimilarityScore { get; set; }
     public string MatchSource { get; set; } = string.Empty; // "Description" or "Review"
     public string? MatchText { get; set; }

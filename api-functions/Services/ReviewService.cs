@@ -133,6 +133,7 @@ public class ReviewService
                 pd.Description,
                 p.ListPrice,
                 p.Color,
+                pp.ThumbNailPhoto,
                 VECTOR_DISTANCE('cosine', pr.CommentsEmbedding, CAST(@QueryEmbedding AS VECTOR(1536))) AS SimilarityScore,
                 'Review' AS MatchSource,
                 pr.Comments AS MatchText
@@ -143,6 +144,8 @@ public class ReviewService
                 ON pm.ProductModelID = pmpdc.ProductModelID AND pmpdc.CultureID = 'en'
             LEFT JOIN Production.ProductDescription pd 
                 ON pmpdc.ProductDescriptionID = pd.ProductDescriptionID
+            LEFT JOIN Production.ProductProductPhoto ppp ON p.ProductID = ppp.ProductID AND ppp.[Primary] = 1
+            LEFT JOIN Production.ProductPhoto pp ON ppp.ProductPhotoID = pp.ProductPhotoID
             WHERE p.FinishedGoodsFlag = 1
               AND pr.CommentsEmbedding IS NOT NULL
             ORDER BY VECTOR_DISTANCE('cosine', pr.CommentsEmbedding, CAST(@QueryEmbedding AS VECTOR(1536)))";
