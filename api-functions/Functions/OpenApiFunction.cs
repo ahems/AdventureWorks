@@ -276,6 +276,58 @@ public class OpenApiFunction
                 }
             }
         });
+
+        paths.Add("/api/search/suggestions", new OpenApiPathItem
+        {
+            Operations = new Dictionary<OperationType, OpenApiOperation>
+            {
+                [OperationType.Get] = new OpenApiOperation
+                {
+                    Summary = "Search suggestions",
+                    Description = "Provides AI-powered type-ahead search suggestions based on partial query input",
+                    Tags = new List<OpenApiTag> { new OpenApiTag { Name = "Search" } },
+                    Parameters = new List<OpenApiParameter>
+                    {
+                        new OpenApiParameter
+                        {
+                            Name = "q",
+                            In = ParameterLocation.Query,
+                            Required = true,
+                            Description = "Partial search query (minimum 2 characters)",
+                            Schema = new OpenApiSchema { Type = "string" }
+                        }
+                    },
+                    Responses = new OpenApiResponses
+                    {
+                        ["200"] = new OpenApiResponse
+                        {
+                            Description = "List of suggested search queries",
+                            Content = new Dictionary<string, OpenApiMediaType>
+                            {
+                                ["application/json"] = new OpenApiMediaType
+                                {
+                                    Schema = new OpenApiSchema
+                                    {
+                                        Type = "object",
+                                        Properties = new Dictionary<string, OpenApiSchema>
+                                        {
+                                            ["query"] = new OpenApiSchema { Type = "string" },
+                                            ["suggestions"] = new OpenApiSchema
+                                            {
+                                                Type = "array",
+                                                Items = new OpenApiSchema { Type = "string" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        ["400"] = new OpenApiResponse { Description = "Missing or invalid query parameter" },
+                        ["500"] = new OpenApiResponse { Description = "Internal server error" }
+                    }
+                }
+            }
+        });
     }
 
     private void AddSeoEndpoints(OpenApiPaths paths)
