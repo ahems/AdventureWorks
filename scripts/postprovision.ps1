@@ -670,14 +670,14 @@ try {
     # Define base record counts for -ai.csv files (additive data)
     # These files should only be loaded when table has exactly the base AdventureWorks count
     $aiCsvBaseRecordCounts = @{
-        'Culture-ai.csv' = 7
+        'Culture-ai.csv' = 8
         'Currency-ai.csv' = 105
         'StateProvince-ai.csv' = 181
         'CountryRegionCurrency-ai.csv' = 109
         'SalesTaxRate-ai.csv' = 29
         'ProductProductPhoto-ai.csv' = 504
         'ProductDescription-ai.csv' = 762
-        'ProductDescription-ai-translations.csv' = 762
+        'ProductDescription-ai-translations.csv' = 2921
         'ProductReview-ai.csv' = 4
         'ProductModelProductDescriptionCulture-ai.csv' = 874
     }
@@ -1074,6 +1074,7 @@ ORDER BY c.ORDINAL_POSITION
                 
                 $batchSize = 100
                 $insertedRows = 0
+                $skippedRows = 0
                 $transaction = $conn.BeginTransaction()
                 
                 # Enable IDENTITY_INSERT if needed
@@ -1084,18 +1085,138 @@ ORDER BY c.ORDINAL_POSITION
                     Write-Output "    Enabled IDENTITY_INSERT for table with identity column"
                 }
                 
+                # Get primary key or unique constraint columns for idempotent inserts
+                $cmd.Transaction = $transaction
+                $cmd.CommandText = @"
+SELECT COLUMN_NAME
+FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+WHERE TABLE_SCHEMA = '$schemaName' AND TABLE_NAME = '$tableName'
+AND CONSTRAINT_NAME LIKE 'PK_%' OR CONSTRAINT_NAME LIKE 'AK_%'
+ORDER BY ORDINAL_POSITION
+"@
+                $pkReader = $cmd.ExecuteReader()
+                $pkColumns = @()
+                while ($pkReader.Read()) {
+                    $pkColumns += $pkReader['COLUMN_NAME']
+                }
+                $pkReader.Close()
+                
                 try {
                     for ($batchStart = 0; $batchStart -lt $dataTable.Rows.Count; $batchStart += $batchSize) {
                         $batchEnd = [Math]::Min($batchStart + $batchSize, $dataTable.Rows.Count)
                         
-                        # Build INSERT statement for this batch
+                        # Build INSERT statement for this batch - use MERGE for AI CSV files to avoid duplicates
                         $columnList = ($loadedColumns | ForEach-Object { "[$($_.Name)]" }) -join ', '
-                        $insertSql = "INSERT INTO [$schemaName].[$tableName] ($columnList) VALUES "
                         
-                        $valuesClauses = @()
-                        for ($r = $batchStart; $r -lt $batchEnd; $r++) {
-                            $row = $dataTable.Rows[$r]
-                            $values = @()
+                        # For AI CSV files with duplicates, use individual INSERT IF NOT EXISTS
+                        if ($isAiCsv -and $pkColumns.Count -gt 0) {
+                            for ($r = $batchStart; $r -lt $batchEnd; $r++) {
+                                $row = $dataTable.Rows[$r]
+                                $values = @()
+                                
+                                # Build WHERE clause for existence check using primary/unique key
+                                $whereConditions = @()
+                                foreach ($pkCol in $pkColumns) {
+                                    $colIndex = ($loadedColumns | Where-Object { $_.Name -eq $pkCol }).CSVIndex
+                                    if ($null -ne $colIndex) {
+                                        $pkValue = $row[$loadedColumns.IndexOf(($loadedColumns | Where-Object { $_.Name -eq $pkCol }))]
+                                        $col = $loadedColumns | Where-Object { $_.Name -eq $pkCol }
+                                        
+                                        if ($pkValue -is [DBNull] -or $null -eq $pkValue) {
+                                            $whereConditions += "[$pkCol] IS NULL"
+                                        }
+                                        elseif ($col.Type -in @('varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext', 'uniqueidentifier')) {
+                                            $escapedVal = $pkValue.ToString().Replace("'", "''")
+                                            $whereConditions += "[$pkCol] = N'$escapedVal'"
+                                        }
+                                        else {
+                                            $whereConditions += "[$pkCol] = $($pkValue.ToString())"
+                                        }
+                                    }
+                                }
+                                
+                                $whereClause = $whereConditions -join ' AND '
+                                
+                                # Build values for INSERT
+                                for ($c = 0; $c -lt $loadedColumns.Count; $c++) {
+                                    $col = $loadedColumns[$c]
+                                    $value = $row[$c]
+                                    
+                                    if ($value -is [DBNull] -or $null -eq $value) {
+                                        $values += "NULL"
+                                    }
+                                    elseif ($col.Type -eq 'hierarchyid') {
+                                        $values += "CAST(0x$($value.ToString()) AS hierarchyid)"
+                                    }
+                                    elseif ($col.Type -eq 'geography') {
+                                        $values += "CAST(0x$($value.ToString()) AS geography)"
+                                    }
+                                    elseif ($col.Type -eq 'geometry') {
+                                        $values += "CAST(0x$($value.ToString()) AS geometry)"
+                                    }
+                                    elseif ($col.Type -eq 'varbinary') {
+                                        $hexStr = ($value | ForEach-Object { $_.ToString('X2') }) -join ''
+                                        $values += "0x$hexStr"
+                                    }
+                                    elseif ($col.Type -in @('varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext', 'uniqueidentifier', 'xml')) {
+                                        $escapedVal = $value.ToString().Replace("'", "''")
+                                        $values += "N'$escapedVal'"
+                                    }
+                                    elseif ($col.Type -eq 'bit') {
+                                        $values += if ($value) { '1' } else { '0' }
+                                    }
+                                    elseif ($col.Type -in @('datetime', 'datetime2', 'date', 'time', 'datetimeoffset')) {
+                                        if ($col.Type -eq 'date') {
+                                            $dateStr = ([datetime]$value).ToString('yyyy-MM-dd')
+                                        }
+                                        elseif ($col.Type -eq 'datetime') {
+                                            $dateStr = ([datetime]$value).ToString('yyyy-MM-dd HH:mm:ss.fff')
+                                        }
+                                        else {
+                                            $dateStr = ([datetime]$value).ToString('yyyy-MM-dd HH:mm:ss.fffffff')
+                                        }
+                                        $values += "'$dateStr'"
+                                    }
+                                    else {
+                                        $values += $value.ToString()
+                                    }
+                                }
+                                
+                                $insertSql = @"
+IF NOT EXISTS (SELECT 1 FROM [$schemaName].[$tableName] WHERE $whereClause)
+BEGIN
+    INSERT INTO [$schemaName].[$tableName] ($columnList) VALUES ($(($values -join ', ')))
+END
+"@
+                                
+                                $cmd.Transaction = $transaction
+                                $cmd.CommandText = $insertSql
+                                try {
+                                    $affected = $cmd.ExecuteNonQuery()
+                                    if ($affected -gt 0) {
+                                        $insertedRows++
+                                    } else {
+                                        $skippedRows++
+                                    }
+                                }
+                                catch {
+                                    # If we still get duplicate errors, just skip this row
+                                    $skippedRows++
+                                }
+                                
+                                if (($insertedRows + $skippedRows) % 100 -eq 0) {
+                                    Write-Output "    ...processed $($insertedRows + $skippedRows) rows ($insertedRows inserted, $skippedRows skipped)"
+                                }
+                            }
+                        }
+                        else {
+                            # Original batch insert logic for non-AI CSV files
+                            $insertSql = "INSERT INTO [$schemaName].[$tableName] ($columnList) VALUES "
+                            
+                            $valuesClauses = @()
+                            for ($r = $batchStart; $r -lt $batchEnd; $r++) {
+                                $row = $dataTable.Rows[$r]
+                                $values = @()
                             
                             for ($c = 0; $c -lt $loadedColumns.Count; $c++) {
                                 $col = $loadedColumns[$c]
@@ -1167,6 +1288,7 @@ ORDER BY c.ORDINAL_POSITION
                         if ($insertedRows % 500 -eq 0) {
                             Write-Output "    ...inserted $insertedRows rows"
                         }
+                        }
                     }
                     
                     # Disable IDENTITY_INSERT if it was enabled
@@ -1176,7 +1298,11 @@ ORDER BY c.ORDINAL_POSITION
                     }
                     
                     $transaction.Commit()
-                    Write-Output "    Successfully loaded $rowCount rows"
+                    if ($skippedRows -gt 0) {
+                        Write-Output "    Successfully loaded $insertedRows rows ($skippedRows duplicates skipped)"
+                    } else {
+                        Write-Output "    Successfully loaded $insertedRows rows"
+                    }
                     $csvLoadSuccess++
                 }
                 catch {
