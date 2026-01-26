@@ -1523,7 +1523,54 @@ if ($openAiEndpoint -and $chatModelName -and $mcpServerUrl) {
     if (-not $mcpServerUrl) { Write-Warning "  - MCP Server URL (API_FUNCTIONS_URL) not set" }
     Write-Output "`nRefer to api-functions/MCP_SERVER.md for manual setup instructions"
 }
+# Grant current user Contributor role on Container Apps Environment for Aspire Dashboard access
+Write-Output "`n========================================="
+Write-Output "Configuring Aspire Dashboard Access"
+Write-Output "========================================="
 
+$containerAppEnvName = (azd env get-value 'CONTAINER_APP_ENVIRONMENT_NAME' 2>$null).Trim()
+if ($containerAppEnvName -and $containerAppEnvName -ne "ERROR: key 'CONTAINER_APP_ENVIRONMENT_NAME' not found in the environment values") {
+    try {
+        # Get current user's object ID
+        $currentContext = Get-AzContext
+        $currentUserId = $currentContext.Account.Id
+        
+        Write-Output "Assigning Contributor role to $currentUserId on Container Apps Environment '$containerAppEnvName'..."
+        
+        # Assign Contributor role to the current user on the Container Apps Environment
+        $roleAssignment = New-AzRoleAssignment `
+            -ObjectId $currentContext.Account.ExtendedProperties.HomeAccountId.Split('.')[0] `
+            -RoleDefinitionName "Contributor" `
+            -ResourceGroupName $resourceGroupName `
+            -ResourceType "Microsoft.App/managedEnvironments" `
+            -ResourceName $containerAppEnvName `
+            -ErrorAction SilentlyContinue
+        
+        if ($roleAssignment) {
+            Write-Output "✅ Contributor role assigned successfully"
+            Write-Output "   You can now access the Aspire Dashboard at:"
+            Write-Output "   https://aspire-dashboard.ext.$($containerAppEnvName -replace 'av-env-', '').azurecontainerapps.io/"
+        } else {
+            Write-Warning "Role assignment may have already existed or requires manual intervention"
+            Write-Output "   If you get authentication errors accessing the Aspire Dashboard:"
+            Write-Output "   1. Go to Azure Portal → Container Apps Environment: $containerAppEnvName"
+            Write-Output "   2. Select 'Access Control (IAM)'"
+            Write-Output "   3. Add role assignment: Contributor to your user account"
+        }
+    }
+    catch {
+        Write-Warning "Failed to assign Contributor role: $($_.Exception.Message)"
+        Write-Output "`n   Manual steps to fix Aspire Dashboard authentication:"
+        Write-Output "   1. Go to Azure Portal → Container Apps Environment: $containerAppEnvName"
+        Write-Output "   2. Select 'Access Control (IAM)'"
+        Write-Output "   3. Click 'Add' → 'Add role assignment'"
+        Write-Output "   4. Select role: Contributor"
+        Write-Output "   5. Assign to your user account: $currentUserId"
+    }
+} else {
+    Write-Warning "CONTAINER_APP_ENVIRONMENT_NAME not found in environment. Skipping Aspire Dashboard access configuration."
+    Write-Output "   You may need to manually assign Contributor role on the Container Apps Environment to access the Aspire Dashboard."
+}
 Write-Output "`n=========================================="
 Write-Output "Post-provision script completed"
 Write-Output "=========================================="

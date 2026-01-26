@@ -283,3 +283,4 @@ output COMMUNICATION_SERVICE_ENDPOINT string = communication.outputs.communicati
 output EMAIL_SENDER_DOMAIN string = communication.outputs.senderDomain
 output PROJECT_NAME string = cognitiveservices.outputs.projectName
 output PROJECT_RESOURCE_ID string = cognitiveservices.outputs.projectResourceId
+output CONTAINER_APP_ENVIRONMENT_NAME string = containerApp.outputs.containerAppEnvName

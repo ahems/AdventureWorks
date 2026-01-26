@@ -68,5 +68,6 @@ resource aspireDashboard 'Microsoft.App/managedEnvironments/dotNetComponents@202
 }
 
 output containerAppEnvId string = containerAppEnv.id
+output containerAppEnvName string = containerAppEnv.name
 output applicationInsightsConnectionString string = appInsights.properties.ConnectionString
 
