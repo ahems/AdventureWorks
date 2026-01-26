@@ -75,6 +75,7 @@
     "backToCamp": "キャンプに戻る"
   },
   "search": {
+    "pageTitle": "商品を検索",
     "title": "検索結果",
     "searchFor": "検索する",
     "searchPlaceholder": "製品を検索...",

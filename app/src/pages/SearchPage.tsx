@@ -421,7 +421,7 @@ const SearchPage: React.FC = () => {
         <section className="bg-doodle-text/5 border-b-2 border-dashed border-doodle-text/20 py-6">
           <div className="container mx-auto px-4">
             <h1 className="font-doodle text-2xl md:text-3xl font-bold text-doodle-text mb-4">
-              Search Products
+              {t("search.pageTitle")}
             </h1>
 
             {/* Search Form */}

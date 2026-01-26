@@ -76,6 +76,7 @@
     "backToCamp": "De Volta ao Acampamento"
   },
   "search": {
+    "pageTitle": "Pesquisar produtos",
     "title": "Resultados da Pesquisa",
     "searchFor": "Pesquisar por",
     "searchPlaceholder": "Pesquisar produtos...",

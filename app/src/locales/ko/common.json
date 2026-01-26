@@ -75,6 +75,7 @@
     "backToCamp": "캠프로 돌아가기"
   },
   "search": {
+    "pageTitle": "제품 검색",
     "title": "검색 결과",
     "searchFor": "검색하기",
     "searchPlaceholder": "제품 검색...",

@@ -77,6 +77,7 @@
     "backToCamp": "Back to Camp"
   },
   "search": {
+    "pageTitle": "Search Products",
     "title": "Search Results",
     "searchFor": "Search for",
     "searchPlaceholder": "Search products...",

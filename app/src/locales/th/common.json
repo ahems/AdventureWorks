@@ -75,6 +75,7 @@
     "backToCamp": "กลับไปที่แคมป์"
   },
   "search": {
+    "pageTitle": "ค้นหาสินค้า",
     "title": "ผลการค้นหา",
     "searchFor": "ค้นหา",
     "searchPlaceholder": "ค้นหาสินค้า...",

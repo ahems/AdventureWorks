@@ -76,6 +76,7 @@
     "backToCamp": "Torna al Campo"
   },
   "search": {
+    "pageTitle": "Cerca prodotti",
     "title": "Risultati della Ricerca",
     "searchFor": "Cerca",
     "searchPlaceholder": "Cerca prodotti...",
