@@ -115,7 +115,7 @@ const ProductPage: React.FC = () => {
     return generateProductStructuredData({
       name: product.Name,
       description: product.Description || product.Name,
-      image: product.LargePhoto || product.ThumbNailPhoto || "",
+      image: product.ThumbNailPhoto || "",
       price: price,
       sku: product.ProductNumber,
       availability:
@@ -306,7 +306,7 @@ const ProductPage: React.FC = () => {
             product.Description ||
             `Buy ${product.Name} at Adventure Works. Premium quality outdoor adventure and sports gear.`
           }
-          image={product.LargePhoto || product.ThumbNailPhoto}
+          image={product.ThumbNailPhoto}
           type="product"
           structuredData={[breadcrumbData, productStructuredData]}
         />
@@ -342,7 +342,6 @@ const ProductPage: React.FC = () => {
             <ProductImageGallery
               productName={product.Name}
               color={selectedColor || product.Color}
-              largePhoto={product.LargePhoto}
               thumbnailPhoto={product.ThumbNailPhoto}
               productPhotos={product.productPhotos}
             />

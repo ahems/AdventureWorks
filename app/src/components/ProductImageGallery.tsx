@@ -7,7 +7,6 @@ import { getLargePhoto } from "@/data/apiService";
 interface ProductImageGalleryProps {
   productName: string;
   color?: string | null;
-  largePhoto?: string | null;
   thumbnailPhoto?: string | null;
   productPhotos?: ProductPhoto[]; // Array of all photos for the product
 }
@@ -29,7 +28,6 @@ const getMockImages = (productName: string) => {
 const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
   productName,
   color,
-  largePhoto,
   thumbnailPhoto,
   productPhotos,
 }) => {
@@ -91,13 +89,8 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
     ? mockImages[selectedIndex]
     : null;
 
-  // Use LargePhoto for main display when available (from GET_PRODUCT_BY_ID single product fetch)
-  // Falls back to ThumbNailPhoto for batch-loaded products (to avoid OutOfMemoryException)
-  const displayPhoto =
-    currentPhoto?.LargePhoto ||
-    currentPhoto?.ThumbNailPhoto ||
-    largePhoto ||
-    thumbnailPhoto;
+  // Main display uses ThumbNailPhoto. LargePhoto is loaded on-demand for fullscreen view.
+  const displayPhoto = currentPhoto?.ThumbNailPhoto || thumbnailPhoto;
 
   return (
     <>

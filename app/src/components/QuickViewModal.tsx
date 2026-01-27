@@ -44,10 +44,10 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
   const { formatPrice } = useCurrency();
 
   const [selectedSize, setSelectedSize] = useState<string | undefined>(
-    product.availableSizes?.[0]
+    product.availableSizes?.[0],
   );
   const [selectedColor, setSelectedColor] = useState<string | undefined>(
-    product.availableColors?.[0]
+    product.availableColors?.[0],
   );
   const [quantity, setQuantity] = useState(1);
 
@@ -72,7 +72,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
   const variantAvailable = isVariantAvailable(
     product,
     selectedSize,
-    selectedColor
+    selectedColor,
   );
 
   const handleAddToCart = () => {
@@ -115,7 +115,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
               <div className="absolute top-4 left-4 z-10 bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text rotate-[-3deg]">
                 {product.SpecialOfferDescription ||
                   `${Math.round((product.DiscountPct || 0) * 100)}${t(
-                    "quickViewModal.percentOff"
+                    "quickViewModal.percentOff",
                   )}`}
               </div>
             )}
@@ -132,11 +132,9 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
               onClick={() => onOpenChange(false)}
               className="block cursor-pointer hover:opacity-90 transition-opacity"
             >
-              {product.LargePhoto || product.ThumbNailPhoto ? (
+              {product.ThumbNailPhoto ? (
                 <img
-                  src={`data:image/gif;base64,${
-                    product.LargePhoto || product.ThumbNailPhoto
-                  }`}
+                  src={`data:image/gif;base64,${product.ThumbNailPhoto}`}
                   alt={`${product.Name}${
                     product.Color ? ` - ${product.Color}` : ""
                   }`}
@@ -326,8 +324,8 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
                 {!product.inStock
                   ? t("quickViewModal.outOfStock")
                   : variantAvailable
-                  ? t("quickViewModal.addToCart")
-                  : t("quickViewModal.unavailable")}
+                    ? t("quickViewModal.addToCart")
+                    : t("quickViewModal.unavailable")}
               </button>
               <button
                 onClick={handleToggleWishlist}

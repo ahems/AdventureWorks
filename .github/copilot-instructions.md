@@ -183,9 +183,8 @@ See [docs/DAB_NAMING_CONVENTIONS.md](docs/DAB_NAMING_CONVENTIONS.md) for complet
 
 The project uses **environment-based config pairs**:
 
-- `api/dab-config.json` (local dev - CORS all origins, no auth)
-- `api/dab-config.prod.json` (Azure - restricted CORS, Entra ID auth)
-- `app/.env` (local API URL)
+- `api/dab-config.json` (Azure demo deployment - CORS all origins, no auth)
+- `app/.env` (local API URL - not normally needed due to azd env injection)
 - `app/public/config.js` (runtime config injection for Azure)
 
 **Never hardcode URLs** - always use environment variables or runtime config.

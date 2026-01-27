@@ -509,12 +509,11 @@ export const getProductById = async (
     }
 
     // Set primary photo (first photo) as legacy single photo fields for backward compatibility
+    // Note: Only thumbnails are loaded initially. LargePhoto must be fetched on-demand using getLargePhoto()
     const primaryPhoto = productPhotos[0];
     const productWithPhotos = {
       ...product,
       productPhotos: productPhotos.length > 0 ? productPhotos : undefined,
-      LargePhoto: primaryPhoto?.LargePhoto,
-      LargePhotoFileName: primaryPhoto?.LargePhotoFileName,
       ThumbNailPhoto: primaryPhoto?.ThumbNailPhoto,
       ThumbnailPhotoFileName: primaryPhoto?.ThumbnailPhotoFileName,
     };

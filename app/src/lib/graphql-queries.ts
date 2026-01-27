@@ -133,6 +133,7 @@ export const GET_PRODUCTS = gql`
 `;
 
 // Query to get a product by ID
+// Note: Only loads thumbnails initially. Use GET_LARGE_PHOTO separately for fullscreen/zoom
 export const GET_PRODUCT_BY_ID = gql`
   query GetProductById($id: Int!) {
     products(filter: { ProductID: { eq: $id } }) {
@@ -161,8 +162,6 @@ export const GET_PRODUCT_BY_ID = gql`
             Primary
             productPhoto {
               ProductPhotoID
-              LargePhoto
-              LargePhotoFileName
               ThumbNailPhoto
               ThumbnailPhotoFileName
             }

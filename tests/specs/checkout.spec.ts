@@ -266,35 +266,59 @@ test.describe("Checkout Flow", () => {
     console.log("⏳ Waiting for cart page to load and fetch items...");
     await page.waitForTimeout(5000); // Increased wait for React Query refetch
 
+    // Get current user's businessEntityId from localStorage
+    const currentUser = await page.evaluate(() => {
+      const stored = localStorage.getItem("adventureworks_current_user");
+      return stored ? JSON.parse(stored) : null;
+    });
+    const userBusinessEntityId = currentUser?.businessEntityId;
+    console.log(`👤 Current user BusinessEntityID: ${userBusinessEntityId}`);
+
     // Try to directly query the cart API to see if items exist
     const apiUrl =
       process.env.VITE_API_URL || testEnv.restApiBaseUrl.replace("/api", "");
     try {
-      const cartApiResponse = await page.evaluate(async (url) => {
-        try {
-          const response = await fetch(`${url}/graphql`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              query: `query { shoppingCartItems { items { ShoppingCartItemID ProductID Quantity ShoppingCartID } } }`,
-            }),
-          });
-          return await response.json();
-        } catch (e) {
-          return { error: String(e) };
-        }
-      }, apiUrl);
+      const cartApiResponse = await page.evaluate(
+        async ({ url, shoppingCartId }) => {
+          try {
+            const response = await fetch(`${url}/graphql`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                query: `query GetCart($shoppingCartId: String!) { 
+                  shoppingCartItems(filter: { ShoppingCartID: { eq: $shoppingCartId } }) { 
+                    items { ShoppingCartItemID ProductID Quantity ShoppingCartID } 
+                  } 
+                }`,
+                variables: { shoppingCartId },
+              }),
+            });
+            return await response.json();
+          } catch (e) {
+            return { error: String(e) };
+          }
+        },
+        { url: apiUrl, shoppingCartId: userBusinessEntityId?.toString() },
+      );
       console.log(
-        `🔍 Direct GraphQL cart query result:`,
-        JSON.stringify(cartApiResponse).substring(0, 200),
+        `🔍 Direct GraphQL cart query for ShoppingCartID ${userBusinessEntityId}:`,
+        JSON.stringify(cartApiResponse),
       );
     } catch (error) {
       console.log(`⚠️  Could not query cart API directly:`, error);
     }
 
-    const cartItems = page.locator('[data-testid*="cart-item"]');
-    const cartItemCount = await cartItems.count();
-    console.log(`📦 Cart has ${cartItemCount} items displayed on page`);
+    // Retry logic: Wait for cart items to appear (up to 10 seconds with polling)
+    let cartItemCount = 0;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const cartItems = page.locator('[data-testid*="cart-item"]');
+      cartItemCount = await cartItems.count();
+      console.log(
+        `📦 Attempt ${attempt + 1}/5: Cart has ${cartItemCount} items displayed on page`,
+      );
+      if (cartItemCount > 0) break;
+      await page.waitForTimeout(2000);
+    }
 
     if (cartItemCount === 0) {
       console.log(
@@ -589,8 +613,23 @@ test.describe("Checkout Flow", () => {
       await expect(page).toHaveURL(/\/product\//);
     }
 
+    // Wait for product page to fully load
+    await page.waitForTimeout(2000);
+
+    // Check if product is in stock before attempting to add to cart
+    const outOfStockMsg = page.getByText(/out of stock|unavailable/i);
+    if ((await outOfStockMsg.count()) > 0) {
+      console.log("⚠️  Product is out of stock, trying another product...");
+      await page.goto(`${testEnv.webBaseUrl}/product/707`);
+      await page.waitForLoadState("domcontentloaded");
+      await page.waitForTimeout(2000);
+    }
+
     const addToCartButton = page.getByRole("button", { name: /add to cart/i });
-    await expect(addToCartButton).toBeVisible();
+    await expect(addToCartButton).toBeVisible({ timeout: 10000 });
+
+    // Ensure button is enabled
+    await expect(addToCartButton).toBeEnabled({ timeout: 5000 });
     await addToCartButton.click();
 
     // Wait for cart to update
@@ -672,15 +711,25 @@ test.describe("Checkout Flow", () => {
       await page.goto(`${testEnv.webBaseUrl}/product/680`);
       await page.waitForLoadState("domcontentloaded");
       await page.waitForTimeout(2000);
-      await page.getByRole("button", { name: /add to cart/i }).click();
-      await page.waitForTimeout(500);
+
+      const firstAddButton = page.getByRole("button", { name: /add to cart/i });
+      await expect(firstAddButton).toBeVisible({ timeout: 10000 });
+      await expect(firstAddButton).toBeEnabled({ timeout: 5000 });
+      await firstAddButton.click();
+      await page.waitForTimeout(1000);
 
       // Add second product
       await page.goto(`${testEnv.webBaseUrl}/product/707`);
       await page.waitForLoadState("domcontentloaded");
       await page.waitForTimeout(2000);
-      await page.getByRole("button", { name: /add to cart/i }).click();
-      await page.waitForTimeout(500);
+
+      const secondAddButton = page.getByRole("button", {
+        name: /add to cart/i,
+      });
+      await expect(secondAddButton).toBeVisible({ timeout: 10000 });
+      await expect(secondAddButton).toBeEnabled({ timeout: 5000 });
+      await secondAddButton.click();
+      await page.waitForTimeout(1000);
     } else {
       console.log(`✅ Found ${availableProductCount} products`);
 
@@ -691,8 +740,14 @@ test.describe("Checkout Flow", () => {
         await page.goto(`${testEnv.webBaseUrl}${firstHref}`);
         await page.waitForLoadState("domcontentloaded");
         await page.waitForTimeout(1000);
-        await page.getByRole("button", { name: /add to cart/i }).click();
-        await page.waitForTimeout(500);
+
+        const firstAddButton = page.getByRole("button", {
+          name: /add to cart/i,
+        });
+        await expect(firstAddButton).toBeVisible({ timeout: 10000 });
+        await expect(firstAddButton).toBeEnabled({ timeout: 5000 });
+        await firstAddButton.click();
+        await page.waitForTimeout(1000);
       }
 
       // Add second product
@@ -705,20 +760,32 @@ test.describe("Checkout Flow", () => {
           await page.goto(`${testEnv.webBaseUrl}${secondHref}`);
           await page.waitForLoadState("domcontentloaded");
           await page.waitForTimeout(1000);
-          await page.getByRole("button", { name: /add to cart/i }).click();
-          await page.waitForTimeout(500);
+
+          const secondAddButton = page.getByRole("button", {
+            name: /add to cart/i,
+          });
+          await expect(secondAddButton).toBeVisible({ timeout: 10000 });
+          await expect(secondAddButton).toBeEnabled({ timeout: 5000 });
+          await secondAddButton.click();
+          await page.waitForTimeout(1000);
         }
       }
     }
 
     // Go to cart and verify items
     await page.goto(`${testEnv.webBaseUrl}/cart`);
-    await page.waitForTimeout(1000);
 
-    const cartItems = page.locator(
-      '[data-testid*="cart-item"], [class*="cart"]',
-    );
-    const initialCount = await cartItems.count();
+    // Wait for cart items to load with retry logic
+    let initialCount = 0;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const cartItems = page.locator('[data-testid*="cart-item"]');
+      initialCount = await cartItems.count();
+      console.log(
+        `📦 Attempt ${attempt + 1}/5: Cart has ${initialCount} items initially`,
+      );
+      if (initialCount > 0) break;
+      await page.waitForTimeout(2000);
+    }
     console.log(`📦 Cart has ${initialCount} items initially`);
 
     if (initialCount === 0) {
