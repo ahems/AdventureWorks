@@ -171,6 +171,7 @@ The `docs/` folder contains focused deep dives on important parts of the solutio
     ```bash
     ./test-telemetry.sh        # Validate telemetry is working
     ./generate-telemetry.sh    # Generate demo browsing data
+    ./test-product-comparison.sh  # Test product comparison with anonymous users
     ```
 
 If you are exploring the AI and agent pieces specifically, start with the AI Agent docs above and then dive into [api-functions/README.md](api-functions/README.md) for the concrete Functions and endpoints.

@@ -56,10 +56,7 @@ echo -e "${YELLOW}Step 0: Setting up initial password...${NC}"
 echo "-------------------------------------------"
 curl -s -X POST "${FUNCTION_URL}/api/password" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"businessEntityID\": $TEST_BUSINESS_ENTITY_ID,
-    \"password\": \"$ORIGINAL_PASSWORD\"
-  }" > /dev/null
+  -d '{"businessEntityID": '"$TEST_BUSINESS_ENTITY_ID"', "password": "'"$ORIGINAL_PASSWORD"'"}' > /dev/null
 
 echo -e "${GREEN}✓ Initial password set${NC}"
 echo ""
@@ -70,9 +67,7 @@ echo "-------------------------------------------"
 echo "Request: POST ${FUNCTION_URL}/api/password/reset/request"
 RESET_REQUEST_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/reset/request" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"email\": \"$TEST_EMAIL\"
-  }")
+  -d '{"email": "'"$TEST_EMAIL"'"}')
 
 HTTP_CODE=$(echo "$RESET_REQUEST_RESPONSE" | grep "HTTP_CODE:" | cut -d':' -f2)
 RESPONSE_BODY=$(echo "$RESET_REQUEST_RESPONSE" | sed '/HTTP_CODE:/d')
@@ -107,10 +102,7 @@ echo "-------------------------------------------"
 echo "Request: POST ${FUNCTION_URL}/api/password/reset/validate"
 VALIDATE_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/reset/validate" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"businessEntityID\": $TEST_BUSINESS_ENTITY_ID,
-    \"token\": \"$RESET_TOKEN\"
-  }")
+  -d '{"businessEntityID": '"$TEST_BUSINESS_ENTITY_ID"', "token": "'"$RESET_TOKEN"'"}')
 
 HTTP_CODE=$(echo "$VALIDATE_RESPONSE" | grep "HTTP_CODE:" | cut -d':' -f2)
 RESPONSE_BODY=$(echo "$VALIDATE_RESPONSE" | sed '/HTTP_CODE:/d')
@@ -140,10 +132,7 @@ echo -e "${YELLOW}Step 2a: Testing invalid token validation...${NC}"
 echo "-------------------------------------------"
 INVALID_VALIDATE_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/reset/validate" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"businessEntityID\": $TEST_BUSINESS_ENTITY_ID,
-    \"token\": \"INVALID1\"
-  }")
+  -d '{"businessEntityID": '"$TEST_BUSINESS_ENTITY_ID"', "token": "INVALID1"}')
 
 RESPONSE_BODY=$(echo "$INVALID_VALIDATE_RESPONSE" | sed '/HTTP_CODE:/d')
 
@@ -161,11 +150,7 @@ echo "-------------------------------------------"
 echo "Request: POST ${FUNCTION_URL}/api/password/reset/complete"
 COMPLETE_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/reset/complete" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"businessEntityID\": $TEST_BUSINESS_ENTITY_ID,
-    \"token\": \"$RESET_TOKEN\",
-    \"newPassword\": \"$NEW_PASSWORD\"
-  }")
+  -d '{"businessEntityID": '"$TEST_BUSINESS_ENTITY_ID"', "token": "'"$RESET_TOKEN"'", "newPassword": "'"$NEW_PASSWORD"'"}')
 
 HTTP_CODE=$(echo "$COMPLETE_RESPONSE" | grep "HTTP_CODE:" | cut -d':' -f2)
 RESPONSE_BODY=$(echo "$COMPLETE_RESPONSE" | sed '/HTTP_CODE:/d')
@@ -196,10 +181,7 @@ echo "-------------------------------------------"
 echo "Request: POST ${FUNCTION_URL}/api/password/verify"
 OLD_PASSWORD_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/verify" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"businessEntityID\": $TEST_BUSINESS_ENTITY_ID,
-    \"password\": \"$ORIGINAL_PASSWORD\"
-  }")
+  -d '{"businessEntityID": '"$TEST_BUSINESS_ENTITY_ID"', "password": "'"$ORIGINAL_PASSWORD"'"}')
 
 RESPONSE_BODY=$(echo "$OLD_PASSWORD_RESPONSE" | sed '/HTTP_CODE:/d')
 
@@ -220,10 +202,7 @@ echo "-------------------------------------------"
 echo "Request: POST ${FUNCTION_URL}/api/password/verify"
 NEW_PASSWORD_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/verify" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"businessEntityID\": $TEST_BUSINESS_ENTITY_ID,
-    \"password\": \"$NEW_PASSWORD\"
-  }")
+  -d '{"businessEntityID": '"$TEST_BUSINESS_ENTITY_ID"', "password": "'"$NEW_PASSWORD"'"}')
 
 HTTP_CODE=$(echo "$NEW_PASSWORD_RESPONSE" | grep "HTTP_CODE:" | cut -d':' -f2)
 RESPONSE_BODY=$(echo "$NEW_PASSWORD_RESPONSE" | sed '/HTTP_CODE:/d')
@@ -253,11 +232,7 @@ echo "-------------------------------------------"
 echo "Attempting to reuse the same token..."
 REUSE_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/reset/complete" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"businessEntityID\": $TEST_BUSINESS_ENTITY_ID,
-    \"token\": \"$RESET_TOKEN\",
-    \"newPassword\": \"AnotherPassword789!\"
-  }")
+  -d '{"businessEntityID": '"$TEST_BUSINESS_ENTITY_ID"', "token": "'"$RESET_TOKEN"'", "newPassword": "AnotherPassword789!"}')
 
 HTTP_CODE=$(echo "$REUSE_RESPONSE" | grep "HTTP_CODE:" | cut -d':' -f2)
 RESPONSE_BODY=$(echo "$REUSE_RESPONSE" | sed '/HTTP_CODE:/d')
@@ -282,9 +257,7 @@ echo "-------------------------------------------"
 echo "Requesting new reset token..."
 RESET_REQUEST_RESPONSE=$(curl -s -X POST "${FUNCTION_URL}/api/password/reset/request" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"email\": \"$TEST_EMAIL\"
-  }")
+  -d '{"email": "'"$TEST_EMAIL"'"}')
 
 RESET_TOKEN=$(echo "$RESET_REQUEST_RESPONSE" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
 
@@ -296,11 +269,7 @@ fi
 echo "Testing password that's too short..."
 SHORT_PASSWORD_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/reset/complete" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"businessEntityID\": $TEST_BUSINESS_ENTITY_ID,
-    \"token\": \"$RESET_TOKEN\",
-    \"newPassword\": \"Short1!\"
-  }")
+  -d '{"businessEntityID": '"$TEST_BUSINESS_ENTITY_ID"', "token": "'"$RESET_TOKEN"'", "newPassword": "Short1!"}')
 
 HTTP_CODE=$(echo "$SHORT_PASSWORD_RESPONSE" | grep "HTTP_CODE:" | cut -d':' -f2)
 RESPONSE_BODY=$(echo "$SHORT_PASSWORD_RESPONSE" | sed '/HTTP_CODE:/d')
@@ -322,9 +291,7 @@ echo "-------------------------------------------"
 echo "Request: POST ${FUNCTION_URL}/api/password/reset/request"
 NONEXISTENT_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/reset/request" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"email\": \"nonexistent@example.com\"
-  }")
+  -d '{"email": "nonexistent@example.com"}')
 
 HTTP_CODE=$(echo "$NONEXISTENT_RESPONSE" | grep "HTTP_CODE:" | cut -d':' -f2)
 RESPONSE_BODY=$(echo "$NONEXISTENT_RESPONSE" | sed '/HTTP_CODE:/d')
@@ -346,10 +313,7 @@ echo -e "${YELLOW}Cleanup: Restoring original password...${NC}"
 echo "-------------------------------------------"
 curl -s -X POST "${FUNCTION_URL}/api/password" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"businessEntityID\": $TEST_BUSINESS_ENTITY_ID,
-    \"password\": \"$ORIGINAL_PASSWORD\"
-  }" > /dev/null
+  -d '{"businessEntityID": '"$TEST_BUSINESS_ENTITY_ID"', "password": "'"$ORIGINAL_PASSWORD"'"}' > /dev/null
 
 echo -e "${GREEN}✓ Original password restored${NC}"
 echo ""

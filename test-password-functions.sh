@@ -34,10 +34,7 @@ echo "-------------------------------------------"
 echo "Request: POST ${FUNCTION_URL}/api/password"
 SET_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"businessEntityID\": $BUSINESS_ENTITY_ID,
-    \"password\": \"$TEST_PASSWORD\"
-  }")
+  -d '{"businessEntityID": '"$BUSINESS_ENTITY_ID"', "password": "'"$TEST_PASSWORD"'"}')
 
 HTTP_CODE=$(echo "$SET_RESPONSE" | grep "HTTP_CODE:" | cut -d':' -f2)
 RESPONSE_BODY=$(echo "$SET_RESPONSE" | sed '/HTTP_CODE:/d')
@@ -63,10 +60,7 @@ echo "-------------------------------------------"
 echo "Request: POST ${FUNCTION_URL}/api/password/verify"
 VERIFY_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/verify" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"businessEntityID\": $BUSINESS_ENTITY_ID,
-    \"password\": \"$TEST_PASSWORD\"
-  }")
+  -d '{"businessEntityID": '"$BUSINESS_ENTITY_ID"', "password": "'"$TEST_PASSWORD"'"}')
 
 HTTP_CODE=$(echo "$VERIFY_RESPONSE" | grep "HTTP_CODE:" | cut -d':' -f2)
 RESPONSE_BODY=$(echo "$VERIFY_RESPONSE" | sed '/HTTP_CODE:/d')
@@ -92,10 +86,7 @@ echo "-------------------------------------------"
 echo "Request: POST ${FUNCTION_URL}/api/password/verify"
 VERIFY_WRONG_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/verify" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"businessEntityID\": $BUSINESS_ENTITY_ID,
-    \"password\": \"$WRONG_PASSWORD\"
-  }")
+  -d '{"businessEntityID": '"$BUSINESS_ENTITY_ID"', "password": "'"$WRONG_PASSWORD"'"}')
 
 HTTP_CODE=$(echo "$VERIFY_WRONG_RESPONSE" | grep "HTTP_CODE:" | cut -d':' -f2)
 RESPONSE_BODY=$(echo "$VERIFY_WRONG_RESPONSE" | sed '/HTTP_CODE:/d')
@@ -122,10 +113,7 @@ NEW_PASSWORD="NewPassword789!"
 echo "Request: POST ${FUNCTION_URL}/api/password (update)"
 UPDATE_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"businessEntityID\": $BUSINESS_ENTITY_ID,
-    \"password\": \"$NEW_PASSWORD\"
-  }")
+  -d '{"businessEntityID": '"$BUSINESS_ENTITY_ID"', "password": "'"$NEW_PASSWORD"'"}')
 
 HTTP_CODE=$(echo "$UPDATE_RESPONSE" | grep "HTTP_CODE:" | cut -d':' -f2)
 RESPONSE_BODY=$(echo "$UPDATE_RESPONSE" | sed '/HTTP_CODE:/d')
@@ -137,10 +125,7 @@ echo ""
 # Verify old password no longer works
 VERIFY_OLD_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/verify" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"businessEntityID\": $BUSINESS_ENTITY_ID,
-    \"password\": \"$TEST_PASSWORD\"
-  }")
+  -d '{"businessEntityID": '"$BUSINESS_ENTITY_ID"', "password": "'"$TEST_PASSWORD"'"}')
 
 OLD_HTTP_CODE=$(echo "$VERIFY_OLD_RESPONSE" | grep "HTTP_CODE:" | cut -d':' -f2)
 OLD_RESPONSE_BODY=$(echo "$VERIFY_OLD_RESPONSE" | sed '/HTTP_CODE:/d')
@@ -158,10 +143,7 @@ fi
 # Verify new password works
 VERIFY_NEW_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/verify" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"businessEntityID\": $BUSINESS_ENTITY_ID,
-    \"password\": \"$NEW_PASSWORD\"
-  }")
+  -d '{"businessEntityID": '"$BUSINESS_ENTITY_ID"', "password": "'"$NEW_PASSWORD"'"}')
 
 NEW_HTTP_CODE=$(echo "$VERIFY_NEW_RESPONSE" | grep "HTTP_CODE:" | cut -d':' -f2)
 NEW_RESPONSE_BODY=$(echo "$VERIFY_NEW_RESPONSE" | sed '/HTTP_CODE:/d')
@@ -182,10 +164,7 @@ echo "-------------------------------------------"
 echo "Request: POST ${FUNCTION_URL}/api/password (short password)"
 SHORT_PASSWORD_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"businessEntityID\": $BUSINESS_ENTITY_ID,
-    \"password\": \"short\"
-  }")
+  -d '{"businessEntityID": '"$BUSINESS_ENTITY_ID"', "password": "short"}')
 
 HTTP_CODE=$(echo "$SHORT_PASSWORD_RESPONSE" | grep "HTTP_CODE:" | cut -d':' -f2)
 RESPONSE_BODY=$(echo "$SHORT_PASSWORD_RESPONSE" | sed '/HTTP_CODE:/d')
