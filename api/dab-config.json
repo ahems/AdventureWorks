@@ -27,7 +27,8 @@
     },
     "telemetry": {
       "application-insights": {
-        "enabled": false
+        "enabled": true,
+        "connection-string": "@env('APPLICATIONINSIGHTS_CONNECTION_STRING')"
       }
     },
     "cache": {
