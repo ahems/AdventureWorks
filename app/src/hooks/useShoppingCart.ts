@@ -10,6 +10,10 @@ export const useShoppingCart = (shoppingCartId: string | null) => {
     enabled: !!shoppingCartId,
     staleTime: 0, // Always fetch fresh data
     refetchOnMount: "always", // Force refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when window gains focus
+    refetchInterval: 1000, // Poll every 1 second to catch updates quickly
+    retry: 3, // Retry failed requests
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
   });
 };
 
@@ -66,9 +70,13 @@ export const useAddToCart = () => {
         );
       }
     },
-    onSettled: (_, __, variables) => {
-      // Always refetch after error or success
-      queryClient.invalidateQueries({
+    onSettled: async (_, __, variables) => {
+      // Immediately invalidate and refetch
+      await queryClient.invalidateQueries({
+        queryKey: ["shoppingCart", variables.shoppingCartId],
+      });
+      // Force immediate refetch
+      await queryClient.refetchQueries({
         queryKey: ["shoppingCart", variables.shoppingCartId],
       });
     },
@@ -124,8 +132,11 @@ export const useUpdateCartItem = () => {
         );
       }
     },
-    onSettled: (_, __, variables) => {
-      queryClient.invalidateQueries({
+    onSettled: async (_, __, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ["shoppingCart", variables.shoppingCartId],
+      });
+      await queryClient.refetchQueries({
         queryKey: ["shoppingCart", variables.shoppingCartId],
       });
     },
@@ -173,8 +184,11 @@ export const useDeleteCartItem = () => {
         );
       }
     },
-    onSettled: (_, __, variables) => {
-      queryClient.invalidateQueries({
+    onSettled: async (_, __, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ["shoppingCart", variables.shoppingCartId],
+      });
+      await queryClient.refetchQueries({
         queryKey: ["shoppingCart", variables.shoppingCartId],
       });
     },

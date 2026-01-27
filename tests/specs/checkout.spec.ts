@@ -639,12 +639,19 @@ test.describe("Checkout Flow", () => {
 
     // Navigate to cart
     await page.goto(`${testEnv.webBaseUrl}/cart`);
+    await page.waitForLoadState("domcontentloaded");
 
-    // Wait for cart to load and verify it has items
-    await page.waitForTimeout(1000);
-    const cartItems = page.locator('[data-testid*="cart-item"]');
-    const cartItemCount = await cartItems.count();
-    console.log(`📦 Cart has ${cartItemCount} items`);
+    // Wait for cart to load and verify it has items with retry logic
+    let cartItemCount = 0;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const cartItems = page.locator('[data-testid*="cart-item"]');
+      cartItemCount = await cartItems.count();
+      console.log(
+        `📦 Cart check attempt ${attempt + 1}/5: Cart has ${cartItemCount} items`,
+      );
+      if (cartItemCount > 0) break;
+      await page.waitForTimeout(2000);
+    }
 
     if (cartItemCount === 0) {
       console.log("⚠️  Cart is empty - skipping validation test");
@@ -803,12 +810,19 @@ test.describe("Checkout Flow", () => {
 
     // Go back to cart
     await page.goto(`${testEnv.webBaseUrl}/cart`);
+    await page.waitForLoadState("domcontentloaded");
 
-    // Verify items are still in cart
-    const cartItemsAfter = page.locator(
-      '[data-testid*="cart-item"], [class*="cart"]',
-    );
-    const finalCount = await cartItemsAfter.count();
+    // Wait for cart to refetch with retry logic (same as initial check)
+    let finalCount = 0;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const cartItems = page.locator('[data-testid*="cart-item"]');
+      finalCount = await cartItems.count();
+      console.log(
+        `📦 After navigation attempt ${attempt + 1}/5: Cart has ${finalCount} items`,
+      );
+      if (finalCount >= initialCount) break;
+      await page.waitForTimeout(2000);
+    }
 
     expect(finalCount).toBe(initialCount);
     console.log("✅ Cart persists correctly during checkout process");

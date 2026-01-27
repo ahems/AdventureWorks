@@ -277,6 +277,8 @@ All Azure resources use passwordless auth:
 The project includes several test scripts in root:
 
 - `test-signup.sh` - Validates user registration flow
+- `test-password-functions.sh` - Tests password hashing and verification
+- `test-password-reset-flow.sh` - Tests complete password reset flow (request, validate, complete)
 - `test-discounts.sh` - Tests special offers integration
 - `test-inventory.js` - Node script for inventory checks
 

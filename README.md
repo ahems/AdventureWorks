@@ -134,6 +134,8 @@ The `docs/` folder contains focused deep dives on important parts of the solutio
 
 - **Passwords & Security**
   - [docs/PASSWORD_IMPLEMENTATION.md](docs/PASSWORD_IMPLEMENTATION.md)
+  - [docs/PASSWORD_RESET_FLOW.md](docs/PASSWORD_RESET_FLOW.md)
+  - Quick test: `./test-password-reset-flow.sh`
 
 - **Receipts & Email**
   - [docs/RECEIPT_GENERATION.md](docs/RECEIPT_GENERATION.md)

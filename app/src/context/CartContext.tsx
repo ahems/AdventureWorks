@@ -68,14 +68,29 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
 
   // Combine cart items with product details to create CartItem objects
   const items = useMemo<CartItem[]>(() => {
-    if (!cartItems.length || !allProducts.length) return [];
+    // Return empty if cart items haven't loaded yet (loading state)
+    // But allow empty cart if products are loaded and cart is genuinely empty
+    if (!cartItems.length) return [];
+
+    // If we have cart items but products haven't loaded, return empty but this is a loading state
+    if (!allProducts.length) {
+      console.log(
+        "[CartContext] Cart items exist but products not loaded yet, waiting...",
+      );
+      return [];
+    }
 
     return cartItems
       .map((cartItem) => {
         const product = allProducts.find(
           (p) => p.ProductID === cartItem.ProductID,
         );
-        if (!product) return null;
+        if (!product) {
+          console.warn(
+            `[CartContext] Product ${cartItem.ProductID} not found in products list`,
+          );
+          return null;
+        }
 
         return {
           ...product,

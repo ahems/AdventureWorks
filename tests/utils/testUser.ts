@@ -74,14 +74,14 @@ export const signupThroughUi = async (
   await page.getByRole("button", { name: /create account/i }).click();
 
   // Wait for user to be stored in localStorage after signup
-  // Increased timeout to 30s to allow for Azure Functions cold start
+  // Increased timeout to 60s to allow for Azure Functions cold start
   await page.waitForFunction(
     (key) => {
       const stored = localStorage.getItem(key);
       return stored !== null;
     },
     APP_STORAGE_KEYS.currentUser,
-    { timeout: 30000 },
+    { timeout: 60000 },
   );
 
   // Navigate to home page after successful signup
