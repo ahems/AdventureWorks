@@ -1,20 +1,126 @@
+# AdventureWorks E-Commerce - Robots.txt
+# Updated: January 27, 2026
+
+# ============================================
+# Major Search Engines
+# ============================================
+
 User-agent: Googlebot
 Allow: /
+# Allow all content for Google
+
+User-agent: Googlebot-Image
+Allow: /
+# Allow Google Image search
 
 User-agent: Bingbot
 Allow: /
+# Allow all content for Bing
+
+User-agent: Slurp
+Allow: /
+# Yahoo search bot
+
+# ============================================
+# Social Media Bots
+# ============================================
 
 User-agent: Twitterbot
 Allow: /
+# Twitter card previews
 
 User-agent: facebookexternalhit
 Allow: /
+# Facebook link previews
+
+User-agent: LinkedInBot
+Allow: /
+# LinkedIn link previews
+
+# ============================================
+# AI/ML Scrapers & Training Bots (Blocked)
+# ============================================
+
+User-agent: GPTBot
+Disallow: /
+# OpenAI's web crawler
+
+User-agent: ChatGPT-User
+Disallow: /
+# ChatGPT user agent
+
+User-agent: CCBot
+Disallow: /
+# Common Crawl bot
+
+User-agent: Google-Extended
+Disallow: /
+# Google AI training
+
+User-agent: anthropic-ai
+Disallow: /
+# Anthropic's Claude crawler
+
+User-agent: Claude-Web
+Disallow: /
+# Claude web browser
+
+User-agent: Omgilibot
+Disallow: /
+# Omgili content crawler
+
+User-agent: FacebookBot
+Disallow: /
+# Meta's AI scraper (different from facebookexternalhit)
+
+User-agent: Diffbot
+Disallow: /
+# Diffbot scraper
+
+User-agent: Bytespider
+Disallow: /
+# ByteDance/TikTok crawler
+
+User-agent: PerplexityBot
+Disallow: /
+# Perplexity AI
+
+User-agent: Applebot-Extended
+Disallow: /
+# Apple AI training
+
+User-agent: cohere-ai
+Disallow: /
+# Cohere AI
+
+# ============================================
+# General Crawlers
+# ============================================
 
 User-agent: *
 Allow: /
 
-# Sitemap
+# Disallow private/transient pages
+Disallow: /auth
+Disallow: /reset-password
+Disallow: /checkout
+Disallow: /order-confirmation
+Disallow: /account
+
+# Disallow duplicate or filtered views
+Disallow: /*?*sort=
+Disallow: /*?*filter=
+Disallow: /*?*page=
+
+# ============================================
+# Sitemap Location
+# ============================================
+
 Sitemap: https://proud-flower-0e8bed00f.3.azurestaticapps.net/sitemap.xml
 
-# Crawl-delay (be nice to servers)
+# ============================================
+# Crawl Configuration
+# ============================================
+
+# Crawl-delay for general bots (be nice to servers)
 Crawl-delay: 1
