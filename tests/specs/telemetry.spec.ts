@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { signupThroughUi } from "../utils/testUser";
 import { testEnv } from "../utils/env";
+import { getRandomProductIds } from "../utils/productHelper";
 
 test.describe("Application Insights Telemetry", () => {
   test("telemetry is initialized and events are tracked", async ({ page }) => {
@@ -34,7 +35,10 @@ test.describe("Application Insights Telemetry", () => {
     ).toBe(true);
 
     // Navigate to a product page (this should trigger page view telemetry)
-    await page.goto(`${testEnv.webBaseUrl}/product/680`);
+    const testProductIds = await getRandomProductIds(1);
+    const testProductId = testProductIds[0];
+    console.log(`📊 Testing telemetry with product ${testProductId}`);
+    await page.goto(`${testEnv.webBaseUrl}/product/${testProductId}`);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(3000); // Give telemetry time to be sent
 
@@ -132,12 +136,16 @@ test.describe("Application Insights Telemetry", () => {
     await signupThroughUi(page);
 
     // Navigate to multiple pages to generate page view events
+    const testProductIds = await getRandomProductIds(3);
     const pagesToVisit = [
       `${testEnv.webBaseUrl}/`,
-      `${testEnv.webBaseUrl}/product/680`,
-      `${testEnv.webBaseUrl}/product/707`,
+      `${testEnv.webBaseUrl}/product/${testProductIds[0]}`,
+      `${testEnv.webBaseUrl}/product/${testProductIds[1]}`,
       `${testEnv.webBaseUrl}/cart`,
     ];
+    console.log(
+      `📊 Testing navigation telemetry with products: ${testProductIds.join(", ")}`,
+    );
 
     for (const pageUrl of pagesToVisit) {
       await page.goto(pageUrl);

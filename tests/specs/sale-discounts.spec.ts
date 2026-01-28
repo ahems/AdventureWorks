@@ -3,6 +3,7 @@ import { signupThroughUi } from "../utils/testUser";
 import { testEnv, APP_STORAGE_KEYS } from "../utils/env";
 import { warmupEndpoint } from "../utils/warmup";
 import { execSync } from "child_process";
+import { getRandomProductIds } from "../utils/productHelper";
 
 const LANGUAGES_WITH_CURRENCY = [
   { code: "en", name: "English", currencyCode: "USD", currencySymbol: "$" },

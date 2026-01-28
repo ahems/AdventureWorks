@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { testEnv } from "../utils/env";
+import { getRandomProductIds } from "../utils/productHelper";
 
 /**
  * Telemetry Generator Test
@@ -200,26 +201,14 @@ test.describe("Telemetry Generator - Anonymous Browsing", () => {
       "\n📦 Phase 4: Viewing full product pages with image galleries...",
     );
 
-    // Get product IDs to visit (using known product IDs from AdventureWorks)
-    const popularProductIds = [
-      "680",
-      "706",
-      "707",
-      "708",
-      "709",
-      "710", // HL Road Frame
-      "771",
-      "772",
-      "773",
-      "774",
-      "775", // Mountain-100
-      "776",
-      "777",
-      "778", // Road-150
-      "843",
-      "844",
-      "845", // Touring-1000
-    ];
+    // Get product IDs to visit - fetch random products from database for variety
+    console.log("🔍 Fetching random products from database for browsing...");
+    const popularProductIds = (await getRandomProductIds(20)).map((id) =>
+      id.toString(),
+    );
+    console.log(
+      `📚 Selected ${popularProductIds.length} products to browse: ${popularProductIds.slice(0, 5).join(", ")}...`,
+    );
 
     // Randomly select 4-7 products to view in detail
     const detailViewCount = Math.floor(Math.random() * 4) + 4; // 4-7 products
@@ -416,16 +405,13 @@ test.describe("Telemetry Generator - Anonymous Browsing", () => {
     const itemsToAdd = Math.floor(Math.random() * 3) + 2; // 2-4 items
     let itemsAdded = 0;
 
-    const cartProductIds = [
-      "680",
-      "707",
-      "771",
-      "843", // Bikes
-      "879",
-      "880", // Jerseys
-      "712",
-      "713", // Bottles
-    ];
+    console.log("🔍 Fetching random products for cart simulation...");
+    const cartProductIds = (await getRandomProductIds(15)).map((id) =>
+      id.toString(),
+    );
+    console.log(
+      `🛍️ Selected ${cartProductIds.length} products for potential cart adds`,
+    );
 
     for (let i = 0; i < itemsToAdd; i++) {
       const productId = randomPick(cartProductIds);
@@ -607,22 +593,25 @@ test.describe("Telemetry Generator - Anonymous Browsing", () => {
     console.log("\n👥 Simulating multiple quick browsing sessions");
     console.log("=".repeat(60));
 
+    // Fetch random products for personas
+    console.log("🔍 Fetching products for persona simulation...");
+    const allPersonaProducts = await getRandomProductIds(15);
     const personas = [
       {
         name: "Window Shopper",
-        products: ["680", "706", "771"],
+        products: allPersonaProducts.slice(0, 3).map((id) => id.toString()),
         searchTerm: "bike",
         addToCart: false,
       },
       {
         name: "Quick Buyer",
-        products: ["712", "713"],
+        products: allPersonaProducts.slice(3, 5).map((id) => id.toString()),
         searchTerm: "bottle",
         addToCart: true,
       },
       {
         name: "Comparison Shopper",
-        products: ["843", "844", "845", "846"],
+        products: allPersonaProducts.slice(5, 9).map((id) => id.toString()),
         searchTerm: "touring",
         addToCart: false,
       },

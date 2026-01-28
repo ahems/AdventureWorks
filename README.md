@@ -167,12 +167,52 @@ The `docs/` folder contains focused deep dives on important parts of the solutio
   - [tests/README.md](tests/README.md) - Playwright E2E tests
   - [tests/TELEMETRY_TESTING.md](tests/TELEMETRY_TESTING.md) - Validating Application Insights telemetry
   - [docs/TELEMETRY_GENERATION.md](docs/TELEMETRY_GENERATION.md) - Generating demo telemetry data
+  - [docs/TEST_DATA_RANDOMIZATION_ANALYSIS.md](docs/TEST_DATA_RANDOMIZATION_ANALYSIS.md) - Test data randomization patterns
+  - [docs/TEST_DATA_RANDOMIZATION_SUMMARY.md](docs/TEST_DATA_RANDOMIZATION_SUMMARY.md) - Implementation summary
   - Quick commands:
     ```bash
     ./test-telemetry.sh        # Validate telemetry is working
     ./generate-telemetry.sh    # Generate demo browsing data
     ./test-product-comparison.sh  # Test product comparison with anonymous users
+    npx playwright test        # Run all E2E tests
     ```
+
+### Testing Best Practices
+
+The test suite uses **dynamic product selection** to ensure comprehensive coverage across the entire product catalog:
+
+**Product Helper Utility** (`tests/utils/productHelper.ts`):
+
+- Fetches all products from the database (handles DAB's 100-item pagination)
+- Provides random product selection functions with optional filtering
+- Caches results for 5 minutes to optimize performance
+
+**Usage in tests:**
+
+```typescript
+import {
+  getRandomProductIds,
+  getInStockProductIds,
+} from "../utils/productHelper";
+
+// Get any random products
+const productIds = await getRandomProductIds(5);
+
+// Get products likely to be in stock
+const inStockIds = await getInStockProductIds(10);
+
+// Navigate to a random product
+await page.goto(`${testEnv.webBaseUrl}/product/${productIds[0]}`);
+```
+
+**Benefits:**
+
+- Tests exercise 100% of product catalog over multiple runs (vs. 1-2% with hardcoded IDs)
+- Automatically adapts to product database changes
+- Catches edge cases with different product characteristics
+- More realistic simulation of user behavior
+
+See [docs/TEST_DATA_RANDOMIZATION_ANALYSIS.md](docs/TEST_DATA_RANDOMIZATION_ANALYSIS.md) for detailed analysis and implementation details.
 
 If you are exploring the AI and agent pieces specifically, start with the AI Agent docs above and then dive into [api-functions/README.md](api-functions/README.md) for the concrete Functions and endpoints.
 

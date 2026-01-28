@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { signupThroughUi } from "../utils/testUser";
 import { testEnv, APP_STORAGE_KEYS } from "../utils/env";
+import { getRandomProductIds } from "../utils/productHelper";
 
 const LANGUAGES = [
   { code: "en", name: "English", sample: "Home" },
@@ -26,7 +27,12 @@ test.describe("Internationalization", () => {
     await signupThroughUi(page);
 
     // Go directly to a product page to see prices
-    await page.goto(`${testEnv.webBaseUrl}/product/680`); // Mountain-100 Silver, 38
+    const testProductIds = await getRandomProductIds(1);
+    const testProductId = testProductIds[0];
+    console.log(
+      `🌍 Testing internationalization with product ${testProductId}`,
+    );
+    await page.goto(`${testEnv.webBaseUrl}/product/${testProductId}`);
     await page.waitForLoadState("domcontentloaded");
 
     // Wait for product details to load
@@ -145,7 +151,10 @@ test.describe("Internationalization", () => {
     await signupThroughUi(page);
 
     // Navigate directly to a product and add to cart
-    await page.goto(`${testEnv.webBaseUrl}/product/680`); // Mountain-100 Silver, 38
+    const testProductIds = await getRandomProductIds(1);
+    const testProductId = testProductIds[0];
+    console.log(`🛍️ Testing currency with product ${testProductId}`);
+    await page.goto(`${testEnv.webBaseUrl}/product/${testProductId}`);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
 

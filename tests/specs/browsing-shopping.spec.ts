@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { signupThroughUi } from "../utils/testUser";
 import { testEnv } from "../utils/env";
 import { warmupEndpoint } from "../utils/warmup";
+import { getInStockProductIds } from "../utils/productHelper";
 
 test.describe("User Browsing and Shopping", () => {
   // Warm up services before running tests to avoid cold start delays
@@ -111,7 +112,9 @@ test.describe("User Browsing and Shopping", () => {
     }
 
     // Try to find a product that's in stock
-    const productIdsToTry = [680, 707, 711, 712, 715, 716, 717]; // Various products
+    console.log("🔍 Fetching random products from database to find one in stock...");
+    const productIdsToTry = await getInStockProductIds(10); // Get 10 potential products
+    console.log(`📚 Testing products: ${productIdsToTry.slice(0, 5).join(", ")}...`);
     let productAdded = false;
 
     for (const productId of productIdsToTry) {
@@ -345,7 +348,12 @@ test.describe("User Browsing and Shopping", () => {
     ).toBeVisible();
 
     // Navigate to a different product
-    await page.goto(`${testEnv.webBaseUrl}/product/707`); // Sport-100 Helmet, Red
+    // Use a random product for image gallery test
+    console.log("🔍 Selecting random product for image gallery test...");
+    const testProductIds = await getInStockProductIds(1);
+    const testProductId = testProductIds[0];
+    console.log(`📸 Testing product ${testProductId} for image gallery`);
+    await page.goto(`${testEnv.webBaseUrl}/product/${testProductId}`); // Random product
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
     const secondProductUrl = page.url();
@@ -369,10 +377,9 @@ test.describe("User Browsing and Shopping", () => {
     await signupThroughUi(page);
 
     // Try multiple products to find one that's out of stock
-    const productIdsToCheck = [
-      680, 707, 711, 712, 715, 716, 717, 718, 719, 720,
-    ];
-    let foundOutOfStock = false;
+    console.log("🔍 Fetching random products from database to check stock status...");
+    const productIdsToCheck = await getInStockProductIds(20); // Check 20 products
+    console.log(`📦 Checking ${productIdsToCheck.length} products for stock status`);\n    let foundOutOfStock = false;
 
     for (const productId of productIdsToCheck) {
       await page.goto(`${testEnv.webBaseUrl}/product/${productId}`);

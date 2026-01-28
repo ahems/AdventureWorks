@@ -4,6 +4,7 @@ import { signupThroughUi } from "../utils/testUser";
 import { testEnv } from "../utils/env";
 import { execSync } from "child_process";
 import { warmupEndpoint } from "../utils/warmup";
+import { getInStockProductIds } from "../utils/productHelper";
 
 const US_STATES = [
   { label: "Washington (WA )", abbrev: "WA" },
@@ -121,10 +122,13 @@ test.describe("Checkout Flow", () => {
 
       if (retryCount === 0) {
         console.log(
-          "⚠️  No products found on homepage - going directly to a known product",
+          "⚠️  No products found on homepage - selecting random product from database",
         );
-        // Go directly to a known product page instead
-        await page.goto(`${testEnv.webBaseUrl}/product/680`);
+        // Get a random in-stock product instead
+        const randomProductIds = await getInStockProductIds(1);
+        const randomProductId = randomProductIds[0];
+        console.log(`🎲 Selected random product ${randomProductId}`);
+        await page.goto(`${testEnv.webBaseUrl}/product/${randomProductId}`);
         await page.waitForLoadState("domcontentloaded");
         await page.waitForTimeout(2000);
       } else {
@@ -139,7 +143,11 @@ test.describe("Checkout Flow", () => {
           await page.goto(`${testEnv.webBaseUrl}${href}`);
           await page.waitForLoadState("domcontentloaded");
         } else {
-          await page.goto(`${testEnv.webBaseUrl}/product/680`);
+          // Fallback to random product
+          const randomProductIds = await getInStockProductIds(1);
+          await page.goto(
+            `${testEnv.webBaseUrl}/product/${randomProductIds[0]}`,
+          );
           await page.waitForLoadState("domcontentloaded");
         }
       }
@@ -155,8 +163,9 @@ test.describe("Checkout Flow", () => {
         await page.goto(`${testEnv.webBaseUrl}${href}`);
         await page.waitForLoadState("domcontentloaded");
       } else {
-        // Fallback to known product
-        await page.goto(`${testEnv.webBaseUrl}/product/680`);
+        // Fallback to random product
+        const randomProductIds = await getInStockProductIds(1);
+        await page.goto(`${testEnv.webBaseUrl}/product/${randomProductIds[0]}`);
         await page.waitForLoadState("domcontentloaded");
       }
     }
@@ -168,8 +177,11 @@ test.describe("Checkout Flow", () => {
     // Check if product is in stock
     const outOfStockMsg = page.getByText(/out of stock|unavailable/i);
     if ((await outOfStockMsg.count()) > 0) {
-      console.log("⚠️  Product is out of stock, trying another product...");
-      await page.goto(`${testEnv.webBaseUrl}/product/707`); // Try a different known product
+      console.log(
+        "⚠️  Product is out of stock, trying another random product...",
+      );
+      const randomProductIds = await getInStockProductIds(1);
+      await page.goto(`${testEnv.webBaseUrl}/product/${randomProductIds[0]}`);
       await page.waitForLoadState("domcontentloaded");
       await page.waitForTimeout(1000);
     }
@@ -583,8 +595,9 @@ test.describe("Checkout Flow", () => {
       await page.waitForTimeout(5000);
 
       if ((await productLinks.count()) === 0) {
-        console.log("⚠️  Going directly to known product");
-        await page.goto(`${testEnv.webBaseUrl}/product/680`);
+        console.log("⚠️  Going directly to random product from database");
+        const randomProductIds = await getInStockProductIds(1);
+        await page.goto(`${testEnv.webBaseUrl}/product/${randomProductIds[0]}`);
         await page.waitForLoadState("domcontentloaded");
         await page.waitForTimeout(2000);
       } else {
@@ -593,7 +606,10 @@ test.describe("Checkout Flow", () => {
           await page.goto(`${testEnv.webBaseUrl}${href}`);
           await page.waitForLoadState("domcontentloaded");
         } else {
-          await page.goto(`${testEnv.webBaseUrl}/product/680`);
+          const randomProductIds = await getInStockProductIds(1);
+          await page.goto(
+            `${testEnv.webBaseUrl}/product/${randomProductIds[0]}`,
+          );
           await page.waitForLoadState("domcontentloaded");
         }
       }
@@ -603,7 +619,8 @@ test.describe("Checkout Flow", () => {
         await page.goto(`${testEnv.webBaseUrl}${href}`);
         await page.waitForLoadState("domcontentloaded");
       } else {
-        await page.goto(`${testEnv.webBaseUrl}/product/680`);
+        const randomProductIds = await getInStockProductIds(1);
+        await page.goto(`${testEnv.webBaseUrl}/product/${randomProductIds[0]}`);
         await page.waitForLoadState("domcontentloaded");
       }
     }
@@ -619,8 +636,11 @@ test.describe("Checkout Flow", () => {
     // Check if product is in stock before attempting to add to cart
     const outOfStockMsg = page.getByText(/out of stock|unavailable/i);
     if ((await outOfStockMsg.count()) > 0) {
-      console.log("⚠️  Product is out of stock, trying another product...");
-      await page.goto(`${testEnv.webBaseUrl}/product/707`);
+      console.log(
+        "⚠️  Product is out of stock, trying another random product...",
+      );
+      const randomProductIds = await getInStockProductIds(1);
+      await page.goto(`${testEnv.webBaseUrl}/product/${randomProductIds[0]}`);
       await page.waitForLoadState("domcontentloaded");
       await page.waitForTimeout(2000);
     }
@@ -713,9 +733,12 @@ test.describe("Checkout Flow", () => {
 
     const availableProductCount = await productLinks.count();
     if (availableProductCount === 0) {
-      console.log("⚠️  No products available - using known product IDs");
+      console.log(
+        "⚠️  No products available - using random products from database",
+      );
+      const randomProductIds = await getInStockProductIds(2);
       // Add first product
-      await page.goto(`${testEnv.webBaseUrl}/product/680`);
+      await page.goto(`${testEnv.webBaseUrl}/product/${randomProductIds[0]}`);
       await page.waitForLoadState("domcontentloaded");
       await page.waitForTimeout(2000);
 
@@ -726,7 +749,7 @@ test.describe("Checkout Flow", () => {
       await page.waitForTimeout(1000);
 
       // Add second product
-      await page.goto(`${testEnv.webBaseUrl}/product/707`);
+      await page.goto(`${testEnv.webBaseUrl}/product/${randomProductIds[1]}`);
       await page.waitForLoadState("domcontentloaded");
       await page.waitForTimeout(2000);
 

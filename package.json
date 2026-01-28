@@ -5,7 +5,8 @@
   },
   "dependencies": {
     "mssql": "^12.2.0",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "typescript": "^5.9.3"
   },
   "devDependencies": {
     "@faker-js/faker": "^9.0.0",

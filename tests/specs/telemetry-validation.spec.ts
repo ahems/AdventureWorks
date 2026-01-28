@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { signupThroughUi } from "../utils/testUser";
 import { testEnv } from "../utils/env";
 import { execSync } from "child_process";
+import { getRandomProductIds } from "../utils/productHelper";
 
 /**
  * Query Application Insights for custom events
@@ -95,8 +96,11 @@ test.describe("Application Insights - End-to-End Telemetry Validation", () => {
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
 
-    console.log("📦 Viewing product page...");
-    await page.goto(`${testEnv.webBaseUrl}/product/680`);
+    console.log("📦 Selecting random product for telemetry test...");
+    const testProductIds = await getRandomProductIds(1);
+    const testProductId = testProductIds[0];
+    console.log(`📦 Viewing product page ${testProductId}...`);
+    await page.goto(`${testEnv.webBaseUrl}/product/${testProductId}`);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(2000);
 
@@ -285,7 +289,9 @@ test.describe("Application Insights - End-to-End Telemetry Validation", () => {
 
   test("product view events contain product metadata", async ({ page }) => {
     const testStartTime = new Date();
-    const productId = "680";
+    const testProductIds = await getRandomProductIds(1);
+    const productId = testProductIds[0].toString();
+    console.log(`🔍 Selected random product ${productId} for metadata test`);
 
     // View a specific product
     console.log(`\n📦 Viewing product ${productId}...`);
