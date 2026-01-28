@@ -112,9 +112,13 @@ test.describe("User Browsing and Shopping", () => {
     }
 
     // Try to find a product that's in stock
-    console.log("🔍 Fetching random products from database to find one in stock...");
+    console.log(
+      "🔍 Fetching random products from database to find one in stock...",
+    );
     const productIdsToTry = await getInStockProductIds(10); // Get 10 potential products
-    console.log(`📚 Testing products: ${productIdsToTry.slice(0, 5).join(", ")}...`);
+    console.log(
+      `📚 Testing products: ${productIdsToTry.slice(0, 5).join(", ")}...`,
+    );
     let productAdded = false;
 
     for (const productId of productIdsToTry) {
@@ -377,9 +381,14 @@ test.describe("User Browsing and Shopping", () => {
     await signupThroughUi(page);
 
     // Try multiple products to find one that's out of stock
-    console.log("🔍 Fetching random products from database to check stock status...");
+    console.log(
+      "🔍 Fetching random products from database to check stock status...",
+    );
     const productIdsToCheck = await getInStockProductIds(20); // Check 20 products
-    console.log(`📦 Checking ${productIdsToCheck.length} products for stock status`);\n    let foundOutOfStock = false;
+    console.log(
+      `📦 Checking ${productIdsToCheck.length} products for stock status`,
+    );
+    let foundOutOfStock = false;
 
     for (const productId of productIdsToCheck) {
       await page.goto(`${testEnv.webBaseUrl}/product/${productId}`);

@@ -10,6 +10,28 @@ These tests exercise the Azure Functions that power account management flows in 
 - Internationalization
 - Search functionality
 
+## Test Execution Options
+
+### Local Testing (Default)
+
+Sequential execution in dev container - best for development and debugging:
+
+```bash
+npm run test:e2e
+```
+
+### Azure Playwright Testing (Cloud Scale)
+
+Parallel execution across 20+ workers with cross-browser support:
+
+```bash
+./run-tests-on-azure-playwright.sh
+# or
+npm run test:e2e:azure
+```
+
+**📖 See [Azure Playwright Testing Guide](../docs/AZURE_PLAYWRIGHT_TESTING.md) for detailed documentation.**
+
 ## Prerequisites
 
 These tests run directly against the Azure deployment—no local services (DAB, Functions, or Vite) are needed.

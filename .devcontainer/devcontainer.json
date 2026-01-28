@@ -53,7 +53,7 @@
       }
     }
   },
-  "postCreateCommand": "az bicep install && (cd app && npm ci) && npm install --prefix app @playwright/test faker csv-parse csv-writer && (cd app && npx --yes playwright install --with-deps)",
+  "postCreateCommand": "az bicep install && npm ci && (cd app && npm ci) && npm install --prefix app @playwright/test faker csv-parse csv-writer && (cd app && npx --yes playwright install --with-deps)",
   "hostRequirements": {
     "memory": "8gb"
   }

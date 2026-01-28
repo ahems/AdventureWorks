@@ -37,6 +37,9 @@ param revisionSuffix string = toLower(substring(replace(newGuid(),'-',''), 0, 8)
 param AIServicesKind string = 'AIServices'
 param publicNetworkAccess string = 'Enabled'
 param sqlDatabaseName string
+@description('Location for Playwright Testing workspace. Must be one of: eastus, westus3, westeurope, eastasia')
+@allowed(['eastus', 'westus3', 'westeurope', 'eastasia'])
+param playwrightLocation string = 'westeurope'
 
 var chatGptDeploymentCapacity = availableChatGptDeploymentCapacity / 10
 var embeddingDeploymentCapacity = availableEmbeddingDeploymentCapacity / 10
@@ -151,6 +154,21 @@ module appinsights 'modules/applicationinsights.bicep' = {
   }
   dependsOn: [
     identity
+  ]
+}
+
+module playwright 'modules/playwright.bicep' = {
+  name: 'Deploy-Playwright-Testing-Workspace'
+  params: {
+    playwrightWorkspaceName: 'pw${resourceToken}'
+    location: playwrightLocation
+    identityName: identityName
+    aadAdminObjectId: aadAdminObjectId
+    storageAccountName: storage.outputs.storageAccountName
+  }
+  dependsOn: [
+    identity
+    storage
   ]
 }
 
@@ -284,3 +302,13 @@ output EMAIL_SENDER_DOMAIN string = communication.outputs.senderDomain
 output PROJECT_NAME string = cognitiveservices.outputs.projectName
 output PROJECT_RESOURCE_ID string = cognitiveservices.outputs.projectResourceId
 output CONTAINER_APP_ENVIRONMENT_NAME string = containerApp.outputs.containerAppEnvName
+
+// Playwright Workspaces outputs (Azure LoadTest Service)
+output PLAYWRIGHT_WORKSPACE_ID string = playwright.outputs.playwrightWorkspaceId
+output PLAYWRIGHT_WORKSPACE_NAME string = playwright.outputs.playwrightWorkspaceName
+output PLAYWRIGHT_WORKSPACE_GUID string = playwright.outputs.playwrightWorkspaceGuid
+output PLAYWRIGHT_DASHBOARD_URL string = playwright.outputs.playwrightDashboardUrl
+output PLAYWRIGHT_SERVICE_URL string = playwright.outputs.playwrightServiceUrl
+output PLAYWRIGHT_STORAGE_ACCOUNT string = playwright.outputs.storageAccountName
+output PLAYWRIGHT_REPORTS_CONTAINER string = playwright.outputs.reportsContainerName
+output PLAYWRIGHT_REPORTS_URL string = playwright.outputs.reportsContainerUrl
