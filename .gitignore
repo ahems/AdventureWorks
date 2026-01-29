@@ -193,6 +193,9 @@ blob-report/
 test-results/
 tests/playwright-report/
 tests/test-results/
+# Demo test artifacts (keep demo test files but not results)
+tests/playwright-report-demo/
+tests/test-results-demo/
 
 # api-mcp .NET build outputs
 api-mcp/**/bin/

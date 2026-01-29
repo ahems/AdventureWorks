@@ -2,6 +2,12 @@
 
 AdventureWorks is an end‑to‑end e‑commerce sample that demonstrates how to build a modern, AI‑powered, passwordless web application on Azure. It combines a React SPA frontend, GraphQL/REST data access, Azure Functions for business logic, and Azure OpenAI–powered experiences such as semantic search, AI agents, and automatic content generation.
 
+## Demo Video
+
+See the deployed application in action:
+
+<video src="docs/adventureworks-demo.webm" controls width="100%" title="AdventureWorks Demo"></video>
+
 ---
 
 ## High‑Level Architecture

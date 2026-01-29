@@ -166,10 +166,6 @@ module playwright 'modules/playwright.bicep' = {
     aadAdminObjectId: aadAdminObjectId
     storageAccountName: storage.outputs.storageAccountName
   }
-  dependsOn: [
-    identity
-    storage
-  ]
 }
 
 module containerApp 'modules/aca.bicep' = {
