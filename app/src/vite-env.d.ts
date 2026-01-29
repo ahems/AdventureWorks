@@ -2,6 +2,8 @@
 
 interface ImportMetaEnv {
   readonly VITE_API_URL: string;
+  readonly VITE_API_FUNCTIONS_URL?: string;
+  readonly VITE_API_MCP_URL?: string;
 }
 
 interface ImportMeta {
@@ -12,6 +14,7 @@ interface ImportMeta {
 interface AppConfig {
   API_URL: string;
   API_FUNCTIONS_URL?: string;
+  API_MCP_URL?: string;
   APPINSIGHTS_CONNECTIONSTRING?: string;
 }
 

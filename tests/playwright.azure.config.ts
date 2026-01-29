@@ -26,6 +26,7 @@ const isAzureRun = !!process.env.PLAYWRIGHT_SERVICE_URL;
 // Base configuration shared between local and Azure runs
 const baseConfig = defineConfig({
   testDir: "./specs",
+  globalSetup: require.resolve("./global-setup"),
   timeout: 45_000,
   expect: {
     timeout: 5_000,

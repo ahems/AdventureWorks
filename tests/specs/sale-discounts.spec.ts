@@ -1,7 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { signupThroughUi } from "../utils/testUser";
 import { testEnv, APP_STORAGE_KEYS } from "../utils/env";
-import { warmupEndpoint } from "../utils/warmup";
 import { execSync } from "child_process";
 import { getRandomProductIds } from "../utils/productHelper";
 
@@ -47,28 +46,6 @@ const getTestEmail = (): string => {
 };
 
 test.describe("Sale/Discount Browsing with Language Switching", () => {
-  // Warm up services before running tests to avoid cold start delays
-  test.beforeAll(async () => {
-    console.log("🔥 Warming up services for sale page tests...");
-    await Promise.all([
-      warmupEndpoint({
-        url: `${testEnv.restApiBaseUrl}/Product`,
-        name: "DAB API",
-        maxRetries: 3,
-        retryDelayMs: 2000,
-        timeoutMs: 20000,
-      }),
-      warmupEndpoint({
-        url: testEnv.webBaseUrl,
-        name: "Web App",
-        maxRetries: 3,
-        retryDelayMs: 2000,
-        timeoutMs: 20000,
-      }),
-    ]);
-    console.log("✅ Services ready for sale page tests\n");
-  });
-
   test("user can browse sale page and see discounted prices in default language", async ({
     page,
   }) => {

@@ -3,6 +3,7 @@ param location string = resourceGroup().location
 param identityName string
 param apiUrl string
 param apiFunctionsUrl string = ''
+param apiMcpUrl string = ''
 param appInsightsConnectionString string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
@@ -48,6 +49,7 @@ resource swaConfig 'Microsoft.Web/staticSites/config@2023-01-01' = {
   properties: {
     API_URL: apiUrl
     API_FUNCTIONS_URL: apiFunctionsUrl
+    API_MCP_URL: apiMcpUrl
     APPINSIGHTS_CONNECTIONSTRING: appInsightsConnectionString
   }
 }

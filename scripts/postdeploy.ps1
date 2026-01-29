@@ -45,9 +45,37 @@ if ($LASTEXITCODE -eq 0) {
     exit 1
 }
 
+# Update Static Web App configuration with API_MCP_URL
+Write-Output ""
+Write-Output "Updating Static Web App configuration with API_MCP_URL..."
+
+$swaServiceName = (azd env get-value 'SERVICE_APP_NAME' 2>$null).Trim()
+$apiMcpUrl = (azd env get-value 'API_MCP_URL' 2>$null).Trim()
+
+if ([string]::IsNullOrWhiteSpace($swaServiceName) -or [string]::IsNullOrWhiteSpace($apiMcpUrl)) {
+    Write-Warning "SERVICE_APP_NAME or API_MCP_URL not found in azd environment. Skipping Static Web App update."
+} else {
+    Write-Output "Static Web App Name: $swaServiceName"
+    Write-Output "Setting API_MCP_URL to: $apiMcpUrl"
+
+    # Update the Static Web App settings using az CLI
+    az staticwebapp appsettings set `
+        --name $swaServiceName `
+        --resource-group $resourceGroupName `
+        --setting-names "API_MCP_URL=$apiMcpUrl" `
+        --output none
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Output "Successfully updated API_MCP_URL in Static Web App configuration."
+    } else {
+        Write-Warning "Failed to update Static Web App settings. Exit code: $LASTEXITCODE"
+    }
+}
+
 Write-Output ""
 Write-Output "Post-deployment configuration completed successfully."
 Write-Output "NOTE: Static Web App config.js was updated during the predeploy hook."
 Write-Output "The frontend is configured with:"
 Write-Output "  API URL: $(azd env get-value 'API_URL' 2>$null)"
 Write-Output "  API Functions URL: $(azd env get-value 'API_FUNCTIONS_URL' 2>$null)"
+Write-Output "  API MCP URL: $(azd env get-value 'API_MCP_URL' 2>$null)"

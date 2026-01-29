@@ -10,6 +10,25 @@ These tests exercise the Azure Functions that power account management flows in 
 - Internationalization
 - Search functionality
 
+## Global Health Check Warmup
+
+**All tests now include an automatic warmup phase** that runs before any tests execute. The health check page (`/health`) is loaded to verify all backend services are operational:
+
+- ✅ GraphQL API (DAB)
+- ✅ Azure Functions (all endpoints)
+- ✅ MCP API
+- ✅ Cold start handling (up to 90 seconds)
+
+**If the health check fails, all tests are skipped** to prevent cascading failures from infrastructure issues.
+
+This replaces the previous individual `warmupEndpoint()` calls in each test file, providing:
+
+- **Faster test execution** - single warmup instead of per-suite
+- **Better reliability** - comprehensive verification before any tests run
+- **Clear failure indication** - immediate feedback if services aren't ready
+
+The health check test itself is available for manual testing in `tests/manual/health-check.spec.ts`.
+
 ## Test Execution Options
 
 ### Local Testing (Default)

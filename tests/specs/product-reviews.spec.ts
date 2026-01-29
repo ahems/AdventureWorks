@@ -1,36 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { signupThroughUi } from "../utils/testUser";
 import { testEnv } from "../utils/env";
-import { warmupEndpoint } from "../utils/warmup";
 import { getRandomProductIds } from "../utils/productHelper";
 
 test.describe("Product Reviews", () => {
-  // Warm up services before running tests to avoid cold start delays
-  test.beforeAll(async () => {
-    test.setTimeout(60000); // Increase beforeAll timeout to 60s
-    console.log("🔥 Warming up services for product review tests...");
-    // Warm up critical services only - ProductReview endpoint may need longer to cold start
-    await Promise.all([
-      warmupEndpoint({
-        url: `${testEnv.restApiBaseUrl}/Product`,
-        name: "DAB API - Product",
-        maxRetries: 3,
-        retryDelayMs: 2000,
-        timeoutMs: 30000, // Increased for Azure cold starts
-      }),
-      warmupEndpoint({
-        url: testEnv.webBaseUrl,
-        name: "Web App",
-        maxRetries: 3,
-        retryDelayMs: 2000,
-        timeoutMs: 20000,
-      }),
-    ]);
-    // Note: ProductReview endpoint warmup skipped as it may take >30s on cold start
-    // First test using it will handle the delay
-    console.log("✅ Services ready for product review tests\n");
-  });
-
   test("authenticated user can add a product review", async ({ page }) => {
     test.setTimeout(120000); // 2 minutes for potential cold start
     console.log("🧪 Test: Authenticated user can add a product review");

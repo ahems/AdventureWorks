@@ -120,9 +120,18 @@ const Footer: React.FC = () => {
             <p className="font-doodle text-sm opacity-60">
               {t("copyright", { year: new Date().getFullYear() })}
             </p>
-            <p className="font-doodle text-sm opacity-60">
-              <TwemojiText text={t("builtWith")} size="0.875rem" />
-            </p>
+            <div className="flex items-center gap-4">
+              <Link
+                to="/health"
+                className="font-doodle text-xs opacity-40 hover:opacity-100 transition-opacity"
+                title="System Health Check"
+              >
+                Health
+              </Link>
+              <p className="font-doodle text-sm opacity-60">
+                <TwemojiText text={t("builtWith")} size="0.875rem" />
+              </p>
+            </div>
           </div>
         </div>
       </div>

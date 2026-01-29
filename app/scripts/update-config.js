@@ -12,17 +12,19 @@ const __dirname = dirname(__filename);
 const API_URL = process.env.VITE_API_URL || "http://localhost:5000/graphql";
 const API_FUNCTIONS_URL =
   process.env.VITE_API_FUNCTIONS_URL || "http://localhost:7071";
+const API_MCP_URL = process.env.VITE_API_MCP_URL || "http://localhost:8080";
 const APPINSIGHTS_CONNECTIONSTRING =
   process.env.VITE_APPINSIGHTS_CONNECTIONSTRING || "";
 
 console.log("[Build] Updating config.js with API_URL:", API_URL);
 console.log(
   "[Build] Updating config.js with API_FUNCTIONS_URL:",
-  API_FUNCTIONS_URL
+  API_FUNCTIONS_URL,
 );
+console.log("[Build] Updating config.js with API_MCP_URL:", API_MCP_URL);
 console.log(
   "[Build] Updating config.js with APPINSIGHTS_CONNECTIONSTRING:",
-  APPINSIGHTS_CONNECTIONSTRING ? "Set" : "Not set"
+  APPINSIGHTS_CONNECTIONSTRING ? "Set" : "Not set",
 );
 
 const configContent = `// Runtime configuration
@@ -30,6 +32,7 @@ const configContent = `// Runtime configuration
 window.APP_CONFIG = {
   API_URL: '${API_URL}',
   API_FUNCTIONS_URL: '${API_FUNCTIONS_URL}',
+  API_MCP_URL: '${API_MCP_URL}',
   APPINSIGHTS_CONNECTIONSTRING: '${APPINSIGHTS_CONNECTIONSTRING}'
 };
 `;

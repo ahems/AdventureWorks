@@ -1,30 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { testEnv } from "../utils/env";
-import { warmupEndpoint } from "../utils/warmup";
 
 test.describe("Search Functionality", () => {
-  // Warm up services before running tests to avoid cold start delays
-  test.beforeAll(async () => {
-    console.log("🔥 Warming up services for search tests...");
-    await Promise.all([
-      warmupEndpoint({
-        url: `${testEnv.restApiBaseUrl}/Product`,
-        name: "DAB API",
-        maxRetries: 3,
-        retryDelayMs: 2000,
-        timeoutMs: 20000,
-      }),
-      warmupEndpoint({
-        url: testEnv.webBaseUrl,
-        name: "Web App",
-        maxRetries: 3,
-        retryDelayMs: 2000,
-        timeoutMs: 20000,
-      }),
-    ]);
-    console.log("✅ Services ready for search tests\n");
-  });
-
   test("search for red bikes returns actual red bike products (Product 750 and others)", async ({
     page,
   }) => {
@@ -37,12 +14,12 @@ test.describe("Search Functionality", () => {
 
     // Wait for search page to load
     await expect(page.locator("h1")).toContainText("Search Products", {
-      timeout: 10000,
+      timeout: 30000,
     });
 
     // Enter search query
     const searchInput = page.locator('input[placeholder*="Search"]');
-    await expect(searchInput).toBeVisible({ timeout: 10000 });
+    await expect(searchInput).toBeVisible({ timeout: 30000 });
     await searchInput.fill("red bikes");
 
     // Submit search
@@ -142,11 +119,11 @@ test.describe("Search Functionality", () => {
     await page.waitForTimeout(5000);
 
     // Wait for search page to load
-    await expect(page.locator("h1")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("h1")).toBeVisible({ timeout: 30000 });
 
     // Enter search query
     const searchInput = page.locator('input[placeholder*="Search"]');
-    await expect(searchInput).toBeVisible({ timeout: 10000 });
+    await expect(searchInput).toBeVisible({ timeout: 30000 });
     await searchInput.fill("red helmet");
 
     // Submit search
@@ -261,7 +238,7 @@ test.describe("Search Functionality", () => {
 
     // Enter search query
     const searchInput = page.locator('input[placeholder*="Search"]');
-    await expect(searchInput).toBeVisible({ timeout: 10000 });
+    await expect(searchInput).toBeVisible({ timeout: 30000 });
     await searchInput.fill("bike");
 
     // Submit search
@@ -488,7 +465,7 @@ test.describe("Search Functionality", () => {
 
     // Verify search input is populated
     const searchInput = page.locator('input[placeholder*="Search"]');
-    await expect(searchInput).toHaveValue("helmet");
+    await expect(searchInput).toHaveValue("helmet", { timeout: 15000 });
     console.log("✓ Search query populated from URL parameter");
 
     // Verify results are shown
@@ -578,7 +555,7 @@ test.describe("Search Functionality", () => {
 
     // Verify language changed (search placeholder should be in Chinese)
     const searchInput = page.locator('input[placeholder*="搜尋"]'); // "Search" in Chinese
-    await expect(searchInput).toBeVisible({ timeout: 10000 });
+    await expect(searchInput).toBeVisible({ timeout: 30000 });
     console.log("✓ Language switched to Chinese");
 
     // Search for "紅色自行車" (red bikes in Chinese)
@@ -739,7 +716,7 @@ test.describe("Search Functionality", () => {
 
     // Verify language changed
     const searchInput = page.locator('input[placeholder*="Suche"]'); // "Search" in German
-    await expect(searchInput).toBeVisible({ timeout: 10000 });
+    await expect(searchInput).toBeVisible({ timeout: 30000 });
     console.log("✓ Language switched to German");
 
     // Search for "rote Fahrräder" (red bikes in German)
@@ -777,7 +754,7 @@ test.describe("Search Functionality", () => {
 
     // Perform search in English first
     const searchInput = page.locator('input[placeholder*="Search"]');
-    await expect(searchInput).toBeVisible({ timeout: 10000 });
+    await expect(searchInput).toBeVisible({ timeout: 30000 });
     await searchInput.fill("red bikes");
 
     const searchButton = page.locator('button[type="submit"]', {

@@ -1,32 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { signupThroughUi } from "../utils/testUser";
 import { testEnv } from "../utils/env";
-import { warmupEndpoint } from "../utils/warmup";
 import { getInStockProductIds } from "../utils/productHelper";
 
 test.describe("User Browsing and Shopping", () => {
-  // Warm up services before running tests to avoid cold start delays
-  test.beforeAll(async () => {
-    console.log("🔥 Warming up services for browsing tests...");
-    await Promise.all([
-      warmupEndpoint({
-        url: `${testEnv.restApiBaseUrl}/Product`,
-        name: "DAB API",
-        maxRetries: 3,
-        retryDelayMs: 2000,
-        timeoutMs: 20000,
-      }),
-      warmupEndpoint({
-        url: testEnv.webBaseUrl,
-        name: "Web App",
-        maxRetries: 3,
-        retryDelayMs: 2000,
-        timeoutMs: 20000,
-      }),
-    ]);
-    console.log("✅ Services ready for browsing tests\n");
-  });
-
   test("user can browse categories, view products, and add items to cart", async ({
     page,
   }) => {

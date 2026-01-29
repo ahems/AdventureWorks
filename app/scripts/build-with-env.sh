@@ -23,10 +23,15 @@ if [ -f ".env.production" ]; then
   echo "[Build Script] Environment variables set:"
   echo "  VITE_API_URL=$VITE_API_URL"
   echo "  VITE_API_FUNCTIONS_URL=$VITE_API_FUNCTIONS_URL"
+  echo "  VITE_API_MCP_URL=$VITE_API_MCP_URL"
 else
   echo "[Build Script] WARNING: .env.production not found at $(pwd)/.env.production"
   ls -la .env* 2>/dev/null || echo "No .env files found"
 fi
+
+# Generate config.js with environment variables
+echo "[Build Script] Generating config.js..."
+bash scripts/generate-config.sh
 
 # Run the standard build
 echo "[Build Script] Running npm run build..."

@@ -205,18 +205,6 @@ module containerAppApi 'modules/aca-api.bicep' = {
   }
 }
 
-module staticWebAppFrontend 'modules/swa-app.bicep' = {
-  name: 'Deploy-Static-Web-App-Frontend'
-  params: {
-    swaName: 'av-swa-${resourceToken}'
-    location: location
-    identityName: identityName
-    apiUrl: containerAppApi.outputs.apiUrl
-    apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
-    appInsightsConnectionString: appinsights.outputs.connectionString
-  }
-}
-
 module containerAppApiMcp 'modules/aca-api-mcp.bicep' = {
   name: 'Deploy-Container-App-API-MCP'
   params: {
@@ -256,6 +244,19 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
   }
 }
 
+module staticWebAppFrontend 'modules/swa-app.bicep' = {
+  name: 'Deploy-Static-Web-App-Frontend'
+  params: {
+    swaName: 'av-swa-${resourceToken}'
+    location: location
+    identityName: identityName
+    apiUrl: containerAppApi.outputs.apiUrl
+    apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
+    apiMcpUrl: containerAppApiMcp.outputs.apiMcpUrl
+    appInsightsConnectionString: appinsights.outputs.connectionString
+  }
+}
+
 output APP_REDIRECT_URI string = staticWebAppFrontend.outputs.appRedirectUri
 
 // Expose values needed for local debugging / .env population
@@ -290,6 +291,7 @@ output SERVICE_API_MCP_NAME string = 'av-mcp-${resourceToken}'
 
 output API_FUNCTIONS_URL string = containerAppApiFunctions.outputs.apiFunctionsUrl
 output MCP_SERVICE_URL string = containerAppApiMcp.outputs.apiMcpUrl
+output API_MCP_URL string = containerAppApiMcp.outputs.apiMcpUrl
 
 // Static Web App deployment token for azd deploy
 @secure()

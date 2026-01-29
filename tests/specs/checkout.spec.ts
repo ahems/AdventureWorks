@@ -3,7 +3,6 @@ import { faker } from "@faker-js/faker";
 import { signupThroughUi } from "../utils/testUser";
 import { testEnv } from "../utils/env";
 import { execSync } from "child_process";
-import { warmupEndpoint } from "../utils/warmup";
 import { getInStockProductIds } from "../utils/productHelper";
 
 const US_STATES = [
@@ -46,28 +45,6 @@ const getTestEmail = (): string => {
 };
 
 test.describe("Checkout Flow", () => {
-  // Warm up services before running tests to avoid cold start delays
-  test.beforeAll(async () => {
-    console.log("🔥 Warming up services for checkout tests...");
-    await Promise.all([
-      warmupEndpoint({
-        url: `${testEnv.restApiBaseUrl}/Product`,
-        name: "DAB API",
-        maxRetries: 3,
-        retryDelayMs: 5000,
-        timeoutMs: 60000,
-      }),
-      warmupEndpoint({
-        url: testEnv.webBaseUrl,
-        name: "Web App",
-        maxRetries: 3,
-        retryDelayMs: 5000,
-        timeoutMs: 60000,
-      }),
-    ]);
-    console.log("✅ Services ready for checkout tests\n");
-  });
-
   test("user can complete full checkout process with order confirmation", async ({
     page,
   }) => {
