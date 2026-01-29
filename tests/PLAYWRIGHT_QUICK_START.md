@@ -15,7 +15,7 @@ This provisions the Azure Playwright Testing workspace along with all other Azur
 ### 2. Verify Deployment
 
 ```bash
-./playwright-quick-ref.sh info
+../scripts/utilities/playwright-quick-ref.sh info
 ```
 
 Expected output:
@@ -41,13 +41,13 @@ You're ready to run tests!
 
 ```bash
 # Run all tests
-./run-tests-on-azure-playwright.sh
+../tests/scripts/run-tests-on-azure-playwright.sh
 
 # Run specific test file
-./run-tests-on-azure-playwright.sh product-reviews
+../tests/scripts/run-tests-on-azure-playwright.sh product-reviews
 
 # Run tests matching pattern
-./run-tests-on-azure-playwright.sh "checkout*"
+../tests/scripts/run-tests-on-azure-playwright.sh "checkout*"
 ```
 
 ### Option 2: NPM Script
@@ -73,7 +73,7 @@ Results display automatically after test execution.
 ### In Azure Portal
 
 ```bash
-./playwright-quick-ref.sh dashboard
+../scripts/utilities/playwright-quick-ref.sh dashboard
 ```
 
 Or get the URL:
@@ -104,7 +104,7 @@ Contact your Azure admin to grant you the **Playwright Service User** role on th
 ### Install missing dependencies
 
 ```bash
-./playwright-quick-ref.sh install
+../scripts/utilities/playwright-quick-ref.sh install
 ```
 
 ## 📈 Local vs Azure Testing
@@ -120,26 +120,26 @@ Contact your Azure admin to grant you the **Playwright Service User** role on th
 
 ```bash
 # Show workspace info
-./playwright-quick-ref.sh info
+../scripts/utilities/playwright-quick-ref.sh info
 
 # Check workspace status
-./playwright-quick-ref.sh status
+../scripts/utilities/playwright-quick-ref.sh status
 
 # Open Azure Portal dashboard
-./playwright-quick-ref.sh dashboard
+../scripts/utilities/playwright-quick-ref.sh dashboard
 
 # Install dependencies
-./playwright-quick-ref.sh install
+../scripts/utilities/playwright-quick-ref.sh install
 
 # Run tests
-./playwright-quick-ref.sh test
+../scripts/utilities/playwright-quick-ref.sh test
 ```
 
 ## 📚 Learn More
 
-- **Full Documentation**: [docs/AZURE_PLAYWRIGHT_TESTING.md](./docs/AZURE_PLAYWRIGHT_TESTING.md)
-- **Implementation Details**: [docs/AZURE_PLAYWRIGHT_TESTING_IMPLEMENTATION.md](./docs/AZURE_PLAYWRIGHT_TESTING_IMPLEMENTATION.md)
-- **Test Documentation**: [tests/README.md](./tests/README.md)
+- **Full Documentation**: [docs/testing/AZURE_PLAYWRIGHT_TESTING.md](../docs/testing/AZURE_PLAYWRIGHT_TESTING.md)
+- **Implementation Details**: [docs/testing/AZURE_PLAYWRIGHT_TESTING_IMPLEMENTATION.md](../docs/testing/AZURE_PLAYWRIGHT_TESTING_IMPLEMENTATION.md)
+- **Test Documentation**: [tests/README.md](README.md)
 
 ## 💡 Pro Tips
 

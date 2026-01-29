@@ -157,4 +157,4 @@ If you want to understand where a specific Azure resource comes from, start at `
 - Azure deployment flow and hooks: [QUICKSTART.md](../QUICKSTART.md), [scripts/README.md](../scripts/README.md)
 - SQL schema, roles, and seed data: [scripts/sql/README.md](../scripts/sql/README.md)
 - AI agent automation and MCP wiring: [docs/AI_AGENT_AUTOMATION.md](../docs/AI_AGENT_AUTOMATION.md), [docs/AI_AGENT_DEPLOYMENT_SUMMARY.md](../docs/AI_AGENT_DEPLOYMENT_SUMMARY.md)
-- Application Insights integration and flow: [docs/APP_INSIGHTS_INTEGRATION.md](../docs/APP_INSIGHTS_INTEGRATION.md), [docs/APP_INSIGHTS_CONNECTION_STRING_FLOW.md](../docs/APP_INSIGHTS_CONNECTION_STRING_FLOW.md)
+- Application Insights integration and flow: [docs/features/monitoring/](../docs/features/monitoring/)

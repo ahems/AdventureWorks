@@ -126,8 +126,8 @@ const testProductId = testProductIds[0];
 
 **Files Created:**
 
-- `/docs/TEST_DATA_RANDOMIZATION_ANALYSIS.md` - Full analysis of issues
-- `/docs/TEST_DATA_RANDOMIZATION_SUMMARY.md` - This document
+- [TEST_DATA_RANDOMIZATION_ANALYSIS.md](TEST_DATA_RANDOMIZATION_ANALYSIS.md) - Full analysis of issues
+- [TEST_DATA_RANDOMIZATION_SUMMARY.md](TEST_DATA_RANDOMIZATION_SUMMARY.md) - This document
 
 ## Results & Benefits
 

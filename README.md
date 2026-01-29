@@ -87,7 +87,15 @@ All services authenticate using **Managed Identity** and the `Authentication=Act
 - `app/` – React + TypeScript + Vite frontend (Azure Static Web App).
 - `api/` – Data API Builder (DAB) configuration, Dockerfile, and local start scripts.
 - `api-functions/` – .NET 8 isolated Azure Functions with AI, email, receipts, passwords, SEO, and translation workflows.
-  `scripts/` – Helper scripts for exporting embeddings, monitoring orchestrations, data seeding, and SQL/data utilities (see [scripts/sql/README.md](scripts/sql/README.md)).
+- `api-mcp/` – Model Context Protocol server providing AI agent tool capabilities.
+- `infra/` – Bicep infrastructure as code for Azure resource provisioning.
+- `scripts/` – Automation and utility scripts organized by category:
+  - `scripts/hooks/` – Azure Developer CLI (azd) lifecycle hooks (preup, postprovision, postdeploy, etc.)
+  - `scripts/data-management/` – Data export and orchestration monitoring scripts
+  - `scripts/generators/` – Content generation scripts (reviews, telemetry)
+  - `scripts/utilities/` – Helper tools (translations, image downloads, duplicate checking)
+- `tests/` – Playwright E2E tests and test scripts (see [tests/README.md](tests/README.md))
+- `docs/` – Comprehensive documentation organized by feature area (see [docs/README.md](docs/README.md))
 
 For function‑level details (routes, triggers, and responsibilities), see:
 
@@ -96,6 +104,14 @@ For function‑level details (routes, triggers, and responsibilities), see:
 If you want to understand the AI agent's tool surface area, see:
 
 - [api-mcp/README.md](api-mcp/README.md)
+
+For all automation scripts and their usage, see:
+
+- [scripts/README.md](scripts/README.md)
+
+For testing and test scripts, see:
+
+- [tests/scripts/README.md](tests/scripts/README.md)
 
 ---
 
@@ -127,67 +143,56 @@ The project is wired for **remote container builds** for APIs and Functions via 
 
 ## Documentation Map
 
-The `docs/` folder contains focused deep dives on important parts of the solution:
+The `docs/` folder contains comprehensive documentation organized by feature area. For a complete index, see [docs/README.md](docs/README.md).
 
-- **AI agent & MCP**
-  - [docs/AGENT_FRAMEWORK_MIGRATION.md](docs/AGENT_FRAMEWORK_MIGRATION.md)
-  - [docs/AI_AGENT_AUTOMATION.md](docs/AI_AGENT_AUTOMATION.md)
-  - [docs/AI_AGENT_DEPLOYMENT_SUMMARY.md](docs/AI_AGENT_DEPLOYMENT_SUMMARY.md)
-  - [docs/AI_AGENT_TELEMETRY_IMPLEMENTATION.md](docs/AI_AGENT_TELEMETRY_IMPLEMENTATION.md)
-  - [docs/AI_AND_MCP_TESTING_GUIDE.md](docs/AI_AND_MCP_TESTING_GUIDE.md)
-  - [docs/AI_CHAT_MCP_TESTING.md](docs/AI_CHAT_MCP_TESTING.md)
+**Quick Links:**
 
-- **Data API Builder & GraphQL**
-  - [docs/DAB_NAMING_CONVENTIONS.md](docs/DAB_NAMING_CONVENTIONS.md)
+- **Architecture & Migration**
+  - [QUICKSTART.md](QUICKSTART.md) – Local development guide
+  - [docs/architecture/MIGRATION_SUMMARY.md](docs/architecture/MIGRATION_SUMMARY.md) – GraphQL migration history
 
-- **Passwords & Security**
-  - [docs/PASSWORD_IMPLEMENTATION.md](docs/PASSWORD_IMPLEMENTATION.md)
-  - [docs/PASSWORD_RESET_FLOW.md](docs/PASSWORD_RESET_FLOW.md)
-  - Quick test: `./test-password-reset-flow.sh`
+- **AI Agent & MCP**
+  - [docs/features/ai-agent/](docs/features/ai-agent/) – AI agent implementation and deployment guides
+  - [api-mcp/README.md](api-mcp/README.md) – MCP server tool surface area
 
-- **Receipts & Email**
-  - [docs/RECEIPT_GENERATION.md](docs/RECEIPT_GENERATION.md)
-  - [docs/RECEIPT_GENERATION_FLOW.md](docs/RECEIPT_GENERATION_FLOW.md)
-  - [docs/SEND_EMAIL_FUNCTION.md](docs/SEND_EMAIL_FUNCTION.md)
+- **Authentication & Security**
+  - [docs/features/authentication/](docs/features/authentication/) – Password implementation and reset flows
 
-- **SEO**
-  - [docs/SEO_IMPLEMENTATION.md](docs/SEO_IMPLEMENTATION.md)
-  - [docs/SEO_COMPONENTS_IMPLEMENTATION.md](docs/SEO_COMPONENTS_IMPLEMENTATION.md)
+- **Email & Receipts**
+  - [docs/features/email/](docs/features/email/) – Email and PDF receipt generation
 
-- **Translations & Localization**
-  - [docs/LANGUAGE_FILE_TRANSLATION.md](docs/LANGUAGE_FILE_TRANSLATION.md)
-  - [docs/LANGUAGE_TRANSLATION_DURABLE_FUNCTIONS.md](docs/LANGUAGE_TRANSLATION_DURABLE_FUNCTIONS.md)
-  - [docs/TRANSLATION_BLOB_STORAGE.md](docs/TRANSLATION_BLOB_STORAGE.md)
-  - [docs/EMOJI_IN_TRANSLATIONS.md](docs/EMOJI_IN_TRANSLATIONS.md)
+- **Testing**
+  - [tests/README.md](tests/README.md) – Playwright E2E tests
+  - [tests/scripts/README.md](tests/scripts/README.md) – API and integration test scripts
+  - [docs/testing/](docs/testing/) – Testing guides and telemetry validation
 
-- **Review generation & embeddings**
-  - [docs/REVIEW_GENERATION.md](docs/REVIEW_GENERATION.md)
-  - [docs/REVIEW_GENERATION_WORKFLOW.md](docs/REVIEW_GENERATION_WORKFLOW.md)
-  - [docs/REVIEW_GENERATION_SCRIPTS.md](docs/REVIEW_GENERATION_SCRIPTS.md)
-  - [scripts/EMBEDDING_EXPORT.md](scripts/EMBEDDING_EXPORT.md)
-  - [scripts/EMBEDDING_EXPORT_LIMITATION.md](scripts/EMBEDDING_EXPORT_LIMITATION.md)
-
-- **Observability & App Insights**
-  - [docs/APP_INSIGHTS_INTEGRATION.md](docs/APP_INSIGHTS_INTEGRATION.md)
-  - [docs/APP_INSIGHTS_CONNECTION_STRING_FLOW.md](docs/APP_INSIGHTS_CONNECTION_STRING_FLOW.md)
-
-- **Testing & Telemetry Generation**
-  - [tests/README.md](tests/README.md) - Playwright E2E tests
-  - [tests/TELEMETRY_TESTING.md](tests/TELEMETRY_TESTING.md) - Validating Application Insights telemetry
-  - [docs/TELEMETRY_GENERATION.md](docs/TELEMETRY_GENERATION.md) - Generating demo telemetry data
-  - [docs/TEST_DATA_RANDOMIZATION_ANALYSIS.md](docs/TEST_DATA_RANDOMIZATION_ANALYSIS.md) - Test data randomization patterns
-  - [docs/TEST_DATA_RANDOMIZATION_SUMMARY.md](docs/TEST_DATA_RANDOMIZATION_SUMMARY.md) - Implementation summary
-  - Quick commands:
-    ```bash
-    ./test-telemetry.sh        # Validate telemetry is working
-    ./generate-telemetry.sh    # Generate demo browsing data
-    ./test-product-comparison.sh  # Test product comparison with anonymous users
-    npx playwright test        # Run all E2E tests
-    ```
+- **Other Features**
+  - [docs/features/internationalization/](docs/features/internationalization/) – Translation workflows
+  - [docs/features/reviews/](docs/features/reviews/) – Review generation and embeddings
+  - [docs/features/search/](docs/features/search/) – AI search troubleshooting
+  - [docs/features/seo/](docs/features/seo/) – SEO implementation
+  - [docs/features/monitoring/](docs/features/monitoring/) – Application Insights integration
 
 ### Testing Best Practices
 
-The test suite uses **dynamic product selection** to ensure comprehensive coverage across the entire product catalog:
+The test suite uses **dynamic product selection** to ensure comprehensive coverage across the entire product catalog. For complete testing documentation, see:
+
+- [tests/scripts/README.md](tests/scripts/README.md) – All test scripts with usage examples
+- [docs/testing/](docs/testing/) – Testing guides and analysis
+
+**Quick Commands:**
+
+```bash
+# Run E2E tests
+npx playwright test
+
+# API and integration tests (see tests/scripts/README.md for all available tests)
+cd tests/scripts
+./test-telemetry.sh              # Validate telemetry
+./test-product-comparison.sh     # Test product comparison
+./test-password-reset-flow.sh    # Test password reset flow
+./test-ai-and-mcp-complete.sh    # Test AI agent and MCP integration
+```
 
 **Product Helper Utility** (`tests/utils/productHelper.ts`):
 
@@ -220,9 +225,7 @@ await page.goto(`${testEnv.webBaseUrl}/product/${productIds[0]}`);
 - Catches edge cases with different product characteristics
 - More realistic simulation of user behavior
 
-See [docs/TEST_DATA_RANDOMIZATION_ANALYSIS.md](docs/TEST_DATA_RANDOMIZATION_ANALYSIS.md) for detailed analysis and implementation details.
-
-If you are exploring the AI and agent pieces specifically, start with the AI Agent docs above and then dive into [api-functions/README.md](api-functions/README.md) for the concrete Functions and endpoints.
+See [docs/testing/TEST_DATA_RANDOMIZATION_ANALYSIS.md](docs/testing/TEST_DATA_RANDOMIZATION_ANALYSIS.md) for detailed analysis and implementation details.
 
 ---
 

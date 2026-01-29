@@ -117,4 +117,4 @@ Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/c
 - Frontend local development details: [app/LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md)
 - Data API Builder service and container config: [api/README.md](../api/README.md)
 - Azure Functions and AI/MCP workflows: [api-functions/README.md](../api-functions/README.md)
-- GraphQL naming rules from the AdventureWorks schema: [docs/DAB_NAMING_CONVENTIONS.md](../docs/DAB_NAMING_CONVENTIONS.md)
+- GraphQL naming rules from the AdventureWorks schema: [docs/architecture/DAB_NAMING_CONVENTIONS.md](../docs/architecture/DAB_NAMING_CONVENTIONS.md)

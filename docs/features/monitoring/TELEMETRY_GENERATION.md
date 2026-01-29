@@ -397,7 +397,7 @@ The test uses hardcoded product IDs from AdventureWorks. If your catalog differs
 - [tests/specs/telemetry-generator.spec.ts](tests/specs/telemetry-generator.spec.ts) - Test implementation
 - [tests/specs/telemetry.spec.ts](tests/specs/telemetry.spec.ts) - Network validation tests
 - [tests/specs/telemetry-validation.spec.ts](tests/specs/telemetry-validation.spec.ts) - Query validation tests
-- [tests/TELEMETRY_TESTING.md](tests/TELEMETRY_TESTING.md) - Telemetry testing documentation
+- [tests/TELEMETRY_TESTING.md](../../../tests/TELEMETRY_TESTING.md) - Telemetry testing documentation
 
 ## License Note
 

@@ -356,7 +356,7 @@ For comprehensive validation including Application Insights storage:
 
 ## Related Documentation
 
-- [Application Insights Integration](../docs/APP_INSIGHTS_INTEGRATION.md) - How telemetry is implemented
+- [Application Insights Integration](../docs/features/monitoring/APP_INSIGHTS_INTEGRATION.md) - How telemetry is implemented
 - [Playwright Configuration](./playwright.config.ts) - Test configuration
 - [Test Utilities](./utils/) - Helper functions for testing
 
