@@ -1,90 +1,98 @@
-import { test, expect } from "@playwright/test";
+import { test } from "@playwright/test";
 import { testEnv } from "../utils/env";
-import { getRandomProductIds } from "../utils/productHelper";
 
 test.describe("Demo Video - AdventureWorks Site Tour", () => {
   test("showcase main features of the site", async ({ page }) => {
     // Set a slower pace for better video visibility
     const waitTime = 2000;
+    const scrollWait = 1000;
 
-    // Navigate to home page
+    // === 1. Homepage ===
+    console.log("📍 Homepage");
     await page.goto(testEnv.webBaseUrl);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(waitTime);
 
-    // Verify homepage loaded
-    await expect(page.locator("h1, h2").first()).toBeVisible({
-      timeout: 10000,
+    // === 2. Scroll to bottom of homepage (slowly) ===
+    console.log("📍 Scrolling to bottom of homepage");
+    await page.evaluate(() => {
+      const scrollHeight = document.body.scrollHeight;
+      const scrollStep = scrollHeight / 4;
+      window.scrollBy(0, scrollStep);
     });
-
-    // Scroll down to show featured categories
-    await page.evaluate(() => window.scrollBy(0, 400));
+    await page.waitForTimeout(scrollWait);
+    await page.evaluate(() => {
+      const scrollHeight = document.body.scrollHeight;
+      const scrollStep = scrollHeight / 4;
+      window.scrollBy(0, scrollStep);
+    });
+    await page.waitForTimeout(scrollWait);
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.waitForTimeout(waitTime);
 
-    // Browse to a category
-    const categoryLinks = page
-      .locator('[data-testid*="category-card"]')
+    // === 3. Change language to French ===
+    console.log("📍 Changing language to French");
+    const languageSelector = page
+      .locator(
+        '[data-testid*="language"], select[name*="language"], button[aria-label*="language"]',
+      )
       .first();
-    if (await categoryLinks.isVisible({ timeout: 5000 })) {
-      await categoryLinks.click();
-      await page.waitForLoadState("domcontentloaded");
-      await page.waitForTimeout(waitTime);
+    if (await languageSelector.isVisible({ timeout: 3000 })) {
+      await languageSelector.click();
+      await page.waitForTimeout(500);
 
-      // Wait for products to load
-      await page.waitForTimeout(3000);
-
-      // Scroll to show products
-      await page.evaluate(() => window.scrollBy(0, 300));
-      await page.waitForTimeout(waitTime);
-
-      // Click on a product if available
-      const productCards = page.locator('[data-testid*="product-card"]');
-      if ((await productCards.count()) > 0) {
-        await productCards.first().click();
-        await page.waitForLoadState("domcontentloaded");
+      const frenchOption = page.locator("text=/français|french/i").first();
+      if (await frenchOption.isVisible({ timeout: 2000 })) {
+        await frenchOption.click();
         await page.waitForTimeout(waitTime);
       }
-    } else {
-      // Go directly to a product page
-      const productIds = await getRandomProductIds(1);
-      await page.goto(`${testEnv.webBaseUrl}/product/${productIds[0]}`);
-      await page.waitForLoadState("domcontentloaded");
-      await page.waitForTimeout(waitTime);
     }
 
-    // Verify product page loaded
-    await expect(
-      page.locator("h1, h2, [data-testid='product-name']").first(),
-    ).toBeVisible({ timeout: 10000 });
-
-    // Scroll to show product details
-    await page.evaluate(() => window.scrollBy(0, 400));
+    // === 4. Scroll back to top of homepage ===
+    console.log("📍 Scrolling back to top of homepage");
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(waitTime);
 
-    // Look for Add to Cart button and click it if visible
-    const addToCartButton = page
-      .locator('button:has-text("Add to Cart")')
-      .first();
-    if (await addToCartButton.isVisible({ timeout: 3000 })) {
-      await addToCartButton.click();
-      await page.waitForTimeout(waitTime);
-
-      // Check if cart updated (look for cart icon or notification)
-      const cartIndicator = page.locator(
-        '[data-testid*="cart"], [class*="cart"]',
-      );
-      if (await cartIndicator.isVisible({ timeout: 3000 })) {
-        await page.waitForTimeout(1000);
-      }
-    }
-
-    // Navigate to search/explore more features
-    await page.goto(testEnv.webBaseUrl);
+    // === 5. Navigate to Sale page ===
+    console.log("📍 Sale Page");
+    await page.goto(`${testEnv.webBaseUrl}/sale`);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(waitTime);
 
-    // Final scroll to show footer/additional content
-    await page.evaluate(() => window.scrollBy(0, 300));
+    // === 6. Scroll to bottom ===
+    console.log("📍 Scrolling to bottom");
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.waitForTimeout(waitTime);
+
+    // === 7. Scroll to top ===
+    console.log("📍 Scrolling to top");
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(waitTime);
+
+    // === 8. Click product 930 ===
+    console.log("📍 Opening Product 930");
+    await page.goto(`${testEnv.webBaseUrl}/product/930`);
+    await page.waitForLoadState("domcontentloaded");
+    await page.waitForTimeout(waitTime);
+
+    // === 9. Scroll to top of page ===
+    console.log("📍 Scrolling to top of product page");
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(scrollWait);
+
+    // === 10. Click the 3rd image ===
+    console.log("📍 Clicking 3rd image");
+    const thirdImage = page
+      .locator('img[alt*="Image"], [class*="image"], [data-testid*="image"]')
+      .nth(2);
+    if (await thirdImage.isVisible({ timeout: 3000 })) {
+      await thirdImage.click();
+      await page.waitForTimeout(waitTime);
+    }
+
+    // === 11. Scroll down all the way to the bottom ===
+    console.log("📍 Scrolling to bottom of page");
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.waitForTimeout(waitTime);
 
     console.log("✅ Demo video recording completed");

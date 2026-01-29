@@ -5,7 +5,6 @@ import { testEnv } from "./utils/env";
 export default defineConfig({
   testDir: "./specs",
   testMatch: "**/demo-video.spec.ts",
-  globalSetup: require.resolve("./global-setup"),
   timeout: 120_000,
   expect: {
     timeout: 10_000,
