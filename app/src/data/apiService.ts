@@ -1,5 +1,6 @@
 import { graphqlClient } from "@/lib/graphql-client";
 import { getRestApiUrl } from "@/lib/utils";
+import { trackError } from "@/lib/appInsights";
 import {
   GET_CATEGORIES,
   GET_SUBCATEGORIES,
@@ -166,7 +167,10 @@ const attachDescriptionsToProducts = async (
       return product;
     });
   } catch (error) {
-    console.error("Error attaching descriptions to products:", error);
+    trackError("Error attaching descriptions to products", error, {
+      service: "apiService",
+      function: "attachDescriptionsToProducts",
+    });
     return products;
   }
 };
@@ -230,7 +234,10 @@ const attachDiscountsToProducts = async (
 
     return result;
   } catch (error) {
-    console.error("❌ [attachDiscountsToProducts] Error:", error);
+    trackError("Error attaching discounts to products", error, {
+      service: "apiService",
+      function: "attachDiscountsToProducts",
+    });
     return products; // Return products without discounts on error
   }
 };
@@ -266,10 +273,11 @@ const attachPhotosToProducts = async (
           );
         allPhotoMappings.push(...photoMappingsData.productProductPhotos.items);
       } catch (chunkError) {
-        console.warn(
-          `Failed to fetch photo mappings for chunk, continuing...`,
-          chunkError,
-        );
+        trackError("Failed to fetch photo mappings for chunk", chunkError, {
+          service: "apiService",
+          function: "attachPhotosToProducts",
+          context: "photoMappings",
+        });
         // Continue with other chunks even if one fails
       }
     }
@@ -297,10 +305,11 @@ const attachPhotosToProducts = async (
           });
         allPhotos.push(...photoDataResponse.productPhotos.items);
       } catch (photoError) {
-        console.warn(
-          `Failed to fetch photos for chunk, continuing...`,
-          photoError,
-        );
+        trackError("Failed to fetch photos for chunk", photoError, {
+          service: "apiService",
+          function: "attachPhotosToProducts",
+          context: "photoData",
+        });
         // Continue with other chunks even if one fails
       }
     }
@@ -330,7 +339,10 @@ const attachPhotosToProducts = async (
       return product;
     });
   } catch (error) {
-    console.error("Error attaching photos to products:", error);
+    trackError("Error attaching photos to products", error, {
+      service: "apiService",
+      function: "attachPhotosToProducts",
+    });
     return products; // Return products without photos on error
   }
 };
@@ -391,7 +403,10 @@ const attachInventoryToProducts = async (
 
     return result;
   } catch (error) {
-    console.error("❌ [attachInventoryToProducts] Error:", error);
+    trackError("Error attaching inventory to products", error, {
+      service: "apiService",
+      function: "attachInventoryToProducts",
+    });
     return products; // Return products without inventory on error
   }
 };
@@ -420,7 +435,10 @@ export const getCategories = async (): Promise<ProductCategory[]> => {
       await graphqlClient.request<CategoriesResponse>(GET_CATEGORIES);
     return addIconsToCategories(data.productCategories.items);
   } catch (error) {
-    console.error("Error fetching categories:", error);
+    trackError("Error fetching categories", error, {
+      service: "apiService",
+      function: "getCategories",
+    });
     return [];
   }
 };
@@ -432,7 +450,10 @@ export const getSubcategories = async (): Promise<ProductSubcategory[]> => {
       await graphqlClient.request<SubcategoriesResponse>(GET_SUBCATEGORIES);
     return data.productSubcategories.items;
   } catch (error) {
-    console.error("Error fetching subcategories:", error);
+    trackError("Error fetching subcategories", error, {
+      service: "apiService",
+      function: "getSubcategories",
+    });
     return [];
   }
 };
@@ -448,7 +469,11 @@ export const getSubcategoriesByCategory = async (
     );
     return data.productSubcategories.items;
   } catch (error) {
-    console.error("Error fetching subcategories by category:", error);
+    trackError("Error fetching subcategories by category", error, {
+      service: "apiService",
+      function: "getSubcategoriesByCategory",
+      categoryId: categoryId,
+    });
     return [];
   }
 };
@@ -470,7 +495,10 @@ export const getProducts = async (
     }
     return products;
   } catch (error) {
-    console.error("Error fetching products:", error);
+    trackError("Error fetching products", error, {
+      service: "apiService",
+      function: "getProducts",
+    });
     return [];
   }
 };
@@ -531,7 +559,11 @@ export const getProductById = async (
     );
     return productsWithInventory[0];
   } catch (error) {
-    console.error("Error fetching product by ID:", error);
+    trackError("Error fetching product by ID", error, {
+      service: "apiService",
+      function: "getProductById",
+      productId: productId,
+    });
     return undefined;
   }
 };
@@ -550,7 +582,11 @@ export const getProductsBySubcategory = async (
     products = await attachInventoryToProducts(products);
     return await attachPhotosToProducts(products);
   } catch (error) {
-    console.error("Error fetching products by subcategory:", error);
+    trackError("Error fetching products by subcategory", error, {
+      service: "apiService",
+      function: "getProductsBySubcategory",
+      subcategoryId: subcategoryId,
+    });
     return [];
   }
 };
@@ -579,8 +615,11 @@ export const getProductsByCategory = async (
     products = await attachInventoryToProducts(products);
     return await attachPhotosToProducts(products);
   } catch (error) {
-    console.error("Error fetching products by category:", error);
-    console.error("Error details:", error);
+    trackError("Error fetching products by category", error, {
+      service: "apiService",
+      function: "getProductsByCategory",
+      categoryId: categoryId,
+    });
     return [];
   }
 };
@@ -597,7 +636,11 @@ export const getCategoryById = async (
     const categories = addIconsToCategories(data.productCategories.items);
     return categories[0];
   } catch (error) {
-    console.error("Error fetching category by ID:", error);
+    trackError("Error fetching category by ID", error, {
+      service: "apiService",
+      function: "getCategoryById",
+      categoryId: categoryId,
+    });
     return undefined;
   }
 };
@@ -613,7 +656,11 @@ export const getSubcategoryById = async (
     );
     return data.productSubcategories.items[0];
   } catch (error) {
-    console.error("Error fetching subcategory by ID:", error);
+    trackError("Error fetching subcategory by ID", error, {
+      service: "apiService",
+      function: "getSubcategoryById",
+      subcategoryId: subcategoryId,
+    });
     return undefined;
   }
 };
@@ -650,7 +697,10 @@ export const getFeaturedProducts = async (): Promise<Product[]> => {
     // NOW attach photos only to the 6 selected products
     return await attachPhotosToProducts(selectedProducts);
   } catch (error) {
-    console.error("Error fetching featured products:", error);
+    trackError("Error fetching featured products", error, {
+      service: "apiService",
+      function: "getFeaturedProducts",
+    });
     return [];
   }
 };
@@ -669,7 +719,10 @@ export const getSaleProducts = async (): Promise<Product[]> => {
     // NOW attach photos only to the sale products
     return await attachPhotosToProducts(saleProducts);
   } catch (error) {
-    console.error("❌ [getSaleProducts] Error:", error);
+    trackError("Error fetching sale products", error, {
+      service: "apiService",
+      function: "getSaleProducts",
+    });
     throw error; // Re-throw to let React Query handle it
   }
 };
@@ -688,7 +741,10 @@ export let products: Product[] = [];
       getProducts(),
     ]);
   } catch (error) {
-    console.error("Error initializing data:", error);
+    trackError("Error initializing data", error, {
+      service: "apiService",
+      context: "moduleInitialization",
+    });
   }
 })();
 
@@ -728,7 +784,10 @@ export const getShoppingCartItems = async (
     );
     return data.shoppingCartItems.items;
   } catch (error) {
-    console.error("Error fetching shopping cart items:", error);
+    trackError("Error fetching shopping cart items", error, {
+      service: "apiService",
+      function: "getShoppingCartItems",
+    });
     return [];
   }
 };
@@ -763,7 +822,11 @@ export const createCartItem = async (
     // REST API returns { value: [...] }
     return data.value && data.value.length > 0 ? data.value[0] : null;
   } catch (error) {
-    console.error("Error creating cart item:", error);
+    trackError("Error creating cart item", error, {
+      service: "apiService",
+      function: "createCartItem",
+      productId: productId,
+    });
     return null;
   }
 };
@@ -785,7 +848,11 @@ export const updateCartItemQuantity = async (
     );
     return data.updateShoppingCartItem;
   } catch (error) {
-    console.error("Error updating cart item:", error);
+    trackError("Error updating cart item", error, {
+      service: "apiService",
+      function: "updateCartItemQuantity",
+      shoppingCartItemId: shoppingCartItemId,
+    });
     return null;
   }
 };
@@ -800,7 +867,11 @@ export const deleteCartItem = async (
     });
     return true;
   } catch (error) {
-    console.error("Error deleting cart item:", error);
+    trackError("Error deleting cart item", error, {
+      service: "apiService",
+      function: "deleteCartItem",
+      shoppingCartItemId: shoppingCartItemId,
+    });
     return false;
   }
 };
@@ -816,7 +887,10 @@ export const clearShoppingCart = async (
     );
     return true;
   } catch (error) {
-    console.error("Error clearing shopping cart:", error);
+    trackError("Error clearing shopping cart", error, {
+      service: "apiService",
+      function: "clearShoppingCart",
+    });
     return false;
   }
 };
@@ -839,7 +913,11 @@ export const getLargePhoto = async (
       LargePhotoFileName: photo.LargePhotoFileName,
     };
   } catch (error) {
-    console.error("Error fetching large photo:", error);
+    trackError("Error fetching large photo", error, {
+      service: "apiService",
+      function: "getLargePhoto",
+      photoId: photoId,
+    });
     return null;
   }
 };

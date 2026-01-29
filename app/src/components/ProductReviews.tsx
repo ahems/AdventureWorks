@@ -6,6 +6,7 @@ import { Review } from "@/types/review";
 import ReviewCard from "./ReviewCard";
 import ReviewForm from "./ReviewForm";
 import { useTranslation } from "react-i18next";
+import { trackError } from "@/lib/appInsights";
 
 type SortOption = "newest" | "helpful" | "highest" | "lowest";
 
@@ -38,7 +39,11 @@ const ProductReviews: React.FC<ProductReviewsProps> = ({ productId }) => {
     try {
       await addReview(review, user?.email, user?.businessEntityId);
     } catch (error) {
-      console.error("Failed to submit review:", error);
+      trackError("Failed to submit product review", error as Error, {
+        component: "ProductReviews",
+        productId: review.productId.toString(),
+        userId: user?.businessEntityId?.toString() || "unknown",
+      });
     }
   };
 
@@ -54,7 +59,7 @@ const ProductReviews: React.FC<ProductReviewsProps> = ({ productId }) => {
       case "newest":
         return sorted.sort(
           (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         );
       case "helpful":
         return sorted.sort((a, b) => b.helpful - a.helpful);

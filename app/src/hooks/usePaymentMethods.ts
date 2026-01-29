@@ -3,6 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import { graphqlClient } from "@/lib/graphql-client";
 import { gql } from "graphql-request";
 import { getRestApiUrl } from "@/lib/utils";
+import { trackError } from "@/lib/appInsights";
 
 export interface SavedPaymentMethod {
   id: string;
@@ -80,7 +81,7 @@ const getCardBrand = (cardType: string): string => {
 export const usePaymentMethods = () => {
   const { user } = useAuth();
   const [paymentMethods, setPaymentMethods] = useState<SavedPaymentMethod[]>(
-    []
+    [],
   );
   const [isLoading, setIsLoading] = useState(false);
 
@@ -93,7 +94,7 @@ export const usePaymentMethods = () => {
       const personCardsResponse =
         await graphqlClient.request<PersonCreditCardsResponse>(
           GET_PERSON_CREDIT_CARDS,
-          { businessEntityId: user.businessEntityId }
+          { businessEntityId: user.businessEntityId },
         );
 
       const personCards = personCardsResponse.personCreditCards?.items || [];
@@ -109,7 +110,7 @@ export const usePaymentMethods = () => {
         GET_CREDIT_CARDS,
         {
           cardIds,
-        }
+        },
       );
 
       const cards = cardsResponse.creditCards?.items || [];
@@ -119,7 +120,7 @@ export const usePaymentMethods = () => {
         id: card.CreditCardID.toString(),
         type: "card" as const,
         label: `${getCardBrand(card.CardType)} •••• ${card.CardNumber.slice(
-          -4
+          -4,
         )}`,
         cardLast4: card.CardNumber.slice(-4),
         cardBrand: getCardBrand(card.CardType),
@@ -129,10 +130,11 @@ export const usePaymentMethods = () => {
 
       setPaymentMethods(methods);
     } catch (error) {
-      console.error(
-        "[usePaymentMethods] Error fetching payment methods:",
-        error
-      );
+      trackError("Error fetching payment methods", error as Error, {
+        hook: "usePaymentMethods",
+        context: "fetchPaymentMethods",
+        businessEntityId: user?.businessEntityId,
+      });
       setPaymentMethods([]);
     } finally {
       setIsLoading(false);
@@ -156,12 +158,8 @@ export const usePaymentMethods = () => {
       if (!user?.businessEntityId) return;
 
       // TODO: Implement API call to create credit card and link to person
-      console.log(
-        "[usePaymentMethods] Add payment method not yet implemented via API",
-        method
-      );
     },
-    [user?.businessEntityId]
+    [user?.businessEntityId],
   );
 
   const removePaymentMethod = useCallback(
@@ -180,7 +178,7 @@ export const usePaymentMethods = () => {
             headers: {
               "Content-Type": "application/json",
             },
-          }
+          },
         );
 
         if (!response.ok) {
@@ -188,19 +186,19 @@ export const usePaymentMethods = () => {
           throw new Error(`Failed to delete payment method: ${errorText}`);
         }
 
-        console.log("[usePaymentMethods] Payment method removed successfully");
-
         // Refetch to update the list
         await fetchPaymentMethods();
       } catch (error) {
-        console.error(
-          "[usePaymentMethods] Error removing payment method:",
-          error
-        );
+        trackError("Error removing payment method", error as Error, {
+          hook: "usePaymentMethods",
+          context: "removePaymentMethod",
+          methodId,
+          businessEntityId: user?.businessEntityId,
+        });
         throw error;
       }
     },
-    [user?.businessEntityId, fetchPaymentMethods]
+    [user?.businessEntityId, fetchPaymentMethods],
   );
 
   const getDefaultPaymentMethod = useCallback(() => {

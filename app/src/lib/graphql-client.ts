@@ -1,4 +1,5 @@
 import { GraphQLClient } from "graphql-request";
+import { trackError } from "@/lib/appInsights";
 
 // Get API URL from runtime config or environment variables
 const getApiUrl = (): string => {
@@ -8,8 +9,15 @@ const getApiUrl = (): string => {
 
     // Check if it's a placeholder pattern (#{VAR}#)
     if (configUrl.includes("#{")) {
-      console.warn(
-        "[GraphQL Client] Config URL contains placeholder. Using environment variable fallback."
+      trackError(
+        "GraphQL Client config URL contains placeholder",
+        new Error("Unresolved placeholder in API_URL"),
+        {
+          component: "graphql-client",
+          configUrl,
+          fallback:
+            import.meta.env.VITE_API_URL || "http://localhost:5000/graphql",
+        },
       );
       return import.meta.env.VITE_API_URL || "http://localhost:5000/graphql";
     }

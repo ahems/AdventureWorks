@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { getRestApiUrl, getFunctionsApiUrl } from "@/lib/utils";
+import { trackError } from "@/lib/appInsights";
 
 export interface Address {
   id: string;
@@ -55,47 +56,39 @@ export const useAddresses = () => {
   // Fetch addresses from both APIs
   const fetchAddresses = useCallback(async () => {
     if (!user?.businessEntityId) {
-      console.log("[useAddresses] No businessEntityId found for user:", user);
       return;
     }
 
-    console.log(
-      "[useAddresses] Fetching addresses for businessEntityId:",
-      user.businessEntityId,
-    );
     setIsLoading(true);
     try {
       const dabApiUrl = getRestApiUrl();
 
       // Get BusinessEntityAddress links from DAB
       const url = `${dabApiUrl}/BusinessEntityAddress?$filter=BusinessEntityID eq ${user.businessEntityId}`;
-      console.log("[useAddresses] Fetching BusinessEntityAddress from:", url);
       const response = await fetch(url);
 
       if (!response.ok) {
-        console.error(
-          "[useAddresses] Failed to fetch business entity addresses, status:",
-          response.status,
+        trackError(
+          "Failed to fetch business entity addresses",
+          new Error(`HTTP ${response.status}`),
+          {
+            hook: "useAddresses",
+            context: "fetchAddresses",
+            businessEntityId: user.businessEntityId,
+            status: response.status,
+          },
         );
         setAddresses([]);
         return;
       }
 
       const data = await response.json();
-      console.log("[useAddresses] BusinessEntityAddress data:", data);
       const businessEntityAddresses: BusinessEntityAddress[] = data.value || [];
 
       if (businessEntityAddresses.length === 0) {
-        console.log("[useAddresses] No addresses found for this user");
         setAddresses([]);
         return;
       }
-
-      console.log(
-        "[useAddresses] Found",
-        businessEntityAddresses.length,
-        "linked addresses",
-      );
       // Fetch each address from Functions API
       const functionsApiUrl = getFunctionsApiUrl();
       const addressPromises = businessEntityAddresses.map(async (bea) => {
@@ -138,18 +131,20 @@ export const useAddresses = () => {
                     }
                   }
                 } catch (error) {
-                  console.error(
-                    `Failed to fetch CountryRegion ${countryCode}:`,
-                    error,
-                  );
+                  trackError("Failed to fetch CountryRegion", error as Error, {
+                    hook: "useAddresses",
+                    context: "fetchAddresses",
+                    countryCode,
+                  });
                 }
               }
             }
           } catch (error) {
-            console.error(
-              `Failed to fetch StateProvince ${apiAddress.stateProvinceID}:`,
-              error,
-            );
+            trackError("Failed to fetch StateProvince", error as Error, {
+              hook: "useAddresses",
+              context: "fetchAddresses",
+              stateProvinceID: apiAddress.stateProvinceID,
+            });
           }
 
           // Map to frontend format
@@ -167,7 +162,11 @@ export const useAddresses = () => {
             isDefault: bea.AddressTypeID === 2, // Home is default
           } as Address;
         } catch (error) {
-          console.error(`Failed to fetch address ${bea.AddressID}:`, error);
+          trackError("Failed to fetch address", error as Error, {
+            hook: "useAddresses",
+            context: "fetchAddresses",
+            addressID: bea.AddressID,
+          });
           return null;
         }
       });
@@ -177,7 +176,11 @@ export const useAddresses = () => {
       );
       setAddresses(fetchedAddresses);
     } catch (error) {
-      console.error("Error fetching addresses:", error);
+      trackError("Error fetching addresses", error as Error, {
+        hook: "useAddresses",
+        context: "fetchAddresses",
+        businessEntityId: user?.businessEntityId,
+      });
       setAddresses([]);
     } finally {
       setIsLoading(false);
@@ -204,10 +207,6 @@ export const useAddresses = () => {
         const beaData = await beaResponse.json();
         const hasDefaultAddress = beaData.value && beaData.value.length > 0;
 
-        console.log(
-          `[addAddress] Checking for existing default: hasDefaultAddress=${hasDefaultAddress}`,
-        );
-
         // Parse address type from addressType, but enforce single default rule
         let addressTypeId: string;
         const requestedTypeId = Object.entries(ADDRESS_TYPE_MAP).find(
@@ -216,9 +215,6 @@ export const useAddresses = () => {
 
         if (requestedTypeId === "2" && hasDefaultAddress) {
           // User requested Home (default) but there's already a default, use Shipping instead
-          console.log(
-            "[addAddress] Default already exists, using Shipping (3) instead of Home (2)",
-          );
           addressTypeId = "3";
         } else if (requestedTypeId) {
           // Use the requested type
@@ -227,10 +223,6 @@ export const useAddresses = () => {
           // No type specified, use Home (2) for first address, Shipping (3) otherwise
           addressTypeId = hasDefaultAddress ? "3" : "2";
         }
-
-        console.log(
-          `[addAddress] Creating address with AddressTypeID=${addressTypeId}`,
-        );
 
         // Create address via Functions API (with BusinessEntityID to create link automatically)
         const response = await fetch(`${functionsApiUrl}/api/addresses`, {
@@ -249,11 +241,12 @@ export const useAddresses = () => {
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error(
-            "Failed to create address:",
-            response.status,
-            errorText,
-          );
+          trackError("Failed to create address", new Error(errorText), {
+            hook: "useAddresses",
+            context: "addAddress",
+            status: response.status,
+            businessEntityId: user.businessEntityId,
+          });
           throw new Error(
             `Failed to create address: ${response.status} ${errorText}`,
           );
@@ -264,7 +257,11 @@ export const useAddresses = () => {
         // Refresh addresses to show the newly created address
         await fetchAddresses();
       } catch (error) {
-        console.error("Error adding address:", error);
+        trackError("Error adding address", error as Error, {
+          hook: "useAddresses",
+          context: "addAddress",
+          businessEntityId: user?.businessEntityId,
+        });
         throw error;
       } finally {
         setIsLoading(false);
@@ -337,7 +334,12 @@ export const useAddresses = () => {
         // Refresh addresses
         await fetchAddresses();
       } catch (error) {
-        console.error("Error updating address:", error);
+        trackError("Error updating address", error as Error, {
+          hook: "useAddresses",
+          context: "updateAddress",
+          addressId: id,
+          businessEntityId: user?.businessEntityId,
+        });
         throw error;
       } finally {
         setIsLoading(false);
@@ -382,7 +384,12 @@ export const useAddresses = () => {
         // Refresh addresses
         await fetchAddresses();
       } catch (error) {
-        console.error("Error deleting address:", error);
+        trackError("Error deleting address", error as Error, {
+          hook: "useAddresses",
+          context: "deleteAddress",
+          addressId: id,
+          businessEntityId: user?.businessEntityId,
+        });
         throw error;
       } finally {
         setIsLoading(false);
@@ -432,10 +439,6 @@ export const useAddresses = () => {
               .value?.[0] as BusinessEntityAddress;
 
             if (currentBea && currentBea.AddressTypeID === 2) {
-              console.log(
-                "[setDefaultAddress] Removing default from address:",
-                currentAddressId,
-              );
               // Delete the old Home (2) record
               const deleteResponse = await fetch(
                 `${dabApiUrl}/BusinessEntityAddress/BusinessEntityID/${user.businessEntityId}/AddressID/${currentAddressId}/AddressTypeID/2`,
@@ -445,9 +448,16 @@ export const useAddresses = () => {
               );
 
               if (!deleteResponse.ok) {
-                console.error(
-                  "[setDefaultAddress] Failed to delete old default:",
-                  await deleteResponse.text(),
+                const errorText = await deleteResponse.text();
+                trackError(
+                  "Failed to delete old default address",
+                  new Error(errorText),
+                  {
+                    hook: "useAddresses",
+                    context: "setDefaultAddress",
+                    addressId: currentAddressId,
+                    businessEntityId: user.businessEntityId,
+                  },
                 );
                 throw new Error("Failed to remove old default address");
               }
@@ -467,25 +477,25 @@ export const useAddresses = () => {
               );
 
               if (!createResponse.ok) {
-                console.error(
-                  "[setDefaultAddress] Failed to create new record:",
-                  await createResponse.text(),
+                const errorText = await createResponse.text();
+                trackError(
+                  "Failed to create new record for old default address",
+                  new Error(errorText),
+                  {
+                    hook: "useAddresses",
+                    context: "setDefaultAddress",
+                    addressId: currentAddressId,
+                    businessEntityId: user.businessEntityId,
+                  },
                 );
                 throw new Error("Failed to update old default address");
               }
-              console.log(
-                "[setDefaultAddress] Successfully changed old default to Shipping",
-              );
             }
           }
         }
 
         // Change the new default address to Home (2) if it's not already
         if (newDefaultBea.AddressTypeID !== 2) {
-          console.log(
-            "[setDefaultAddress] Setting address as default:",
-            addressId,
-          );
           // Delete the old record
           const deleteResponse = await fetch(
             `${dabApiUrl}/BusinessEntityAddress/BusinessEntityID/${user.businessEntityId}/AddressID/${addressId}/AddressTypeID/${newDefaultBea.AddressTypeID}`,
@@ -495,9 +505,16 @@ export const useAddresses = () => {
           );
 
           if (!deleteResponse.ok) {
-            console.error(
-              "[setDefaultAddress] Failed to delete old record:",
-              await deleteResponse.text(),
+            const errorText = await deleteResponse.text();
+            trackError(
+              "Failed to delete old address record",
+              new Error(errorText),
+              {
+                hook: "useAddresses",
+                context: "setDefaultAddress",
+                addressId,
+                businessEntityId: user.businessEntityId,
+              },
             );
             throw new Error("Failed to delete old address record");
           }
@@ -517,21 +534,30 @@ export const useAddresses = () => {
           );
 
           if (!createResponse.ok) {
-            console.error(
-              "[setDefaultAddress] Failed to create new default:",
-              await createResponse.text(),
+            const errorText = await createResponse.text();
+            trackError(
+              "Failed to create new default address",
+              new Error(errorText),
+              {
+                hook: "useAddresses",
+                context: "setDefaultAddress",
+                addressId,
+                businessEntityId: user.businessEntityId,
+              },
             );
             throw new Error("Failed to set new default address");
           }
-          console.log(
-            "[setDefaultAddress] Successfully set new default to Home",
-          );
         }
 
         // Refresh addresses to reflect changes
         await fetchAddresses();
       } catch (error) {
-        console.error("Error setting default address:", error);
+        trackError("Error setting default address", error as Error, {
+          hook: "useAddresses",
+          context: "setDefaultAddress",
+          addressId: id,
+          businessEntityId: user?.businessEntityId,
+        });
         throw error;
       } finally {
         setIsLoading(false);

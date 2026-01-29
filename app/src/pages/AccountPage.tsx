@@ -54,6 +54,7 @@ import { AddressCard } from "@/components/AddressCard";
 import { toast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { formatPhoneNumber, parsePhoneNumber } from "@/lib/phoneFormatter";
+import { trackError } from "@/lib/appInsights";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrency } from "@/context/CurrencyContext";
 
@@ -203,7 +204,10 @@ const AccountPage: React.FC = () => {
               }
             }
           } catch (error) {
-            console.error("[AccountPage] Error fetching creation date:", error);
+            trackError("Error fetching creation date", error, {
+              page: "AccountPage",
+              businessEntityId: user.businessEntityId,
+            });
           }
         };
         fetchCreatedDate();

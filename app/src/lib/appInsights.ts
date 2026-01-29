@@ -12,7 +12,7 @@ export const initAppInsights = () => {
 
   if (!connectionString) {
     console.warn(
-      "[App Insights] No connection string provided - telemetry disabled"
+      "[App Insights] No connection string provided - telemetry disabled",
     );
     return null;
   }
@@ -46,7 +46,7 @@ export const initAppInsights = () => {
           appInsights.setAuthenticatedUserContext(
             String(userData.CustomerID),
             undefined,
-            true
+            true,
           );
         }
       } catch (e) {
@@ -67,7 +67,7 @@ export const getAppInsights = () => appInsights;
 // Custom tracking helpers
 export const trackEvent = (
   name: string,
-  properties?: Record<string, unknown>
+  properties?: Record<string, unknown>,
 ) => {
   if (appInsights) {
     appInsights.trackEvent({ name }, properties);
@@ -76,7 +76,7 @@ export const trackEvent = (
 
 export const trackPageView = (
   name?: string,
-  properties?: Record<string, unknown>
+  properties?: Record<string, unknown>,
 ) => {
   if (appInsights) {
     appInsights.trackPageView({ name });
@@ -84,7 +84,7 @@ export const trackPageView = (
     if (properties) {
       appInsights.trackEvent(
         { name: `PageView_${name || "Unknown"}` },
-        properties
+        properties,
       );
     }
   }
@@ -92,7 +92,7 @@ export const trackPageView = (
 
 export const trackException = (
   error: Error,
-  properties?: Record<string, unknown>
+  properties?: Record<string, unknown>,
 ) => {
   if (appInsights) {
     appInsights.trackException({ exception: error }, properties);
@@ -102,7 +102,7 @@ export const trackException = (
 export const trackMetric = (
   name: string,
   value: number,
-  properties?: Record<string, unknown>
+  properties?: Record<string, unknown>,
 ) => {
   if (appInsights) {
     appInsights.trackMetric({ name, average: value }, properties);
@@ -119,5 +119,26 @@ export const setUserContext = (userId: string) => {
 export const clearUserContext = () => {
   if (appInsights) {
     appInsights.clearAuthenticatedUserContext();
+  }
+};
+
+// Helper to track errors with consistent format
+export const trackError = (
+  message: string,
+  error?: unknown,
+  properties?: Record<string, unknown>,
+) => {
+  if (appInsights) {
+    if (error instanceof Error) {
+      appInsights.trackException(
+        { exception: error },
+        { ...properties, message },
+      );
+    } else {
+      appInsights.trackException(
+        { exception: new Error(message) },
+        { ...properties, errorDetails: error },
+      );
+    }
   }
 };

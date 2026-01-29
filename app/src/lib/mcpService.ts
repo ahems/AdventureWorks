@@ -3,6 +3,8 @@
  * Calls AI Agent which uses MCP tools internally
  */
 
+import { trackError } from "@/lib/appInsights";
+
 const getAgentEndpoint = (): string => {
   // Check for runtime config first (Azure deployment)
   if (typeof window !== "undefined" && window.APP_CONFIG?.API_FUNCTIONS_URL) {
@@ -69,7 +71,6 @@ export const chatWithAgent = async (
     }
 
     const data = await response.json();
-    console.log("[AI Agent] Raw API response:", data);
 
     // Map API response (capital case) to interface (lowercase)
     const result: AgentChatResponse = {
@@ -79,10 +80,12 @@ export const chatWithAgent = async (
       toolsUsed: data.ToolsUsed || data.toolsUsed || [],
     };
 
-    console.log("[AI Agent] Mapped response:", result);
     return result;
   } catch (error) {
-    console.error("Agent chat error:", error);
+    trackError("Agent chat error", error, {
+      service: "mcpService",
+      function: "chatWithAgent",
+    });
     throw error;
   }
 };
@@ -107,7 +110,10 @@ export const getAgentStatus = async () => {
 
     return await response.json();
   } catch (error) {
-    console.error("Failed to get agent status:", error);
+    trackError("Failed to get agent status", error, {
+      service: "mcpService",
+      function: "getAgentStatus",
+    });
     throw error;
   }
 };
@@ -177,7 +183,11 @@ export const callMCPTool = async (
 
     return data.content[0]?.text || "No response from server";
   } catch (error) {
-    console.error("MCP tool call error:", error);
+    trackError("MCP tool call error", error, {
+      service: "mcpService",
+      function: "callMCPTool",
+      toolName: name,
+    });
     throw error;
   }
 };
@@ -202,7 +212,10 @@ export const listMCPTools = async () => {
 
     return await response.json();
   } catch (error) {
-    console.error("Failed to list MCP tools:", error);
+    trackError("Failed to list MCP tools", error, {
+      service: "mcpService",
+      function: "listMCPTools",
+    });
     throw error;
   }
 };

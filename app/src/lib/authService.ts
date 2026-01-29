@@ -1,6 +1,7 @@
 import { graphqlClient } from "./graphql-client";
 import { gql } from "graphql-request";
 import { getFunctionsApiUrl, getRestApiUrl } from "./utils";
+import { trackError } from "@/lib/appInsights";
 
 export interface AuthUser {
   businessEntityId: number;
@@ -257,7 +258,10 @@ export async function loginUser(
       },
     };
   } catch (error) {
-    console.error("Login error:", error);
+    trackError("Login error", error, {
+      service: "authService",
+      function: "loginUser",
+    });
     return {
       success: false,
       error: "An error occurred during login. Please try again.",
@@ -360,7 +364,10 @@ export async function signupUser(
       },
     };
   } catch (error) {
-    console.error("Signup error:", error);
+    trackError("Signup error", error, {
+      service: "authService",
+      function: "signupUser",
+    });
     return {
       success: false,
       error: "An error occurred during signup. Please try again.",
@@ -406,7 +413,11 @@ export async function updateUserProfile(
       },
     };
   } catch (error) {
-    console.error("Update profile error:", error);
+    trackError("Update profile error", error, {
+      service: "authService",
+      function: "updateUserProfile",
+      businessEntityId: businessEntityId,
+    });
     return {
       success: false,
       error: "An error occurred while updating your profile. Please try again.",
@@ -472,7 +483,11 @@ export async function changePassword(
       success: true,
     };
   } catch (error) {
-    console.error("Change password error:", error);
+    trackError("Change password error", error, {
+      service: "authService",
+      function: "changePassword",
+      businessEntityId: businessEntityId,
+    });
     return {
       success: false,
       error:
@@ -492,11 +507,6 @@ export async function deleteAccount(
     const functionsUrl = getFunctionsApiUrl();
     const restApiUrl = getRestApiUrl();
 
-    console.log(
-      "[deleteAccount] Starting deletion for businessEntityId:",
-      businessEntityId,
-    );
-
     // Delete in order to handle foreign key constraints
 
     // 1. Delete shopping cart items
@@ -507,11 +517,6 @@ export async function deleteAccount(
       if (cartResponse.ok) {
         const cartData = await cartResponse.json();
         const cartItems = cartData.value || [];
-        console.log(
-          "[deleteAccount] Deleting",
-          cartItems.length,
-          "shopping cart items",
-        );
         for (const item of cartItems) {
           await fetch(
             `${restApiUrl}/ShoppingCartItem/ShoppingCartItemID/${item.ShoppingCartItemID}`,
@@ -520,7 +525,15 @@ export async function deleteAccount(
         }
       }
     } catch (error) {
-      console.error("[deleteAccount] Error deleting cart items:", error);
+      trackError(
+        "Error deleting shopping cart items during account deletion",
+        error as Error,
+        {
+          service: "authService",
+          operation: "deleteAccount",
+          businessEntityId: businessEntityId.toString(),
+        },
+      );
     }
 
     // 2. Delete sales order details, then orders (if customer exists)
@@ -533,8 +546,6 @@ export async function deleteAccount(
         const customerData = await customerResponse.json();
         const customer = customerData.value?.[0];
         if (customer) {
-          console.log("[deleteAccount] Found customer:", customer.CustomerID);
-
           // Get all orders for this customer
           const ordersResponse = await fetch(
             `${restApiUrl}/SalesOrderHeader?$filter=CustomerID eq ${customer.CustomerID}`,
@@ -542,7 +553,6 @@ export async function deleteAccount(
           if (ordersResponse.ok) {
             const ordersData = await ordersResponse.json();
             const orders = ordersData.value || [];
-            console.log("[deleteAccount] Deleting", orders.length, "orders");
 
             for (const order of orders) {
               // Delete order details first
@@ -576,7 +586,15 @@ export async function deleteAccount(
         }
       }
     } catch (error) {
-      console.error("[deleteAccount] Error deleting orders/customer:", error);
+      trackError(
+        "Error deleting orders/customer during account deletion",
+        error as Error,
+        {
+          service: "authService",
+          operation: "deleteAccount",
+          businessEntityId: businessEntityId.toString(),
+        },
+      );
     }
 
     // 3. Delete addresses
@@ -588,7 +606,6 @@ export async function deleteAccount(
       if (beaResponse.ok) {
         const beaData = await beaResponse.json();
         const beaLinks = beaData.value || [];
-        console.log("[deleteAccount] Deleting", beaLinks.length, "addresses");
 
         for (const link of beaLinks) {
           // Delete BusinessEntityAddress link
@@ -603,12 +620,28 @@ export async function deleteAccount(
               method: "DELETE",
             });
           } catch (error) {
-            console.error("[deleteAccount] Error deleting address:", error);
+            trackError(
+              "Error deleting individual address during account deletion",
+              error as Error,
+              {
+                service: "authService",
+                operation: "deleteAccount",
+                addressId: link.AddressID?.toString() || "unknown",
+              },
+            );
           }
         }
       }
     } catch (error) {
-      console.error("[deleteAccount] Error deleting addresses:", error);
+      trackError(
+        "Error deleting addresses during account deletion",
+        error as Error,
+        {
+          service: "authService",
+          operation: "deleteAccount",
+          businessEntityId: businessEntityId.toString(),
+        },
+      );
     }
 
     // 4. Delete phone numbers
@@ -619,7 +652,6 @@ export async function deleteAccount(
       if (phoneResponse.ok) {
         const phoneData = await phoneResponse.json();
         const phones = phoneData.value || [];
-        console.log("[deleteAccount] Deleting", phones.length, "phone numbers");
         for (const phone of phones) {
           await fetch(
             `${restApiUrl}/PersonPhone/BusinessEntityID/${phone.BusinessEntityID}/PhoneNumber/${encodeURIComponent(phone.PhoneNumber)}/PhoneNumberTypeID/${phone.PhoneNumberTypeID}`,
@@ -628,7 +660,15 @@ export async function deleteAccount(
         }
       }
     } catch (error) {
-      console.error("[deleteAccount] Error deleting phone numbers:", error);
+      trackError(
+        "Error deleting phone numbers during account deletion",
+        error as Error,
+        {
+          service: "authService",
+          operation: "deleteAccount",
+          businessEntityId: businessEntityId.toString(),
+        },
+      );
     }
 
     // 5. Delete email addresses
@@ -639,11 +679,6 @@ export async function deleteAccount(
       if (emailResponse.ok) {
         const emailData = await emailResponse.json();
         const emails = emailData.value || [];
-        console.log(
-          "[deleteAccount] Deleting",
-          emails.length,
-          "email addresses",
-        );
         for (const email of emails) {
           // Use GraphQL mutation for delete to handle composite keys properly
           const DELETE_EMAIL = gql`
@@ -666,7 +701,15 @@ export async function deleteAccount(
         }
       }
     } catch (error) {
-      console.error("[deleteAccount] Error deleting email addresses:", error);
+      trackError(
+        "Error deleting email addresses during account deletion",
+        error as Error,
+        {
+          service: "authService",
+          operation: "deleteAccount",
+          businessEntityId: businessEntityId.toString(),
+        },
+      );
     }
 
     // 6. Delete password
@@ -676,7 +719,15 @@ export async function deleteAccount(
         { method: "DELETE" },
       );
     } catch (error) {
-      console.error("[deleteAccount] Error deleting password:", error);
+      trackError(
+        "Error deleting password during account deletion",
+        error as Error,
+        {
+          service: "authService",
+          operation: "deleteAccount",
+          businessEntityId: businessEntityId.toString(),
+        },
+      );
     }
 
     // 7. Delete Person record (use GraphQL to ensure proper key handling)
@@ -692,7 +743,15 @@ export async function deleteAccount(
         businessEntityId: businessEntityId,
       });
     } catch (error) {
-      console.error("[deleteAccount] Error deleting person:", error);
+      trackError(
+        "Error deleting person record during account deletion",
+        error as Error,
+        {
+          service: "authService",
+          operation: "deleteAccount",
+          businessEntityId: businessEntityId.toString(),
+        },
+      );
     }
 
     // 8. Delete BusinessEntity (use GraphQL to ensure proper key handling)
@@ -708,15 +767,26 @@ export async function deleteAccount(
         businessEntityId: businessEntityId,
       });
     } catch (error) {
-      console.error("[deleteAccount] Error deleting business entity:", error);
+      trackError(
+        "Error deleting business entity during account deletion",
+        error as Error,
+        {
+          service: "authService",
+          operation: "deleteAccount",
+          businessEntityId: businessEntityId.toString(),
+        },
+      );
     }
 
-    console.log("[deleteAccount] Account deletion completed");
     return {
       success: true,
     };
   } catch (error) {
-    console.error("Delete account error:", error);
+    trackError("Account deletion failed", error as Error, {
+      service: "authService",
+      operation: "deleteAccount",
+      businessEntityId: businessEntityId.toString(),
+    });
     return {
       success: false,
       error: "An error occurred while deleting your account. Please try again.",
@@ -747,7 +817,10 @@ export async function requestPasswordReset(email: string): Promise<AuthResult> {
       success: true,
     };
   } catch (error) {
-    console.error("Request password reset error:", error);
+    trackError("Password reset request failed", error as Error, {
+      service: "authService",
+      operation: "requestPasswordReset",
+    });
     return {
       success: false,
       error: "An error occurred processing your request. Please try again.",
@@ -780,7 +853,11 @@ export async function validateResetToken(
     const result = await response.json();
     return { isValid: result.isValid };
   } catch (error) {
-    console.error("Validate reset token error:", error);
+    trackError("Password reset token validation failed", error as Error, {
+      service: "authService",
+      operation: "validateResetToken",
+      businessEntityId: businessEntityId.toString(),
+    });
     return { isValid: false };
   }
 }
@@ -820,7 +897,11 @@ export async function resetPassword(
       success: true,
     };
   } catch (error) {
-    console.error("Reset password error:", error);
+    trackError("Password reset completion failed", error as Error, {
+      service: "authService",
+      operation: "resetPassword",
+      businessEntityId: businessEntityId.toString(),
+    });
     return {
       success: false,
       error: "An error occurred resetting your password. Please try again.",

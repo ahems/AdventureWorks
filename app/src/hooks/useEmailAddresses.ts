@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { graphqlClient } from "@/lib/graphql-client";
 import { gql } from "graphql-request";
 import { toast } from "./use-toast";
+import { trackError } from "@/lib/appInsights";
 
 export interface EmailAddress {
   EmailAddressID: number;
@@ -105,7 +106,10 @@ export const useCreateEmailAddress = () => {
       });
     },
     onError: (error: Error) => {
-      console.error("Error creating email address:", error);
+      trackError("Error creating email address", error, {
+        hook: "useEmailAddresses",
+        context: "createEmailAddress",
+      });
       toast({
         title: "Error",
         description:
@@ -150,7 +154,10 @@ export const useUpdateEmailAddress = () => {
       });
     },
     onError: (error: Error) => {
-      console.error("Error updating email address:", error);
+      trackError("Error updating email address", error, {
+        hook: "useEmailAddresses",
+        context: "updateEmailAddress",
+      });
       toast({
         title: "Error",
         description:
@@ -192,7 +199,10 @@ export const useDeleteEmailAddress = () => {
       });
     },
     onError: (error: Error) => {
-      console.error("Error deleting email address:", error);
+      trackError("Error deleting email address", error, {
+        hook: "useEmailAddresses",
+        context: "deleteEmailAddress",
+      });
       toast({
         title: "Error",
         description:

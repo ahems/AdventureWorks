@@ -15,7 +15,7 @@ import {
   useDeleteCartItem,
   useClearCart,
 } from "@/hooks/useShoppingCart";
-import { trackEvent } from "@/lib/appInsights";
+import { trackEvent, trackError } from "@/lib/appInsights";
 import { useProducts } from "@/hooks/useProducts";
 
 interface CartContextType {
@@ -74,9 +74,6 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
 
     // If we have cart items but products haven't loaded, return empty but this is a loading state
     if (!allProducts.length) {
-      console.log(
-        "[CartContext] Cart items exist but products not loaded yet, waiting...",
-      );
       return [];
     }
 
@@ -86,9 +83,10 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
           (p) => p.ProductID === cartItem.ProductID,
         );
         if (!product) {
-          console.warn(
-            `[CartContext] Product ${cartItem.ProductID} not found in products list`,
-          );
+          trackError(`Product not found in products list`, undefined, {
+            component: "CartContext",
+            productId: cartItem.ProductID,
+          });
           return null;
         }
 
@@ -156,7 +154,11 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
           ),
         });
       } catch (error) {
-        console.error("Failed to update cart item:", error);
+        trackError("Failed to update cart item", error, {
+          component: "CartContext",
+          productId: product.ProductID,
+          quantity: newQuantity,
+        });
         toast({
           title: "Error",
           description: "Failed to update cart. Please try again.",
@@ -192,7 +194,11 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
           ),
         });
       } catch (error) {
-        console.error("Failed to add item to cart:", error);
+        trackError("Failed to add item to cart", error, {
+          component: "CartContext",
+          productId: product.ProductID,
+          quantity: quantity,
+        });
         toast({
           title: "Error",
           description: "Failed to add item to cart. Please try again.",

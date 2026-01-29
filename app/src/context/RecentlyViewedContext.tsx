@@ -7,6 +7,7 @@ import React, {
   ReactNode,
 } from "react";
 import { Product } from "@/types/product";
+import { trackError } from "@/lib/appInsights";
 
 // Lightweight version for localStorage - no photo binary data
 interface RecentlyViewedProduct {
@@ -67,7 +68,9 @@ export const RecentlyViewedProvider: React.FC<{ children: ReactNode }> = ({
       }
     } catch (error) {
       // Invalid stored data - clear it
-      console.warn("Failed to load recently viewed products:", error);
+      trackError("Failed to load recently viewed products", error, {
+        component: "RecentlyViewedContext",
+      });
       localStorage.removeItem(STORAGE_KEY);
     }
   }, []);
@@ -79,15 +82,20 @@ export const RecentlyViewedProvider: React.FC<{ children: ReactNode }> = ({
       localStorage.setItem(STORAGE_KEY, JSON.stringify(lightweight));
     } catch (error) {
       // Quota exceeded or other error - clear old data and try again with fewer items
-      console.warn("Failed to save recently viewed products:", error);
+      trackError("Failed to save recently viewed products", error, {
+        component: "RecentlyViewedContext",
+        itemCount: recentlyViewed.length,
+      });
       try {
         localStorage.removeItem(STORAGE_KEY);
         const reduced = recentlyViewed.slice(0, Math.min(3, MAX_ITEMS));
         const lightweight = reduced.map(toLightweightProduct);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(lightweight));
-      } catch {
+      } catch (retryError) {
         // Give up - localStorage not available
-        console.error("localStorage not available");
+        trackError("localStorage not available", retryError, {
+          component: "RecentlyViewedContext",
+        });
       }
     }
   }, [recentlyViewed]);
@@ -125,7 +133,7 @@ export const useRecentlyViewed = () => {
   const context = useContext(RecentlyViewedContext);
   if (context === undefined) {
     throw new Error(
-      "useRecentlyViewed must be used within a RecentlyViewedProvider"
+      "useRecentlyViewed must be used within a RecentlyViewedProvider",
     );
   }
   return context;

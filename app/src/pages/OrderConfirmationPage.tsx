@@ -7,6 +7,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { getFunctionsApiUrl } from "@/lib/utils";
 import { graphqlClient } from "@/lib/graphql-client";
+import { trackError, trackEvent } from "@/lib/appInsights";
 
 // GraphQL query to fetch order details with relationships
 const GET_ORDER_DETAILS = gql`
@@ -155,15 +156,11 @@ const OrderConfirmationPage: React.FC = () => {
       const selectedEmailId = emailIdParam
         ? parseInt(emailIdParam, 10)
         : storedEmailId
-        ? parseInt(storedEmailId, 10)
-        : null;
+          ? parseInt(storedEmailId, 10)
+          : null;
 
       if (selectedEmailId) {
         setEmailAddressId(selectedEmailId);
-        console.log(
-          "Order confirmation using EmailAddressID:",
-          selectedEmailId
-        );
         // Fetch the actual email address
         try {
           const emailResponse = await graphqlClient.request<{
@@ -172,11 +169,14 @@ const OrderConfirmationPage: React.FC = () => {
 
           if (emailResponse.emailAddresses.items.length > 0) {
             setSelectedEmail(
-              emailResponse.emailAddresses.items[0].EmailAddress
+              emailResponse.emailAddresses.items[0].EmailAddress,
             );
           }
         } catch (error) {
-          console.error("Error fetching selected email:", error);
+          trackError("Error fetching selected email", error, {
+            page: "OrderConfirmationPage",
+            emailAddressId: selectedEmailId,
+          });
         }
       }
 
@@ -184,7 +184,10 @@ const OrderConfirmationPage: React.FC = () => {
         // Parse order ID (format: "SO-12345" -> 12345)
         const salesOrderId = parseInt(orderId.replace(/^SO-/, ""), 10);
         if (isNaN(salesOrderId)) {
-          console.error("Invalid order ID format");
+          trackError("Invalid order ID format", undefined, {
+            page: "OrderConfirmationPage",
+            orderId: orderId,
+          });
           setLoading(false);
           return;
         }
@@ -219,7 +222,10 @@ const OrderConfirmationPage: React.FC = () => {
 
         const orderData = orderResponse.salesOrderHeaders.items[0];
         if (!orderData) {
-          console.error("Order not found");
+          trackError("Order not found", undefined, {
+            page: "OrderConfirmationPage",
+            salesOrderId: salesOrderId,
+          });
           setLoading(false);
           return;
         }
@@ -320,31 +326,35 @@ const OrderConfirmationPage: React.FC = () => {
                   customerId: orderData.CustomerID,
                   emailAddressId: selectedEmailId,
                 }),
-              }
+              },
             );
 
             if (response.ok) {
-              console.log(
-                "Receipt generation and email delivery initiated for SalesOrderId:",
-                salesOrderId,
-                "EmailAddressId:",
-                selectedEmailId
-              );
+              trackEvent("Order_ReceiptGenerationInitiated", {
+                salesOrderId: salesOrderId,
+                emailAddressId: selectedEmailId,
+              });
             } else {
-              console.error(
-                "Failed to initiate receipt and email:",
-                await response.text()
-              );
+              const responseText = await response.text();
+              trackError("Failed to initiate receipt and email", undefined, {
+                page: "OrderConfirmationPage",
+                salesOrderId: salesOrderId,
+                responseText: responseText,
+              });
             }
           } catch (error) {
-            console.error(
-              "Error initiating receipt generation and email:",
-              error
-            );
+            trackError("Error initiating receipt generation and email", error, {
+              page: "OrderConfirmationPage",
+              salesOrderId: salesOrderId,
+              emailAddressId: selectedEmailId,
+            });
           }
         }
       } catch (error) {
-        console.error("Error fetching order:", error);
+        trackError("Error fetching order", error, {
+          page: "OrderConfirmationPage",
+          orderId: orderId,
+        });
       } finally {
         setLoading(false);
       }

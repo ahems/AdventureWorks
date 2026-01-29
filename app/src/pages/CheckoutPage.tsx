@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { trackEvent } from "@/lib/appInsights";
+import { trackEvent, trackError } from "@/lib/appInsights";
 import {
   ArrowLeft,
   CreditCard,
@@ -550,7 +550,10 @@ const CheckoutPage: React.FC = () => {
           }
         }
       } catch (error) {
-        console.error("Error fetching tax rate or currency:", error);
+        trackError("Error fetching tax rate or currency", error, {
+          page: "CheckoutPage",
+          state: shippingData.state,
+        });
         setTaxRate(0.08); // Default 8%
         setCurrencyCode("USD");
         setExchangeRate(1);
@@ -573,7 +576,9 @@ const CheckoutPage: React.FC = () => {
           setSelectedShipMethodId(response.shipMethods.items[0].ShipMethodID);
         }
       } catch (error) {
-        console.error("Error fetching shipping methods:", error);
+        trackError("Error fetching shipping methods", error, {
+          page: "CheckoutPage",
+        });
       }
     };
     fetchShipMethods();
@@ -713,7 +718,10 @@ const CheckoutPage: React.FC = () => {
           checkEmailWarning(newEmailInput);
           setUseNewEmail(false);
         } catch (error) {
-          console.error("Error creating email:", error);
+          trackError("Error creating email", error, {
+            page: "CheckoutPage",
+            context: "emailValidation",
+          });
           return;
         }
       }
@@ -898,11 +906,10 @@ const CheckoutPage: React.FC = () => {
             });
           }
         } catch (stockError) {
-          console.error(
-            "Error updating stock for product",
-            item.ProductID,
-            stockError,
-          );
+          trackError("Error updating stock for product", stockError, {
+            page: "CheckoutPage",
+            productId: item.ProductID,
+          });
           // Continue even if stock update fails
         }
       }
@@ -915,11 +922,10 @@ const CheckoutPage: React.FC = () => {
               shoppingCartItemId: item.ShoppingCartItemID,
             });
           } catch (deleteError) {
-            console.error(
-              "Error deleting cart item",
-              item.ShoppingCartItemID,
-              deleteError,
-            );
+            trackError("Error deleting cart item", deleteError, {
+              page: "CheckoutPage",
+              shoppingCartItemId: item.ShoppingCartItemID,
+            });
             // Continue even if delete fails
           }
         }
@@ -971,7 +977,10 @@ const CheckoutPage: React.FC = () => {
         `/order-confirmation?orderId=${orderId}&emailId=${selectedEmailId}`,
       );
     } catch (error) {
-      console.error("Order creation error:", error);
+      trackError("Order creation error", error, {
+        page: "CheckoutPage",
+        customerId: user?.customerID,
+      });
       toast({
         title: t("checkout.orderFailed"),
         description:
@@ -1264,22 +1273,19 @@ const CheckoutPage: React.FC = () => {
                                 return;
                               }
                               try {
-                                console.log(
-                                  `🔑 Creating new email address for order confirmation: ${newEmailInput}`,
-                                );
                                 const result =
                                   await createEmailAddress.mutateAsync({
                                     businessEntityId: user.businessEntityId,
                                     emailAddress: newEmailInput,
                                   });
-                                console.log(
-                                  `✅ Email created successfully with ID: ${result.EmailAddressID}`,
-                                );
                                 setSelectedEmailId(result.EmailAddressID);
                                 checkEmailWarning(newEmailInput);
                                 setUseNewEmail(false);
                               } catch (error) {
-                                console.error("Error creating email:", error);
+                                trackError("Error creating email", error, {
+                                  page: "CheckoutPage",
+                                  context: "orderPlacement",
+                                });
                                 toast({
                                   title: "Email Error",
                                   description:

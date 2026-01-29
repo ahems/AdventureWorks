@@ -4,6 +4,7 @@ import { Review, ProductReview } from "@/types/review";
 import { graphqlClient } from "@/lib/graphql-client";
 import { GET_PRODUCT_REVIEWS, GET_ALL_REVIEWS } from "@/lib/graphql-queries";
 import { getRestApiUrl } from "@/lib/utils";
+import { trackError } from "@/lib/appInsights";
 
 const STORAGE_KEY = "adventureworks_user_reviews";
 
@@ -38,7 +39,7 @@ export const useReviews = (productId: number) => {
         // Fetch reviews from API
         const data = await graphqlClient.request<ReviewsResponse>(
           GET_PRODUCT_REVIEWS,
-          { productId }
+          { productId },
         );
 
         const apiReviews = data.productReviews.items.map(convertProductReview);
@@ -49,7 +50,7 @@ export const useReviews = (productId: number) => {
           ? JSON.parse(storedReviews)
           : [];
         const productUserReviews = userReviews.filter(
-          (r) => r.productId === productId
+          (r) => r.productId === productId,
         );
 
         // Load user vote marks from localStorage (to track who voted)
@@ -67,12 +68,16 @@ export const useReviews = (productId: number) => {
         // Combine and sort: user reviews first, then API reviews by date
         const allReviews = [...productUserReviews, ...reviewsWithVotes].sort(
           (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         );
 
         setReviews(allReviews);
       } catch (error) {
-        console.error("Error fetching reviews:", error);
+        trackError("Error fetching reviews", error as Error, {
+          hook: "useReviews",
+          context: "fetchReviews",
+          productId,
+        });
         setReviews([]);
       } finally {
         setIsLoading(false);
@@ -87,13 +92,13 @@ export const useReviews = (productId: number) => {
   const addReview = async (
     review: Omit<Review, "id" | "createdAt" | "helpful" | "markedUsefulBy">,
     userEmail?: string,
-    userId?: number
+    userId?: number,
   ) => {
     // If user is logged in and we have email/userId, submit to API
     if (userEmail && userId) {
       // Check if user already reviewed this product
       const existingReview = reviews.find(
-        (r) => r.id.startsWith("api_") && r.productId === review.productId
+        (r) => r.id.startsWith("api_") && r.productId === review.productId,
       );
 
       // Check API reviews for this user
@@ -150,7 +155,12 @@ export const useReviews = (productId: number) => {
         setReviews((prev) => [newReview, ...prev]);
         return newReview;
       } catch (error) {
-        console.error("Error submitting review to API:", error);
+        trackError("Error submitting review to API", error as Error, {
+          hook: "useReviews",
+          context: "addReview",
+          productId: review.productId,
+          userId,
+        });
         throw error;
       }
     }
@@ -208,7 +218,7 @@ export const useReviews = (productId: number) => {
 
       localStorage.setItem(
         `${STORAGE_KEY}_helpful`,
-        JSON.stringify(helpfulData)
+        JSON.stringify(helpfulData),
       );
 
       setReviews((prev) =>
@@ -219,8 +229,8 @@ export const useReviews = (productId: number) => {
                 helpful: helpfulData[reviewId].helpful,
                 markedUsefulBy: helpfulData[reviewId].markedUsefulBy,
               }
-            : r
-        )
+            : r,
+        ),
       );
 
       return true;
@@ -258,7 +268,7 @@ export const useReviews = (productId: number) => {
           body: JSON.stringify({
             HelpfulVotes: newHelpfulCount,
           }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -282,25 +292,30 @@ export const useReviews = (productId: number) => {
                 helpful: newHelpfulCount,
                 markedUsefulBy: voteData[reviewId],
               }
-            : r
-        )
+            : r,
+        ),
       );
 
       return true;
     } catch (error) {
-      console.error("Error updating helpful votes:", error);
+      trackError("Error updating helpful votes", error as Error, {
+        hook: "useReviews",
+        context: "markAsUseful",
+        reviewId,
+        userId,
+      });
       return false;
     }
   };
 
   const hasUserReviewedProduct = (
     userId: number,
-    productId: number
+    productId: number,
   ): boolean => {
     // Check if user already submitted a review for this product
     // Check API reviews for matching UserID
     return reviews.some(
-      (r) => r.id.startsWith("api_") && r.productId === productId
+      (r) => r.id.startsWith("api_") && r.productId === productId,
     );
   };
 

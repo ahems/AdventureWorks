@@ -121,14 +121,12 @@ export const AIChatOverlay = () => {
       }));
 
       // Call AI Agent (which uses MCP tools internally)
-      console.log("[AI Chat] Sending message:", textToSend);
       const agentResponse = await chatWithAgent(
         textToSend,
         conversationHistory,
         user?.businessEntityId,
         selectedLanguage,
       );
-      console.log("[AI Chat] Received response:", agentResponse);
 
       // Add assistant response
       const assistantMessage: Message = {
@@ -137,7 +135,6 @@ export const AIChatOverlay = () => {
         content: agentResponse.response,
         timestamp: new Date(),
       };
-      console.log("[AI Chat] Adding assistant message:", assistantMessage);
       setMessages((prev) => [...prev, assistantMessage]);
 
       // Update suggested questions from AI
@@ -145,10 +142,6 @@ export const AIChatOverlay = () => {
         agentResponse.suggestedQuestions &&
         agentResponse.suggestedQuestions.length > 0
       ) {
-        console.log(
-          "[AI Chat] Updating suggestions:",
-          agentResponse.suggestedQuestions,
-        );
         setSuggestedQuestions(agentResponse.suggestedQuestions);
       }
     } catch (error) {

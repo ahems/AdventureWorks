@@ -3,6 +3,7 @@ import { graphqlClient } from "@/lib/graphql-client";
 import { getRestApiUrl } from "@/lib/utils";
 import { gql } from "graphql-request";
 import { toast } from "./use-toast";
+import { trackError } from "@/lib/appInsights";
 
 export interface ProfileData {
   BusinessEntityID: number;
@@ -161,7 +162,7 @@ export const useUpdateProfile = () => {
             const deleteUrl = `${restApiUrl}/PersonPhone/BusinessEntityID/${
               profile.BusinessEntityID
             }/PhoneNumber/${encodeURIComponent(
-              existingPhone.PhoneNumber
+              existingPhone.PhoneNumber,
             )}/PhoneNumberTypeID/${existingPhone.PhoneNumberTypeID}`;
 
             const deleteResponse = await fetch(deleteUrl, {
@@ -171,7 +172,7 @@ export const useUpdateProfile = () => {
             if (!deleteResponse.ok) {
               const errorText = await deleteResponse.text();
               throw new Error(
-                `Phone deletion failed: ${deleteResponse.status} ${errorText}`
+                `Phone deletion failed: ${deleteResponse.status} ${errorText}`,
               );
             }
           }
@@ -193,7 +194,7 @@ export const useUpdateProfile = () => {
           if (!createResponse.ok) {
             const errorText = await createResponse.text();
             throw new Error(
-              `Phone creation failed: ${createResponse.status} ${errorText}`
+              `Phone creation failed: ${createResponse.status} ${errorText}`,
             );
           }
         } else {
@@ -214,10 +215,9 @@ export const useUpdateProfile = () => {
           if (!response.ok) {
             const errorText = await response.text();
             throw new Error(
-              `Phone creation failed: ${response.status} ${errorText}`
+              `Phone creation failed: ${response.status} ${errorText}`,
             );
           }
-          console.log("[useProfile] Phone created successfully");
         }
       }
 

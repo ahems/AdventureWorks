@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { getRestApiUrl } from "@/lib/utils";
+import { trackError } from "@/lib/appInsights";
 
 interface CountryRegion {
   CountryRegionCode: string;
@@ -43,7 +44,10 @@ export const useCountriesAndStates = (countryCode?: string) => {
         allCountries.sort((a, b) => a.Name.localeCompare(b.Name));
         setCountries(allCountries);
       } catch (error) {
-        console.error("Failed to fetch countries:", error);
+        trackError("Failed to fetch countries", error as Error, {
+          hook: "useCountriesAndStates",
+          context: "fetchCountries",
+        });
       } finally {
         setIsLoading(false);
       }
@@ -63,19 +67,23 @@ export const useCountriesAndStates = (countryCode?: string) => {
       try {
         const dabApiUrl = getRestApiUrl();
         const response = await fetch(
-          `${dabApiUrl}/StateProvince?$filter=CountryRegionCode eq '${countryCode}'`
+          `${dabApiUrl}/StateProvince?$filter=CountryRegionCode eq '${countryCode}'`,
         );
         if (response.ok) {
           const data = await response.json();
           const stateList = data.value || [];
           // Sort states alphabetically by name
           stateList.sort((a: StateProvince, b: StateProvince) =>
-            a.Name.localeCompare(b.Name)
+            a.Name.localeCompare(b.Name),
           );
           setStates(stateList);
         }
       } catch (error) {
-        console.error("Failed to fetch states:", error);
+        trackError("Failed to fetch states", error as Error, {
+          hook: "useCountriesAndStates",
+          context: "fetchStates",
+          countryCode,
+        });
       } finally {
         setIsLoading(false);
       }

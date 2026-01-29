@@ -158,7 +158,6 @@ builder.Services.AddScoped<EmailService>(sp =>
     var storageAccountName = configuration["AzureWebJobsStorage__accountName"]
         ?? Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName");
 
-    // Debug: Log if storage account name is found
     var logger = sp.GetRequiredService<ILogger<EmailService>>();
     if (string.IsNullOrEmpty(storageAccountName))
     {
@@ -198,7 +197,11 @@ var mcpClient = McpClient.CreateAsync(
 ).GetAwaiter().GetResult();
 
 var mcpTools = mcpClient.ListToolsAsync().GetAwaiter().GetResult();
-Console.WriteLine($"Loaded {mcpTools.Count} MCP tools for durable agent from {mcpServerUrl}");
+
+// Log MCP tools initialization
+var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+var programLogger = loggerFactory.CreateLogger("Program");
+programLogger.LogInformation("Loaded {ToolCount} MCP tools for durable agent from {McpServerUrl}", mcpTools.Count, mcpServerUrl);
 
 // Create the durable agent with Azure OpenAI and MCP tools
 var endpoint = config["AZURE_OPENAI_ENDPOINT"]

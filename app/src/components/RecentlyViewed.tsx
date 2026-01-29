@@ -8,6 +8,7 @@ import { gql } from "graphql-request";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/context/CurrencyContext";
+import { trackError } from "@/lib/appInsights";
 
 // Query to fetch thumbnail photos for recently viewed products
 const GET_PRODUCT_THUMBNAILS = gql`
@@ -45,7 +46,7 @@ const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
   const { t } = useTranslation("common");
   const { formatPrice } = useCurrency();
   const [thumbnails, setThumbnails] = useState<Map<number, string | null>>(
-    new Map()
+    new Map(),
   );
   const [loading, setLoading] = useState(false);
 
@@ -80,7 +81,15 @@ const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
 
         setThumbnails(thumbnailMap);
       } catch (error) {
-        console.error("Failed to fetch thumbnails for recently viewed:", error);
+        trackError(
+          "Failed to fetch thumbnails for recently viewed products",
+          error as Error,
+          {
+            component: "RecentlyViewed",
+            productCount: productsToShow.length,
+            productIds: productIds.join(","),
+          },
+        );
       } finally {
         setLoading(false);
       }

@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, ZoomIn, X } from "lucide-react";
 import { ProductPhoto } from "@/types/product";
 import { useTranslation } from "react-i18next";
 import { getLargePhoto } from "@/data/apiService";
+import { trackError } from "@/lib/appInsights";
 
 interface ProductImageGalleryProps {
   productName: string;
@@ -64,7 +65,11 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
           }
         })
         .catch((error) => {
-          console.error("Failed to load large photo:", error);
+          trackError("Failed to load large photo for product", error as Error, {
+            component: "ProductImageGallery",
+            productPhotoId: currentPhotoId?.toString() || "unknown",
+            productName,
+          });
         })
         .finally(() => {
           setIsLoadingLargePhoto(false);
