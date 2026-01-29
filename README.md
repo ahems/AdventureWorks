@@ -6,7 +6,9 @@ AdventureWorks is an end‑to‑end e‑commerce sample that demonstrates how to
 
 See the deployed application in action:
 
-<video src="docs/adventureworks-demo.webm" controls width="100%" title="AdventureWorks Demo"></video>
+![AdventureWorks Demo](docs/adventureworks-demo.gif)
+
+_[Watch full video](docs/adventureworks-demo.webm) (25 seconds)_
 
 ---
 
