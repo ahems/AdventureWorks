@@ -3,12 +3,8 @@
 name: adventureworks
 hooks:
   preup:
-    shell: pwsh
-    run: ./scripts/hooks/preup.ps1
-    interactive: true
-  postup:
-    shell: pwsh
-    run: ./scripts/hooks/postup.ps1
+    shell: sh
+    run: ./scripts/hooks/preup.sh
     interactive: true
   postprovision:
     shell: pwsh
@@ -18,14 +14,6 @@ hooks:
     shell: sh
     run: ./scripts/hooks/predeploy.sh
     interactive: false
-  postdeploy:
-    shell: pwsh
-    run: ./scripts/hooks/postdeploy.ps1
-    interactive: true
-  postdown:
-    shell: pwsh
-    run: ./scripts/hooks/postdown.ps1
-    interactive: true
 services:
   api-mcp:
     project: ./api-mcp
@@ -41,6 +29,11 @@ services:
     docker:
       path: dockerfile
       remoteBuild: true
+    hooks:
+      postdeploy:
+        shell: sh
+        run: ./scripts/hooks/api-postdeploy.sh
+        interactive: false
   api-functions:
     project: ./api-functions
     host: containerapp
@@ -56,6 +49,11 @@ services:
     config:
       buildCommand: bash scripts/build-with-env.sh
       outputLocation: dist
+    hooks:
+      postdeploy:
+        shell: sh
+        run: ./scripts/hooks/app-postdeploy.sh
+        interactive: false
 infra:
   provider: bicep
   path: ./infra
