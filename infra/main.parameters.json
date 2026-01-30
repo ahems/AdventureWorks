@@ -11,15 +11,6 @@
     "aadAdminObjectId": {
       "value": "${OBJECT_ID}"
     },
-    "webAppClientSecret": {
-      "value": "${CLIENT_SECRET}"
-    },
-    "webAppClientId": {
-      "value": "${CLIENT_ID}"
-    },
-    "apiAppIdUri": {
-      "value": "${API_APP_ID_URI}"
-    },
     "restoreOpenAi": {
       "value": false
     },

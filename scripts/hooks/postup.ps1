@@ -114,7 +114,7 @@ Write-Host "Generating/updating .env at $envFile" -ForegroundColor Cyan
 $desiredVariables = @(
     @{ Target='IS_LOCALHOST'; Static='true' },
     @{ Target='APPLICATIONINSIGHTS_CONNECTION_STRING'; Candidates=@('APPLICATIONINSIGHTS_CONNECTION_STRING') },
-    @{ Target='AZURE_CLIENT_ID'; Candidates=@('AZURE_CLIENT_ID','CLIENT_ID') },
+    @{ Target='AZURE_CLIENT_ID'; Candidates=@('AZURE_CLIENT_ID') },
     @{ Target='API_URL'; Candidates=@('API_URL','GRAPHQL_API_URL') }
 )
 

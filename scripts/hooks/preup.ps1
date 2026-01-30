@@ -69,268 +69,8 @@ function Set-AzdValue {
 }
 
 #############################################
-# Azure Login Context
-#############################################
-# PSScriptAnalyzer SuppressMessage = PSUseApprovedVerbs "Ensure prefix retained for idempotent helper functions."
-function Ensure-AzLogin {
-	param([string]$TenantId,[string]$SubscriptionId)
-	if (-not (Get-AzContext -ErrorAction SilentlyContinue)) {
-		Write-Host "Connecting to Azure..." -ForegroundColor DarkCyan
-		if ($TenantId) {
-			Write-Host "Using tenant: $TenantId" -ForegroundColor DarkCyan
-			Connect-AzAccount -Tenant $TenantId -UseDeviceAuthentication | Out-Null
-		} else {
-			Connect-AzAccount -UseDeviceAuthentication | Out-Null
-		}
-	}
-	if ($SubscriptionId) {
-		if ((Get-AzContext).Subscription.Id -ne $SubscriptionId) {
-			Write-Host "Switching subscription context to $SubscriptionId" -ForegroundColor DarkCyan
-			Set-AzContext -Subscription $SubscriptionId | Out-Null
-		}		
-	}
-}
-
-#############################################
-# Entra ID (AAD) Application + Secret
-#############################################
-# PSScriptAnalyzer SuppressMessage = PSUseApprovedVerbs "Ensure prefix retained for idempotent helper functions."
-function Ensure-AppRegistration {
-	param(
-		[Parameter(Mandatory)][string]$AppDisplayName
-	)
-	$existing = Get-AzADApplication -DisplayName $AppDisplayName -ErrorAction SilentlyContinue
-	if (-not $existing) {
-		Write-Host "Creating Azure AD application '$AppDisplayName'..." -ForegroundColor Green
-		New-AzADApplication -DisplayName $AppDisplayName | Out-Null
-		Start-Sleep -Seconds 5
-		$app = Get-AzADApplication -DisplayName $AppDisplayName
-		if (-not $app) { throw "Failed to retrieve app registration after creation." }
-		$sp = New-AzADServicePrincipal -ApplicationId $app.AppId
-		$cred = New-AzADSpCredential -ObjectId $sp.Id -EndDate (Get-Date).AddYears(1)
-		Set-AzdValue -Name 'CLIENT_ID' -Value $app.AppId
-		Set-AzdValue -Name 'CLIENT_SECRET' -Value $cred.SecretText
-		Write-Host "App registration + SP + secret created." -ForegroundColor Green
-	} else {
-		Write-Host "Application '$AppDisplayName' already exists - skipping creation." -ForegroundColor Yellow
-		# Optionally set CLIENT_ID if missing
-		$clientIdEnv = Get-AzdValue -Name 'CLIENT_ID'
-		if (-not $clientIdEnv) { Set-AzdValue -Name 'CLIENT_ID' -Value $existing.AppId }
-
-		# Ensure CLIENT_SECRET exists; if missing, create a new SP credential and persist it
-		$clientSecretEnv = Get-AzdValue -Name 'CLIENT_SECRET'
-		if (-not $clientSecretEnv) {
-			Write-Host "CLIENT_SECRET not found in environment. Creating a new secret for the existing application..." -ForegroundColor DarkCyan
-			$sp = Get-AzADServicePrincipal -ApplicationId $existing.AppId -ErrorAction SilentlyContinue
-			if (-not $sp) {
-				Write-Host "Service principal not found for existing app. Creating service principal..." -ForegroundColor DarkCyan
-				$sp = New-AzADServicePrincipal -ApplicationId $existing.AppId
-			}
-			$cred = New-AzADSpCredential -ObjectId $sp.Id -EndDate (Get-Date).AddYears(1)
-			if (-not $cred -or -not $cred.SecretText) { throw "Failed to create or retrieve secret text for existing application." }
-			Set-AzdValue -Name 'CLIENT_SECRET' -Value $cred.SecretText
-			Write-Host "Created and persisted CLIENT_SECRET for existing application." -ForegroundColor Green
-		}
-	}
-}
-
-# PSScriptAnalyzer SuppressMessage = PSUseApprovedVerbs "Ensure helper naming aligns with rest of script."
-function Ensure-ApiAppRegistration {
-	param(
-		[Parameter(Mandatory)][string]$ApiAppDisplayName,
-		[Parameter(Mandatory)][string]$WebAppClientId
-	)
-
-	if (-not $WebAppClientId) { throw 'Web application client id not available; ensure Ensure-AppRegistration ran first.' }
-
-	# Initialize variables
-	$appRole = $null
-	$appRoleId = $null
-
-	$apiApp = Get-AzADApplication -DisplayName $ApiAppDisplayName -Select AppRole,AppId,Id,DisplayName -ErrorAction SilentlyContinue
-	$identifierUri = $null  # Don't use old environment variable, generate fresh based on new app
-	$appRoleValue = 'Api.Access'
-	$appRoleDescription = 'Allows the web application to call the API.'
-
-	if (-not $apiApp) {
-		Write-Host "Creating API Azure AD application '$ApiAppDisplayName'..." -ForegroundColor Green
-		# Create the app first without identifier URI to get the app ID
-		$appRoleId = [Guid]::NewGuid()
-		$roleSpec = @{
-			AllowedMemberTypes = @('Application')
-			Description = $appRoleDescription
-			DisplayName = $appRoleValue
-			Id = $appRoleId
-			IsEnabled = $true
-			Value = $appRoleValue
-		}
-		New-AzADApplication -DisplayName $ApiAppDisplayName -AppRole $roleSpec -SignInAudience 'AzureADMyOrg' | Out-Null
-		Start-Sleep -Seconds 5
-		$apiApp = Get-AzADApplication -DisplayName $ApiAppDisplayName -Select AppRole,AppId,Id,DisplayName
-		if (-not $apiApp) { throw 'Failed to retrieve API app registration after creation.' }
-		if (-not $apiApp.AppId) { throw 'API app was created but AppId is missing.' }
-		
-		# Now set the identifier URI using the app ID
-		if (-not $identifierUri) { $identifierUri = "api://$($apiApp.AppId)" }
-		Update-AzADApplication -ObjectId $apiApp.Id -IdentifierUris @($identifierUri) | Out-Null
-		Start-Sleep -Seconds 5
-		$apiApp = Get-AzADApplication -DisplayName $ApiAppDisplayName -Select AppRole,AppId,Id,DisplayName
-		
-		# Create mock app role object with known ID for newly created app
-		Write-Host "Creating mock app role object with known ID for newly created app..." -ForegroundColor Yellow
-		$appRole = [PSCustomObject]@{
-			Id = $appRoleId
-			Value = $appRoleValue
-			DisplayName = $appRoleValue
-			Description = $appRoleDescription
-		}
-	} else {
-		if (-not $identifierUri) {
-			# Get full app object to check IdentifierUris
-			$fullApiApp = Get-AzADApplication -DisplayName $ApiAppDisplayName
-			try {
-				if ($fullApiApp.IdentifierUris -and $fullApiApp.IdentifierUris.Count -gt 0) {
-					$identifierUri = $fullApiApp.IdentifierUris[0]
-				} else {
-					$identifierUri = "api://$($apiApp.AppId)"
-					Update-AzADApplication -ObjectId $apiApp.Id -IdentifierUris @($identifierUri) | Out-Null
-					$apiApp = Get-AzADApplication -DisplayName $ApiAppDisplayName -Select AppRole,AppId,Id,DisplayName
-				}
-			} catch {
-				Write-Host "Warning: Could not access IdentifierUris property, setting default identifier URI..." -ForegroundColor Yellow
-				$identifierUri = "api://$($apiApp.AppId)"
-				Update-AzADApplication -ObjectId $apiApp.Id -IdentifierUris @($identifierUri) | Out-Null
-				$apiApp = Get-AzADApplication -DisplayName $ApiAppDisplayName -Select AppRole,AppId,Id,DisplayName
-			}
-		}
-
-		$appRole = $null
-		try {
-			# Get full app object to check for existing roles
-			$fullApiAppForRoles = Get-AzADApplication -DisplayName $ApiAppDisplayName
-			if ($fullApiAppForRoles -and $fullApiAppForRoles.AppRole) {
-				$appRole = $fullApiAppForRoles.AppRole | Where-Object { $_.Value -eq $appRoleValue }
-				if ($appRole) { 
-					if ($appRole.GetType().IsArray -and $appRole.Count -gt 0) {
-						$appRole = $appRole[0] 
-					}
-					Write-Host "Found existing role '$appRoleValue' in API app - skipping creation" -ForegroundColor Green
-				}
-			}
-		} catch {
-			Write-Verbose "AppRole property not found or accessible on API app object." -Verbose:$false
-		}
-
-		if (-not $appRole) {
-			Write-Host "Adding application role '$appRoleValue' to API app..." -ForegroundColor DarkCyan
-			$appRoleId = [Guid]::NewGuid()
-			$roleSpec = @{
-				AllowedMemberTypes = @('Application')
-				Description = $appRoleDescription
-				DisplayName = $appRoleValue
-				Id = $appRoleId
-				IsEnabled = $true
-				Value = $appRoleValue
-			}
-			$existingRoles = @()
-			try {
-				if ($fullApiAppForRoles -and $fullApiAppForRoles.AppRole) {
-					foreach ($r in $fullApiAppForRoles.AppRole) {
-						$existingRoles += @{
-							AllowedMemberTypes = $r.AllowedMemberTypes
-							Description = $r.Description
-							DisplayName = $r.DisplayName
-							Id = [Guid]$r.Id
-							IsEnabled = [bool]$r.IsEnabled
-							Value = $r.Value
-						}
-					}
-				}
-			} catch {
-				Write-Verbose "AppRoles property not found or accessible on API app object during role enumeration." -Verbose:$false
-			}
-			$allRoles = $existingRoles + $roleSpec
-			Update-AzADApplication -ObjectId $apiApp.Id -AppRole $allRoles | Out-Null
-			Start-Sleep -Seconds 5
-			$apiApp = Get-AzADApplication -DisplayName $ApiAppDisplayName -Select AppRole,AppId,Id,DisplayName
-			$appRole = $null
-			try {
-				if ($apiApp -and $apiApp.AppRole) {
-					$appRole = $apiApp.AppRole | Where-Object { $_.Value -eq $appRoleValue }
-				}
-			} catch {
-				Write-Verbose "AppRole property not found or accessible on API app object after role update." -Verbose:$false
-			}
-			if ($appRole -and $appRole.Count -gt 0) { $appRole = $appRole[0] }
-			if (-not $appRole) { throw 'Failed to create API application role.' }
-		}
-	}
-
-	if (-not $identifierUri) {
-		$identifierUri = "api://$($apiApp.AppId)"
-		Update-AzADApplication -ObjectId $apiApp.Id -IdentifierUris @($identifierUri) | Out-Null
-		Start-Sleep -Seconds 5
-		$apiApp = Get-AzADApplication -DisplayName $ApiAppDisplayName -Select AppRole,AppId,Id,DisplayName
-	}
-
-	if (-not $appRole) {
-		Write-Host "DEBUG: API App object properties:" -ForegroundColor Red
-		Write-Host "AppId: $($apiApp.AppId)" -ForegroundColor Red
-		Write-Host "DisplayName: $($apiApp.DisplayName)" -ForegroundColor Red
-		Write-Host "AppRoles count: $(if ($apiApp.AppRoles) { $apiApp.AppRoles.Count } else { 'null or not accessible' })" -ForegroundColor Red
-		if ($apiApp.AppRoles) {
-			foreach ($role in $apiApp.AppRoles) {
-				Write-Host "Role Value: '$($role.Value)', Id: '$($role.Id)'" -ForegroundColor Red
-			}
-		}
-		throw "API application role '$appRoleValue' was not found after creation/update."
-	}
-	$apiRoleId = [string]$appRole.Id
-
-	$apiSp = Get-AzADServicePrincipal -ApplicationId $apiApp.AppId -ErrorAction SilentlyContinue
-	if (-not $apiSp) {
-		Write-Host "Creating service principal for API app..." -ForegroundColor DarkCyan
-		$apiSp = New-AzADServicePrincipal -ApplicationId $apiApp.AppId
-	}
-
-	$webSp = Get-AzADServicePrincipal -ApplicationId $WebAppClientId -ErrorAction SilentlyContinue
-	if (-not $webSp) {
-		Write-Host "Creating service principal for web app registration..." -ForegroundColor DarkCyan
-		$webSp = New-AzADServicePrincipal -ApplicationId $WebAppClientId
-	}
-
-	$assignmentExists = $false
-	try {
-		$assignments = Get-AzADServicePrincipalAppRoleAssignment -ServicePrincipalId $webSp.Id -ErrorAction Stop
-		if ($assignments) {
-			$assignmentExists = $assignments | Where-Object { $_.ResourceId -eq $apiSp.Id -and ([string]$_.AppRoleId -eq $apiRoleId) }
-			if ($assignmentExists) {
-				Write-Host "Role assignment already exists between web app and API app - skipping creation" -ForegroundColor Green
-			}
-		}
-	} catch {
-		Write-Verbose "Unable to enumerate existing role assignments: $($_.Exception.Message)" -Verbose:$false
-	}
-
-	if (-not $assignmentExists) {
-		Write-Host "Assigning API app role '$appRoleValue' to web app service principal..." -ForegroundColor DarkCyan
-		New-AzADServicePrincipalAppRoleAssignment -ServicePrincipalId $webSp.Id -ResourceId $apiSp.Id -AppRoleId ([Guid]$apiRoleId) | Out-Null
-	}
-
-	Set-AzdValue -Name 'API_APP_ID' -Value $apiApp.AppId
-	Set-AzdValue -Name 'API_APP_OBJECT_ID' -Value $apiApp.Id
-	Set-AzdValue -Name 'API_APP_ROLE_ID' -Value $apiRoleId
-	Set-AzdValue -Name 'API_APP_ID_URI' -Value $identifierUri
-
-	Write-Host "API app registration ensured. Audience: $identifierUri" -ForegroundColor Green
-}
-
-#############################################
 # Azure AI Foundry Account + Model Selection
 #############################################
-# Microsoft Foundry Account + Model Selection
-#############################################
-# Minimal model (only fields we actually use)
 class Model { [string]$format; [string]$name; [string]$version }
 
 # PSScriptAnalyzer SuppressMessage = PSUseApprovedVerbs "Ensure helper naming aligns with rest of script."
@@ -422,73 +162,30 @@ function Get-AoaiModelAvailableQuota {
 # MAIN EXECUTION FLOW
 #############################################
 Ensure-PsGalleryTrusted
-Ensure-Module -Name Az.Accounts -MinVersion '2.12.0'
 Ensure-Module -Name Az.Resources
 Ensure-Module -Name Az.CognitiveServices
 
-$tenantId       = Get-AzdValue -Name 'TENANT_ID'
 $subscriptionId = Get-AzdValue -Name 'AZURE_SUBSCRIPTION_ID'
-Ensure-AzLogin -TenantId $tenantId -SubscriptionId $subscriptionId
 
-# If subscription id is missing but resource group is already known, attempt to discover the subscription
 if (-not $subscriptionId) {
-	Write-Host "No value for AZURE_SUBSCRIPTION_ID found." -ForegroundColor DarkCyan
-	$rgForLookup = Get-AzdValue -Name 'AZURE_RESOURCE_GROUP'
-	if ($rgForLookup) {
-		Write-Host "Attempting to resolve AZURE_SUBSCRIPTION_ID for resource group '$rgForLookup'..." -ForegroundColor DarkCyan
-		$resolvedSubId = $null
-
-		# First try current context (fast path)
-		$ctx = Get-AzContext -ErrorAction SilentlyContinue
-		if ($ctx) {
-			try {
-				if (Get-AzResourceGroup -Name $rgForLookup -ErrorAction SilentlyContinue) {
-					$resolvedSubId = $ctx.Subscription.Id
-				}
-			} catch { }
-		}
-
-		# Enumerate subscriptions if still not resolved
-		if (-not $resolvedSubId) {
-			try {
-				$subs = Get-AzSubscription -ErrorAction Stop
-				foreach ($sub in $subs) {
-					try {
-						Set-AzContext -Subscription $sub.Id -ErrorAction Stop | Out-Null
-						if (Get-AzResourceGroup -Name $rgForLookup -ErrorAction SilentlyContinue) { $resolvedSubId = $sub.Id; break }
-					} catch { }
-				}
-			} catch {
-				Write-Warning "Failed enumerating subscriptions while resolving subscription id: $($_.Exception.Message)"
-			}
-		}
-
-		if ($resolvedSubId) {
-			Write-Host "Resolved subscription id '$resolvedSubId' for resource group '$rgForLookup'." -ForegroundColor Green
-			Set-AzdValue -Name 'AZURE_SUBSCRIPTION_ID' -Value $resolvedSubId
-			$subscriptionId = $resolvedSubId
-			# Ensure context is set to resolved subscription
-			if ((Get-AzContext).Subscription.Id -ne $subscriptionId) { Set-AzContext -Subscription $subscriptionId | Out-Null }
-		} else {
-			Write-Warning "Unable to resolve subscription id using resource group '$rgForLookup'. Proceeding without setting AZURE_SUBSCRIPTION_ID."
-		}
-	}
+	Write-Warning "AZURE_SUBSCRIPTION_ID not found in azd environment. This may be required for model enumeration."
 }
 
-# Ensure NAME & OBJECT_ID env vars (user context)
+# Ensure NAME & OBJECT_ID env vars (user context) using Azure CLI
 $nameVal = Get-AzdValue -Name 'NAME'
 $objectIdVal = Get-AzdValue -Name 'OBJECT_ID'
 if (-not $nameVal -or -not $objectIdVal) {
-	$acct = (Get-AzContext).Account
-	$nameVal = $acct.Id
-	$userObj = Get-AzADUser -SignedIn
-	$objectIdVal = $userObj.Id
+	Write-Host "Retrieving current user information from Azure CLI..." -ForegroundColor Cyan
+	$accountInfo = az account show --query '{name:user.name}' -o json | ConvertFrom-Json
+	$nameVal = $accountInfo.name
+	$userInfo = az ad signed-in-user show --query '{id:id}' -o json | ConvertFrom-Json
+	$objectIdVal = $userInfo.id
 	Set-AzdValue -Name 'NAME' -Value $nameVal
 	Set-AzdValue -Name 'OBJECT_ID' -Value $objectIdVal
 	Write-Host "Persisted NAME and OBJECT_ID to azd env." -ForegroundColor Green
 }
 
-# 2. Azure AI Foundry provisioning + model selection (skip if already fully selected)
+# Azure AI Foundry provisioning + model selection (skip if already fully selected)
 $existingChatComplete = (Get-AzdValue -Name 'chatGptDeploymentVersion') -and (Get-AzdValue -Name 'chatGptSkuName') -and (Get-AzdValue -Name 'chatGptModelName') -and (Get-AzdValue -Name 'availableChatGptDeploymentCapacity')
 $existingEmbComplete  = (Get-AzdValue -Name 'embeddingDeploymentVersion') -and (Get-AzdValue -Name 'embeddingDeploymentSkuName') -and (Get-AzdValue -Name 'embeddingDeploymentModelName') -and (Get-AzdValue -Name 'availableEmbeddingDeploymentCapacity')
 $existingImageComplete = (Get-AzdValue -Name 'imageDeploymentVersion') -and (Get-AzdValue -Name 'imageDeploymentSkuName') -and (Get-AzdValue -Name 'imageDeploymentModelName') -and (Get-AzdValue -Name 'imageModelFormat') -and (Get-AzdValue -Name 'availableImageDeploymentCapacity')
@@ -528,26 +225,6 @@ if (-not $resourceGroup) {
 	$resourceGroup = "rg-$envName"
 	Set-AzdValue -Name 'AZURE_RESOURCE_GROUP' -Value $resourceGroup
 	Write-Host "Derived and set AZURE_RESOURCE_GROUP = $resourceGroup" -ForegroundColor Cyan
-	# Create the resource group immediately if it does not exist using resolved $location
-	$existingRg = Get-AzResourceGroup -Name $resourceGroup -ErrorAction SilentlyContinue
-	if (-not $existingRg) {
-		Write-Host "Creating resource group '$resourceGroup' in location '$location'..." -ForegroundColor Green
-		New-AzResourceGroup -Name $resourceGroup -Location $location | Out-Null
-	} else {
-		Write-Host "Resource group '$resourceGroup' already exists." -ForegroundColor Yellow
-	}
-}
-
-# SECOND-CHANCE SUBSCRIPTION RESOLUTION
-if (-not $subscriptionId) {
-	$ctx = Get-AzContext -ErrorAction SilentlyContinue
-	if ($ctx -and $ctx.Subscription -and $ctx.Subscription.Id) {
-		$subscriptionId = $ctx.Subscription.Id
-		Set-AzdValue -Name 'AZURE_SUBSCRIPTION_ID' -Value $subscriptionId
-		Write-Host "Captured subscription id from current context: $subscriptionId" -ForegroundColor Green
-	} else {
-		Write-Warning "Subscription id still not resolved after resource group handling. Model enumeration will fail without it."
-	}
 }
 
 $accountName = Get-AzdValue -Name 'AZURE_OPENAI_ACCOUNT_NAME'
@@ -602,7 +279,7 @@ if ($pwshSupportsParallel) {
 		$quotas = $models | ForEach-Object -Parallel {
 			$fmt = if ([string]::IsNullOrWhiteSpace($_.format)) { 'OpenAI' } else { $_.format }
 			try {
-				Write-Host "  [Parallel] Getting available quota for Model '$($_.name)' v '$($_.version)'" -ForegroundColor DarkCyan
+
 				function _Encode([string]$v){ [System.Uri]::EscapeDataString($v) }
 				$relPath = "/subscriptions/$($using:acctSubId)/providers/Microsoft.CognitiveServices/modelCapacities?api-version=$($using:apiVersionCap)&modelFormat=$(_Encode $fmt)&modelName=$(_Encode $_.name)&modelVersion=$(_Encode $_.version)"
 				$resp = Invoke-AzRestMethod -Method GET -Path $relPath -ErrorAction Stop
@@ -627,7 +304,7 @@ if ($pwshSupportsParallel) {
 		$i++
 		$fmt = if ([string]::IsNullOrWhiteSpace($m.format)) { 'OpenAI' } else { $m.format }
 		try {
-			Write-Host "  [$i/$total] Getting available quota for Model '$($m.name)', version '$($m.version)'..." -ForegroundColor DarkCyan
+
 			$quota = Get-AoaiModelAvailableQuota -ResourceGroupName $resourceGroup -AccountName $accountName -ModelName $m.name -ModelVersion $m.version -ModelFormat $fmt -ErrorAction Stop
 			if ($quota) { $allQuota += $quota }
 		} catch {

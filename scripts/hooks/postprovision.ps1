@@ -340,7 +340,7 @@ ORDER BY c.ORDINAL_POSITION
                 $Command.ExecuteNonQuery() | Out-Null
                 
                 $insertedRows += ($batchEnd - $i)
-                if ($insertedRows % 500 -eq 0) {
+                if ($insertedRows % 1000 -eq 0) {
                     Write-Output "    ...inserted $insertedRows rows"
                 }
             }
@@ -1082,7 +1082,7 @@ ORDER BY c.ORDINAL_POSITION
                 $dataTable.Rows.Add($dataRow)
                 $rowCount++
                 
-                if ($rowCount % 5000 -eq 0) {
+                if ($rowCount % 10000 -eq 0) {
                     Write-Output "    ...parsed $rowCount rows"
                 }
             }
@@ -1231,7 +1231,7 @@ END
                                     $skippedRows++
                                 }
                                 
-                                if (($insertedRows + $skippedRows) % 100 -eq 0) {
+                                if (($insertedRows + $skippedRows) % 500 -eq 0) {
                                     Write-Output "    ...processed $($insertedRows + $skippedRows) rows ($insertedRows inserted, $skippedRows skipped)"
                                 }
                             }
@@ -1312,7 +1312,7 @@ END
                         
                         $insertedRows += ($batchEnd - $batchStart)
                         
-                        if ($insertedRows % 500 -eq 0) {
+                        if ($insertedRows % 1000 -eq 0) {
                             Write-Output "    ...inserted $insertedRows rows"
                         }
                         }
@@ -1457,7 +1457,7 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
                             }
                             $nextPhotoId++
                             
-                            if ($currentFile % 50 -eq 0) {
+                            if ($currentFile % 100 -eq 0) {
                                 Write-Output "    ...uploaded $currentFile of $totalPngFiles images"
                             }
                         }
