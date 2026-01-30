@@ -177,7 +177,7 @@ function Ensure-ApiAppRegistration {
 		$apiApp = Get-AzADApplication -DisplayName $ApiAppDisplayName -Select AppRole,AppId,Id,DisplayName
 		
 		# Create mock app role object with known ID for newly created app
-		Write-Host "Creating mock app role object with known ID for newly created app..." -ForegroundColor Yellow
+
 		$appRole = [PSCustomObject]@{
 			Id = $appRoleId
 			Value = $appRoleValue
@@ -274,15 +274,6 @@ function Ensure-ApiAppRegistration {
 	}
 
 	if (-not $appRole) {
-		Write-Host "DEBUG: API App object properties:" -ForegroundColor Red
-		Write-Host "AppId: $($apiApp.AppId)" -ForegroundColor Red
-		Write-Host "DisplayName: $($apiApp.DisplayName)" -ForegroundColor Red
-		Write-Host "AppRoles count: $(if ($apiApp.AppRoles) { $apiApp.AppRoles.Count } else { 'null or not accessible' })" -ForegroundColor Red
-		if ($apiApp.AppRoles) {
-			foreach ($role in $apiApp.AppRoles) {
-				Write-Host "Role Value: '$($role.Value)', Id: '$($role.Id)'" -ForegroundColor Red
-			}
-		}
 		throw "API application role '$appRoleValue' was not found after creation/update."
 	}
 	$apiRoleId = [string]$appRole.Id
@@ -602,7 +593,7 @@ if ($pwshSupportsParallel) {
 		$quotas = $models | ForEach-Object -Parallel {
 			$fmt = if ([string]::IsNullOrWhiteSpace($_.format)) { 'OpenAI' } else { $_.format }
 			try {
-				Write-Host "  [Parallel] Getting available quota for Model '$($_.name)' v '$($_.version)'" -ForegroundColor DarkCyan
+
 				function _Encode([string]$v){ [System.Uri]::EscapeDataString($v) }
 				$relPath = "/subscriptions/$($using:acctSubId)/providers/Microsoft.CognitiveServices/modelCapacities?api-version=$($using:apiVersionCap)&modelFormat=$(_Encode $fmt)&modelName=$(_Encode $_.name)&modelVersion=$(_Encode $_.version)"
 				$resp = Invoke-AzRestMethod -Method GET -Path $relPath -ErrorAction Stop
@@ -627,7 +618,7 @@ if ($pwshSupportsParallel) {
 		$i++
 		$fmt = if ([string]::IsNullOrWhiteSpace($m.format)) { 'OpenAI' } else { $m.format }
 		try {
-			Write-Host "  [$i/$total] Getting available quota for Model '$($m.name)', version '$($m.version)'..." -ForegroundColor DarkCyan
+
 			$quota = Get-AoaiModelAvailableQuota -ResourceGroupName $resourceGroup -AccountName $accountName -ModelName $m.name -ModelVersion $m.version -ModelFormat $fmt -ErrorAction Stop
 			if ($quota) { $allQuota += $quota }
 		} catch {
