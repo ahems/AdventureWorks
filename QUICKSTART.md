@@ -53,6 +53,10 @@ Then ensure `azd` is pointed at the correct subscription:
 azd config set defaults.subscription <your-subscription-id>
 ```
 
+```pwsh
+Connect-AzAccount Set-AzContext -Subscription <your-subscription-id>
+```
+
 You only need to do this once per Codespace (or per environment) unless you change subscriptions.
 
 ---

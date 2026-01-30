@@ -19,6 +19,9 @@
       "version": "latest"
     }
   },
+  "remoteEnv": {
+    "DOTNET_ROOT": "/usr/share/dotnet"
+  },
   "customizations": {
     "vscode": {
       "extensions": [
