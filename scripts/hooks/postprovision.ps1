@@ -500,7 +500,8 @@ try {
                 $errorMsg -match 'There is already an object named' -or
                 $errorMsg -match 'already has a primary key defined on it' -or
                 $errorMsg -match 'Altering existing schema components is not allowed' -or
-                $errorMsg -match 'A full-text index for table') {
+                $errorMsg -match 'A full-text index for table' -or
+                $errorMsg -match 'The specified namespace already exists in the specified XML schema collection') {
                 $alreadyExistsCount++
             } else {
                 $unexpectedErrorCount++
