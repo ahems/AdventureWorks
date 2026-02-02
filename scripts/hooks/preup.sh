@@ -43,6 +43,19 @@ set_azd_value() {
 #############################################
 # Azure AI Foundry Account + Model Selection
 #############################################
+ensure_resource_group() {
+  local sub_id=$1
+  local rg=$2
+  local loc=$3
+  
+  if az group show -n "$rg" --subscription "$sub_id" &>/dev/null; then
+    color_dark_gray "Resource group '$rg' already exists."
+  else
+    color_green "Creating resource group '$rg' in $loc..."
+    az group create --name "$rg" --location "$loc" --subscription "$sub_id" >/dev/null
+  fi
+}
+
 ensure_foundry_account() {
   local sub_id=$1
   local rg=$2
@@ -153,7 +166,7 @@ get_model_quota() {
     return
   fi
   
-  # Filter for location, exclude Batch SKUs, only positive capacity
+  # Filter for location, exclude Batch SKUs, only positive capacity - output to stdout
   echo "$response" | jq -c --arg loc "$location" '
     .value[]? |
     select(.location | ascii_downcase == ($loc | ascii_downcase)) |
@@ -174,10 +187,18 @@ get_model_quota() {
 # MAIN EXECUTION FLOW
 #############################################
 
+# Get or retrieve subscription ID from Azure CLI
 subscription_id=$(get_azd_value "AZURE_SUBSCRIPTION_ID")
 
 if [[ -z "$subscription_id" ]]; then
-  color_yellow "Warning: AZURE_SUBSCRIPTION_ID not found in azd environment. This may be required for model enumeration."
+  color_cyan "AZURE_SUBSCRIPTION_ID not found, retrieving from Azure CLI context..."
+  subscription_id=$(az account show --query 'id' -o tsv 2>/dev/null || true)
+  if [[ -z "$subscription_id" ]]; then
+    color_red "Error: Unable to retrieve subscription ID. Please run 'az login' first."
+    exit 1
+  fi
+  set_azd_value "AZURE_SUBSCRIPTION_ID" "$subscription_id"
+  color_green "Persisted AZURE_SUBSCRIPTION_ID to azd env."
 fi
 
 # Ensure NAME & OBJECT_ID env vars (user context) using Azure CLI
@@ -224,14 +245,38 @@ if [[ "$existing_chat_complete" == "true" ]] && \
   exit 0
 fi
 
-# Get cognitive services location (AI Foundry region), with fallback to main Azure location
-cognitive_services_location=$(get_azd_value "cognitiveservicesLocation")
-if [[ -z "$cognitive_services_location" ]]; then
-  cognitive_services_location=$(get_azd_value "AZURE_LOCATION" "eastus2")
-  set_azd_value "cognitiveservicesLocation" "$cognitive_services_location"
-  color_cyan "Set cognitiveservicesLocation = $cognitive_services_location (from AZURE_LOCATION)"
+
+
+# Ensure resource_group and env_name are set before any use
+resource_group=$(get_azd_value "AZURE_RESOURCE_GROUP")
+env_name=$(get_azd_value "AZURE_ENV_NAME")
+if [[ -z "$resource_group" ]]; then
+  if [[ -z "$env_name" ]]; then
+    color_red "Error: AZURE_RESOURCE_GROUP not set and cannot derive because AZURE_ENV_NAME is missing."
+    exit 1
+  fi
+  resource_group="rg-$env_name"
+  set_azd_value "AZURE_RESOURCE_GROUP" "$resource_group"
+  color_cyan "Derived and set AZURE_RESOURCE_GROUP = $resource_group"
 fi
-location=$cognitive_services_location
+
+# Get AI Foundry location: prefer FOUNDRY_LOCATION from azd env, else use resource group location
+foundry_location=$(get_azd_value "FOUNDRY_LOCATION")
+if [[ -z "$foundry_location" ]]; then
+  # If not set, use the resource group's location
+  resource_group_location=$(az group show -n "$resource_group" --subscription "$subscription_id" --query location -o tsv 2>/dev/null || true)
+  if [[ -n "$resource_group_location" ]]; then
+    foundry_location="$resource_group_location"
+    color_cyan "Set Foundry location from resource group: $foundry_location"
+  else
+    foundry_location=$(get_azd_value "AZURE_LOCATION" "eastus2")
+    color_cyan "Set Foundry location from AZURE_LOCATION: $foundry_location"
+  fi
+  set_azd_value "FOUNDRY_LOCATION" "$foundry_location"
+else
+  color_cyan "Using Foundry location from FOUNDRY_LOCATION: $foundry_location"
+fi
+location=$foundry_location
 
 # Persist default Azure location if it was not previously set
 if [[ -z "$(get_azd_value AZURE_LOCATION)" ]]; then
@@ -247,26 +292,26 @@ if [[ -z "$sql_database_name" ]]; then
   set_azd_value "SQL_DATABASE_NAME" "$sql_database_name"
 fi
 
-resource_group=$(get_azd_value "AZURE_RESOURCE_GROUP")
-env_name=$(get_azd_value "AZURE_ENV_NAME")
-if [[ -z "$resource_group" ]]; then
-  if [[ -z "$env_name" ]]; then
-    color_red "Error: AZURE_RESOURCE_GROUP not set and cannot derive because AZURE_ENV_NAME is missing."
-    exit 1
-  fi
-  resource_group="rg-$env_name"
-  set_azd_value "AZURE_RESOURCE_GROUP" "$resource_group"
-  color_cyan "Derived and set AZURE_RESOURCE_GROUP = $resource_group"
-fi
 
-account_name=$(get_azd_value "AZURE_OPENAI_ACCOUNT_NAME")
-if [[ -z "$account_name" ]]; then
-  # Generate a random hash similar to PowerShell's approach
-  hash=$(cat /dev/urandom | tr -dc 'a-f0-9' | fold -w 8 | head -n 1)
-  account_name="av-openai-$hash"
-  set_azd_value "AZURE_OPENAI_ACCOUNT_NAME" "$account_name"
-  color_cyan "Derived Microsoft Foundry account name: $account_name"
+
+# Ensure resource group exists before querying its id
+ensure_resource_group "$subscription_id" "$resource_group" "$location"
+
+# Compute Foundry account name as in Bicep: 'av-ai-${toLower(uniqueString(resourceGroup().id, environmentName, location))}'
+environment_name=$(get_azd_value "AZURE_ENV_NAME")
+if [[ -z "$environment_name" ]]; then
+  color_red "Error: AZURE_ENV_NAME is not set. Cannot compute Foundry account name."
+  exit 1
 fi
+resource_group_id=$(az group show -n "$resource_group" --subscription "$subscription_id" --query id -o tsv 2>/dev/null || true)
+if [[ -z "$resource_group_id" ]]; then
+  color_red "Error: Could not retrieve resource group id for $resource_group."
+  exit 1
+fi
+# Use Python to compute uniqueString and toLower as in Bicep
+account_name=$(python3 -c "import hashlib; print('av-ai-' + hashlib.sha1(('$resource_group_id' + '$environment_name' + '$location').encode('utf-8')).hexdigest()[:13].lower())")
+set_azd_value "AZURE_OPENAI_ACCOUNT_NAME" "$account_name"
+color_cyan "Computed Microsoft Foundry account name: $account_name (matches Bicep logic)"
 
 ensure_foundry_account "$subscription_id" "$resource_group" "$account_name" "$location"
 
@@ -301,31 +346,69 @@ account_location=$(az cognitiveservices account show \
   --subscription "$subscription_id" \
   --query location -o tsv)
 
-# Get quota for each model (parallel execution)
-throttle=${AOAI_QUOTA_DOP:-8}
-color_green "Retrieving quota in parallel (ThrottleLimit=$throttle)..."
+# Get quota for each model (parallel with background jobs)
+color_green "Retrieving quota for models (parallel)..."
 
-# Create temporary files for parallel processing
+# Create temporary file
 quota_file=$(mktemp)
 trap "rm -f $quota_file" EXIT
 
-# Export functions and variables for parallel execution
-export -f get_model_quota url_encode
-export subscription_id account_location
+# Use background jobs with manual throttling and separate output files
+temp_dir=$(mktemp -d)
+trap "rm -rf $temp_dir $quota_file" EXIT
 
-# Process models in parallel
-echo "$models" | jq -c '.[]' | xargs -P "$throttle" -I {} bash -c '
-  model_json="{}"
-  name=$(echo "$model_json" | jq -r ".name")
-  version=$(echo "$model_json" | jq -r ".version")
-  format=$(echo "$model_json" | jq -r ".format")
+max_jobs=8
+job_count=0
+file_index=0
+
+while IFS= read -r model_json; do
+  name=$(echo "$model_json" | jq -r '.name' 2>&1) || { color_red "Failed to parse name from: $model_json"; continue; }
+  version=$(echo "$model_json" | jq -r '.version' 2>&1) || { color_red "Failed to parse version from: $model_json"; continue; }
+  format=$(echo "$model_json" | jq -r '.format' 2>&1) || { color_red "Failed to parse format from: $model_json"; continue; }
   [[ "$format" == "" ]] && format="OpenAI"
   
-  get_model_quota "$subscription_id" "$account_location" "$name" "$version" "$format"
-' >> "$quota_file"
+  if (( file_index % 10 == 0 )); then
+    color_dark_gray "Processing model $file_index..."
+  fi
+  
+  # Each job writes to its own file
+  out_file="$temp_dir/$file_index.json"
+  ((file_index++)) || true
+  
+  # Run in background - wrap in subshell to avoid errexit propagation
+  (
+    set +e  # Disable errexit for this subshell
+    result=$(get_model_quota "$subscription_id" "$account_location" "$name" "$version" "$format")
+    if [[ -n "$result" ]]; then
+      echo "$result" > "$out_file"
+    fi
+    exit 0  # Always succeed
+  ) &
+  
+  job_count=$((job_count + 1))
+  
+  # Throttle: wait if we've reached max concurrent jobs
+  while [[ $(jobs -r | wc -l) -ge $max_jobs ]]; do
+    sleep 0.1
+  done
+  
+  if (( file_index % 10 == 0 )); then
+    color_dark_gray "Processed $file_index models..."
+  fi
+done < <(echo "$models" | jq -c '.[]')
 
-# Read all quota results
-all_quota=$(cat "$quota_file" | jq -s '.')
+# Wait for remaining jobs - don't fail if jobs failed
+wait || true
+
+# Combine all result files (check if any exist first)
+if ls "$temp_dir"/*.json 1> /dev/null 2>&1; then
+  cat "$temp_dir"/*.json >> "$quota_file" 2>/dev/null || true
+else
+  color_yellow "Warning: No quota data collected from API calls."
+fi
+
+# Read all quota results, filtering out empty lines and non-JSON content
+all_quota=$(grep -v '^$' "$quota_file" 2>/dev/null | grep '^{' 2>/dev/null | jq -s '.' 2>/dev/null || echo "[]")
 quota_count=$(echo "$all_quota" | jq 'length')
 
 if [[ "$quota_count" -eq 0 ]]; then
@@ -334,8 +417,8 @@ if [[ "$quota_count" -eq 0 ]]; then
 fi
 
 color_green "Sorting quota results..."
-# Sort by AvailableCapacity descending, then ModelVersion descending
-sorted=$(echo "$all_quota" | jq -c 'sort_by(-.AvailableCapacity, -.ModelVersion)')
+# Sort by AvailableCapacity descending
+sorted=$(echo "$all_quota" | jq -c 'sort_by(-.AvailableCapacity)')
 
 # Select chat model with preference for 'mini' models, then exclude 'nano', then any available
 chat_pick=$(echo "$sorted" | jq -c 'first(.[] | select(.ModelName | test("mini"; "i")))' 2>/dev/null || echo "null")

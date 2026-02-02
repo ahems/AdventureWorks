@@ -1,14 +1,14 @@
 targetScope = 'resourceGroup'
 param resourceToken string = toLower(uniqueString(resourceGroup().id, environmentName, location))
 param environmentName string
-param cognitiveservicesname string
+param foundryname string
 param identityName string = 'av-identity-${resourceToken}'
 param appInsightsName string = 'av-appinsights-${toLower(resourceToken)}'
 param workspaceName string = 'av-workspace-${toLower(resourceToken)}'
 param acrName string = 'avacr${toLower(resourceToken)}'
 param sqlServerName string = 'av-sql-${toLower(resourceToken)}'
 param diagnosticsName string = 'acr-diagnostics-${toLower(resourceToken)}'
-param cognitiveservicesLocation string = resourceGroup().location
+param foundryLocation string = resourceGroup().location
 param location string = resourceGroup().location
 param adminUserEnabled bool = true
 param aadAdminLogin string
@@ -77,13 +77,13 @@ module communication 'modules/communication.bicep' = {
   ]
 }
 
-module cognitiveservices 'modules/aiservices.bicep' = {
+module aifoundry 'modules/aiservices.bicep' = {
   name: 'Deploy-AI-Foundry'
   params: {
-    name: cognitiveservicesname
-    location: cognitiveservicesLocation
+    name: foundryname
+    location: foundryLocation
     identityName: identityName
-    customSubDomainName: cognitiveservicesname
+    customSubDomainName: foundryname
     restoreOpenAi: restoreOpenAi
     chatGptModelName: chatGptModelName
     chatGptDeploymentName: chatGptDeploymentName
@@ -112,6 +112,9 @@ module cognitiveservices 'modules/aiservices.bicep' = {
     storageAccountName: storage.outputs.storageAccountName
     storageAccountConnectionName: 'av-storage-connection-${resourceToken}'
   }
+  dependsOn: [
+    identity
+  ]
 }
 
 module database 'modules/database.bicep' = {
@@ -125,6 +128,9 @@ module database 'modules/database.bicep' = {
     useFreeLimit: useFreeLimit
     sqlDatabaseName: sqlDatabaseName
   }
+  dependsOn: [
+    identity
+  ]
 }
 
 module acr 'modules/acr.bicep' = {
@@ -210,7 +216,7 @@ module containerAppApiMcp 'modules/aca-api-mcp.bicep' = {
     containerRegistryName: acrName
     identityName: identityName
     sqlConnectionString: database.outputs.connectionString
-    aiFoundryEndpoint: cognitiveservices.outputs.endpoint
+    aiFoundryEndpoint: aifoundry.outputs.endpoint
     minReplica: 0
     maxReplica: 3
     revisionSuffix: revisionSuffix
@@ -227,7 +233,7 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
     containerRegistryName: acrName
     identityName: identityName
     sqlConnectionString: database.outputs.connectionString
-    aiFoundryEndpoint: cognitiveservices.outputs.endpoint
+    aiFoundryEndpoint: aifoundry.outputs.endpoint
     chatGptDeploymentName: chatGptDeploymentName
     storageAccountName: storage.outputs.storageAccountName
     communicationServiceEndpoint: communication.outputs.communicationServiceEndpoint
@@ -244,7 +250,7 @@ module staticWebAppFrontend 'modules/swa-app.bicep' = {
   name: 'Deploy-Static-Web-App-Frontend'
   params: {
     swaName: 'av-swa-${resourceToken}'
-    location: location
+    location: 'eastus2'
     identityName: identityName
     apiUrl: containerAppApi.outputs.apiUrl
     apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
@@ -297,8 +303,8 @@ output AZURE_STATIC_WEB_APP_DEPLOYMENT_TOKEN string = staticWebAppFrontend.outpu
 output COMMUNICATION_SERVICE_NAME string = communication.outputs.communicationServiceName
 output COMMUNICATION_SERVICE_ENDPOINT string = communication.outputs.communicationServiceEndpoint
 output EMAIL_SENDER_DOMAIN string = communication.outputs.senderDomain
-output PROJECT_NAME string = cognitiveservices.outputs.projectName
-output PROJECT_RESOURCE_ID string = cognitiveservices.outputs.projectResourceId
+output PROJECT_NAME string = aifoundry.outputs.projectName
+output PROJECT_RESOURCE_ID string = aifoundry.outputs.projectResourceId
 output CONTAINER_APP_ENVIRONMENT_NAME string = containerApp.outputs.containerAppEnvName
 
 // Playwright Workspaces outputs (Azure LoadTest Service)

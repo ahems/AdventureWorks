@@ -41,11 +41,8 @@ Inside the Codespace terminal:
 azd auth login
 ```
 
-or, if you prefer using the Azure CLI directly first:
-
-```bash
-az login
-```
+azd env set "TENANT_ID" ed9aa516-5358-4016-a8b2-b6ccb99142d0 // 3Cloud Lab
+azd env set "AZURE_SUBSCRIPTION_ID" 6c8e23df-4aec-4ed5-bec5-79853ea6c6c6 // Data Lab
 
 Then ensure `azd` is pointed at the correct subscription:
 
@@ -53,11 +50,24 @@ Then ensure `azd` is pointed at the correct subscription:
 azd config set defaults.subscription <your-subscription-id>
 ```
 
+Also sign in using a Powershell Terminal:
+
 ```pwsh
+Connect-AzAccount -UseDeviceAuthentication -Tenant <your-tenant-id>
 Connect-AzAccount Set-AzContext -Subscription <your-subscription-id>
 ```
 
-You only need to do this once per Codespace (or per environment) unless you change subscriptions.
+Set the Azure region you want to deploy to:
+
+```bash
+azd env set 'AZURE_LOCATION'='eastus2'
+```
+
+Optionally, if you want to deploy your AI Foundry in a different region, do so like this:
+
+```bash
+azd env set 'FOUNDRY_LOCATION'='swedencentral'
+```
 
 ---
 

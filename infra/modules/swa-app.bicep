@@ -1,5 +1,12 @@
 param swaName string
-param location string = resourceGroup().location
+@allowed([
+  'westus2'
+  'centralus'
+  'eastus2'
+  'westeurope'
+  'eastasia'
+])
+param location string = 'eastus2'
 param identityName string
 param apiUrl string
 param apiFunctionsUrl string = ''

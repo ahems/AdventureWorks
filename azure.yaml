@@ -54,6 +54,13 @@ services:
         shell: sh
         run: ./scripts/hooks/app-postdeploy.sh
         interactive: false
+  seed-job:
+    project: .
+    host: containerapp
+    language: docker
+    docker:
+      path: seed-job/dockerfile
+      remoteBuild: true
 infra:
   provider: bicep
   path: ./infra

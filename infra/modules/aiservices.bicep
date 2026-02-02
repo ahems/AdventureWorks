@@ -1,4 +1,4 @@
-param name string = 'av-openai-${uniqueString(resourceGroup().id)}'
+param name string = 'av-ai-${uniqueString(resourceGroup().id)}'
 param location string = 'canadaeast'
 param tags object = {}
 @description('The custom subdomain name used to access the API. Defaults to the value of the name parameter.')
@@ -157,26 +157,6 @@ resource aiServiceConnection 'Microsoft.CognitiveServices/accounts/connections@2
     metadata: {
       ApiType: 'azure'
       ResourceId: account.id
-    }
-  }
-}
-
-
-// Creates the Azure Foundry connection to your Azure App Insights resource
-resource appInsightConnection 'Microsoft.CognitiveServices/accounts/connections@2025-04-01-preview' = {
-  name: appInsightConnectionName
-  parent: account
-  properties: {
-    category: 'AppInsights'
-    target: appInsightsId
-    authType: 'ApiKey'
-    isSharedToAll: true
-    credentials: {
-      key: appInsightConnectionString
-    }
-    metadata: {
-      ApiType: 'Azure'
-      ResourceId: appInsightsId
     }
   }
 }

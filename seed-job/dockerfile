@@ -1,0 +1,51 @@
+# Base image includes PowerShell 7 + Az PowerShell modules preinstalled
+# (Good fit for automation containers that need Az cmdlets)
+FROM mcr.microsoft.com/azure-powershell:latest
+
+# Optional: install OS security updates (recommended by MS docs for these images)
+# and tools that sometimes help with troubleshooting / TLS / zip, etc.
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
+       ca-certificates curl unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set a working directory inside the container
+WORKDIR /app
+
+# Copy your job script + assets into the image, maintaining the directory structure
+# the script expects (script uses $PSScriptRoot for relative paths)
+# Note: Paths are relative to the repository root when using remote build
+COPY scripts/hooks/postprovision.ps1 /app/scripts/hooks/postprovision.ps1
+COPY scripts/sql/ /app/scripts/sql/
+COPY images/ /app/images/
+
+# Install additional PowerShell modules you used in the original hook
+# - Microsoft.Graph (you had it in your script)
+# If you no longer need Graph in the job, you can remove this to keep image smaller.
+RUN pwsh -NoLogo -NoProfile -Command \
+    "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; \
+     Install-Module Microsoft.Graph -Scope AllUsers -Force -Confirm:\$false"
+
+# (Optional but useful) Add Microsoft.Data.SqlClient to a known location.
+# Your current script tries to use Microsoft.Data.SqlClient if present.
+# This step downloads the NuGet package and unzips the DLLs so your script can load it.
+#
+# NOTE: Loading SqlClient from PowerShell sometimes requires picking the right target framework DLL.
+# The NuGet package contains multiple assemblies (net8.0, netstandard2.0, net462, etc.).
+# See guidance/examples for loading SqlClient assemblies in PowerShell.  [5](https://gist.github.com/MartinHBA/86c6014175758a07b09fa7bb76ba8e27)[6](https://www.nuget.org/packages/Microsoft.Data.SqlClient)
+RUN pwsh -NoLogo -NoProfile -Command \
+    "Install-PackageProvider -Name NuGet -Force; \
+     Save-Package Microsoft.Data.SqlClient -Path /app/_nuget -Force; \
+     \$pkg = Get-ChildItem /app/_nuget -Recurse -Filter Microsoft.Data.SqlClient.dll | Select-Object -First 1; \
+     Write-Host ('SqlClient candidate dll: ' + \$pkg.FullName)"
+
+# Environment variables (set these at job creation time too; these are defaults/fallbacks)
+ENV AZURE_RESOURCE_GROUP=""
+ENV SQL_SERVER_NAME=""
+ENV SQL_DATABASE_NAME="todo"
+ENV USER_MANAGED_IDENTITY_NAME=""
+ENV TENANT_ID=""
+
+# Run the job script
+# In ACA Jobs, you can also override command/args at deployment time if you prefer. [7](https://techcommunity.microsoft.com/blog/appsonazureblog/command-override-in-azure-container-apps-container-app-job/4082514)
+ENTRYPOINT ["pwsh", "-NoLogo", "-NoProfile", "-File", "/app/scripts/hooks/postprovision.ps1"]

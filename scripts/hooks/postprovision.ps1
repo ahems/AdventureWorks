@@ -83,7 +83,7 @@ if( $ManagedIdentityName -ceq "ERROR: key 'USER_MANAGED_IDENTITY_NAME' not found
         Write-Warning "Failed to retrieve user-assigned managed identities: $($_.Exception.Message)"
     }
 } else {
-    Write-Output "USER_MANAGED_IDENTITY_NAME already set to '$ManagedIdentityName'. Skipping retrieval of user-assigned managed identity."   
+    Write-Output "USER_MANAGED_IDENTITY_NAME: '$ManagedIdentityName'"
 }
 if( -not $ManagedIdentityName ) {
     Write-Error "USER_MANAGED_IDENTITY_NAME not found in azd environment and no user-assigned managed identity could be located. Please ensure you have a user-assigned managed identity deployed in the resource group."
@@ -111,7 +111,7 @@ if( $sqlServerName -ceq "ERROR: key 'SQL_SERVER_NAME' not found in the environme
         Write-Warning "Failed to retrieve SQL Servers: $($_.Exception.Message)"
     }
 } else {
-    Write-Output "SQL_SERVER_NAME already set to '$sqlServerName'. Skipping retrieval of SQL server."
+    Write-Output "SQL_SERVER_NAME: '$sqlServerName'"
 }
 if( -not $sqlServerName ) {
     Write-Error "SQL_SERVER_NAME not found in azd environment and no SQL Server could be located. Please ensure you have a SQL Server deployed in the resource group."
@@ -382,7 +382,7 @@ catch {
 $escapedIdentityName = $ManagedIdentityName -replace ']', ']]'
 
 # Load SQL script from file
-$roleAssignmentSqlPath = Join-Path $PSScriptRoot 'sql\assign-database-roles.sql'
+$roleAssignmentSqlPath = Join-Path $PSScriptRoot '..\sql\assign-database-roles.sql'
 if (-not (Test-Path $roleAssignmentSqlPath)) {
     Write-Error "SQL script not found: $roleAssignmentSqlPath"
     exit 1
@@ -416,7 +416,7 @@ try {
     # ---------------------------------------------------------------------
     # Load and execute SQL to create table(s)
     # ---------------------------------------------------------------------
-    $createTableSqlPath = Join-Path $PSScriptRoot 'sql\AdventureWorks.sql'
+    $createTableSqlPath = Join-Path $PSScriptRoot '..\sql\AdventureWorks.sql'
     if (-not (Test-Path $createTableSqlPath)) {
         Write-Error "SQL script not found: $createTableSqlPath"
         $conn.Close()
@@ -448,11 +448,16 @@ try {
     $unexpectedErrorCount = 0
     
     foreach ($batch in $batches) {
-        $trimmedBatch = $batch.Trim()
+        # Remove any remaining GO statements from the batch (in case splitting missed any)
+        # This handles GO statements that might be on lines with other content or have different formatting
+        $cleanBatch = $batch -replace '(?mi)^\s*GO\s*$', ''
+        $cleanBatch = $cleanBatch -replace '(?i)\bGO\b(?=\s*$)', ''
+        $cleanBatch = $cleanBatch -replace '(?i)\bGO\b(?=\s*\r?\n)', ''
+        $trimmedBatch = $cleanBatch.Trim()
         if ($trimmedBatch.Length -eq 0 -or $trimmedBatch -match '^\s*--.*$') { 
             continue 
         }
-        
+
         # Skip batches with unsupported operations or checks
         $shouldSkip = $false
         $skipReasons = @(
@@ -467,8 +472,9 @@ try {
             @{ Pattern = '(?i)sp_addextendedproperty.*ddlDatabaseTriggerLog'; Reason = 'Extended property for skipped database trigger' }
             @{ Pattern = '(?i)IF\s+''.*SqlSamplesSourceDataPath.*IS\s+NULL'; Reason = 'SQLCMD variable validation' }
             @{ Pattern = '(?i)OPENROWSET|BULK\s+INSERT'; Reason = 'OPENROWSET/BULK INSERT (CSV loading not supported)' }
+            @{ Pattern = '(?i)\bGO\b'; Reason = 'Contains unremoved GO statement' }
         )
-        
+
         foreach ($skipCheck in $skipReasons) {
             if ($trimmedBatch -match $skipCheck.Pattern) {
                 $shouldSkip = $true
@@ -476,9 +482,9 @@ try {
                 break
             }
         }
-        
+
         if ($shouldSkip) { continue }
-        
+
         $batchNum++
         try {
             $cmd.CommandText = $trimmedBatch
@@ -527,7 +533,7 @@ try {
     # ---------------------------------------------------------------------
     # Apply AI enhancements to schema
     # ---------------------------------------------------------------------
-    $aiEnhancementsSqlPath = Join-Path $PSScriptRoot 'sql\AdventureWorks-AI.sql'
+    $aiEnhancementsSqlPath = Join-Path $PSScriptRoot '..\sql\AdventureWorks-AI.sql'
     if (Test-Path $aiEnhancementsSqlPath) {
         Write-Output "`nApplying AI schema enhancements from $aiEnhancementsSqlPath..."
         $aiSql = Get-Content -Path $aiEnhancementsSqlPath -Raw
@@ -538,8 +544,18 @@ try {
         $successCount = 0
         $skipCount = 0
         foreach ($batch in $aiBatches) {
-            $trimmedBatch = $batch.Trim()
+            # Remove any remaining GO statements from the batch
+            $cleanBatch = $batch -replace '(?mi)^\s*GO\s*$', ''
+            $cleanBatch = $cleanBatch -replace '(?i)\bGO\b(?=\s*$)', ''
+            $cleanBatch = $cleanBatch -replace '(?i)\bGO\b(?=\s*\r?\n)', ''
+            $trimmedBatch = $cleanBatch.Trim()
             if ($trimmedBatch.Length -eq 0) { continue }
+            
+            # Skip if batch still contains GO statement
+            if ($trimmedBatch -match '(?i)\bGO\b') {
+                $skipCount++
+                continue
+            }
             
             try {
                 $cmd.CommandText = $trimmedBatch
@@ -552,7 +568,16 @@ try {
                 }
             }
             catch {
-                Write-Warning "AI enhancement batch failed: $($_.Exception.Message)"
+                $errorMsg = $_.Exception.Message
+                # Only warn on unexpected errors (not "already exists" type errors)
+                if ($errorMsg -match 'already exists' -or 
+                    $errorMsg -match 'Cannot find the object' -or
+                    $errorMsg -match 'There is already an object named' -or
+                    $errorMsg -match 'Could not create constraint or index') {
+                    $skipCount++
+                } else {
+                    Write-Warning "AI enhancement batch failed: $errorMsg"
+                }
             }
         }
         Write-Output "AI schema enhancements completed: $successCount applied, $skipCount already existed"
@@ -565,7 +590,7 @@ try {
     # ---------------------------------------------------------------------
     Write-Output "`nLoading CSV data into tables using SqlBulkCopy..."
     
-    $csvFolder = Join-Path $PSScriptRoot 'sql'
+    $csvFolder = Join-Path $PSScriptRoot '..\sql'
     
     # Define table load order and CSV configurations
     # Format: @{ Table='SchemaName.TableName'; File='filename.csv'; Delimiter='\t' or '+|'; RowTerminator='\n' or '&|'; IsWideChar=$true/$false }
@@ -695,7 +720,7 @@ try {
     # Define base record counts for -ai.csv files (additive data)
     # These files should only be loaded when table has exactly the base AdventureWorks count
     $aiCsvBaseRecordCounts = @{
-        'Culture-ai.csv' = 8
+        'Culture-ai.csv' = 7
         'Currency-ai.csv' = 105
         'StateProvince-ai.csv' = 181
         'CountryRegionCurrency-ai.csv' = 109
@@ -783,6 +808,11 @@ try {
                 continue
             }
             
+            # DEBUG: ProductDescription.csv tracking
+            if ($config.File -eq 'ProductDescription.csv') {
+                Write-Output "    [DEBUG] Read $($rows.Count) rows from CSV file"
+            }
+            
             # Check if this table has hierarchyid or geography columns (we'll handle these with INSERT statements)
             # Also use INSERT for tables with hex-encoded columns (varbinary/text with special handling)
             $cmd.CommandText = @"
@@ -868,8 +898,20 @@ ORDER BY c.ORDINAL_POSITION
             $rowCount = 0
             $delimiter = $config.Delimiter
             
+            # DEBUG: ProductDescription.csv tracking
+            $debugSkipped = 0
+            $debugParsed = 0
+            
             # Track which columns we're actually loading (all columns now, including hierarchyid)
             $loadedColumns = $columns
+            
+            # DEBUG: ProductDescription.csv column info
+            if ($config.File -eq 'ProductDescription.csv') {
+                Write-Output "    [DEBUG] Table has $($allColumns.Count) total columns, $($columns.Count) non-identity/computed columns"
+                Write-Output "    [DEBUG] All columns: $(($allColumns | ForEach-Object { $_.Name }) -join ', ')"
+                Write-Output "    [DEBUG] Loadable columns: $(($columns | ForEach-Object { $_.Name }) -join ', ')"
+                Write-Output "    [DEBUG] First row sample: $($rows[0].Substring(0, [Math]::Min(100, $rows[0].Length)))..."
+            }
             
             foreach ($row in $rows) {
                 if ([string]::IsNullOrWhiteSpace($row)) { continue }
@@ -881,10 +923,19 @@ ORDER BY c.ORDINAL_POSITION
                     $values = $values[1..($values.Count-1)]
                 }
                 
+                # DEBUG: ProductDescription.csv field count check
+                if ($config.File -eq 'ProductDescription.csv' -and $debugParsed -eq 0) {
+                    Write-Output "    [DEBUG] First row has $($values.Count) fields (expecting $($allColumns.Count))"
+                    Write-Output "    [DEBUG] First row values: $(($values | ForEach-Object { $_.Substring(0, [Math]::Min(20, $_.Length)) }) -join ' | ')"
+                }
+                
                 # Check against total column count (CSV should have all columns including IDENTITY/computed)
-                if ($values.Count -ne $allColumns.Count) { 
+                if ($values.Count -ne $allColumns.Count) {
+                    if ($config.File -eq 'ProductDescription.csv') { $debugSkipped++ }
                     continue 
                 }
+                
+                if ($config.File -eq 'ProductDescription.csv') { $debugParsed++ }
                 
                 $dataRow = $dataTable.NewRow()
                 $dataTableColIndex = 0
@@ -1087,6 +1138,13 @@ ORDER BY c.ORDINAL_POSITION
                 }
             }
             
+            # DEBUG: ProductDescription.csv final row count
+            if ($config.File -eq 'ProductDescription.csv') {
+                Write-Output "    [DEBUG] DataTable final row count: $($dataTable.Rows.Count)"
+                Write-Output "    [DEBUG] Rows skipped due to field count mismatch: $debugSkipped"
+                Write-Output "    [DEBUG] Rows successfully parsed: $debugParsed"
+            }
+            
             # Check if any column is an IDENTITY column (need to enable IDENTITY_INSERT)
             $hasIdentityColumn = $columns | Where-Object { $_.IsIdentity } | Measure-Object | Select-Object -ExpandProperty Count
             $hasIdentityColumn = $hasIdentityColumn -gt 0
@@ -1185,6 +1243,11 @@ ORDER BY ORDINAL_POSITION
                                         $hexStr = ($value | ForEach-Object { $_.ToString('X2') }) -join ''
                                         $values += "0x$hexStr"
                                     }
+                                    elseif ($col.Type -eq 'vector') {
+                                        # VECTOR columns need CAST from JSON string
+                                        $escapedVal = $value.ToString().Replace("'", "''")
+                                        $values += "CAST(N'$escapedVal' AS VECTOR(1536))"
+                                    }
                                     elseif ($col.Type -in @('varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext', 'uniqueidentifier', 'xml')) {
                                         $escapedVal = $value.ToString().Replace("'", "''")
                                         $values += "N'$escapedVal'"
@@ -1271,6 +1334,11 @@ END
                                     # Convert byte array to hex string with 0x prefix
                                     $hexStr = ($value | ForEach-Object { $_.ToString('X2') }) -join ''
                                     $values += "0x$hexStr"
+                                }
+                                elseif ($col.Type -eq 'vector') {
+                                    # VECTOR columns need CAST from JSON string
+                                    $escapedVal = $value.ToString().Replace("'", "''")
+                                    $values += "CAST(N'$escapedVal' AS VECTOR(1536))"
                                 }
                                 elseif ($col.Type -in @('varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext', 'uniqueidentifier', 'xml')) {
                                     # Escape single quotes
@@ -1389,7 +1457,7 @@ END
         Write-Output "  AI-generated photos already uploaded ($aiPhotoCount AI photos found) - Skipping"
     }
     else {
-        $imagesDir = Join-Path $PSScriptRoot ".." "images"
+        $imagesDir = Join-Path $PSScriptRoot ".." ".." "images"
         
         if (Test-Path $imagesDir) {
             $pngFiles = Get-ChildItem -Path $imagesDir -Filter "*.png" | Sort-Object Name
@@ -1493,7 +1561,7 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
     
     # Now load ProductProductPhoto-ai.csv to link photos to products
     Write-Output "`nLoading AI-generated photo mappings..."
-    $csvFolder = Join-Path $PSScriptRoot 'sql'
+    $csvFolder = Join-Path $PSScriptRoot '..\sql'
     $photoMappingFile = Join-Path $csvFolder "ProductProductPhoto-ai.csv"
     if (Test-Path $photoMappingFile) {
         try {

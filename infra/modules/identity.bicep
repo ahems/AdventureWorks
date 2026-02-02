@@ -1,7 +1,7 @@
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param location string = resourceGroup().location
 
-var roleName = 'av-deployment-script-role'
+var roleName = 'av-deployment-script-role-${uniqueString(resourceGroup().id)}'
 var roleDescription = 'Role to deploy custom CLI scripts for the AdventureWorks deployment'
 var roleDefName = guid(identityName)
 var managedIdentityOperatorRoleId  = 'f1a07417-d97a-45cb-824c-7a7467783830'

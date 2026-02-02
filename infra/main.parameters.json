@@ -20,7 +20,7 @@
     "sqlDatabaseName": {
       "value": "${SQL_DATABASE_NAME}"
     },
-    "cognitiveservicesname": {
+    "foundryname": {
       "value": "${AZURE_OPENAI_ACCOUNT_NAME}"
     },
     "chatGptDeploymentVersion": {
@@ -62,8 +62,8 @@
     "availableImageDeploymentCapacity": {
       "value": "${availableImageDeploymentCapacity}"
     },
-    "cognitiveservicesLocation": {
-      "value": "swedencentral"
+    "foundryLocation": {
+      "value": "${FOUNDRY_LOCATION}"
     }
   }
 }

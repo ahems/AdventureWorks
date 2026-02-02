@@ -22,7 +22,7 @@ module sqlServerModule 'br/public:avm/res/sql/server:0.14.0' = {
     location: location
     // AAD admin mapping
     administrators: {
-      azureADOnlyAuthentication: false
+      azureADOnlyAuthentication: true
       login: aadAdminLogin
       sid: aadAdminObjectId
       tenantId: tenantId
