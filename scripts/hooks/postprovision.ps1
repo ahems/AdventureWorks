@@ -486,6 +486,7 @@ try {
         if ($shouldSkip) { continue }
 
         $batchNum++
+        
         try {
             $cmd.CommandText = $trimmedBatch
             $null = $cmd.ExecuteNonQuery()
@@ -503,6 +504,7 @@ try {
                 $errorMsg -match 'A full-text index for table' -or
                 $errorMsg -match 'The specified namespace already exists in the specified XML schema collection') {
                 $alreadyExistsCount++
+                Write-Verbose "Batch ${batchNum} object already exists (idempotent): $errorMsg" -Verbose
             } else {
                 $unexpectedErrorCount++
                 Write-Warning "Unexpected error in batch ${batchNum}: $errorMsg"
@@ -529,6 +531,10 @@ try {
     # Overall assessment
     if ($unexpectedErrorCount -eq 0) {
         Write-Output "  Schema is up to date and ready for use"
+    } else {
+        Write-Error "SQL script execution failed with $unexpectedErrorCount unexpected errors. Cannot proceed with AI enhancements and data loading."
+        $conn.Close()
+        exit 1
     }
     
     # ---------------------------------------------------------------------
