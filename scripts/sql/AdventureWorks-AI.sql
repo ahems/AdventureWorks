@@ -86,12 +86,18 @@ GO
 -- Step 7: Create view for semantic product search across all languages
 -- Joins Product -> ProductModel -> ProductModelProductDescriptionCulture -> ProductDescription
 -- Enables language-specific vector similarity search via DAB API
+-- Always drop and recreate to ensure view stays current with schema changes
 
-IF NOT EXISTS (SELECT 1 FROM sys.views WHERE object_id = OBJECT_ID(N'[Production].[vProductSearch]'))
+IF EXISTS (SELECT 1 FROM sys.views WHERE object_id = OBJECT_ID(N'[Production].[vProductSearch]'))
 BEGIN
-    EXEC('CREATE VIEW [Production].[vProductSearch]
-    AS
-    SELECT 
+    DROP VIEW [Production].[vProductSearch];
+END;
+
+GO
+
+CREATE VIEW [Production].[vProductSearch]
+AS
+SELECT 
         p.[ProductID],
         p.[Name] AS [ProductName],
         p.[ProductNumber],
@@ -113,17 +119,10 @@ BEGIN
             ON pm.[ProductModelID] = pmx.[ProductModelID]
         LEFT JOIN [Production].[ProductDescription] pd 
             ON pmx.[ProductDescriptionID] = pd.[ProductDescriptionID]
-    WHERE p.[FinishedGoodsFlag] = 1');
-    
-    PRINT 'Created view Production.vProductSearch for multi-language semantic search';
-END
-ELSE
-BEGIN
-    PRINT 'View Production.vProductSearch already exists - skipping';
-END;
+    WHERE p.[FinishedGoodsFlag] = 1;
 
 GO
-
+    
 PRINT 'Created view Production.vProductSearch for multi-language semantic search';
 
 GO
@@ -277,12 +276,18 @@ GO
 -- Step 13: Create view for semantic review search
 -- Enables vector similarity search on product reviews via DAB API
 -- Useful for finding reviews based on semantic meaning rather than keyword matching
+-- Always drop and recreate to ensure view stays current with schema changes
 
-IF NOT EXISTS (SELECT 1 FROM sys.views WHERE object_id = OBJECT_ID(N'[Production].[vReviewSearch]'))
+IF EXISTS (SELECT 1 FROM sys.views WHERE object_id = OBJECT_ID(N'[Production].[vReviewSearch]'))
 BEGIN
-    EXEC('CREATE VIEW [Production].[vReviewSearch]
-    AS
-    SELECT 
+    DROP VIEW [Production].[vReviewSearch];
+END;
+
+GO
+
+CREATE VIEW [Production].[vReviewSearch]
+AS
+SELECT 
         pr.[ProductReviewID],
         pr.[ProductID],
         pr.[ReviewerName],
@@ -297,17 +302,10 @@ BEGIN
         p.[ProductNumber]
     FROM [Production].[ProductReview] pr
         INNER JOIN [Production].[Product] p 
-            ON pr.[ProductID] = p.[ProductID]');
-    
-    PRINT 'Created view Production.vReviewSearch for semantic review search';
-END
-ELSE
-BEGIN
-    PRINT 'View Production.vReviewSearch already exists - skipping';
-END;
+            ON pr.[ProductID] = p.[ProductID];
 
 GO
-
+    
 PRINT 'Created view Production.vReviewSearch for semantic review search';
 
 GO

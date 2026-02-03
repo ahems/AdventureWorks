@@ -556,6 +556,7 @@ try {
         
         $successCount = 0
         $skipCount = 0
+        $hasErrors = $false
         foreach ($batch in $aiBatches) {
             # Remove any remaining GO statements from the batch
             $cleanBatch = $batch -replace '(?mi)^\s*GO\s*$', ''
@@ -590,11 +591,16 @@ try {
                     $skipCount++
                 } else {
                     Write-Warning "AI enhancement batch failed: $errorMsg"
+                    $hasErrors = $true
                 }
             }
         }
         $elapsed = (Get-Date) - $scriptStartTime
         Write-Output "AI schema enhancements completed: $successCount applied, $skipCount already existed [+$([math]::Floor($elapsed.TotalMinutes))m]"
+        
+        if ($hasErrors) {
+            throw "AI schema enhancements completed with errors. Review the warnings above."
+        }
     } else {
         Write-Output "`nAI enhancements SQL file not found, skipping..."
     }
