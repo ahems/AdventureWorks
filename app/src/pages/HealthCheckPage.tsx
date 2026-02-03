@@ -245,7 +245,9 @@ const HealthCheckPage: React.FC = () => {
         return;
       }
 
-      const endpoint = `${mcpUrl}/health`;
+      // Extract base URL (remove /mcp path if present) for health check
+      const baseUrl = mcpUrl.replace(/\/mcp$/, "");
+      const endpoint = `${baseUrl}/health`;
       updateCheckStatus(name, "checking", undefined, undefined, endpoint);
 
       const controller = new AbortController();
