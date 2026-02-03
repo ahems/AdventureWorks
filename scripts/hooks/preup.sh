@@ -261,20 +261,62 @@ if [[ -z "$resource_group" ]]; then
 fi
 
 # Get AI Foundry location: prefer FOUNDRY_LOCATION from azd env, else use resource group location
+color_cyan "Looking for AI Foundry location in FOUNDRY_LOCATION environment variable..."
 foundry_location=$(get_azd_value "FOUNDRY_LOCATION")
+
+# Validate location is valid for Cognitive Services if provided
+if [[ -n "$foundry_location" ]]; then
+  color_cyan "Validating FOUNDRY_LOCATION '$foundry_location' is a valid Azure region for Cognitive Services..."
+  valid_locations=$(az provider show --namespace Microsoft.CognitiveServices --query "resourceTypes[?resourceType=='accounts'].locations[]" -o tsv 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+  
+  # Normalize the foundry_location for comparison (lowercase, no spaces)
+  normalized_location=$(echo "$foundry_location" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+  
+  if echo "$valid_locations" | grep -q "^${normalized_location}$"; then
+    color_green "Validated: '$foundry_location' is a valid region for AI Foundry (Cognitive Services)."
+  else
+    color_red "Error: FOUNDRY_LOCATION '$foundry_location' is not a valid Azure region for Cognitive Services."
+    color_yellow "Valid regions include: $(echo "$valid_locations" | head -10 | tr '\n' ', ')"
+    color_yellow "Please set FOUNDRY_LOCATION to a valid region or unset it to use resource group location."
+    exit 1
+  fi
+fi
+
 if [[ -z "$foundry_location" ]]; then
+  color_yellow "FOUNDRY_LOCATION not set, checking resource group location..."
   # If not set, use the resource group's location
   resource_group_location=$(az group show -n "$resource_group" --subscription "$subscription_id" --query location -o tsv 2>/dev/null || true)
   if [[ -n "$resource_group_location" ]]; then
     foundry_location="$resource_group_location"
     color_cyan "Set Foundry location from resource group: $foundry_location"
   else
-    foundry_location=$(get_azd_value "AZURE_LOCATION" "eastus2")
+    color_yellow "Resource group location not available, using AZURE_LOCATION as fallback..."
+    azure_location=$(get_azd_value "AZURE_LOCATION" "eastus2")
+    
+    # Validate AZURE_LOCATION is valid for Cognitive Services
+    if [[ -n "$azure_location" ]]; then
+      color_cyan "Validating AZURE_LOCATION '$azure_location' is a valid Azure region for Cognitive Services..."
+      valid_locations=$(az provider show --namespace Microsoft.CognitiveServices --query "resourceTypes[?resourceType=='accounts'].locations[]" -o tsv 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+      normalized_azure_location=$(echo "$azure_location" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+      
+      if echo "$valid_locations" | grep -q "^${normalized_azure_location}$"; then
+        color_green "Validated: '$azure_location' is a valid region for AI Foundry (Cognitive Services)."
+        foundry_location="$azure_location"
+      else
+        color_red "Error: AZURE_LOCATION '$azure_location' is not a valid Azure region for Cognitive Services."
+        color_yellow "Valid regions include: $(echo "$valid_locations" | head -10 | tr '\n' ', ')"
+        color_yellow "Please set AZURE_LOCATION to a valid region."
+        exit 1
+      fi
+    else
+      foundry_location="eastus2"
+    fi
+    
     color_cyan "Set Foundry location from AZURE_LOCATION: $foundry_location"
   fi
   set_azd_value "FOUNDRY_LOCATION" "$foundry_location"
 else
-  color_cyan "Using Foundry location from FOUNDRY_LOCATION: $foundry_location"
+  color_cyan "Using validated Foundry location from FOUNDRY_LOCATION: $foundry_location"
 fi
 location=$foundry_location
 
