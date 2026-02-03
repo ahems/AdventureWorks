@@ -260,7 +260,17 @@ if [[ -z "$resource_group" ]]; then
   color_cyan "Derived and set AZURE_RESOURCE_GROUP = $resource_group"
 fi
 
-# Get AI Foundry location: prefer FOUNDRY_LOCATION from azd env, else use resource group location
+# Determine resource group location from AZURE_LOCATION (for resource group placement)
+rg_location=$(get_azd_value "AZURE_LOCATION")
+if [[ -z "$rg_location" ]]; then
+  rg_location="eastus2"
+  color_cyan "AZURE_LOCATION not set, defaulting to: $rg_location"
+  set_azd_value "AZURE_LOCATION" "$rg_location"
+else
+  color_cyan "Using AZURE_LOCATION for resource group: $rg_location"
+fi
+
+# Get AI Foundry location: prefer FOUNDRY_LOCATION from azd env, else use AZURE_LOCATION
 color_cyan "Looking for AI Foundry location in FOUNDRY_LOCATION environment variable..."
 foundry_location=$(get_azd_value "FOUNDRY_LOCATION")
 
@@ -283,47 +293,32 @@ if [[ -n "$foundry_location" ]]; then
 fi
 
 if [[ -z "$foundry_location" ]]; then
-  color_yellow "FOUNDRY_LOCATION not set, checking resource group location..."
-  # If not set, use the resource group's location
-  resource_group_location=$(az group show -n "$resource_group" --subscription "$subscription_id" --query location -o tsv 2>/dev/null || true)
-  if [[ -n "$resource_group_location" ]]; then
-    foundry_location="$resource_group_location"
-    color_cyan "Set Foundry location from resource group: $foundry_location"
+  color_yellow "FOUNDRY_LOCATION not set, using AZURE_LOCATION..."
+  foundry_location="$rg_location"
+  
+  # Validate foundry_location is valid for Cognitive Services
+  color_cyan "Validating '$foundry_location' is a valid Azure region for Cognitive Services..."
+  valid_locations=$(az provider show --namespace Microsoft.CognitiveServices --query "resourceTypes[?resourceType=='accounts'].locations[]" -o tsv 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+  normalized_location=$(echo "$foundry_location" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+  
+  if echo "$valid_locations" | grep -q "^${normalized_location}$"; then
+    color_green "Validated: '$foundry_location' is a valid region for AI Foundry (Cognitive Services)."
   else
-    color_yellow "Resource group location not available, using AZURE_LOCATION as fallback..."
-    azure_location=$(get_azd_value "AZURE_LOCATION" "eastus2")
-    
-    # Validate AZURE_LOCATION is valid for Cognitive Services
-    if [[ -n "$azure_location" ]]; then
-      color_cyan "Validating AZURE_LOCATION '$azure_location' is a valid Azure region for Cognitive Services..."
-      valid_locations=$(az provider show --namespace Microsoft.CognitiveServices --query "resourceTypes[?resourceType=='accounts'].locations[]" -o tsv 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d ' ')
-      normalized_azure_location=$(echo "$azure_location" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
-      
-      if echo "$valid_locations" | grep -q "^${normalized_azure_location}$"; then
-        color_green "Validated: '$azure_location' is a valid region for AI Foundry (Cognitive Services)."
-        foundry_location="$azure_location"
-      else
-        color_red "Error: AZURE_LOCATION '$azure_location' is not a valid Azure region for Cognitive Services."
-        color_yellow "Valid regions include: $(echo "$valid_locations" | head -10 | tr '\n' ', ')"
-        color_yellow "Please set AZURE_LOCATION to a valid region."
-        exit 1
+    color_yellow "Warning: '$foundry_location' is not valid for Cognitive Services. Trying alternate regions..."
+    # Try common Cognitive Services regions as fallback
+    for fallback in "eastus2" "eastus" "westus" "westus2" "swedencentral"; do
+      normalized_fallback=$(echo "$fallback" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+      if echo "$valid_locations" | grep -q "^${normalized_fallback}$"; then
+        foundry_location="$fallback"
+        color_cyan "Using fallback Foundry location: $foundry_location"
+        break
       fi
-    else
-      foundry_location="eastus2"
-    fi
-    
-    color_cyan "Set Foundry location from AZURE_LOCATION: $foundry_location"
+    done
   fi
+  
   set_azd_value "FOUNDRY_LOCATION" "$foundry_location"
 else
   color_cyan "Using validated Foundry location from FOUNDRY_LOCATION: $foundry_location"
-fi
-location=$foundry_location
-
-# Persist default Azure location if it was not previously set
-if [[ -z "$(get_azd_value AZURE_LOCATION)" ]]; then
-  set_azd_value "AZURE_LOCATION" "$location"
-  color_cyan "Set default AZURE_LOCATION = $location"
 fi
 
 # Get SQL database name from azd environment, default to 'AdventureWorks' if not set
@@ -336,28 +331,24 @@ fi
 
 
 
-# Ensure resource group exists before querying its id
-ensure_resource_group "$subscription_id" "$resource_group" "$location"
+# Ensure resource group exists before querying its id (use rg_location for resource group)
+ensure_resource_group "$subscription_id" "$resource_group" "$rg_location"
 
-# Compute Foundry account name as in Bicep: 'av-ai-${toLower(uniqueString(resourceGroup().id, environmentName, location))}'
-environment_name=$(get_azd_value "AZURE_ENV_NAME")
-if [[ -z "$environment_name" ]]; then
-  color_red "Error: AZURE_ENV_NAME is not set. Cannot compute Foundry account name."
-  exit 1
-fi
+# Compute Foundry account name as in Bicep: 'av-ai-${uniqueString(resourceGroup().id)}'
+# Note: Bicep's uniqueString uses ONLY resourceGroup().id, not environment name or location
 resource_group_id=$(az group show -n "$resource_group" --subscription "$subscription_id" --query id -o tsv 2>/dev/null || true)
 if [[ -z "$resource_group_id" ]]; then
   color_red "Error: Could not retrieve resource group id for $resource_group."
   exit 1
 fi
-# Use Python to compute uniqueString and toLower as in Bicep
-account_name=$(python3 -c "import hashlib; print('av-ai-' + hashlib.sha1(('$resource_group_id' + '$environment_name' + '$location').encode('utf-8')).hexdigest()[:13].lower())")
+# Use Python to compute uniqueString matching Bicep's uniqueString(resourceGroup().id)
+account_name=$(python3 -c "import hashlib; print('av-ai-' + hashlib.sha1('$resource_group_id'.encode('utf-8')).hexdigest()[:13].lower())")
 set_azd_value "AZURE_OPENAI_ACCOUNT_NAME" "$account_name"
-color_cyan "Computed Microsoft Foundry account name: $account_name (matches Bicep logic)"
+color_cyan "Computed Microsoft Foundry account name: $account_name (matches Bicep: uniqueString(resourceGroup().id))"
 
-ensure_foundry_account "$subscription_id" "$resource_group" "$account_name" "$location"
+ensure_foundry_account "$subscription_id" "$resource_group" "$account_name" "$foundry_location"
 
-color_cyan "Enumerating models for Microsoft Foundry account '$account_name' in region '$location'..."
+color_cyan "Enumerating models for Microsoft Foundry account '$account_name' in region '$foundry_location'..."
 if [[ -z "$subscription_id" ]]; then
   color_red "Error: Subscription id is missing; cannot enumerate models."
   exit 1
