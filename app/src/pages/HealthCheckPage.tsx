@@ -37,6 +37,7 @@ const HealthCheckPage: React.FC = () => {
   const [checks, setChecks] = useState<HealthCheckResult[]>([]);
   const [progress, setProgress] = useState(0);
   const [startTime, setStartTime] = useState<number>(0);
+  const [refreshCountdown, setRefreshCountdown] = useState<number | null>(null);
 
   // Define all function endpoints to check
   const functionEndpoints: FunctionEndpoint[] = [
@@ -297,13 +298,127 @@ const HealthCheckPage: React.FC = () => {
     }
   };
 
+  const checkAIGeneratedImages = async (): Promise<void> => {
+    const name = "AI Generated Images";
+    const start = performance.now();
+    updateCheckStatus(name, "checking");
+
+    try {
+      const apiUrl = getGraphQLApiUrl();
+      updateCheckStatus(name, "checking", undefined, undefined, apiUrl);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+
+      // Query for ProductPhoto records with ProductPhotoID >= 1000 (AI-generated images)
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: `{
+            productPhotos(filter: { ProductPhotoID: { gte: 1000 } }) {
+              items {
+                ProductPhotoID
+              }
+            }
+          }`,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      const responseTime = Math.round(performance.now() - start);
+
+      if (!response.ok) {
+        updateCheckStatus(
+          name,
+          "unhealthy",
+          `HTTP ${response.status}: ${response.statusText}`,
+          responseTime,
+          apiUrl,
+        );
+        return;
+      }
+
+      const data = await response.json();
+
+      if (data.errors) {
+        updateCheckStatus(
+          name,
+          "unhealthy",
+          `GraphQL errors: ${data.errors.map((e: { message: string }) => e.message).join(", ")}`,
+          responseTime,
+          apiUrl,
+        );
+        return;
+      }
+
+      if (data.data?.productPhotos?.items) {
+        const count = data.data.productPhotos.items.length;
+        const expectedCount = 885;
+
+        if (count >= expectedCount) {
+          updateCheckStatus(
+            name,
+            "healthy",
+            `Found ${count} AI-generated images (expected ~${expectedCount})`,
+            responseTime,
+            apiUrl,
+          );
+        } else if (count > 0) {
+          updateCheckStatus(
+            name,
+            "unhealthy",
+            `Only ${count} of ~${expectedCount} AI-generated images found (upload may be in progress)`,
+            responseTime,
+            apiUrl,
+          );
+        } else {
+          updateCheckStatus(
+            name,
+            "unhealthy",
+            `No AI-generated images found (expected ~${expectedCount})`,
+            responseTime,
+            apiUrl,
+          );
+        }
+      } else {
+        updateCheckStatus(
+          name,
+          "unhealthy",
+          "Invalid response structure",
+          responseTime,
+          apiUrl,
+        );
+      }
+    } catch (error: unknown) {
+      const responseTime = Math.round(performance.now() - start);
+      if ((error as Error).name === "AbortError") {
+        updateCheckStatus(
+          name,
+          "timeout",
+          "Request timeout (>60s)",
+          responseTime,
+        );
+      } else {
+        updateCheckStatus(
+          name,
+          "unhealthy",
+          (error as Error).message,
+          responseTime,
+        );
+      }
+    }
+  };
+
   useEffect(() => {
     const runHealthChecks = async () => {
       setStartTime(Date.now());
       setChecks([]);
       setProgress(0);
+      setRefreshCountdown(null);
 
-      const totalChecks = 2 + functionEndpoints.length; // DAB + MCP + Functions
+      const totalChecks = 3 + functionEndpoints.length; // DAB + MCP + AI Images + Functions
       let completedChecks = 0;
 
       const updateProgress = () => {
@@ -315,6 +430,7 @@ const HealthCheckPage: React.FC = () => {
       await Promise.all([
         checkGraphQLAPI().finally(updateProgress),
         checkMCPAPI().finally(updateProgress),
+        checkAIGeneratedImages().finally(updateProgress),
         ...functionEndpoints.map((func) =>
           checkFunction(func).finally(updateProgress),
         ),
@@ -324,6 +440,37 @@ const HealthCheckPage: React.FC = () => {
     runHealthChecks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-refresh effect when checks fail
+  useEffect(() => {
+    const allChecksComplete =
+      checks.length > 0 &&
+      checks.filter((c) => c.status === "checking").length === 0;
+    const hasFailures =
+      checks.filter((c) => c.status === "unhealthy" || c.status === "timeout")
+        .length > 0;
+
+    if (allChecksComplete && hasFailures) {
+      // Start countdown from 10 seconds
+      setRefreshCountdown(10);
+
+      const countdownInterval = setInterval(() => {
+        setRefreshCountdown((prev) => {
+          if (prev === null || prev <= 1) {
+            clearInterval(countdownInterval);
+            window.location.reload();
+            return null;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(countdownInterval);
+    } else if (allChecksComplete && !hasFailures) {
+      // All healthy, stop any countdown
+      setRefreshCountdown(null);
+    }
+  }, [checks]);
 
   const getStatusIcon = (status: HealthCheckResult["status"]) => {
     switch (status) {
@@ -407,6 +554,11 @@ const HealthCheckPage: React.FC = () => {
                 {allChecksComplete
                   ? `Completed in ${elapsedTime}s`
                   : `Running health checks... (${elapsedTime}s elapsed)`}
+                {refreshCountdown !== null && (
+                  <span className="block mt-2 text-orange-600 font-semibold">
+                    Auto-refreshing in {refreshCountdown} seconds...
+                  </span>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent>

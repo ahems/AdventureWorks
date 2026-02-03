@@ -198,11 +198,6 @@ var mcpClient = McpClient.CreateAsync(
 
 var mcpTools = mcpClient.ListToolsAsync().GetAwaiter().GetResult();
 
-// Log MCP tools initialization
-var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
-var programLogger = loggerFactory.CreateLogger("Program");
-programLogger.LogInformation("Loaded {ToolCount} MCP tools for durable agent from {McpServerUrl}", mcpTools.Count, mcpServerUrl);
-
 // Create the durable agent with Azure OpenAI and MCP tools
 var endpoint = config["AZURE_OPENAI_ENDPOINT"]
     ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT environment variable is not set");
@@ -236,4 +231,11 @@ Guidelines:
 // Configure as durable agent for Azure Functions
 builder.ConfigureDurableAgents(options => options.AddAIAgent(durableAgent));
 
-builder.Build().Run();
+var app = builder.Build();
+
+// Log MCP tools initialization
+var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+var programLogger = loggerFactory.CreateLogger("Program");
+programLogger.LogInformation("Loaded {ToolCount} MCP tools for durable agent from {McpServerUrl}", mcpTools.Count, mcpServerUrl);
+
+app.Run();

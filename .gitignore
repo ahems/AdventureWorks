@@ -179,6 +179,8 @@ product-images/
 
 # Generated config files
 app/staticwebapp.config.json
+app/.env.production
+app/public/config.js
 
 # AI Agent configuration (auto-generated during deployment)
 AI_AGENT_CONFIG.json

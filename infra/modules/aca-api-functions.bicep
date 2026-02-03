@@ -154,6 +154,10 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
               value: '~4'
             }
             {
+              name: 'WEBSITES_PORT'
+              value: '80'
+            }
+            {
               name: 'WEBSITE_HOSTNAME'
               value: '${apiFunctionsName}.${replace(replace(containerAppEnvId, '/subscriptions/', ''), '/resourceGroups/', '')}.azurecontainerapps.io'
             }
