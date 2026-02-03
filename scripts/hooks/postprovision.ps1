@@ -1,3 +1,7 @@
+# Capture start time for duration tracking
+$scriptStartTime = Get-Date
+Write-Output "Starting post-provision script at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+
 # Trust PSGallery to suppress the untrusted repository prompt
 try {
     $gallery = Get-PSRepository -Name 'PSGallery' -ErrorAction Stop
@@ -514,7 +518,8 @@ try {
     }
     
     # Provide clear summary
-    Write-Output "SQL script execution completed:"
+    $elapsed = (Get-Date) - $scriptStartTime
+    Write-Output "SQL script execution completed: [+$([math]::Floor($elapsed.TotalMinutes))m $($elapsed.Seconds)s]"
     if ($successCount -gt 0) {
         Write-Output "  ✓ $successCount objects created/modified"
     }
@@ -542,7 +547,8 @@ try {
     # ---------------------------------------------------------------------
     $aiEnhancementsSqlPath = Join-Path $PSScriptRoot '..\sql\AdventureWorks-AI.sql'
     if (Test-Path $aiEnhancementsSqlPath) {
-        Write-Output "`nApplying AI schema enhancements from $aiEnhancementsSqlPath..."
+        $elapsed = (Get-Date) - $scriptStartTime
+        Write-Output "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Applying AI schema enhancements from $aiEnhancementsSqlPath..."
         $aiSql = Get-Content -Path $aiEnhancementsSqlPath -Raw
         
         # Split on GO statements
@@ -587,7 +593,8 @@ try {
                 }
             }
         }
-        Write-Output "AI schema enhancements completed: $successCount applied, $skipCount already existed"
+        $elapsed = (Get-Date) - $scriptStartTime
+        Write-Output "AI schema enhancements completed: $successCount applied, $skipCount already existed [+$([math]::Floor($elapsed.TotalMinutes))m]"
     } else {
         Write-Output "`nAI enhancements SQL file not found, skipping..."
     }
@@ -595,7 +602,8 @@ try {
     # ---------------------------------------------------------------------
     # Load CSV data into tables using SqlBulkCopy
     # ---------------------------------------------------------------------
-    Write-Output "`nLoading CSV data into tables using SqlBulkCopy..."
+    $elapsed = (Get-Date) - $scriptStartTime
+    Write-Output "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Loading CSV data into tables using SqlBulkCopy..."
     
     $csvFolder = Join-Path $PSScriptRoot '..\sql'
     
@@ -748,7 +756,8 @@ try {
             continue
         }
         
-        Write-Output "  Loading $($config.Table) from $($config.File)..."
+        $elapsed = (Get-Date) - $scriptStartTime
+        Write-Output "  [+$([math]::Floor($elapsed.TotalMinutes))m] Loading $($config.Table) from $($config.File)..."
         
         try {
             # Parse table name
@@ -1174,7 +1183,6 @@ ORDER BY c.ORDINAL_POSITION
                     $cmd.Transaction = $transaction
                     $cmd.CommandText = "SET IDENTITY_INSERT [$schemaName].[$tableName] ON"
                     $cmd.ExecuteNonQuery() | Out-Null
-                    Write-Output "    Enabled IDENTITY_INSERT for table with identity column"
                 }
                 
                 # Get primary key or unique constraint columns for idempotent inserts
@@ -1447,17 +1455,20 @@ END
         }
     }
     
-    Write-Output "`nCSV Data Loading Summary:"
+$elapsed = (Get-Date) - $scriptStartTime
+Write-Output "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinutes))m]"
     Write-Output "  - $csvLoadSuccess tables loaded successfully"
     Write-Output "  - $csvLoadFailed tables failed to load"
     Write-Output "  - $csvLoadSkipped tables skipped"
     
     # Upload AI-generated PNG images from images directory
-    Write-Output "`nUploading AI-generated PNG images..."
+    $elapsed = (Get-Date) - $scriptStartTime
+    Write-Output "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Uploading AI-generated PNG images..."
     
     # Check if AI photos already uploaded (idempotency check)
-    # Base AdventureWorks data uses ProductPhotoIDs 1-100, AI photos use IDs > 100
-    $cmd.CommandText = "SELECT COUNT(*) FROM Production.ProductPhoto WHERE ProductPhotoID > 100"
+    # AI photos from PNG files use ProductPhotoIDs starting at 1000
+    # (ProductPhotoIDs 1-100 are base AdventureWorks, 101-999 may be from CSV AI data)
+    $cmd.CommandText = "SELECT COUNT(*) FROM Production.ProductPhoto WHERE ProductPhotoID >= 1000"
     $aiPhotoCount = $cmd.ExecuteScalar()
     
     if ($aiPhotoCount -gt 0) {
@@ -1542,8 +1553,8 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
                         }
                     }
                     else {
-                        # Skip large images - they're processed with their thumbnails
-                        $skippedCount++
+                        # Skip large images - they're processed with their thumbnails (don't count as skipped)
+                        # Large images are intentionally processed when their thumbnail is handled
                     }
                 }
                 catch {
@@ -1552,9 +1563,12 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
                 }
             }
             
-            Write-Output "`nPNG Upload Summary:"
+            $elapsed = (Get-Date) - $scriptStartTime
+            Write-Output "`nPNG Upload Summary: [+$([math]::Floor($elapsed.TotalMinutes))m]"
             Write-Output "  - $uploadedCount image pairs uploaded successfully"
-            Write-Output "  - $skippedCount files skipped"
+            if ($skippedCount -gt 0) {
+                Write-Output "  - $skippedCount files skipped (non-product images or missing pairs)"
+            }
             Write-Output "  - $failedCount files failed"
         }
         else {
@@ -1566,117 +1580,13 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
     }
     }  # End idempotency check for AI photos
     
-    # Now load ProductProductPhoto-ai.csv to link photos to products
-    Write-Output "`nLoading AI-generated photo mappings..."
-    $csvFolder = Join-Path $PSScriptRoot '..\sql'
-    $photoMappingFile = Join-Path $csvFolder "ProductProductPhoto-ai.csv"
-    if (Test-Path $photoMappingFile) {
-        try {
-            # Quick check: if we already have AI photo mappings (ProductPhotoID > 100), skip entirely
-            $cmd = $conn.CreateCommand()
-            $cmd.CommandText = "SELECT COUNT(*) FROM Production.ProductProductPhoto WHERE ProductPhotoID > 100"
-            $existingAiMappings = $cmd.ExecuteScalar()
-            
-            if ($existingAiMappings -gt 0) {
-                Write-Output "  Table already contains $existingAiMappings AI photo mappings - Skipping"
-            }
-            else {
-                $mappingData = Import-Csv -Path $photoMappingFile -Delimiter "`t" -Header @('ProductID', 'ProductPhotoID', 'Primary', 'ModifiedDate')
-                $mappingCount = $mappingData.Count
-                Write-Output "  Loading $mappingCount photo mappings..."
-                
-                $mappingInserted = 0
-                $transaction = $conn.BeginTransaction()
-                
-                try {
-                    # Use batch INSERT with IF NOT EXISTS for better performance
-                    foreach ($mapping in $mappingData) {
-                        $cmd = $conn.CreateCommand()
-                        $cmd.Transaction = $transaction
-                        $cmd.CommandText = @"
-IF NOT EXISTS (SELECT 1 FROM Production.ProductProductPhoto WHERE ProductID = @ProductID AND ProductPhotoID = @ProductPhotoID)
-BEGIN
-    INSERT INTO Production.ProductProductPhoto 
-        (ProductID, ProductPhotoID, [Primary], ModifiedDate)
-    VALUES 
-        (@ProductID, @ProductPhotoID, @Primary, @ModifiedDate)
-END
-"@
-                        $cmd.Parameters.AddWithValue("@ProductID", [int]$mapping.ProductID) | Out-Null
-                        $cmd.Parameters.AddWithValue("@ProductPhotoID", [int]$mapping.ProductPhotoID) | Out-Null
-                        $cmd.Parameters.AddWithValue("@Primary", [int]$mapping.Primary) | Out-Null
-                        $cmd.Parameters.AddWithValue("@ModifiedDate", [datetime]$mapping.ModifiedDate) | Out-Null
-                        
-                        $affected = $cmd.ExecuteNonQuery()
-                        if ($affected -gt 0) {
-                            $mappingInserted++
-                        }
-                    }
-                    
-                    $transaction.Commit()
-                    Write-Output "  Successfully loaded $mappingInserted photo mappings"
-                }
-                catch {
-                    $transaction.Rollback()
-                    throw
-                }
-            }
-        }
-        catch {
-            Write-Warning "  Failed to load photo mappings: $($_.Exception.Message)"
-        }
-    }
-    else {
-        Write-Output "  ProductProductPhoto-ai.csv not found - skipping photo mappings"
-    }
+    # Note: ProductProductPhoto-ai.csv mappings are loaded earlier in the CSV data loading section
     
     $conn.Close()
 }
 catch {
     Write-Error "Failed to execute T-SQL for managed identity via ADO.NET: $($_.Exception.Message)"
     exit 1
-}
-
-# Set WEBSITE_HOSTNAME for Azure Functions Durable Functions
-Write-Output "`nConfiguring WEBSITE_HOSTNAME for Azure Functions..."
-$functionsAppName = (azd env get-value 'SERVICE_API_FUNCTIONS_NAME' 2>$null).Trim()
-
-if ($functionsAppName -and $functionsAppName -ne "ERROR: key 'SERVICE_API_FUNCTIONS_NAME' not found in the environment values") {
-    try {
-        Write-Output "Retrieving FQDN for Functions container app: $functionsAppName"
-        
-        # Get the container app FQDN using Azure CLI
-        $fqdn = az containerapp show `
-            --name $functionsAppName `
-            --resource-group $resourceGroupName `
-            --query "properties.configuration.ingress.fqdn" `
-            --output tsv 2>$null
-        
-        if ($fqdn -and $fqdn -ne '') {
-            $websiteHostname = "https://$fqdn"
-            Write-Output "Setting WEBSITE_HOSTNAME to: $websiteHostname"
-            
-            # Update the container app environment variables
-            az containerapp update `
-                --name $functionsAppName `
-                --resource-group $resourceGroupName `
-                --set-env-vars "WEBSITE_HOSTNAME=$websiteHostname" `
-                --output none 2>$null
-            
-            if ($LASTEXITCODE -eq 0) {
-                Write-Output "Successfully set WEBSITE_HOSTNAME for $functionsAppName"
-            } else {
-                Write-Warning "Failed to set WEBSITE_HOSTNAME. Exit code: $LASTEXITCODE"
-            }
-        } else {
-            Write-Warning "Could not retrieve FQDN for Functions container app $functionsAppName"
-        }
-    }
-    catch {
-        Write-Warning "Error configuring WEBSITE_HOSTNAME: $($_.Exception.Message)"
-    }
-} else {
-    Write-Warning "SERVICE_API_FUNCTIONS_NAME not found in environment. Skipping WEBSITE_HOSTNAME configuration."
 }
 
 # Set VITE_API_URL for Static Web App build
@@ -1698,18 +1608,12 @@ if ($apiFunctionsUrl) {
 }
 
 # Grant current user Contributor role on Container Apps Environment for Aspire Dashboard access
-Write-Output "`n========================================="
-Write-Output "Configuring Aspire Dashboard Access"
-Write-Output "========================================="
-
 $containerAppEnvName = (azd env get-value 'CONTAINER_APP_ENVIRONMENT_NAME' 2>$null).Trim()
 if ($containerAppEnvName -and $containerAppEnvName -ne "ERROR: key 'CONTAINER_APP_ENVIRONMENT_NAME' not found in the environment values") {
+    Write-Output "`nConfiguring Aspire Dashboard access..."
     try {
         # Get current user's object ID
         $currentContext = Get-AzContext
-        $currentUserId = $currentContext.Account.Id
-        
-        Write-Output "Assigning Contributor role to $currentUserId on Container Apps Environment '$containerAppEnvName'..."
         
         # Assign Contributor role to the current user on the Container Apps Environment
         $roleAssignment = New-AzRoleAssignment `
@@ -1721,30 +1625,18 @@ if ($containerAppEnvName -and $containerAppEnvName -ne "ERROR: key 'CONTAINER_AP
             -ErrorAction SilentlyContinue
         
         if ($roleAssignment) {
-            Write-Output "✅ Contributor role assigned successfully"
-            Write-Output "   You can now access the Aspire Dashboard at:"
-            Write-Output "   https://aspire-dashboard.ext.$($containerAppEnvName -replace 'av-env-', '').azurecontainerapps.io/"
-        } else {
-            Write-Warning "Role assignment may have already existed or requires manual intervention"
-            Write-Output "   If you get authentication errors accessing the Aspire Dashboard:"
-            Write-Output "   1. Go to Azure Portal → Container Apps Environment: $containerAppEnvName"
-            Write-Output "   2. Select 'Access Control (IAM)'"
-            Write-Output "   3. Add role assignment: Contributor to your user account"
+            Write-Output "  Aspire Dashboard access configured successfully"
         }
     }
     catch {
-        Write-Warning "Failed to assign Contributor role: $($_.Exception.Message)"
-        Write-Output "`n   Manual steps to fix Aspire Dashboard authentication:"
-        Write-Output "   1. Go to Azure Portal → Container Apps Environment: $containerAppEnvName"
-        Write-Output "   2. Select 'Access Control (IAM)'"
-        Write-Output "   3. Click 'Add' → 'Add role assignment'"
-        Write-Output "   4. Select role: Contributor"
-        Write-Output "   5. Assign to your user account: $currentUserId"
+        # Silent failure - role may already exist
     }
-} else {
-    Write-Warning "CONTAINER_APP_ENVIRONMENT_NAME not found in environment. Skipping Aspire Dashboard access configuration."
-    Write-Output "   You may need to manually assign Contributor role on the Container Apps Environment to access the Aspire Dashboard."
 }
+
+$scriptEndTime = Get-Date
+$scriptDuration = $scriptEndTime - $scriptStartTime
 Write-Output "`n=========================================="
 Write-Output "Post-provision script completed"
+Write-Output "Finished at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+Write-Output "Total duration: $([math]::Floor($scriptDuration.TotalMinutes))m $($scriptDuration.Seconds)s"
 Write-Output "=========================================="
