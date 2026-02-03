@@ -82,14 +82,16 @@ azd up
 
 `azd up` will:
 
-1. Execute the **preup** hook to prepare Azure AD registrations and discover OpenAI models.
-2. Run `azd provision` to deploy Bicep templates under `infra/`.
-3. Execute **postprovision** scripts to configure SQL roles and import data.
-4. Run `azd deploy` to build and push containers to ACR and deploy Container Apps / Static Web Apps.
-5. Execute the **postdeploy** hook to finish configuration (CORS, frontend config, etc.).
-6. Execute the **postup** hook to generate local `.env` helpers for debugging.
+1. Execute the **preup** hook to create an AI Foundry and discover available model quotas for chat, embeddings, and image generation in your subscription.
+2. Run `azd provision` to deploy Bicep infrastructure templates under `infra/` (Container Apps, Azure SQL, Storage, OpenAI, etc.).
+3. Execute **postprovision** scripts to configure Azure SQL managed identity permissions, create database schema, and import AdventureWorks seed data. **This step takes approximately 24 minutes** due to comprehensive data loading.
+4. Run `azd deploy` to build container images via ACR remote build and deploy services to Container Apps and Static Web Apps.
+5. Execute the **postdeploy** hook to configure runtime CORS settings and environment variables on the API Container App.
+6. Execute the **postup** hook to generate a local `.env` file in the repo root for easier debugging.
 
 At the end, `azd` will print out key endpoints such as the Static Web App URL, API URLs, and Function endpoints.
+
+> **Tip:** After deployment completes, visit `https://<your-static-web-app-url>/health` to verify all services are running and the database is fully loaded. The health check will show the status of the API, Functions, and database connectivity.
 
 ---
 
@@ -155,19 +157,21 @@ When you later tear down resources with `azd down`, `postdown` runs for cleanup.
 
 **When it runs:** Before `azd up` begins provisioning or deployment.
 
-**Purpose:** Prepare the Azure tenant and `azd` environment values for this application.
+**Purpose:** Create an AI Foundry and discover available AI model quotas for the application.
 
 Key responsibilities:
 
 - Ensures the PowerShell Gallery is trusted and required modules are present (`Az.*`, etc.).
 - Provides helper functions to read and write `azd` environment values (`Get-AzdValue`, `Set-AzdValue`).
 - Ensures you are logged into Azure (`Ensure-AzLogin`) with the correct tenant and subscription.
-- Creates or reuses **Entra ID (AAD) app registrations**:
-  - `Ensure-AppRegistration` – creates a web app registration, service principal, and secret; persists `CLIENT_ID` and `CLIENT_SECRET` into the `azd` environment.
-  - `Ensure-ApiAppRegistration` – creates an API application registration with app roles and identifier URIs.
-- Sets or updates `azd` environment values needed for later stages (API auth, model discovery, etc.).
+- Creates an **AI Foundry** in your subscription.
+- Discovers and validates available model quotas for:
+  - Chat models (e.g., GPT-4, GPT-3.5)
+  - Embedding models (e.g., text-embedding-ada-002)
+  - Image generation models (e.g., DALL-E)
+- Sets or updates `azd` environment values with discovered model names and availability for later stages.
 
-This script is responsible for the **identity scaffolding** that the rest of the app and scripts depend on.
+This script is responsible for the **AI infrastructure preparation** that the rest of the app depends on.
 
 ---
 
