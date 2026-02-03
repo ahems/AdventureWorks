@@ -115,29 +115,24 @@ For testing and test scripts, see:
 
 ---
 
-## Local Development (Overview)
+## Getting Started
 
-A detailed step‑by‑step guide is provided in the repository documentation, but the rough flow is:
+Deploy the complete solution to Azure using:
 
-1. **Bootstrap Azure environment** (if needed)
-   - Use `azd up` to provision infrastructure and deploy containers:
-     - Runs azd lifecycle hooks (`preup`, `postprovision`, `postdeploy`).
-     - Discovers Azure OpenAI models and configures environment values.
+```bash
+azd up
+```
 
-2. **Run Data API Builder locally**
-   - Use the helper script and VS Code task to start DAB:
-     - `cd api && ./start-local-api.sh`
+This command will:
 
-3. **Run the frontend locally**
-   - `cd app && npm install`
-   - `npm run dev`
-   - Ensure `VITE_API_URL` points to your local DAB GraphQL endpoint (for example, `http://localhost:5000/graphql`).
+- Provision all Azure infrastructure (Container Apps, Static Web App, SQL Database, Storage, etc.)
+- Run lifecycle hooks (`preup`, `postprovision`, `postdeploy`)
+- Discover Azure OpenAI models and configure environment values
+- Build and deploy containers via Azure Container Registry
+- Configure database schema and load sample data
+- Set up managed identity authentication across all services
 
-4. **Run Azure Functions locally (optional)**
-   - Use the `func: host start` VS Code task (depends on the build task).
-   - Configure `MCP_SERVICE_URL` in `api-functions/local.settings.json` to point at the Azure‑hosted MCP service if you want the AI agent to function locally.
-
-The project is wired for **remote container builds** for APIs and Functions via Azure Container Registry, as defined in `azure.yaml`.
+Once deployed, you can access the application via the Static Web App URL shown in the deployment output.
 
 ---
 
@@ -147,8 +142,7 @@ The `docs/` folder contains comprehensive documentation organized by feature are
 
 **Quick Links:**
 
-- **Architecture & Migration**
-  - [QUICKSTART.md](QUICKSTART.md) – Local development guide
+- **Architecture & Deployment**
   - [docs/architecture/MIGRATION_SUMMARY.md](docs/architecture/MIGRATION_SUMMARY.md) – GraphQL migration history
 
 - **AI Agent & MCP**

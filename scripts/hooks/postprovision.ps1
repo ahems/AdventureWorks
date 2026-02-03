@@ -830,11 +830,6 @@ try {
                 continue
             }
             
-            # DEBUG: ProductDescription.csv tracking
-            if ($config.File -eq 'ProductDescription.csv') {
-                Write-Output "    [DEBUG] Read $($rows.Count) rows from CSV file"
-            }
-            
             # Check if this table has hierarchyid or geography columns (we'll handle these with INSERT statements)
             # Also use INSERT for tables with hex-encoded columns (varbinary/text with special handling)
             $cmd.CommandText = @"
@@ -920,20 +915,8 @@ ORDER BY c.ORDINAL_POSITION
             $rowCount = 0
             $delimiter = $config.Delimiter
             
-            # DEBUG: ProductDescription.csv tracking
-            $debugSkipped = 0
-            $debugParsed = 0
-            
             # Track which columns we're actually loading (all columns now, including hierarchyid)
             $loadedColumns = $columns
-            
-            # DEBUG: ProductDescription.csv column info
-            if ($config.File -eq 'ProductDescription.csv') {
-                Write-Output "    [DEBUG] Table has $($allColumns.Count) total columns, $($columns.Count) non-identity/computed columns"
-                Write-Output "    [DEBUG] All columns: $(($allColumns | ForEach-Object { $_.Name }) -join ', ')"
-                Write-Output "    [DEBUG] Loadable columns: $(($columns | ForEach-Object { $_.Name }) -join ', ')"
-                Write-Output "    [DEBUG] First row sample: $($rows[0].Substring(0, [Math]::Min(100, $rows[0].Length)))..."
-            }
             
             foreach ($row in $rows) {
                 if ([string]::IsNullOrWhiteSpace($row)) { continue }
@@ -945,19 +928,10 @@ ORDER BY c.ORDINAL_POSITION
                     $values = $values[1..($values.Count-1)]
                 }
                 
-                # DEBUG: ProductDescription.csv field count check
-                if ($config.File -eq 'ProductDescription.csv' -and $debugParsed -eq 0) {
-                    Write-Output "    [DEBUG] First row has $($values.Count) fields (expecting $($allColumns.Count))"
-                    Write-Output "    [DEBUG] First row values: $(($values | ForEach-Object { $_.Substring(0, [Math]::Min(20, $_.Length)) }) -join ' | ')"
-                }
-                
                 # Check against total column count (CSV should have all columns including IDENTITY/computed)
                 if ($values.Count -ne $allColumns.Count) {
-                    if ($config.File -eq 'ProductDescription.csv') { $debugSkipped++ }
                     continue 
                 }
-                
-                if ($config.File -eq 'ProductDescription.csv') { $debugParsed++ }
                 
                 $dataRow = $dataTable.NewRow()
                 $dataTableColIndex = 0
@@ -1158,13 +1132,6 @@ ORDER BY c.ORDINAL_POSITION
                 if ($rowCount % 10000 -eq 0) {
                     Write-Output "    ...parsed $rowCount rows"
                 }
-            }
-            
-            # DEBUG: ProductDescription.csv final row count
-            if ($config.File -eq 'ProductDescription.csv') {
-                Write-Output "    [DEBUG] DataTable final row count: $($dataTable.Rows.Count)"
-                Write-Output "    [DEBUG] Rows skipped due to field count mismatch: $debugSkipped"
-                Write-Output "    [DEBUG] Rows successfully parsed: $debugParsed"
             }
             
             # Check if any column is an IDENTITY column (need to enable IDENTITY_INSERT)
@@ -1488,7 +1455,11 @@ Write-Output "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinute
             $totalPngFiles = $pngFiles.Count
             
             if ($totalPngFiles -gt 0) {
-                Write-Output "  Found $totalPngFiles PNG files to upload"
+                # Count thumbnails and large images separately
+                $thumbnailCount = ($pngFiles | Where-Object { $_.Name -like "*_thumb.png" -or $_.Name -like "*_small.png" }).Count
+                $largeImageCount = $totalPngFiles - $thumbnailCount
+                
+                Write-Output "  Found $totalPngFiles PNG files to upload ($thumbnailCount thumbnails, $largeImageCount large images)"
                 
                 $uploadedCount = 0
                 $skippedCount = 0
