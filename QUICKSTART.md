@@ -12,6 +12,7 @@ This guide walks you through cloning this repo into your own GitHub account, sta
 
 2. **(Optional) Clone locally**
    - If you want a local clone in addition to Codespaces, run:
+
      ```bash
      git clone https://github.com/<your-account>/AdventureWorks.git
      cd AdventureWorks
@@ -25,7 +26,7 @@ The remaining steps assume you are working in **your fork**.
 
 This repository is configured with a devcontainer so you get all required tooling (Azure CLI, azd, .NET, Node, Docker‑in‑Docker) preinstalled.
 
-1. From your fork on GitHub, click **Code → Codespaces → Create codespace on main** (or `dev`).
+1. From your fork on GitHub, click **Code → Codespaces → Create codespace on main**.
 2. Wait for the container to build and VS Code (web or desktop) to connect.
 3. Once the container is ready, you should see the repo under `/workspaces/AdventureWorks` and the Azure CLI (`az`) and Azure Developer CLI (`azd`) available in the integrated terminal.
 
@@ -33,43 +34,69 @@ This repository is configured with a devcontainer so you get all required toolin
 
 ---
 
-## 3. Log in to Azure
+## 3. Create an Environment and Log in to Azure
 
 Inside the Codespace terminal:
 
 ```bash
-azd auth login
+azd env new <your-environment-name>
 ```
 
-azd env set "TENANT_ID" ed9aa516-5358-4016-a8b2-b6ccb99142d0 // 3Cloud Lab
-azd env set "AZURE_SUBSCRIPTION_ID" 6c8e23df-4aec-4ed5-bec5-79853ea6c6c6 // Data Lab
+The value you use to name your environment will be prepended with 'rg-' and this will be the name of the resource group used to deploy to.
 
-Then ensure `azd` is pointed at the correct subscription:
+(Optional) If you need to set the Tenant ID or SUBSCRIPTION ID when logging in to Azure, you can do so first like so:
+
+```bash
+azd env set TENANT_ID "<your-tenant-id>"
+azd env set AZURE_SUBSCRIPTION_ID "<your-subscription-id>"
+```
+
+Also ensure `azd` is pointed at the correct subscription:
 
 ```bash
 azd config set defaults.subscription <your-subscription-id>
 ```
 
-Also sign in using a Powershell Terminal:
+Login to Azure:
+
+```bash
+azd auth login
+```
+
+Note: If you encounter problems signing in to Azure due to multi-factor authentication enabled on your account, you may need to launch the codespace in Visual Studio Code on your desktop instead of in a browser.
+
+Once you have successfully signed in using azd, sign in via Powershell:
 
 ```pwsh
 Connect-AzAccount -UseDeviceAuthentication -Tenant <your-tenant-id>
 Connect-AzAccount Set-AzContext -Subscription <your-subscription-id>
 ```
 
-Set the Azure region you want to deploy to:
+Set the Azure regions you want to deploy services to:
 
 ```bash
-azd env set 'AZURE_LOCATION'='eastus2'
+azd env set AZURE_LOCATION "eastus2"
+azd env set FOUNDRY_LOCATION "swedencentral"
+azd env set PLAYWRIGHT_LOCATION "westeurope"
 ```
 
-Optionally, if you want to deploy your AI Foundry in a different region, do so like this:
+Optional: Set the OpenAI model parameters to use for chat, embeddings and image generation (example values shown):
 
 ```bash
-azd env set 'FOUNDRY_LOCATION'='swedencentral'
+azd env set availableChatGptDeploymentCapacity 4500
+azd env set availableEmbeddingDeploymentCapacity 754
+azd env set availableImageDeploymentCapacity 1
+azd env set chatGptDeploymentVersion "2025-04-14"
+azd env set chatGptModelName "gpt-4.1-mini"
+azd env set chatGptSkuName "Standard"
+azd env set embeddingDeploymentModelName "text-embedding-3-small"
+azd env set embeddingDeploymentSkuName "GlobalStandard"
+azd env set embeddingDeploymentVersion 1
+azd env set imageDeploymentModelName "gpt-image-1"
+azd env set imageDeploymentSkuName "GlobalStandard"
+azd env set imageDeploymentVersion "2025-04-15"
+azd env set imageModelFormat "OpenAI"
 ```
-
----
 
 ## 4. Provision and Deploy with `azd up`
 
@@ -84,7 +111,7 @@ azd up
 
 1. Execute the **preup** hook to create an AI Foundry and discover available model quotas for chat, embeddings, and image generation in your subscription.
 2. Run `azd provision` to deploy Bicep infrastructure templates under `infra/` (Container Apps, Azure SQL, Storage, OpenAI, etc.).
-3. Execute **postprovision** scripts to configure Azure SQL managed identity permissions, create database schema, and import AdventureWorks seed data. **This step takes approximately 24 minutes** due to comprehensive data loading.
+3. Execute **postprovision** scripts to configure Azure SQL managed identity permissions, create database schema, and import AdventureWorks seed data. **This step takes approximately 24 minutes** due to comprehensive data loading. This is also done using PowerShell not bash which is why you need to sign in to Powershell (Connect-AzAccount) as well as bash (azd auth login).
 4. Run `azd deploy` to build container images via ACR remote build and deploy services to Container Apps and Static Web Apps.
 5. Execute the **postdeploy** hook to configure runtime CORS settings and environment variables on the API Container App.
 6. Execute the **postup** hook to generate a local `.env` file in the repo root for easier debugging.
@@ -145,9 +172,7 @@ Defined hooks:
 3. `postprovision`
 4. `azd deploy` (build + deploy app services)
 5. `predeploy` and `postdeploy` (around deployment, especially frontend)
-6. `postup` (final local config after `azd up` completes)
-
-When you later tear down resources with `azd down`, `postdown` runs for cleanup.
+6. `postup` (final message display after `azd up` completes)
 
 ---
 
@@ -161,14 +186,13 @@ When you later tear down resources with `azd down`, `postdown` runs for cleanup.
 
 Key responsibilities:
 
-- Ensures the PowerShell Gallery is trusted and required modules are present (`Az.*`, etc.).
 - Provides helper functions to read and write `azd` environment values (`Get-AzdValue`, `Set-AzdValue`).
-- Ensures you are logged into Azure (`Ensure-AzLogin`) with the correct tenant and subscription.
+- Ensures you are logged into Azure with the correct tenant and subscription.
 - Creates an **AI Foundry** in your subscription.
 - Discovers and validates available model quotas for:
-  - Chat models (e.g., GPT-4, GPT-3.5)
-  - Embedding models (e.g., text-embedding-ada-002)
-  - Image generation models (e.g., DALL-E)
+  - Chat models (e.g., GPT-4, GPT-5x, etc.)
+  - Embedding models (e.g., text-embedding-ada-002, gpt-x, etc.)
+  - Image generation models (e.g., gpt-image-x)
 - Sets or updates `azd` environment values with discovered model names and availability for later stages.
 
 This script is responsible for the **AI infrastructure preparation** that the rest of the app depends on.

@@ -1,6 +1,8 @@
 # AdventureWorks E‑Commerce (Azure Reference Solution)
 
-AdventureWorks is an end‑to‑end e‑commerce sample that demonstrates how to build a modern, AI‑powered, passwordless web application on Azure. It combines a React SPA frontend, GraphQL/REST data access, Azure Functions for business logic, and Azure OpenAI–powered experiences such as semantic search, AI agents, and automatic content generation.
+AdventureWorks is an e‑commerce sample app and API built upon the sample [AdventureWorks dataset](https://learn.microsoft.com/en-us/sql/samples/adventureworks-install-configure) that demonstrates a modern, AI‑powered web application on Azure using this 'heritage' (real-world!) data set. It combines a React 19 + Vite with TypeScript and Tailwind CSS SPA frontend, GraphQL/REST data access using Data API Builder, Azure Functions in Containers for business logic, and Azure OpenAI–powered experiences such as semantic search, AI agents with an MCP Server, and automated content generation to enhance the original data set (particularly product images).
+
+All the scripts, markup, tests, docs and code for this entire app - meaning, everything in this repo - was created entirely using AI: GitHub Copilot in Agent mode, using mostly the Claude Sonnet 4.5 model.
 
 ## Demo Video
 
