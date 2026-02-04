@@ -1436,7 +1436,7 @@ Write-Output "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinute
     
     # Upload AI-generated PNG images from images directory
     $elapsed = (Get-Date) - $scriptStartTime
-    Write-Output "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Uploading AI-generated PNG images..."
+    Write-Output "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Adding AI-generated PNG images to Database..."
     
     # Check if AI photos already uploaded (idempotency check)
     # AI photos from PNG files use ProductPhotoIDs starting at 1000

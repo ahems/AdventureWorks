@@ -37,7 +37,7 @@ param revisionSuffix string = toLower(substring(replace(newGuid(),'-',''), 0, 8)
 param AIServicesKind string = 'AIServices'
 param publicNetworkAccess string = 'Enabled'
 param sqlDatabaseName string
-@description('Location for Playwright Testing workspace. Must be one of: eastus, westus3, westeurope, eastasia')
+@description('Location for Playwright Testing workspace. Must be one of: eastus, westus3, westeurope, eastasia. Defaults to resource group location.')
 @allowed(['eastus', 'westus3', 'westeurope', 'eastasia'])
 param playwrightLocation string = 'westeurope'
 

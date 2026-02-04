@@ -17,6 +17,11 @@ hooks:
     run: bash scripts/hooks/predeploy.sh
     cwd: .
     interactive: false
+  postup:
+    shell: sh
+    run: bash scripts/hooks/postup.sh
+    cwd: .
+    interactive: true
 services:
   api-mcp:
     project: ./api-mcp
@@ -53,6 +58,11 @@ services:
       buildCommand: bash scripts/build-with-env.sh
       outputLocation: dist
     hooks:
+      predeploy:
+        shell: sh
+        run: npm install && bash scripts/build-with-env.sh
+        cwd: ./app
+        interactive: false
       postdeploy:
         shell: sh
         run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/app-postdeploy.sh"

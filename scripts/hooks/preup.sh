@@ -4,11 +4,20 @@ set -euo pipefail
 #############################################
 # Color output helpers
 #############################################
-color_cyan() { echo -e "\033[36m$1\033[0m"; }
-color_green() { echo -e "\033[32m$1\033[0m"; }
-color_yellow() { echo -e "\033[33m$1\033[0m"; }
-color_red() { echo -e "\033[31m$1\033[0m"; }
-color_dark_gray() { echo -e "\033[90m$1\033[0m"; }
+# Only use colors if output is to a terminal
+if [[ -t 1 ]]; then
+  color_cyan() { printf '\033[36m%s\033[0m\n' "$1"; }
+  color_green() { printf '\033[32m%s\033[0m\n' "$1"; }
+  color_yellow() { printf '\033[33m%s\033[0m\n' "$1"; }
+  color_red() { printf '\033[31m%s\033[0m\n' "$1"; }
+  color_dark_gray() { printf '\033[90m%s\033[0m\n' "$1"; }
+else
+  color_cyan() { printf '%s\n' "$1"; }
+  color_green() { printf '%s\n' "$1"; }
+  color_yellow() { printf '%s\n' "$1"; }
+  color_red() { printf '%s\n' "$1"; }
+  color_dark_gray() { printf '%s\n' "$1"; }
+fi
 
 #############################################
 # azd environment variable helpers
@@ -325,7 +334,7 @@ fi
 sql_database_name=$(get_azd_value "SQL_DATABASE_NAME")
 if [[ -z "$sql_database_name" ]]; then
   sql_database_name='AdventureWorks'
-  echo "SQL_DATABASE_NAME not found in azd environment. Setting default: '$sql_database_name'"
+  color_cyan "SQL_DATABASE_NAME not found in azd environment. Setting default: '$sql_database_name'"
   set_azd_value "SQL_DATABASE_NAME" "$sql_database_name"
 fi
 
@@ -344,7 +353,7 @@ fi
 # Use Python to compute uniqueString matching Bicep's uniqueString(resourceGroup().id)
 account_name=$(python3 -c "import hashlib; print('av-ai-' + hashlib.sha1('$resource_group_id'.encode('utf-8')).hexdigest()[:13].lower())")
 set_azd_value "AZURE_OPENAI_ACCOUNT_NAME" "$account_name"
-color_cyan "Computed Microsoft Foundry account name: $account_name (matches Bicep: uniqueString(resourceGroup().id))"
+color_cyan "Microsoft Foundry account name: $account_name"
 
 ensure_foundry_account "$subscription_id" "$resource_group" "$account_name" "$foundry_location"
 
