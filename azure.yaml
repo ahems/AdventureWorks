@@ -49,6 +49,13 @@ services:
     docker:
       path: Dockerfile
       remoteBuild: true
+  seed-job:
+    project: ./seed-job
+    host: containerapp
+    language: docker
+    docker:
+      path: dockerfile
+      remoteBuild: true
   app:
     project: ./app
     host: staticwebapp
