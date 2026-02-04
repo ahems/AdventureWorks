@@ -1,9 +1,9 @@
-param appInsightsName string = 'todoapp-appinsights-${toLower(uniqueString(resourceGroup().id))}'
-param containerAppEnvName string = 'todoapp-env-${uniqueString(resourceGroup().id)}'
+param appInsightsName string = 'av-appinsights-${toLower(uniqueString(resourceGroup().id))}'
+param containerAppEnvName string = 'av-env-${uniqueString(resourceGroup().id)}'
 param location string = resourceGroup().location
-param containerRegistryName string = 'todoappacr${toLower(uniqueString(resourceGroup().id))}'
-param identityName string = 'todoapp-identity-${uniqueString(resourceGroup().id)}'
-param workspaceName string = 'todoapp-workspace-${toLower(uniqueString(resourceGroup().id))}'
+param containerRegistryName string = 'avacr${toLower(uniqueString(resourceGroup().id))}'
+param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
+param workspaceName string = 'av-workspace-${toLower(uniqueString(resourceGroup().id))}'
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspaceName
@@ -53,9 +53,21 @@ resource containerAppEnv 'Microsoft.App/managedEnvironments@2023-11-02-preview' 
         sharedKey: workspace.listKeys().primarySharedKey
       }
     }
+    // OpenTelemetry is automatically enabled when using Aspire components in the app
+    // The Application Insights connection above captures all telemetry
+  }
+}
+
+// Aspire Dashboard as a managed .NET component
+resource aspireDashboard 'Microsoft.App/managedEnvironments/dotNetComponents@2025-10-02-preview' = {
+  parent: containerAppEnv
+  name: 'aspire-dashboard'
+  properties: {
+    componentType: 'AspireDashboard'
   }
 }
 
 output containerAppEnvId string = containerAppEnv.id
+output containerAppEnvName string = containerAppEnv.name
 output applicationInsightsConnectionString string = appInsights.properties.ConnectionString
 

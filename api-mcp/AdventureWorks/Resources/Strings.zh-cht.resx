@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ProductNotFound" xml:space="preserve">
+    <value>找不到產品 #{0}。</value>
+  </data>
+  <data name="InventoryAvailability" xml:space="preserve">
+    <value>📦 庫存可用性：{0}</value>
+  </data>
+  <data name="ProductId" xml:space="preserve">
+    <value>產品編號：{0}</value>
+  </data>
+  <data name="OutOfStock" xml:space="preserve">
+    <value>❌ 全台各地皆無庫存</value>
+  </data>
+  <data name="OutOfStockMessage" xml:space="preserve">
+    <value>此產品目前無法使用。請稍後再試或聯絡客服。</value>
+  </data>
+  <data name="InStock" xml:space="preserve">
+    <value>✅ 有現貨 - 總共可用：{0} 台</value>
+  </data>
+  <data name="AvailableAt" xml:space="preserve">
+    <value>可於以下地點購買：</value>
+  </data>
+  <data name="LocationIcon" xml:space="preserve">
+    <value>📍 {0}</value>
+  </data>
+  <data name="Quantity" xml:space="preserve">
+    <value>數量：{0} 單位</value>
+  </data>
+  <data name="Location" xml:space="preserve">
+    <value>位置：架子 {0}，儲物格 {1}</value>
+  </data>
+  <data name="Recommended" xml:space="preserve">
+    <value>💡 推薦：從 {0} 訂購（有 {1} 件庫存）</value>
+  </data>
+  <data name="NoProductsFound" xml:space="preserve">
+    <value>找不到符合「{0}」的產品</value>
+  </data>
+  <data name="FoundProducts" xml:space="preserve">
+    <value>找到 {0} 件符合「{1}」的產品（使用描述和評論的語意搜尋）：</value>
+  </data>
+  <data name="Category" xml:space="preserve">
+    <value>分類：{0}</value>
+  </data>
+  <data name="Price" xml:space="preserve">
+    <value>價格：${0:N2}</value>
+  </data>
+  <data name="Match" xml:space="preserve">
+    <value>比賽：發現於 {0}</value>
+  </data>
+  <data name="Review" xml:space="preserve">
+    <value>評論：{0}</value>
+  </data>
+  <data name="Description" xml:space="preserve">
+    <value>描述：{0}</value>
+  </data>
+  <data name="Relevance" xml:space="preserve">
+    <value>相關性：{0:P1}</value>
+  </data>
+  <data name="NoOrdersFound" xml:space="preserve">
+    <value>未找到客戶 #{0} 的訂單。</value>
+  </data>
+  <data name="OrderHistory" xml:space="preserve">
+    <value>📋 客戶 #{0} 的訂單歷史記錄</value>
+  </data>
+  <data name="RecentOrders" xml:space="preserve">
+    <value>顯示最近的 {0} 筆訂單：</value>
+  </data>
+  <data name="OrderNumber" xml:space="preserve">
+    <value>訂單編號 #{0}</value>
+  </data>
+  <data name="OrderDate" xml:space="preserve">
+    <value>日期：{0:yyyy-MM-dd}</value>
+  </data>
+  <data name="Status" xml:space="preserve">
+    <value>狀態：{0}</value>
+  </data>
+  <data name="Total" xml:space="preserve">
+    <value>總計：${0:N2}</value>
+  </data>
+  <data name="Items" xml:space="preserve">
+    <value>項目：{0}</value>
+  </data>
+  <data name="ShipDate" xml:space="preserve">
+    <value>已出貨：{0:yyyy-MM-dd}</value>
+  </data>
+  <data name="OrderNotFound" xml:space="preserve">
+    <value>找不到訂單 #{0}。</value>
+  </data>
+  <data name="OrderDoesNotBelongToCustomer" xml:space="preserve">
+    <value>訂單 #{0} 不屬於客戶 #{1}。</value>
+  </data>
+  <data name="OrderDetails" xml:space="preserve">
+    <value>📦 訂單詳情 - 訂單編號 #{0}</value>
+  </data>
+  <data name="Customer" xml:space="preserve">
+    <value>客戶編號：{0}</value>
+  </data>
+  <data name="ShipTo" xml:space="preserve">
+    <value>寄送至：</value>
+  </data>
+  <data name="Subtotal" xml:space="preserve">
+    <value>小計：${0:N2}</value>
+  </data>
+  <data name="Tax" xml:space="preserve">
+    <value>稅金：${0:N2}</value>
+  </data>
+  <data name="Shipping" xml:space="preserve">
+    <value>運費：${0:N2}</value>
+  </data>
+  <data name="OrderItems" xml:space="preserve">
+    <value>訂單項目：</value>
+  </data>
+  <data name="Qty" xml:space="preserve">
+    <value>數量：{0}</value>
+  </data>
+  <data name="UnitPrice" xml:space="preserve">
+    <value>單價：${0:N2}</value>
+  </data>
+  <data name="LineTotal" xml:space="preserve">
+    <value>行總計：${0:N2}</value>
+  </data>
+  <data name="NoComplementaryProducts" xml:space="preserve">
+    <value>未找到產品 #{0} 的相關配件。</value>
+  </data>
+  <data name="ComplementaryProducts" xml:space="preserve">
+    <value>🛍️ 購買此商品的顧客也購買了：</value>
+  </data>
+  <data name="PurchasedTogether" xml:space="preserve">
+    <value>一起購買 {0} 次</value>
+  </data>
+  <data name="NoRecommendations" xml:space="preserve">
+    <value>找不到客戶 #{0} 的購買紀錄以生成推薦。</value>
+  </data>
+  <data name="PersonalizedRecommendations" xml:space="preserve">
+    <value>✨ 為客戶 #{0} 提供的個人化推薦</value>
+  </data>
+  <data name="BasedOnPurchaseHistory" xml:space="preserve">
+    <value>根據您的購買記錄：</value>
+  </data>
+  <data name="SimilarTo" xml:space="preserve">
+    <value>類似於：{0}</value>
+  </data>
+  <data name="NoReviews" xml:space="preserve">
+    <value>找不到產品 #{0} 的評論。</value>
+  </data>
+  <data name="ReviewAnalysis" xml:space="preserve">
+    <value>⭐ 產品評論分析：{0}</value>
+  </data>
+  <data name="OverallRating" xml:space="preserve">
+    <value>整體評分：{0:F1}/5.0 ({1})</value>
+  </data>
+  <data name="TotalReviews" xml:space="preserve">
+    <value>總評論數：{0}</value>
+  </data>
+  <data name="RatingDistribution" xml:space="preserve">
+    <value>評分分佈：</value>
+  </data>
+  <data name="StarReviews" xml:space="preserve">
+    <value>{0}⭐：{1} 則評論（{2:F1}%）</value>
+  </data>
+  <data name="WhatCustomersLove" xml:space="preserve">
+    <value>👍 客戶喜愛：</value>
+  </data>
+  <data name="CommonConcerns" xml:space="preserve">
+    <value>👎 常見疑慮：</value>
+  </data>
+  <data name="LatestReview" xml:space="preserve">
+    <value>最新評論：{0:yyyy-MM-dd} 由 {1} 發表</value>
+  </data>
+  <data name="Anonymous" xml:space="preserve">
+    <value>匿名</value>
+  </data>
+</root>

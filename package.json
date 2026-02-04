@@ -1,0 +1,20 @@
+{
+  "scripts": {
+    "test:e2e:warmup": "tsx tests/utils/warmup.ts",
+    "test:e2e": "npm run test:e2e:warmup && playwright test -c tests/playwright.config.ts",
+    "test:e2e:azure": "playwright test -c tests/playwright.azure.config.ts"
+  },
+  "dependencies": {
+    "mssql": "^12.2.0",
+    "node-fetch": "^3.3.2",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@azure/identity": "^4.0.0",
+    "@azure/playwright": "^1.0.0",
+    "@faker-js/faker": "^9.0.0",
+    "@playwright/test": "^1.41.2",
+    "@types/node": "^20.11.30",
+    "tsx": "^4.7.0"
+  }
+}

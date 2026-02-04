@@ -1,14 +1,19 @@
-param name string = 'todoapp-openai-${uniqueString(resourceGroup().id)}'
-param keyVaultName string = 'todoapp-kv-${uniqueString(resourceGroup().id)}'
+param name string = 'av-ai-${uniqueString(resourceGroup().id)}'
 param location string = 'canadaeast'
 param tags object = {}
 @description('The custom subdomain name used to access the API. Defaults to the value of the name parameter.')
 param customSubDomainName string = name
 param kind string = 'AIServices'
-param openAiDeploymentName string = 'chat'
 param restoreOpenAi bool = false
-param identityName string = 'todoapp-identity-${uniqueString(resourceGroup().id)}'
+param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param aadAdminObjectId string
+param projectName string
+param appInsightsId string
+param appInsightConnectionString string
+param appInsightConnectionName string
+param aoaiConnectionName string
+param storageAccountName string
+param storageAccountConnectionName string
 
 @allowed([ 'Enabled', 'Disabled' ])
 param publicNetworkAccess string = 'Enabled'
@@ -28,12 +33,26 @@ param embeddingDeploymentName string = ''
 param embeddingDeploymentVersion string = ''
 param embeddingDeploymentCapacity int = 0
 param embeddingSkuName string = ''
+param imageModelName string = ''
+param imageDeploymentName string = 'gpt-image-1'
+param imageDeploymentVersion string = ''
+param imageDeploymentCapacity int = 0
+param imageSkuName string = ''
+param imageModelFormat string = 'OpenAI'
 var embedding = {
   modelName: !empty(embeddingModelName) ? embeddingModelName : 'text-embedding-ada-002'
   deploymentName: !empty(embeddingDeploymentName) ? embeddingDeploymentName : 'embedding'
   deploymentVersion: !empty(embeddingDeploymentVersion) ? embeddingDeploymentVersion : '2'
   deploymentCapacity: embeddingDeploymentCapacity != 0 ? embeddingDeploymentCapacity : 30
   embeddingSkuName: !empty(embeddingSkuName) ? embeddingSkuName : 'Standard'
+}
+var imageModel = {
+  modelName: !empty(imageModelName) ? imageModelName : ''
+  deploymentName: !empty(imageDeploymentName) ? imageDeploymentName : 'image'
+  deploymentVersion: !empty(imageDeploymentVersion) ? string(imageDeploymentVersion) : ''
+  deploymentCapacity: imageDeploymentCapacity != 0 ? imageDeploymentCapacity : 1
+  imageSkuName: !empty(imageSkuName) ? imageSkuName : 'Standard'
+  format: !empty(imageModelFormat) ? imageModelFormat : 'OpenAI'
 }
 param openAiHost string = 'azure'
 param chatGptModelName string = ''
@@ -70,16 +89,39 @@ var deployments = [
       version: embedding.deploymentVersion
     }
     sku: {
-      name: 'Standard'
+      name: embedding.embeddingSkuName
       capacity: embedding.deploymentCapacity
     }
   }
 ]
 
+var imageDeployment = !empty(imageModel.modelName) && !empty(imageModel.deploymentVersion) ? [
+  {
+    name: imageModel.deploymentName
+    model: {
+      format: imageModel.format
+      name: imageModel.modelName
+      version: imageModel.deploymentVersion
+    }
+    sku: {
+      name: imageModel.imageSkuName
+      capacity: imageModel.deploymentCapacity
+    }
+  }
+] : []
+
+var allDeployments = concat(deployments, imageDeployment)
+
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
 }
 
+resource storageAccount 'Microsoft.Storage/storageAccounts@2022-09-01' existing = {
+  name: storageAccountName
+}
+
+// Microsoft Foundry resource (AIServices kind enables access to broader model catalog, agents, and Foundry Tools)
+// Uses latest 2025-06-01 API with allowProjectManagement for full Foundry capabilities
 resource account 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   name: name
   location: location
@@ -95,21 +137,71 @@ resource account 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
     customSubDomainName: customSubDomainName
     publicNetworkAccess: publicNetworkAccess
     networkAcls: networkAcls
-    disableLocalAuth: true
+    disableLocalAuth: true // Enforce Entra ID authentication only
     dynamicThrottlingEnabled: false
     restrictOutboundNetworkAccess: false
     restore: restoreOpenAi
+    allowProjectManagement: true // Required for Microsoft Foundry features (projects, agents, broader model catalog)
   }
   sku: sku
 }
 
-// Grant the managed identity data-plane permission to invoke Azure AI Foundry deployments (chat/completions, embeddings, etc.)
-// Role: Cognitive Services OpenAI User (least-privilege for inference)
-// If you need to manage deployments, consider Cognitive Services OpenAI Contributor instead.
-// Role definition ID source: Built-in role GUID for 'Cognitive Services OpenAI User'. Adjust if tenant introduces custom role.
-resource openAiUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  // Use deterministic GUID from account id + identity name (both known at compile time)
-  name: guid(account.id, identityName, 'openai-user')
+resource aiServiceConnection 'Microsoft.CognitiveServices/accounts/connections@2025-04-01-preview' = {
+  name: aoaiConnectionName
+  parent: account
+  properties: {
+    category: 'AzureOpenAI'
+    authType: 'AAD'
+    isSharedToAll: true
+    target: account.properties.endpoints['OpenAI Language Model Instance API']
+    metadata: {
+      ApiType: 'azure'
+      ResourceId: account.id
+    }
+  }
+}
+
+// Creates the Azure Foundry connection to your Azure Storage resource
+resource storageAccountConnection 'Microsoft.CognitiveServices/accounts/connections@2025-04-01-preview' = {
+  name: storageAccountConnectionName
+  parent: account
+  properties: {
+    category: 'AzureStorageAccount'
+    target: storageAccount.properties.primaryEndpoints.blob
+    authType: 'AAD'
+    isSharedToAll: true    
+    metadata: {
+      ApiType: 'Azure'
+      ResourceId: storageAccount.id
+    }
+  }
+}
+
+// Microsoft Foundry Project (organizes work, provides access management and data isolation)
+// Projects are containers for agents, model deployments, and other Foundry resources
+resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-04-01-preview' = {
+  name: projectName
+  parent: account
+  location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${azidentity.id}': {}
+    }
+  }
+  properties: {
+    description: 'AI Foundry Project for AI Foundry Demo'
+    displayName: 'AI Foundry Demo Project'
+  }
+}
+
+// Grant the managed identity data-plane permissions to invoke Microsoft Foundry deployments
+// Role: Cognitive Services OpenAI Contributor - allows both inference and deployment management
+// This role works with all Microsoft Foundry models (OpenAI, Meta, Mistral, etc.) not just OpenAI
+// For inference-only access, use 'Cognitive Services OpenAI User' (5e0bd9bd-7b93-4f28-af87-19fc36ad61bd)
+resource openAiUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = {
+  // Use deterministic GUID from account id + identity id + role definition
+  name: guid(account.id, azidentity.id, 'a001fd3d-188f-4b5d-821b-7da978bf7442')
   scope: account
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a001fd3d-188f-4b5d-821b-7da978bf7442') // Cognitive Services OpenAI Contributor
@@ -118,10 +210,11 @@ resource openAiUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-
   }
 }
 
-// Grant the same data-plane role to the specified AAD admin/user so local development (DefaultAzureCredential using user context) can call the Azure AI Foundry deployments directly.
-// Uses deterministic GUID to stay idempotent across deployments.
-resource openAiUserLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(account.id, aadAdminObjectId, 'openai-user')
+// Grant the specified Entra ID admin/user data-plane access for local development
+// Enables DefaultAzureCredential (az login) to call Microsoft Foundry deployments during development
+// Uses deterministic GUID to maintain idempotency across deployments
+resource openAiUserLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = {
+  name: guid(account.id, aadAdminObjectId, 'a001fd3d-188f-4b5d-821b-7da978bf7442')
   scope: account
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a001fd3d-188f-4b5d-821b-7da978bf7442') // Cognitive Services OpenAI Contributor
@@ -130,8 +223,10 @@ resource openAiUserLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@
   }
 }
 
+// Deploy models to Microsoft Foundry resource using latest API
+// Models deployed here are accessible via Azure AI Model Inference API endpoint
 @batchSize(1)
-resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = [for deployment in deployments: {
+resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = [for deployment in allDeployments: {
   parent: account
   name: deployment.name
   properties: {
@@ -140,28 +235,15 @@ resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01
   sku: deployment.sku
 }]
 
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
-  name: keyVaultName
-}
-
-resource OpenAiDeployment 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
-  name: 'AZUREOPENAIDEPLOYMENTNAME'
-  properties: {
-    value: openAiDeploymentName
-    contentType: 'text/plain'
-  }
-}
-
-resource Endpoint 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
-  name: 'AZUREOPENAIENDPOINT'
-  properties: {
-    value: account.properties.endpoint
-    contentType: 'text/plain'
-  }
-}
-
 output endpoint string = account.properties.endpoint
 output id string = account.id
 output name string = account.name
+output projectResourceId string = aiProject.id
+output projectName string = aiProject.name
+output serviceName string = account.name
+output projectEndpoint string = aiProject.properties.endpoints['AI Foundry API']
+output PrincipalId string = azidentity.properties.principalId
+output accountPrincipalId string = azidentity.properties.principalId
+output projectPrincipalId string = azidentity.properties.principalId
+output storageConnectionId string = storageAccountConnection.id
+output storageConnectionName string = storageAccountConnection.name

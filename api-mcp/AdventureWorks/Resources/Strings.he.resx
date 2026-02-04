@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ProductNotFound" xml:space="preserve">
+    <value>המוצר #{0} לא נמצא.</value>
+  </data>
+  <data name="InventoryAvailability" xml:space="preserve">
+    <value>📦 זמינות מלאי עבור: {0}</value>
+  </data>
+  <data name="ProductId" xml:space="preserve">
+    <value>מזהה מוצר: {0}</value>
+  </data>
+  <data name="OutOfStock" xml:space="preserve">
+    <value>❌ אזל מהמלאי בכל הסניפים</value>
+  </data>
+  <data name="OutOfStockMessage" xml:space="preserve">
+    <value>המוצר אינו זמין כרגע. אנא בדוק שוב מאוחר יותר או פנה לתמיכה.</value>
+  </data>
+  <data name="InStock" xml:space="preserve">
+    <value>✅ במלאי - סה\"כ זמין: {0} יחידות</value>
+  </data>
+  <data name="AvailableAt" xml:space="preserve">
+    <value>זמין ב:</value>
+  </data>
+  <data name="LocationIcon" xml:space="preserve">
+    <value>📍 {0}</value>
+  </data>
+  <data name="Quantity" xml:space="preserve">
+    <value>כמות: {0} יחידות</value>
+  </data>
+  <data name="Location" xml:space="preserve">
+    <value>מיקום: מדף {0}, תא {1}</value>
+  </data>
+  <data name="Recommended" xml:space="preserve">
+    <value>💡 מומלץ: הזמינו מ-{0} (זמינים {1} יחידות)</value>
+  </data>
+  <data name="NoProductsFound" xml:space="preserve">
+    <value>לא נמצאו מוצרים התואמים ל-'{0}'</value>
+  </data>
+  <data name="FoundProducts" xml:space="preserve">
+    <value>נמצאו {0} מוצרים התואמים ל'{1}' (בשימוש בחיפוש סמנטי בתיאורים ובביקורות):</value>
+  </data>
+  <data name="Category" xml:space="preserve">
+    <value>קטגוריה: {0}</value>
+  </data>
+  <data name="Price" xml:space="preserve">
+    <value>מחיר: ${0:N2}</value>
+  </data>
+  <data name="Match" xml:space="preserve">
+    <value>התאמה: נמצא ב-{0}</value>
+  </data>
+  <data name="Review" xml:space="preserve">
+    <value>ביקורת: {0}</value>
+  </data>
+  <data name="Description" xml:space="preserve">
+    <value>תיאור: {0}</value>
+  </data>
+  <data name="Relevance" xml:space="preserve">
+    <value>רלוונטיות: {0:P1}</value>
+  </data>
+  <data name="NoOrdersFound" xml:space="preserve">
+    <value>לא נמצאו הזמנות עבור הלקוח #{0}.</value>
+  </data>
+  <data name="OrderHistory" xml:space="preserve">
+    <value>📋 היסטוריית הזמנות ללקוח #{0}</value>
+  </data>
+  <data name="RecentOrders" xml:space="preserve">
+    <value>מציג {0} הזמנות אחרונות:</value>
+  </data>
+  <data name="OrderNumber" xml:space="preserve">
+    <value>הזמנה מס׳ #{0}</value>
+  </data>
+  <data name="OrderDate" xml:space="preserve">
+    <value>תאריך: {0:yyyy-MM-dd}</value>
+  </data>
+  <data name="Status" xml:space="preserve">
+    <value>סטטוס: {0}</value>
+  </data>
+  <data name="Total" xml:space="preserve">
+    <value>סה\"כ: ${0:N2}</value>
+  </data>
+  <data name="Items" xml:space="preserve">
+    <value>פריטים: {0}</value>
+  </data>
+  <data name="ShipDate" xml:space="preserve">
+    <value>נשלח: {0:yyyy-MM-dd}</value>
+  </data>
+  <data name="OrderNotFound" xml:space="preserve">
+    <value>ההזמנה #{0} לא נמצאה.</value>
+  </data>
+  <data name="OrderDoesNotBelongToCustomer" xml:space="preserve">
+    <value>ההזמנה #{0} אינה שייכת ללקוח #{1}.</value>
+  </data>
+  <data name="OrderDetails" xml:space="preserve">
+    <value>📦 פרטי הזמנה - הזמנה מספר #{0}</value>
+  </data>
+  <data name="Customer" xml:space="preserve">
+    <value>מספר לקוח: {0}</value>
+  </data>
+  <data name="ShipTo" xml:space="preserve">
+    <value>לשלוח אל:</value>
+  </data>
+  <data name="Subtotal" xml:space="preserve">
+    <value>סכום ביניים: ${0:N2}</value>
+  </data>
+  <data name="Tax" xml:space="preserve">
+    <value>מס: ${0:N2}</value>
+  </data>
+  <data name="Shipping" xml:space="preserve">
+    <value>משלוח: ${0:N2}</value>
+  </data>
+  <data name="OrderItems" xml:space="preserve">
+    <value>פריטי הזמנה:</value>
+  </data>
+  <data name="Qty" xml:space="preserve">
+    <value>כמות: {0}</value>
+  </data>
+  <data name="UnitPrice" xml:space="preserve">
+    <value>מחיר ליחידה: ${0:N2}</value>
+  </data>
+  <data name="LineTotal" xml:space="preserve">
+    <value>סך הכל שורה: ${0:N2}</value>
+  </data>
+  <data name="NoComplementaryProducts" xml:space="preserve">
+    <value>לא נמצאו מוצרים משלימים למוצר #{0}.</value>
+  </data>
+  <data name="ComplementaryProducts" xml:space="preserve">
+    <value>🛍️ לקוחות שקנו מוצר זה קנו גם:</value>
+  </data>
+  <data name="PurchasedTogether" xml:space="preserve">
+    <value>נרכש יחד {0} פעמים</value>
+  </data>
+  <data name="NoRecommendations" xml:space="preserve">
+    <value>לא נמצאה היסטוריית רכישות עבור הלקוח #{0} ליצירת המלצות.</value>
+  </data>
+  <data name="PersonalizedRecommendations" xml:space="preserve">
+    <value>✨ המלצות מותאמות אישית ללקוח #{0}</value>
+  </data>
+  <data name="BasedOnPurchaseHistory" xml:space="preserve">
+    <value>בהתבסס על היסטוריית הרכישות שלך:</value>
+  </data>
+  <data name="SimilarTo" xml:space="preserve">
+    <value>דומה ל: {0}</value>
+  </data>
+  <data name="NoReviews" xml:space="preserve">
+    <value>לא נמצאו ביקורות עבור המוצר #{0}.</value>
+  </data>
+  <data name="ReviewAnalysis" xml:space="preserve">
+    <value>⭐ ניתוח ביקורות מוצר עבור: {0}</value>
+  </data>
+  <data name="OverallRating" xml:space="preserve">
+    <value>דירוג כללי: {0:F1}/5.0 ({1})</value>
+  </data>
+  <data name="TotalReviews" xml:space="preserve">
+    <value>סה\"כ ביקורות: {0}</value>
+  </data>
+  <data name="RatingDistribution" xml:space="preserve">
+    <value>התפלגות דירוג:</value>
+  </data>
+  <data name="StarReviews" xml:space="preserve">
+    <value>{0}⭐: {1} ביקורות ({2:F1}%)</value>
+  </data>
+  <data name="WhatCustomersLove" xml:space="preserve">
+    <value>👍 מה שהלקוחות אוהבים:</value>
+  </data>
+  <data name="CommonConcerns" xml:space="preserve">
+    <value>👎 חששות נפוצים:</value>
+  </data>
+  <data name="LatestReview" xml:space="preserve">
+    <value>סקירה אחרונה: {0:yyyy-MM-dd} מאת {1}</value>
+  </data>
+  <data name="Anonymous" xml:space="preserve">
+    <value>אנונימי</value>
+  </data>
+</root>

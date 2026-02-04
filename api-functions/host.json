@@ -1,0 +1,36 @@
+{
+  "version": "2.0",
+  "logging": {
+    "applicationInsights": {
+      "samplingSettings": {
+        "isEnabled": true,
+        "excludedTypes": "Request"
+      },
+      "enableLiveMetricsFilters": true
+    },
+    "logLevel": {
+      "default": "Information",
+      "Microsoft.Azure.WebJobs": "Information",
+      "Azure.Core": "Warning",
+      "Azure.Storage.Queues": "Warning",
+      "DurableTask.AzureStorage": "Warning"
+    }
+  },
+  "extensions": {
+    "durableTask": {
+      "hubName": "AdventureWorksFunctions",
+      "maxOrchestrationActions": 100000,
+      "maxActivityPollingInterval": "00:00:02",
+      "storageProvider": {
+        "type": "AzureStorage"
+      }
+    },
+    "queues": {
+      "maxPollingInterval": "00:00:02",
+      "visibilityTimeout": "00:30:00",
+      "batchSize": 1,
+      "maxDequeueCount": 5,
+      "newBatchThreshold": 0
+    }
+  }
+}

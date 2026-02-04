@@ -6,24 +6,23 @@
   "runtime": {
     "rest": {
       "enabled": true,
-      "path": "/api"
+      "path": "/api",
+      "request-body-strict": false
     },
     "graphql": {
       "enabled": true,
-      "path": "/graphql"
+      "path": "/graphql",
+      "allow-introspection": true
     },
     "host": {
       "port": 5000,
+      "mode": "development",
       "cors": {
-        "origins": ["@env('APP_URL')"],
-        "allow-credentials": true
+        "origins": ["*"],
+        "allow-credentials": false
       },
       "authentication": {
-        "provider": "AzureAD",
-        "jwt": {
-          "audience": "@env('API_APP_ID_URI')",
-          "issuer": "https://sts.windows.net/@env('TENANT_ID')/"
-        }
+        "provider": "StaticWebApps"
       }
     },
     "telemetry": {
@@ -31,14 +30,685 @@
         "enabled": true,
         "connection-string": "@env('APPLICATIONINSIGHTS_CONNECTION_STRING')"
       }
+    },
+    "cache": {
+      "enabled": false
     }
   },
+  "swagger": {
+    "enabled": true,
+    "path": "/swagger"
+  },
   "entities": {
-    "todo": {
-      "source": "dbo.ToDo",
+    "UnitMeasure": {
+      "source": "Production.UnitMeasure",
       "permissions": [
         {
-          "role": "authenticated",
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "Culture": {
+      "source": "Production.Culture",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "Currency": {
+      "source": "Sales.Currency",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "AddressType": {
+      "source": "Person.AddressType",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "ContactType": {
+      "source": "Person.ContactType",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "PhoneNumberType": {
+      "source": "Person.PhoneNumberType",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "SalesReason": {
+      "source": "Sales.SalesReason",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "CreditCard": {
+      "source": "Sales.CreditCard",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "CurrencyRate": {
+      "source": "Sales.CurrencyRate",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ],
+      "relationships": {
+        "currency": {
+          "cardinality": "one",
+          "target.entity": "Currency",
+          "source.fields": ["ToCurrencyCode"],
+          "target.fields": ["CurrencyCode"]
+        }
+      }
+    },
+    "CountryRegion": {
+      "source": "Person.CountryRegion",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "SalesTerritory": {
+      "source": "Sales.SalesTerritory",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "ShipMethod": {
+      "source": "Purchasing.ShipMethod",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "StateProvince": {
+      "source": "Person.StateProvince",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "BusinessEntity": {
+      "source": "Person.BusinessEntity",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "BusinessEntityAddress": {
+      "source": "Person.BusinessEntityAddress",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "Person": {
+      "source": "Person.Person",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            {
+              "action": "create",
+              "fields": {
+                "exclude": ["rowguid", "ModifiedDate"]
+              }
+            },
+            {
+              "action": "read"
+            },
+            {
+              "action": "update",
+              "fields": {
+                "exclude": ["BusinessEntityID", "rowguid", "ModifiedDate"]
+              }
+            },
+            {
+              "action": "delete"
+            }
+          ]
+        }
+      ],
+      "relationships": {
+        "emailAddresses": {
+          "cardinality": "many",
+          "target.entity": "EmailAddress",
+          "source.fields": ["BusinessEntityID"],
+          "target.fields": ["BusinessEntityID"]
+        }
+      }
+    },
+    "Password": {
+      "source": "Person.Password",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "EmailAddress": {
+      "source": "Person.EmailAddress",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["create", "read", "update", "delete"],
+          "fields": {
+            "include": ["*"],
+            "exclude": ["rowguid", "ModifiedDate"]
+          }
+        }
+      ]
+    },
+    "PersonPhone": {
+      "source": "Person.PersonPhone",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "PersonCreditCard": {
+      "source": "Sales.PersonCreditCard",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "SalesPerson": {
+      "source": "Sales.SalesPerson",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "Store": {
+      "source": "Sales.Store",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "Customer": {
+      "source": "Sales.Customer",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["create", "read", "update", "delete"],
+          "fields": {
+            "include": ["*"],
+            "exclude": ["rowguid", "ModifiedDate"]
+          }
+        }
+      ]
+    },
+    "Illustration": {
+      "source": "Production.Illustration",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "Location": {
+      "source": "Production.Location",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "ProductCategory": {
+      "source": "Production.ProductCategory",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "ProductSubcategory": {
+      "source": "Production.ProductSubcategory",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "ProductModel": {
+      "source": "Production.ProductModel",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "ProductDescription": {
+      "source": "Production.ProductDescription",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "ProductModelProductDescriptionCulture": {
+      "source": "Production.ProductModelProductDescriptionCulture",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "ProductSearch": {
+      "source": {
+        "object": "Production.vProductSearch",
+        "type": "view",
+        "key-fields": ["ProductID", "ProductDescriptionID"]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["read"]
+        }
+      ]
+    },
+    "ProductModelIllustration": {
+      "source": "Production.ProductModelIllustration",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "Product": {
+      "source": "Production.Product",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ],
+      "relationships": {
+        "productProductPhotos": {
+          "cardinality": "many",
+          "target.entity": "ProductProductPhoto",
+          "source.fields": ["ProductID"],
+          "target.fields": ["ProductID"]
+        }
+      }
+    },
+    "ProductCostHistory": {
+      "source": "Production.ProductCostHistory",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "ProductListPriceHistory": {
+      "source": "Production.ProductListPriceHistory",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "ProductInventory": {
+      "source": "Production.ProductInventory",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "SpecialOffer": {
+      "source": "Sales.SpecialOffer",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "SpecialOfferProduct": {
+      "source": "Sales.SpecialOfferProduct",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "SalesOrderHeader": {
+      "source": "Sales.SalesOrderHeader",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ],
+      "relationships": {
+        "salesOrderDetails": {
+          "cardinality": "many",
+          "target.entity": "SalesOrderDetail",
+          "source.fields": ["SalesOrderID"],
+          "target.fields": ["SalesOrderID"]
+        },
+        "shipMethod": {
+          "cardinality": "one",
+          "target.entity": "ShipMethod",
+          "source.fields": ["ShipMethodID"],
+          "target.fields": ["ShipMethodID"]
+        },
+        "currencyRate": {
+          "cardinality": "one",
+          "target.entity": "CurrencyRate",
+          "source.fields": ["CurrencyRateID"],
+          "target.fields": ["CurrencyRateID"]
+        }
+      }
+    },
+    "SalesOrderDetail": {
+      "source": "Sales.SalesOrderDetail",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ],
+      "relationships": {
+        "salesOrderHeader": {
+          "cardinality": "one",
+          "target.entity": "SalesOrderHeader",
+          "source.fields": ["SalesOrderID"],
+          "target.fields": ["SalesOrderID"]
+        },
+        "product": {
+          "cardinality": "one",
+          "target.entity": "Product",
+          "source.fields": ["ProductID"],
+          "target.fields": ["ProductID"]
+        }
+      }
+    },
+    "SalesOrderHeaderSalesReason": {
+      "source": "Sales.SalesOrderHeaderSalesReason",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "ShoppingCartItem": {
+      "source": "Sales.ShoppingCartItem",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "CountryRegionCurrency": {
+      "source": "Sales.CountryRegionCurrency",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "SalesTaxRate": {
+      "source": "Sales.SalesTaxRate",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "ScrapReason": {
+      "source": "Production.ScrapReason",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "Department": {
+      "source": "HumanResources.Department",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "Shift": {
+      "source": "HumanResources.Shift",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "EmployeeDepartmentHistory": {
+      "source": "HumanResources.EmployeeDepartmentHistory",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "EmployeePayHistory": {
+      "source": "HumanResources.EmployeePayHistory",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "BusinessEntityContact": {
+      "source": "Person.BusinessEntityContact",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "Vendor": {
+      "source": "Purchasing.Vendor",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "ProductVendor": {
+      "source": "Purchasing.ProductVendor",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "PurchaseOrderHeader": {
+      "source": "Purchasing.PurchaseOrderHeader",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "PurchaseOrderDetail": {
+      "source": "Purchasing.PurchaseOrderDetail",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "ProductPhoto": {
+      "source": "Production.ProductPhoto",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "ProductProductPhoto": {
+      "source": "Production.ProductProductPhoto",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ],
+      "relationships": {
+        "productPhoto": {
+          "cardinality": "one",
+          "target.entity": "ProductPhoto",
+          "source.fields": ["ProductPhotoID"],
+          "target.fields": ["ProductPhotoID"]
+        }
+      }
+    },
+    "TransactionHistory": {
+      "source": "Production.TransactionHistory",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "TransactionHistoryArchive": {
+      "source": "Production.TransactionHistoryArchive",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "WorkOrder": {
+      "source": "Production.WorkOrder",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "WorkOrderRouting": {
+      "source": "Production.WorkOrderRouting",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "SalesPersonQuotaHistory": {
+      "source": "Sales.SalesPersonQuotaHistory",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "SalesTerritoryHistory": {
+      "source": "Sales.SalesTerritoryHistory",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "JobCandidate": {
+      "source": "HumanResources.JobCandidate",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ]
+    },
+    "ProductReview": {
+      "source": "Production.ProductReview",
+      "permissions": [
+        {
+          "role": "anonymous",
           "actions": ["*"]
         }
       ]

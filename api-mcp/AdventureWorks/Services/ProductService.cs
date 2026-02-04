@@ -1,0 +1,179 @@
+using System.Data;
+using System.Text.Json;
+using System.Globalization;
+using Dapper;
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Localization;
+using AdventureWorks.Models;
+using AdventureWorks.Resources;
+
+namespace AdventureWorks.Services;
+
+public class ProductService
+{
+    private readonly string _connectionString;
+    private readonly IStringLocalizer<Strings> _localizer;
+
+    public ProductService(string connectionString, IStringLocalizer<Strings> localizer)
+    {
+        _connectionString = connectionString;
+        _localizer = localizer;
+    }
+
+    private async Task<IDbConnection> GetConnectionAsync()
+    {
+        // Connection string contains Authentication=Active Directory Default
+        // which handles credential acquisition automatically
+        var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+        return connection;
+    }
+
+    public async Task<List<ProductData>> GetFinishedGoodsProductsAsync(List<int>? productIds = null)
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = @"
+            SELECT 
+                p.ProductID,
+                p.Name,
+                p.ProductNumber,
+                p.Color,
+                p.ListPrice,
+                p.Size,
+                p.SizeUnitMeasureCode,
+                p.Weight,
+                p.WeightUnitMeasureCode,
+                p.Class,
+                p.Style,
+                p.ProductSubcategoryID,
+                ps.Name AS ProductSubcategoryName,
+                pc.ProductCategoryID,
+                pc.Name AS ProductCategoryName,
+                p.ProductModelID,
+                pm.Name AS ProductModelName,
+                pm.CatalogDescription,
+                pd.ProductDescriptionID,
+                pd.Description,
+                p.ModifiedDate
+            FROM Production.Product p
+            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID
+            LEFT JOIN Production.ProductModel pm ON p.ProductModelID = pm.ProductModelID
+            LEFT JOIN Production.ProductModelProductDescriptionCulture pmpdc ON pm.ProductModelID = pmpdc.ProductModelID AND pmpdc.CultureID = 'en'
+            LEFT JOIN Production.ProductDescription pd ON pmpdc.ProductDescriptionID = pd.ProductDescriptionID
+            WHERE p.FinishedGoodsFlag = 1";
+
+        if (productIds != null && productIds.Count > 0)
+        {
+            sql += " AND p.ProductID IN @ProductIds";
+        }
+
+        sql += " ORDER BY p.ProductID";
+
+        var products = await connection.QueryAsync<ProductData>(sql, new { ProductIds = productIds });
+        return products.ToList();
+    }
+
+    public async Task<string> CheckInventoryAvailabilityAsync(int productId, string cultureId = "en")
+    {
+        // Set culture for localization
+        CultureInfo.CurrentUICulture = new CultureInfo(cultureId);
+
+        using var connection = await GetConnectionAsync();
+
+        // Get product name (only for finished goods)
+        var productName = await connection.QueryFirstOrDefaultAsync<string>(
+            "SELECT Name FROM Production.Product WHERE ProductID = @ProductId AND FinishedGoodsFlag = 1",
+            new { ProductId = productId });
+
+        if (string.IsNullOrEmpty(productName))
+        {
+            return _localizer["ProductNotFound", productId].Value;
+        }
+
+        // Get total inventory from finished goods locations only
+        var totalStock = await connection.QueryFirstOrDefaultAsync<int?>(@"
+            SELECT SUM(pi.Quantity)
+            FROM Production.ProductInventory pi
+            INNER JOIN Production.Product p ON pi.ProductID = p.ProductID
+            INNER JOIN Production.Location l ON pi.LocationID = l.LocationID
+            WHERE pi.ProductID = @ProductId
+            AND p.FinishedGoodsFlag = 1
+            AND l.Name LIKE 'Finished Goods%'
+            AND pi.Quantity > 0",
+            new { ProductId = productId });
+
+        var result = new System.Text.StringBuilder();
+        result.AppendLine(_localizer["InventoryAvailability", productName].Value);
+        result.AppendLine(_localizer["ProductId", productId].Value);
+        result.AppendLine();
+
+        if (!totalStock.HasValue || totalStock.Value == 0)
+        {
+            result.AppendLine(_localizer["OutOfStock"].Value);
+            result.AppendLine(_localizer["OutOfStockMessage"].Value);
+        }
+        else
+        {
+            result.AppendLine(_localizer["InStock", totalStock.Value].Value);
+        }
+
+        return result.ToString();
+    }
+
+    private static readonly HashSet<string> SupportedCultures = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "ar", "en", "es", "fr", "he", "th", "zh-cht",
+        "en-gb", "en-ca", "en-au", "ja", "ko", "de"
+    };
+
+    public async Task<List<ProductSearchResult>> SearchProductsByDescriptionEmbeddingAsync(float[] queryEmbedding, int topN = 10, string cultureId = "en")
+    {
+        // Validate culture ID
+        if (!SupportedCultures.Contains(cultureId))
+        {
+            throw new ArgumentException($"Unsupported culture '{cultureId}'. Supported cultures: {string.Join(", ", SupportedCultures)}", nameof(cultureId));
+        }
+
+        using var connection = await GetConnectionAsync();
+
+        // Use VECTOR_DISTANCE for semantic similarity search with native VECTOR columns
+        // Returns products with the most similar descriptions to the query
+        // Convert float array to JSON for CAST to VECTOR
+        var embeddingJson = JsonSerializer.Serialize(queryEmbedding);
+
+        var sql = @"
+            SELECT TOP (@TopN)
+                p.ProductID,
+                p.Name,
+                pd.Description,
+                p.ListPrice,
+                p.Color,
+                p.Size,
+                pc.Name AS ProductCategoryName,
+                ps.Name AS ProductSubcategoryName,
+                VECTOR_DISTANCE('cosine', pd.DescriptionEmbedding, CAST(@QueryEmbedding AS VECTOR(1536))) AS SimilarityScore
+            FROM Production.Product p
+            INNER JOIN Production.ProductModel pm ON p.ProductModelID = pm.ProductModelID
+            INNER JOIN Production.ProductModelProductDescriptionCulture pmpdc 
+                ON pm.ProductModelID = pmpdc.ProductModelID
+            INNER JOIN Production.ProductDescription pd 
+                ON pmpdc.ProductDescriptionID = pd.ProductDescriptionID
+            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID
+            WHERE p.FinishedGoodsFlag = 1
+              AND pd.DescriptionEmbedding IS NOT NULL
+              AND pmpdc.CultureID = @CultureId
+            ORDER BY VECTOR_DISTANCE('cosine', pd.DescriptionEmbedding, CAST(@QueryEmbedding AS VECTOR(1536)))";
+
+        var results = await connection.QueryAsync<ProductSearchResult>(sql, new
+        {
+            TopN = topN,
+            QueryEmbedding = embeddingJson,
+            CultureId = cultureId
+        });
+
+        return results.ToList();
+    }
+}

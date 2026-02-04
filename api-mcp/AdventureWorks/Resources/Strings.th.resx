@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ProductNotFound" xml:space="preserve">
+    <value>ไม่พบสินค้า #{0}</value>
+  </data>
+  <data name="InventoryAvailability" xml:space="preserve">
+    <value>📦 สินค้าคงคลังสำหรับ: {0}</value>
+  </data>
+  <data name="ProductId" xml:space="preserve">
+    <value>รหัสสินค้า: {0}</value>
+  </data>
+  <data name="OutOfStock" xml:space="preserve">
+    <value>❌ สินค้าหมดที่ทุกสาขา</value>
+  </data>
+  <data name="OutOfStockMessage" xml:space="preserve">
+    <value>สินค้านี้ไม่พร้อมใช้งานในขณะนี้ กรุณาตรวจสอบอีกครั้งในภายหลังหรือติดต่อฝ่ายสนับสนุน</value>
+  </data>
+  <data name="InStock" xml:space="preserve">
+    <value>✅ มีสินค้าในสต็อก - จำนวนทั้งหมดที่มี: {0} หน่วย</value>
+  </data>
+  <data name="AvailableAt" xml:space="preserve">
+    <value>มีจำหน่ายที่:</value>
+  </data>
+  <data name="LocationIcon" xml:space="preserve">
+    <value>📍 {0}</value>
+  </data>
+  <data name="Quantity" xml:space="preserve">
+    <value>จำนวน: {0} หน่วย</value>
+  </data>
+  <data name="Location" xml:space="preserve">
+    <value>สถานที่: ชั้นวาง {0}, กล่อง {1}</value>
+  </data>
+  <data name="Recommended" xml:space="preserve">
+    <value>💡 แนะนำ: สั่งซื้อจาก {0} (มีสินค้า {1} ชิ้นในสต็อก)</value>
+  </data>
+  <data name="NoProductsFound" xml:space="preserve">
+    <value>ไม่พบสินค้าที่ตรงกับ '{0}'</value>
+  </data>
+  <data name="FoundProducts" xml:space="preserve">
+    <value>พบสินค้า {0} รายการที่ตรงกับ '{1}' (ใช้การค้นหาเชิงความหมายจากคำอธิบายและรีวิว):</value>
+  </data>
+  <data name="Category" xml:space="preserve">
+    <value>หมวดหมู่: {0}</value>
+  </data>
+  <data name="Price" xml:space="preserve">
+    <value>ราคา: ${0:N2}</value>
+  </data>
+  <data name="Match" xml:space="preserve">
+    <value>แมตช์: พบใน {0}</value>
+  </data>
+  <data name="Review" xml:space="preserve">
+    <value>รีวิว: {0}</value>
+  </data>
+  <data name="Description" xml:space="preserve">
+    <value>คำอธิบาย: {0}</value>
+  </data>
+  <data name="Relevance" xml:space="preserve">
+    <value>ความเกี่ยวข้อง: {0:P1}</value>
+  </data>
+  <data name="NoOrdersFound" xml:space="preserve">
+    <value>ไม่พบคำสั่งซื้อสำหรับลูกค้า #{0}</value>
+  </data>
+  <data name="OrderHistory" xml:space="preserve">
+    <value>📋 ประวัติการสั่งซื้อสำหรับลูกค้า #{0}</value>
+  </data>
+  <data name="RecentOrders" xml:space="preserve">
+    <value>แสดงคำสั่งซื้อล่าสุด {0} รายการ:</value>
+  </data>
+  <data name="OrderNumber" xml:space="preserve">
+    <value>คำสั่งซื้อ #{0}</value>
+  </data>
+  <data name="OrderDate" xml:space="preserve">
+    <value>วันที่: {0:yyyy-MM-dd}</value>
+  </data>
+  <data name="Status" xml:space="preserve">
+    <value>สถานะ: {0}</value>
+  </data>
+  <data name="Total" xml:space="preserve">
+    <value>รวม: ${0:N2}</value>
+  </data>
+  <data name="Items" xml:space="preserve">
+    <value>รายการ: {0}</value>
+  </data>
+  <data name="ShipDate" xml:space="preserve">
+    <value>จัดส่ง: {0:yyyy-MM-dd}</value>
+  </data>
+  <data name="OrderNotFound" xml:space="preserve">
+    <value>ไม่พบคำสั่งซื้อหมายเลข #{0}</value>
+  </data>
+  <data name="OrderDoesNotBelongToCustomer" xml:space="preserve">
+    <value>คำสั่งซื้อ #{0} ไม่ได้เป็นของลูกค้า #{1}</value>
+  </data>
+  <data name="OrderDetails" xml:space="preserve">
+    <value>📦 รายละเอียดคำสั่งซื้อ - คำสั่งซื้อหมายเลข #{0}</value>
+  </data>
+  <data name="Customer" xml:space="preserve">
+    <value>รหัสลูกค้า: {0}</value>
+  </data>
+  <data name="ShipTo" xml:space="preserve">
+    <value>จัดส่งไปที่:</value>
+  </data>
+  <data name="Subtotal" xml:space="preserve">
+    <value>ยอดรวมย่อย: ${0:N2}</value>
+  </data>
+  <data name="Tax" xml:space="preserve">
+    <value>ภาษี: ${0:N2}</value>
+  </data>
+  <data name="Shipping" xml:space="preserve">
+    <value>ค่าจัดส่ง: ${0:N2}</value>
+  </data>
+  <data name="OrderItems" xml:space="preserve">
+    <value>รายการสั่งซื้อ:</value>
+  </data>
+  <data name="Qty" xml:space="preserve">
+    <value>จำนวน: {0}</value>
+  </data>
+  <data name="UnitPrice" xml:space="preserve">
+    <value>ราคาต่อหน่วย: ${0:N2}</value>
+  </data>
+  <data name="LineTotal" xml:space="preserve">
+    <value>ยอดรวมทั้งบรรทัด: ${0:N2}</value>
+  </data>
+  <data name="NoComplementaryProducts" xml:space="preserve">
+    <value>ไม่พบสินค้าสำหรับแนะนำเพิ่มเติมสำหรับสินค้า #{0}</value>
+  </data>
+  <data name="ComplementaryProducts" xml:space="preserve">
+    <value>🛍️ ลูกค้าที่ซื้อสินค้านี้ยังได้ซื้อ:</value>
+  </data>
+  <data name="PurchasedTogether" xml:space="preserve">
+    <value>ซื้อพร้อมกัน {0} ครั้ง</value>
+  </data>
+  <data name="NoRecommendations" xml:space="preserve">
+    <value>ไม่พบประวัติการซื้อสำหรับลูกค้า #{0} เพื่อสร้างคำแนะนำ</value>
+  </data>
+  <data name="PersonalizedRecommendations" xml:space="preserve">
+    <value>✨ คำแนะนำเฉพาะสำหรับลูกค้า #{0}</value>
+  </data>
+  <data name="BasedOnPurchaseHistory" xml:space="preserve">
+    <value>จากประวัติการซื้อของคุณ:</value>
+  </data>
+  <data name="SimilarTo" xml:space="preserve">
+    <value>คล้ายกับ: {0}</value>
+  </data>
+  <data name="NoReviews" xml:space="preserve">
+    <value>ไม่พบรีวิวสำหรับสินค้า #{0}</value>
+  </data>
+  <data name="ReviewAnalysis" xml:space="preserve">
+    <value>⭐ การวิเคราะห์รีวิวสินค้า สำหรับ: {0}</value>
+  </data>
+  <data name="OverallRating" xml:space="preserve">
+    <value>คะแนนรวม: {0:F1}/5.0 ({1})</value>
+  </data>
+  <data name="TotalReviews" xml:space="preserve">
+    <value>รีวิวทั้งหมด: {0}</value>
+  </data>
+  <data name="RatingDistribution" xml:space="preserve">
+    <value>การกระจายคะแนน:</value>
+  </data>
+  <data name="StarReviews" xml:space="preserve">
+    <value>{0}⭐: {1} รีวิว ({2:F1}%)</value>
+  </data>
+  <data name="WhatCustomersLove" xml:space="preserve">
+    <value>👍 สิ่งที่ลูกค้าชื่นชอบ:</value>
+  </data>
+  <data name="CommonConcerns" xml:space="preserve">
+    <value>👎 ความกังวลทั่วไป:</value>
+  </data>
+  <data name="LatestReview" xml:space="preserve">
+    <value>รีวิวล่าสุด: {0:yyyy-MM-dd} โดย {1}</value>
+  </data>
+  <data name="Anonymous" xml:space="preserve">
+    <value>ไม่ระบุชื่อ</value>
+  </data>
+</root>

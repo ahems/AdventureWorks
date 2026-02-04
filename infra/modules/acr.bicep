@@ -1,7 +1,7 @@
-param acrName string = 'todoappacr${toLower(uniqueString(resourceGroup().id))}'
+param acrName string = 'avacr${toLower(uniqueString(resourceGroup().id))}'
 param diagnosticsName string = 'acr-diagnostics-${toLower(uniqueString(resourceGroup().id))}'
-param identityName string = 'todoapp-identity-${uniqueString(resourceGroup().id)}'
-param workspaceName string = 'todoapp-workspace-${toLower(uniqueString(resourceGroup().id))}'
+param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
+param workspaceName string = 'av-workspace-${toLower(uniqueString(resourceGroup().id))}'
 param location string = resourceGroup().location
 param adminUserEnabled bool = true
 

@@ -1,0 +1,20 @@
+{
+  "aboutUs": {"":"About Us"},
+  "tagline": {"":"Your one-stop shop for outdoor adventure gear. Quality bikes, components, and accessories since 2001."},
+  "shop": {"":"Shop"},
+  "quickLinks": {"":"Quick Links"},
+  "shoppingCart": {"":"Shopping Trolley"},
+  "trackOrder": {"":"Track Order"},
+  "returnsPolicy": {"":"Returns Policy"},
+  "faq": {"":"FAQ"},
+  "contactUs": {"":"Contact Us"},
+  "address": {"":"1 Adventure Way, Hamilton, NZ 3204"},
+  "phone": {"":"(09) 555 1234"},
+  "email": {"":"hello@adventureworks.co.nz"},
+  "copyright": {"":"© {{year}} AdventureWorks. All rights reserved."},
+  "builtWith": {"":"Built with ❤️ using Azure and React"},
+  "privacyPolicy": {"":"Privacy Policy"},
+  "termsOfService": {"":"Terms of Service"},
+  "pages": {"home":"Home","sale":"Sale","categories":"Categories","search":"Search","compare":"Compare Products","notFound":"Page Not Found","notFoundMessage":"Sorry, the page you are looking for doesn’t exist.","goHome":"Go to Homepage","loading":"Loading...","error":"An error occurred","tryAgain":"Try Again"},
+  "general": {"yes":"Yes","no":"No","ok":"OK","cancel":"Cancel","save":"Save","delete":"Delete","edit":"Edit","close":"Close","back":"Back","next":"Next","previous":"Previous","submit":"Submit","confirm":"Confirm","apply":"Apply","reset":"Reset","filter":"Filter","sort":"Sort","sortBy":"Sort By","priceHighToLow":"Price: High to Low","priceLowToHigh":"Price: Low to High","newest":"Newest","rating":"Rating","popular":"Popular"}
+}

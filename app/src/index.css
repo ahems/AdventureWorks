@@ -1,0 +1,284 @@
+@import url('https://fonts.googleapis.com/css2?family=Short+Stack&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* DoodleCSS-inspired Adventure E-Shop Design System */
+
+@layer base {
+  :root {
+    /* Core DoodleCSS colors */
+    --background: 32 50% 97%;
+    --foreground: 0 0% 24%;
+
+    --card: 32 50% 97%;
+    --card-foreground: 0 0% 24%;
+
+    --popover: 32 50% 97%;
+    --popover-foreground: 0 0% 24%;
+
+    /* Adventure orange/rust accent */
+    --primary: 15 80% 55%;
+    --primary-foreground: 32 50% 97%;
+
+    /* Warm cream secondary */
+    --secondary: 32 30% 90%;
+    --secondary-foreground: 0 0% 24%;
+
+    /* Muted tones */
+    --muted: 32 20% 88%;
+    --muted-foreground: 0 0% 45%;
+
+    /* Forest green accent */
+    --accent: 145 45% 35%;
+    --accent-foreground: 32 50% 97%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 32 50% 97%;
+
+    --border: 0 0% 75%;
+    --input: 0 0% 75%;
+    --ring: 15 80% 55%;
+
+    --radius: 0.25rem;
+
+    /* Doodle-specific */
+    --doodle-bg: #FDF7F1;
+    --doodle-text: #3c3c3c;
+    --doodle-link: #1c1c1c;
+    --doodle-accent: #FF5E5B;
+    --doodle-green: #4a7c59;
+    --doodle-blue: #5B8CFF;
+
+    --sidebar-background: 32 50% 97%;
+    --sidebar-foreground: 0 0% 24%;
+    --sidebar-primary: 15 80% 55%;
+    --sidebar-primary-foreground: 32 50% 97%;
+    --sidebar-accent: 32 30% 90%;
+    --sidebar-accent-foreground: 0 0% 24%;
+    --sidebar-border: 0 0% 75%;
+    --sidebar-ring: 15 80% 55%;
+  }
+
+  .dark {
+    --background: 0 0% 12%;
+    --foreground: 32 30% 90%;
+
+    --card: 0 0% 15%;
+    --card-foreground: 32 30% 90%;
+
+    --popover: 0 0% 15%;
+    --popover-foreground: 32 30% 90%;
+
+    --primary: 15 80% 55%;
+    --primary-foreground: 0 0% 12%;
+
+    --secondary: 0 0% 20%;
+    --secondary-foreground: 32 30% 90%;
+
+    --muted: 0 0% 25%;
+    --muted-foreground: 32 20% 65%;
+
+    --accent: 145 45% 45%;
+    --accent-foreground: 0 0% 12%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 32 30% 90%;
+
+    --border: 0 0% 30%;
+    --input: 0 0% 30%;
+    --ring: 15 80% 55%;
+
+    --sidebar-background: 0 0% 12%;
+    --sidebar-foreground: 32 30% 90%;
+    --sidebar-primary: 15 80% 55%;
+    --sidebar-primary-foreground: 0 0% 12%;
+    --sidebar-accent: 0 0% 20%;
+    --sidebar-accent-foreground: 32 30% 90%;
+    --sidebar-border: 0 0% 30%;
+    --sidebar-ring: 15 80% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Short Stack', cursive;
+    background-color: var(--doodle-bg);
+  }
+}
+
+/* Hand-drawn border effect using box-shadow */
+@layer utilities {
+  .doodle-border {
+    position: relative;
+    border: 3px solid var(--doodle-text);
+    border-radius: 2px;
+    box-shadow: 
+      2px 2px 0 var(--doodle-text),
+      -1px -1px 0 var(--doodle-text),
+      1px -1px 0 var(--doodle-text),
+      -1px 1px 0 var(--doodle-text);
+  }
+
+  .doodle-border-light {
+    border: 2px solid var(--doodle-text);
+    border-radius: 1px;
+    box-shadow: 1px 1px 0 var(--doodle-text);
+  }
+
+  .doodle-card {
+    position: relative;
+    background: var(--doodle-bg);
+    border: 3px solid var(--doodle-text);
+    border-radius: 4px;
+    box-shadow: 
+      4px 4px 0 var(--doodle-text);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .doodle-card:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 
+      6px 6px 0 var(--doodle-text);
+  }
+
+  .doodle-button {
+    position: relative;
+    background: var(--doodle-bg);
+    border: 3px solid var(--doodle-text);
+    padding: 0.5rem 1.5rem;
+    font-family: 'Short Stack', cursive;
+    font-size: 1rem;
+    color: var(--doodle-text);
+    cursor: pointer;
+    box-shadow: 3px 3px 0 var(--doodle-text);
+    transition: all 0.15s ease;
+  }
+
+  .doodle-button:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 4px 4px 0 var(--doodle-text);
+  }
+
+  .doodle-button:active {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 var(--doodle-text);
+  }
+
+  .doodle-button-primary {
+    background: var(--doodle-accent);
+    color: white;
+    border-color: var(--doodle-text);
+  }
+
+  .doodle-button-accent {
+    background: var(--doodle-green);
+    color: white;
+    border-color: var(--doodle-text);
+  }
+
+  .doodle-input {
+    background: var(--doodle-bg);
+    border: 3px solid var(--doodle-text);
+    padding: 0.5rem 1rem;
+    font-family: 'Short Stack', cursive;
+    font-size: 1rem;
+    color: var(--doodle-text);
+    box-shadow: 2px 2px 0 var(--doodle-text);
+  }
+
+  .doodle-input:focus {
+    outline: 2px dashed var(--doodle-text);
+    outline-offset: 2px;
+  }
+
+  /* Squiggly underline effect */
+  .squiggle {
+    text-decoration: underline;
+    text-decoration-style: wavy;
+    text-underline-offset: 4px;
+  }
+
+  /* Handwritten heading style */
+  .hand-heading {
+    font-family: 'Short Stack', cursive;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  /* Floating animation */
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .float-animation {
+    animation: float 3s ease-in-out infinite;
+  }
+
+  /* Wiggle animation */
+  @keyframes wiggle {
+    0%, 100% { transform: rotate(-2deg); }
+    50% { transform: rotate(2deg); }
+  }
+
+  .wiggle-animation {
+    animation: wiggle 0.5s ease-in-out infinite;
+  }
+
+  /* Bounce in animation */
+  @keyframes bounce-in {
+    0% { transform: scale(0.9); opacity: 0; }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .bounce-in {
+    animation: bounce-in 0.4s ease-out;
+  }
+
+  /* Marquee animation for promo ticker */
+  @keyframes marquee {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  .animate-marquee {
+    animation: marquee 20s linear infinite;
+  }
+
+  /* Stagger animation delay classes */
+  .delay-100 { animation-delay: 100ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-400 { animation-delay: 400ms; }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--doodle-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--doodle-text);
+  border: 2px solid var(--doodle-bg);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2c2c2c;
+}

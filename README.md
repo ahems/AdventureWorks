@@ -1,154 +1,234 @@
-# Azure Sample Application Demo
+# AdventureWorks E‑Commerce (Azure Reference Solution)
 
-## Overview
+AdventureWorks is an e‑commerce sample app and API built upon the sample [AdventureWorks dataset](https://learn.microsoft.com/en-us/sql/samples/adventureworks-install-configure) that demonstrates a modern, AI‑powered web application on Azure using this 'heritage' (real-world!) data set. It combines a React 19 + Vite with TypeScript and Tailwind CSS SPA frontend, GraphQL/REST data access using Data API Builder, Azure Functions in Containers for business logic, and Azure OpenAI–powered experiences such as semantic search, AI agents with an MCP Server, and automated content generation to enhance the original data set (particularly product images).
 
-This is a modern, cloud-native sample application that demonstrates enterprise-grade Azure development patterns with AI integration. This sample showcases a complete full-stack application built with Flask (frontend) using Python, Data API Builder (backend API), Azure SQL Database, and Azure AI Foundry, all deployed using Azure Developer CLI (azd) via fully automated Infrastructure as Code (Bicep) and protected throughout with Entra ID.
+All the scripts, markup, tests, docs and code for this entire app - meaning, everything in this repo - was created entirely using AI: GitHub Copilot in Agent mode, using mostly the Claude Sonnet 4.5 model.
 
-### Key Features
+## Demo Video
 
-- **🔐 Zero-Trust Security**: All Azure services use Azure Entra ID (Azure AD) authentication with managed identities for passwordless, secure connections
-- **🤖 AI-Powered Recommendations**: Integrated Azure AI Foundry provides intelligent task completion suggestions and priority recommendations
-- **🧠 Intelligent Model Selection**: Automated discovery of optimal OpenAI models based on availability and quota in the deployment region at deploy-time, with preference for cost-effective mini/small models
-- **📊 Modern API Architecture**: REST and GraphQL endpoints via Microsoft Data API Builder (DAB) for flexible data access, secured using Entra ID
-- **🔄 Session Management**: Redis-backed sessions with automatic token refresh and secure credential storage
-- **📈 Comprehensive Monitoring**: OpenTelemetry integration with Application Insights for telemetry, logging, and performance tracking
-- **🚀 Serverless Deployment**: Runs on Azure Container Apps for automatic scaling and high availability
-- **👥 User Data Isolation**: Row-level security ensures users can only access their own tasks
+See the deployed application in action:
 
-## Usage Demo
+![AdventureWorks Demo](docs/adventureworks-demo.gif)
 
-### Initial Home Page
+_[Watch full video](docs/adventureworks-demo.webm) (25 seconds)_
 
-This is how the home page looks once it has all been deployed to Azure:
+---
 
-![Home Page](images/start.png)
+## High‑Level Architecture
 
-### Loggging in
+This repo implements a **3‑tier Azure application** with passwordless authentication and managed identities:
 
-Once the user clicks the Log In button, they will be prompted for permissions the first time they use the app, like this:
+```text
+User → Static Web App → GraphQL (DAB) → Azure SQL
+                     ↘ Azure Functions → Azure SQL / Storage / Email / OpenAI
+```
 
-![Permissions Requested](images/PermissionsRequested.png)
+- **Frontend** (`app/`)
+  - React + TypeScript + Vite single‑page application.
+  - Deployed as an **Azure Static Web App**.
+  - Talks to backend via GraphQL (Data API Builder) and HTTP APIs (Azure Functions).
 
-### Logged-In Home Page
+- **Backend API** (`api/`)
+  - **Microsoft Data API Builder (DAB)** exposes the AdventureWorks SQL schema as GraphQL + REST.
+  - Runs in **Azure Container Apps**.
+  - Enforces DAB naming conventions and pagination limits (100 items per query).
 
-Once logged in, the page looks like this, initially:
+- **Serverless Functions** (`api-functions/`)
+  - .NET 8 **Azure Functions (isolated worker)** in Container Apps.
+  - Implements custom business logic not suited for DAB, including:
+    - AI agent endpoints (via Model Context Protocol).
+    - Password & password‑reset workflows.
+    - Semantic search over embeddings.
+    - Receipt PDF generation and email delivery.
+    - Product image generation and thumbnailing.
+    - Translation of product descriptions and language files.
 
-![Logged In](images/home.png)
+- **Database**
+  - **Azure SQL** with the AdventureWorks sample schema (`Production.*`, `Sales.*`, `Person.*`).
+  - Accessed with **managed identity** / Entra ID authentication (no passwords or connection strings in code).
 
-This brief video shows the application in use once it has all been deployed to Azure and the user has logged in:
+- **Infrastructure as Code** (`infra/`)
+  - **Bicep** modules describe Azure resources (Container Apps, Static Web App, SQL, storage, monitoring, etc.).
+  - Orchestrated by **Azure Developer CLI (azd)** using `azure.yaml` and lifecycle hooks.
 
-![ToDo App Demo](images/TodoList.gif)
+All services authenticate using **Managed Identity** and the `Authentication=Active Directory Default` pattern; secrets are not baked into code.
 
-### Architecture
+---
 
-The application consists of:
+## Key Capabilities
 
-- **Frontend Web App**: Flask application with Bootstrap UI, Azure AD authentication, and AI recommendations
-- **Backend API**: Data API Builder providing REST/GraphQL endpoints with JWT authentication
-- **Database**: Azure SQL Database with Entra ID authentication and row-level security
-- **AI Services**: Azure AI Foundry for intelligent task suggestions with managed identity authentication
-- **Session Storage**: Azure Cache for Redis with managed identity authentication
-- **Monitoring**: Application Insights and Log Analytics workspace with managed identity authentication
+- **AI Agent & MCP Integration**
+  - Chat endpoint that uses the Microsoft Agent Framework + Model Context Protocol (MCP) to orchestrate tools like order lookup, product search, and recommendations, backed by the `api-mcp` service.
+  - Telemetry via Application Insights for tracing conversations and tool usage.
 
-### End-to-End Entra ID Authentication
+- **AI‑Generated Content**
+  - Enhances product descriptions using Azure OpenAI.
+  - Generates synthetic product reviews and corresponding embeddings for richer demo data.
+  - Automatically translates content into multiple languages.
 
-This sample demonstrates a comprehensive zero-trust security model using Azure Entra ID (Azure AD) authentication at every layer:
+- **Semantic Search**
+  - Uses vector embeddings for product descriptions and reviews.
+  - Exposes a semantic search HTTP API that ranks products by similarity to a natural‑language query.
 
-- **User → Frontend App**: Users authenticate via Azure AD OAuth 2.0 with PKCE flow, receiving JWT tokens for secure session management
-- **Frontend App → Backend API**: The web app uses client credentials flow (app-to-app authentication) with Azure AD to obtain access tokens for API calls from Data API Builder
-- **Backend API → Database**: Data API Builder uses a user managed identity to authenticate to Azure SQL Database, eliminating connection strings and passwords
-- **Frontend App → Azure Services**: The Flask application uses managed identity credentials to authenticate to:
-  - **Redis Cache**: Passwordless authentication for session storage
-  - **Azure AI Foundry**: Token-based access for AI recommendations
-  - **Application Insights**: Secure telemetry publishing
-  - **Key Vault**: Retrieving secrets without hardcoded credentials
+- **Receipts & Email**
+  - Generates PDF order receipts with QuestPDF and stores them in Azure Blob Storage.
+  - Sends order confirmation emails (with receipt links) via Azure Communication Services Email.
 
-All authentication flows are configured automatically during deployment, demonstrating enterprise best practices for secure, passwordless cloud applications.
+- **SEO & Sitemaps**
+  - Generates an XML sitemap covering static pages, category pages, and product detail pages.
+  - Frontend includes SEO‑friendly components and metadata (see docs).
 
-### Deployment with Azure Developer CLI (azd)
+- **Password & Reset Flows**
+  - Demonstrates PBKDF2 password hashing and verification against the AdventureWorks schema.
+  - Implements a full password‑reset workflow with short‑lived tokens and email links.
 
-This application is designed for one-command deployment using Azure Developer CLI:
+---
 
-1. **Pre-Deployment** (`preup.ps1`): Automatically creates Azure AD app registrations, discovers available OpenAI models with quota, and configures authentication settings
-2. **Infrastructure Provisioning** (`azd provision`): Deploys all Azure resources using Bicep templates with intelligent model selection and capacity calculation
-3. **Application Deployment** (`azd deploy`): Builds and deploys containerized applications to Azure Container Apps with remote build in Azure Container Registry
-4. **Post-Deployment** (`postdeploy.ps1`): Configures redirect URIs and sets runtime environment variables for CORS security
+## Repository Layout
 
-All deployment automation is handled through PowerShell scripts executed by azd lifecycle hooks, making the entire process seamless and repeatable.
+- `app/` – React + TypeScript + Vite frontend (Azure Static Web App).
+- `api/` – Data API Builder (DAB) configuration, Dockerfile, and local start scripts.
+- `api-functions/` – .NET 8 isolated Azure Functions with AI, email, receipts, passwords, SEO, and translation workflows.
+- `api-mcp/` – Model Context Protocol server providing AI agent tool capabilities.
+- `infra/` – Bicep infrastructure as code for Azure resource provisioning.
+- `scripts/` – Automation and utility scripts organized by category:
+  - `scripts/hooks/` – Azure Developer CLI (azd) lifecycle hooks (preup, postprovision, postdeploy, etc.)
+  - `scripts/data-management/` – Data export and orchestration monitoring scripts
+  - `scripts/generators/` – Content generation scripts (reviews, telemetry)
+  - `scripts/utilities/` – Helper tools (translations, image downloads, duplicate checking)
+- `tests/` – Playwright E2E tests and test scripts (see [tests/README.md](tests/README.md))
+- `docs/` – Comprehensive documentation organized by feature area (see [docs/README.md](docs/README.md))
 
-## Deployment from Visual Studio Code using Codespaces
+For function‑level details (routes, triggers, and responsibilities), see:
 
-The easiest way to get started is to use GitHub Codespaces as all the tools are installed for you. Steps:
+- [api-functions/README.md](api-functions/README.md)
 
-1. Clone this repo, then in your repo select "Code", "Codespaces" and click the plus to create a new Codespace: ![Open in GitHub Codespaces](images/CreateCodeSpace.png).
+If you want to understand the AI agent's tool surface area, see:
 
-   This will launch the repo is VS Code in a Browser.
+- [api-mcp/README.md](api-mcp/README.md)
 
-2. Next, we reccommend you launch the CodeSpace in *Visual Studio Code Dev Containers* as the Login from the command line to Azure using 2-factor Credentials often fails from a CodeSpace running in a Browser. To do this, left-click the name of the Codespace in the bottom-left of the screen and then select "Open in VS Code Desktop" as shown here:
+For all automation scripts and their usage, see:
 
-    ![VS Code Dev Containers](images/OpenInCodeSpaces.png)
+- [scripts/README.md](scripts/README.md)
 
-   *Note:* If you don't see the name of the CodeSpace in the bottom right, *right*-Click the status bar and ensure 'Remote Host' is checked.
+For testing and test scripts, see:
 
-3. Once the project files show up in your desktop deployment of Visual Studio Code (this may take several minutes), use the terminal window to follow the steps below to deploy the infrasructure. To easily view the instructions, select README.md, right-click and select "Open Preview" which will make it easier to read.
+- [tests/scripts/README.md](tests/scripts/README.md)
 
-### Configure Environment
+---
 
-Use the terminal in Visual Studio Code to do these steps. From the top menu, select "Terminal" and then "New Terminal" in order to create one if one doesn't already appear. Then in this, Terminal, follow these steps:
+## Getting Started
 
-1. Create a new environment:
+Deploy the complete solution to Azure using:
 
-   ```shell
-   azd env new
-   ```
+```bash
+azd up
+```
 
-   You will be asked for the name of the environment, which will also be used as the resource group name created by default in eastus2. "rg-" will automatically be prepended to the name so enter something like "adamhems-todoapp" for example.
+This command will:
 
-2. (Optional) Set Environment Variables:
+- Provision all Azure infrastructure (Container Apps, Static Web App, SQL Database, Storage, etc.)
+- Run lifecycle hooks (`preup`, `postprovision`, `postdeploy`)
+- Discover Azure OpenAI models and configure environment values
+- Build and deploy containers via Azure Container Registry
+- Configure database schema and load sample data
+- Set up managed identity authentication across all services
 
-   There are a number of local variables you can optionally set depending on your preferences. The first of these is the TENANT_ID of your Azure environment, if you have a specific one you wish to use; in which case enter it like so:
+Once deployed, you can access the application via the Static Web App URL shown in the deployment output.
 
-   ```shell
-   azd env set TENANT_ID <your tenant ID>
-   ```
+---
 
-   Another is AZURE_SUBSCRIPTION_ID, which you can set in the same way as above if you wish to use a particular Azure Subscription. Otherwise you'll be given the option of selecting one in the next step.
+## Documentation Map
 
-   ```shell
-   azd env set AZURE_SUBSCRIPTION_ID <your Subscription ID>
-   ```
+The `docs/` folder contains comprehensive documentation organized by feature area. For a complete index, see [docs/README.md](docs/README.md).
 
-   Lastly you can also set AZURE_LOCATION which is the Azure region you want everything deployed it, which uses 'eastus2' as the default if this value is not set.
+**Quick Links:**
 
-   ```shell
-   azd env set AZURE_LOCATION westus
-   ```
+- **Architecture & Deployment**
+  - [docs/architecture/MIGRATION_SUMMARY.md](docs/architecture/MIGRATION_SUMMARY.md) – GraphQL migration history
 
-3. Provision Infrastructure
+- **AI Agent & MCP**
+  - [docs/features/ai-agent/](docs/features/ai-agent/) – AI agent implementation and deployment guides
+  - [api-mcp/README.md](api-mcp/README.md) – MCP server tool surface area
 
-   This is initiated with one command like so:
+- **Authentication & Security**
+  - [docs/features/authentication/](docs/features/authentication/) – Password implementation and reset flows
 
-   ```shell
-   azd up
-   ```
+- **Email & Receipts**
+  - [docs/features/email/](docs/features/email/) – Email and PDF receipt generation
 
-   You will be prompted to login to Azure the first time you run this command; select "Y" in order to so so. A web browser will pop up and you will select the account you wish to use. Please note if this fails, make sure you have followed Step at the top of the page to launch the CodeSpace in *Visual Studio Code Dev Containers*.
+- **Testing**
+  - [tests/README.md](tests/README.md) – Playwright E2E tests
+  - [tests/scripts/README.md](tests/scripts/README.md) – API and integration test scripts
+  - [docs/testing/](docs/testing/) – Testing guides and telemetry validation
 
-   You may be asked to log in a second time using <https://microsoft.com/devicelogin> and entering a code (provided). Do so, if asked. You may also be asked "Are you trying to sign in to Microsoft Azure PowerShell?" - select Yes if so in order to run the automated scripts of this deployment.
+- **Other Features**
+  - [docs/features/internationalization/](docs/features/internationalization/) – Translation workflows
+  - [docs/features/reviews/](docs/features/reviews/) – Review generation and embeddings
+  - [docs/features/search/](docs/features/search/) – AI search troubleshooting
+  - [docs/features/seo/](docs/features/seo/) – SEO implementation
+  - [docs/features/monitoring/](docs/features/monitoring/) – Application Insights integration
 
-4. De-Provision Infrastructure
+### Testing Best Practices
 
-   To remove everything created in the step above, run one command like so:
+The test suite uses **dynamic product selection** to ensure comprehensive coverage across the entire product catalog. For complete testing documentation, see:
 
-   ```shell
-   azd down --force --purge
-   ```
+- [tests/scripts/README.md](tests/scripts/README.md) – All test scripts with usage examples
+- [docs/testing/](docs/testing/) – Testing guides and analysis
 
-## Project Documentation
+**Quick Commands:**
 
-This repository contains detailed documentation for each component of the MyToDoApp application:
+```bash
+# Run E2E tests
+npx playwright test
 
-- **[App Documentation](app/README.md)** - Frontend web application built with Flask, including authentication flow, AI-powered recommendations, session management, and integration with Azure services using managed identity
-- **[API Documentation](api/README.md)** - Backend API service using Microsoft Data API Builder (DAB), providing REST and GraphQL endpoints with Azure AD authentication and managed identity database access
-- **[Infrastructure Documentation](infra/README.md)** - Infrastructure as Code (IaC) using Azure Bicep templates, including architecture overview, module descriptions, and deployment configuration for all Azure resources
-- **[Scripts Documentation](scripts/README.md)** - PowerShell automation scripts for the Azure Developer CLI (azd) deployment lifecycle, including pre-deployment setup, post-provisioning configuration, and teardown procedures
+# API and integration tests (see tests/scripts/README.md for all available tests)
+cd tests/scripts
+./test-telemetry.sh              # Validate telemetry
+./test-product-comparison.sh     # Test product comparison
+./test-password-reset-flow.sh    # Test password reset flow
+./test-ai-and-mcp-complete.sh    # Test AI agent and MCP integration
+```
+
+**Product Helper Utility** (`tests/utils/productHelper.ts`):
+
+- Fetches all products from the database (handles DAB's 100-item pagination)
+- Provides random product selection functions with optional filtering
+- Caches results for 5 minutes to optimize performance
+
+**Usage in tests:**
+
+```typescript
+import {
+  getRandomProductIds,
+  getInStockProductIds,
+} from "../utils/productHelper";
+
+// Get any random products
+const productIds = await getRandomProductIds(5);
+
+// Get products likely to be in stock
+const inStockIds = await getInStockProductIds(10);
+
+// Navigate to a random product
+await page.goto(`${testEnv.webBaseUrl}/product/${productIds[0]}`);
+```
+
+**Benefits:**
+
+- Tests exercise 100% of product catalog over multiple runs (vs. 1-2% with hardcoded IDs)
+- Automatically adapts to product database changes
+- Catches edge cases with different product characteristics
+- More realistic simulation of user behavior
+
+See [docs/testing/TEST_DATA_RANDOMIZATION_ANALYSIS.md](docs/testing/TEST_DATA_RANDOMIZATION_ANALYSIS.md) for detailed analysis and implementation details.
+
+---
+
+## Who Is This Repo For?
+
+- Developers looking for a **realistic reference implementation** of an AI‑enhanced e‑commerce app on Azure.
+- Teams evaluating **Data API Builder + Azure Functions + Static Web Apps** as a pattern for line‑of‑business apps.
+- Practitioners who want to see how to wire **Azure OpenAI**, **MCP**, **durable workflows**, and **managed identity** together in a production‑style architecture.
+
+You can clone this repo, deploy it with `azd up`, and then explore or extend individual components (frontend, Functions, MCP server, or infra) depending on your interests.

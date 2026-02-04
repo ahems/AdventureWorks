@@ -1,42 +1,63 @@
 {
-    "name": "Automated IaC Demo",
-    "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
-    "features": {
-        "ghcr.io/devcontainers/features/azure-cli:1": {
-            "version": "latest"
-        },
-        "ghcr.io/devcontainers/features/git:1": {
-            "version": "latest",
-            "lfs": true
-        },
-        "ghcr.io/azure/azure-dev/azd:latest": {},
-        "ghcr.io/devcontainers/features/powershell:1": {
-            "version": "latest"
-        }
+  "name": "AdventureWorks",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/azure-cli:1": {
+      "version": "latest"
     },
-    "customizations": {
-        "vscode": {
-            "extensions": [
-                "ms-azuretools.vscode-bicep",
-                "ms-python.python",
-                "ms-vscode.powershell",
-                "redis.redis-for-vscode"
-            ],
-            "settings": {
-                // Provide a stable default PowerShell name that matches the configured additional path below
-                "powershell.powerShellAdditionalExePaths": {
-                    "PowerShell (x64)": "/usr/bin/pwsh"
-                },
-                "powershell.powerShellDefaultVersion": "PowerShell (x64)",
-                "powershell.enableStartUpBanner": false
-            }
-        }
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest",
+      "lfs": true
     },
-    "forwardPorts": [
-        50505
-    ],
-    "postCreateCommand": "az bicep install",
-    "hostRequirements": {
-        "memory": "8gb"
+    "ghcr.io/azure/azure-dev/azd:latest": {},
+    "ghcr.io/devcontainers/features/powershell:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest"
     }
+  },
+  "remoteEnv": {
+    "DOTNET_ROOT": "/usr/share/dotnet"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-bicep",
+        "ms-vscode.powershell",
+        "ms-dotnettools.csharp",
+        "ms-dotnettools.csdevkit",
+        "ms-azuretools.vscode-azurefunctions",
+        "ms-vscode.vscode-node-azure-pack",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "ms-playwright.playwright"
+      ],
+      "settings": {
+        // PowerShell settings
+        "powershell.powerShellAdditionalExePaths": {
+          "PowerShell (x64)": "/usr/bin/pwsh"
+        },
+        "powershell.powerShellDefaultVersion": "PowerShell (x64)",
+        "powershell.enableStartUpBanner": false,
+
+        // .NET settings
+        "dotnet.defaultSolution": "AdventureWorks.sln",
+
+        // Format settings
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "[csharp]": {
+          "editor.defaultFormatter": "ms-dotnettools.csharp"
+        }
+      }
+    }
+  },
+  "postCreateCommand": "az bicep install && npm ci && (cd app && npm ci) && npm install --prefix app @playwright/test faker csv-parse csv-writer && (cd app && npx --yes playwright install --with-deps)",
+  "hostRequirements": {
+    "memory": "8gb"
+  }
 }

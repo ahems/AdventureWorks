@@ -14,7 +14,10 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# Exclude Python lib directories but not TypeScript/JavaScript lib folders
+**/lib/
+!app/src/lib/
+!**/src/lib/
 lib64/
 parts/
 sdist/
@@ -165,3 +168,37 @@ deploy-acr-build-task.parameters.json
 
 .terraform/
 .azure
+# Azurite (Azure Storage Emulator)
+__azurite_db_*.json
+__blobstorage__/
+__queuestorage__/
+__tablestorage__/
+.azurite/
+# Downloaded product images
+product-images/
+
+# Generated config files
+app/staticwebapp.config.json
+app/.env.production
+app/public/config.js
+
+# AI Agent configuration (auto-generated during deployment)
+AI_AGENT_CONFIG.json
+
+# Node.js dependencies
+node_modules/
+config.json
+
+# Playwright test artifacts
+playwright-report/
+blob-report/
+test-results/
+tests/playwright-report/
+tests/test-results/
+# Demo test artifacts (keep demo test files but not results)
+tests/playwright-report-demo/
+tests/test-results-demo/
+
+# api-mcp .NET build outputs
+api-mcp/**/bin/
+api-mcp/**/obj/
