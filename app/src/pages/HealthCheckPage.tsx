@@ -313,15 +313,17 @@ const HealthCheckPage: React.FC = () => {
       const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
 
       // Query for ProductPhoto records with ProductPhotoID >= 1000 (AI-generated images)
+      // Use first: 5000 to override the default 100-item pagination limit
       const response = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: `{
-            productPhotos(filter: { ProductPhotoID: { gte: 1000 } }) {
+            productPhotos(filter: { ProductPhotoID: { gte: 1000 } }, first: 5000) {
               items {
                 ProductPhotoID
               }
+              hasNextPage
             }
           }`,
         }),
@@ -357,9 +359,18 @@ const HealthCheckPage: React.FC = () => {
 
       if (data.data?.productPhotos?.items) {
         const count = data.data.productPhotos.items.length;
+        const hasNextPage = data.data.productPhotos.hasNextPage;
         const expectedCount = 885;
 
-        if (count >= expectedCount) {
+        if (hasNextPage) {
+          updateCheckStatus(
+            name,
+            "unhealthy",
+            `Found ${count}+ AI-generated images but pagination indicates more exist (may need to increase query limit)`,
+            responseTime,
+            apiUrl,
+          );
+        } else if (count >= expectedCount) {
           updateCheckStatus(
             name,
             "healthy",

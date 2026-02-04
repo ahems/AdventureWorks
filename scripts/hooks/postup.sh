@@ -86,7 +86,7 @@ color_cyan "📋 Next Steps:"
 echo ""
 
 if [[ -n "$static_web_url" ]]; then
-  color_yellow "1. Verify all services are healthy:"
+  color_yellow "1. Verify all services are healthy, and awake:"
   echo "   🔍 $static_web_url/health"
   echo ""
   color_yellow "2. Once everything is healthy, explore the site:"
