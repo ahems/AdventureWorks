@@ -1,0 +1,67 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AzureFunctionsVersion>V4</AzureFunctionsVersion>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>api_functions</RootNamespace>
+    <UserSecretsId>c869d2e4-83e3-44c8-a7c8-e159e560539d</UserSecretsId>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Azure.Identity" Version="1.17.1" />
+    <PackageReference Include="Azure.AI.OpenAI" Version="2.8.0-beta.1" />
+    <PackageReference Include="Azure.AI.Inference" Version="1.0.0-beta.2" />
+    <PackageReference Include="Azure.AI.Projects" Version="1.2.0-beta.5" />
+    <PackageReference Include="Azure.Communication.Email" Version="1.1.0" />
+    
+    <!-- Microsoft Agent Framework for durable agents in Azure Functions -->
+    <PackageReference Include="Microsoft.Agents.AI" Version="*-*" />
+    <PackageReference Include="Microsoft.Agents.AI.AzureAI" Version="*-*" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting.AzureFunctions" Version="*-*" />
+    <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="*-*" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.27.0" />
+    <PackageReference Include="Azure.Storage.Queues" Version="12.25.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Storage.Queues" Version="5.5.3" />
+    <PackageReference Include="Dapper" Version="2.1.66" />
+    <PackageReference Include="Microsoft.ApplicationInsights.WorkerService" Version="2.23.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.51.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.1.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.7" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.11.0" />
+    <PackageReference Include="Microsoft.DurableTask.Client" Version="1.18.0" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageReference Include="QuestPDF" Version="2024.12.3" />
+    
+    <!-- Microsoft Agent Framework for MCP Server -->
+    <PackageReference Include="ModelContextProtocol" Version="0.5.0-preview.1" />
+    
+    <!-- Aspire Component Integrations (updated for compatibility) -->
+    <PackageReference Include="Aspire.Microsoft.Data.SqlClient" Version="13.1.0" />
+    <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="13.1.0" />
+    <PackageReference Include="Aspire.Azure.Storage.Queues" Version="13.1.0" />
+    
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Include OpenAPI spec file in deployment -->
+    <None Update="openapi-spec.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- Include Short Stack font for PDF generation -->
+    <None Update="Fonts\ShortStack-Regular.ttf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- Include bike icon for PDF receipts -->
+    <None Update="Fonts\bike-icon.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

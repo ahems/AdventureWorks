@@ -1,0 +1,20 @@
+{
+  "aboutUs": {"":"Tentang Kami"},
+  "tagline": {"":"Satu tempat untuk semua kebutuhan perlengkapan petualangan luar ruangan Anda. Sepeda, komponen, dan aksesori berkualitas sejak 2001."},
+  "shop": {"":"Belanja"},
+  "quickLinks": {"":"Tautan Cepat"},
+  "shoppingCart": {"":"Keranjang Belanja"},
+  "trackOrder": {"":"Lacak Pesanan"},
+  "returnsPolicy": {"":"Kebijakan Pengembalian Barang"},
+  "faq": {"":"FAQ"},
+  "contactUs": {"":"Hubungi Kami"},
+  "address": {"":"Jl. Petualangan 1, Jakarta 10220"},
+  "phone": {"":"(021) 123-4567"},
+  "email": {"":"hello@adventureworks.id"},
+  "copyright": {"":"© {{year}} AdventureWorks. Semua hak dilindungi."},
+  "builtWith": {"":"Dibuat dengan ❤️ menggunakan Azure dan React"},
+  "privacyPolicy": {"":"Kebijakan Privasi"},
+  "termsOfService": {"":"Syarat Layanan"},
+  "pages": {"home":"Beranda","sale":"Diskon","categories":"Kategori","search":"Cari","compare":"Bandingkan Produk","notFound":"Halaman Tidak Ditemukan","notFoundMessage":"Maaf, halaman yang Anda cari tidak ada.","goHome":"Pergi ke Beranda","loading":"Memuat...","error":"Terjadi kesalahan","tryAgain":"Coba Lagi"},
+  "general": {"yes":"Ya","no":"Tidak","ok":"OK","cancel":"Batal","save":"Simpan","delete":"Hapus","edit":"Sunting","close":"Tutup","back":"Kembali","next":"Berikutnya","previous":"Sebelumnya","submit":"Kirim","confirm":"Konfirmasi","apply":"Terapkan","reset":"Atur Ulang","filter":"Saring","sort":"Urutkan","sortBy":"Urutkan Berdasarkan","priceHighToLow":"Harga: Tinggi ke Rendah","priceLowToHigh":"Harga: Rendah ke Tinggi","newest":"Terbaru","rating":"Penilaian","popular":"Populer"}
+}

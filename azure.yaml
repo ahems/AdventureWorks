@@ -1,42 +1,72 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
 
-name: my-to-do-app
+name: adventureworks
 hooks:
   preup:
-    shell: pwsh
-    run: ./scripts/preup.ps1
-    interactive: true
-  postup:
-    shell: pwsh
-    run: ./scripts/postup.ps1
+    shell: sh
+    run: bash scripts/hooks/preup.sh
+    cwd: .
     interactive: true
   postprovision:
     shell: pwsh
-    run: ./scripts/postprovision.ps1
+    run: pwsh scripts/hooks/postprovision.ps1
+    cwd: .
     interactive: true
-  postdeploy:
-    shell: pwsh
-    run: ./scripts/postdeploy.ps1
-    interactive: true
-  postdown:
-    shell: pwsh
-    run: ./scripts/postdown.ps1
+  predeploy:
+    shell: sh
+    run: bash scripts/hooks/predeploy.sh
+    cwd: .
+    interactive: false
+  postup:
+    shell: sh
+    run: bash scripts/hooks/postup.sh
+    cwd: .
     interactive: true
 services:
-    app:
-        project: ./app
-        host: containerapp
-        language: python
-        docker:
-            path: dockerfile
-            remoteBuild: true
-    api:
-        project: ./api
-        host: containerapp
-        language: python
-        docker:
-            path: dockerfile
-            remoteBuild: true
+  api-mcp:
+    project: ./api-mcp
+    host: containerapp
+    language: docker
+    docker:
+      path: Dockerfile
+      remoteBuild: true
+  api:
+    project: ./api
+    host: containerapp
+    language: python
+    docker:
+      path: dockerfile
+      remoteBuild: true
+    hooks:
+      postdeploy:
+        shell: sh
+        run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/api-postdeploy.sh"
+        interactive: false
+  api-functions:
+    project: ./api-functions
+    host: containerapp
+    language: csharp
+    docker:
+      path: Dockerfile
+      remoteBuild: true
+  app:
+    project: ./app
+    host: staticwebapp
+    language: js
+    dist: dist
+    config:
+      buildCommand: bash scripts/build-with-env.sh
+      outputLocation: dist
+    hooks:
+      predeploy:
+        shell: sh
+        run: npm install && bash scripts/build-with-env.sh
+        cwd: ./app
+        interactive: false
+      postdeploy:
+        shell: sh
+        run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/app-postdeploy.sh"
+        interactive: false
 infra:
   provider: bicep
   path: ./infra

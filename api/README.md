@@ -68,12 +68,12 @@ api/
 
 **Environment Variables:**
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MI_RESOURCE` | `https://database.windows.net` | Azure resource URL for token acquisition |
-| `MI_INITIAL_DELAY_SECONDS` | `0` | Initial delay before checking MI token availability |
-| `MI_PERIOD_SECONDS` | `1` | Wait period between token availability checks |
-| `MI_FAILURE_THRESHOLD` | `60` | Maximum number of retry attempts before failing |
+| Variable                   | Default                        | Description                                         |
+| -------------------------- | ------------------------------ | --------------------------------------------------- |
+| `MI_RESOURCE`              | `https://database.windows.net` | Azure resource URL for token acquisition            |
+| `MI_INITIAL_DELAY_SECONDS` | `0`                            | Initial delay before checking MI token availability |
+| `MI_PERIOD_SECONDS`        | `1`                            | Wait period between token availability checks       |
+| `MI_FAILURE_THRESHOLD`     | `60`                           | Maximum number of retry attempts before failing     |
 
 ### entrypoint.sh
 
@@ -211,14 +211,14 @@ GraphQL:
 
 The API service requires the following environment variables to be set by `azd` during deployment:
 
-| Variable | Description | Set By |
-|----------|-------------|--------|
-| `DATABASE_CONNECTION_STRING` | SQL connection string with Managed Identity auth | azd (from [infra outputs](../infra/README.md)) |
-| `API_APP_ID_URI` | Azure AD API identifier URI (e.g., `api://guid`) | [`preup.ps1`](../scripts/README.md#1-preupps1) script |
-| `TENANT_ID` | Azure AD tenant ID | [`preup.ps1`](../scripts/README.md#1-preupps1) script |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Application Insights connection string | azd (from [infra outputs](../infra/README.md)) |
-| `AZURE_CLIENT_ID` | User-assigned managed identity client ID | azd (from [infra outputs](../infra/README.md)) |
-| `APP_URL` | Frontend application URL for CORS restrictions | [`postdeploy.ps1`](../scripts/README.md#3-postdeployps1) script |
+| Variable                                | Description                                      | Set By                                                          |
+| --------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------- |
+| `DATABASE_CONNECTION_STRING`            | SQL connection string with Managed Identity auth | azd (from [infra outputs](../infra/README.md))                  |
+| `API_APP_ID_URI`                        | Azure AD API identifier URI (e.g., `api://guid`) | [`preup.ps1`](../scripts/README.md#1-preupps1) script           |
+| `TENANT_ID`                             | Azure AD tenant ID                               | [`preup.ps1`](../scripts/README.md#1-preupps1) script           |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Application Insights connection string           | azd (from [infra outputs](../infra/README.md))                  |
+| `AZURE_CLIENT_ID`                       | User-assigned managed identity client ID         | azd (from [infra outputs](../infra/README.md))                  |
+| `APP_URL`                               | Frontend application URL for CORS restrictions   | [`postdeploy.ps1`](../scripts/README.md#3-postdeployps1) script |
 
 ## Database Permissions
 
@@ -346,8 +346,12 @@ Access metrics in Azure Portal → Application Insights → Application Map/Perf
 
 ### Project Documentation
 
+- [Root Project README](../README.md) - overall architecture and components
+- [Quickstart Guide](../QUICKSTART.md) - azd workflow and lifecycle hooks
 - [Scripts Documentation](../scripts/README.md) - azd lifecycle scripts including `preup.ps1` and `postprovision.ps1`
 - [Infrastructure Documentation](../infra/README.md) - Bicep modules and Azure resource configuration
+- [Azure Functions & AI features](../api-functions/README.md) - serverless endpoints that complement DAB
+- [DAB naming and GraphQL schema rules](../docs/DAB_NAMING_CONVENTIONS.md) - how AdventureWorks tables map to GraphQL entities
 
 ### Microsoft Documentation
 

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Adventure Works | Outdoor Adventure & Sports Gear</title>
+    <meta name="description" content="Premium bikes, components, clothing & accessories for outdoor enthusiasts. Shop mountain bikes, road bikes, cycling gear and more at Adventure Works." />
+    <meta name="author" content="Adventure Works" />
+    <meta name="keywords" content="bikes, bicycles, mountain bikes, road bikes, cycling gear, bike accessories, helmets, jerseys" />
+    <link rel="canonical" href="https://adventureworks.com" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+
+    <!-- Open Graph / Social -->
+    <meta property="og:title" content="Adventure Works | Outdoor Adventure & Sports Gear" />
+    <meta property="og:description" content="Premium bikes, components, clothing & accessories for outdoor enthusiasts. Gear up for your next adventure!" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/thumbnail.png" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@AdventureWorks" />
+    <meta name="twitter:image" content="/thumbnail.png" />
+    
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Store",
+      "name": "Adventure Works",
+      "description": "Outdoor Adventure & Sports Retailer - Premium bikes, components, clothing & accessories",
+      "url": "https://adventureworks.com",
+      "priceRange": "$$",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "1 Adventure Way",
+        "addressLocality": "Bothell",
+        "addressRegion": "WA",
+        "postalCode": "98011",
+        "addressCountry": "US"
+      }
+    }
+    </script>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <!-- Load runtime config first (injected by Docker in production) -->
+    <script src="/config.js"></script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

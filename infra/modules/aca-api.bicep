@@ -1,9 +1,8 @@
-param keyVaultName string = 'todoapp-kv-${uniqueString(resourceGroup().id)}'
-param appInsightsName string = 'todoapp-appinsights-${toLower(uniqueString(resourceGroup().id))}'
-param apiName string = 'todoapp-api-${uniqueString(resourceGroup().id)}'
+param appInsightsName string = 'av-appinsights-${toLower(uniqueString(resourceGroup().id))}'
+param apiName string = 'av-api-${uniqueString(resourceGroup().id)}'
 param location string = resourceGroup().location
-param containerRegistryName string = 'todoappacr${toLower(uniqueString(resourceGroup().id))}'
-param identityName string = 'todoapp-identity-${uniqueString(resourceGroup().id)}'
+param containerRegistryName string = 'avacr${toLower(uniqueString(resourceGroup().id))}'
+param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param containerAppEnvId string
 // Public bootstrap image to avoid ACR pull failures during initial infra provisioning
 param bootstrapImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
@@ -17,10 +16,7 @@ param maxReplica int = 3
 param revisionSuffix string
 @secure()
 param sqlConnectionString string
-@secure()
-param redisConnectionString string
-param clientId string
-param apiAppIdUri string
+param appUrl string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -59,6 +55,14 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         external: true
         targetPort: 5000
         allowInsecure: false
+        transport: 'http'
+        clientCertificateMode: 'ignore'
+        corsPolicy: {
+          allowedOrigins: ['*']
+          allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
+          allowedHeaders: ['*']
+          allowCredentials: false
+        }
         traffic: [
           {
             latestRevision: true
@@ -89,10 +93,6 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
               value: sqlConnectionString
             }
             {
-              name: 'REDIS_CONNECTION_STRING'
-              value: redisConnectionString
-            }
-            {
               name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
               value: appInsights.properties.ConnectionString
             }
@@ -100,20 +100,13 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'AZURE_CLIENT_ID'
               value: azidentity.properties.clientId
             }
-            {name: 'CLIENT_ID'
-             value: clientId
-            }
-            {
-              name: 'API_APP_ID_URI'
-              value: apiAppIdUri
-            }
-            {
-              name: 'API_APP_ID'
-              value: split(apiAppIdUri, '/')[2]
-            }
             {
               name: 'TENANT_ID'
               value: subscription().tenantId
+            }
+            {
+              name: 'APP_URL'
+              value: appUrl
             }
           ]
         }
@@ -130,22 +123,29 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
               }
             }
           }
+          {
+            name: 'cpu-utilization'
+            custom: {
+              type: 'cpu'
+              metadata: {
+                type: 'Utilization'
+                value: '70'
+              }
+            }
+          }
+          {
+            name: 'memory-utilization'
+            custom: {
+              type: 'memory'
+              metadata: {
+                type: 'Utilization'
+                value: '75'
+              }
+            }
+          }
         ]
       }
     }
-  }
-}
-
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
-  name: keyVaultName
-}
-
-resource apiurl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
-  name: 'API-URL'
-  properties: {
-    value: 'https://${api.properties.configuration.ingress.fqdn}/graphql/'
-    contentType: 'text/plain'
   }
 }
 

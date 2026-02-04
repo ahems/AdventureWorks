@@ -1,0 +1,14 @@
+{
+  "$schema": "https://aka.ms/azure/static-web-apps-cli/schema",
+  "configurations": {
+    "adventure-eshop": {
+      "appLocation": ".",
+      "outputLocation": "dist",
+      "appBuildCommand": "bash scripts/build-with-env.sh",
+      "run": "npm run dev",
+      "appDevserverUrl": "http://localhost:5173",
+      "appName": "todoapp-swa-ewphuc52etkbc",
+      "resourceGroup": "rg-adamhems-adventureworks"
+    }
+  }
+}

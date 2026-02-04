@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ProductNotFound" xml:space="preserve">
+    <value>製品番号#{0}が見つかりません。</value>
+  </data>
+  <data name="InventoryAvailability" xml:space="preserve">
+    <value>📦 在庫状況：{0}</value>
+  </data>
+  <data name="ProductId" xml:space="preserve">
+    <value>製品ID: {0}</value>
+  </data>
+  <data name="OutOfStock" xml:space="preserve">
+    <value>❌ 全店舗で在庫切れです</value>
+  </data>
+  <data name="OutOfStockMessage" xml:space="preserve">
+    <value>この製品は現在ご利用いただけません。後ほど再度ご確認いただくか、サポートまでお問い合わせください。</value>
+  </data>
+  <data name="InStock" xml:space="preserve">
+    <value>✅ 在庫あり - 合計利用可能数: {0} 台</value>
+  </data>
+  <data name="AvailableAt" xml:space="preserve">
+    <value>取扱店舗：</value>
+  </data>
+  <data name="LocationIcon" xml:space="preserve">
+    <value>📍 {0}</value>
+  </data>
+  <data name="Quantity" xml:space="preserve">
+    <value>数量：{0}台</value>
+  </data>
+  <data name="Location" xml:space="preserve">
+    <value>場所：棚 {0}、ビン {1}</value>
+  </data>
+  <data name="Recommended" xml:space="preserve">
+    <value>💡 おすすめ：{0}からご注文ください（在庫{1}台）</value>
+  </data>
+  <data name="NoProductsFound" xml:space="preserve">
+    <value>'{0}' に一致する商品は見つかりませんでした</value>
+  </data>
+  <data name="FoundProducts" xml:space="preserve">
+    <value>'{1}' に一致する製品が {0} 件見つかりました（説明とレビューに対するセマンティック検索を使用）：</value>
+  </data>
+  <data name="Category" xml:space="preserve">
+    <value>カテゴリー: {0}</value>
+  </data>
+  <data name="Price" xml:space="preserve">
+    <value>価格: ${0:N2}</value>
+  </data>
+  <data name="Match" xml:space="preserve">
+    <value>一致: {0}で見つかりました</value>
+  </data>
+  <data name="Review" xml:space="preserve">
+    <value>レビュー: {0}</value>
+  </data>
+  <data name="Description" xml:space="preserve">
+    <value>説明: {0}</value>
+  </data>
+  <data name="Relevance" xml:space="preserve">
+    <value>関連性: {0:P1}</value>
+  </data>
+  <data name="NoOrdersFound" xml:space="preserve">
+    <value>顧客番号#{0}の注文は見つかりませんでした。</value>
+  </data>
+  <data name="OrderHistory" xml:space="preserve">
+    <value>📋 顧客#{0}の注文履歴</value>
+  </data>
+  <data name="RecentOrders" xml:space="preserve">
+    <value>最新の注文 {0} 件を表示しています:</value>
+  </data>
+  <data name="OrderNumber" xml:space="preserve">
+    <value>注文番号#{0}</value>
+  </data>
+  <data name="OrderDate" xml:space="preserve">
+    <value>日付: {0:yyyy-MM-dd}</value>
+  </data>
+  <data name="Status" xml:space="preserve">
+    <value>ステータス: {0}</value>
+  </data>
+  <data name="Total" xml:space="preserve">
+    <value>合計: ${0:N2}</value>
+  </data>
+  <data name="Items" xml:space="preserve">
+    <value>アイテム: {0}</value>
+  </data>
+  <data name="ShipDate" xml:space="preserve">
+    <value>発送日: {0:yyyy-MM-dd}</value>
+  </data>
+  <data name="OrderNotFound" xml:space="preserve">
+    <value>注文番号#{0}が見つかりません。</value>
+  </data>
+  <data name="OrderDoesNotBelongToCustomer" xml:space="preserve">
+    <value>注文番号#{0}は顧客番号#{1}のものではありません。</value>
+  </data>
+  <data name="OrderDetails" xml:space="preserve">
+    <value>📦 注文詳細 - 注文番号#{0}</value>
+  </data>
+  <data name="Customer" xml:space="preserve">
+    <value>顧客ID: {0}</value>
+  </data>
+  <data name="ShipTo" xml:space="preserve">
+    <value>配送先：</value>
+  </data>
+  <data name="Subtotal" xml:space="preserve">
+    <value>小計: ${0:N2}</value>
+  </data>
+  <data name="Tax" xml:space="preserve">
+    <value>税金: ${0:N2}</value>
+  </data>
+  <data name="Shipping" xml:space="preserve">
+    <value>配送費用: ${0:N2}</value>
+  </data>
+  <data name="OrderItems" xml:space="preserve">
+    <value>注文商品：</value>
+  </data>
+  <data name="Qty" xml:space="preserve">
+    <value>数量: {0}</value>
+  </data>
+  <data name="UnitPrice" xml:space="preserve">
+    <value>単価: ${0:N2}</value>
+  </data>
+  <data name="LineTotal" xml:space="preserve">
+    <value>合計金額: ${0:N2}</value>
+  </data>
+  <data name="NoComplementaryProducts" xml:space="preserve">
+    <value>製品#{0}に対応する補完商品は見つかりませんでした。</value>
+  </data>
+  <data name="ComplementaryProducts" xml:space="preserve">
+    <value>🛍️ この商品を購入したお客様は、こちらの商品も購入しています：</value>
+  </data>
+  <data name="PurchasedTogether" xml:space="preserve">
+    <value>一緒に購入された回数 {0} 回</value>
+  </data>
+  <data name="NoRecommendations" xml:space="preserve">
+    <value>顧客#{0}の購入履歴が見つからないため、推薦を生成できません。</value>
+  </data>
+  <data name="PersonalizedRecommendations" xml:space="preserve">
+    <value>✨ カスタマー#{0}様へのパーソナライズされたおすすめ</value>
+  </data>
+  <data name="BasedOnPurchaseHistory" xml:space="preserve">
+    <value>ご購入履歴に基づいて：</value>
+  </data>
+  <data name="SimilarTo" xml:space="preserve">
+    <value>{0} に類似しています</value>
+  </data>
+  <data name="NoReviews" xml:space="preserve">
+    <value>製品#{0}のレビューは見つかりませんでした。</value>
+  </data>
+  <data name="ReviewAnalysis" xml:space="preserve">
+    <value>⭐ {0} の製品レビュー分析</value>
+  </data>
+  <data name="OverallRating" xml:space="preserve">
+    <value>総合評価: {0:F1}/5.0 ({1})</value>
+  </data>
+  <data name="TotalReviews" xml:space="preserve">
+    <value>総レビュー数: {0}</value>
+  </data>
+  <data name="RatingDistribution" xml:space="preserve">
+    <value>評価分布：</value>
+  </data>
+  <data name="StarReviews" xml:space="preserve">
+    <value>{0}⭐: {1}件のレビュー（{2:F1}%）</value>
+  </data>
+  <data name="WhatCustomersLove" xml:space="preserve">
+    <value>👍 お客様に愛されているポイント：</value>
+  </data>
+  <data name="CommonConcerns" xml:space="preserve">
+    <value>👎 よくあるご不安点：</value>
+  </data>
+  <data name="LatestReview" xml:space="preserve">
+    <value>最新のレビュー: {0:yyyy-MM-dd} 投稿者 {1}</value>
+  </data>
+  <data name="Anonymous" xml:space="preserve">
+    <value>匿名</value>
+  </data>
+</root>

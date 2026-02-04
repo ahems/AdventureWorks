@@ -1,0 +1,20 @@
+{
+  "aboutUs": {"":"Hakkımızda"},
+  "tagline": {"":"Açık hava macerası ekipmanlarınız için tek adresiniz. 2001’den beri kaliteli bisikletler, bileşenler ve aksesuarlar."},
+  "shop": {"":"Alışveriş"},
+  "quickLinks": {"":"Hızlı Bağlantılar"},
+  "shoppingCart": {"":"Alışveriş Sepeti"},
+  "trackOrder": {"":"Siparişi Takip Et"},
+  "returnsPolicy": {"":"İade Politikası"},
+  "faq": {"":"SSS"},
+  "contactUs": {"":"Bize Ulaşın"},
+  "address": {"":"1 Macera Yolu, Bothell, WA 98011"},
+  "phone": {"":"(555) 123-4567"},
+  "email": {"":"hello@adventureworks.com.tr"},
+  "copyright": {"":"© {{year}} AdventureWorks. Tüm hakları saklıdır."},
+  "builtWith": {"":"Azure ve React kullanılarak ❤️ ile oluşturuldu"},
+  "privacyPolicy": {"":"Gizlilik Politikası"},
+  "termsOfService": {"":"Hizmet Şartları"},
+  "pages": {"home":"Ana Sayfa","sale":"İndirim","categories":"Kategoriler","search":"Ara","compare":"Ürünleri Karşılaştır","notFound":"Sayfa Bulunamadı","notFoundMessage":"Üzgünüz, aradığınız sayfa mevcut değil.","goHome":"Ana Sayfaya Git","loading":"Yükleniyor...","error":"Bir hata oluştu","tryAgain":"Tekrar Deneyin"},
+  "general": {"yes":"Evet","no":"Hayır","ok":"Tamam","cancel":"İptal et","save":"Kaydet","delete":"Sil","edit":"Düzenle","close":"Kapat","back":"Geri","next":"Sonraki","previous":"Önceki","submit":"Gönder","confirm":"Onayla","apply":"Başvur","reset":"Sıfırla","filter":"Filtre","sort":"Sırala","sortBy":"Sırala","priceHighToLow":"Fiyat: Yüksekten Düşüğe","priceLowToHigh":"Fiyat: Düşükten Yükseğe","newest":"En Yeni","rating":"Değerlendirme","popular":"Popüler"}
+}

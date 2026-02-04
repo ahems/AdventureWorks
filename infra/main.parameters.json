@@ -11,15 +11,6 @@
     "aadAdminObjectId": {
       "value": "${OBJECT_ID}"
     },
-    "webAppClientSecret": {
-      "value": "${CLIENT_SECRET}"
-    },
-    "webAppClientId": {
-      "value": "${CLIENT_ID}"
-    },
-    "apiAppIdUri": {
-      "value": "${API_APP_ID_URI}"
-    },
     "restoreOpenAi": {
       "value": false
     },
@@ -28,8 +19,8 @@
     },
     "sqlDatabaseName": {
       "value": "${SQL_DATABASE_NAME}"
-    },    
-    "cognitiveservicesname": {
+    },
+    "foundryname": {
       "value": "${AZURE_OPENAI_ACCOUNT_NAME}"
     },
     "chatGptDeploymentVersion": {
@@ -56,8 +47,23 @@
     "availableEmbeddingDeploymentCapacity": {
       "value": "${availableEmbeddingDeploymentCapacity}"
     },
-    "cognitiveservicesLocation": {
-      "value": "${AZURE_LOCATION}"
+    "imageModelName": {
+      "value": "${imageDeploymentModelName}"
+    },
+    "imageDeploymentVersion": {
+      "value": "${imageDeploymentVersion}"
+    },
+    "imageSkuName": {
+      "value": "${imageDeploymentSkuName}"
+    },
+    "imageModelFormat": {
+      "value": "${imageModelFormat}"
+    },
+    "availableImageDeploymentCapacity": {
+      "value": "${availableImageDeploymentCapacity}"
+    },
+    "foundryLocation": {
+      "value": "${FOUNDRY_LOCATION}"
     }
   }
 }
