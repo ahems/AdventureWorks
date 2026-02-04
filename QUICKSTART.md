@@ -60,7 +60,7 @@ azd config set defaults.subscription <your-subscription-id>
 Login to Azure:
 
 ```bash
-azd auth login
+az login --tenant <your-tenant-id>
 ```
 
 Note: If you encounter problems signing in to Azure due to multi-factor authentication enabled on your account, you may need to launch the codespace in Visual Studio Code on your desktop instead of in a browser.
