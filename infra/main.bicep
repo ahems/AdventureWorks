@@ -257,6 +257,8 @@ module containerAppSeedJob 'modules/aca-seed-job.bicep' = {
     sqlServerName: sqlServerName
     sqlDatabaseName: sqlDatabaseName
     containerAppEnvId: containerApp.outputs.containerAppEnvId
+    // imageName omitted - will use bootstrap image during initial provision
+    // and get updated with actual image during azd deploy
   }
   dependsOn: [
     containerApp

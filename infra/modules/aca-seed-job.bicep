@@ -5,6 +5,7 @@ param containerRegistryName string = 'avacr${toLower(uniqueString(resourceGroup(
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param containerAppEnvId string
 param bootstrapImage string = 'mcr.microsoft.com/azure-powershell:latest'
+param imageName string = ''
 param sqlServerName string
 param sqlDatabaseName string
 
@@ -35,6 +36,9 @@ resource seedJob 'Microsoft.App/jobs@2024-03-01' = {
   properties: {
     environmentId: containerAppEnvId
     configuration: {
+      triggerType: 'Manual'
+      replicaTimeout: 2000
+      replicaRetryLimit: 0
       secrets: []
       registries: [
         {
@@ -47,11 +51,17 @@ resource seedJob 'Microsoft.App/jobs@2024-03-01' = {
       containers: [
         {
           name: seedJobName
-          image: bootstrapImage
+          image: !empty(imageName) ? '${acr.properties.loginServer}/${imageName}' : bootstrapImage
           resources: {
-            cpu: json('1.0')
-            memory: '2Gi'
+            cpu: json('2.0')
+            memory: '4Gi'
           }
+          volumeMounts: [
+            {
+              volumeName: 'logs'
+              mountPath: '/logs'
+            }
+          ]
           env: [
             {
               name: 'AZURE_RESOURCE_GROUP'
@@ -82,6 +92,13 @@ resource seedJob 'Microsoft.App/jobs@2024-03-01' = {
               value: azidentity.properties.clientId
             }
           ]
+        }
+      ]
+      volumes: [
+        {
+          name: 'logs'
+          storageType: 'AzureFile'
+          storageName: 'seed-job'
         }
       ]
     }
