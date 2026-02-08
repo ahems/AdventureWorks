@@ -10,22 +10,6 @@ $logDir = "/logs"
 $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $logFile = "$logDir/seed-$timestamp.log"
 
-# Test if we can write to the log location
-try {
-    if (-not (Test-Path $logDir)) {
-        New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-        "Log directory created: $logDir" | Out-File -FilePath "$logDir/test-$timestamp.txt"
-    }
-    "Script starting at $(Get-Date)" | Out-File -FilePath $logFile
-    Write-Output "Log file created: $logFile"
-} catch {
-    # If we can't write to /logs, write to /tmp as fallback
-    $logDir = "/tmp"
-    $logFile = "$logDir/seed-$timestamp.log"
-    "FALLBACK: Writing to $logFile because /logs is not writable" | Out-File -FilePath $logFile
-    Write-Output "FALLBACK: Using $logFile"
-}
-
 # Function to write to both console and log file
 function Write-Log {
     param([string]$Message)
@@ -59,11 +43,6 @@ Write-Log "Log File: $logFile"
 Write-Log "PowerShell Version: $($PSVersionTable.PSVersion)"
 Write-Log "OS: $($PSVersionTable.OS)"
 Write-Log "=========================================="
-
-# PSGallery not needed for this script - all required modules are pre-installed
-
-# Az modules are pre-installed in the mcr.microsoft.com/azure-powershell base image
-# No need to install them again
 
 # Import required modules
 Write-Log "Importing PowerShell modules..."
@@ -125,21 +104,9 @@ Write-Log "`nConnecting to Azure using Managed Identity..."
 Write-Log "  Client ID: $azureClientId"
 Write-Log "  Tenant ID: $tenantId"
 
-# Test if IMDS is reachable (non-fatal - just informational)
-Write-Log "  Testing IMDS endpoint accessibility..."
-try {
-    $imdsUrl = "http://169.254.169.254/metadata/instance?api-version=2021-02-01"
-    $imdsTest = Invoke-RestMethod -Uri $imdsUrl -Headers @{Metadata="true"} -TimeoutSec 5 -ErrorAction Stop
-    Write-Log "  ✓ IMDS endpoint is reachable"
-    Write-Log "  IMDS Response: $($imdsTest | ConvertTo-Json -Depth 2 -Compress)"
-} catch {
-    Write-Log "  ⚠ WARNING: IMDS metadata endpoint test failed (this is OK, will proceed)"
-    Write-Log "  Error: $($_.Exception.Message)"
-}
-
 try {
     Write-Log "  Attempting Connect-AzAccount -Identity..."
-    $connectResult = Connect-AzAccount -Identity -AccountId $azureClientId -TenantId $tenantId -ErrorAction Stop -WarningAction SilentlyContinue
+    Connect-AzAccount -Identity -AccountId $azureClientId -TenantId $tenantId -ErrorAction Stop -WarningAction SilentlyContinue
     
     Write-Log "  ✓ Successfully connected to Azure using Managed Identity"
     $context = Get-AzContext
@@ -159,7 +126,6 @@ try {
     exit 1
 }
 
-# Helper functions (same as original script)
 function Convert-SecureIfNeededToPlainText {
     param(
         [Parameter(Mandatory)] $Value
@@ -247,7 +213,7 @@ function Import-JsonTable {
         [System.Data.Common.DbCommand] $Command
     )
     
-    Write-Output "  Loading [$SchemaName].[$TableName] from JSON file..."
+    Write-Log "  Loading [$SchemaName].[$TableName] from JSON file..."
     
     try {
         # Check if table already has data
@@ -255,7 +221,7 @@ function Import-JsonTable {
         $existingCount = $Command.ExecuteScalar()
         
         if ($existingCount -gt 0) {
-            Write-Output "    Table already contains $existingCount rows - Skipping"
+            Write-Log "    Table already contains $existingCount rows - Skipping"
             return $true
         }
         
@@ -267,17 +233,17 @@ function Import-JsonTable {
         
         $jsonContent = Get-Content -Path $JsonFilePath -Raw -Encoding UTF8
         if ([string]::IsNullOrWhiteSpace($jsonContent)) {
-            Write-Output "    JSON file is empty - Skipping"
+            Write-Log "    JSON file is empty - Skipping"
             return $true
         }
         
         $records = $jsonContent | ConvertFrom-Json
         if (-not $records -or $records.Count -eq 0) {
-            Write-Output "    No records in JSON file - Skipping"
+            Write-Log "    No records in JSON file - Skipping"
             return $true
         }
         
-        Write-Output "    Parsed $($records.Count) records from JSON"
+        Write-Log "    Parsed $($records.Count) records from JSON"
         
         # Get column information (excluding IDENTITY and computed columns)
         $Command.CommandText = @"
@@ -379,12 +345,12 @@ ORDER BY c.ORDINAL_POSITION
                 
                 $insertedRows += ($batchEnd - $i)
                 if ($insertedRows % 1000 -eq 0) {
-                    Write-Output "    ...inserted $insertedRows rows"
+                    Write-Log "    ...inserted $insertedRows rows"
                 }
             }
             
             $transaction.Commit()
-            Write-Output "    Successfully loaded $insertedRows rows from JSON"
+            Write-Log "    Successfully loaded $insertedRows rows from JSON"
             return $true
         }
         catch {
@@ -474,7 +440,7 @@ try {
     # Split on GO statements (case insensitive, with optional whitespace)
     $batches = $tableSql -split '(?mi)^\s*GO\s*$'
     
-    Write-Output "Processing SQL script with $($batches.Count) potential batches..."
+    Write-Log "Processing SQL script with $($batches.Count) potential batches..."
     $batchNum = 0
     $successCount = 0
     $skipCount = 0
@@ -579,7 +545,7 @@ try {
     $aiEnhancementsSqlPath = Join-Path $PSScriptRoot 'sql' 'AdventureWorks-AI.sql'
     if (Test-Path $aiEnhancementsSqlPath) {
         $elapsed = (Get-Date) - $scriptStartTime
-        Write-Output "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Applying AI schema enhancements from $aiEnhancementsSqlPath..."
+        Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Applying AI schema enhancements from $aiEnhancementsSqlPath..."
         $aiSql = Get-Content -Path $aiEnhancementsSqlPath -Raw
         
         # Split on GO statements
@@ -627,13 +593,13 @@ try {
             }
         }
         $elapsed = (Get-Date) - $scriptStartTime
-        Write-Output "AI schema enhancements completed: $successCount applied, $skipCount already existed [+$([math]::Floor($elapsed.TotalMinutes))m]"
+        Write-Log "AI schema enhancements completed: $successCount applied, $skipCount already existed [+$([math]::Floor($elapsed.TotalMinutes))m]"
         
         if ($hasErrors) {
             throw "AI schema enhancements completed with errors. Review the warnings above."
         }
     } else {
-        Write-Output "`nAI enhancements SQL file not found, skipping..."
+        Write-Log "`nAI enhancements SQL file not found, skipping..."
     }
     
     # ---------------------------------------------------------------------
@@ -662,7 +628,7 @@ try {
         @{ Table='Sales.CurrencyRate'; File='CurrencyRate.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Person.CountryRegion'; File='CountryRegion.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Sales.SalesTerritory'; File='SalesTerritory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-    @{ Table='Purchasing.ShipMethod'; File='ShipMethod.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Purchasing.ShipMethod'; File='ShipMethod.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         
     # ===== GEOGRAPHY =====
         @{ Table='Person.StateProvince'; File='StateProvince.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -671,14 +637,14 @@ try {
 
         # ===== CUSTOMER/PERSON DATA =====
         @{ Table='Person.BusinessEntity'; File='BusinessEntity.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
-    @{ Table='Person.BusinessEntityAddress'; File='BusinessEntityAddress.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
+        @{ Table='Person.BusinessEntityAddress'; File='BusinessEntityAddress.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
         @{ Table='Person.Person'; File='Person.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
         @{ Table='Person.Password'; File='Password.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
         @{ Table='Person.EmailAddress'; File='EmailAddress.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
         @{ Table='Person.PersonPhone'; File='PersonPhone.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
         @{ Table='HumanResources.Employee'; File='Employee.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Sales.PersonCreditCard'; File='PersonCreditCard.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-    @{ Table='Sales.SalesPerson'; File='SalesPerson.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Sales.SalesPerson'; File='SalesPerson.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Sales.Store'; File='Store.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
         @{ Table='Sales.Customer'; File='Customer.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         
@@ -821,22 +787,22 @@ try {
             if ($isAiCsv -and $baseRecordCount) {
                 # For -ai.csv files, only load if table has exactly the base record count
                 if ($existingCount -eq $baseRecordCount) {
-                    Write-Output "    Table contains base $existingCount rows, adding AI enhancements..."
+                    Write-Log "    Table contains base $existingCount rows, adding AI enhancements..."
                 }
                 elseif ($existingCount -gt $baseRecordCount) {
-                    Write-Output "    Table already contains $existingCount rows (expected $baseRecordCount) - AI data already loaded, skipping"
+                    Write-Log "    Table already contains $existingCount rows (expected $baseRecordCount) - AI data already loaded, skipping"
                     $csvLoadSkipped++
                     continue
                 }
                 else {
-                    Write-Output "    Table contains $existingCount rows (expected $baseRecordCount) - Base data not loaded yet, skipping AI data"
+                    Write-Log "    Table contains $existingCount rows (expected $baseRecordCount) - Base data not loaded yet, skipping AI data"
                     $csvLoadSkipped++
                     continue
                 }
             }
             elseif ($existingCount -gt 0) {
                 # For regular CSV files, skip if any data exists
-                Write-Output "    Table already contains $existingCount rows - Skipping"
+                Write-Log "    Table already contains $existingCount rows - Skipping"
                 $csvLoadSkipped++
                 continue
             }
@@ -1164,7 +1130,7 @@ ORDER BY c.ORDINAL_POSITION
                 $rowCount++
                 
                 if ($rowCount % 10000 -eq 0) {
-                    Write-Output "    ...parsed $rowCount rows"
+                    Write-Log "    ...parsed $rowCount rows"
                 }
             }
             
@@ -1178,7 +1144,7 @@ ORDER BY c.ORDINAL_POSITION
             # - AI CSV files (need IF NOT EXISTS checks to avoid duplicate key errors)
             if ($hasSpecialColumns -or $hasIdentityColumn -or $isAiCsv) {
                 # Use batched INSERT statements for special tables (hierarchyid, geography, hex-encoded columns)
-                Write-Output "    Inserting $rowCount rows using batched INSERT (special columns)..."
+                Write-Log "    Inserting $rowCount rows using batched INSERT (special columns)..."
                 
                 $batchSize = 100
                 $insertedRows = 0
@@ -1317,7 +1283,7 @@ END
                                 }
                                 
                                 if (($insertedRows + $skippedRows) % 500 -eq 0) {
-                                    Write-Output "    ...processed $($insertedRows + $skippedRows) rows ($insertedRows inserted, $skippedRows skipped)"
+                                    Write-Log "    ...processed $($insertedRows + $skippedRows) rows ($insertedRows inserted, $skippedRows skipped)"
                                 }
                             }
                         }
@@ -1403,7 +1369,7 @@ END
                         $insertedRows += ($batchEnd - $batchStart)
                         
                         if ($insertedRows % 1000 -eq 0) {
-                            Write-Output "    ...inserted $insertedRows rows"
+                            Write-Log "    ...inserted $insertedRows rows"
                         }
                         }
                     }
@@ -1417,13 +1383,13 @@ END
                     $transaction.Commit()
                     if ($insertedRows -gt 0) {
                         if ($skippedRows -gt 0) {
-                            Write-Output "    Successfully loaded $insertedRows rows ($skippedRows duplicates skipped)"
+                            Write-Log "    Successfully loaded $insertedRows rows ($skippedRows duplicates skipped)"
                         } else {
-                            Write-Output "    Successfully loaded $insertedRows rows"
+                            Write-Log "    Successfully loaded $insertedRows rows"
                         }
                         $csvLoadSuccess++
                     } else {
-                        Write-Output "    All $skippedRows rows already exist - Skipping"
+                        Write-Log "    All $skippedRows rows already exist - Skipping"
                         $csvLoadSkipped++
                     }
                 }
@@ -1437,7 +1403,7 @@ END
             }
             else {
                 # Use SqlBulkCopy for fast insert (tables without special columns or identity columns)
-                Write-Output "    Bulk inserting $rowCount rows..."
+                Write-Log "    Bulk inserting $rowCount rows..."
                 
                 $bulkCopy = New-Object System.Data.SqlClient.SqlBulkCopy($conn)
                 $bulkCopy.DestinationTableName = "[$schemaName].[$tableName]"
@@ -1452,7 +1418,7 @@ END
                 $bulkCopy.WriteToServer($dataTable)
                 $bulkCopy.Close()
                 
-                Write-Output "    Successfully loaded $rowCount rows"
+                Write-Log "    Successfully loaded $rowCount rows"
                 $csvLoadSuccess++
             }
         }
@@ -1463,10 +1429,10 @@ END
     }
     
 $elapsed = (Get-Date) - $scriptStartTime
-Write-Output "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinutes))m]"
-    Write-Output "  - $csvLoadSuccess tables loaded successfully"
-    Write-Output "  - $csvLoadFailed tables failed to load"
-    Write-Output "  - $csvLoadSkipped tables skipped"
+Write-Log "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinutes))m]"
+    Write-Log "  - $csvLoadSuccess tables loaded successfully"
+    Write-Log "  - $csvLoadFailed tables failed to load"
+    Write-Log "  - $csvLoadSkipped tables skipped"
     
     # CSV loading summary
     $elapsed = (Get-Date) - $scriptStartTime
@@ -1488,7 +1454,7 @@ Write-Output "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinute
     $aiPhotoCount = $cmd.ExecuteScalar()
     
     if ($aiPhotoCount -gt 0) {
-        Write-Output "  AI-generated photos already uploaded ($aiPhotoCount AI photos found) - Skipping"
+        Write-Log "  AI-generated photos already uploaded ($aiPhotoCount AI photos found) - Skipping"
     }
     else {
         $imagesDir = Join-Path $PSScriptRoot "images"
@@ -1502,7 +1468,7 @@ Write-Output "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinute
                 $thumbnailCount = ($pngFiles | Where-Object { $_.Name -like "*_thumb.png" -or $_.Name -like "*_small.png" }).Count
                 $largeImageCount = $totalPngFiles - $thumbnailCount
                 
-                Write-Output "  Found $totalPngFiles PNG files to upload ($thumbnailCount thumbnails, $largeImageCount large images)"
+                Write-Log "  Found $totalPngFiles PNG files to upload ($thumbnailCount thumbnails, $largeImageCount large images)"
                 
                 $uploadedCount = 0
                 $skippedCount = 0
@@ -1564,7 +1530,7 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
                             $nextPhotoId++
                             
                             if ($currentFile % 100 -eq 0) {
-                                Write-Output "    ...uploaded $currentFile of $totalPngFiles images"
+                                Write-Log "    ...uploaded $currentFile of $totalPngFiles images"
                             }
                         }
                         else {
@@ -1584,19 +1550,19 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
             }
             
             $elapsed = (Get-Date) - $scriptStartTime
-            Write-Output "`nPNG Upload Summary: [+$([math]::Floor($elapsed.TotalMinutes))m]"
-            Write-Output "  - $uploadedCount image pairs uploaded successfully"
+            Write-Log "`nPNG Upload Summary: [+$([math]::Floor($elapsed.TotalMinutes))m]"
+            Write-Log "  - $uploadedCount image pairs uploaded successfully"
             if ($skippedCount -gt 0) {
-                Write-Output "  - $skippedCount files skipped (non-product images or missing pairs)"
+                Write-Log "  - $skippedCount files skipped (non-product images or missing pairs)"
             }
-            Write-Output "  - $failedCount files failed"
+            Write-Log "  - $failedCount files failed"
         }
         else {
-            Write-Output "  No PNG files found in images directory"
+            Write-Log "  No PNG files found in images directory"
         }
     }
     else {
-        Write-Output "  Images directory not found: $imagesDir"
+        Write-Log "  Images directory not found: $imagesDir"
     }
     }  # End idempotency check for AI photos
     
@@ -1606,13 +1572,13 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
 }
 catch {
     Write-Error "Failed to execute database seeding: $($_.Exception.Message)"
-    exit 1
+} finally {
+    $scriptEndTime = Get-Date
+    $scriptDuration = $scriptEndTime - $scriptStartTime
+    Write-Log "`n=========================================="
+    Write-Log "DATABASE SEEDING SCRIPT COMPLETED SUCCESSFULLY"
+    Write-Log "Finished at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+    Write-Log "Total duration: $([math]::Floor($scriptDuration.TotalMinutes))m $($scriptDuration.Seconds)s"
+    Write-Log "=========================================="
 }
 
-$scriptEndTime = Get-Date
-$scriptDuration = $scriptEndTime - $scriptStartTime
-Write-Log "`n=========================================="
-Write-Log "DATABASE SEEDING SCRIPT COMPLETED SUCCESSFULLY"
-Write-Log "Finished at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-Write-Log "Total duration: $([math]::Floor($scriptDuration.TotalMinutes))m $($scriptDuration.Seconds)s"
-Write-Log "=========================================="

@@ -183,11 +183,13 @@ module containerApp 'modules/aca.bicep' = {
     workspaceName:workspaceName
     containerRegistryName:acrName
     identityName:identityName
+    storageAccountName:storage.outputs.storageAccountName
   }
   dependsOn: [
     appinsights
     identity
     acr
+    storage
   ]
 }
 

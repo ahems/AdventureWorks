@@ -71,6 +71,18 @@ echo "=========================================="
 echo "Assigning database roles to Managed Identity..."
 echo "=========================================="
 
+# Check if user is logged in to Azure CLI
+echo "Verifying Azure CLI login status..."
+if ! az account show &>/dev/null; then
+    echo ""
+    echo "❌ ERROR: Not logged in to Azure CLI"
+    echo ""
+    echo "Please run 'az login' to authenticate with Azure, then try again."
+    echo ""
+    exit 1
+fi
+echo "  ✓ Azure CLI login verified"
+
 # Get required values
 SQL_SERVER_NAME=$(azd env get-value SQL_SERVER_NAME 2>/dev/null | tr -d '\n\r ')
 SQL_DATABASE_NAME=$(azd env get-value SQL_DATABASE_NAME 2>/dev/null | tr -d '\n\r ')
@@ -86,32 +98,61 @@ if [ -n "$SQL_SERVER_NAME" ] && [ -n "$SQL_DATABASE_NAME" ] && [ -n "$USER_MANAG
     
     # Use a minimal PowerShell script that calls az CLI (not Az PowerShell modules)
     # This avoids separate PowerShell login and uses current az CLI context
-    pwsh -NoProfile -NonInteractive -Command "
+    PWSH_OUTPUT=$(pwsh -NoProfile -NonInteractive -Command "
         # Get SQL token using az CLI (same login as bash)
-        \$tokenJson = az account get-access-token --resource https://database.windows.net/ | ConvertFrom-Json
-        \$token = \$tokenJson.accessToken
+        try {
+            \$tokenJson = az account get-access-token --resource https://database.windows.net/ 2>&1 | ConvertFrom-Json
+            if (-not \$tokenJson.accessToken) {
+                Write-Error 'Failed to get access token'
+                exit 1
+            }
+            \$token = \$tokenJson.accessToken
+        } catch {
+            Write-Error \"Failed to get Azure access token: \$_\"
+            exit 1
+        }
         
         # Read and prepare SQL script
-        \$sql = Get-Content 'seed-job/sql/assign-database-roles.sql' -Raw
-        \$sql = \$sql -replace '{{IDENTITY_NAME}}', '$USER_MANAGED_IDENTITY_NAME'
+        try {
+            \$sql = Get-Content 'seed-job/sql/assign-database-roles.sql' -Raw
+            \$sql = \$sql -replace '{{IDENTITY_NAME}}', '$USER_MANAGED_IDENTITY_NAME'
+        } catch {
+            Write-Error \"Failed to read SQL script: \$_\"
+            exit 1
+        }
         
         # Execute SQL with token
-        \$connString = 'Server=tcp:$SQL_SERVER_NAME.database.windows.net,1433;Initial Catalog=$SQL_DATABASE_NAME;Encrypt=True;TrustServerCertificate=False;'
-        \$conn = New-Object System.Data.SqlClient.SqlConnection(\$connString)
-        \$conn.AccessToken = \$token
-        \$conn.Open()
-        \$cmd = \$conn.CreateCommand()
-        \$cmd.CommandText = \$sql
-        \$null = \$cmd.ExecuteNonQuery()
-        \$conn.Close()
-        Write-Host '  ✓ Database roles assigned successfully'
-    " 2>&1
+        try {
+            \$connString = 'Server=tcp:$SQL_SERVER_NAME.database.windows.net,1433;Initial Catalog=$SQL_DATABASE_NAME;Encrypt=True;TrustServerCertificate=False;'
+            \$conn = New-Object System.Data.SqlClient.SqlConnection(\$connString)
+            \$conn.AccessToken = \$token
+            \$conn.Open()
+            \$cmd = \$conn.CreateCommand()
+            \$cmd.CommandText = \$sql
+            \$null = \$cmd.ExecuteNonQuery()
+            \$conn.Close()
+            Write-Host '  ✓ Database roles assigned successfully'
+        } catch {
+            Write-Error \"Failed to execute SQL: \$_\"
+            exit 1
+        }
+    " 2>&1)
+    PWSH_EXIT_CODE=$?
     
-    if [ $? -eq 0 ]; then
+    echo "$PWSH_OUTPUT"
+    
+    if [ $PWSH_EXIT_CODE -ne 0 ]; then
         echo ""
-    else
-        echo "  ⚠ Database role assignment may have failed (might be OK if already assigned)"
+        echo "❌ ERROR: Database role assignment failed"
+        echo ""
+        echo "This may be caused by:"
+        echo "  - Azure CLI token expired (try running 'az login' again)"
+        echo "  - Insufficient permissions on the SQL database"
+        echo "  - Network connectivity issues"
+        echo ""
+        exit 1
     fi
+    echo ""
 else
     echo "WARNING: Missing required environment variables for database role assignment"
     echo "  SQL_SERVER_NAME: ${SQL_SERVER_NAME:-[NOT SET]}"
