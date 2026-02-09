@@ -1,4 +1,9 @@
-# AdventureWorks E-Commerce - AI Agent Instructions
+---
+description: AdventureWorks E-Commerce project rules and architecture guidance for Cursor AI agents
+alwaysApply: true
+---
+
+# AdventureWorks E-Commerce - Cursor Agent Instructions
 
 ## Architecture Overview
 
@@ -27,68 +32,37 @@ All services authenticate via **Managed Identity** (passwordless). No connection
 
 **Environment variables required:**
 
-Testin is done against the Azure-hosted services, so the following environment variables should have been set automatically once the azd up has been run be set and available in your local environment:
+Testing is done against the Azure-hosted services. The following environment variables should have been set automatically once `azd up` has been run:
 
-- AI_AGENT_MCP_ENDPOINT - the MCP service URL
-- AI_AGENT_MODEL - the ChatGPT model deployment name
-- AI_AGENT_OPENAI_ENDPOINT - the Azure OpenAI endpoint
-- API_FUNCTIONS_URL - the Azure Functions URL
-- API_MCP_URL - the MCP service URL
-- API_URL - the GraphQL API URL
-- APPINSIGHTS_CONNECTIONSTRING - the App Insights connection string
-- APPINSIGHTS_INSTRUMENTATIONKEY - the App Insights instrumentation key
-- APPLICATIONINSIGHTS_CONNECTION_STRING - the App Insights connection string
-- APP_REDIRECT_URI - the app redirect URI
-- AZURE_CLIENT_ID - the Azure client ID
-- AZURE_CONTAINER_REGISTRY_ENDPOINT - the Azure Container Registry endpoint
-- AZURE_LOCATION - the Azure location
-- AZURE_OPENAI_ACCOUNT_NAME - the Azure OpenAI account name
-- AZURE_OPENAI_ENDPOINT - the Azure OpenAI endpoint
-- AZURE_RESOURCE_GROUP - the Azure resource group
-- AZURE_STATIC_WEB_APP_DEPLOYMENT_TOKEN - the Azure Static Web App deployment token
-- AZURE_SUBSCRIPTION_ID - the Azure subscription ID
-- COMMUNICATION_SERVICE_ENDPOINT - the Communication Service endpoint
-- COMMUNICATION_SERVICE_NAME - the Communication Service name
-- EMAIL_SENDER_DOMAIN - the email sender domain
-- MCP_SERVICE_URL - the MCP service URL
-- SERVICE_API_FUNCTIONS_IMAGE_NAME - the API Functions image name
-- SERVICE_API_FUNCTIONS_NAME - the API Functions service name
-- SERVICE_API_IMAGE_NAME - the API image name
-- SERVICE_API_MCP_IMAGE_NAME - the API MCP image name
-- SERVICE_API_MCP_NAME - the API MCP service name
-- SERVICE_API_NAME - the API service name
-- SERVICE_API_RESOURCE_EXISTS - indicates if the API resource exists
-- SERVICE_APP_NAME - the Static Web App service name
-- SQL_ADMIN_PASSWORD - the SQL admin password
-- SQL_ADMIN_USER - the SQL admin user
-- SQL_DATABASE_NAME - the SQL database name
-- SQL_SERVER_NAME - the SQL server name
-- STORAGE_ACCOUNT_NAME - the Storage Account name
-- TENANT_ID - the Azure tenant ID
-- USER_MANAGED_IDENTITY_NAME - the User Managed Identity name
-- VITE_API_FUNCTIONS_URL - the Azure Functions URL
-- VITE_API_URL - the GraphQL API URL
-- chatGptDeploymentVersion - the ChatGPT deployment version
-- chatGptModelName - the ChatGPT model name
-- chatGptSkuName - the ChatGPT SKU name
-- cognitiveservicesLocation - the Cognitive Services location
-- embeddingDeploymentModelName - the embedding deployment model name
-- embeddingDeploymentSkuName - the embedding deployment SKU name
-- embeddingDeploymentVersion - the embedding deployment version
-- imageDeploymentModelName - the image deployment model name
-- imageDeploymentSkuName - the image deployment SKU name
-- imageDeploymentVersion - the image deployment version
-- imageModelFormat - the image model format
+- `AI_AGENT_MCP_ENDPOINT` - the MCP service URL
+- `AI_AGENT_MODEL` - the ChatGPT model deployment name
+- `AI_AGENT_OPENAI_ENDPOINT` - the Azure OpenAI endpoint
+- `API_FUNCTIONS_URL` - the Azure Functions URL
+- `API_MCP_URL` - the MCP service URL
+- `API_URL` - the GraphQL API URL
+- `APPINSIGHTS_CONNECTIONSTRING` - the App Insights connection string
+- `APP_REDIRECT_URI` - the app redirect URI
+- `AZURE_CLIENT_ID` - the Azure client ID
+- `AZURE_CONTAINER_REGISTRY_ENDPOINT` - the Azure Container Registry endpoint
+- `AZURE_LOCATION` - the Azure location
+- `AZURE_RESOURCE_GROUP` - the Azure resource group
+- `AZURE_SUBSCRIPTION_ID` - the Azure subscription ID
+- `MCP_SERVICE_URL` - the MCP service URL
+- `SQL_DATABASE_NAME` - the SQL database name
+- `SQL_SERVER_NAME` - the SQL server name
+- `STORAGE_ACCOUNT_NAME` - the Storage Account name
+- `TENANT_ID` - the Azure tenant ID
+- `VITE_API_FUNCTIONS_URL` - the Azure Functions URL (frontend)
+- `VITE_API_URL` - the GraphQL API URL (frontend)
 
-**For Azure Functions (api-functions) local development:**
+**For Azure Functions (`api-functions/`) local development:**
 
 The Functions project requires `MCP_SERVICE_URL` to connect to the Model Context Protocol server for AI agent capabilities. **Use the Azure-hosted MCP service** rather than running it locally:
 
-````bash
+```bash
 # Get the MCP service URL from Azure
 azd env get-values | grep MCP_SERVICE_URL
-
-
+```
 
 ### Azure Deployment (azd)
 
@@ -96,25 +70,17 @@ The app uses **azd lifecycle hooks** for automated deployment orchestration:
 
 ```bash
 azd up  # Full deploy: preup → provision → deploy → postdeploy
-        # Total time: ~29 minutes (21 min infrastructure + 8 min seed-job)
-````
+```
 
 **Hook execution order:**
 
 1. `preup.ps1` - Creates Entra ID app registrations, discovers OpenAI models
-2. `azd provision` - Deploys Bicep infrastructure (~21 minutes)
-3. `postprovision.sh` - Configures SQL database roles, deploys seed-job for data import (~2-3 min + seed-job runs ~8 min asynchronously)
+2. `azd provision` - Deploys Bicep infrastructure
+3. `postprovision.ps1` - Configures SQL database roles, imports sample data
 4. `azd deploy` - Builds containers via ACR remote build, deploys to Container Apps
 5. `postdeploy.ps1` - Updates redirect URIs, sets runtime CORS config
 
 **Key distinction**: `api/` and `api-functions/` build with **remote build** in ACR (see `azure.yaml`). The `app/` builds locally then deploys to Static Web Apps.
-
-**Note:** The seed-job runs asynchronously in the background. Monitor its progress with:
-```bash
-az containerapp job execution list --name <seed-job-name> --resource-group <resource-group>
-```
-
-For complete details on the seed-job architecture and data loading process, see [seed-job/README.md](../seed-job/README.md).
 
 ### Getting Azure Resource Information
 
@@ -154,15 +120,6 @@ query {
 }
 ```
 
-### VS Code Tasks
-
-Use built-in tasks for development (accessible via `Cmd/Ctrl+Shift+B`):
-
-- `func: host start` - Run Azure Functions locally (depends on build task)
-- `start frontend` - Run React dev server
-- `start api (DAB)` - Run local DAB server
-- `build all` - Compile .NET projects
-
 ## Project-Specific Conventions
 
 ### GraphQL API (DAB Naming)
@@ -185,7 +142,7 @@ const { productCategories } = await client.request(gql`
 `);
 ```
 
-See [docs/DAB_NAMING_CONVENTIONS.md](docs/DAB_NAMING_CONVENTIONS.md) for complete rules.
+See `docs/DAB_NAMING_CONVENTIONS.md` for complete rules.
 
 ### Configuration Files Pattern
 
@@ -270,7 +227,7 @@ DAB entities map to these via `dab-config.json` source definitions:
 All Azure resources use passwordless auth:
 
 1. **Container Apps** get system-assigned MI at deployment
-2. **SQL Database** grants roles in `postprovision.sh`:
+2. **SQL Database** grants roles in `postprovision.ps1`:
    ```sql
    CREATE USER [mi-name] FROM EXTERNAL PROVIDER;
    ALTER ROLE db_datareader ADD MEMBER [mi-name];
@@ -336,8 +293,8 @@ az monitor app-insights query --app <app-name> --analytics-query "requests | top
 
 ## Documentation Map
 
-- [QUICKSTART.md](QUICKSTART.md) - Local development walkthrough
-- [app/LOCAL_DEVELOPMENT.md](app/LOCAL_DEVELOPMENT.md) - Frontend-specific setup
-- [api/README.md](api/README.md) - DAB deployment details
-- [MIGRATION_SUMMARY.md](MIGRATION_SUMMARY.md) - GraphQL integration history
-- [docs/DAB_NAMING_CONVENTIONS.md](docs/DAB_NAMING_CONVENTIONS.md) - GraphQL schema rules
+- `QUICKSTART.md` - Local development walkthrough
+- `app/LOCAL_DEVELOPMENT.md` - Frontend-specific setup
+- `api/README.md` - DAB deployment details
+- `MIGRATION_SUMMARY.md` - GraphQL integration history
+- `docs/DAB_NAMING_CONVENTIONS.md` - GraphQL schema rules

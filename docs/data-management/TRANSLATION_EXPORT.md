@@ -52,7 +52,7 @@ Translations are generated using Azure Functions with Azure OpenAI:
 
 **Location**: `scripts/export-ai-translations.sh`
 
-**Purpose**: Exports culture mappings to `scripts/sql/ProductModelProductDescriptionCulture-ai.csv`
+**Purpose**: Exports culture mappings to `seed-job/sql/ProductModelProductDescriptionCulture-ai.csv`
 
 **Usage**:
 
@@ -71,7 +71,7 @@ cd scripts
 
 **Location**: `scripts/export-ai-product-descriptions.sh`
 
-**Purpose**: Exports actual translated descriptions to `scripts/sql/ProductDescription-ai-translations.csv`
+**Purpose**: Exports actual translated descriptions to `seed-job/sql/ProductDescription-ai-translations.csv`
 
 **Usage**:
 
@@ -105,7 +105,7 @@ Both scripts overwrite their CSV files each time, so run them multiple times saf
 
 ## Deployment Integration
 
-The exported CSVs are automatically loaded by `scripts/postprovision.ps1` during `azd provision`:
+The exported CSVs in `seed-job/sql/` are containerized and automatically loaded during `azd up`:
 
 **Usage**:
 
@@ -121,11 +121,7 @@ cd scripts
 - Exports to CSV with pipe delimiter (`|`)
 - Shows progress: `X / 2,048 records`
 
-**Run this script**:
-
-## Deployment Integration
-
-Both exported CSVs are automatically loaded by `scripts/postprovision.ps1` during `azd provision`:
+Both exported CSVs are loaded by the **seed-job** Container App Job during deployment:
 
 **Configuration** (lines 667-678):
 
@@ -244,10 +240,10 @@ azd provision
 ## Files Modified
 
 1. **`scripts/export-ai-translations.sh`** - Export script (NEW)
-2. **`scripts/sql/ProductModelProductDescriptionCulture-ai.csv`** - Exported data (GENERATED)
-3. **`scripts/postprovision.ps1`** - Added configuration for -ai.csv loading:
-   - Line 676: Base record count (874)
-   - Line 593-595: CSV load configuration
+2. **`seed-job/sql/ProductModelProductDescriptionCulture-ai.csv`** - Exported data (GENERATED)
+3. **`seed-job/seed-database.ps1`** - Database seeding script that loads these CSV files in the container
+
+For complete details on how the seed-job processes these files, see [seed-job/README.md](../../seed-job/README.md).
 
 ## Notes
 

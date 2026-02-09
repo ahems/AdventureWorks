@@ -8,8 +8,8 @@ hooks:
     cwd: .
     interactive: true
   postprovision:
-    shell: pwsh
-    run: pwsh scripts/hooks/postprovision.ps1
+    shell: sh
+    run: bash scripts/hooks/postprovision.sh
     cwd: .
     interactive: true
   predeploy:

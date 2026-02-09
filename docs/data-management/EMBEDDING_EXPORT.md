@@ -65,10 +65,14 @@ node export-product-review-embeddings.js
 
 ## Integration with Deployment
 
-The exported CSV files are used by `postprovision.ps1` during Azure deployment:
+The exported CSV files in `seed-job/sql/` are containerized and loaded during Azure deployment:
 
 1. **AdventureWorks-AI.sql** creates tables with VECTOR(1536) columns
-2. **postprovision.ps1** imports CSV files with these configurations:
+2. The **seed-job** Container App Job imports CSV files during `azd up`:
+   - `ProductDescription-ai.csv` with DescriptionEmbedding vectors
+   - `ProductReview-ai.csv` with CommentsEmbedding vectors
+
+3. The seed-job's `seed-database.ps1` script imports these files with vector column handling:
 
    ```powershell
    @{ Table='Production.ProductDescription'; File='ProductDescription-ai.csv';
@@ -78,7 +82,7 @@ The exported CSV files are used by `postprovision.ps1` during Azure deployment:
       VectorColumns=@('CommentsEmbedding') }
    ```
 
-3. VECTOR columns are imported using:
+4. VECTOR columns are imported using:
    ```sql
    CAST('[0.1,0.2,...]' AS VECTOR(1536))
    ```
@@ -124,7 +128,9 @@ Re-run these scripts whenever:
 
 ## Related Files
 
-- `../scripts/sql/AdventureWorks-AI.sql` - Schema with VECTOR columns
-- `../scripts/postprovision.ps1` - Deployment script
+- `../seed-job/sql/AdventureWorks-AI.sql` - Schema with VECTOR columns
+- `../seed-job/seed-database.ps1` - Database seeding script in container
+- `../seed-job/README.md` - Complete seed-job documentation
+- `../scripts/hooks/postprovision.sh` - Deploys seed-job Container App Job
 - `../api-functions/Services/ProductService.cs` - Embedding generation
 - `../api-functions/Services/ReviewService.cs` - Embedding generation

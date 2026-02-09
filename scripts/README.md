@@ -19,18 +19,22 @@ scripts/
 
 These scripts are automatically executed during `azd` operations:
 
-| Script                | Runs During        | Purpose                                        |
-| --------------------- | ------------------ | ---------------------------------------------- |
-| **preup.ps1**         | Before `azd up`    | Creates Entra ID apps, discovers OpenAI models |
-| **postprovision.ps1** | After provisioning | Database setup, role assignments               |
-| **postup.ps1**        | After `azd up`     | Final configuration                            |
-| **predeploy.sh**      | Before deployment  | Build preparation                              |
-| **postdeploy.ps1**    | After deployment   | CORS config, redirect URIs                     |
-| **postdown.ps1**      | After `azd down`   | Cleanup operations                             |
+| Script                | Runs During        | Purpose                                        | Duration          |
+| --------------------- | ------------------ | ---------------------------------------------- | ----------------- |
+| **preup.ps1**         | Before `azd up`    | Creates Entra ID apps, discovers OpenAI models | ~2-3 min          |
+| **postprovision.sh**  | After provisioning | Database role assignments, seed-job deployment | ~2-3 min (hook) + ~8 min (seed-job async) |
+| **postup.ps1**        | After `azd up`     | Final configuration                            | < 1 min           |
+| **predeploy.sh**      | Before deployment  | Build preparation                              | ~1-2 min          |
+| **postdeploy.ps1**    | After deployment   | CORS config, redirect URIs                     | < 1 min           |
+| **postdown.ps1**      | After `azd down`   | Cleanup operations                             | < 1 min           |
+
+**Total `azd up` time:** ~29 minutes (includes ~21 minutes for infrastructure provisioning + ~8 minutes for seed-job data loading)
 
 **⚠️ Important:** These scripts are referenced in `azure.yaml`. Do not move or rename without updating the configuration.
 
-For detailed information on what each hook does, see the comments in the hook files themselves or refer to the [AdventureWorks instructions](.github/copilot-instructions.md) for the complete deployment workflow.
+For detailed information on what each hook does, see the comments in the hook files themselves or refer to the [AdventureWorks instructions](../.github/copilot-instructions.md) for the complete deployment workflow.
+
+For details on the database seeding process, see [seed-job/README.md](../seed-job/README.md).
 
 ## 📊 Data Management
 
