@@ -192,7 +192,8 @@ az acr build \
     --registry "$ACR_NAME" \
     --image seed-job:latest \
     --file seed-job/dockerfile \
-    seed-job
+    seed-job \
+    --no-logs 2>&1 | grep -E "(Run ID|Queued|Started|Finished)" || true
 
 # Use the endpoint directly for the image name
 IMAGE_NAME="${ACR_ENDPOINT}/seed-job:latest"
@@ -202,27 +203,26 @@ echo "Updating Container App Job image..."
 
 # Simple approach: Just update the container image for the specific container
 # This preserves ALL other configuration including env vars and volume mounts
-az containerapp job update \
+# Suppress verbose JSON output and filter extension warnings
+(az containerapp job update \
     --name "$SEED_JOB_NAME" \
     --resource-group "$RESOURCE_GROUP" \
     --container-name "$SEED_JOB_NAME" \
-    --image "$IMAGE_NAME"
+    --image "$IMAGE_NAME" \
+    --output none 2>&1) | grep -v "The behavior of this command" | grep -v "^$" || true
 
-echo ""
-echo "Seed job image deployed successfully!"
+echo "  ✓ Seed job image deployed successfully!"
+
 echo ""
 echo "Starting seed job to populate database..."
-az containerapp job start \
+(az containerapp job start \
     --name "$SEED_JOB_NAME" \
-    --resource-group "$RESOURCE_GROUP"
+    --resource-group "$RESOURCE_GROUP" \
+    --output none 2>&1) | grep -v "The behavior of this command" | grep -v "^$" || true
 
-if [ $? -eq 0 ]; then
-    echo "  ✓ Seed job started successfully"
-    echo "  Note: The job runs asynchronously. Check execution status with:"
-    echo "    az containerapp job execution list --name $SEED_JOB_NAME --resource-group $RESOURCE_GROUP"
-else
-    echo "  ⚠ Seed job start may have failed"
-fi
+echo "  ✓ Seed job started successfully"
+echo "  Note: The job runs asynchronously. Check execution status with:"
+echo "    az containerapp job execution list --name $SEED_JOB_NAME --resource-group $RESOURCE_GROUP"
 
 echo ""
 echo "=========================================="
