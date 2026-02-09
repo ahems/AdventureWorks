@@ -53,7 +53,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       ]
       ingress: {
         external: true
-        targetPort: 5000
+        targetPort: 80
         allowInsecure: false
         transport: 'http'
         clientCertificateMode: 'ignore'

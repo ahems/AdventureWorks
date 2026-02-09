@@ -19,10 +19,16 @@ RUN chmod +x /entrypoint.sh
 
 # Optional tuning via env vars
 # MI_RESOURCE: resource URL for token acquisition (default: https://database.windows.net)
-# MI_INITIAL_DELAY_SECONDS, MI_PERIOD_SECONDS, MI_FAILURE_THRESHOLD to control wait behavior
+# MI_INITIAL_DELAY_SECONDS, MI_PERIOD_SECONDS, MI_FAILURE_THRESHOLD to control MI wait behavior
+# DB_INITIAL_DELAY_SECONDS: Initial delay before first DAB start
+# DB_PERIOD_SECONDS: Delay before each DAB start attempt (used on Container Apps restarts)
+# DB_FAILURE_THRESHOLD: Max retries (used for reference, actual retries handled by Container Apps restart policy)
 ENV MI_RESOURCE="https://database.windows.net" \
 	MI_INITIAL_DELAY_SECONDS="0" \
 	MI_PERIOD_SECONDS="1" \
-	MI_FAILURE_THRESHOLD="60"
+	MI_FAILURE_THRESHOLD="60" \
+	DB_INITIAL_DELAY_SECONDS="0" \
+	DB_PERIOD_SECONDS="30" \
+	DB_FAILURE_THRESHOLD="50"
 
 ENTRYPOINT ["/entrypoint.sh"]
