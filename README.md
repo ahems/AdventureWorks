@@ -90,6 +90,7 @@ All services authenticate using **Managed Identity** and the `Authentication=Act
 - `api/` – Data API Builder (DAB) configuration, Dockerfile, and local start scripts.
 - `api-functions/` – .NET 8 isolated Azure Functions with AI, email, receipts, passwords, SEO, and translation workflows.
 - `api-mcp/` – Model Context Protocol server providing AI agent tool capabilities.
+- `seed-job/` – Containerized database seeding job (Azure Container App Job) that loads SQL scripts, CSV data, and product images (~8 minute execution time). See [seed-job/README.md](seed-job/README.md).
 - `infra/` – Bicep infrastructure as code for Azure resource provisioning.
 - `scripts/` – Automation and utility scripts organized by category:
   - `scripts/hooks/` – Azure Developer CLI (azd) lifecycle hooks (preup, postprovision, postdeploy, etc.)
@@ -106,6 +107,10 @@ For function‑level details (routes, triggers, and responsibilities), see:
 If you want to understand the AI agent's tool surface area, see:
 
 - [api-mcp/README.md](api-mcp/README.md)
+
+For database seeding, SQL scripts, and data loading details, see:
+
+- [seed-job/README.md](seed-job/README.md)
 
 For all automation scripts and their usage, see:
 
@@ -127,12 +132,14 @@ azd up
 
 This command will:
 
-- Provision all Azure infrastructure (Container Apps, Static Web App, SQL Database, Storage, etc.)
+- Provision all Azure infrastructure (Container Apps, Static Web App, SQL Database, Storage, etc.) — **~21 minutes**
 - Run lifecycle hooks (`preup`, `postprovision`, `postdeploy`)
 - Discover Azure OpenAI models and configure environment values
 - Build and deploy containers via Azure Container Registry
-- Configure database schema and load sample data
+- Configure database schema and load sample data via seed-job Container App Job — **~8 minutes**
 - Set up managed identity authentication across all services
+
+**Total deployment time: ~29 minutes** (infrastructure provisioning + seed-job execution)
 
 Once deployed, you can access the application via the Static Web App URL shown in the deployment output.
 

@@ -222,7 +222,7 @@ The API service requires the following environment variables to be set by `azd` 
 
 ## Database Permissions
 
-The API service connects to Azure SQL Database using the user-assigned managed identity. The required permissions are configured by the [`postprovision.ps1`](../scripts/README.md#2-postprovisionps1) script:
+The API service connects to Azure SQL Database using the user-assigned managed identity. The required permissions are configured by the [`postprovision.sh`](../scripts/README.md) script:
 
 - **db_datareader**: Read access to all tables
 - **db_datawriter**: Write access to all tables
@@ -320,7 +320,7 @@ Verify Azure AD app registration and environment variables
 
 **Solution**:
 
-- Run [`postprovision.ps1`](../scripts/README.md#2-postprovisionps1) to ensure permissions are set
+- Run [`postprovision.sh`](../scripts/README.md) to ensure permissions are set
 - Verify SQL firewall allows Azure services (configured in [infrastructure](../infra/README.md))
 - Check `DATABASE_CONNECTION_STRING` format
 
@@ -348,7 +348,7 @@ Access metrics in Azure Portal → Application Insights → Application Map/Perf
 
 - [Root Project README](../README.md) - overall architecture and components
 - [Quickstart Guide](../QUICKSTART.md) - azd workflow and lifecycle hooks
-- [Scripts Documentation](../scripts/README.md) - azd lifecycle scripts including `preup.ps1` and `postprovision.ps1`
+- [Scripts Documentation](../scripts/README.md) - azd lifecycle scripts including `preup.ps1` and `postprovision.sh`
 - [Infrastructure Documentation](../infra/README.md) - Bicep modules and Azure resource configuration
 - [Azure Functions & AI features](../api-functions/README.md) - serverless endpoints that complement DAB
 - [DAB naming and GraphQL schema rules](../docs/DAB_NAMING_CONVENTIONS.md) - how AdventureWorks tables map to GraphQL entities

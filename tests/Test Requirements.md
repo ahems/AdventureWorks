@@ -18,7 +18,7 @@ This app (./app) needs a full suite of Playwright tests under ./tests to validat
 
 - AI chat features - Not yet implemented
 - AI product descriptions test - Skipped due to home page cold start (products don't load immediately)
-- Various non-critical CSV import validations (Culture, Currency, ProductPhoto, StateProvince)
+- Various non-critical CSV import validations (Culture, Currency, ProductPhoto, StateProvince from seed-job/sql/)
 - Checkout currency test - Blocked by out-of-stock products
 
 **Recent Fixes (January 24, 2026):**
@@ -75,8 +75,8 @@ This app (./app) needs a full suite of Playwright tests under ./tests to validat
 
 ### ✅ Data Validation - AI-Enhanced CSV Imports (4/7 passing, 3 skipped)
 
-- [x] ProductReview-ai.csv data is imported correctly
-- [x] ProductDescription-ai.csv data is imported correctly
+- [x] ProductReview-ai.csv data is imported correctly (from seed-job/sql/)
+- [x] ProductDescription-ai.csv data is imported correctly (from seed-job/sql/)
 - [~] Culture-ai.csv data is imported correctly (skipped - not critical)
 - [~] Currency-ai.csv data is imported (skipped - not critical)
 - [~] ProductProductPhoto-ai.csv data links products to images (skipped - not critical)
@@ -84,7 +84,7 @@ This app (./app) needs a full suite of Playwright tests under ./tests to validat
 - [x] Database has products available for display ✅ **FIXED Jan 24, 2026** - now filters for ListPrice > 0
 - [x] Product categories are available
 
-**Status:** All critical validations passing. Products with prices successfully validated by filtering for ListPrice > 0.
+**Status:** All critical validations passing. Products with prices successfully validated by filtering for ListPrice > 0. CSV files loaded by seed-job Container App Job during deployment.
 
 ### ✅ Password Security (1/1 passing)
 
@@ -124,8 +124,8 @@ This app (./app) needs a full suite of Playwright tests under ./tests to validat
 
 ### Data Sources
 
-- Original AdventureWorks database CSV files in `./scripts/sql/*.csv`
-- AI-enhanced CSV files (`*-ai.csv`) should be imported by azd scripts
+- Original AdventureWorks database CSV files in `./seed-job/sql/*.csv`
+- AI-enhanced CSV files (`*-ai.csv`) are imported by the seed-job Container App Job during `azd up`
 - Tests validate AI data is present and matches expected format
 
 ### Environment Configuration

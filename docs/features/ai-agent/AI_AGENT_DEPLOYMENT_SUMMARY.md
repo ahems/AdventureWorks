@@ -25,27 +25,24 @@ Automated AI Agent creation has been fully integrated into the Azure deployment 
    - Contains agent configuration (name, model, endpoint, tools)
    - Used by `test_agent.py` and custom integrations
 
-### Modified Files
+### Infrastructure Files
 
-1. **`scripts/postprovision.ps1`**
-   - Added AI Agent creation logic (150+ lines)
-   - Installs `agent-framework-azure-ai` Python package
-   - Creates agent with MCP tools
-   - Tests agent functionality
-   - Saves configuration to JSON and azd environment
+1. **Bicep templates** (in `infra/`)
+   - Deploy Azure AI Foundry (Cognitive Services)
+   - Deploy Azure Functions Container App with MCP Server
+   - Configure supporting Azure resources
 
 2. **`api-functions/MCP_SERVER.md`**
-   - Updated deployment section with automation details
-   - Added testing instructions
-   - Documented the automated process
+   - Documents MCP Server deployment
+   - Provides testing instructions
+   - Describes available MCP tools
 
 3. **`README.md`**
-   - Added AI Agent feature to key features list
-   - Added agent testing instructions after deployment
-   - Added links to new documentation
+   - Lists AI Agent feature in key capabilities
+   - References MCP integration documentation
 
 4. **`.gitignore`**
-   - Added `AI_AGENT_CONFIG.json` (generated file)
+   - Includes `AI_AGENT_CONFIG.json` (if manually generated)
 
 ## How It Works
 
@@ -56,17 +53,14 @@ azd up
   ↓
 azd provision (Bicep templates)
   ↓
-postprovision.ps1 hook
+postprovision.sh hook
   ↓
 ┌─────────────────────────────────────────┐
-│ 1. Check Python & install packages      │
-│ 2. Get Azure OpenAI endpoint            │
-│ 3. Get deployed model name               │
-│ 4. Get MCP Server URL                    │
-│ 5. Generate Python script                │
-│ 6. Create AI Agent with MCP tools        │
-│ 7. Test agent with sample query          │
-│ 8. Save config to JSON                   │
+│ 1. Configure database roles              │
+│ 2. Deploy seed-job for data import       │
+│ 3. Set environment variables             │
+│                                          │
+│ Note: AI Agent configuration is manual   │
 │ 9. Store in azd environment              │
 └─────────────────────────────────────────┘
   ↓

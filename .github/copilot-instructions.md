@@ -96,17 +96,25 @@ The app uses **azd lifecycle hooks** for automated deployment orchestration:
 
 ```bash
 azd up  # Full deploy: preup → provision → deploy → postdeploy
+        # Total time: ~29 minutes (21 min infrastructure + 8 min seed-job)
 ````
 
 **Hook execution order:**
 
 1. `preup.ps1` - Creates Entra ID app registrations, discovers OpenAI models
-2. `azd provision` - Deploys Bicep infrastructure
-3. `postprovision.ps1` - Configures SQL database roles, imports sample data
+2. `azd provision` - Deploys Bicep infrastructure (~21 minutes)
+3. `postprovision.sh` - Configures SQL database roles, deploys seed-job for data import (~2-3 min + seed-job runs ~8 min asynchronously)
 4. `azd deploy` - Builds containers via ACR remote build, deploys to Container Apps
 5. `postdeploy.ps1` - Updates redirect URIs, sets runtime CORS config
 
 **Key distinction**: `api/` and `api-functions/` build with **remote build** in ACR (see `azure.yaml`). The `app/` builds locally then deploys to Static Web Apps.
+
+**Note:** The seed-job runs asynchronously in the background. Monitor its progress with:
+```bash
+az containerapp job execution list --name <seed-job-name> --resource-group <resource-group>
+```
+
+For complete details on the seed-job architecture and data loading process, see [seed-job/README.md](../seed-job/README.md).
 
 ### Getting Azure Resource Information
 
@@ -262,7 +270,7 @@ DAB entities map to these via `dab-config.json` source definitions:
 All Azure resources use passwordless auth:
 
 1. **Container Apps** get system-assigned MI at deployment
-2. **SQL Database** grants roles in `postprovision.ps1`:
+2. **SQL Database** grants roles in `postprovision.sh`:
    ```sql
    CREATE USER [mi-name] FROM EXTERNAL PROVIDER;
    ALTER ROLE db_datareader ADD MEMBER [mi-name];

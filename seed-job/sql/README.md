@@ -2,6 +2,10 @@
 
 This folder contains the SQL scripts and CSV data used to provision the AdventureWorks database for this sample. It combines the **original AdventureWorks data exports** with **AI-augmented datasets** used to showcase the AI features in this project.
 
+These files are containerized and deployed as part of the **seed-job** Azure Container App Job, which runs during `azd up` and takes approximately **8 minutes** to populate the database with schema, data, and product images.
+
+**For complete seed-job documentation (architecture, deployment, monitoring), see [../README.md](../README.md).**
+
 ## Conventions
 
 - `*.csv` files without an `-ai` suffix are **original AdventureWorks seed data**, exported from the sample database.
@@ -118,3 +122,16 @@ In summary:
   - Enriched reference data for more realistic demos.
 
 These files are consumed by the SQL scripts and deployment automation to populate the Azure SQL database used by the application.
+
+## Deployment Process
+
+During `azd up`, the `postprovision.sh` hook:
+1. Builds the seed-job container image with these files using Azure Container Registry
+2. Deploys and starts the seed-job as an Azure Container App Job
+3. The job executes `seed-database.ps1` which loads all SQL scripts and CSV files
+4. **Total seed-job execution time: ~8 minutes**
+
+You can monitor the seed-job progress with:
+```bash
+az containerapp job execution list --name <seed-job-name> --resource-group <resource-group>
+```
