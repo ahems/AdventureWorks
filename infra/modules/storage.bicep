@@ -12,7 +12,7 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
     kind: 'StorageV2'
     skuName: 'Standard_LRS'
     allowBlobPublicAccess: false
-    allowSharedKeyAccess: false // RBAC only
+    allowSharedKeyAccess: true // Required for Container Apps file share mounts
     minimumTlsVersion: 'TLS1_2'
     publicNetworkAccess: 'Enabled'
     requireInfrastructureEncryption: true
@@ -94,6 +94,17 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
       tables: []
     }
     
+    fileServices: {
+      shares: [
+        {
+          name: 'seed-job-logs'
+          accessTier: 'TransactionOptimized'
+          enabledProtocols: 'SMB'
+          shareQuota: 5
+        }
+      ]
+    }
+    
     // Grant managed identity required permissions for Durable Functions
     roleAssignments: [
       {
@@ -125,6 +136,11 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
       {
         principalId: aadAdminObjectId
         roleDefinitionIdOrName: 'Storage Table Data Contributor'
+        principalType: 'User'
+      }
+      {
+        principalId: aadAdminObjectId
+        roleDefinitionIdOrName: 'Storage File Data SMB Share Contributor'
         principalType: 'User'
       }
     ]

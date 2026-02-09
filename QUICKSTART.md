@@ -109,12 +109,14 @@ azd up
 
 `azd up` will:
 
-1. Execute the **preup** hook to create an AI Foundry and discover available model quotas for chat, embeddings, and image generation in your subscription.
-2. Run `azd provision` to deploy Bicep infrastructure templates under `infra/` (Container Apps, Azure SQL, Storage, OpenAI, etc.).
-3. Execute **postprovision** scripts to configure Azure SQL managed identity permissions, create database schema, and import AdventureWorks seed data. **This step takes approximately 24 minutes** due to comprehensive data loading. This is also done using PowerShell not bash which is why you need to sign in to Powershell (Connect-AzAccount) as well as bash (azd auth login).
+1. Execute the **preup** hook to create an AI Foundry and discover available model quotas for chat, embeddings, and image generation in your subscription (~2-3 minutes).
+2. Run `azd provision` to deploy Bicep infrastructure templates under `infra/` (Container Apps, Azure SQL, Storage, OpenAI, etc.) — **~21 minutes**.
+3. Execute **postprovision.sh** to configure Azure SQL managed identity permissions and deploy the seed-job Container App Job (~2-3 minutes). The seed-job runs asynchronously in the background to create database schema and import AdventureWorks seed data (**~8 minutes**).
 4. Run `azd deploy` to build container images via ACR remote build and deploy services to Container Apps and Static Web Apps.
 5. Execute the **postdeploy** hook to configure runtime CORS settings and environment variables on the API Container App.
 6. Execute the **postup** hook to generate a local `.env` file in the repo root for easier debugging.
+
+**Total deployment time: ~29 minutes** (infrastructure provisioning + seed-job execution)
 
 At the end, `azd` will print out key endpoints such as the Static Web App URL, API URLs, and Function endpoints.
 
@@ -158,12 +160,12 @@ The hooks configured in `azure.yaml` live under `scripts/` and are invoked autom
 
 Defined hooks:
 
-- `preup` → `scripts/preup.ps1`
-- `postup` → `scripts/postup.ps1`
-- `postprovision` → `scripts/postprovision.ps1`
-- `predeploy` → `scripts/predeploy.sh`
-- `postdeploy` → `scripts/postdeploy.ps1`
-- `postdown` → `scripts/postdown.ps1`
+- `preup` → `scripts/hooks/preup.sh`
+- `postprovision` → `scripts/hooks/postprovision.sh`
+- `predeploy` → `scripts/hooks/predeploy.sh`
+- `postup` → `scripts/hooks/postup.sh`
+- `postdeploy` → `scripts/hooks/api-postdeploy.sh` (for api service)
+- `postdeploy` → `scripts/hooks/app-postdeploy.sh` (for app service)
 
 #### Execution Order Around `azd up`
 
@@ -223,28 +225,42 @@ This makes it easy to run local tools, tests, or scripts that rely on simple `.e
 
 ---
 
-### 5.2.3 `scripts/postprovision.ps1`
+### 5.2.3 `scripts/postprovision.sh`
 
 **Hook:** `postprovision`
 
 **When it runs:** After `azd provision` (infrastructure deployment) but **before** app services are built and deployed.
 
-**Purpose:** Finalize infrastructure configuration, especially around Azure SQL and managed identity.
+**Duration:** The hook itself completes quickly (~2-3 minutes), but it launches an asynchronous seed-job that runs for **~8 minutes** in the background.
+
+**Purpose:** Finalize infrastructure configuration, especially around Azure SQL, managed identity, and database seeding.
 
 Key responsibilities:
 
-- Ensures required PowerShell modules are installed and imported:
-  - `Microsoft.Graph`
-  - `Az.Resources`, `Az.ManagedServiceIdentity`, `Az.Sql`
-- Retrieves environment values from `azd env`:
-  - `TENANT_ID`, `AZURE_RESOURCE_GROUP`, `SQL_DATABASE_NAME`, `USER_MANAGED_IDENTITY_NAME`, `SQL_SERVER_NAME`.
-- If certain values are missing, discovers them from the deployed resource group and writes them back to `azd env`.
-- Connects to Azure with the correct tenant context if not already authenticated.
-- Uses Azure SQL management cmdlets and ADO.NET to:
-  - Ensure the user‑assigned managed identity has the correct permissions on the SQL Server and database.
-  - Load or update the AdventureWorks schema and seed data using embedded SQL and/or JSON import helpers (functions like `Import-JsonTable`).
+- Sets environment variables for frontend build (VITE_API_URL, VITE_API_FUNCTIONS_URL).
+- Configures Aspire Dashboard access by assigning Contributor role to the current user on the Container Apps Environment.
+- Ensures the user‑assigned managed identity has the correct database permissions:
+  - Connects to Azure SQL using the current user's Azure CLI credentials.
+  - Executes `seed-job/sql/assign-database-roles.sql` to grant db_datareader, db_datawriter, and db_ddladmin roles to the managed identity.
+- Deploys the **seed-job** Container App Job:
+  - Builds the seed-job container image using Azure Container Registry (`az acr build`).
+  - Updates the Container App Job with the new image.
+  - Starts the seed-job asynchronously to populate the database with schema and data from `seed-job/sql/`.
 
-In short, `postprovision` wires up the **database and identity layer** so the app can talk to SQL using managed identity and the right roles.
+The seed-job runs as a containerized Azure Container App Job that:
+- Executes `seed-database.ps1` inside the container.
+- Loads SQL scripts (`AdventureWorks.sql`, `AdventureWorks-AI.sql`) and CSV files (both original and AI-enhanced).
+- Populates product images from the `seed-job/images/` directory.
+- **Takes approximately 8 minutes** to complete database seeding.
+
+In short, `postprovision` wires up the **database and identity layer**, then triggers an asynchronous job to populate the database so the app can talk to SQL using managed identity with a fully seeded dataset.
+
+**Note:** You can monitor seed-job execution with:
+```bash
+az containerapp job execution list --name <seed-job-name> --resource-group <resource-group>
+```
+
+For complete details on the seed-job architecture, components, and data loading process, see [seed-job/README.md](../seed-job/README.md).
 
 ---
 

@@ -4,6 +4,7 @@ param location string = resourceGroup().location
 param containerRegistryName string = 'avacr${toLower(uniqueString(resourceGroup().id))}'
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param workspaceName string = 'av-workspace-${toLower(uniqueString(resourceGroup().id))}'
+param storageAccountName string
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspaceName
@@ -30,6 +31,10 @@ resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' 
 
 resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
   name: appInsightsName
+}
+
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
+  name: storageAccountName
 }
 
 resource containerAppEnv 'Microsoft.App/managedEnvironments@2023-11-02-preview' = {
@@ -64,6 +69,20 @@ resource aspireDashboard 'Microsoft.App/managedEnvironments/dotNetComponents@202
   name: 'aspire-dashboard'
   properties: {
     componentType: 'AspireDashboard'
+  }
+}
+
+// Storage for seed job logs
+resource seedJobStorage 'Microsoft.App/managedEnvironments/storages@2023-11-02-preview' = {
+  parent: containerAppEnv
+  name: 'seed-job'
+  properties: {
+    azureFile: {
+      accountName: storageAccount.name
+      accountKey: storageAccount.listKeys().keys[0].value
+      shareName: 'seed-job-logs'
+      accessMode: 'ReadWrite'
+    }
   }
 }
 

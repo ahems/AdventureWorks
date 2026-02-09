@@ -183,11 +183,13 @@ module containerApp 'modules/aca.bicep' = {
     workspaceName:workspaceName
     containerRegistryName:acrName
     identityName:identityName
+    storageAccountName:storage.outputs.storageAccountName
   }
   dependsOn: [
     appinsights
     identity
     acr
+    storage
   ]
 }
 
@@ -246,6 +248,29 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
   }
 }
 
+module containerAppSeedJob 'modules/aca-seed-job.bicep' = {
+  name: 'Deploy-Container-App-Seed-Job'
+  params: {
+    location: location
+    appInsightsName: appInsightsName
+    seedJobName: 'av-seed-job-${resourceToken}'
+    containerRegistryName: acrName
+    identityName: identityName
+    sqlServerName: sqlServerName
+    sqlDatabaseName: sqlDatabaseName
+    containerAppEnvId: containerApp.outputs.containerAppEnvId
+    // imageName omitted - will use bootstrap image during initial provision
+    // and get updated with actual image during azd deploy
+  }
+  dependsOn: [
+    containerApp
+    database
+    identity
+    acr
+    appinsights
+  ]
+}
+
 module staticWebAppFrontend 'modules/swa-app.bicep' = {
   name: 'Deploy-Static-Web-App-Frontend'
   params: {
@@ -290,6 +315,7 @@ output SERVICE_APP_NAME string = staticWebAppFrontend.outputs.staticWebAppName
 output SERVICE_API_NAME string = 'av-api-${resourceToken}'
 output SERVICE_API_FUNCTIONS_NAME string = 'av-func-${resourceToken}'
 output SERVICE_API_MCP_NAME string = 'av-mcp-${resourceToken}'
+output SERVICE_SEED_JOB_NAME string = containerAppSeedJob.outputs.seedJobName
 
 output API_FUNCTIONS_URL string = containerAppApiFunctions.outputs.apiFunctionsUrl
 output MCP_SERVICE_URL string = containerAppApiMcp.outputs.apiMcpUrl

@@ -17,15 +17,14 @@ When you run `azd up` or `azd provision`, the system automatically:
    - Azure Functions Container App with MCP Server
    - All supporting Azure resources
 
-2. **Configures AI Agent** (via postprovision.ps1)
-   - Installs `agent-framework-azure-ai` Python package
-   - Creates AI Agent with MCP tools
-   - Configures agent instructions for customer service
-   - Tests the agent to verify functionality
-   - Saves configuration to `AI_AGENT_CONFIG.json`
+2. **Configuration** (manual or via custom automation)
+   - AI Agent configuration is not automated by default
+   - Can be configured manually using `agent-framework-azure-ai` Python package
+   - Agent can use MCP tools from the deployed MCP Server
+   - Configuration requires setting up agent instructions for customer service
+   - Configuration can be saved to `AI_AGENT_CONFIG.json`
 
-3. **Stores Configuration** (in azd environment)
-   - `AI_AGENT_NAME`: Agent display name
+3. **Environment Variables** (available in azd environment)
    - `AI_AGENT_MODEL`: Deployed model name
    - `API_FUNCTIONS_URL`: MCP Server endpoint
    - `AZURE_OPENAI_ENDPOINT`: AI Foundry endpoint
@@ -231,11 +230,10 @@ EOF
 If you update the MCP Server tools or want to recreate the agent:
 
 ```bash
-# Redeploy functions and recreate agent
+# Redeploy functions
 azd deploy api-functions
 
-# Or just re-run postprovision
-pwsh scripts/postprovision.ps1
+# Then manually configure the agent using your preferred method
 ```
 
 ## Security Considerations
@@ -247,7 +245,7 @@ pwsh scripts/postprovision.ps1
 
 ## Next Steps
 
-1. **Customize Instructions:** Edit the agent instructions in `postprovision.ps1`
+1. **Configure Agent:** Set up the AI Agent manually with desired instructions
 2. **Add More Tools:** Extend the MCP Server with additional functions
 3. **Build UI:** Create a chat interface that uses the agent
 4. **Add Auth:** Implement user authentication to pass CustomerID from logged-in users

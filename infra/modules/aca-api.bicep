@@ -53,7 +53,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       ]
       ingress: {
         external: true
-        targetPort: 5000
+        targetPort: 80
         allowInsecure: false
         transport: 'http'
         clientCertificateMode: 'ignore'
@@ -107,6 +107,22 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'APP_URL'
               value: appUrl
+            }
+            {
+              name: 'ASPNETCORE_URLS'
+              value: 'http://+:80'
+            }
+            {
+              name: 'Logging__LogLevel__Default'
+              value: 'Warning'
+            }
+            {
+              name: 'Logging__LogLevel__Microsoft'
+              value: 'Warning'
+            }
+            {
+              name: 'Logging__LogLevel__Azure'
+              value: 'Warning'
             }
           ]
         }

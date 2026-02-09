@@ -52,6 +52,30 @@ wait_for_mi_token() {
 
 wait_for_mi_token
 
+# Wait for database schema to be ready (seed job may still be running)
+wait_for_database_schema() {
+  DB_INITIAL_DELAY="${DB_INITIAL_DELAY_SECONDS:-0}"
+  DB_PERIOD="${DB_PERIOD_SECONDS:-10}"
+  DB_MAX_RETRIES="${DB_FAILURE_THRESHOLD:-50}"
+  
+  if [ "${DB_INITIAL_DELAY}" -gt 0 ]; then
+    log "Database wait initial delay: ${DB_INITIAL_DELAY}s"
+    sleep "${DB_INITIAL_DELAY}"
+  fi
+
+  # Simple approach: Add a configurable delay to allow seed job to complete
+  # Container Apps will restart if DAB crashes, creating an effective retry loop
+  # After several restarts (~6 minutes), the seed job completes and DAB starts successfully
+  if [ "${DB_PERIOD}" -gt 0 ]; then
+    log "Waiting ${DB_PERIOD}s before starting DAB to allow database seeding to complete..."
+    sleep "${DB_PERIOD}"
+  fi
+  
+  log "Database wait complete. Starting DAB (Container Apps will restart if schema not ready)."
+}
+
+wait_for_database_schema
+
 # Start Data API Builder
 # Ensure we run from /App where dab-config.json resides
 cd /App
