@@ -40,7 +40,12 @@ These scripts test the AdventureWorks APIs and Azure Functions directly using cu
 
 ### Azure Playwright Tests
 
-- **run-azure-playwright-tests.sh** - Runs Playwright E2E tests against Azure deployment
+- **run-tests-on-azure-playwright.sh** - Runs Playwright E2E tests against Azure deployment
+  
+  **Note:** Ensure Playwright browsers are installed first:
+  ```bash
+  npx playwright install
+  ```
 
 ## Usage
 

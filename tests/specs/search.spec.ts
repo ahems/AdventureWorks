@@ -111,7 +111,7 @@ test.describe("Search Functionality", () => {
     console.log("🔍 Testing search for 'red helmet'...");
 
     // Navigate directly to search page (no login required)
-    await page.goto("/search");
+    await page.goto(`${testEnv.webBaseUrl}/search`);
     await page.waitForLoadState("domcontentloaded");
 
     // Wait for page to be fully loaded (products may load slowly)
@@ -186,7 +186,7 @@ test.describe("Search Functionality", () => {
   }) => {
     console.log("🔍 Testing search for 'red frame'...");
 
-    await page.goto("/search?q=red frame");
+    await page.goto(`${testEnv.webBaseUrl}/search?q=red frame`);
     await page.waitForLoadState("domcontentloaded");
 
     // Wait for search to execute
@@ -232,7 +232,7 @@ test.describe("Search Functionality", () => {
   test("search for bikes returns bike-related products", async ({ page }) => {
     console.log("🔍 Testing search for 'bike'...");
 
-    await page.goto("/search");
+    await page.goto(`${testEnv.webBaseUrl}/search`);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(5000);
 
@@ -456,8 +456,8 @@ test.describe("Search Functionality", () => {
   test("search with URL query parameter works", async ({ page }) => {
     console.log("🔍 Testing search via URL parameter...");
 
-    // Navigate with query parameter
-    await page.goto("/search?q=helmet");
+    // Navigate with query parameter using full URL
+    await page.goto(`${testEnv.webBaseUrl}/search?q=helmet`);
     await page.waitForLoadState("domcontentloaded");
 
     // Wait for search to execute

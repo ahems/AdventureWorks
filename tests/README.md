@@ -55,9 +55,14 @@ npm run test:e2e:azure
 
 These tests run directly against the Azure deployment—no local services (DAB, Functions, or Vite) are needed.
 
-1. Sign in to Azure: `az login` (or `azd login`).
-2. Select the environment: `azd env refresh` (or ensure `AZURE_ENV_NAME` is set).
-3. Confirm the required values exist by running:
+1. **Install Playwright browsers** (if not already installed):
+   ```bash
+   npx playwright install
+   ```
+
+2. Sign in to Azure: `az login` (or `azd login`).
+3. Select the environment: `azd env refresh` (or ensure `AZURE_ENV_NAME` is set).
+4. Confirm the required values exist by running:
    - `azd env get-value "APP_REDIRECT_URI"`
    - `azd env get-value "VITE_API_FUNCTIONS_URL"`
    - `azd env get-value "VITE_API_URL"`

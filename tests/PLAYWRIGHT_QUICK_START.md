@@ -104,6 +104,10 @@ Contact your Azure admin to grant you the **Playwright Service User** role on th
 ### Install missing dependencies
 
 ```bash
+# Install Playwright browsers
+npx playwright install
+
+# Or use the quick reference script
 ../scripts/utilities/playwright-quick-ref.sh install
 ```
 

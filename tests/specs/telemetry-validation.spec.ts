@@ -26,10 +26,19 @@ async function queryApplicationInsights(
       { encoding: "utf8" },
     ).trim();
 
+    // Normalize the query by removing extra whitespace and newlines
+    // This prevents shell interpretation issues with multi-line queries
+    const normalizedQuery = query
+      .trim()
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .join(' ');
+
     console.log(
       `\n🔍 Querying Application Insights: ${appInsightsName} in ${resourceGroup}`,
     );
-    console.log(`📊 Query: ${query}`);
+    console.log(`📊 Query: ${normalizedQuery}`);
     console.log(`⏱️  Timespan: ${timespan}\n`);
 
     // Note: --timespan parameter removed due to Azure CLI version compatibility
@@ -37,7 +46,7 @@ async function queryApplicationInsights(
     const command = `az monitor app-insights query \
       --app "${appInsightsName}" \
       --resource-group "${resourceGroup}" \
-      --analytics-query "${query}" \
+      --analytics-query "${normalizedQuery}" \
       --output json`;
 
     const result = execSync(command, {
