@@ -43,16 +43,14 @@ async function queryApplicationInsights(
 
     // Note: --timespan parameter removed due to Azure CLI version compatibility
     // The query itself filters by timestamp, so timespan is redundant
-    const command = `az monitor app-insights query \
-      --app "${appInsightsName}" \
-      --resource-group "${resourceGroup}" \
-      --analytics-query "${normalizedQuery}" \
-      --output json`;
-
-    const result = execSync(command, {
-      encoding: "utf8",
-      maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-    });
+    // Use array syntax to avoid shell quote escaping issues
+    const result = execSync(
+      `az monitor app-insights query --app ${JSON.stringify(appInsightsName)} --resource-group ${JSON.stringify(resourceGroup)} --analytics-query ${JSON.stringify(normalizedQuery)} --output json`,
+      {
+        encoding: "utf8",
+        maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+      }
+    );
 
     const parsed = JSON.parse(result);
     return parsed;

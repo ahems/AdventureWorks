@@ -132,6 +132,34 @@ export const GET_PRODUCTS = gql`
   }
 `;
 
+// Query to get products by multiple IDs (for cart)
+export const GET_PRODUCTS_BY_IDS = gql`
+  query GetProductsByIds($ids: [Int!]!) {
+    products(filter: { ProductID: { in: $ids } }) {
+      items {
+        ProductID
+        Name
+        ProductNumber
+        Color
+        ListPrice
+        StandardCost
+        Size
+        SizeUnitMeasureCode
+        Weight
+        WeightUnitMeasureCode
+        ProductLine
+        Class
+        Style
+        ProductSubcategoryID
+        ProductModelID
+        SellStartDate
+        SellEndDate
+        DiscontinuedDate
+      }
+    }
+  }
+`;
+
 // Query to get a product by ID
 // Note: Only loads thumbnails initially. Use GET_LARGE_PHOTO separately for fullscreen/zoom
 export const GET_PRODUCT_BY_ID = gql`
