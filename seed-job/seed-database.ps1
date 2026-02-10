@@ -603,6 +603,177 @@ try {
     }
     
     # ---------------------------------------------------------------------
+    # Start PNG image upload as background job (runs concurrently with CSV loading)
+    # ---------------------------------------------------------------------
+    $elapsed = (Get-Date) - $scriptStartTime
+    Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Starting PNG image upload in background..."
+    
+    $pngUploadJob = Start-ThreadJob -ScriptBlock {
+        param($connString, $accessTkn, $scriptRoot, $startTime)
+        
+        $result = @{
+            Uploaded = 0
+            Skipped = 0
+            Failed = 0
+            TotalFiles = 0
+            ThumbnailCount = 0
+            ImagePairCount = 0
+            AlreadyLoaded = $false
+            NoFiles = $false
+            NoDirec = $false
+        }
+        
+        try {
+            # Create connection for idempotency check
+            $connType = [System.Type]::GetType('Microsoft.Data.SqlClient.SqlConnection, Microsoft.Data.SqlClient')
+            if (-not $connType) { $connType = [System.Data.SqlClient.SqlConnection] }
+            
+            $checkConn = [Activator]::CreateInstance($connType, $connString)
+            $accessTokenProp = $connType.GetProperty('AccessToken')
+            if ($accessTokenProp) {
+                $accessTokenProp.SetValue($checkConn, $accessTkn)
+            }
+            $checkConn.Open()
+            
+            # Check if AI photos already uploaded
+            $cmd = $checkConn.CreateCommand()
+            $cmd.CommandText = "SELECT COUNT(*) FROM Production.ProductPhoto WHERE ProductPhotoID >= 1000"
+            $aiPhotoCount = $cmd.ExecuteScalar()
+            $checkConn.Close()
+            
+            if ($aiPhotoCount -gt 0) {
+                $result.AlreadyLoaded = $true
+                return $result
+            }
+            
+            $imagesDir = Join-Path $scriptRoot "images"
+            
+            if (-not (Test-Path $imagesDir)) {
+                $result.NoDirec = $true
+                return $result
+            }
+            
+            $pngFiles = Get-ChildItem -Path $imagesDir -Filter "*.png" | Sort-Object Name
+            $result.TotalFiles = $pngFiles.Count
+            
+            if ($result.TotalFiles -eq 0) {
+                $result.NoFiles = $true
+                return $result
+            }
+            
+            $result.ThumbnailCount = ($pngFiles | Where-Object { $_.Name -like "*_thumb.png" -or $_.Name -like "*_small.png" }).Count
+            
+            # Pre-process: create image pairs
+            $imagePairs = @()
+            $photoId = 1000
+            
+            foreach ($pngFile in $pngFiles) {
+                $fileName = $pngFile.Name
+                $isThumbnail = $fileName -like "*_thumb.png" -or $fileName -like "*_small.png"
+                
+                if ($isThumbnail) {
+                    $baseFileName = $fileName -replace '_thumb\.png$', '.png' -replace '_small\.png$', '.png'
+                    $largeImagePath = Join-Path $imagesDir $baseFileName
+                    
+                    if (Test-Path $largeImagePath) {
+                        $imagePairs += @{
+                            PhotoID = $photoId
+                            ThumbPath = $pngFile.FullName
+                            ThumbName = $fileName
+                            LargePath = $largeImagePath
+                            LargeName = $baseFileName
+                        }
+                        $photoId++
+                    }
+                }
+            }
+            
+            $result.ImagePairCount = $imagePairs.Count
+            
+            # Parallel upload (2 threads)
+            $uploadResults = $imagePairs | ForEach-Object -ThrottleLimit 2 -Parallel {
+                $pair = $_
+                $uploadResult = @{ Success = $false; Skipped = $false; Failed = $false }
+                
+                try {
+                    $thumbBytes = [System.IO.File]::ReadAllBytes($pair.ThumbPath)
+                    $largeBytes = [System.IO.File]::ReadAllBytes($pair.LargePath)
+                    
+                    $connStr = $using:connString
+                    $accessToken = $using:accessTkn
+                    
+                    $connType = [System.Type]::GetType('Microsoft.Data.SqlClient.SqlConnection, Microsoft.Data.SqlClient')
+                    if (-not $connType) { $connType = [System.Data.SqlClient.SqlConnection] }
+                    
+                    $threadConn = [Activator]::CreateInstance($connType, $connStr)
+                    $accessTokenProp = $connType.GetProperty('AccessToken')
+                    if ($accessTokenProp) {
+                        $accessTokenProp.SetValue($threadConn, $accessToken)
+                    }
+                    
+                    $threadConn.Open()
+                    
+                    try {
+                        $checkCmd = $threadConn.CreateCommand()
+                        $checkCmd.CommandText = "SELECT COUNT(*) FROM Production.ProductPhoto WHERE ProductPhotoID = @PhotoID"
+                        $checkCmd.Parameters.AddWithValue("@PhotoID", $pair.PhotoID) | Out-Null
+                        $exists = [int]$checkCmd.ExecuteScalar()
+                        
+                        if ($exists -eq 0) {
+                            $insertCmd = $threadConn.CreateCommand()
+                            $insertCmd.CommandText = @"
+SET IDENTITY_INSERT Production.ProductPhoto ON;
+INSERT INTO Production.ProductPhoto 
+    (ProductPhotoID, ThumbNailPhoto, ThumbnailPhotoFileName, LargePhoto, LargePhotoFileName, ModifiedDate)
+VALUES 
+    (@PhotoID, @ThumbBytes, @ThumbFileName, @LargeBytes, @LargeFileName, GETDATE());
+SET IDENTITY_INSERT Production.ProductPhoto OFF;
+"@
+                            $insertCmd.Parameters.AddWithValue("@PhotoID", $pair.PhotoID) | Out-Null
+                            $insertCmd.Parameters.Add("@ThumbBytes", [System.Data.SqlDbType]::VarBinary, $thumbBytes.Length).Value = $thumbBytes
+                            $insertCmd.Parameters.AddWithValue("@ThumbFileName", $pair.ThumbName) | Out-Null
+                            $insertCmd.Parameters.Add("@LargeBytes", [System.Data.SqlDbType]::VarBinary, $largeBytes.Length).Value = $largeBytes
+                            $insertCmd.Parameters.AddWithValue("@LargeFileName", $pair.LargeName) | Out-Null
+                            
+                            $insertCmd.ExecuteNonQuery() | Out-Null
+                            $uploadResult.Success = $true
+                        }
+                        else {
+                            $uploadResult.Skipped = $true
+                        }
+                    }
+                    finally {
+                        $threadConn.Close()
+                        $threadConn.Dispose()
+                    }
+                }
+                catch {
+                    $uploadResult.Failed = $true
+                    $uploadResult.Error = $_.Exception.Message
+                }
+                
+                $uploadResult
+            }
+            
+            $result.Uploaded = ($uploadResults | Where-Object { $_.Success }).Count
+            $result.Skipped = ($uploadResults | Where-Object { $_.Skipped }).Count
+            $result.Failed = ($uploadResults | Where-Object { $_.Failed }).Count
+            
+            if ($result.Failed -gt 0) {
+                $result.Errors = ($uploadResults | Where-Object { $_.Failed } | ForEach-Object { $_.Error } | Select-Object -First 5)
+            }
+        }
+        catch {
+            $result.Failed = -1
+            $result.Error = $_.Exception.Message
+        }
+        
+        return $result
+    } -ArgumentList $connectionString, $accessToken, $PSScriptRoot, $scriptStartTime
+    
+    Write-Log "  PNG upload job started (running in background while CSV data loads)..."
+    
+    # ---------------------------------------------------------------------
     # Load CSV data into tables using SqlBulkCopy
     # ---------------------------------------------------------------------
     $elapsed = (Get-Date) - $scriptStartTime
@@ -657,8 +828,8 @@ try {
         @{ Table='Production.ProductDescription'; File='ProductDescription.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # Enhanced product descriptions with embeddings (DescriptionEmbedding VECTOR field, JSON array)
         @{ Table='Production.ProductDescription'; File='ProductDescription-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('DescriptionEmbedding') }
-        # AI-translated product descriptions (actual text content for 16 new cultures)
-        @{ Table='Production.ProductDescription'; File='ProductDescription-ai-translations.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false }
+        # AI-translated product descriptions (actual text content for 16 new cultures; CSV has only ID, Description, ModifiedDate)
+        @{ Table='Production.ProductDescription'; File='ProductDescription-ai-translations.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false; DefaultColumns=@('rowguid', 'DescriptionEmbedding') }
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # AI-translated product description culture mappings (16 additional cultures beyond base AdventureWorks 7)
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture-ai.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false }
@@ -911,6 +1082,28 @@ ORDER BY c.ORDINAL_POSITION
             }
             $reader.Close()
             
+            # If config specifies DefaultColumns, CSV has fewer columns - those use DB DEFAULT when inserting
+            $defaultCols = @()
+            if ($config.DefaultColumns) { $defaultCols = @($config.DefaultColumns) }
+            $expectedCsvColumnCount = $allColumns.Count
+            foreach ($col in $columns) { $col.UseDefault = $false }
+            if ($defaultCols.Count -gt 0) {
+                $csvIdx = 0
+                foreach ($ac in $allColumns) {
+                    if ($ac.Name -in $defaultCols) {
+                        $ac.CSVIndex = -1
+                    } else {
+                        $ac.CSVIndex = $csvIdx++
+                    }
+                }
+                foreach ($col in $columns) {
+                    $col.CSVIndex = ($allColumns | Where-Object { $_.Name -eq $col.Name })[0].CSVIndex
+                    $col.UseDefault = ($col.Name -in $defaultCols)
+                }
+                $expectedCsvColumnCount = $allColumns.Count - $defaultCols.Count
+                Write-Log "    CSV has $expectedCsvColumnCount columns (using DB DEFAULT for: $($defaultCols -join ', '))"
+            }
+            
             # Parse CSV rows into DataTable
             $rowCount = 0
             $delimiter = $config.Delimiter
@@ -928,8 +1121,8 @@ ORDER BY c.ORDINAL_POSITION
                     $values = $values[1..($values.Count-1)]
                 }
                 
-                # Check against total column count (CSV should have all columns including IDENTITY/computed)
-                if ($values.Count -ne $allColumns.Count) {
+                # Check against expected column count (may be less than allColumns if DefaultColumns specified)
+                if ($values.Count -ne $expectedCsvColumnCount) {
                     continue 
                 }
                 
@@ -939,14 +1132,24 @@ ORDER BY c.ORDINAL_POSITION
                 # Process only the columns we're inserting (skip IDENTITY/computed)
                 for ($i = 0; $i -lt $columns.Count; $i++) {
                     $col = $columns[$i]
-                    # Use the CSVIndex to get the correct value from the CSV
-                    $val = $values[$col.CSVIndex].Trim()
+                    # Use the CSVIndex to get the correct value from the CSV (or use default for DefaultColumns)
+                    if ($col.CSVIndex -lt 0) {
+                        $val = $null  # Column uses DB DEFAULT - placeholder for row cell
+                    } else {
+                        $val = $values[$col.CSVIndex].Trim()
+                    }
                     
-                        # BCP with -w (Unicode) and -t delimiter may add & prefix to fields - remove it
-                        if ($config.IsWideChar -and $val.StartsWith('&')) {
-                            $val = $val.Substring(1).Trim()
-                        
-                        }
+                    # Column uses DB DEFAULT - no value from CSV
+                    if ($col.UseDefault) {
+                        $dataRow[$dataTableColIndex] = [DBNull]::Value
+                        $dataTableColIndex++
+                        continue
+                    }
+                    
+                    # BCP with -w (Unicode) and -t delimiter may add & prefix to fields - remove it
+                    if ($config.IsWideChar -and $null -ne $val -and $val.StartsWith('&')) {
+                        $val = $val.Substring(1).Trim()
+                    }
                     # Handle NULL values
                     $isNull = [string]::IsNullOrWhiteSpace($val) -or $val -in @('NULL', '\N', 'null')
                     
@@ -1215,7 +1418,10 @@ ORDER BY ORDINAL_POSITION
                                     $col = $loadedColumns[$c]
                                     $value = $row[$c]
                                     
-                                    if ($value -is [DBNull] -or $null -eq $value) {
+                                    if ($col.UseDefault) {
+                                        $values += "DEFAULT"
+                                    }
+                                    elseif ($value -is [DBNull] -or $null -eq $value) {
                                         $values += "NULL"
                                     }
                                     elseif ($col.Type -eq 'hierarchyid') {
@@ -1300,7 +1506,10 @@ END
                                 $col = $loadedColumns[$c]
                                 $value = $row[$c]
                                 
-                                if ($value -is [DBNull] -or $null -eq $value) {
+                                if ($col.UseDefault) {
+                                    $values += "DEFAULT"
+                                }
+                                elseif ($value -is [DBNull] -or $null -eq $value) {
                                     $values += "NULL"
                                 }
                                 elseif ($col.Type -eq 'hierarchyid') {
@@ -1443,128 +1652,44 @@ Write-Log "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinutes))
         Write-Log "  ✗ Failed: $csvLoadFailed tables"
     }
     
-    # Upload AI-generated PNG images from images directory
+    # Wait for background PNG upload job to complete
     $elapsed = (Get-Date) - $scriptStartTime
-    Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Adding AI-generated PNG images to Database..."
+    Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Waiting for PNG image upload to complete..."
     
-    # Check if AI photos already uploaded (idempotency check)
-    # AI photos from PNG files use ProductPhotoIDs starting at 1000
-    # (ProductPhotoIDs 1-100 are base AdventureWorks, 101-999 may be from CSV AI data)
-    $cmd.CommandText = "SELECT COUNT(*) FROM Production.ProductPhoto WHERE ProductPhotoID >= 1000"
-    $aiPhotoCount = $cmd.ExecuteScalar()
+    # Wait for the job and get results
+    $pngResult = Receive-Job -Job $pngUploadJob -Wait
+    Remove-Job -Job $pngUploadJob
     
-    if ($aiPhotoCount -gt 0) {
-        Write-Log "  AI-generated photos already uploaded ($aiPhotoCount AI photos found) - Skipping"
+    $elapsed = (Get-Date) - $scriptStartTime
+    Write-Log "`nPNG Upload Summary: [+$([math]::Floor($elapsed.TotalMinutes))m]"
+    
+    if ($pngResult.AlreadyLoaded) {
+        Write-Log "  AI-generated photos already uploaded - Skipping"
+    }
+    elseif ($pngResult.NoDirec) {
+        Write-Log "  Images directory not found - Skipping"
+    }
+    elseif ($pngResult.NoFiles) {
+        Write-Log "  No PNG files found in images directory"
+    }
+    elseif ($pngResult.Failed -eq -1) {
+        Write-Warning "  PNG upload job failed: $($pngResult.Error)"
     }
     else {
-        $imagesDir = Join-Path $PSScriptRoot "images"
-        
-        if (Test-Path $imagesDir) {
-            $pngFiles = Get-ChildItem -Path $imagesDir -Filter "*.png" | Sort-Object Name
-            $totalPngFiles = $pngFiles.Count
-            
-            if ($totalPngFiles -gt 0) {
-                # Count thumbnails and large images separately
-                $thumbnailCount = ($pngFiles | Where-Object { $_.Name -like "*_thumb.png" -or $_.Name -like "*_small.png" }).Count
-                $largeImageCount = $totalPngFiles - $thumbnailCount
-                
-                Write-Log "  Found $totalPngFiles PNG files to upload ($thumbnailCount thumbnails, $largeImageCount large images)"
-                
-                $uploadedCount = 0
-                $skippedCount = 0
-                $failedCount = 0
-                $currentFile = 0
-                
-                # Start ProductPhotoID at 1000 to match AI-generated photo range
-                $nextPhotoId = 1000
-            
-            foreach ($pngFile in $pngFiles) {
-                $currentFile++
-                $fileName = $pngFile.Name
-                
-                try {
-                    # Read image bytes
-                    $imageBytes = [System.IO.File]::ReadAllBytes($pngFile.FullName)
-                    
-                    # Determine if this is a thumbnail or large image
-                    $isThumbnail = $fileName -like "*_thumb.png" -or $fileName -like "*_small.png"
-                    
-                    if ($isThumbnail) {
-                        # Extract the base filename to find corresponding large image
-                        $baseFileName = $fileName -replace '_thumb\.png$', '.png' -replace '_small\.png$', '.png'
-                        $largeImagePath = Join-Path $imagesDir $baseFileName
-                        
-                        if (Test-Path $largeImagePath) {
-                            # Read large image
-                            $largeImageBytes = [System.IO.File]::ReadAllBytes($largeImagePath)
-                            
-                            # Check if this ProductPhotoID already exists (idempotency)
-                            $checkCmd = $conn.CreateCommand()
-                            $checkCmd.CommandText = "SELECT COUNT(*) FROM Production.ProductPhoto WHERE ProductPhotoID = @PhotoID"
-                            $checkCmd.Parameters.AddWithValue("@PhotoID", $nextPhotoId) | Out-Null
-                            $exists = [int]$checkCmd.ExecuteScalar()
-                            
-                            if ($exists -eq 0) {
-                                # Insert with both thumbnail and large image
-                                $cmd = $conn.CreateCommand()
-                                $cmd.CommandText = @"
-SET IDENTITY_INSERT Production.ProductPhoto ON;
-INSERT INTO Production.ProductPhoto 
-    (ProductPhotoID, ThumbNailPhoto, ThumbnailPhotoFileName, LargePhoto, LargePhotoFileName, ModifiedDate)
-VALUES 
-    (@PhotoID, @ThumbBytes, @ThumbFileName, @LargeBytes, @LargeFileName, GETDATE());
-SET IDENTITY_INSERT Production.ProductPhoto OFF;
-"@
-                                $cmd.Parameters.AddWithValue("@PhotoID", $nextPhotoId) | Out-Null
-                                $cmd.Parameters.Add("@ThumbBytes", [System.Data.SqlDbType]::VarBinary, $imageBytes.Length).Value = $imageBytes
-                                $cmd.Parameters.AddWithValue("@ThumbFileName", $fileName) | Out-Null
-                                $cmd.Parameters.Add("@LargeBytes", [System.Data.SqlDbType]::VarBinary, $largeImageBytes.Length).Value = $largeImageBytes
-                                $cmd.Parameters.AddWithValue("@LargeFileName", $baseFileName) | Out-Null
-                                
-                                $cmd.ExecuteNonQuery() | Out-Null
-                                $uploadedCount++
-                            }
-                            else {
-                                $skippedCount++
-                            }
-                            $nextPhotoId++
-                            
-                            if ($currentFile % 100 -eq 0) {
-                                Write-Log "    ...uploaded $currentFile of $totalPngFiles images"
-                            }
-                        }
-                        else {
-                            Write-Warning "    [$currentFile/$totalPngFiles] Skipping $fileName - no corresponding large image found"
-                            $skippedCount++
-                        }
-                    }
-                    else {
-                        # Skip large images - they're processed with their thumbnails (don't count as skipped)
-                        # Large images are intentionally processed when their thumbnail is handled
-                    }
-                }
-                catch {
-                    Write-Warning "    [$currentFile/$totalPngFiles] Failed to upload $fileName : $($_.Exception.Message)"
-                    $failedCount++
-                }
-            }
-            
-            $elapsed = (Get-Date) - $scriptStartTime
-            Write-Log "`nPNG Upload Summary: [+$([math]::Floor($elapsed.TotalMinutes))m]"
-            Write-Log "  - $uploadedCount image pairs uploaded successfully"
-            if ($skippedCount -gt 0) {
-                Write-Log "  - $skippedCount files skipped (non-product images or missing pairs)"
-            }
-            Write-Log "  - $failedCount files failed"
+        $largeImageCount = $pngResult.TotalFiles - $pngResult.ThumbnailCount
+        Write-Log "  Found $($pngResult.TotalFiles) PNG files ($($pngResult.ThumbnailCount) thumbnails, $largeImageCount large images)"
+        Write-Log "  Processed $($pngResult.ImagePairCount) image pairs using parallel upload (2 threads)"
+        Write-Log "  - $($pngResult.Uploaded) image pairs uploaded successfully"
+        if ($pngResult.Skipped -gt 0) {
+            Write-Log "  - $($pngResult.Skipped) files skipped (already exist)"
         }
-        else {
-            Write-Log "  No PNG files found in images directory"
+        if ($pngResult.Failed -gt 0) {
+            Write-Log "  - $($pngResult.Failed) files failed"
+            if ($pngResult.Errors) {
+                Write-Warning "  First few errors: $($pngResult.Errors -join '; ')"
+            }
         }
     }
-    else {
-        Write-Log "  Images directory not found: $imagesDir"
-    }
-    }  # End idempotency check for AI photos
     
     # Note: ProductProductPhoto-ai.csv mappings are loaded earlier in the CSV data loading section
     
