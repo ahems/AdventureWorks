@@ -658,10 +658,10 @@ try {
         # Enhanced product descriptions with embeddings (DescriptionEmbedding VECTOR field, JSON array)
         @{ Table='Production.ProductDescription'; File='ProductDescription-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('DescriptionEmbedding') }
         # AI-translated product descriptions (actual text content for 16 new cultures)
-        @{ Table='Production.ProductDescription'; File='ProductDescription-ai-translations.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Production.ProductDescription'; File='ProductDescription-ai-translations.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # AI-translated product description culture mappings (16 additional cultures beyond base AdventureWorks 7)
-        @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture-ai.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModelIllustration'; File='ProductModelIllustration.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.Product'; File='Product.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductReview'; File='ProductReview.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments') }
@@ -745,9 +745,9 @@ try {
         'SalesTaxRate-ai.csv' = 29
         'ProductProductPhoto-ai.csv' = 504
         'ProductDescription-ai.csv' = 762
-        'ProductDescription-ai-translations.csv' = 2921
+        'ProductDescription-ai-translations.csv' = 2610    # 762 base + 1848 AI descriptions
         'ProductReview-ai.csv' = 4
-        'ProductModelProductDescriptionCulture-ai.csv' = 874
+        'ProductModelProductDescriptionCulture-ai.csv' = 762  # base culture mappings only
     }
     
     Write-Log "  Total CSV files to process: $($csvLoadConfig.Count)"
@@ -780,8 +780,8 @@ try {
             $cmd.CommandText = "SELECT COUNT(*) FROM [$schemaName].[$tableName]"
             $existingCount = $cmd.ExecuteScalar()
             
-            # Determine if this is an additive -ai.csv file
-            $isAiCsv = $config.File -match '-ai\.csv$'
+            # Determine if this is an additive AI CSV file (registered in base record counts)
+            $isAiCsv = $aiCsvBaseRecordCounts.ContainsKey($config.File)
             $baseRecordCount = $aiCsvBaseRecordCounts[$config.File]
             
             if ($isAiCsv -and $baseRecordCount) {
