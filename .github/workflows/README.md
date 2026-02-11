@@ -60,10 +60,9 @@ Before running this workflow, you must:
 
 1. **Setup Phase**:
    - Checks out the repository
-   - Installs Azure CLI
+   - Verifies pre-installed tools (Azure CLI, PowerShell, Python)
    - Installs Azure Developer CLI (azd)
-   - Installs PowerShell (required for postprovision hook)
-   - Installs additional dependencies (jq, Python)
+   - Installs additional dependencies (jq)
 
 2. **Authentication Phase**:
    - Logs in to Azure CLI using service principal credentials

@@ -31,32 +31,29 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       
-      - name: Install Azure CLI
+      - name: Verify pre-installed tools
         run: |
-          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          # Verify Azure CLI, PowerShell, and Python are available (pre-installed on ubuntu-latest)
+          echo "Azure CLI version:"
+          az version
+          echo ""
+          echo "PowerShell version:"
+          pwsh --version
+          echo ""
+          echo "Python version:"
+          python3 --version
       
       - name: Install Azure Developer CLI
         run: |
           curl -fsSL https://aka.ms/install-azd.sh | bash
       
-      - name: Install PowerShell
-        run: |
-          # Install PowerShell
-          sudo apt-get update
-          sudo apt-get install -y wget apt-transport-https software-properties-common
-          wget -q "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb"
-          sudo dpkg -i packages-microsoft-prod.deb
-          sudo apt-get update
-          sudo apt-get install -y powershell
-          rm packages-microsoft-prod.deb
-      
       - name: Install additional dependencies
         run: |
           # Install jq for JSON processing (used in hooks)
+          sudo apt-get update
           sudo apt-get install -y jq
-          
-          # Python should already be available in ubuntu-latest, verify
-          python3 --version
+          echo "jq version:"
+          jq --version
       
       - name: Azure Login with Service Principal
         run: |
@@ -94,7 +91,16 @@ jobs:
           
           # For service principal authentication, we need to set the user context
           # Get the service principal object ID
+          echo "Retrieving service principal object ID..."
           SP_OBJECT_ID=$(az ad sp show --id ${{ secrets.AZURE_CLIENT_ID }} --query id -o tsv)
+          
+          # Verify the service principal was found
+          if [ -z "$SP_OBJECT_ID" ]; then
+            echo "Error: Could not retrieve service principal object ID"
+            exit 1
+          fi
+          
+          echo "Service principal object ID: $SP_OBJECT_ID"
           azd env set OBJECT_ID "$SP_OBJECT_ID"
           azd env set NAME "${{ secrets.AZURE_CLIENT_ID }}"
           
@@ -129,7 +135,6 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           
       - name: Display deployment information
-        if: success()
         run: |
           echo "Deployment completed successfully!"
           echo ""
