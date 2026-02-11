@@ -1,0 +1,146 @@
+name: Deploy with Service Principal (azd up)
+
+on:
+  workflow_dispatch:
+    inputs:
+      AZURE_RESOURCE_GROUP:
+        description: 'Azure Resource Group name (required)'
+        required: true
+        type: string
+      AZURE_LOCATION:
+        description: 'Azure location for main resources'
+        required: false
+        default: 'eastus2'
+        type: string
+      FOUNDRY_LOCATION:
+        description: 'Azure location for AI Foundry/Cognitive Services'
+        required: false
+        default: 'swedencentral'
+        type: string
+      PLAYWRIGHT_LOCATION:
+        description: 'Azure location for Playwright browser automation'
+        required: false
+        default: 'westeurope'
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install Azure CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+      
+      - name: Install Azure Developer CLI
+        run: |
+          curl -fsSL https://aka.ms/install-azd.sh | bash
+      
+      - name: Install PowerShell
+        run: |
+          # Install PowerShell
+          sudo apt-get update
+          sudo apt-get install -y wget apt-transport-https software-properties-common
+          wget -q "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb"
+          sudo dpkg -i packages-microsoft-prod.deb
+          sudo apt-get update
+          sudo apt-get install -y powershell
+          rm packages-microsoft-prod.deb
+      
+      - name: Install additional dependencies
+        run: |
+          # Install jq for JSON processing (used in hooks)
+          sudo apt-get install -y jq
+          
+          # Python should already be available in ubuntu-latest, verify
+          python3 --version
+      
+      - name: Azure Login with Service Principal
+        run: |
+          az login --service-principal \
+            --username ${{ secrets.AZURE_CLIENT_ID }} \
+            --password ${{ secrets.AZURE_CLIENT_SECRET }} \
+            --tenant ${{ secrets.AZURE_TENANT_ID }}
+          
+          # Set the subscription context
+          az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          
+          # Verify login
+          az account show
+      
+      - name: Configure azd environment
+        run: |
+          # Create a new azd environment based on the resource group name
+          # Use the resource group name as the environment name (it will be prefixed with 'rg-' by azd)
+          ENV_NAME="${{ inputs.AZURE_RESOURCE_GROUP }}"
+          # Remove 'rg-' prefix if it exists to avoid double-prefixing
+          ENV_NAME="${ENV_NAME#rg-}"
+          
+          azd env new "$ENV_NAME" --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          
+          # Set required environment variables for azd
+          azd env set AZURE_SUBSCRIPTION_ID "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          azd env set AZURE_RESOURCE_GROUP "${{ inputs.AZURE_RESOURCE_GROUP }}"
+          azd env set AZURE_LOCATION "${{ inputs.AZURE_LOCATION }}"
+          azd env set FOUNDRY_LOCATION "${{ inputs.FOUNDRY_LOCATION }}"
+          azd env set PLAYWRIGHT_LOCATION "${{ inputs.PLAYWRIGHT_LOCATION }}"
+          
+          # Set tenant ID for hook scripts
+          azd env set TENANT_ID "${{ secrets.AZURE_TENANT_ID }}"
+          
+          # For service principal authentication, we need to set the user context
+          # Get the service principal object ID
+          SP_OBJECT_ID=$(az ad sp show --id ${{ secrets.AZURE_CLIENT_ID }} --query id -o tsv)
+          azd env set OBJECT_ID "$SP_OBJECT_ID"
+          azd env set NAME "${{ secrets.AZURE_CLIENT_ID }}"
+          
+          # SQL Database name (default used in hooks)
+          azd env set SQL_DATABASE_NAME "AdventureWorks"
+      
+      - name: Login to PowerShell Az Module
+        shell: pwsh
+        run: |
+          # Create a credential object for service principal
+          $securePassword = ConvertTo-SecureString -String "${{ secrets.AZURE_CLIENT_SECRET }}" -AsPlainText -Force
+          $credential = New-Object System.Management.Automation.PSCredential("${{ secrets.AZURE_CLIENT_ID }}", $securePassword)
+          
+          # Connect using service principal
+          Connect-AzAccount -ServicePrincipal -Credential $credential -Tenant "${{ secrets.AZURE_TENANT_ID }}"
+          
+          # Set the subscription context
+          Set-AzContext -Subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          
+          # Verify connection
+          Get-AzContext
+      
+      - name: Run azd up
+        run: |
+          # Run azd up which will execute all hooks (preup, provision, postprovision, deploy, postdeploy, postup)
+          # This runs non-interactively and uses the service principal credentials
+          azd up --no-prompt
+        env:
+          # Ensure Azure CLI uses the service principal
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          
+      - name: Display deployment information
+        if: success()
+        run: |
+          echo "Deployment completed successfully!"
+          echo ""
+          echo "Environment variables:"
+          azd env get-values
+          echo ""
+          echo "You can access your deployed application using the URLs above."
+      
+      - name: Upload azd logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: azd-logs
+          path: ~/.azd/
+          retention-days: 7
