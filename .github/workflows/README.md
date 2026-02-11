@@ -88,9 +88,9 @@ Before running this workflow, you must:
 Total deployment time is approximately **29 minutes**:
 - Infrastructure provisioning: ~21 minutes
 - Container builds and deployments: varies based on service complexity
-- Database seeding: ~8 minutes (initiated during postprovision but runs asynchronously in the background)
+- Database seeding: ~8 minutes (starts during postprovision and continues asynchronously in the background)
 
-Note: The seed job starts during the postprovision phase and runs asynchronously, so it may still be running after `azd up` completes. You can monitor its progress with:
+Note: The seed job starts during the postprovision phase and continues asynchronously in the background, so it may still be running after `azd up` completes. You can monitor its progress with:
 ```bash
 az containerapp job execution list --name <seed-job-name> --resource-group <resource-group-name>
 ```
