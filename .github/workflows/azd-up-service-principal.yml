@@ -82,6 +82,7 @@ jobs:
           azd env new "$ENV_NAME" --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           
           # Set required environment variables for azd
+          azd env set AZURE_ENV_NAME "$ENV_NAME"
           azd env set AZURE_SUBSCRIPTION_ID "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
           azd env set AZURE_RESOURCE_GROUP "${{ inputs.AZURE_RESOURCE_GROUP }}"
           azd env set AZURE_LOCATION "${{ inputs.AZURE_LOCATION }}"
