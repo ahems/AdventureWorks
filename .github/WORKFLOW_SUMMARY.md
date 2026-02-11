@@ -62,9 +62,10 @@ When you trigger the workflow, you can provide:
 
 ## Expected Duration
 
-Approximately 29 minutes total:
+Approximately 21-29 minutes total:
 - Infrastructure provisioning: ~21 minutes
-- Database seeding: ~8 minutes (runs asynchronously)
+- Container builds and deployments: varies
+- Database seeding: ~8 minutes (initiated but runs asynchronously in background after workflow completes)
 
 ## Key Features
 

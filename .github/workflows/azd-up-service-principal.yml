@@ -71,9 +71,10 @@ jobs:
       - name: Configure azd environment
         run: |
           # Create a new azd environment based on the resource group name
-          # Use the resource group name as the environment name (it will be prefixed with 'rg-' by azd)
+          # The resource group is created with the name provided in the input
+          # If the input includes 'rg-' prefix, remove it to avoid issues
           ENV_NAME="${{ inputs.AZURE_RESOURCE_GROUP }}"
-          # Remove 'rg-' prefix if it exists to avoid double-prefixing
+          # Remove 'rg-' prefix if it exists
           ENV_NAME="${ENV_NAME#rg-}"
           
           azd env new "$ENV_NAME" --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
