@@ -1,5 +1,6 @@
 # Database Seeding Script for Container App Job
 # Uses Managed Identity for authentication (configured in infrastructure)
+$ScriptVersion = '2026-02-12.1'
 
 # CRITICAL: Setup error handling FIRST before anything else
 $ErrorActionPreference = 'Continue'  # Don't stop on errors initially
@@ -38,6 +39,7 @@ $ErrorActionPreference = 'Stop'
 $scriptStartTime = Get-Date
 Write-Log "=========================================="
 Write-Log "DATABASE SEEDING SCRIPT STARTED"
+Write-Log "Seed script version: $ScriptVersion"
 Write-Log "Start Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 Write-Log "Log File: $logFile"
 Write-Log "PowerShell Version: $($PSVersionTable.PSVersion)"
@@ -829,7 +831,7 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         # Enhanced product descriptions with embeddings (DescriptionEmbedding VECTOR field, JSON array)
         @{ Table='Production.ProductDescription'; File='ProductDescription-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('DescriptionEmbedding') }
         # AI-translated product descriptions (actual text content for 16 new cultures; CSV has only ID, Description, ModifiedDate)
-        @{ Table='Production.ProductDescription'; File='ProductDescription-ai-translations.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false; DefaultColumns=@('rowguid', 'DescriptionEmbedding') }
+        @{ Table='Production.ProductDescription'; File='ProductDescription-ai-translations.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false; DefaultColumns=@('rowguid', 'DescriptionEmbedding'); UpdateIfExists=$true }
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # AI-translated product description culture mappings (16 additional cultures beyond base AdventureWorks 7)
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture-ai.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false }
@@ -1139,9 +1141,21 @@ ORDER BY c.ORDINAL_POSITION
                         $val = $values[$col.CSVIndex].Trim()
                     }
                     
-                    # Column uses DB DEFAULT - no value from CSV
+                    # Column uses DB DEFAULT - no value from CSV (use placeholder so non-nullable columns accept the row; INSERT will use DEFAULT/NULL)
                     if ($col.UseDefault) {
-                        $dataRow[$dataTableColIndex] = [DBNull]::Value
+                        if ($col.IsNullable) {
+                            $dataRow[$dataTableColIndex] = [DBNull]::Value
+                        } else {
+                            # Placeholder so DataTable accepts the row; INSERT builder will use DEFAULT
+                            switch ($col.Type) {
+                                'uniqueidentifier' { $dataRow[$dataTableColIndex] = [guid]::Empty }
+                                'bit' { $dataRow[$dataTableColIndex] = $false }
+                                'int' { $dataRow[$dataTableColIndex] = 0 }
+                                'datetime' { $dataRow[$dataTableColIndex] = [datetime]::new(1900, 1, 1, 0, 0, 0) }
+                                'datetime2' { $dataRow[$dataTableColIndex] = [datetime]::new(1900, 1, 1, 0, 0, 0) }
+                                default { $dataRow[$dataTableColIndex] = [DBNull]::Value }
+                            }
+                        }
                         $dataTableColIndex++
                         continue
                     }
@@ -1344,7 +1358,7 @@ ORDER BY c.ORDINAL_POSITION
             # Use different insert method depending on whether table has special columns, hex encoding, identity columns, or AI CSV files
             # SqlBulkCopy does NOT support IDENTITY_INSERT or idempotent inserts, so we must use batched INSERT for:
             # - Identity columns, special columns (hierarchyid, geography, etc.)
-            # - AI CSV files (need IF NOT EXISTS checks to avoid duplicate key errors)
+            # - AI CSV files (use INSERT...SELECT WHERE NOT EXISTS for idempotent load; no IF batch to avoid PowerShell parse errors)
             if ($hasSpecialColumns -or $hasIdentityColumn -or $isAiCsv) {
                 # Use batched INSERT statements for special tables (hierarchyid, geography, hex-encoded columns)
                 Write-Log "    Inserting $rowCount rows using batched INSERT (special columns)..."
@@ -1352,6 +1366,7 @@ ORDER BY c.ORDINAL_POSITION
                 $batchSize = 100
                 $insertedRows = 0
                 $skippedRows = 0
+                $updatedRows = 0
                 $transaction = $conn.BeginTransaction()
                 
                 # Enable IDENTITY_INSERT if needed
@@ -1377,6 +1392,7 @@ ORDER BY ORDINAL_POSITION
                 }
                 $pkReader.Close()
                 
+                $updateErrorLogged = $false
                 try {
                     for ($batchStart = 0; $batchStart -lt $dataTable.Rows.Count; $batchStart += $batchSize) {
                         $batchEnd = [Math]::Min($batchStart + $batchSize, $dataTable.Rows.Count)
@@ -1384,8 +1400,10 @@ ORDER BY ORDINAL_POSITION
                         # Build INSERT statement for this batch - use MERGE for AI CSV files to avoid duplicates
                         $columnList = ($loadedColumns | ForEach-Object { "[$($_.Name)]" }) -join ', '
                         
-                        # For AI CSV files with duplicates, use individual INSERT IF NOT EXISTS
+                        # For AI CSV files with PK, use parameterized INSERT...SELECT WHERE NOT EXISTS (no IF batch)
                         if ($isAiCsv -and $pkColumns.Count -gt 0) {
+                            if ($batchStart -eq 0) { Write-Log "    Using parameterized INSERT...SELECT for idempotent load (version $ScriptVersion)" }
+                            $doUpdateIfExists = ($config.UpdateIfExists -eq $true) -or ($config.File -eq 'ProductDescription-ai-translations.csv')
                             for ($r = $batchStart; $r -lt $batchEnd; $r++) {
                                 $row = $dataTable.Rows[$r]
                                 $values = @()
@@ -1413,83 +1431,154 @@ ORDER BY ORDINAL_POSITION
                                 
                                 $whereClause = $whereConditions -join ' AND '
                                 
-                                # Build values for INSERT
+                                # Build INSERT: use parameterized INSERT...SELECT (no IF) to avoid "if" parse errors; omit UseDefault columns so SELECT has no DEFAULT
+                                $insertColumnListParam = @()
+                                $selectPlaceholdersParam = @()
+                                $insertParamValues = @()
+                                $values = @()
+                                $paramIdx = 0
+                                $canParameterize = @('int', 'bigint', 'smallint', 'tinyint', 'bit', 'datetime', 'datetime2', 'date', 'time', 'datetimeoffset', 'nvarchar', 'varchar', 'nchar', 'char', 'uniqueidentifier', 'decimal', 'numeric', 'money', 'float', 'real')
                                 for ($c = 0; $c -lt $loadedColumns.Count; $c++) {
                                     $col = $loadedColumns[$c]
                                     $value = $row[$c]
-                                    
                                     if ($col.UseDefault) {
-                                        $values += "DEFAULT"
+                                        $defaultOrNull = if ($col.Default -and [string]::IsNullOrWhiteSpace($col.Default) -eq $false) { "DEFAULT" } else { "NULL" }
+                                        $values += $defaultOrNull
+                                        continue
                                     }
-                                    elseif ($value -is [DBNull] -or $null -eq $value) {
+                                    $insertColumnListParam += "[$($col.Name)]"
+                                    if ($col.Type -in $canParameterize -and ($null -eq $value -or $value -is [DBNull] -or $value -is [string] -or $value -is [DateTime] -or $value -is [decimal] -or $value -is [Guid] -or ($null -ne $value -and $value.GetType().IsPrimitive))) {
+                                        if ($col.Name -in $pkColumns) {
+                                            $pkIdx = [array]::IndexOf($pkColumns, $col.Name)
+                                            $selectPlaceholdersParam += "@pk$pkIdx"
+                                        } else {
+                                            $selectPlaceholdersParam += "@ins$paramIdx"
+                                            $insVal = if ($null -eq $value -or $value -is [DBNull]) { [DBNull]::Value } else { $value }
+                                            $insertParamValues += $insVal
+                                            $paramIdx++
+                                        }
                                         $values += "NULL"
                                     }
-                                    elseif ($col.Type -eq 'hierarchyid') {
-                                        $values += "CAST(0x$($value.ToString()) AS hierarchyid)"
-                                    }
-                                    elseif ($col.Type -eq 'geography') {
-                                        $values += "CAST(0x$($value.ToString()) AS geography)"
-                                    }
-                                    elseif ($col.Type -eq 'geometry') {
-                                        $values += "CAST(0x$($value.ToString()) AS geometry)"
-                                    }
-                                    elseif ($col.Type -eq 'varbinary') {
-                                        $hexStr = ($value | ForEach-Object { $_.ToString('X2') }) -join ''
-                                        $values += "0x$hexStr"
-                                    }
-                                    elseif ($col.Type -eq 'vector') {
-                                        # VECTOR columns need CAST from JSON string
-                                        $escapedVal = $value.ToString().Replace("'", "''")
-                                        $values += "CAST(N'$escapedVal' AS VECTOR(1536))"
-                                    }
-                                    elseif ($col.Type -in @('varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext', 'uniqueidentifier', 'xml')) {
-                                        $escapedVal = $value.ToString().Replace("'", "''")
-                                        $values += "N'$escapedVal'"
-                                    }
-                                    elseif ($col.Type -eq 'bit') {
-                                        $values += if ($value) { '1' } else { '0' }
-                                    }
-                                    elseif ($col.Type -in @('datetime', 'datetime2', 'date', 'time', 'datetimeoffset')) {
-                                        if ($col.Type -eq 'date') {
-                                            $dateStr = ([datetime]$value).ToString('yyyy-MM-dd')
-                                        }
-                                        elseif ($col.Type -eq 'datetime') {
-                                            $dateStr = ([datetime]$value).ToString('yyyy-MM-dd HH:mm:ss.fff')
-                                        }
-                                        else {
-                                            $dateStr = ([datetime]$value).ToString('yyyy-MM-dd HH:mm:ss.fffffff')
-                                        }
-                                        $values += "'$dateStr'"
-                                    }
                                     else {
-                                        $values += $value.ToString()
+                                        if ($value -is [DBNull] -or $null -eq $value) { $lit = "NULL" }
+                                        elseif ($col.Type -eq 'hierarchyid') { $lit = "CAST(0x$($value.ToString()) AS hierarchyid)" }
+                                        elseif ($col.Type -eq 'geography') { $lit = "CAST(0x$($value.ToString()) AS geography)" }
+                                        elseif ($col.Type -eq 'geometry') { $lit = "CAST(0x$($value.ToString()) AS geometry)" }
+                                        elseif ($col.Type -eq 'varbinary') { $hexStr = ($value | ForEach-Object { $_.ToString('X2') }) -join ''; $lit = "0x$hexStr" }
+                                        elseif ($col.Type -eq 'vector') { $escapedVal = $value.ToString().Replace("'", "''"); $lit = "CAST(N'$escapedVal' AS VECTOR(1536))" }
+                                        elseif ($col.Type -in @('varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext', 'uniqueidentifier', 'xml')) { $escapedVal = $value.ToString().Replace("'", "''"); $lit = "N'$escapedVal'" }
+                                        elseif ($col.Type -eq 'bit') { $bitVal = if ($value) { '1' } else { '0' }; $lit = $bitVal }
+                                        elseif ($col.Type -in @('datetime', 'datetime2', 'date', 'time', 'datetimeoffset')) {
+                                            if ($col.Type -eq 'date') { $dateStr = ([datetime]$value).ToString('yyyy-MM-dd') }
+                                            elseif ($col.Type -eq 'datetime') { $dateStr = ([datetime]$value).ToString('yyyy-MM-dd HH:mm:ss.fff') }
+                                            else { $dateStr = ([datetime]$value).ToString('yyyy-MM-dd HH:mm:ss.fffffff') }
+                                            $lit = "'$dateStr'"
+                                        }
+                                        else { $lit = $value.ToString() }
+                                        $selectPlaceholdersParam += $lit
+                                        $values += $lit
                                     }
                                 }
-                                
-                                $insertSql = @"
-IF NOT EXISTS (SELECT 1 FROM [$schemaName].[$tableName] WHERE $whereClause)
-BEGIN
-    INSERT INTO [$schemaName].[$tableName] ($columnList) VALUES ($(($values -join ', ')))
-END
-"@
-                                
+                                $whereParamParts = @()
+                                $whereParamValues = @()
+                                $pkIdx = 0
+                                foreach ($pkCol in $pkColumns) {
+                                    $colIdx = [array]::IndexOf(($loadedColumns | ForEach-Object { $_.Name }), $pkCol)
+                                    if ($colIdx -ge 0) {
+                                        $whereParamParts += "[$pkCol] = @pk$pkIdx"
+                                        $whereParamValues += $row[$colIdx]
+                                        $pkIdx++
+                                    }
+                                }
+                                $insertColList = $insertColumnListParam -join ', '
+                                $insertSql = "INSERT INTO [$schemaName].[$tableName] ($insertColList) SELECT " + ($selectPlaceholdersParam -join ', ') + " FROM (SELECT 1 AS _d) AS _t WHERE NOT EXISTS (SELECT 1 FROM [$schemaName].[$tableName] WHERE " + ($whereParamParts -join ' AND ') + ")"
                                 $cmd.Transaction = $transaction
                                 $cmd.CommandText = $insertSql
+                                $cmd.Parameters.Clear()
+                                for ($i = 0; $i -lt $whereParamValues.Count; $i++) {
+                                    $v = $whereParamValues[$i]
+                                    $pval = if ($null -eq $v -or $v -is [DBNull]) { [DBNull]::Value } else { $v }
+                                    $null = $cmd.Parameters.AddWithValue("@pk$i", $pval)
+                                }
+                                for ($i = 0; $i -lt $insertParamValues.Count; $i++) {
+                                    $null = $cmd.Parameters.AddWithValue("@ins$i", $insertParamValues[$i])
+                                }
                                 try {
                                     $affected = $cmd.ExecuteNonQuery()
+                                    $cmd.Parameters.Clear()
                                     if ($affected -gt 0) {
                                         $insertedRows++
                                     } else {
-                                        $skippedRows++
+                                        # Row already exists: update non-PK columns if config requests it (e.g. translations)
+                                        if ($doUpdateIfExists -and $pkColumns.Count -gt 0) {
+                                            $setParts = @()
+                                            $setParamValues = @()
+                                            $paramIdx = 0
+                                            for ($c = 0; $c -lt $loadedColumns.Count; $c++) {
+                                                $col = $loadedColumns[$c]
+                                                if ($col.Name -in $pkColumns -or $col.UseDefault) { continue }
+                                                $setParts += "[$($col.Name)] = @set$paramIdx"
+                                                $setParamValues += $row[$c]
+                                                $paramIdx++
+                                            }
+                                            if ($setParts.Count -gt 0) {
+                                                $whereParamParts = @()
+                                                $whereParamValues = @()
+                                                $pkIdx = 0
+                                                foreach ($pkCol in $pkColumns) {
+                                                    $colIdx = [array]::IndexOf(($loadedColumns | ForEach-Object { $_.Name }), $pkCol)
+                                                    if ($colIdx -ge 0) {
+                                                        $whereParamParts += "[$pkCol] = @pk$pkIdx"
+                                                        $whereParamValues += $row[$colIdx]
+                                                        $pkIdx++
+                                                    }
+                                                }
+                                                $updateSql = "UPDATE [$schemaName].[$tableName] SET " + ($setParts -join ', ') + " WHERE " + ($whereParamParts -join ' AND ')
+                                                $cmd.CommandText = $updateSql
+                                                $cmd.Parameters.Clear()
+                                                for ($i = 0; $i -lt $setParamValues.Count; $i++) {
+                                                    $val = $setParamValues[$i]
+                                                    $paramVal = if ($null -eq $val -or $val -is [DBNull]) { [DBNull]::Value } else { $val }
+                                                    $null = $cmd.Parameters.AddWithValue("@set$i", $paramVal)
+                                                }
+                                                for ($i = 0; $i -lt $whereParamValues.Count; $i++) {
+                                                    $val = $whereParamValues[$i]
+                                                    $paramVal = if ($null -eq $val -or $val -is [DBNull]) { [DBNull]::Value } else { $val }
+                                                    $null = $cmd.Parameters.AddWithValue("@pk$i", $paramVal)
+                                                }
+                                                try {
+                                                    $cmd.ExecuteNonQuery() | Out-Null
+                                                    $updatedRows++
+                                                } catch {
+                                                    if (-not $updateErrorLogged) {
+                                                        Write-Log "    Update failed (first row): $($_.Exception.Message)"
+                                                        $updateErrorLogged = $true
+                                                    }
+                                                    $skippedRows++
+                                                }
+                                                $cmd.Parameters.Clear()
+                                            } else {
+                                                $skippedRows++
+                                            }
+                                        } else {
+                                            $skippedRows++
+                                        }
                                     }
                                 }
                                 catch {
                                     # If we still get duplicate errors, just skip this row
+                                    if (-not $updateErrorLogged) {
+                                        Write-Log "    Insert/Update failed (first row): $($_.Exception.Message)"
+                                        if ($_.ScriptStackTrace) { Write-Log "    Stack: $($_.ScriptStackTrace)" }
+                                        $updateErrorLogged = $true
+                                    }
                                     $skippedRows++
                                 }
                                 
-                                if (($insertedRows + $skippedRows) % 500 -eq 0) {
-                                    Write-Log "    ...processed $($insertedRows + $skippedRows) rows ($insertedRows inserted, $skippedRows skipped)"
+                                $processed = $insertedRows + $updatedRows + $skippedRows
+                                if ($processed % 500 -eq 0) {
+                                    $msg = "    ...processed $processed rows ($insertedRows inserted, $updatedRows updated, $skippedRows skipped)"
+                                    Write-Log $msg
                                 }
                             }
                         }
@@ -1507,7 +1596,8 @@ END
                                 $value = $row[$c]
                                 
                                 if ($col.UseDefault) {
-                                    $values += "DEFAULT"
+                                    # Use DEFAULT only if column has a default constraint; otherwise NULL
+                                    $values += if ($col.Default -and [string]::IsNullOrWhiteSpace($col.Default) -eq $false) { "DEFAULT" } else { "NULL" }
                                 }
                                 elseif ($value -is [DBNull] -or $null -eq $value) {
                                     $values += "NULL"
@@ -1590,12 +1680,13 @@ END
                     }
                     
                     $transaction.Commit()
-                    if ($insertedRows -gt 0) {
-                        if ($skippedRows -gt 0) {
-                            Write-Log "    Successfully loaded $insertedRows rows ($skippedRows duplicates skipped)"
-                        } else {
-                            Write-Log "    Successfully loaded $insertedRows rows"
-                        }
+                    $loadedCount = $insertedRows + $updatedRows
+                    if ($loadedCount -gt 0) {
+                        $msg = "Successfully loaded $loadedCount rows"
+                        if ($insertedRows -gt 0 -and $updatedRows -gt 0) { $msg += " ($insertedRows inserted, $updatedRows updated)" }
+                        elseif ($updatedRows -gt 0) { $msg += " ($updatedRows updated)" }
+                        if ($skippedRows -gt 0) { $msg += " ($skippedRows duplicates skipped)" }
+                        Write-Log "    $msg"
                         $csvLoadSuccess++
                     } else {
                         Write-Log "    All $skippedRows rows already exist - Skipping"
@@ -1607,6 +1698,13 @@ END
                     throw
                 }
                 finally {
+                    if ($hasIdentityColumn) {
+                        $cmd.Transaction = $null
+                        try {
+                            $cmd.CommandText = "SET IDENTITY_INSERT [$schemaName].[$tableName] OFF"
+                            $cmd.ExecuteNonQuery() | Out-Null
+                        } catch { }
+                    }
                     $cmd.Transaction = $null
                 }
             }
@@ -1632,7 +1730,7 @@ END
             }
         }
         catch {
-            Write-Warning "    Failed to load $($config.File): $($_.Exception.Message)"
+            Write-Log "    ✗ Failed to load $($config.Table) from $($config.File): $($_.Exception.Message)"
             $csvLoadFailed++
         }
     }
