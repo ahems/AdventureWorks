@@ -135,8 +135,10 @@ export const expectLoginFailure = async (
   await page.getByLabel(/email address/i).fill(email);
   await page.getByLabel(/^password$/i).fill(password);
   await page.getByRole("button", { name: /sign in/i }).click();
+  // Login failure is shown in a toast (title "Login Failed", description "Invalid email or password.")
+  // Wait for the toast to render and match either message
   await expect(
-    page.getByText(/invalid email or password/i).first(),
-  ).toBeVisible();
+    page.getByText(/invalid email or password|login failed/i).first(),
+  ).toBeVisible({ timeout: 8000 });
   await expect(page).toHaveURL(/\/auth/);
 };

@@ -7,6 +7,9 @@ test.describe("User Browsing and Shopping", () => {
   test("user can browse categories, view products, and add items to cart", async ({
     page,
   }) => {
+    // Allow time for cold starts and multiple product page loads
+    test.setTimeout(60000);
+
     // Create a test user
     await signupThroughUi(page);
 
@@ -101,7 +104,19 @@ test.describe("User Browsing and Shopping", () => {
     for (const productId of productIdsToTry) {
       await page.goto(`${testEnv.webBaseUrl}/product/${productId}`);
       await page.waitForLoadState("domcontentloaded");
-      await page.waitForTimeout(2000);
+
+      // Wait for product page to load - add-to-cart button appears after data loads (cold start can be slow)
+      const addToCartButton = page.locator(
+        '[data-testid="add-to-cart-button"]',
+      );
+      try {
+        await expect(addToCartButton).toBeVisible({ timeout: 15000 });
+      } catch {
+        console.log(
+          `⚠️  Product ${productId} page didn't show add-to-cart in time, trying another...`,
+        );
+        continue;
+      }
 
       // Check if product is out of stock
       const outOfStockMessage = page.getByText(/out of stock/i);
@@ -114,24 +129,9 @@ test.describe("User Browsing and Shopping", () => {
         continue;
       }
 
-      // Product is in stock - try to add to cart
-      const addToCartButton = page.locator(
-        '[data-testid="add-to-cart-button"]',
-      );
-      await expect(addToCartButton).toBeVisible();
-
       // Wait for button to be enabled (product data must load)
       try {
-        await page.waitForFunction(
-          () => {
-            const btn = document.querySelector(
-              '[data-testid="add-to-cart-button"]',
-            );
-            return btn && !btn.hasAttribute("disabled");
-          },
-          { timeout: 5000 },
-        );
-
+        await expect(addToCartButton).toBeEnabled({ timeout: 5000 });
         await addToCartButton.click();
         productAdded = true;
         console.log(`✅ Successfully added product ${productId} to cart`);

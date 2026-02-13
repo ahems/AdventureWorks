@@ -17,16 +17,12 @@ test.describe("AI Features", () => {
     // Create a test user
     await signupThroughUi(page);
 
-    // Navigate to search or home page
-    await page.goto(testEnv.webBaseUrl);
+    // Navigate to search page so the search input is always visible (no header toggle)
+    await page.goto(`${testEnv.webBaseUrl}/search`);
+    await page.waitForLoadState("domcontentloaded");
 
-    // Click the search toggle button to reveal the search input
-    const searchToggle = page.locator('[data-testid="search-toggle-button"]');
-    await expect(searchToggle).toBeVisible({ timeout: 5000 });
-    await searchToggle.click();
-
-    // Now look for the search input that should be visible
-    const searchInput = page.locator('[data-testid="search-input"]');
+    // SearchBar uses placeholder with "Search" - no data-testid on input
+    const searchInput = page.locator('input[placeholder*="Search"]');
     await expect(searchInput).toBeVisible({ timeout: 5000 });
 
     // Test search with semantic query (should use embeddings)
@@ -40,8 +36,10 @@ test.describe("AI Features", () => {
       await searchInput.clear();
       await searchInput.fill(query);
 
-      // Click the search submit button
-      const searchButton = page.locator('[data-testid="search-submit-button"]');
+      // Click the search submit button (SearchBar has no data-testid)
+      const searchButton = page.locator('button[type="submit"]', {
+        hasText: "Search",
+      });
       await searchButton.click();
 
       // Wait longer for semantic search API call and results to render
@@ -57,7 +55,7 @@ test.describe("AI Features", () => {
       // Check if we're on search results page or results appeared
       const hasSearchUrl = page.url().includes("/search");
       const searchResults = page.locator(
-        '[data-testid*="search-result"], [class*="search-result"], [class*="product-card"]',
+        '[data-testid^="product-card-"], [class*="product-card"]',
       );
       const resultCount = await searchResults.count();
 
@@ -82,11 +80,9 @@ test.describe("AI Features", () => {
         test.skip();
       }
 
-      // Go back for next search
+      // Go back to search page for next query
       if (hasSearchUrl) {
-        await page.goto(testEnv.webBaseUrl);
-        // Re-open search for next query
-        await searchToggle.click();
+        await page.goto(`${testEnv.webBaseUrl}/search`);
         await expect(searchInput).toBeVisible({ timeout: 5000 });
       }
     }
@@ -303,15 +299,12 @@ test.describe("AI Features", () => {
     // Create a test user
     await signupThroughUi(page);
 
-    await page.goto(testEnv.webBaseUrl);
+    // Navigate to search page so the search input is always visible
+    await page.goto(`${testEnv.webBaseUrl}/search`);
+    await page.waitForLoadState("domcontentloaded");
 
-    // Click the search toggle button to reveal the search input
-    const searchToggle = page.locator('[data-testid="search-toggle-button"]');
-    await expect(searchToggle).toBeVisible({ timeout: 5000 });
-    await searchToggle.click();
-
-    // Find search input
-    const searchInput = page.locator('[data-testid="search-input"]');
+    // SearchBar uses placeholder with "Search" - no data-testid on input
+    const searchInput = page.locator('input[placeholder*="Search"]');
     await expect(searchInput).toBeVisible({ timeout: 5000 });
 
     // Test different types of queries
@@ -325,8 +318,10 @@ test.describe("AI Features", () => {
       await searchInput.clear();
       await searchInput.fill(query);
 
-      // Click the search submit button
-      const searchButton = page.locator('[data-testid="search-submit-button"]');
+      // Click the search submit button (SearchBar has no data-testid)
+      const searchButton = page.locator('button[type="submit"]', {
+        hasText: "Search",
+      });
       await searchButton.click();
 
       await page.waitForTimeout(2000);

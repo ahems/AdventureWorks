@@ -471,6 +471,10 @@ test.describe("Checkout Flow", () => {
       const randomCvv = Math.floor(100 + Math.random() * 900).toString();
       await cvvInput.fill(randomCvv);
       console.log(`✅ Filled CVV: ${randomCvv}`);
+
+      // Trigger blur so payment form validation runs and Pay button can become enabled
+      await cvvInput.blur();
+      await page.waitForTimeout(500);
     } else {
       console.log(
         "⚠️  Card number input not found - payment form may not be visible",
@@ -483,22 +487,9 @@ test.describe("Checkout Flow", () => {
       .getByRole("button", { name: /pay|place order|complete order/i })
       .or(page.getByTestId("place-order-button"));
 
-    const isVisible = await placeOrderButton.isVisible();
-    const isEnabled = await placeOrderButton.isEnabled();
-    console.log(
-      `🔍 Place Order button - Visible: ${isVisible}, Enabled: ${isEnabled}`,
-    );
-
-    if (!isEnabled) {
-      // Check card validation
-      const cardNum = await page
-        .locator('input[placeholder*="4242"]')
-        .inputValue();
-      console.log(`🔍 Card number value: ${cardNum}`);
-    }
-
     await expect(placeOrderButton).toBeVisible();
-    await expect(placeOrderButton).toBeEnabled();
+    // Wait for validation to pass and button to become enabled
+    await expect(placeOrderButton).toBeEnabled({ timeout: 10000 });
     await placeOrderButton.click();
     console.log("✅ Clicked Place Order button");
 
