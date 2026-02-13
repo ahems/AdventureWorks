@@ -442,39 +442,41 @@ test.describe("Checkout Flow", () => {
       }
     }
 
-    // Fill payment information - card is already selected, just fill the fields
-    const cardNumberInput = page
-      .locator(
-        'input[placeholder*="4242"], input[placeholder*="card"], input[type="text"]',
-      )
-      .first();
+    // Fill payment information - use label or placeholder to target correct inputs
+    const cardNumberInput = page.getByLabel(/card number/i).or(
+      page.locator('input[placeholder*="4242"]').first(),
+    );
     if ((await cardNumberInput.count()) > 0) {
       console.log("💳 Filling payment information");
 
-      // Use a valid test card number (Visa)
-      await cardNumberInput.fill("4111111111111111");
+      // Use valid Luhn test card (Visa format with spaces - app formats on change)
+      await cardNumberInput.fill("4242 4242 4242 4242");
+      await cardNumberInput.blur();
+      await page.waitForTimeout(200);
 
-      // Fill cardholder name (placeholder is just a name like "John Doe")
-      const cardholderNameInput = page.getByPlaceholder(/john|doe|name/i);
+      const cardholderNameInput = page.getByLabel(/cardholder|name/i).first();
       if ((await cardholderNameInput.count()) > 0) {
         await cardholderNameInput.fill("Test User");
+        await cardholderNameInput.blur();
+        await page.waitForTimeout(200);
         console.log("✅ Filled cardholder name");
       }
 
-      // Fill expiry date in the future (12/28) - placeholder is "MM/YY"
-      const expiryInput = page.getByPlaceholder(/mm.*yy/i);
-      await expiryInput.fill("12/28");
-      console.log("✅ Filled expiry date: 12/28");
+      const expiryInput = page.getByPlaceholder(/mm.*yy/i).first();
+      if ((await expiryInput.count()) > 0) {
+        await expiryInput.fill("12/28");
+        await expiryInput.blur();
+        await page.waitForTimeout(200);
+        console.log("✅ Filled expiry date: 12/28");
+      }
 
-      // Fill CVV with random 3-digit number - placeholder is "123"
-      const cvvInput = page.getByPlaceholder(/123|cvv/i);
-      const randomCvv = Math.floor(100 + Math.random() * 900).toString();
-      await cvvInput.fill(randomCvv);
-      console.log(`✅ Filled CVV: ${randomCvv}`);
-
-      // Trigger blur so payment form validation runs and Pay button can become enabled
-      await cvvInput.blur();
-      await page.waitForTimeout(500);
+      const cvvInput = page.getByPlaceholder(/123|cvv/i).first();
+      if ((await cvvInput.count()) > 0) {
+        await cvvInput.fill("123");
+        await cvvInput.blur();
+        await page.waitForTimeout(500);
+        console.log("✅ Filled CVV");
+      }
     } else {
       console.log(
         "⚠️  Card number input not found - payment form may not be visible",
@@ -488,8 +490,8 @@ test.describe("Checkout Flow", () => {
       .or(page.getByTestId("place-order-button"));
 
     await expect(placeOrderButton).toBeVisible();
-    // Wait for validation to pass and button to become enabled
-    await expect(placeOrderButton).toBeEnabled({ timeout: 10000 });
+    // Wait for validation to pass and button to become enabled (Luhn + all fields)
+    await expect(placeOrderButton).toBeEnabled({ timeout: 15000 });
     await placeOrderButton.click();
     console.log("✅ Clicked Place Order button");
 

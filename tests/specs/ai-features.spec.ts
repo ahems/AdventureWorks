@@ -21,9 +21,10 @@ test.describe("AI Features", () => {
     await page.goto(`${testEnv.webBaseUrl}/search`);
     await page.waitForLoadState("domcontentloaded");
 
-    // SearchBar uses placeholder with "Search" - no data-testid on input
-    const searchInput = page.locator('input[placeholder*="Search"]');
-    await expect(searchInput).toBeVisible({ timeout: 5000 });
+    // Wait for search page to render (h1 then input; placeholder can be "Search for bikes..." or i18n)
+    await expect(page.locator("h1")).toContainText(/search|products/i, { timeout: 15000 });
+    const searchInput = page.getByPlaceholder(/search|bikes|gear|clothing|describe/i).first();
+    await expect(searchInput).toBeVisible({ timeout: 10000 });
 
     // Test search with semantic query (should use embeddings)
     const searchQueries = [
@@ -42,49 +43,32 @@ test.describe("AI Features", () => {
       });
       await searchButton.click();
 
-      // Wait longer for semantic search API call and results to render
-      await page.waitForTimeout(5000);
-
-      // Debug: take screenshot and log page state
-      await page.screenshot({
-        path: `test-results/search-${query.replace(/\s/g, "-")}.png`,
-      });
-      console.log(`URL: ${page.url()}`);
-      console.log(`Page title: ${await page.title()}`);
-
-      // Check if we're on search results page or results appeared
-      const hasSearchUrl = page.url().includes("/search");
+      // Wait for semantic search API and product cards to appear (can be slow)
       const searchResults = page.locator(
         '[data-testid^="product-card-"], [class*="product-card"]',
       );
-      const resultCount = await searchResults.count();
+      const hasSearchUrl = page.url().includes("/search");
+      let resultCount = 0;
+      try {
+        await expect(searchResults.first()).toBeVisible({ timeout: 20000 });
+        resultCount = await searchResults.count();
+      } catch {
+        resultCount = await searchResults.count();
+      }
 
-      if (hasSearchUrl || resultCount > 0) {
-        if (resultCount === 0) {
-          console.warn(`⚠️ No AI search results for "${query}" - embeddings may not be seeded`);
-          // Don't fail the test, just skip remaining queries
-          test.skip();
-        }
-
-        // Verify we have results
+      if (resultCount > 0) {
         expect(resultCount).toBeGreaterThan(0);
-
-        // Verify results are relevant (contain product information)
         const firstResult = searchResults.first();
         await expect(firstResult).toBeVisible();
-
         console.log(`✅ Search for "${query}" returned ${resultCount} results`);
       } else {
-        console.warn(`⚠️ No results found for query: "${query}" - AI search may not be configured`);
-        // Skip test if AI search is not working
+        console.warn(`⚠️ No AI search results for "${query}" after 20s - embeddings may not be seeded or search is slow`);
         test.skip();
       }
 
       // Go back to search page for next query
-      if (hasSearchUrl) {
-        await page.goto(`${testEnv.webBaseUrl}/search`);
-        await expect(searchInput).toBeVisible({ timeout: 5000 });
-      }
+      await page.goto(`${testEnv.webBaseUrl}/search`);
+      await expect(searchInput).toBeVisible({ timeout: 10000 });
     }
   });
 
@@ -303,9 +287,9 @@ test.describe("AI Features", () => {
     await page.goto(`${testEnv.webBaseUrl}/search`);
     await page.waitForLoadState("domcontentloaded");
 
-    // SearchBar uses placeholder with "Search" - no data-testid on input
-    const searchInput = page.locator('input[placeholder*="Search"]');
-    await expect(searchInput).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("h1")).toContainText(/search|products/i, { timeout: 15000 });
+    const searchInput = page.getByPlaceholder(/search|bikes|gear|clothing|describe/i).first();
+    await expect(searchInput).toBeVisible({ timeout: 10000 });
 
     // Test different types of queries
     const testQueries = [
@@ -324,29 +308,30 @@ test.describe("AI Features", () => {
       });
       await searchButton.click();
 
-      await page.waitForTimeout(2000);
-
-      // Check for results
+      // Wait for product cards (semantic search can be slow)
       const results = page.locator(
-        '[data-testid*="product"], [class*="product-card"]',
+        '[data-testid^="product-card-"], [class*="product-card"]',
       );
-      const count = await results.count();
+      let count = 0;
+      try {
+        await expect(results.first()).toBeVisible({ timeout: 20000 });
+        count = await results.count();
+      } catch {
+        count = await results.count();
+      }
 
       if (count > 0) {
         console.log(
           `✅ Search by ${type} ("${query}") returned ${count} results`,
         );
       } else {
-        console.warn(`⚠️ No results for ${type} search: "${query}" - AI search may not be working`);
-        // Skip test if no results for any query type
+        console.warn(`⚠️ No results for ${type} search: "${query}" after 20s - AI search may not be working`);
         test.skip();
       }
 
-      // Return to home for next search
-      await page.goto(testEnv.webBaseUrl);
-      // Re-open search for next query
-      await searchToggle.click();
-      await expect(searchInput).toBeVisible({ timeout: 5000 });
+      // Return to search page for next query
+      await page.goto(`${testEnv.webBaseUrl}/search`);
+      await expect(searchInput).toBeVisible({ timeout: 10000 });
     }
   });
 });

@@ -91,14 +91,27 @@ test.describe("User Browsing and Shopping", () => {
       console.log("⚠️  No images found after wait - possible cold start delay");
     }
 
-    // Try to find a product that's in stock
+    // Try to find a product that's in stock (API-based list + fallback IDs from known catalog)
     console.log(
       "🔍 Fetching random products from database to find one in stock...",
     );
-    const productIdsToTry = await getInStockProductIds(10); // Get 10 potential products
-    console.log(
-      `📚 Testing products: ${productIdsToTry.slice(0, 5).join(", ")}...`,
-    );
+    let productIdsToTry: number[];
+    try {
+      productIdsToTry = await getInStockProductIds(12);
+      console.log(
+        `📚 Testing products: ${productIdsToTry.slice(0, 5).join(", ")}...`,
+      );
+    } catch {
+      productIdsToTry = [];
+    }
+    // Fallback: known product IDs that are often in stock (finished goods from AdventureWorks)
+    const fallbackIds = [965, 940, 870, 707, 711, 752, 749, 942, 913, 848];
+    const allIds = [...productIdsToTry];
+    for (const id of fallbackIds) {
+      if (!allIds.includes(id)) allIds.push(id);
+    }
+    productIdsToTry = allIds.slice(0, 18);
+
     let productAdded = false;
 
     for (const productId of productIdsToTry) {
@@ -110,7 +123,7 @@ test.describe("User Browsing and Shopping", () => {
         '[data-testid="add-to-cart-button"]',
       );
       try {
-        await expect(addToCartButton).toBeVisible({ timeout: 15000 });
+        await expect(addToCartButton).toBeVisible({ timeout: 20000 });
       } catch {
         console.log(
           `⚠️  Product ${productId} page didn't show add-to-cart in time, trying another...`,
@@ -131,7 +144,7 @@ test.describe("User Browsing and Shopping", () => {
 
       // Wait for button to be enabled (product data must load)
       try {
-        await expect(addToCartButton).toBeEnabled({ timeout: 5000 });
+        await expect(addToCartButton).toBeEnabled({ timeout: 8000 });
         await addToCartButton.click();
         productAdded = true;
         console.log(`✅ Successfully added product ${productId} to cart`);
@@ -147,12 +160,9 @@ test.describe("User Browsing and Shopping", () => {
     // Verify at least one product was added
     expect(productAdded).toBe(true);
 
-    // Verify cart was updated - look for success message or cart badge update
+    // Verify cart was updated - cart count badge or toast (either indicates success)
     await expect(
-      page
-        .getByText(/added to cart|item added|successfully added/i)
-        .first()
-        .or(page.locator('[data-testid="cart-count"]')),
+      page.locator('[data-testid="cart-count"]'),
     ).toBeVisible({ timeout: 5000 });
 
     // Browse another category
