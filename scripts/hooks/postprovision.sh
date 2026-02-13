@@ -222,7 +222,7 @@ echo "Starting seed job to populate database..."
 
 echo "  ✓ Seed job started successfully"
 echo "  Note: The job runs asynchronously. Check execution status with:"
-echo "    az containerapp job execution list --name $SEED_JOB_NAME --resource-group $RESOURCE_GROUP"
+echo "    az containerapp job execution list --name $SEED_JOB_NAME --resource-group $RESOURCE_GROUP --query \"[0].properties.status\" -o tsv"
 
 echo ""
 echo "=========================================="

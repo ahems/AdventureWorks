@@ -1,6 +1,6 @@
 # Database Seeding Script for Container App Job
 # Uses Managed Identity for authentication (configured in infrastructure)
-$ScriptVersion = '2026-02-12.1'
+$ScriptVersion = '2026-02-13.3'
 
 # CRITICAL: Setup error handling FIRST before anything else
 $ErrorActionPreference = 'Continue'  # Don't stop on errors initially
@@ -611,7 +611,7 @@ try {
     Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Starting PNG image upload in background..."
     
     $pngUploadJob = Start-ThreadJob -ScriptBlock {
-        param($connString, $accessTkn, $scriptRoot, $startTime)
+        param($connString, $scriptRoot, $startTime, $accountId, $tenantId)
         
         $result = @{
             Uploaded = 0
@@ -623,9 +623,32 @@ try {
             AlreadyLoaded = $false
             NoFiles = $false
             NoDirec = $false
+            Error = $null
+            StackTrace = $null
         }
         
         try {
+        try {
+            # Obtain our own token in this thread (passed token may not serialize correctly across runspaces)
+            $threadToken = $null
+            try {
+                Connect-AzAccount -Identity -AccountId $accountId -TenantId $tenantId -ErrorAction Stop -WarningAction SilentlyContinue | Out-Null
+                $rawToken = (Get-AzAccessToken -ResourceUrl 'https://database.windows.net/').Token
+                if (-not $rawToken) { throw 'Access token empty' }
+                if ($rawToken -is [System.Security.SecureString]) {
+                    $ptr = [System.Runtime.InteropServices.Marshal]::SecureStringToGlobalAllocUnicode($rawToken)
+                    try { $threadToken = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($ptr) }
+                    finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeGlobalAllocUnicode($ptr) }
+                } else {
+                    $threadToken = [string]$rawToken
+                }
+            } catch {
+                $result.Failed = -1
+                $result.Error = "Failed to obtain SQL token in PNG job: $($_.Exception.Message)"
+                $result.StackTrace = $_.ScriptStackTrace
+                return $result
+            }
+            
             # Create connection for idempotency check
             $connType = [System.Type]::GetType('Microsoft.Data.SqlClient.SqlConnection, Microsoft.Data.SqlClient')
             if (-not $connType) { $connType = [System.Data.SqlClient.SqlConnection] }
@@ -633,7 +656,7 @@ try {
             $checkConn = [Activator]::CreateInstance($connType, $connString)
             $accessTokenProp = $connType.GetProperty('AccessToken')
             if ($accessTokenProp) {
-                $accessTokenProp.SetValue($checkConn, $accessTkn)
+                $accessTokenProp.SetValue($checkConn, $threadToken)
             }
             $checkConn.Open()
             
@@ -692,7 +715,7 @@ try {
             
             $result.ImagePairCount = $imagePairs.Count
             
-            # Parallel upload (2 threads)
+            # Parallel upload (2 threads) - use same token obtained in this job
             $uploadResults = $imagePairs | ForEach-Object -ThrottleLimit 2 -Parallel {
                 $pair = $_
                 $uploadResult = @{ Success = $false; Skipped = $false; Failed = $false }
@@ -702,7 +725,7 @@ try {
                     $largeBytes = [System.IO.File]::ReadAllBytes($pair.LargePath)
                     
                     $connStr = $using:connString
-                    $accessToken = $using:accessTkn
+                    $token = $using:threadToken
                     
                     $connType = [System.Type]::GetType('Microsoft.Data.SqlClient.SqlConnection, Microsoft.Data.SqlClient')
                     if (-not $connType) { $connType = [System.Data.SqlClient.SqlConnection] }
@@ -710,7 +733,7 @@ try {
                     $threadConn = [Activator]::CreateInstance($connType, $connStr)
                     $accessTokenProp = $connType.GetProperty('AccessToken')
                     if ($accessTokenProp) {
-                        $accessTokenProp.SetValue($threadConn, $accessToken)
+                        $accessTokenProp.SetValue($threadConn, $token)
                     }
                     
                     $threadConn.Open()
@@ -768,10 +791,17 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         catch {
             $result.Failed = -1
             $result.Error = $_.Exception.Message
+            $result.StackTrace = $_.ScriptStackTrace
         }
-        
         return $result
-    } -ArgumentList $connectionString, $accessToken, $PSScriptRoot, $scriptStartTime
+        } catch {
+            # Outer catch: any uncaught failure in the job (e.g. assembly load, serialization)
+            $result.Failed = -1
+            $result.Error = $_.Exception.Message
+            $result.StackTrace = $_.ScriptStackTrace
+            return $result
+        }
+    } -ArgumentList $connectionString, $PSScriptRoot, $scriptStartTime, $azureClientId, $tenantId
     
     Write-Log "  PNG upload job started (running in background while CSV data loads)..."
     
@@ -1756,27 +1786,44 @@ Write-Log "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinutes))
     
     # Wait for the job and get results
     $pngResult = Receive-Job -Job $pngUploadJob -Wait
+    $pngJobState = $pngUploadJob.State
+    $pngJobError = $pngUploadJob.Error
     Remove-Job -Job $pngUploadJob
     
     $elapsed = (Get-Date) - $scriptStartTime
     Write-Log "`nPNG Upload Summary: [+$([math]::Floor($elapsed.TotalMinutes))m]"
     
-    if ($pngResult.AlreadyLoaded) {
+    # Job failed before returning (e.g. runspace/assembly error)
+    if ($pngJobState -eq 'Failed') {
+        Write-Log "  PNG upload job failed (job state: Failed). Error: $($pngJobError | Out-String)"
+    }
+    # No result object (serialization or job never produced output)
+    elseif ($null -eq $pngResult) {
+        Write-Log "  PNG upload job returned no output (job may have failed or serialization issue). Job state: $pngJobState"
+    }
+    # Result may be a hashtable with string keys from deserialization
+    elseif ($true -eq $pngResult.AlreadyLoaded) {
         Write-Log "  AI-generated photos already uploaded - Skipping"
     }
-    elseif ($pngResult.NoDirec) {
+    elseif ($true -eq $pngResult.NoDirec) {
         Write-Log "  Images directory not found - Skipping"
     }
-    elseif ($pngResult.NoFiles) {
+    elseif ($true -eq $pngResult.NoFiles) {
         Write-Log "  No PNG files found in images directory"
     }
     elseif ($pngResult.Failed -eq -1) {
-        Write-Warning "  PNG upload job failed: $($pngResult.Error)"
+        Write-Log "  PNG upload job failed: $($pngResult.Error)"
+        if ($pngResult.StackTrace) {
+            Write-Log "  Stack trace: $($pngResult.StackTrace)"
+        }
     }
-    else {
-        $largeImageCount = $pngResult.TotalFiles - $pngResult.ThumbnailCount
+    elseif ($null -ne $pngResult.TotalFiles -or $null -ne $pngResult.Uploaded) {
+        $largeImageCount = [int]$pngResult.TotalFiles - [int]$pngResult.ThumbnailCount
         Write-Log "  Found $($pngResult.TotalFiles) PNG files ($($pngResult.ThumbnailCount) thumbnails, $largeImageCount large images)"
         Write-Log "  Processed $($pngResult.ImagePairCount) image pairs using parallel upload (2 threads)"
+        if ($pngResult.ImagePairCount -eq 0 -and $pngResult.TotalFiles -gt 0) {
+            Write-Log "  No image pairs formed (expected *_thumb.png / *_small.png with matching .png; check images/ naming)"
+        }
         Write-Log "  - $($pngResult.Uploaded) image pairs uploaded successfully"
         if ($pngResult.Skipped -gt 0) {
             Write-Log "  - $($pngResult.Skipped) files skipped (already exist)"
@@ -1784,9 +1831,12 @@ Write-Log "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinutes))
         if ($pngResult.Failed -gt 0) {
             Write-Log "  - $($pngResult.Failed) files failed"
             if ($pngResult.Errors) {
-                Write-Warning "  First few errors: $($pngResult.Errors -join '; ')"
+                Write-Log "  First few errors: $($pngResult.Errors -join '; ')"
             }
         }
+    }
+    else {
+        Write-Log "  PNG upload result was unexpected. Job state: $pngJobState. Result: $($pngResult | ConvertTo-Json -Compress -Depth 3)"
     }
     
     # Note: ProductProductPhoto-ai.csv mappings are loaded earlier in the CSV data loading section
