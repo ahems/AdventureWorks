@@ -305,8 +305,26 @@ SELECT
             ON pr.[ProductID] = p.[ProductID];
 
 GO
-    
+
 PRINT 'Created view Production.vReviewSearch for semantic review search';
+
+GO
+
+-- Step 14: Add index on ProductProductPhoto(ProductPhotoID) for photo lookups
+-- The PK is (ProductID, ProductPhotoID), so lookups by ProductID are already fast.
+-- Lookups by ProductPhotoID (e.g. joins from ProductPhoto, DAB relationship) need this index.
+-- Without it, selecting many ProductPhoto rows can be very slow and cause timeouts/parsererror.
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[Production].[ProductProductPhoto]') AND name = 'IX_ProductProductPhoto_ProductPhotoID')
+BEGIN
+    CREATE NONCLUSTERED INDEX [IX_ProductProductPhoto_ProductPhotoID]
+    ON [Production].[ProductProductPhoto]([ProductPhotoID]);
+    PRINT 'Added index IX_ProductProductPhoto_ProductPhotoID for ProductPhoto lookups';
+END
+ELSE
+BEGIN
+    PRINT 'Index IX_ProductProductPhoto_ProductPhotoID already exists - skipping';
+END;
 
 GO
 

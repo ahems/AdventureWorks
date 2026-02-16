@@ -108,12 +108,16 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
           >
             {displayPhoto ? (
               <img
+                data-testid="product-gallery-main-image"
                 src={`data:image/gif;base64,${displayPhoto}`}
                 alt={`${productName} - Image ${selectedIndex + 1}`}
                 className="w-full h-full object-contain"
               />
             ) : (
-              <div className="text-center p-8">
+              <div
+                className="text-center p-8"
+                data-testid="product-gallery-fallback"
+              >
                 <span className="text-8xl block mb-4">
                   {currentMockImage?.emoji}
                 </span>

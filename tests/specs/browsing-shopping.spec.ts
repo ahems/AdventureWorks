@@ -75,21 +75,10 @@ test.describe("User Browsing and Shopping", () => {
       page.locator("h1, h2, [data-testid='product-name']").first(),
     ).toBeVisible({ timeout: 10000 });
 
-    // Verify product images or image gallery is shown
-    // Real images have alt like "Product Name - Image 1", fallback shows emojis
-    const hasRealImages = await page.locator("img[alt*='Image']").count();
-    const hasImageGallery = await page
-      .locator('[class*="doodle-card"]')
-      .count();
-
-    if (hasRealImages > 0) {
-      console.log("✅ Real product images loaded");
-      await expect(page.locator("img[alt*='Image']").first()).toBeVisible();
-    } else if (hasImageGallery > 0) {
-      console.log("⚠️  Using fallback image gallery (no real photos in DB)");
-    } else {
-      console.log("⚠️  No images found after wait - possible cold start delay");
-    }
+    // Require real product images from database (no fallback - test fails if no photo IDs)
+    const mainImage = page.locator("[data-testid='product-gallery-main-image']");
+    await expect(mainImage).toBeVisible({ timeout: 15000 });
+    console.log("✅ Real product image loaded (from ProductPhoto)");
 
     // Try to find a product that's in stock (API-based list + fallback IDs from known catalog)
     console.log(
@@ -276,35 +265,10 @@ test.describe("User Browsing and Shopping", () => {
       .first();
     await expect(price).toBeVisible();
 
-    // Verify product image gallery exists
-    // Real images have alt like "Product Name - Image 1", fallback shows emojis
-    const realImages = page.locator("img[alt*='Image']");
-    const imageGallery = page.locator('[class*="doodle-card"]');
-
-    // Check for real images first
-    const hasRealImages = (await realImages.count()) > 0;
-
-    if (hasRealImages) {
-      const imageCount = await realImages.count();
-      console.log(`✅ Found ${imageCount} real product images`);
-
-      // Verify at least one image is loaded
-      const firstImage = realImages.first();
-      await expect(firstImage).toBeVisible();
-    } else {
-      // Check for fallback image gallery (emoji display)
-      const galleryCount = await imageGallery.count();
-      if (galleryCount > 0) {
-        console.log(
-          "⚠️  Using fallback image gallery - no real photos in database",
-        );
-        await expect(imageGallery.first()).toBeVisible();
-      } else {
-        console.log(
-          "⚠️  No images or image gallery found - possible loading issue",
-        );
-      }
-    }
+    // Require real product images from database (no fallback - test fails if no photo IDs)
+    const mainImage = page.locator("[data-testid='product-gallery-main-image']");
+    await expect(mainImage).toBeVisible({ timeout: 15000 });
+    console.log("✅ Real product image displayed (from ProductPhoto)");
 
     // Check if product description exists
     const description = page.locator(

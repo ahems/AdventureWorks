@@ -473,12 +473,10 @@ test.describe("Search Functionality", () => {
     await page.goto(`${testEnv.webBaseUrl}/search?q=helmet`);
     await page.waitForLoadState("domcontentloaded");
 
-    // Wait for search to execute
-    await page.waitForTimeout(5000);
-
-    // Verify search input is populated
-    const searchInput = page.locator('input[placeholder*="Search"]');
-    await expect(searchInput).toHaveValue("helmet", { timeout: 15000 });
+    // Wait for search page to finish loading (skeleton is replaced by real SearchBar)
+    const searchInput = page.locator("[data-testid='search-query-input']");
+    await expect(searchInput).toBeVisible({ timeout: 20000 });
+    await expect(searchInput).toHaveValue("helmet", { timeout: 5000 });
     console.log("✓ Search query populated from URL parameter");
 
     // Verify results are shown

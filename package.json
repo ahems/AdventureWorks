@@ -2,7 +2,7 @@
   "scripts": {
     "test:e2e:warmup": "tsx tests/utils/warmup.ts",
     "test:e2e": "npm run test:e2e:warmup && playwright test -c tests/playwright.config.ts",
-    "test:e2e:azure": "playwright test -c tests/playwright.azure.config.ts"
+    "test:e2e:azure": "PLAYWRIGHT_SERVICE_URL=$(azd env get-value PLAYWRIGHT_SERVICE_URL 2>/dev/null) playwright test -c tests/playwright.azure.config.ts"
   },
   "dependencies": {
     "mssql": "^12.2.0",

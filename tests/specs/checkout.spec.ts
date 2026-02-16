@@ -45,11 +45,12 @@ const getTestEmail = (): string => {
 };
 
 test.describe("Checkout Flow", () => {
+  // Allow time for cart API, checkout form, and parallel/cold start
+  test.setTimeout(90000);
+
   test("user can complete full checkout process with order confirmation", async ({
     page,
   }) => {
-    test.setTimeout(60000); // Increase timeout to 60 seconds
-
     // Listen for browser console errors
     page.on("console", (msg) => {
       if (msg.type() === "error") {
@@ -251,9 +252,15 @@ test.describe("Checkout Flow", () => {
     await page.goto(`${testEnv.webBaseUrl}/cart`);
     await expect(page).toHaveURL(/\/cart/);
 
-    // Wait for cart to load and verify it has items
+    // Wait for cart page to be ready (cart content or empty state)
     console.log("⏳ Waiting for cart page to load and fetch items...");
-    await page.waitForTimeout(5000); // Increased wait for React Query refetch
+    await expect(
+      page
+        .locator('[data-testid*="cart-item"]')
+        .or(page.getByRole("link", { name: /checkout/i }))
+        .or(page.getByText(/your cart is empty|no items/i))
+        .first(),
+    ).toBeVisible({ timeout: 15000 });
 
     // Get current user's businessEntityId from localStorage
     const currentUser = await page.evaluate(() => {
@@ -297,16 +304,16 @@ test.describe("Checkout Flow", () => {
       console.log(`⚠️  Could not query cart API directly:`, error);
     }
 
-    // Retry logic: Wait for cart items to appear (up to 10 seconds with polling)
+    // Retry logic: Wait for cart items to appear (longer under parallel load / cold start)
     let cartItemCount = 0;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 8; attempt++) {
       const cartItems = page.locator('[data-testid*="cart-item"]');
       cartItemCount = await cartItems.count();
       console.log(
-        `📦 Attempt ${attempt + 1}/5: Cart has ${cartItemCount} items displayed on page`,
+        `📦 Attempt ${attempt + 1}/8: Cart has ${cartItemCount} items displayed on page`,
       );
       if (cartItemCount > 0) break;
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(2500);
     }
 
     if (cartItemCount === 0) {
@@ -335,9 +342,15 @@ test.describe("Checkout Flow", () => {
     // Should be on checkout page
     await expect(page).toHaveURL(/\/checkout/);
 
-    // Wait for checkout page to fully load
-    await page.waitForTimeout(2000);
+    // Wait for checkout form to be ready (address or Place Order visible) before filling
     console.log("⏳ Waiting for checkout form to load");
+    await expect(
+      page
+        .getByRole("button", {
+          name: /add a different email|place order|pay/i,
+        })
+        .or(page.getByLabel(/address line 1|street address/i)),
+    ).toBeVisible({ timeout: 20000 });
 
     // CRITICAL: Click "Add a different email" to enter TEST_EMAIL for order confirmation
     const addEmailButton = page.getByRole("button", {
@@ -631,16 +644,16 @@ test.describe("Checkout Flow", () => {
     await page.goto(`${testEnv.webBaseUrl}/cart`);
     await page.waitForLoadState("domcontentloaded");
 
-    // Wait for cart to load and verify it has items with retry logic
+    // Wait for cart to load and verify it has items with retry logic (more attempts under parallel load)
     let cartItemCount = 0;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 8; attempt++) {
       const cartItems = page.locator('[data-testid*="cart-item"]');
       cartItemCount = await cartItems.count();
       console.log(
-        `📦 Cart check attempt ${attempt + 1}/5: Cart has ${cartItemCount} items`,
+        `📦 Cart check attempt ${attempt + 1}/8: Cart has ${cartItemCount} items`,
       );
       if (cartItemCount > 0) break;
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(2500);
     }
 
     if (cartItemCount === 0) {
@@ -654,6 +667,11 @@ test.describe("Checkout Flow", () => {
     await checkoutButton.click();
 
     await expect(page).toHaveURL(/\/checkout/);
+    await expect(
+      page
+        .getByRole("button", { name: /place order|pay|complete order/i })
+        .or(page.getByLabel(/address line 1/i)),
+    ).toBeVisible({ timeout: 15000 });
 
     // Try to submit without filling required fields - button shows "Pay $XX.XX"
     const submitButton = page
@@ -775,16 +793,16 @@ test.describe("Checkout Flow", () => {
     // Go to cart and verify items
     await page.goto(`${testEnv.webBaseUrl}/cart`);
 
-    // Wait for cart items to load with retry logic
+    // Wait for cart items to load with retry logic (more attempts under parallel load)
     let initialCount = 0;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 8; attempt++) {
       const cartItems = page.locator('[data-testid*="cart-item"]');
       initialCount = await cartItems.count();
       console.log(
-        `📦 Attempt ${attempt + 1}/5: Cart has ${initialCount} items initially`,
+        `📦 Attempt ${attempt + 1}/8: Cart has ${initialCount} items initially`,
       );
       if (initialCount > 0) break;
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(2500);
     }
     console.log(`📦 Cart has ${initialCount} items initially`);
 
@@ -800,21 +818,26 @@ test.describe("Checkout Flow", () => {
     await expect(checkoutButton).toBeVisible({ timeout: 10000 });
     await checkoutButton.click();
     await expect(page).toHaveURL(/\/checkout/);
+    await expect(
+      page
+        .getByRole("button", { name: /place order|pay/i })
+        .or(page.getByLabel(/address line 1/i)),
+    ).toBeVisible({ timeout: 15000 });
 
     // Go back to cart
     await page.goto(`${testEnv.webBaseUrl}/cart`);
     await page.waitForLoadState("domcontentloaded");
 
-    // Wait for cart to refetch with retry logic (same as initial check)
+    // Wait for cart to refetch with retry logic (more attempts under parallel load)
     let finalCount = 0;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 8; attempt++) {
       const cartItems = page.locator('[data-testid*="cart-item"]');
       finalCount = await cartItems.count();
       console.log(
-        `📦 After navigation attempt ${attempt + 1}/5: Cart has ${finalCount} items`,
+        `📦 After navigation attempt ${attempt + 1}/8: Cart has ${finalCount} items`,
       );
       if (finalCount >= initialCount) break;
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(2500);
     }
 
     expect(finalCount).toBe(initialCount);

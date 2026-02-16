@@ -16,7 +16,7 @@ interface CsvRow {
 }
 
 const loadCsvFile = (filename: string): CsvRow[] => {
-  const csvPath = path.join(process.cwd(), "..", "scripts", "sql", filename);
+  const csvPath = path.join(process.cwd(), "seed-job", "sql", filename);
 
   if (!fs.existsSync(csvPath)) {
     console.warn(`⚠️ CSV file not found: ${csvPath}`);
