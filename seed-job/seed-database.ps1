@@ -804,6 +804,7 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
     } -ArgumentList $connectionString, $PSScriptRoot, $scriptStartTime, $azureClientId, $tenantId
     
     Write-Log "  PNG upload job started (running in background while CSV data loads)..."
+    Write-Log "  Base product images (ProductPhoto.csv) load later in the CSV step so both base and PNG images are present."
     
     # ---------------------------------------------------------------------
     # Load CSV data into tables using SqlBulkCopy
@@ -983,31 +984,47 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
             $cmd.CommandText = "SELECT COUNT(*) FROM [$schemaName].[$tableName]"
             $existingCount = $cmd.ExecuteScalar()
             
-            # Determine if this is an additive AI CSV file (registered in base record counts)
-            $isAiCsv = $aiCsvBaseRecordCounts.ContainsKey($config.File)
-            $baseRecordCount = $aiCsvBaseRecordCounts[$config.File]
-            
-            if ($isAiCsv -and $baseRecordCount) {
-                # For -ai.csv files, only load if table has exactly the base record count
-                if ($existingCount -eq $baseRecordCount) {
-                    Write-Log "    Table contains base $existingCount rows, adding AI enhancements..."
-                }
-                elseif ($existingCount -gt $baseRecordCount) {
-                    Write-Log "    Table already contains $existingCount rows (expected $baseRecordCount) - AI data already loaded, skipping"
+            # Production.ProductPhoto: load base images (ProductPhoto.csv) when no base rows exist (ID < 1000).
+            # PNG upload job inserts rows with ProductPhotoID 1000+ in parallel; we must still load base CSV so both base and PNG images are present.
+            if ($config.File -eq 'ProductPhoto.csv' -and $schemaName -eq 'Production' -and $tableName -eq 'ProductPhoto') {
+                $cmd.CommandText = "SELECT COUNT(*) FROM [Production].[ProductPhoto] WHERE ProductPhotoID < 1000"
+                $basePhotoCount = $cmd.ExecuteScalar()
+                if ($basePhotoCount -gt 0) {
+                    Write-Log "    Base product photos already loaded ($basePhotoCount rows with ProductPhotoID < 1000) - Skipping"
                     $csvLoadSkipped++
                     continue
                 }
-                else {
-                    Write-Log "    Table contains $existingCount rows (expected $baseRecordCount) - Base data not loaded yet, skipping AI data"
-                    $csvLoadSkipped++
-                    continue
+                if ($existingCount -gt 0) {
+                    Write-Log "    Table has $existingCount rows (PNG upload); loading base ProductPhoto.csv (IDs < 1000) as well..."
                 }
             }
-            elseif ($existingCount -gt 0) {
-                # For regular CSV files, skip if any data exists
-                Write-Log "    Table already contains $existingCount rows - Skipping"
-                $csvLoadSkipped++
-                continue
+            else {
+                # Determine if this is an additive AI CSV file (registered in base record counts)
+                $isAiCsv = $aiCsvBaseRecordCounts.ContainsKey($config.File)
+                $baseRecordCount = $aiCsvBaseRecordCounts[$config.File]
+                
+                if ($isAiCsv -and $baseRecordCount) {
+                    # For -ai.csv files, only load if table has exactly the base record count
+                    if ($existingCount -eq $baseRecordCount) {
+                        Write-Log "    Table contains base $existingCount rows, adding AI enhancements..."
+                    }
+                    elseif ($existingCount -gt $baseRecordCount) {
+                        Write-Log "    Table already contains $existingCount rows (expected $baseRecordCount) - AI data already loaded, skipping"
+                        $csvLoadSkipped++
+                        continue
+                    }
+                    else {
+                        Write-Log "    Table contains $existingCount rows (expected $baseRecordCount) - Base data not loaded yet, skipping AI data"
+                        $csvLoadSkipped++
+                        continue
+                    }
+                }
+                elseif ($existingCount -gt 0) {
+                    # For regular CSV files, skip if any data exists
+                    Write-Log "    Table already contains $existingCount rows - Skipping"
+                    $csvLoadSkipped++
+                    continue
+                }
             }
             
             # Read CSV with proper encoding

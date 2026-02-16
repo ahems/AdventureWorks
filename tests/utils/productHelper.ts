@@ -1,5 +1,7 @@
 import { testEnv } from "./env";
 
+const graphqlUrl = testEnv.restApiBaseUrl.replace(/\/api\/?$/, "/graphql");
+
 /**
  * Product data structure from the database
  */
@@ -158,6 +160,82 @@ export const getInStockProductIds = async (
 ): Promise<number[]> => {
   const products = await getInStockProducts(count);
   return products.map((p) => p.ProductID);
+};
+
+/**
+ * Get product IDs that have at least one product-photo mapping and are finished goods (valid for image tests).
+ * Accepts both base images (ProductPhotoID < 1000) and PNG images (ProductPhotoID >= 1000); no filter on photo ID.
+ */
+export const getProductIdsWithPhotos = async (
+  limit = 15,
+): Promise<number[]> => {
+  try {
+    // 1) All product-photo mappings (base + PNG); variance in IDs allowed
+    const mapRes = await fetch(graphqlUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: `
+          query {
+            productProductPhotos(first: 300) {
+              items { ProductID ProductPhotoID }
+            }
+          }
+        `,
+      }),
+    });
+    if (!mapRes.ok) return [680, 706, 707, 708, 723];
+    const mapJson = (await mapRes.json()) as {
+      data?: { productProductPhotos?: { items?: { ProductID: number; ProductPhotoID: number }[] } };
+      errors?: unknown[];
+    };
+    if (mapJson.errors?.length) return [680, 706, 707, 708, 723];
+    const candidateIds = [...new Set((mapJson.data?.productProductPhotos?.items ?? []).map((i) => i.ProductID))];
+    if (candidateIds.length === 0) return [680, 706, 707, 708, 723];
+
+    // 2) Restrict to finished goods only (FinishedGoodsFlag = true)
+    const chunkSize = 100;
+    const finishedGoodIds: number[] = [];
+    for (let i = 0; i < candidateIds.length; i += chunkSize) {
+      const chunk = candidateIds.slice(i, i + chunkSize);
+      const prodRes = await fetch(graphqlUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: `
+            query($ids: [Int!]!) {
+              products(filter: { ProductID: { in: $ids }, FinishedGoodsFlag: { eq: true } }) {
+                items { ProductID }
+              }
+            }
+          `,
+          variables: { ids: chunk },
+        }),
+      });
+      if (!prodRes.ok) continue;
+      const prodJson = (await prodRes.json()) as {
+        data?: { products?: { items?: { ProductID: number }[] } };
+        errors?: unknown[];
+      };
+      if (prodJson.errors?.length) continue;
+      const items = prodJson.data?.products?.items ?? [];
+      finishedGoodIds.push(...items.map((p) => p.ProductID));
+    }
+
+    const ids = finishedGoodIds.slice(0, limit);
+    if (ids.length > 0) return ids;
+  } catch {
+    // ignore
+  }
+  return [680, 706, 707, 708, 723];
+};
+
+/**
+ * Get one product ID that has a product-photo mapping (convenience wrapper).
+ */
+export const getProductIdWithPhoto = async (): Promise<number> => {
+  const ids = await getProductIdsWithPhotos(1);
+  return ids[0] ?? 680;
 };
 
 /**

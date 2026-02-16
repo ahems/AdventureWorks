@@ -70,9 +70,11 @@ Below is a quick reference for the CSVs in this folder. Unless otherwise noted, 
 - `ProductModelIllustration.csv` – Links product models to illustrations.
 - `ProductModelProductDescriptionCulture.csv` – Maps product models to descriptions per culture.
 - `ProductModelProductDescriptionCulture-ai.csv` – AI-augmented mappings (e.g., additional cultures or AI translations).
-- `ProductPhoto.csv` – Product photo metadata.
-- `ProductProductPhoto.csv` – Links products to photos.
-- `ProductProductPhoto-ai.csv` – AI-related product-photo mappings (e.g., synthetic or AI-generated images used for demos).
+- `ProductPhoto.csv` – Product photo metadata (base AdventureWorks; typically **ProductPhotoID** below 1000).
+- `ProductProductPhoto.csv` – Links products to photos (base mappings).
+- `ProductProductPhoto-ai.csv` – AI-related product-photo mappings (links products to photos used for demos).
+
+**ProductPhoto ID ranges:** The seed job loads product photos from two sources. (1) **ProductPhoto.csv** is bulk-loaded first and uses the original AdventureWorks **ProductPhotoID** range (often IDs below 1000). (2) The **PNG upload job** (in `seed-database.ps1`) inserts additional photos from `seed-job/images/*.png` with **ProductPhotoID starting at 1000** (e.g. 1000–1884 for 885 images). So the database can contain both: base IDs from the CSV and IDs ≥ 1000 from the PNG upload. For product–photo links to resolve in the app, **ProductProductPhoto-ai.csv** must reference **ProductPhotoID** values that actually exist in `[Production].[ProductPhoto]`. If only the PNG upload runs (no base ProductPhoto.csv load), then only IDs 1000+ exist—so either load ProductPhoto.csv to get IDs below 1000, or ensure the AI mappings reference IDs in the 1000+ range used by the PNG job.
 - `ProductReview.csv` – Base product reviews.
 - `ProductReview-ai.csv` – AI-generated product reviews used to demonstrate review generation and embeddings.
 - `ProductSubcategory.csv` – Product subcategories.

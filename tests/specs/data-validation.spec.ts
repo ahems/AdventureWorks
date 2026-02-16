@@ -16,6 +16,17 @@ interface CsvRow {
 }
 
 const loadCsvFile = (filename: string): CsvRow[] => {
+  return loadCsvFileWithDelimiter(filename, ",");
+};
+
+/**
+ * Load CSV/TSV with a given delimiter. Use for seed-job files that are tab-delimited and have no header.
+ */
+const loadCsvFileWithDelimiter = (
+  filename: string,
+  delimiter: string,
+  options?: { hasHeader?: boolean; columnNames?: string[] },
+): CsvRow[] => {
   const csvPath = path.join(process.cwd(), "seed-job", "sql", filename);
 
   if (!fs.existsSync(csvPath)) {
@@ -26,16 +37,34 @@ const loadCsvFile = (filename: string): CsvRow[] => {
   const content = fs.readFileSync(csvPath, "utf-8");
   const lines = content.split("\n").filter((line) => line.trim());
 
-  if (lines.length < 2) return [];
+  const hasHeader = options?.hasHeader ?? true;
+  const columnNames = options?.columnNames;
 
-  const headers = lines[0].split(",").map((h) => h.trim().replace(/"/g, ""));
+  if (hasHeader && lines.length < 2) return [];
+  if (!hasHeader && lines.length < 1) return [];
+
+  let headers: string[];
+  let startIdx: number;
+
+  if (hasHeader && !columnNames) {
+    headers = lines[0].split(delimiter).map((h) => h.trim().replace(/"/g, ""));
+    startIdx = 1;
+  } else if (!hasHeader && columnNames && columnNames.length > 0) {
+    headers = columnNames;
+    startIdx = 0;
+  } else if (hasHeader) {
+    headers = lines[0].split(delimiter).map((h) => h.trim().replace(/"/g, ""));
+    startIdx = 1;
+  } else {
+    return [];
+  }
+
   const rows: CsvRow[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(",").map((v) => v.trim().replace(/"/g, ""));
+  for (let i = startIdx; i < lines.length; i++) {
+    const values = lines[i].split(delimiter).map((v) => v.trim().replace(/"/g, ""));
     const row: CsvRow = {};
     headers.forEach((header, idx) => {
-      row[header] = values[idx] || "";
+      row[header] = values[idx] ?? "";
     });
     rows.push(row);
   }
@@ -176,16 +205,15 @@ test.describe("Data Validation - AI-Enhanced CSV Imports", () => {
   });
 
   test("Culture-ai.csv data is imported correctly", async () => {
-    const csvData = loadCsvFile("Culture-ai.csv");
+    // Seed CSVs are tab-delimited with no header; column order: CultureID, Name, ModifiedDate
+    const csvData = loadCsvFileWithDelimiter("Culture-ai.csv", "\t", {
+      hasHeader: false,
+      columnNames: ["CultureID", "Name", "ModifiedDate"],
+    });
 
-    if (csvData.length === 0) {
-      test.skip();
-      return;
-    }
-
+    expect(csvData.length, "Culture-ai.csv missing or empty - check seed-job/sql").toBeGreaterThan(0);
     console.log(`📊 Found ${csvData.length} rows in Culture-ai.csv`);
 
-    // Query cultures
     const query = `
       query {
         cultures {
@@ -196,127 +224,140 @@ test.describe("Data Validation - AI-Enhanced CSV Imports", () => {
         }
       }
     `;
-
     const data = await queryGraphQL(query);
-    const cultures = data.cultures?.items || [];
+    const cultures = data.cultures?.items ?? [];
 
+    expect(
+      cultures.length,
+      "Data missing - check seed job: no cultures returned from DAB API",
+    ).toBeGreaterThan(0);
     console.log(`📊 Found ${cultures.length} cultures in database`);
 
-    expect(cultures.length).toBeGreaterThan(0);
+    const cultureIds = cultures.map((c: { CultureID?: string }) => (c.CultureID ?? "").trim());
+    const expectedFromCsv = csvData.map((r) => (r.CultureID ?? "").trim()).filter(Boolean);
+    const found = expectedFromCsv.filter((id) => cultureIds.includes(id));
 
-    // Verify expected cultures are present
-    const cultureIds = cultures.map((c: any) => c.CultureID);
-    const expectedCultures = ["en", "fr", "es", "de", "ja", "zh-Hans"];
-
-    const foundExpected = expectedCultures.filter((ec) =>
-      cultureIds.includes(ec),
-    );
-
-    expect(foundExpected.length).toBeGreaterThan(0);
-    console.log(`✅ Found ${foundExpected.length} expected cultures`);
+    expect(
+      found.length,
+      `No Culture-ai.csv culture IDs found in API (CSV has ${expectedFromCsv.length}, API returned ${cultureIds.length}). Check seed job.`,
+    ).toBeGreaterThan(0);
+    console.log(`✅ Found ${found.length} CSV cultures in API (e.g. ${found.slice(0, 5).join(", ")})`);
   });
 
   test("Currency-ai.csv data is imported correctly", async () => {
-    const csvData = loadCsvFile("Currency-ai.csv");
+    // Seed CSV is tab-delimited, no header; columns: CurrencyCode, Name, ModifiedDate
+    const csvData = loadCsvFileWithDelimiter("Currency-ai.csv", "\t", {
+      hasHeader: false,
+      columnNames: ["CurrencyCode", "Name", "ModifiedDate"],
+    });
 
-    if (csvData.length === 0) {
-      test.skip();
-      return;
-    }
-
+    expect(csvData.length, "Currency-ai.csv missing or empty - check seed-job/sql").toBeGreaterThan(0);
     console.log(`📊 Found ${csvData.length} rows in Currency-ai.csv`);
 
-    // Query via REST API
     const currencies = await queryREST("Currency");
+    const items = currencies.value ?? [];
 
-    console.log(
-      `📊 Found ${currencies.value?.length || 0} currencies in database`,
+    expect(
+      items.length,
+      "Data missing - check seed job: no currencies returned from DAB REST API",
+    ).toBeGreaterThan(0);
+    console.log(`📊 Found ${items.length} currencies in database`);
+
+    // DAB REST may return camelCase (CurrencyCode or currencyCode)
+    const apiCodes = items.map(
+      (c: { CurrencyCode?: string; currencyCode?: string }) =>
+        (c.CurrencyCode ?? c.currencyCode ?? "").trim(),
     );
+    const expectedFromCsv = csvData.map((r) => (r.CurrencyCode ?? "").trim()).filter(Boolean);
+    const found = expectedFromCsv.filter((code) => apiCodes.includes(code));
 
-    expect(currencies.value?.length).toBeGreaterThan(0);
-
-    // Verify expected currencies
-    const currencyCodes = currencies.value.map((c: any) => c.CurrencyCode);
-    const expectedCurrencies = ["USD", "EUR", "GBP", "JPY"];
-
-    const foundExpected = expectedCurrencies.filter((ec) =>
-      currencyCodes.includes(ec),
-    );
-
-    expect(foundExpected.length).toBeGreaterThan(0);
-    console.log(`✅ Found ${foundExpected.length} expected currencies`);
+    expect(
+      found.length,
+      `No Currency-ai.csv codes found in API (CSV has ${expectedFromCsv.length}, API returned ${apiCodes.length}). Check seed job.`,
+    ).toBeGreaterThan(0);
+    console.log(`✅ Found ${found.length} CSV currency codes in API (e.g. ${found.slice(0, 5).join(", ")})`);
   });
 
-  test("ProductProductPhoto-ai.csv data links products to images", async () => {
-    const csvData = loadCsvFile("ProductProductPhoto-ai.csv");
-
-    if (csvData.length === 0) {
-      test.skip();
-      return;
-    }
-
-    console.log(
-      `📊 Found ${csvData.length} rows in ProductProductPhoto-ai.csv`,
-    );
-
-    // Query products with photos
-    const query = `
+  test("ProductProductPhoto: base and PNG image data present", async () => {
+    // Seed loads base images (ProductPhoto.csv, ProductPhotoID < 1000) and PNG upload (ProductPhotoID 1000+).
+    // Allow variance in IDs: expect product-photo links (any range) and that both base and PNG photos exist in ProductPhoto.
+    const linksQuery = `
       query {
-        products(first: 50) {
-          items {
-            ProductID
-            Name
-            ProductPhotoID
-          }
+        productProductPhotos(first: 500) {
+          items { ProductID ProductPhotoID }
         }
       }
     `;
+    const linksData = await queryGraphQL(linksQuery);
+    const items = linksData.productProductPhotos?.items ?? [];
 
-    const data = await queryGraphQL(query);
-    const products = data.products?.items || [];
+    expect(
+      items.length,
+      "Data missing - check seed job: no product-product-photo links returned from DAB API",
+    ).toBeGreaterThan(0);
+    console.log(`📊 Found ${items.length} product-photo links in database`);
 
-    // Count products with photos
-    const productsWithPhotos = products.filter((p: any) => p.ProductPhotoID);
+    const baseLinks = items.filter((i: { ProductPhotoID: number }) => i.ProductPhotoID < 1000);
+    const pngLinks = items.filter((i: { ProductPhotoID: number }) => i.ProductPhotoID >= 1000);
 
-    console.log(
-      `📊 Found ${productsWithPhotos.length}/${products.length} products with photos`,
-    );
+    expect(
+      baseLinks.length,
+      "Base image links missing: no mappings with ProductPhotoID < 1000. Check ProductPhoto.csv and ProductProductPhoto load.",
+    ).toBeGreaterThan(0);
+    console.log(`✅ Base image links (ProductPhotoID < 1000): ${baseLinks.length}`);
 
-    expect(productsWithPhotos.length).toBeGreaterThan(0);
-    console.log("✅ Product-Photo associations exist");
+    // PNG photos exist in ProductPhoto table (IDs 1000+); links to them may or may not exist depending on seed
+    const pngPhotosQuery = `
+      query {
+        productPhotos(filter: { ProductPhotoID: { gte: 1000 } }, first: 10) {
+          items { ProductPhotoID }
+        }
+      }
+    `;
+    const pngPhotosData = await queryGraphQL(pngPhotosQuery);
+    const pngPhotos = pngPhotosData.productPhotos?.items ?? [];
+    expect(
+      pngPhotos.length,
+      "PNG image data missing: no ProductPhoto rows with ProductPhotoID >= 1000. Check PNG upload in seed job.",
+    ).toBeGreaterThan(0);
+    console.log(`✅ PNG photos in ProductPhoto (ID >= 1000): ${pngPhotos.length} (sample)`);
+    if (pngLinks.length > 0) {
+      console.log(`✅ PNG image links (ProductPhotoID >= 1000): ${pngLinks.length}`);
+    }
   });
 
   test("StateProvince-ai.csv data is imported correctly", async () => {
-    const csvData = loadCsvFile("StateProvince-ai.csv");
+    // Seed CSV is tab-delimited, no header; columns: StateProvinceID, StateProvinceCode, ...
+    const csvData = loadCsvFileWithDelimiter("StateProvince-ai.csv", "\t", {
+      hasHeader: false,
+      columnNames: ["StateProvinceID", "StateProvinceCode"],
+    });
 
-    if (csvData.length === 0) {
-      test.skip();
-      return;
-    }
-
+    expect(csvData.length, "StateProvince-ai.csv missing or empty - check seed-job/sql").toBeGreaterThan(0);
     console.log(`📊 Found ${csvData.length} rows in StateProvince-ai.csv`);
 
-    // Query state provinces
     const stateProvinces = await queryREST("StateProvince");
+    const items = stateProvinces.value ?? [];
 
-    console.log(
-      `📊 Found ${stateProvinces.value?.length || 0} state/provinces in database`,
+    expect(
+      items.length,
+      "Data missing - check seed job: no state provinces returned from DAB REST API",
+    ).toBeGreaterThan(0);
+    console.log(`📊 Found ${items.length} state/provinces in database`);
+
+    // DAB REST may return camelCase (StateProvinceCode or stateProvinceCode)
+    const stateCodes = items.map(
+      (s: { StateProvinceCode?: string; stateProvinceCode?: string }) =>
+        (s.StateProvinceCode ?? s.stateProvinceCode ?? "").trim(),
     );
+    const expectedFromCsv = csvData.map((r) => (r.StateProvinceCode ?? "").trim()).filter(Boolean);
+    const found = expectedFromCsv.filter((code) => stateCodes.includes(code));
 
-    expect(stateProvinces.value?.length).toBeGreaterThan(0);
-
-    // Verify US states are present
-    const stateCodes = stateProvinces.value.map(
-      (s: any) => s.StateProvinceCode,
-    );
-    const expectedStates = ["WA", "CA", "TX", "NY"];
-
-    const foundExpected = expectedStates.filter((es) =>
-      stateCodes.includes(es),
-    );
-
-    expect(foundExpected.length).toBeGreaterThan(0);
-    console.log(`✅ Found ${foundExpected.length} expected US states`);
+    expect(
+      found.length,
+      `No StateProvince-ai.csv codes found in API (CSV has ${expectedFromCsv.length}, API returned ${stateCodes.length}). Check seed job.`,
+    ).toBeGreaterThan(0);
+    console.log(`✅ Found ${found.length} CSV state codes in API (e.g. ${found.slice(0, 5).join(", ")})`);
   });
 
   test("database has products available for display", async () => {
