@@ -45,12 +45,22 @@ const getTestEmail = (): string => {
 };
 
 test.describe("Checkout Flow", () => {
-  // Allow time for cart API, checkout form, and parallel/cold start
-  test.setTimeout(90000);
+  // Allow time for signup (cold start), cart API, checkout form
+  test.setTimeout(180000);
 
   test("user can complete full checkout process with order confirmation", async ({
     page,
   }) => {
+    // Log any failed HTTP response (400/404/etc.) so we can identify the failing request
+    page.on("response", (response) => {
+      const status = response.status();
+      if (status >= 400) {
+        const url = response.url();
+        const method = response.request().method();
+        console.log(`🔴 HTTP ${status} ${method} ${url}`);
+      }
+    });
+
     // Listen for browser console errors
     page.on("console", (msg) => {
       if (msg.type() === "error") {
@@ -180,16 +190,11 @@ test.describe("Checkout Flow", () => {
       const toastText = await toast.first().textContent();
       console.log(`📢 Toast message: ${toastText}`);
 
-      // Check if it's an error toast
-      if (
-        toastText &&
-        (toastText.toLowerCase().includes("error") ||
-          toastText.toLowerCase().includes("failed"))
-      ) {
-        console.log("❌ Failed to add item to cart - error toast detected");
-        console.log("   Skipping test due to cart API failure");
-        test.skip();
-      }
+      // Fail explicitly if add-to-cart returned an error (do not skip)
+      expect(
+        toastText?.toLowerCase(),
+        "Add to cart failed (error toast). Check cart API; run: npx tsx tests/scripts/check-checkout-dab.ts",
+      ).not.toMatch(/error|failed/);
 
       console.log("✅ First item added to cart successfully");
     } catch (error) {
@@ -316,21 +321,10 @@ test.describe("Checkout Flow", () => {
       await page.waitForTimeout(2500);
     }
 
-    if (cartItemCount === 0) {
-      console.log(
-        "⚠️  Cart is empty after adding products - investigating cause:",
-      );
-      console.log("   ✅ Items were successfully added (toast confirmed)");
-      console.log("   ❓ Items may exist in DB but not retrieved correctly");
-      console.log(
-        "   ❓ Possible ShoppingCartID mismatch between add/retrieve",
-      );
-      console.log("   ❓ Possible React Query cache invalidation issue");
-      console.log("   Skipping checkout flow test due to empty cart");
-      test.skip();
-    }
-
-    expect(cartItemCount).toBeGreaterThan(0);
+    expect(
+      cartItemCount,
+      "Cart empty after add. Possible ShoppingCartID/cache/API issue. Run: npx tsx tests/scripts/check-checkout-dab.ts",
+    ).toBeGreaterThan(0);
 
     // Proceed to checkout - use link role since it's a Link component
     const checkoutButton = page.getByRole("link", {
@@ -349,7 +343,8 @@ test.describe("Checkout Flow", () => {
         .getByRole("button", {
           name: /add a different email|place order|pay/i,
         })
-        .or(page.getByLabel(/address line 1|street address/i)),
+        .or(page.getByLabel(/address line 1|street address/i))
+        .first(),
     ).toBeVisible({ timeout: 20000 });
 
     // CRITICAL: Click "Add a different email" to enter TEST_EMAIL for order confirmation
@@ -656,10 +651,10 @@ test.describe("Checkout Flow", () => {
       await page.waitForTimeout(2500);
     }
 
-    if (cartItemCount === 0) {
-      console.log("⚠️  Cart is empty - skipping validation test");
-      test.skip();
-    }
+    expect(
+      cartItemCount,
+      "Cart empty before validation. Run: npx tsx tests/scripts/check-checkout-dab.ts",
+    ).toBeGreaterThan(0);
 
     // Navigate to checkout - use link role since it's a Link component
     const checkoutButton = page.getByRole("link", { name: /checkout/i });
@@ -806,12 +801,10 @@ test.describe("Checkout Flow", () => {
     }
     console.log(`📦 Cart has ${initialCount} items initially`);
 
-    if (initialCount === 0) {
-      console.log("⚠️  Cart is empty - skipping persistence test");
-      test.skip();
-    }
-
-    expect(initialCount).toBeGreaterThan(0);
+    expect(
+      initialCount,
+      "Cart empty before persistence check. Run: npx tsx tests/scripts/check-checkout-dab.ts",
+    ).toBeGreaterThan(0);
 
     // Proceed to checkout - use link role since it's a Link component
     const checkoutButton = page.getByRole("link", { name: /checkout/i });

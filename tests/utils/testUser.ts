@@ -73,16 +73,34 @@ export const signupThroughUi = async (
 
   await page.getByRole("button", { name: /create account/i }).click();
 
-  // Wait for user to be stored in localStorage after signup
-  // Increased timeout to 60s to allow for Azure Functions cold start
-  await page.waitForFunction(
+  // Wait for signup to resolve: either user in localStorage (success) or error toast (failure).
+  // Fails fast on API error instead of waiting full timeout.
+  const signupResultHandle = await page.waitForFunction(
     (key) => {
-      const stored = localStorage.getItem(key);
-      return stored !== null;
+      if (localStorage.getItem(key) !== null) return "success";
+      const body = document.body.innerText;
+      if (
+        /signup failed|error during signup|an error occurred|timed out|try again/i.test(
+          body,
+        )
+      )
+        return "failure";
+      return false;
     },
     APP_STORAGE_KEYS.currentUser,
-    { timeout: 60000 },
+    { timeout: 120000 },
   );
+  const result = await signupResultHandle.jsonValue();
+  if (result === "failure") {
+    const errorSnippet = await page
+      .locator('[role="status"], [data-state="open"]')
+      .first()
+      .textContent()
+      .catch(() => "");
+    throw new Error(
+      `Signup failed (API/backend error). Check Azure Functions signup endpoint. ${errorSnippet ? `Toast: ${errorSnippet.slice(0, 200)}` : ""}`,
+    );
+  }
 
   // Navigate to home page after successful signup
   await page.goto(testEnv.webBaseUrl);

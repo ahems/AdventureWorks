@@ -114,14 +114,26 @@ const queryREST = async (endpoint: string): Promise<any> => {
 
 test.describe("Data Validation - AI-Enhanced CSV Imports", () => {
   test("ProductReview-ai.csv data is imported correctly", async () => {
-    // Load the CSV file
-    const csvData = loadCsvFile("ProductReview-ai.csv");
+    // Tab-delimited, no header (seed-job format)
+    const csvData = loadCsvFileWithDelimiter("ProductReview-ai.csv", "\t", {
+      hasHeader: false,
+      columnNames: [
+        "ProductReviewID",
+        "ProductID",
+        "ReviewerName",
+        "ReviewDate",
+        "Email",
+        "Rating",
+        "Comments",
+        "ModifiedDate",
+        "Vector",
+      ],
+    });
 
-    if (csvData.length === 0) {
-      test.skip();
-      return;
-    }
-
+    expect(
+      csvData.length,
+      "ProductReview-ai.csv missing or empty - check seed-job/sql",
+    ).toBeGreaterThan(0);
     console.log(`📊 Found ${csvData.length} rows in ProductReview-ai.csv`);
 
     // Query the database via DAB API
@@ -144,8 +156,10 @@ test.describe("Data Validation - AI-Enhanced CSV Imports", () => {
 
     console.log(`📊 Found ${reviews.length} reviews in database`);
 
-    // Verify we have reviews
-    expect(reviews.length).toBeGreaterThan(0);
+    expect(
+      reviews.length,
+      "Data missing - check seed job: no product reviews returned from DAB API",
+    ).toBeGreaterThan(0);
 
     // Verify at least some reviews from CSV are present
     // (Note: CSV might have more data than what's in database or vice versa)
@@ -165,13 +179,22 @@ test.describe("Data Validation - AI-Enhanced CSV Imports", () => {
   });
 
   test("ProductDescription-ai.csv data is imported correctly", async () => {
-    const csvData = loadCsvFile("ProductDescription-ai.csv");
+    // Tab-delimited, no header (seed-job format)
+    const csvData = loadCsvFileWithDelimiter("ProductDescription-ai.csv", "\t", {
+      hasHeader: false,
+      columnNames: [
+        "ProductDescriptionID",
+        "Description",
+        "Rowguid",
+        "ModifiedDate",
+        "Vector",
+      ],
+    });
 
-    if (csvData.length === 0) {
-      test.skip();
-      return;
-    }
-
+    expect(
+      csvData.length,
+      "ProductDescription-ai.csv missing or empty - check seed-job/sql",
+    ).toBeGreaterThan(0);
     console.log(`📊 Found ${csvData.length} rows in ProductDescription-ai.csv`);
 
     // Query product descriptions
@@ -191,7 +214,10 @@ test.describe("Data Validation - AI-Enhanced CSV Imports", () => {
 
     console.log(`📊 Found ${descriptions.length} descriptions in database`);
 
-    expect(descriptions.length).toBeGreaterThan(0);
+    expect(
+      descriptions.length,
+      "Data missing - check seed job: no product descriptions returned from DAB API",
+    ).toBeGreaterThan(0);
 
     // Verify descriptions are substantial (AI-enhanced should be longer)
     const substantialDescriptions = descriptions.filter(

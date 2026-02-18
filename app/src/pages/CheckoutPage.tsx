@@ -941,8 +941,8 @@ const CheckoutPage: React.FC = () => {
       const shippingMethodName =
         selectedShipMethod?.Name || "Standard Shipping";
 
-      // Manually clear cart from UI
-      clearCart();
+      // Manually clear cart from UI (await so in-flight GraphQL is not aborted on navigate)
+      await clearCart();
 
       // Track purchase event in Application Insights
       trackEvent("Purchase_Complete", {

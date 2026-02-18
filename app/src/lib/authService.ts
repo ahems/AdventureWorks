@@ -269,8 +269,11 @@ export async function loginUser(
   }
 }
 
+const SIGNUP_TIMEOUT_MS = 80000;
+
 /**
- * Signup new user - creates a person and email address record
+ * Signup new user - creates a person and email address record.
+ * Wrapped in an overall timeout so a hung GraphQL or Functions call surfaces as an error.
  */
 export async function signupUser(
   email: string,
@@ -278,91 +281,125 @@ export async function signupUser(
   firstName: string,
   lastName: string,
 ): Promise<AuthResult> {
-  try {
-    // Check if user already exists
-    const checkResponse = await graphqlClient.request<CheckUserLoginResponse>(
-      CHECK_USER_LOGIN,
-      {
-        email,
-      },
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(
+      () => reject(new DOMException("Signup timed out", "AbortError")),
+      SIGNUP_TIMEOUT_MS,
     );
-    const existingEmails = checkResponse.emailAddresses?.items || [];
+  });
 
-    if (existingEmails.length > 0) {
-      return {
-        success: false,
-        error: "An account with this email already exists.",
-      };
-    }
-
-    // Create business entity first (required by Person table)
-    const businessEntityResponse =
-      await graphqlClient.request<CreateBusinessEntityResponse>(
-        CREATE_BUSINESS_ENTITY,
-      );
-
-    const businessEntityId =
-      businessEntityResponse.createBusinessEntity.BusinessEntityID;
-
-    // Create person record
-    const personResponse = await graphqlClient.request<CreatePersonResponse>(
-      CREATE_PERSON,
-      {
-        businessEntityId,
-        firstName,
-        lastName,
-      },
-    );
-
-    const newPerson = personResponse.createPerson;
-
-    if (!newPerson) {
-      return {
-        success: false,
-        error: "Failed to create account. Please try again.",
-      };
-    }
-
-    // Create email address record
-    const emailResponse =
-      await graphqlClient.request<CreateEmailAddressResponse>(
-        CREATE_EMAIL_ADDRESS,
+  async function doSignup(): Promise<AuthResult> {
+    try {
+      // Check if user already exists
+      const checkResponse = await graphqlClient.request<CheckUserLoginResponse>(
+        CHECK_USER_LOGIN,
         {
-          businessEntityId: newPerson.BusinessEntityID,
-          emailAddress: email,
+          email,
+        },
+      );
+      const existingEmails = checkResponse.emailAddresses?.items || [];
+
+      if (existingEmails.length > 0) {
+        return {
+          success: false,
+          error: "An account with this email already exists.",
+        };
+      }
+
+      // Create business entity first (required by Person table)
+      const businessEntityResponse =
+        await graphqlClient.request<CreateBusinessEntityResponse>(
+          CREATE_BUSINESS_ENTITY,
+        );
+
+      const businessEntityId =
+        businessEntityResponse.createBusinessEntity.BusinessEntityID;
+
+      // Create person record
+      const personResponse = await graphqlClient.request<CreatePersonResponse>(
+        CREATE_PERSON,
+        {
+          businessEntityId,
+          firstName,
+          lastName,
         },
       );
 
-    const newEmailAddress = emailResponse.createEmailAddress;
+      const newPerson = personResponse.createPerson;
 
-    // Create password using password functions API
-    const functionsUrl = getFunctionsApiUrl();
-    const passwordResponse = await fetch(`${functionsUrl}/api/password`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        businessEntityID: newPerson.BusinessEntityID,
-        password: password,
-      }),
-    });
+      if (!newPerson) {
+        return {
+          success: false,
+          error: "Failed to create account. Please try again.",
+        };
+      }
 
-    if (!passwordResponse.ok) {
+      // Create email address record
+      const emailResponse =
+        await graphqlClient.request<CreateEmailAddressResponse>(
+          CREATE_EMAIL_ADDRESS,
+          {
+            businessEntityId: newPerson.BusinessEntityID,
+            emailAddress: email,
+          },
+        );
+
+      const newEmailAddress = emailResponse.createEmailAddress;
+
+      // Create password using password functions API (timeout for cold start / hung backend)
+      const functionsUrl = getFunctionsApiUrl();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 75000);
+      let passwordResponse: Response;
+      try {
+        passwordResponse = await fetch(`${functionsUrl}/api/password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            businessEntityID: newPerson.BusinessEntityID,
+            password: password,
+          }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      if (!passwordResponse.ok) {
+        return {
+          success: false,
+          error: "Failed to create account password. Please try again.",
+        };
+      }
+
+      return {
+        success: true,
+        user: {
+          businessEntityId: newPerson.BusinessEntityID,
+          email: email,
+          firstName: newPerson.FirstName,
+          lastName: newPerson.LastName,
+          emailAddressId: newEmailAddress?.EmailAddressID,
+        },
+      };
+    } catch (error) {
+      trackError("Signup error", error, {
+        service: "authService",
+        function: "signupUser",
+      });
+      const message =
+        error instanceof Error && error.name === "AbortError"
+          ? "Signup request timed out. The server may be starting up; please try again."
+          : "An error occurred during signup. Please try again.";
       return {
         success: false,
-        error: "Failed to create account password. Please try again.",
+        error: message,
       };
     }
+  }
 
-    return {
-      success: true,
-      user: {
-        businessEntityId: newPerson.BusinessEntityID,
-        email: email,
-        firstName: newPerson.FirstName,
-        lastName: newPerson.LastName,
-        emailAddressId: newEmailAddress?.EmailAddressID,
-      },
-    };
+  try {
+    return await Promise.race([doSignup(), timeoutPromise]);
   } catch (error) {
     trackError("Signup error", error, {
       service: "authService",
@@ -370,7 +407,8 @@ export async function signupUser(
     });
     return {
       success: false,
-      error: "An error occurred during signup. Please try again.",
+      error:
+        "Signup request timed out. The server may be starting up; please try again.",
     };
   }
 }

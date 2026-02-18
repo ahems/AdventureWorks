@@ -80,7 +80,10 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
   };
 
   return (
-    <div className="doodle-card group hover:border-doodle-accent transition-all duration-200 flex flex-col h-full">
+    <div
+      className="doodle-card group hover:border-doodle-accent transition-all duration-200 flex flex-col h-full"
+      data-testid={`sale-product-${product.ProductID}`}
+    >
       {/* Image & Badge */}
       <Link to={`/product/${product.ProductID}`} className="block relative">
         <div className="aspect-square bg-doodle-bg border-b-2 border-dashed border-doodle-text flex items-center justify-center overflow-hidden">
@@ -146,7 +149,7 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
         )}
 
         {/* Price */}
-        <div className="mb-3">
+        <div className="mb-3" data-testid={`sale-product-price-${product.ProductID}`}>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-doodle text-sm text-doodle-text/50 line-through">
               {formatPrice(product.ListPrice)}
