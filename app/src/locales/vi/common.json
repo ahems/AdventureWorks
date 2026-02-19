@@ -308,7 +308,7 @@
     "orderFailed": "Đặt Hàng Thất Bại",
     "orderFailedDesc": "Đã xảy ra lỗi khi xử lý đơn hàng của bạn. Vui lòng thử lại.",
     "orderPlaced": "Đơn Hàng Đã Đặt!",
-    "orderConfirmed": "Đơn hàng {orderId} của bạn đã được xác nhận",
+    "orderConfirmed": "Đơn hàng {{orderId}} của bạn đã được xác nhận",
     "invalidCode": "Mã giảm giá không hợp lệ",
     "codeApplied": "Mã đã được áp dụng thành công!",
     "freeShippingDesc": "Miễn phí vận chuyển",

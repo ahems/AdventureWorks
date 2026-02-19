@@ -311,7 +311,7 @@
     "orderFailed": "订单失败",
     "orderFailedDesc": "处理订单时发生错误。请重试。",
     "orderPlaced": "订单已下达！",
-    "orderConfirmed": "您的订单 {orderId} 已确认",
+    "orderConfirmed": "您的订单 {{orderId}} 已确认",
     "invalidCode": "无效折扣码",
     "codeApplied": "折扣码应用成功！",
     "freeShippingDesc": "免邮",

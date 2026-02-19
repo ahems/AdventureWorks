@@ -8,36 +8,35 @@ import Footer from "@/components/Footer";
 import { getFunctionsApiUrl } from "@/lib/utils";
 import { graphqlClient } from "@/lib/graphql-client";
 import { trackError, trackEvent } from "@/lib/appInsights";
+import { CURRENCY_SYMBOLS } from "@/lib/currencies";
 
-// GraphQL query to fetch order details with relationships
-const GET_ORDER_DETAILS = gql`
-  query GetOrderDetails($salesOrderId: Int!) {
-    salesOrderHeaders(filter: { SalesOrderID: { eq: $salesOrderId } }) {
-      items {
-        SalesOrderID
-        SalesOrderNumber
-        OrderDate
-        SubTotal
-        TaxAmt
-        Freight
-        TotalDue
-        ShipToAddressID
-        BillToAddressID
-        CustomerID
-        shipMethod {
-          Name
-        }
-        salesOrderDetails {
-          items {
+// GraphQL: use _by_pk for single-record lookups to avoid filter-related 400s from DAB
+const GET_ORDER_BY_PK = gql`
+  query GetOrderByPk($salesOrderId: Int!) {
+    salesOrderHeader_by_pk(SalesOrderID: $salesOrderId) {
+      SalesOrderID
+      SalesOrderNumber
+      OrderDate
+      SubTotal
+      TaxAmt
+      Freight
+      TotalDue
+      ShipToAddressID
+      BillToAddressID
+      CustomerID
+      shipMethod {
+        Name
+      }
+      salesOrderDetails {
+        items {
+          ProductID
+          OrderQty
+          UnitPrice
+          UnitPriceDiscount
+          LineTotal
+          product {
             ProductID
-            OrderQty
-            UnitPrice
-            UnitPriceDiscount
-            LineTotal
-            product {
-              ProductID
-              Name
-            }
+            Name
           }
         }
       }
@@ -45,47 +44,69 @@ const GET_ORDER_DETAILS = gql`
   }
 `;
 
-const GET_ADDRESS = gql`
-  query GetAddress($addressId: Int!) {
-    addresses(filter: { AddressID: { eq: $addressId } }) {
+// Address is exposed by Azure Functions API (api/addresses/{id}), not DAB.
+// StateProvince in DAB has no relationship to CountryRegion; only CountryRegionCode scalar.
+const GET_STATE_PROVINCE = gql`
+  query GetStateProvince($stateProvinceId: Int!) {
+    stateProvince_by_pk(StateProvinceID: $stateProvinceId) {
+      StateProvinceCode
+      Name
+      CountryRegionCode
+    }
+  }
+`;
+
+const GET_COUNTRY_REGION = gql`
+  query GetCountryRegion($countryRegionCode: String!) {
+    countryRegion_by_pk(CountryRegionCode: $countryRegionCode) {
+      Name
+    }
+  }
+`;
+
+const GET_COUNTRY_CURRENCY = gql`
+  query GetCountryCurrency($countryCode: String!) {
+    countryRegionCurrencies(
+      filter: { CountryRegionCode: { eq: $countryCode } }
+    ) {
       items {
-        AddressID
-        AddressLine1
-        AddressLine2
-        City
-        StateProvince {
-          StateProvinceCode
-          Name
-        }
-        PostalCode
-        CountryRegion {
-          Name
-        }
+        CurrencyCode
       }
     }
   }
 `;
 
-const GET_CUSTOMER = gql`
-  query GetCustomer($customerId: Int!) {
-    customers(filter: { CustomerID: { eq: $customerId } }) {
+const GET_CURRENCY_RATE = gql`
+  query GetCurrencyRate($toCurrencyCode: String!) {
+    currencyRates(
+      filter: {
+        FromCurrencyCode: { eq: "USD" }
+        ToCurrencyCode: { eq: $toCurrencyCode }
+      }
+    ) {
       items {
-        PersonID
+        AverageRate
       }
     }
   }
 `;
 
-const GET_PERSON = gql`
-  query GetPerson($personId: Int!) {
-    people(filter: { BusinessEntityID: { eq: $personId } }) {
-      items {
-        FirstName
-        LastName
-        emailAddresses {
-          items {
-            EmailAddress
-          }
+const GET_CUSTOMER_BY_PK = gql`
+  query GetCustomerByPk($customerId: Int!) {
+    customer_by_pk(CustomerID: $customerId) {
+      PersonID
+    }
+  }
+`;
+
+const GET_PERSON_BY_PK = gql`
+  query GetPersonByPk($personId: Int!) {
+    person_by_pk(BusinessEntityID: $personId) {
+      FirstName
+      LastName
+      emailAddresses {
+        items {
+          EmailAddress
         }
       }
     }
@@ -124,6 +145,7 @@ interface Order {
     state: string;
     zipCode: string;
     country: string;
+    countryRegionCode?: string;
   };
   shippingMethodName: string;
   subtotal: number;
@@ -131,6 +153,10 @@ interface Order {
   tax: number;
   total: number;
   date: string;
+  /** Currency for display (e.g. GBP for UK address). Order amounts are stored in USD. */
+  currencyCode: string;
+  /** Exchange rate from USD to currencyCode (e.g. ~0.79 for GBP). */
+  exchangeRate: number;
 }
 
 const OrderConfirmationPage: React.FC = () => {
@@ -147,13 +173,13 @@ const OrderConfirmationPage: React.FC = () => {
   useEffect(() => {
     const fetchOrder = async () => {
       const orderId = searchParams.get("orderId");
+      const emailIdParam = searchParams.get("emailId");
       if (!orderId) {
         setLoading(false);
         return;
       }
 
       // Retrieve EmailAddressId from URL params or localStorage
-      const emailIdParam = searchParams.get("emailId");
       const storedEmailId = localStorage.getItem("checkout_email_id");
       const selectedEmailId = emailIdParam
         ? parseInt(emailIdParam, 10)
@@ -161,13 +187,14 @@ const OrderConfirmationPage: React.FC = () => {
           ? parseInt(storedEmailId, 10)
           : null;
 
-      if (selectedEmailId) {
+      if (selectedEmailId != null && !isNaN(selectedEmailId)) {
         setEmailAddressId(selectedEmailId);
-        // Fetch the actual email address
+        // Fetch the actual email address (filter query; variable must be Int)
         try {
+          const emailAddressIdInt = Number(selectedEmailId);
           const emailResponse = await graphqlClient.request<{
             emailAddresses: { items: Array<{ EmailAddress: string }> };
-          }>(GET_EMAIL_ADDRESS, { emailAddressId: selectedEmailId });
+          }>(GET_EMAIL_ADDRESS, { emailAddressId: emailAddressIdInt });
 
           if (emailResponse.emailAddresses.items.length > 0) {
             setSelectedEmail(
@@ -183,7 +210,7 @@ const OrderConfirmationPage: React.FC = () => {
       }
 
       try {
-        // Parse order ID (format: "SO-12345" -> 12345)
+        // Parse order ID (format: "SO-12345" -> 12345) and ensure integer for GraphQL
         const salesOrderId = parseInt(orderId.replace(/^SO-/, ""), 10);
         if (isNaN(salesOrderId)) {
           trackError("Invalid order ID format", undefined, {
@@ -194,35 +221,33 @@ const OrderConfirmationPage: React.FC = () => {
           return;
         }
 
-        // Fetch order header with details
+        // Fetch order by primary key (avoids filter-related 400 from DAB)
         const orderResponse = await graphqlClient.request<{
-          salesOrderHeaders: {
-            items: Array<{
-              SalesOrderID: number;
-              SalesOrderNumber: string;
-              OrderDate: string;
-              SubTotal: number;
-              TaxAmt: number;
-              Freight: number;
-              TotalDue: number;
-              ShipToAddressID: number;
-              CustomerID: number;
-              shipMethod: { Name: string } | null;
-              salesOrderDetails: {
-                items: Array<{
-                  ProductID: number;
-                  OrderQty: number;
-                  UnitPrice: number;
-                  UnitPriceDiscount: number;
-                  LineTotal: number;
-                  product: { ProductID: number; Name: string } | null;
-                }>;
-              };
-            }>;
-          };
-        }>(GET_ORDER_DETAILS, { salesOrderId });
+          salesOrderHeader_by_pk: {
+            SalesOrderID: number;
+            SalesOrderNumber: string;
+            OrderDate: string;
+            SubTotal: number;
+            TaxAmt: number;
+            Freight: number;
+            TotalDue: number;
+            ShipToAddressID: number;
+            CustomerID: number;
+            shipMethod: { Name: string } | null;
+            salesOrderDetails: {
+              items: Array<{
+                ProductID: number;
+                OrderQty: number;
+                UnitPrice: number;
+                UnitPriceDiscount: number;
+                LineTotal: number;
+                product: { ProductID: number; Name: string } | null;
+              }>;
+            };
+          } | null;
+        }>(GET_ORDER_BY_PK, { salesOrderId });
 
-        const orderData = orderResponse.salesOrderHeaders.items[0];
+        const orderData = orderResponse.salesOrderHeader_by_pk;
         if (!orderData) {
           trackError("Order not found", undefined, {
             page: "OrderConfirmationPage",
@@ -232,48 +257,121 @@ const OrderConfirmationPage: React.FC = () => {
           return;
         }
 
-        // Fetch shipping address
-        const addressResponse = await graphqlClient.request<{
-          addresses: {
-            items: Array<{
-              AddressLine1: string;
-              AddressLine2: string | null;
-              City: string;
-              StateProvince: { StateProvinceCode: string; Name: string } | null;
-              PostalCode: string;
-              CountryRegion: { Name: string } | null;
-            }>;
-          };
-        }>(GET_ADDRESS, { addressId: orderData.ShipToAddressID });
+        // Fetch shipping address from Azure Functions API (Address is not in DAB)
+        const shipToAddressId = Number(orderData.ShipToAddressID);
+        let address: {
+          AddressLine1: string;
+          AddressLine2: string | null;
+          City: string;
+          StateProvince: { StateProvinceCode: string; Name: string } | null;
+          PostalCode: string;
+          CountryRegion: { Name: string } | null;
+        } | null = null;
+        let countryRegionCode: string | null = null;
+        if (Number.isInteger(shipToAddressId) && shipToAddressId > 0) {
+          const functionsApiUrl = getFunctionsApiUrl();
+          const addressApiUrl = `${functionsApiUrl}/api/addresses/${shipToAddressId}`;
+          const addressRes = await fetch(addressApiUrl);
+          if (addressRes.ok) {
+            // Functions API uses camelCase (JsonNamingPolicy.CamelCase)
+            const raw = (await addressRes.json()) as Record<string, unknown>;
+            const addressLine1 = (raw.addressLine1 ?? raw.AddressLine1) as string ?? "";
+            const addressLine2 = (raw.addressLine2 ?? raw.AddressLine2) as string | null | undefined;
+            const city = (raw.city ?? raw.City) as string ?? "";
+            const stateProvinceId = Number(raw.stateProvinceID ?? raw.StateProvinceID ?? 0);
+            const postalCode = (raw.postalCode ?? raw.PostalCode) as string ?? "";
+            let stateProvince: { StateProvinceCode: string; Name: string } | null = null;
+            let countryRegion: { Name: string } | null = null;
+            if (Number.isInteger(stateProvinceId) && stateProvinceId > 0) {
+              try {
+                const stateResponse = await graphqlClient.request<{
+                  stateProvince_by_pk: {
+                    StateProvinceCode: string;
+                    Name: string;
+                    CountryRegionCode: string;
+                  } | null;
+                }>(GET_STATE_PROVINCE, { stateProvinceId });
+                const sp = stateResponse.stateProvince_by_pk;
+                if (sp) {
+                  stateProvince = { StateProvinceCode: sp.StateProvinceCode, Name: sp.Name };
+                  if (sp.CountryRegionCode) {
+                    countryRegionCode = sp.CountryRegionCode;
+                    const countryResponse = await graphqlClient.request<{
+                      countryRegion_by_pk: { Name: string } | null;
+                    }>(GET_COUNTRY_REGION, { countryRegionCode: sp.CountryRegionCode });
+                    if (countryResponse.countryRegion_by_pk?.Name) {
+                      countryRegion = { Name: countryResponse.countryRegion_by_pk.Name };
+                    }
+                  }
+                }
+              } catch {
+                // State/country optional; address still displays
+              }
+            }
+            address = {
+              AddressLine1: addressLine1,
+              AddressLine2: addressLine2 ?? null,
+              City: city,
+              StateProvince: stateProvince,
+              PostalCode: postalCode,
+              CountryRegion: countryRegion,
+            };
+          }
+        }
 
-        const address = addressResponse.addresses.items[0];
-
-        // Fetch customer and person info
+        // Fetch customer by primary key, then person
+        const customerIdInt = Number(orderData.CustomerID);
         const customerResponse = await graphqlClient.request<{
-          customers: { items: Array<{ PersonID: number | null }> };
-        }>(GET_CUSTOMER, { customerId: orderData.CustomerID });
+          customer_by_pk: { PersonID: number | null } | null;
+        }>(GET_CUSTOMER_BY_PK, { customerId: customerIdInt });
 
-        const personId = customerResponse.customers.items[0]?.PersonID;
+        const personId = customerResponse.customer_by_pk?.PersonID ?? null;
         let firstName = "Customer";
         let lastName = "";
         let email = "";
 
-        if (personId) {
+        if (personId != null && Number.isInteger(Number(personId))) {
           const personResponse = await graphqlClient.request<{
-            people: {
-              items: Array<{
-                FirstName: string;
-                LastName: string;
-                emailAddresses: { items: Array<{ EmailAddress: string }> };
-              }>;
-            };
-          }>(GET_PERSON, { personId });
+            person_by_pk: {
+              FirstName: string;
+              LastName: string;
+              emailAddresses: { items: Array<{ EmailAddress: string }> };
+            } | null;
+          }>(GET_PERSON_BY_PK, { personId: Number(personId) });
 
-          const person = personResponse.people.items[0];
+          const person = personResponse.person_by_pk;
           if (person) {
             firstName = person.FirstName;
             lastName = person.LastName;
             email = person.emailAddresses.items[0]?.EmailAddress || "";
+          }
+        }
+
+        // Resolve currency from shipping address country (order amounts are in USD)
+        let currencyCode = "USD";
+        let exchangeRate = 1;
+        if (countryRegionCode) {
+          try {
+            const currencyResponse = await graphqlClient.request<{
+              countryRegionCurrencies: { items: Array<{ CurrencyCode: string }> };
+            }>(GET_COUNTRY_CURRENCY, { countryCode: countryRegionCode });
+            if (currencyResponse.countryRegionCurrencies.items.length > 0) {
+              const targetCurrency = currencyResponse.countryRegionCurrencies.items[0].CurrencyCode;
+              if (targetCurrency !== "USD") {
+                const rateResponse = await graphqlClient.request<{
+                  currencyRates: { items: Array<{ AverageRate: number }> };
+                }>(GET_CURRENCY_RATE, { toCurrencyCode: targetCurrency });
+                if (rateResponse.currencyRates.items.length > 0) {
+                  currencyCode = targetCurrency;
+                  exchangeRate = rateResponse.currencyRates.items[0].AverageRate;
+                }
+              }
+            }
+          } catch (err) {
+            trackError("Error fetching order currency", err, {
+              page: "OrderConfirmationPage",
+              countryRegionCode,
+            });
           }
         }
 
@@ -298,6 +396,7 @@ const OrderConfirmationPage: React.FC = () => {
             state: address?.StateProvince?.StateProvinceCode || "",
             zipCode: address?.PostalCode || "",
             country: address?.CountryRegion?.Name || "",
+            countryRegionCode: countryRegionCode ?? undefined,
           },
           shippingMethodName: orderData.shipMethod?.Name || "Standard Shipping",
           subtotal: orderData.SubTotal,
@@ -305,6 +404,8 @@ const OrderConfirmationPage: React.FC = () => {
           tax: orderData.TaxAmt,
           total: orderData.TotalDue,
           date: orderData.OrderDate,
+          currencyCode,
+          exchangeRate,
         };
 
         setOrder(order);
@@ -313,20 +414,22 @@ const OrderConfirmationPage: React.FC = () => {
         localStorage.removeItem("checkout_email_id");
 
         // Generate PDF receipt and send confirmation email with attachment (fire-and-forget)
-        if (selectedEmailId && orderData.CustomerID) {
+        const willSendReceipt = !!(selectedEmailId && orderData.CustomerID);
+        if (willSendReceipt) {
           try {
             const functionsApiUrl = getFunctionsApiUrl();
             const receiptUrl = `${functionsApiUrl}/api/orders/generate-and-send-receipt`;
+            const receiptBody = {
+              salesOrderId: Number(salesOrderId),
+              customerId: Number(orderData.CustomerID),
+              emailAddressId: Number(selectedEmailId),
+            };
             const response = await fetch(receiptUrl, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
               },
-              body: JSON.stringify({
-                salesOrderId: salesOrderId,
-                customerId: orderData.CustomerID,
-                emailAddressId: selectedEmailId,
-              }),
+              body: JSON.stringify(receiptBody),
             });
 
             if (response.ok) {
@@ -339,13 +442,6 @@ const OrderConfirmationPage: React.FC = () => {
               const responseText = await response.text();
               const errMsg = `Receipt request failed (${response.status}). Check browser console for URL and response.`;
               setReceiptError(errMsg);
-              if (typeof console !== "undefined" && console.warn) {
-                console.warn("[OrderConfirmation] Receipt request failed.", {
-                  url: receiptUrl,
-                  status: response.status,
-                  responseText: responseText.slice(0, 200),
-                });
-              }
               trackError("Failed to initiate receipt and email", undefined, {
                 page: "OrderConfirmationPage",
                 salesOrderId: salesOrderId,
@@ -353,17 +449,9 @@ const OrderConfirmationPage: React.FC = () => {
               });
             }
           } catch (error) {
-            const functionsApiUrl = getFunctionsApiUrl();
-            const receiptUrl = `${functionsApiUrl}/api/orders/generate-and-send-receipt`;
             const errMsg =
               "We couldn't send your receipt email. Please contact support with your order number.";
             setReceiptError(errMsg);
-            if (typeof console !== "undefined" && console.warn) {
-              console.warn("[OrderConfirmation] Receipt request error.", {
-                url: receiptUrl,
-                error: error instanceof Error ? error.message : String(error),
-              });
-            }
             trackError("Error initiating receipt generation and email", error, {
               page: "OrderConfirmationPage",
               salesOrderId: salesOrderId,
@@ -498,7 +586,7 @@ const OrderConfirmationPage: React.FC = () => {
             <p className="font-doodle text-lg text-doodle-text/70">
               {t("orderConfirmation.thankYou")}{" "}
               <span className="font-bold text-doodle-text">
-                {order.shipping.email}
+                {selectedEmail || order.shipping.email}
               </span>
             </p>
           </div>
@@ -576,53 +664,63 @@ const OrderConfirmationPage: React.FC = () => {
 
                 {/* Items */}
                 <div className="space-y-3">
-                  {order.items.map((item, index) => (
-                    <div
-                      key={`${item.ProductID}-${index}`}
-                      className="flex justify-between font-doodle text-sm"
-                    >
-                      <span className="text-doodle-text/70">
-                        {item.Name} × {item.quantity}
-                      </span>
-                      <span>
-                        ${(item.ListPrice * item.quantity).toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
+                  {order.items.map((item, index) => {
+                    const formatPrice = (amount: number) =>
+                      `${CURRENCY_SYMBOLS[order.currencyCode] ?? order.currencyCode}${(amount * order.exchangeRate).toFixed(2)}`;
+                    return (
+                      <div
+                        key={`${item.ProductID}-${index}`}
+                        className="flex justify-between font-doodle text-sm"
+                      >
+                        <span className="text-doodle-text/70">
+                          {item.Name} × {item.quantity}
+                        </span>
+                        <span>{formatPrice(item.ListPrice * item.quantity)}</span>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <hr className="border-dashed border-doodle-text/30" />
 
                 <div className="space-y-2 font-doodle text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-doodle-text/70">
-                      {t("orderTracking.subtotal")}
-                    </span>
-                    <span>${order.subtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-doodle-text/70">
-                      {t("orderTracking.shipping")} ({order.shippingMethodName})
-                    </span>
-                    <span>
-                      {order.shippingCost === 0
-                        ? t("orderConfirmation.free")
-                        : `$${order.shippingCost.toFixed(2)}`}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-doodle-text/70">
-                      {t("orderTracking.tax")}
-                    </span>
-                    <span>${order.tax.toFixed(2)}</span>
-                  </div>
-                  <hr className="border-dashed border-doodle-text/30" />
-                  <div className="flex justify-between text-lg font-bold">
-                    <span>{t("orderTracking.total")}</span>
-                    <span className="text-doodle-green">
-                      ${order.total.toFixed(2)}
-                    </span>
-                  </div>
+                  {(() => {
+                    const formatPrice = (amount: number) =>
+                      `${CURRENCY_SYMBOLS[order.currencyCode] ?? order.currencyCode}${(amount * order.exchangeRate).toFixed(2)}`;
+                    return (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-doodle-text/70">
+                            {t("orderTracking.subtotal")}
+                          </span>
+                          <span>{formatPrice(order.subtotal)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-doodle-text/70">
+                            {t("orderTracking.shipping")} ({order.shippingMethodName})
+                          </span>
+                          <span>
+                            {order.shippingCost === 0
+                              ? t("orderConfirmation.free")
+                              : formatPrice(order.shippingCost)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-doodle-text/70">
+                            {t("orderTracking.tax")}
+                          </span>
+                          <span>{formatPrice(order.tax)}</span>
+                        </div>
+                        <hr className="border-dashed border-doodle-text/30" />
+                        <div className="flex justify-between text-lg font-bold">
+                          <span>{t("orderTracking.total")}</span>
+                          <span className="text-doodle-green">
+                            {formatPrice(order.total)}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -642,11 +740,14 @@ const OrderConfirmationPage: React.FC = () => {
                     {order.shipping.firstName} {order.shipping.lastName}
                   </p>
                   <p>{order.shipping.address}</p>
+                  {order.shipping.address2 && <p>{order.shipping.address2}</p>}
                   <p>
                     {order.shipping.city}, {order.shipping.state}{" "}
                     {order.shipping.zipCode}
+                    {order.shipping.country && (
+                      <>, {order.shipping.country}</>
+                    )}
                   </p>
-                  <p>{order.shipping.country}</p>
                 </div>
               </div>
 
@@ -668,21 +769,6 @@ const OrderConfirmationPage: React.FC = () => {
                 <p className="font-doodle text-sm text-doodle-text/70 mt-2">
                   {t("orderConfirmation.trackingEmail")}
                 </p>
-              </div>
-
-              {/* Email Confirmation */}
-              <div className="doodle-card p-6 bg-doodle-accent/5">
-                <div className="flex items-center gap-3">
-                  <Mail className="w-6 h-6 text-doodle-accent" />
-                  <div>
-                    <p className="font-doodle font-bold text-doodle-text">
-                      {t("orderConfirmation.confirmationSent")}
-                    </p>
-                    <p className="font-doodle text-sm text-doodle-text/70">
-                      {t("orderConfirmation.checkEmail")}
-                    </p>
-                  </div>
-                </div>
               </div>
             </div>
           </div>

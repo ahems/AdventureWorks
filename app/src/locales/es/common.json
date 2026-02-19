@@ -311,7 +311,7 @@
     "orderFailed": "Pedido fallido",
     "orderFailedDesc": "Hubo un error procesando tu pedido. Por favor, inténtalo de nuevo.",
     "orderPlaced": "¡Pedido realizado!",
-    "orderConfirmed": "Tu pedido {orderId} ha sido confirmado",
+    "orderConfirmed": "Tu pedido {{orderId}} ha sido confirmado",
     "invalidCode": "Código de descuento inválido",
     "codeApplied": "¡Código aplicado con éxito!",
     "freeShippingDesc": "Envío gratis",

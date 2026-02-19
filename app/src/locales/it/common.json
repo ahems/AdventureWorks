@@ -309,7 +309,7 @@
     "orderFailed": "Ordine Fallito",
     "orderFailedDesc": "Si è verificato un errore durante l'elaborazione del tuo ordine. Riprova.",
     "orderPlaced": "Ordine Effettuato!",
-    "orderConfirmed": "Il tuo ordine {orderId} è stato confermato",
+    "orderConfirmed": "Il tuo ordine {{orderId}} è stato confermato",
     "invalidCode": "Codice sconto non valido",
     "codeApplied": "Codice applicato con successo!",
     "freeShippingDesc": "Spedizione gratuita",

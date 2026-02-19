@@ -310,7 +310,7 @@
     "orderFailed": "Commande Échouée",
     "orderFailedDesc": "Une erreur est survenue lors du traitement de votre commande. Veuillez réessayer.",
     "orderPlaced": "Commande Passée !",
-    "orderConfirmed": "Votre commande {orderId} a été confirmée",
+    "orderConfirmed": "Votre commande {{orderId}} a été confirmée",
     "invalidCode": "Code promo invalide",
     "codeApplied": "Code appliqué avec succès !",
     "freeShippingDesc": "Livraison gratuite",

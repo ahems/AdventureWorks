@@ -325,8 +325,9 @@ const CheckoutPage: React.FC = () => {
     null,
   );
   const [useNewAddress, setUseNewAddress] = useState(false);
-  const [saveNewAddress, setSaveNewAddress] = useState(false);
   const [addressLabel, setAddressLabel] = useState("");
+  /** When user enters a new address and saves it in the form (onSave), we store the new address ID here. Do not use selectedAddressId for new-address flow—it may still be the previous default. */
+  const [newAddressIdFromForm, setNewAddressIdFromForm] = useState<string | null>(null);
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(
     null,
   );
@@ -762,40 +763,8 @@ const CheckoutPage: React.FC = () => {
     setIsProcessing(true);
 
     try {
-      // Save address if user opted in and entering a new address (either explicitly or when no saved addresses exist)
+      // Address is created in the form's onSave when user saves for future; do not create again here
       const isEnteringNewAddress = useNewAddress || addresses.length === 0;
-      if (isEnteringNewAddress && saveNewAddress && user) {
-        const stateProvinceId = parseInt(shippingData.state);
-
-        // Validate stateProvinceId before attempting to save
-        if (
-          !stateProvinceId ||
-          isNaN(stateProvinceId) ||
-          stateProvinceId <= 0
-        ) {
-          toast({
-            title: t("checkout.error"),
-            description: "Please select a valid state/province",
-            variant: "destructive",
-          });
-          setIsProcessing(false);
-          return;
-        }
-
-        await addAddress({
-          addressLine1: shippingData.address.split(",")[0],
-          addressLine2: shippingData.address.split(",")[1]?.trim() || "",
-          city: shippingData.city,
-          stateProvinceId: stateProvinceId,
-          postalCode: shippingData.zipCode,
-          addressType: addressLabel || "Shipping Address",
-          isDefault: addresses.length === 0,
-        });
-        toast({
-          title: t("checkout.addressSaved"),
-          description: t("checkout.addressSavedDesc"),
-        });
-      }
 
       // Save payment method if user opted in and entering new payment
       const isEnteringNewPayment = useNewPayment || paymentMethods.length === 0;
@@ -839,10 +808,26 @@ const CheckoutPage: React.FC = () => {
         customerId = createCustomerResponse.createCustomer.CustomerID;
       }
 
-      // Step 2: Get address ID (use selected or default)
-      const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
-      const addressIdString = selectedAddress?.id || addresses[0]?.id;
-
+      // Step 2: Get address ID (selected saved address, or new address from form — always saved to profile when entering new)
+      let addressIdString: string | null = null;
+      if (isEnteringNewAddress) {
+        // New address is always saved in the form's onSave; we use the stored ID here.
+        if (newAddressIdFromForm) {
+          addressIdString = newAddressIdFromForm;
+        } else {
+          toast({
+            title: t("checkout.addressRequired"),
+            description: t("checkout.completeAddressDesc"),
+            variant: "destructive",
+          });
+          setIsProcessing(false);
+          return;
+        }
+      }
+      if (!addressIdString) {
+        const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
+        addressIdString = (selectedAddress?.id || addresses[0]?.id) ?? null;
+      }
       if (!addressIdString) {
         throw new Error("No address available");
       }
@@ -1220,6 +1205,7 @@ const CheckoutPage: React.FC = () => {
                         onClick={() => {
                           setUseNewAddress(true);
                           setSelectedAddressId(null);
+                          setNewAddressIdFromForm(null);
                           setShippingData({
                             firstName: user?.firstName || "",
                             lastName: user?.lastName || "",
@@ -1309,9 +1295,9 @@ const CheckoutPage: React.FC = () => {
                               country: addressData.countryRegionCode || "US",
                             });
 
-                            // Save address if user wants to - AWAIT the save
-                            if (saveNewAddress && user) {
-                              await addAddress({
+                            // Always save new address to the user's profile and store ID for order
+                            if (user) {
+                              const newAddressId = await addAddress({
                                 addressType: addressData.addressType,
                                 addressLine1: addressData.addressLine1,
                                 addressLine2: addressData.addressLine2,
@@ -1320,6 +1306,10 @@ const CheckoutPage: React.FC = () => {
                                 postalCode: addressData.postalCode,
                                 isDefault: addressData.isDefault,
                               });
+                              if (newAddressId) {
+                                setSelectedAddressId(newAddressId);
+                                setNewAddressIdFromForm(newAddressId);
+                              }
                             }
 
                             // Move to next step
@@ -1329,25 +1319,6 @@ const CheckoutPage: React.FC = () => {
                             setUseNewAddress(false);
                           }}
                         />
-
-                        {/* Save Address Option */}
-                        {user && (
-                          <div className="mt-4">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={saveNewAddress}
-                                onChange={(e) =>
-                                  setSaveNewAddress(e.target.checked)
-                                }
-                                className="w-4 h-4"
-                              />
-                              <span className="font-doodle text-sm text-doodle-text">
-                                {t("checkout.saveAddressForFuture")}
-                              </span>
-                            </label>
-                          </div>
-                        )}
                       </>
                     )}
 

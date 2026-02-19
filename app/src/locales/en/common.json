@@ -312,7 +312,7 @@
     "orderFailed": "Order Failed",
     "orderFailedDesc": "There was an error processing your order. Please try again.",
     "orderPlaced": "Order Placed!",
-    "orderConfirmed": "Your order {orderId} has been confirmed",
+    "orderConfirmed": "Your order {{orderId}} has been confirmed",
     "invalidCode": "Invalid discount code",
     "codeApplied": "Code applied successfully!",
     "freeShippingDesc": "Free shipping",

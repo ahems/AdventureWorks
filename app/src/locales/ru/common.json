@@ -309,7 +309,7 @@
     "orderFailed": "Ошибка заказа",
     "orderFailedDesc": "При обработке заказа произошла ошибка. Пожалуйста, попробуйте снова.",
     "orderPlaced": "Заказ оформлен!",
-    "orderConfirmed": "Ваш заказ {orderId} подтверждён",
+    "orderConfirmed": "Ваш заказ {{orderId}} подтверждён",
     "invalidCode": "Неверный код скидки",
     "codeApplied": "Код успешно применён!",
     "freeShippingDesc": "Бесплатная доставка",

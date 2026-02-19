@@ -309,7 +309,7 @@
     "orderFailed": "Bestelling Mislukt",
     "orderFailedDesc": "Er is een fout opgetreden bij het verwerken van uw bestelling. Probeer het alstublieft opnieuw.",
     "orderPlaced": "Bestelling geplaatst!",
-    "orderConfirmed": "Uw bestelling {orderId} is bevestigd",
+    "orderConfirmed": "Uw bestelling {{orderId}} is bevestigd",
     "invalidCode": "Ongeldige kortingscode",
     "codeApplied": "Code succesvol toegepast!",
     "freeShippingDesc": "Gratis verzending",

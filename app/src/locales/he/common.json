@@ -311,7 +311,7 @@
     "orderFailed": "ההזמנה נכשלה",
     "orderFailedDesc": "אירעה שגיאה בעיבוד ההזמנה שלך. אנא נסה שוב.",
     "orderPlaced": "ההזמנה הושלמה!",
-    "orderConfirmed": "ההזמנה שלך {orderId} אושרה",
+    "orderConfirmed": "ההזמנה שלך {{orderId}} אושרה",
     "invalidCode": "קוד הנחה לא תקין",
     "codeApplied": "הקוד הוחל בהצלחה!",
     "freeShippingDesc": "משלוח חינם",

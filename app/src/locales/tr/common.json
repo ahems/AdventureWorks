@@ -311,7 +311,7 @@
     "orderFailed": "Sipariş Başarısız oldu",
     "orderFailedDesc": "Siparişiniz işlenirken bir hata oluştu. Lütfen tekrar deneyin.",
     "orderPlaced": "Sipariş Verildi!",
-    "orderConfirmed": "Siparişiniz {orderId} onaylandı",
+    "orderConfirmed": "Siparişiniz {{orderId}} onaylandı",
     "invalidCode": "Geçersiz indirim kodu",
     "codeApplied": "Kod başarıyla uygulandı!",
     "freeShippingDesc": "Ücretsiz kargo",

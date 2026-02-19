@@ -309,7 +309,7 @@
     "orderFailed": "注文に失敗しました",
     "orderFailedDesc": "ご注文の処理中にエラーが発生しました。もう一度お試しください。",
     "orderPlaced": "注文が完了しました！",
-    "orderConfirmed": "ご注文番号 {orderId} が確認されました",
+    "orderConfirmed": "ご注文番号 {{orderId}} が確認されました",
     "invalidCode": "無効な割引コード",
     "codeApplied": "コードが正常に適用されました！",
     "freeShippingDesc": "送料無料",

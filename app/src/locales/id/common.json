@@ -310,7 +310,7 @@
     "orderFailed": "Pesanan Gagal",
     "orderFailedDesc": "Terjadi kesalahan saat memproses pesanan Anda. Silakan coba lagi.",
     "orderPlaced": "Pesanan Ditempatkan!",
-    "orderConfirmed": "Pesanan Anda {orderId} telah dikonfirmasi",
+    "orderConfirmed": "Pesanan Anda {{orderId}} telah dikonfirmasi",
     "invalidCode": "Kode diskon tidak valid",
     "codeApplied": "Kode berhasil diterapkan!",
     "freeShippingDesc": "Gratis ongkir",

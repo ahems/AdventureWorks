@@ -310,7 +310,7 @@
     "orderFailed": "فشل الطلب",
     "orderFailedDesc": "حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى.",
     "orderPlaced": "تم تقديم الطلب!",
-    "orderConfirmed": "تم تأكيد طلبك {orderId}",
+    "orderConfirmed": "تم تأكيد طلبك {{orderId}}",
     "invalidCode": "رمز الخصم غير صالح",
     "codeApplied": "تم تطبيق الرمز بنجاح!",
     "freeShippingDesc": "الشحن مجاني",
