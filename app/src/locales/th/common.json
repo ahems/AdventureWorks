@@ -238,6 +238,12 @@
     "comingSoon": "เร็วๆ นี้!",
     "signOut": "ออกจากระบบ",
     "orderNotes": "หมายเหตุการสั่งซื้อ:",
+    "sendReceiptTo": "ส่งใบเสร็จไปที่",
+    "resendReceipt": "ส่งใบเสร็จอีกครั้ง",
+    "sendingReceipt": "กำลังส่ง…",
+    "receiptSent": "ส่งใบเสร็จแล้ว",
+    "receiptSentDescription": "ใบเสร็จจะถูกส่งไปยังอีเมลที่เลือกในไม่ช้า",
+    "receiptSendFailed": "ส่งใบเสร็จไม่สำเร็จ",
     "placeholders": {
       "firstName": "จอห์น",
       "lastName": "โดว์",

@@ -240,6 +240,12 @@
     "comingSoon": "قريباً!",
     "signOut": "تسجيل الخروج",
     "orderNotes": "ملاحظات الطلب:",
+    "sendReceiptTo": "إرسال الإيصال إلى",
+    "resendReceipt": "إعادة إرسال الإيصال",
+    "sendingReceipt": "جاري الإرسال…",
+    "receiptSent": "تم إرسال الإيصال",
+    "receiptSentDescription": "سيتم إرسال الإيصال قريباً إلى عنوان البريد الإلكتروني المحدد.",
+    "receiptSendFailed": "فشل إرسال الإيصال",
     "placeholders": {
       "firstName": "جون",
       "lastName": "دو",

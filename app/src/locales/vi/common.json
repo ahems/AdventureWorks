@@ -238,6 +238,12 @@
     "comingSoon": "Sắp ra mắt!",
     "signOut": "Đăng Xuất",
     "orderNotes": "Ghi Chú Đơn Hàng:",
+    "sendReceiptTo": "Gửi biên lai đến",
+    "resendReceipt": "Gửi lại biên lai",
+    "sendingReceipt": "Đang gửi…",
+    "receiptSent": "Đã gửi biên lai",
+    "receiptSentDescription": "Biên lai sẽ được gửi đến địa chỉ email đã chọn trong thời gian sớm nhất.",
+    "receiptSendFailed": "Gửi biên lai thất bại",
     "placeholders": {
       "firstName": "Nguyễn",
       "lastName": "Văn A",

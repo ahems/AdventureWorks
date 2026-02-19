@@ -240,6 +240,12 @@
     "comingSoon": "Bientôt disponible !",
     "signOut": "Se Déconnecter",
     "orderNotes": "Notes de Commande :",
+    "sendReceiptTo": "Envoyer le reçu à",
+    "resendReceipt": "Renvoyer le reçu",
+    "sendingReceipt": "Envoi en cours…",
+    "receiptSent": "Reçu envoyé",
+    "receiptSentDescription": "Le reçu sera envoyé sous peu à l'adresse e-mail sélectionnée.",
+    "receiptSendFailed": "Échec de l'envoi du reçu",
     "placeholders": {
       "firstName": "Jean",
       "lastName": "Dupont",

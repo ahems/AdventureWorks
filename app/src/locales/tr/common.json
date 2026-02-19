@@ -240,6 +240,12 @@
     "comingSoon": "Çok yakında!",
     "signOut": "Oturumu Kapat",
     "orderNotes": "Sipariş Notları:",
+    "sendReceiptTo": "Fişi gönder",
+    "resendReceipt": "Fişi tekrar gönder",
+    "sendingReceipt": "Gönderiliyor…",
+    "receiptSent": "Fiş gönderildi",
+    "receiptSentDescription": "Fiş kısa süre içinde seçilen e-posta adresine gönderilecektir.",
+    "receiptSendFailed": "Fiş gönderilemedi",
     "placeholders": {
       "firstName": "John",
       "lastName": "Doe",

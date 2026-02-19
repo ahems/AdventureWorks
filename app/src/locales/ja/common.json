@@ -238,6 +238,12 @@
     "comingSoon": "近日公開！",
     "signOut": "サインアウト",
     "orderNotes": "注文メモ：",
+    "sendReceiptTo": "領収書の送信先",
+    "resendReceipt": "領収書を再送信",
+    "sendingReceipt": "送信中…",
+    "receiptSent": "領収書を送信しました",
+    "receiptSentDescription": "領収書はまもなく選択したメールアドレスに送信されます。",
+    "receiptSendFailed": "領収書の送信に失敗しました",
     "placeholders": {
       "firstName": "ジョン",
       "lastName": "ドウ",

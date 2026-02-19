@@ -238,6 +238,12 @@
     "comingSoon": "Binnenkort beschikbaar!",
     "signOut": "Uitloggen",
     "orderNotes": "Bestelnotities:",
+    "sendReceiptTo": "Bon verzenden naar",
+    "resendReceipt": "Bon opnieuw verzenden",
+    "sendingReceipt": "Verzenden…",
+    "receiptSent": "Bon verzonden",
+    "receiptSentDescription": "De bon wordt binnenkort verzonden naar het geselecteerde e-mailadres.",
+    "receiptSendFailed": "Bon verzenden mislukt",
     "placeholders": {
       "firstName": "John",
       "lastName": "Doe",

@@ -240,6 +240,12 @@
     "comingSoon": "Coming soon!",
     "signOut": "Sign Out",
     "orderNotes": "Order Notes:",
+    "sendReceiptTo": "Send receipt to",
+    "resendReceipt": "Re-Send Receipt",
+    "sendingReceipt": "Sending…",
+    "receiptSent": "Receipt sent",
+    "receiptSentDescription": "The receipt will be sent to the selected email address shortly.",
+    "receiptSendFailed": "Failed to send receipt",
     "placeholders": {
       "firstName": "John",
       "lastName": "Doe",

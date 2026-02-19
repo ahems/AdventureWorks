@@ -139,6 +139,8 @@ const OrderConfirmationPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [emailAddressId, setEmailAddressId] = useState<number | null>(null);
   const [selectedEmail, setSelectedEmail] = useState<string>("");
+  const [receiptRequestSent, setReceiptRequestSent] = useState(false);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
   const { t } = useTranslation("common");
 
   // Fetch order data from API using order ID from URL
@@ -314,28 +316,36 @@ const OrderConfirmationPage: React.FC = () => {
         if (selectedEmailId && orderData.CustomerID) {
           try {
             const functionsApiUrl = getFunctionsApiUrl();
-            const response = await fetch(
-              `${functionsApiUrl}/api/orders/generate-and-send-receipt`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  salesOrderId: salesOrderId,
-                  customerId: orderData.CustomerID,
-                  emailAddressId: selectedEmailId,
-                }),
+            const receiptUrl = `${functionsApiUrl}/api/orders/generate-and-send-receipt`;
+            const response = await fetch(receiptUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
               },
-            );
+              body: JSON.stringify({
+                salesOrderId: salesOrderId,
+                customerId: orderData.CustomerID,
+                emailAddressId: selectedEmailId,
+              }),
+            });
 
             if (response.ok) {
+              setReceiptRequestSent(true);
               trackEvent("Order_ReceiptGenerationInitiated", {
                 salesOrderId: salesOrderId,
                 emailAddressId: selectedEmailId,
               });
             } else {
               const responseText = await response.text();
+              const errMsg = `Receipt request failed (${response.status}). Check browser console for URL and response.`;
+              setReceiptError(errMsg);
+              if (typeof console !== "undefined" && console.warn) {
+                console.warn("[OrderConfirmation] Receipt request failed.", {
+                  url: receiptUrl,
+                  status: response.status,
+                  responseText: responseText.slice(0, 200),
+                });
+              }
               trackError("Failed to initiate receipt and email", undefined, {
                 page: "OrderConfirmationPage",
                 salesOrderId: salesOrderId,
@@ -343,6 +353,17 @@ const OrderConfirmationPage: React.FC = () => {
               });
             }
           } catch (error) {
+            const functionsApiUrl = getFunctionsApiUrl();
+            const receiptUrl = `${functionsApiUrl}/api/orders/generate-and-send-receipt`;
+            const errMsg =
+              "We couldn't send your receipt email. Please contact support with your order number.";
+            setReceiptError(errMsg);
+            if (typeof console !== "undefined" && console.warn) {
+              console.warn("[OrderConfirmation] Receipt request error.", {
+                url: receiptUrl,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
             trackError("Error initiating receipt generation and email", error, {
               page: "OrderConfirmationPage",
               salesOrderId: salesOrderId,
@@ -411,7 +432,20 @@ const OrderConfirmationPage: React.FC = () => {
                 </p>
               </div>
 
-              {selectedEmail && (
+              {receiptError && (
+                <div className="bg-red-50 border-2 border-red-300 rounded-lg p-6 mb-8">
+                  <p className="font-doodle text-lg font-bold text-red-900">
+                    Receipt email issue
+                  </p>
+                  <p className="font-doodle text-sm text-red-800 mt-2">
+                    {receiptError}
+                  </p>
+                  <p className="font-doodle text-xs text-red-700 mt-2">
+                    Order number: {order.shipping.orderNumber}
+                  </p>
+                </div>
+              )}
+              {selectedEmail && receiptRequestSent && !receiptError && (
                 <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-6 mb-8">
                   <div className="flex items-center justify-center gap-2 mb-2">
                     <Mail className="w-6 h-6 text-blue-600" />
@@ -468,6 +502,43 @@ const OrderConfirmationPage: React.FC = () => {
               </span>
             </p>
           </div>
+
+          {receiptError && (
+            <div className="max-w-2xl mx-auto mb-8">
+              <div className="bg-red-50 border-2 border-red-300 rounded-lg p-6">
+                <p className="font-doodle text-lg font-bold text-red-900">
+                  Receipt email issue
+                </p>
+                <p className="font-doodle text-sm text-red-800 mt-2">
+                  {receiptError}
+                </p>
+                <p className="font-doodle text-xs text-red-700 mt-2">
+                  Order number: {order.id}
+                </p>
+              </div>
+            </div>
+          )}
+          {selectedEmail && receiptRequestSent && !receiptError && (
+            <div className="max-w-2xl mx-auto mb-8">
+              <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-6">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Mail className="w-6 h-6 text-blue-600" />
+                  <p className="font-doodle text-lg font-bold text-blue-900">
+                    Receipt Sent!
+                  </p>
+                </div>
+                <p className="font-doodle text-sm text-blue-700">
+                  Your order receipt has been emailed to:
+                </p>
+                <p className="font-doodle text-base font-bold text-blue-900 mt-2">
+                  {selectedEmail}
+                </p>
+                <p className="font-doodle text-xs text-blue-600 mt-2">
+                  (Check your spam folder if you don't see it!)
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Order Details Card */}

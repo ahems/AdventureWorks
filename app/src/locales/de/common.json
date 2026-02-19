@@ -238,6 +238,12 @@
     "comingSoon": "Demnächst verfügbar!",
     "signOut": "Abmelden",
     "orderNotes": "Bestellhinweise:",
+    "sendReceiptTo": "Beleg senden an",
+    "resendReceipt": "Beleg erneut senden",
+    "sendingReceipt": "Wird gesendet…",
+    "receiptSent": "Beleg gesendet",
+    "receiptSentDescription": "Der Beleg wird in Kürze an die gewählte E-Mail-Adresse gesendet.",
+    "receiptSendFailed": "Beleg konnte nicht gesendet werden",
     "placeholders": {
       "firstName": "John",
       "lastName": "Doe",

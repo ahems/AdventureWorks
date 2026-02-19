@@ -239,6 +239,12 @@
     "comingSoon": "Скоро будет!",
     "signOut": "Выйти",
     "orderNotes": "Примечания к заказу:",
+    "sendReceiptTo": "Отправить чек на",
+    "resendReceipt": "Отправить чек повторно",
+    "sendingReceipt": "Отправка…",
+    "receiptSent": "Чек отправлен",
+    "receiptSentDescription": "Чек будет отправлен на выбранный адрес электронной почты в ближайшее время.",
+    "receiptSendFailed": "Не удалось отправить чек",
     "placeholders": {
       "firstName": "Иван",
       "lastName": "Иванов",

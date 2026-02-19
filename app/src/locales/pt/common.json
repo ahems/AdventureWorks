@@ -239,6 +239,12 @@
     "comingSoon": "Em breve!",
     "signOut": "Terminar Sessão",
     "orderNotes": "Notas do Pedido:",
+    "sendReceiptTo": "Enviar recibo para",
+    "resendReceipt": "Reenviar recibo",
+    "sendingReceipt": "Enviando…",
+    "receiptSent": "Recibo enviado",
+    "receiptSentDescription": "O recibo será enviado em breve para o e-mail selecionado.",
+    "receiptSendFailed": "Falha ao enviar recibo",
     "placeholders": {
       "firstName": "João",
       "lastName": "Doe",

@@ -240,6 +240,12 @@
     "comingSoon": "בקרוב!",
     "signOut": "התנתק",
     "orderNotes": "הערות להזמנה:",
+    "sendReceiptTo": "שלח קבלה אל",
+    "resendReceipt": "שלח קבלה שוב",
+    "sendingReceipt": "שולח…",
+    "receiptSent": "הקבלה נשלחה",
+    "receiptSentDescription": "הקבלה תישלח בקרוב לכתובת הדוא\"ל שנבחרה.",
+    "receiptSendFailed": "שליחת הקבלה נכשלה",
     "placeholders": {
       "firstName": "ג'ון",
       "lastName": "דו",

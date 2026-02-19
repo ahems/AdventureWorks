@@ -240,6 +240,12 @@
     "comingSoon": "敬请期待！",
     "signOut": "登出",
     "orderNotes": "订单备注：",
+    "sendReceiptTo": "收据发送至",
+    "resendReceipt": "重新发送收据",
+    "sendingReceipt": "发送中…",
+    "receiptSent": "收据已发送",
+    "receiptSentDescription": "收据将很快发送至所选电子邮件地址。",
+    "receiptSendFailed": "发送收据失败",
     "placeholders": {
       "firstName": "伟",
       "lastName": "张",

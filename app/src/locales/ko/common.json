@@ -238,6 +238,12 @@
     "comingSoon": "곧 출시됩니다!",
     "signOut": "로그아웃",
     "orderNotes": "주문 메모:",
+    "sendReceiptTo": "영수증 보내기",
+    "resendReceipt": "영수증 다시 보내기",
+    "sendingReceipt": "보내는 중…",
+    "receiptSent": "영수증이 전송되었습니다",
+    "receiptSentDescription": "영수증이 선택한 이메일 주소로 곧 전송됩니다.",
+    "receiptSendFailed": "영수증 전송 실패",
     "placeholders": {
       "firstName": "존",
       "lastName": "도우",
