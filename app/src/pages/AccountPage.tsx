@@ -346,9 +346,9 @@ const AccountPage: React.FC = () => {
               {/* Order History Skeleton */}
               <div className="doodle-card p-6 mb-6">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="w-6 h-6 bg-doodle-text/10 animate-pulse"></div>
-                  <div className="h-6 w-32 bg-doodle-text/10 animate-pulse"></div>
-                  <div className="h-4 w-16 bg-doodle-text/10 animate-pulse"></div>
+                  <Skeleton className="w-6 h-6 rounded" />
+                  <Skeleton className="h-6 w-32" />
+                  <Skeleton className="h-4 w-16" />
                 </div>
                 <div className="space-y-4">
                   {[1, 2, 3].map((i) => (
@@ -357,14 +357,16 @@ const AccountPage: React.FC = () => {
                       className="border-2 border-dashed border-doodle-text/20 p-4"
                     >
                       <div className="flex items-center justify-between">
-                        <div className="space-y-2 flex-1">
-                          <div className="flex items-center gap-2">
-                            <div className="h-5 w-32 bg-doodle-text/10 animate-pulse"></div>
-                            <div className="h-6 w-20 bg-doodle-text/10 animate-pulse rounded-full"></div>
+                        <div className="flex items-center gap-4 flex-1">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Skeleton className="h-5 w-32" />
+                              <Skeleton className="h-6 w-20 rounded-full" />
+                            </div>
+                            <Skeleton className="h-4 w-40" />
                           </div>
-                          <div className="h-4 w-40 bg-doodle-text/10 animate-pulse"></div>
                         </div>
-                        <div className="h-5 w-20 bg-doodle-text/10 animate-pulse"></div>
+                        <Skeleton className="h-5 w-20" />
                       </div>
                     </div>
                   ))}
@@ -547,13 +549,13 @@ const AccountPage: React.FC = () => {
               </div>
 
               {ordersLoading ? (
-                <div className="space-y-4">
+                <div className="space-y-4" data-testid="order-history-skeleton">
                   {[1, 2, 3].map((i) => (
                     <div
                       key={i}
                       className="border-2 border-dashed border-doodle-text/20 p-4"
                     >
-                      <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4 flex-1">
                           <div className="space-y-2">
                             <div className="flex items-center gap-2">
