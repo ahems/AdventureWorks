@@ -459,6 +459,31 @@ const OrderConfirmationPage: React.FC = () => {
             });
           }
         }
+
+        // Start order status processing pipeline (fire-and-forget)
+        try {
+          const functionsApiUrl = getFunctionsApiUrl();
+          const beginProcessingUrl = `${functionsApiUrl}/api/orders/begin-processing-order`;
+          const beginResponse = await fetch(beginProcessingUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ salesOrderId: Number(salesOrderId) }),
+          });
+          if (beginResponse.ok) {
+            trackEvent("Order_StatusProcessingInitiated", { salesOrderId: salesOrderId });
+          } else {
+            trackError("Failed to initiate order status processing", undefined, {
+              page: "OrderConfirmationPage",
+              salesOrderId: salesOrderId,
+              status: beginResponse.status,
+            });
+          }
+        } catch (error) {
+          trackError("Error initiating order status processing", error, {
+            page: "OrderConfirmationPage",
+            salesOrderId: salesOrderId,
+          });
+        }
       } catch (error) {
         trackError("Error fetching order", error, {
           page: "OrderConfirmationPage",
@@ -496,69 +521,11 @@ const OrderConfirmationPage: React.FC = () => {
       <div className="min-h-screen flex flex-col">
         <Header />
         <main className="flex-1 container mx-auto px-4 py-12">
-          <div className="max-w-2xl mx-auto text-center">
+          <div className="max-w-md mx-auto text-center">
             <div className="doodle-card p-12">
-              <div className="inline-flex items-center justify-center w-20 h-20 bg-doodle-green/20 rounded-full mb-6">
-                <CheckCircle className="w-12 h-12 text-doodle-green" />
-              </div>
-              <h1 className="font-doodle text-4xl font-bold text-doodle-text mb-4">
-                🎉 Order Confirmed!
-              </h1>
-              <p className="font-doodle text-xl text-doodle-text mb-6">
-                Thank you for your order!
+              <p className="font-doodle text-doodle-text/70">
+                {t("orderTracking.notFound")}
               </p>
-
-              <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-6 mb-6">
-                <p className="font-doodle text-lg text-yellow-800 mb-2">
-                  <span className="text-2xl">🎪</span>{" "}
-                  <strong>Demo Site Alert!</strong>
-                </p>
-                <p className="font-doodle text-sm text-yellow-700">
-                  Relax! No real payment was processed, no actual products will
-                  arrive at your door, and your wallet is safe. This is all
-                  pretend shopping magic! ✨
-                </p>
-              </div>
-
-              {receiptError && (
-                <div className="bg-red-50 border-2 border-red-300 rounded-lg p-6 mb-8">
-                  <p className="font-doodle text-lg font-bold text-red-900">
-                    Receipt email issue
-                  </p>
-                  <p className="font-doodle text-sm text-red-800 mt-2">
-                    {receiptError}
-                  </p>
-                  <p className="font-doodle text-xs text-red-700 mt-2">
-                    Order number: {order.shipping.orderNumber}
-                  </p>
-                </div>
-              )}
-              {selectedEmail && receiptRequestSent && !receiptError && (
-                <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-6 mb-8">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <Mail className="w-6 h-6 text-blue-600" />
-                    <p className="font-doodle text-lg font-bold text-blue-900">
-                      Receipt Sent!
-                    </p>
-                  </div>
-                  <p className="font-doodle text-sm text-blue-700">
-                    Your order receipt has been emailed to:
-                  </p>
-                  <p className="font-doodle text-base font-bold text-blue-900 mt-2">
-                    {selectedEmail}
-                  </p>
-                  <p className="font-doodle text-xs text-blue-600 mt-2">
-                    (Check your spam folder if you don't see it!)
-                  </p>
-                </div>
-              )}
-
-              <Link
-                to="/"
-                className="doodle-button doodle-button-primary inline-block px-8 py-3"
-              >
-                Continue Pretend Shopping 🛒
-              </Link>
             </div>
           </div>
         </main>
@@ -567,226 +534,117 @@ const OrderConfirmationPage: React.FC = () => {
     );
   }
 
-  const estimatedDelivery = new Date();
-  estimatedDelivery.setDate(estimatedDelivery.getDate() + 5);
-
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <main className="flex-1">
-        <section className="container mx-auto px-4 py-12">
-          {/* Success Header */}
-          <div className="max-w-2xl mx-auto text-center mb-12">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-doodle-green/20 rounded-full mb-6">
-              <CheckCircle className="w-12 h-12 text-doodle-green" />
-            </div>
-            <h1 className="font-doodle text-4xl md:text-5xl font-bold text-doodle-text mb-4">
-              {t("orderConfirmation.title")}
-            </h1>
-            <p className="font-doodle text-lg text-doodle-text/70">
-              {t("orderConfirmation.thankYou")}{" "}
-              <span className="font-bold text-doodle-text">
-                {selectedEmail || order.shipping.email}
-              </span>
-            </p>
-          </div>
-
+      <main className="flex-1 container mx-auto px-4 py-12">
+        <div className="max-w-md mx-auto">
           {receiptError && (
-            <div className="max-w-2xl mx-auto mb-8">
-              <div className="bg-red-50 border-2 border-red-300 rounded-lg p-6">
-                <p className="font-doodle text-lg font-bold text-red-900">
-                  Receipt email issue
-                </p>
-                <p className="font-doodle text-sm text-red-800 mt-2">
-                  {receiptError}
-                </p>
-                <p className="font-doodle text-xs text-red-700 mt-2">
-                  Order number: {order.id}
-                </p>
-              </div>
+            <div className="mb-4 p-4 rounded-lg bg-doodle-warning/20 text-doodle-warning border border-doodle-warning/40">
+              {receiptError}
             </div>
           )}
-          {selectedEmail && receiptRequestSent && !receiptError && (
-            <div className="max-w-2xl mx-auto mb-8">
-              <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-6">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <Mail className="w-6 h-6 text-blue-600" />
-                  <p className="font-doodle text-lg font-bold text-blue-900">
-                    Receipt Sent!
-                  </p>
-                </div>
-                <p className="font-doodle text-sm text-blue-700">
-                  Your order receipt has been emailed to:
-                </p>
-                <p className="font-doodle text-base font-bold text-blue-900 mt-2">
-                  {selectedEmail}
-                </p>
-                <p className="font-doodle text-xs text-blue-600 mt-2">
-                  (Check your spam folder if you don't see it!)
+          <div className="doodle-card p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <CheckCircle className="w-12 h-12 text-doodle-accent flex-shrink-0" />
+              <div>
+                <h1 className="font-doodle text-2xl text-doodle-text">
+                  {t("orderTracking.thankYou")}
+                </h1>
+                <p className="font-doodle text-doodle-text/70">
+                  {t("orderTracking.confirmation")}
                 </p>
               </div>
             </div>
-          )}
 
-          <div className="max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Order Details Card */}
-            <div className="doodle-card p-6">
-              <div className="flex items-center gap-3 mb-6">
-                <Package className="w-6 h-6 text-doodle-accent" />
-                <h2 className="font-doodle text-xl font-bold text-doodle-text">
-                  {t("orderConfirmation.orderDetails")}
-                </h2>
+            <div className="space-y-4 mb-8">
+              <div className="flex items-center gap-2">
+                <Package className="w-5 h-5 text-doodle-accent" />
+                <span className="font-doodle text-doodle-text">
+                  {t("orderTracking.orderNumber")}: <strong>{order.salesOrderNumber}</strong>
+                </span>
               </div>
-
-              <div className="space-y-4">
-                <div className="flex justify-between font-doodle">
-                  <span className="text-doodle-text/70">
-                    {t("orderTracking.orderNumber")}
-                  </span>
-                  <span className="font-bold text-doodle-accent">
-                    {order.id}
+              {receiptRequestSent && (
+                <div className="flex items-center gap-2">
+                  <Mail className="w-5 h-5 text-doodle-accent" />
+                  <span className="font-doodle text-doodle-text/70 text-sm">
+                    {t("orderTracking.receiptSent")}
                   </span>
                 </div>
-                <div className="flex justify-between font-doodle">
-                  <span className="text-doodle-text/70">
-                    {t("orderConfirmation.orderDate")}
-                  </span>
-                  <span>{new Date(order.date).toLocaleDateString()}</span>
-                </div>
-                <div className="flex justify-between font-doodle">
-                  <span className="text-doodle-text/70">
-                    {t("orderConfirmation.paymentMethod")}
-                  </span>
-                  <span className="capitalize">{order.paymentMethod}</span>
-                </div>
+              )}
+            </div>
 
-                <hr className="border-dashed border-doodle-text/30" />
-
-                {/* Items */}
-                <div className="space-y-3">
-                  {order.items.map((item, index) => {
-                    const formatPrice = (amount: number) =>
-                      `${CURRENCY_SYMBOLS[order.currencyCode] ?? order.currencyCode}${(amount * order.exchangeRate).toFixed(2)}`;
-                    return (
-                      <div
-                        key={`${item.ProductID}-${index}`}
-                        className="flex justify-between font-doodle text-sm"
-                      >
-                        <span className="text-doodle-text/70">
-                          {item.Name} × {item.quantity}
-                        </span>
-                        <span>{formatPrice(item.ListPrice * item.quantity)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <hr className="border-dashed border-doodle-text/30" />
-
-                <div className="space-y-2 font-doodle text-sm">
-                  {(() => {
-                    const formatPrice = (amount: number) =>
-                      `${CURRENCY_SYMBOLS[order.currencyCode] ?? order.currencyCode}${(amount * order.exchangeRate).toFixed(2)}`;
-                    return (
-                      <>
-                        <div className="flex justify-between">
-                          <span className="text-doodle-text/70">
-                            {t("orderTracking.subtotal")}
-                          </span>
-                          <span>{formatPrice(order.subtotal)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-doodle-text/70">
-                            {t("orderTracking.shipping")} ({order.shippingMethodName})
-                          </span>
-                          <span>
-                            {order.shippingCost === 0
-                              ? t("orderConfirmation.free")
-                              : formatPrice(order.shippingCost)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-doodle-text/70">
-                            {t("orderTracking.tax")}
-                          </span>
-                          <span>{formatPrice(order.tax)}</span>
-                        </div>
-                        <hr className="border-dashed border-doodle-text/30" />
-                        <div className="flex justify-between text-lg font-bold">
-                          <span>{t("orderTracking.total")}</span>
-                          <span className="text-doodle-green">
-                            {formatPrice(order.total)}
-                          </span>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
+            <div className="border border-doodle-border rounded-lg p-4 mb-8">
+              <h2 className="font-doodle text-lg text-doodle-text mb-3">
+                {t("orderTracking.shippingDetails")}
+              </h2>
+              <div className="font-doodle text-doodle-text/80 space-y-1">
+                <p>
+                  {order.shipping.firstName} {order.shipping.lastName}
+                </p>
+                <p>{order.shipping.address}</p>
+                {order.shipping.address2 && <p>{order.shipping.address2}</p>}
+                <p>
+                  {order.shipping.city}, {order.shipping.state} {order.shipping.zipCode}
+                </p>
+                <p>{order.shipping.country}</p>
               </div>
             </div>
 
-            {/* Shipping & Delivery Card */}
-            <div className="space-y-6">
-              {/* Shipping Address */}
-              <div className="doodle-card p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <MapPin className="w-6 h-6 text-doodle-accent" />
-                  <h2 className="font-doodle text-xl font-bold text-doodle-text">
-                    {t("orderConfirmation.shippingAddress")}
-                  </h2>
-                </div>
-                <div className="font-doodle text-doodle-text/70 space-y-1">
-                  <p className="font-bold text-doodle-text">
-                    {order.shipping.firstName} {order.shipping.lastName}
-                  </p>
-                  <p>{order.shipping.address}</p>
-                  {order.shipping.address2 && <p>{order.shipping.address2}</p>}
-                  <p>
-                    {order.shipping.city}, {order.shipping.state}{" "}
-                    {order.shipping.zipCode}
-                    {order.shipping.country && (
-                      <>, {order.shipping.country}</>
-                    )}
-                  </p>
-                </div>
+            <div className="space-y-2 mb-8">
+              <h2 className="font-doodle text-lg text-doodle-text">
+                {t("orderTracking.orderSummary")}
+              </h2>
+              <div className="flex justify-between font-doodle text-doodle-text/80">
+                <span>{t("orderTracking.subtotal")}</span>
+                <span>
+                  {CURRENCY_SYMBOLS[order.currencyCode] ?? order.currencyCode}{" "}
+                  {(order.subtotal * order.exchangeRate).toFixed(2)}
+                </span>
               </div>
+              <div className="flex justify-between font-doodle text-doodle-text/80">
+                <span>{t("orderTracking.shipping")}</span>
+                <span>
+                  {CURRENCY_SYMBOLS[order.currencyCode] ?? order.currencyCode}{" "}
+                  {(order.shippingCost * order.exchangeRate).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between font-doodle text-doodle-text/80">
+                <span>{t("orderTracking.tax")}</span>
+                <span>
+                  {CURRENCY_SYMBOLS[order.currencyCode] ?? order.currencyCode}{" "}
+                  {(order.tax * order.exchangeRate).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between font-doodle text-lg text-doodle-text pt-2 border-t border-doodle-border">
+                <span>{t("orderTracking.total")}</span>
+                <span>
+                  {CURRENCY_SYMBOLS[order.currencyCode] ?? order.currencyCode}{" "}
+                  {(order.total * order.exchangeRate).toFixed(2)}
+                </span>
+              </div>
+            </div>
 
-              {/* Estimated Delivery */}
-              <div className="doodle-card p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <Truck className="w-6 h-6 text-doodle-accent" />
-                  <h2 className="font-doodle text-xl font-bold text-doodle-text">
-                    {t("orderConfirmation.estimatedDelivery")}
-                  </h2>
-                </div>
-                <p className="font-doodle text-2xl font-bold text-doodle-green">
-                  {estimatedDelivery.toLocaleDateString("en-US", {
-                    weekday: "long",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </p>
-                <p className="font-doodle text-sm text-doodle-text/70 mt-2">
-                  {t("orderConfirmation.trackingEmail")}
-                </p>
-              </div>
+            <div className="flex flex-col gap-3">
+              <Link
+                to="/"
+                className="font-doodle text-center py-3 px-4 rounded-lg bg-doodle-accent text-doodle-bg hover:opacity-90 transition-opacity"
+              >
+                {t("orderTracking.continueShopping")}
+              </Link>
+              <Link
+                to="/orders"
+                className="font-doodle text-center py-3 px-4 rounded-lg border border-doodle-border text-doodle-text hover:bg-doodle-bg/5 transition-colors"
+              >
+                {t("orderTracking.viewOrders")}
+              </Link>
             </div>
           </div>
-
-          {/* Continue Shopping */}
-          <div className="max-w-4xl mx-auto mt-12 text-center">
-            <Link
-              to="/"
-              className="doodle-button doodle-button-primary inline-block px-8 py-3 text-lg"
-            >
-              {t("orderConfirmation.continueShopping")}
-            </Link>
-          </div>
-        </section>
+        </div>
       </main>
       <Footer />
     </div>
   );
-};
+}
 
 export default OrderConfirmationPage;
