@@ -605,6 +605,48 @@ try {
     }
     
     # ---------------------------------------------------------------------
+    # Generate ProductProductPhoto-ai.csv from filesystem (source of truth)
+    # Scan images/product_<ProductID>_photo_<N>.png and assign ProductPhotoIDs 1000+; junction table CSV is derived from the file list.
+    # ---------------------------------------------------------------------
+    $imagesDirForCsv = Join-Path $PSScriptRoot "images"
+    $aiCsvPathOut = Join-Path $PSScriptRoot 'sql' 'ProductProductPhoto-ai.csv'
+    if (Test-Path $imagesDirForCsv) {
+        $elapsed = (Get-Date) - $scriptStartTime
+        Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Generating ProductProductPhoto-ai.csv from image files (filesystem is source of truth)..."
+        $pngFilesForCsv = Get-ChildItem -Path $imagesDirForCsv -Filter "*.png" | Sort-Object Name
+        $pairsForCsv = @()
+        $excludeSuffixPattern = '_thumb\.png$|_small\.png$'
+        foreach ($f in $pngFilesForCsv) {
+            $name = $f.Name
+            if ($name -notmatch $excludeSuffixPattern) { continue }
+            $baseName = $name -replace '_thumb\.png$', '.png' -replace '_small\.png$', '.png'
+            $largePath = Join-Path $imagesDirForCsv $baseName
+            if (-not (Test-Path $largePath)) { continue }
+            if ($baseName -match '^product_(\d+)_photo_(\d+)\.png$') {
+                $pairsForCsv += @{ ProductID = [int]$Matches[1]; PhotoNum = [int]$Matches[2]; ThumbPath = $f.FullName; LargePath = $largePath }
+            }
+        }
+        $pairsForCsv = $pairsForCsv | Sort-Object { $_.ProductID }, { $_.PhotoNum }
+        $nextPhotoId = 1000
+        $junctionRows = @()
+        foreach ($p in $pairsForCsv) {
+            $junctionRows += @{ ProductID = $p.ProductID; ProductPhotoID = $nextPhotoId }
+            $nextPhotoId++
+        }
+        $csvDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $csvLinesOut = for ($i = 0; $i -lt $junctionRows.Count; $i++) {
+            $r = $junctionRows[$i]
+            $isLastForProduct = ($i -eq $junctionRows.Count - 1) -or ($junctionRows[$i + 1].ProductID -ne $r.ProductID)
+            $primary = if ($isLastForProduct) { 1 } else { 0 }
+            "$($r.ProductID)`t$($r.ProductPhotoID)`t$primary`t$csvDate"
+        }
+        $csvLinesOut | Set-Content -Path $aiCsvPathOut -Encoding UTF8
+        Write-Log "  Wrote $($junctionRows.Count) rows to ProductProductPhoto-ai.csv (ProductPhotoIDs 1000–$($nextPhotoId - 1)) from $($pairsForCsv.Count) image pairs"
+    } else {
+        Write-Log "`nImages directory not found; ProductProductPhoto-ai.csv will not be regenerated (existing file used if present)."
+    }
+    
+    # ---------------------------------------------------------------------
     # Start PNG image upload as background job (runs concurrently with CSV loading)
     # ---------------------------------------------------------------------
     $elapsed = (Get-Date) - $scriptStartTime
@@ -660,16 +702,37 @@ try {
             }
             $checkConn.Open()
             
-            # Check if AI photos already uploaded
-            $cmd = $checkConn.CreateCommand()
-            $cmd.CommandText = "SELECT COUNT(*) FROM Production.ProductPhoto WHERE ProductPhotoID >= 1000"
-            $aiPhotoCount = $cmd.ExecuteScalar()
-            $checkConn.Close()
-            
-            if ($aiPhotoCount -gt 0) {
-                $result.AlreadyLoaded = $true
-                return $result
+            # Build ProductID -> ordered ProductPhotoIDs from ProductProductPhoto-ai.csv so we use the same IDs the junction table expects.
+            # Filenames are product_877_photo_2_small.png (ProductID 877, photo 2) -> we use the 1st ProductPhotoID for that product from CSV, etc.
+            $aiCsvPath = Join-Path $scriptRoot 'sql' 'ProductProductPhoto-ai.csv'
+            $productToPhotoIds = @{}
+            $firstAiPhotoId = $null
+            if (Test-Path $aiCsvPath) {
+                $csvLines = Get-Content -Path $aiCsvPath -Encoding UTF8
+                foreach ($line in $csvLines) {
+                    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                    $cols = $line -split "`t"
+                    if ($cols.Count -lt 2) { continue }
+                    $productIdFromCsv = [int]$cols[0]
+                    $photoId = [int]$cols[1]
+                    if ($null -eq $firstAiPhotoId) { $firstAiPhotoId = $photoId }
+                    if (-not $productToPhotoIds.ContainsKey($productIdFromCsv)) { $productToPhotoIds[$productIdFromCsv] = @() }
+                    $productToPhotoIds[$productIdFromCsv] += $photoId
+                }
             }
+            # Idempotency: if any AI CSV ProductPhotoID already exists in ProductPhoto, skip upload
+            if ($null -ne $firstAiPhotoId) {
+                $cmd = $checkConn.CreateCommand()
+                $cmd.CommandText = "SELECT COUNT(*) FROM Production.ProductPhoto WHERE ProductPhotoID = @PhotoID"
+                $null = $cmd.Parameters.AddWithValue("@PhotoID", $firstAiPhotoId)
+                $aiPhotoExists = [int]$cmd.ExecuteScalar()
+                if ($aiPhotoExists -gt 0) {
+                    $checkConn.Close()
+                    $result.AlreadyLoaded = $true
+                    return $result
+                }
+            }
+            $checkConn.Close()
             
             $imagesDir = Join-Path $scriptRoot "images"
             
@@ -688,28 +751,29 @@ try {
             
             $result.ThumbnailCount = ($pngFiles | Where-Object { $_.Name -like "*_thumb.png" -or $_.Name -like "*_small.png" }).Count
             
-            # Pre-process: create image pairs
+            # Pre-process: create image pairs. Only product_<ProductID>_photo_<2|3|4> files are uploaded (no other filenames).
+            # Use ProductPhotoID from ProductProductPhoto-ai.csv so junction table rows resolve.
             $imagePairs = @()
-            $photoId = 1000
-            
             foreach ($pngFile in $pngFiles) {
                 $fileName = $pngFile.Name
                 $isThumbnail = $fileName -like "*_thumb.png" -or $fileName -like "*_small.png"
-                
-                if ($isThumbnail) {
-                    $baseFileName = $fileName -replace '_thumb\.png$', '.png' -replace '_small\.png$', '.png'
-                    $largeImagePath = Join-Path $imagesDir $baseFileName
-                    
-                    if (Test-Path $largeImagePath) {
-                        $imagePairs += @{
-                            PhotoID = $photoId
-                            ThumbPath = $pngFile.FullName
-                            ThumbName = $fileName
-                            LargePath = $largeImagePath
-                            LargeName = $baseFileName
-                        }
-                        $photoId++
-                    }
+                if (-not $isThumbnail) { continue }
+                $baseFileName = $fileName -replace '_thumb\.png$', '.png' -replace '_small\.png$', '.png'
+                $largeImagePath = Join-Path $imagesDir $baseFileName
+                if (-not (Test-Path $largeImagePath)) { continue }
+                if ($baseFileName -notmatch '^product_(\d+)_photo_(\d+)\.png$') { continue }
+                $productId = [int]$Matches[1]
+                $photoNum = [int]$Matches[2]
+                $photoIndex = $photoNum - 2
+                if (-not $productToPhotoIds.ContainsKey($productId)) { continue }
+                if ($photoIndex -lt 0 -or $photoIndex -ge $productToPhotoIds[$productId].Count) { continue }
+                $assignedPhotoId = $productToPhotoIds[$productId][$photoIndex]
+                $imagePairs += @{
+                    PhotoID = $assignedPhotoId
+                    ThumbPath = $pngFile.FullName
+                    ThumbName = $fileName
+                    LargePath = $largeImagePath
+                    LargeName = $baseFileName
                 }
             }
             
@@ -869,8 +933,8 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         @{ Table='Production.ProductModelIllustration'; File='ProductModelIllustration.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.Product'; File='Product.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductReview'; File='ProductReview.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments') }
-        # AI-generated product reviews with embeddings (CommentsEmbedding VECTOR field, JSON array)
-        @{ Table='Production.ProductReview'; File='ProductReview-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments'); VectorColumns=@('CommentsEmbedding') }
+        # AI-generated product reviews: Comments are plain text (not hex); CommentsEmbedding is VECTOR
+        @{ Table='Production.ProductReview'; File='ProductReview-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('CommentsEmbedding') }
         @{ Table='Production.ProductCostHistory'; File='ProductCostHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductListPriceHistory'; File='ProductListPriceHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductInventory'; File='ProductInventory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -985,7 +1049,7 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
             $existingCount = $cmd.ExecuteScalar()
             
             # Production.ProductPhoto: load base images (ProductPhoto.csv) when no base rows exist (ID < 1000).
-            # PNG upload job inserts rows with ProductPhotoID 1000+ in parallel; we must still load base CSV so both base and PNG images are present.
+            # PNG upload job inserts rows using ProductPhotoIDs from ProductProductPhoto-ai.csv (e.g. 182, 731); we still load base CSV so both base and AI images are present.
             if ($config.File -eq 'ProductPhoto.csv' -and $schemaName -eq 'Production' -and $tableName -eq 'ProductPhoto') {
                 $cmd.CommandText = "SELECT COUNT(*) FROM [Production].[ProductPhoto] WHERE ProductPhotoID < 1000"
                 $basePhotoCount = $cmd.ExecuteScalar()
@@ -1476,8 +1540,6 @@ ORDER BY ORDINAL_POSITION
                                     }
                                 }
                                 
-                                $whereClause = $whereConditions -join ' AND '
-                                
                                 # Build INSERT: use parameterized INSERT...SELECT (no IF) to avoid "if" parse errors; omit UseDefault columns so SELECT has no DEFAULT
                                 $insertColumnListParam = @()
                                 $selectPlaceholdersParam = @()
@@ -1795,6 +1857,32 @@ Write-Log "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinutes))
     Write-Log "  ⊙ Skipped (already loaded): $csvLoadSkipped tables"
     if ($csvLoadFailed -gt 0) {
         Write-Log "  ✗ Failed: $csvLoadFailed tables"
+    }
+    
+    # Remove placeholder image (ProductPhotoID 1 "no image available") from product-photo mappings.
+    # This must run AFTER ProductProductPhoto.csv and ProductProductPhoto-ai.csv are loaded;
+    # AdventureWorks-AI.sql used to run this before any CSV load (empty table), so it had no effect.
+    $elapsed = (Get-Date) - $scriptStartTime
+    Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Removing placeholder ProductPhotoID 1 and setting Primary photo..."
+    try {
+        $cmd.CommandText = "DELETE FROM [Production].[ProductProductPhoto] WHERE [ProductPhotoID] = 1"
+        $deleted = $cmd.ExecuteNonQuery()
+        Write-Log "  Removed $deleted ProductProductPhoto row(s) referencing placeholder image (ProductPhotoID 1)"
+        $cmd.CommandText = @"
+WITH RankedPhotos AS (
+    SELECT ProductID, ProductPhotoID,
+           ROW_NUMBER() OVER (PARTITION BY ProductID ORDER BY ModifiedDate DESC) AS PhotoRank
+    FROM [Production].[ProductProductPhoto]
+)
+UPDATE pp
+SET pp.[Primary] = CASE WHEN rp.PhotoRank = 1 THEN 1 ELSE 0 END
+FROM [Production].[ProductProductPhoto] pp
+INNER JOIN RankedPhotos rp ON pp.ProductID = rp.ProductID AND pp.ProductPhotoID = rp.ProductPhotoID
+"@
+        $null = $cmd.ExecuteNonQuery()
+        Write-Log "  Updated Primary flag: most recent photo set as Primary for all products"
+    } catch {
+        Write-Warning "  Placeholder photo cleanup failed: $($_.Exception.Message)"
     }
     
     # Wait for background PNG upload job to complete

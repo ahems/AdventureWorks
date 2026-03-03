@@ -115,7 +115,7 @@ Contains database initialization files:
 Product images for the catalog:
 
 - **1,739 PNG files**
-- Named by ProductPhotoID (e.g., `1.png`, `2.png`)
+- Named `product_<ProductID>_photo_<2|3|4>.png` (and `_small.png` / `_thumb.png`); ProductPhotoIDs come from `ProductProductPhoto-ai.csv`
 - Uploaded to Azure Blob Storage during seeding
 - Referenced by `Production.ProductPhoto` table
 
@@ -253,7 +253,7 @@ The seed job populates the database with:
 ### Changing Images
 
 1. Replace/add PNG files in `images/` directory
-2. Ensure filenames match ProductPhotoID values
+2. Ensure filenames match `product_<ProductID>_photo_<2|3|4>.png` and that `ProductProductPhoto-ai.csv` lists the ProductPhotoIDs used by the PNG upload
 3. Rebuild container and redeploy
 
 ---
