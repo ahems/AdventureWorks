@@ -233,6 +233,8 @@ The seed job populates the database with:
 - **CommentsEmbedding**: VECTOR(1536) for product reviews
 - Enables semantic search via Azure SQL vector capabilities
 
+**Backfilling base description embeddings from a source API:** To populate the 762 base rows with embeddings at seed time (instead of running GenerateProductEmbeddings later), run `scripts/utilities/export-product-description-embeddings-from-source-api.sh` to build `sql/ProductDescription-ai-embeddings.csv` from the source DAB REST API. The seed script will then apply those updates after the main CSV import.
+
 ---
 
 ## Customization
@@ -293,6 +295,16 @@ The seed job populates the database with:
 - Verify Storage Account exists and is accessible
 - Check managed identity has Storage Blob Data Contributor role
 - Confirm STORAGE_ACCOUNT_NAME environment variable is set
+
+### Missing Product Description Embeddings
+
+**Symptoms:** Query shows many finished-goods descriptions with `DescriptionEmbedding IS NULL` (e.g. ~1764 of 6175).
+
+**Cause:** The seed loads 762 base rows from `ProductDescription.csv` (no embeddings) and adds 1848 rows from `ProductDescription-ai.csv` (with embeddings). The base 762 never receive embeddings during seed. `ProductDescription-ai-translations.csv` only updates `Description`/`ModifiedDate` and correctly does not overwrite `DescriptionEmbedding`.
+
+**Solutions:**
+1. **Source API CSV (recommended for repeatable seed):** Run `scripts/utilities/export-product-description-embeddings-from-source-api.sh` to generate `sql/ProductDescription-ai-embeddings.csv`; the seed job will apply these updates after import.
+2. **Post-seed backfill:** Run the **GenerateProductEmbeddings** Azure Function (or equivalent) after seeding to backfill descriptions where `DescriptionEmbedding IS NULL`.
 
 ---
 

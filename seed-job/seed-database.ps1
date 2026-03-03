@@ -923,9 +923,11 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         @{ Table='Production.ProductSubcategory'; File='ProductSubcategory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModel'; File='ProductModel.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
         @{ Table='Production.ProductDescription'; File='ProductDescription.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        # Enhanced product descriptions with embeddings (DescriptionEmbedding VECTOR field, JSON array)
+        # Enhanced product descriptions with embeddings (DescriptionEmbedding VECTOR field, JSON array).
+        # ProductDescription-ai.csv adds NEW rows only (IDs 2011+); the 762 base rows from ProductDescription.csv never get embeddings here.
         @{ Table='Production.ProductDescription'; File='ProductDescription-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('DescriptionEmbedding') }
-        # AI-translated product descriptions (actual text content for 16 new cultures; CSV has only ID, Description, ModifiedDate)
+        # AI-translated product descriptions (actual text content for 16 new cultures; CSV has only ID, Description, ModifiedDate).
+        # DefaultColumns and Update path omit DescriptionEmbedding so existing embeddings are preserved (not overwritten).
         @{ Table='Production.ProductDescription'; File='ProductDescription-ai-translations.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false; DefaultColumns=@('rowguid', 'DescriptionEmbedding'); UpdateIfExists=$true }
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # AI-translated product description culture mappings (16 additional cultures beyond base AdventureWorks 7)
@@ -1858,7 +1860,67 @@ Write-Log "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinutes))
     if ($csvLoadFailed -gt 0) {
         Write-Log "  ✗ Failed: $csvLoadFailed tables"
     }
-    
+
+    # Apply ProductDescription embeddings from source API CSV (updates existing rows only).
+    # Build the CSV with: scripts/utilities/export-product-description-embeddings-from-source-api.sh
+    $embeddingsFromSourcePath = Join-Path $csvFolder 'ProductDescription-ai-embeddings.csv'
+    if (Test-Path $embeddingsFromSourcePath) {
+        $elapsed = (Get-Date) - $scriptStartTime
+        Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Applying ProductDescription embeddings from source API CSV..."
+        $updateEmbeddingSql = "UPDATE Production.ProductDescription SET DescriptionEmbedding = CAST(@emb AS VECTOR(1536)), ModifiedDate = @mod WHERE ProductDescriptionID = @id"
+        $cmd.Transaction = $null
+        $cmd.CommandText = $updateEmbeddingSql
+        $lines = Get-Content -Path $embeddingsFromSourcePath -Encoding UTF8
+        $applied = 0
+        $batchSize = 100
+        for ($i = 1; $i -lt $lines.Count; $i++) {
+            $line = $lines[$i]
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $parts = $line -split "`t", 3
+            if ($parts.Count -lt 2) { continue }
+            $id = [int]::Parse($parts[0].Trim())
+            $embJson = $parts[1].Trim()
+            $modStr = if ($parts.Count -ge 3 -and -not [string]::IsNullOrWhiteSpace($parts[2])) { $parts[2].Trim() } else { $null }
+            $cmd.Parameters.Clear()
+            $null = $cmd.Parameters.AddWithValue('@id', $id)
+            $null = $cmd.Parameters.AddWithValue('@emb', $embJson)
+            if ($null -ne $modStr) {
+                try {
+                    $modDate = [DateTime]::Parse($modStr)
+                    $null = $cmd.Parameters.AddWithValue('@mod', $modDate)
+                } catch {
+                    $null = $cmd.Parameters.AddWithValue('@mod', [DateTime]::UtcNow)
+                }
+            } else {
+                $null = $cmd.Parameters.AddWithValue('@mod', [DateTime]::UtcNow)
+            }
+            try {
+                $n = $cmd.ExecuteNonQuery()
+                if ($n -gt 0) { $applied++ }
+            } catch {
+                Write-Log "  Warning: Update failed for ProductDescriptionID $id : $($_.Exception.Message)"
+            }
+            if ($applied -gt 0 -and $applied % $batchSize -eq 0) {
+                Write-Log "  ...applied $applied embedding updates"
+            }
+        }
+        Write-Log "  Applied $applied ProductDescription embedding updates from ProductDescription-ai-embeddings.csv"
+    }
+
+    # Log ProductDescription embedding coverage (after applying source CSV if present)
+    try {
+        $cmd.CommandText = "SELECT SUM(CASE WHEN DescriptionEmbedding IS NOT NULL THEN 1 ELSE 0 END) AS WithEmb, SUM(CASE WHEN DescriptionEmbedding IS NULL THEN 1 ELSE 0 END) AS MissingEmb, COUNT(*) AS Total FROM Production.ProductDescription"
+        $cmd.Transaction = $null
+        $rd = $cmd.ExecuteReader()
+        if ($rd.Read()) {
+            $withEmb = [int64]($rd.GetValue(0)); $missEmb = [int64]($rd.GetValue(1)); $tot = [int64]($rd.GetValue(2))
+            $rd.Close()
+            Write-Log "  ProductDescription embeddings: $withEmb with embedding, $missEmb missing (of $tot total). Backfill NULLs via GenerateProductEmbeddings if needed."
+        } else { $rd.Close() }
+    } catch {
+        # Non-fatal: schema or table may differ
+    }
+
     # Remove placeholder image (ProductPhotoID 1 "no image available") from product-photo mappings.
     # This must run AFTER ProductProductPhoto.csv and ProductProductPhoto-ai.csv are loaded;
     # AdventureWorks-AI.sql used to run this before any CSV load (empty table), so it had no effect.
