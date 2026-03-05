@@ -1908,6 +1908,52 @@ Write-Log "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinutes))
         Write-Log "  Applied $applied ProductReview UserID updates from ProductReview-ai-UserID.csv"
     }
 
+    # Apply CommentsEmbedding for the 4 original AdventureWorks ProductReview records.
+    # These rows are seeded from ProductReview.csv with CommentsEmbedding left NULL because
+    # the hex-encoded comments cannot be embedded at bulk-insert time.
+    # Generate this file with: scripts/generators/generate-original-review-embeddings.sh
+    $reviewEmbeddingsPath = Join-Path $csvFolder 'ProductReview-ai-Embeddings.csv'
+    if (Test-Path $reviewEmbeddingsPath) {
+        $elapsed = (Get-Date) - $scriptStartTime
+        Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Applying ProductReview embeddings from ProductReview-ai-Embeddings.csv..."
+        $updateReviewEmbSql = "UPDATE Production.ProductReview SET CommentsEmbedding = CAST(@emb AS VECTOR(1536)), ModifiedDate = @mod WHERE ProductReviewID = @rid AND CommentsEmbedding IS NULL"
+        $cmd.Transaction = $null
+        $cmd.CommandText = $updateReviewEmbSql
+        $lines = Get-Content -Path $reviewEmbeddingsPath -Encoding UTF8
+        $applied = 0
+        $batchSize = 10
+        for ($i = 1; $i -lt $lines.Count; $i++) {
+            $line = $lines[$i]
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $parts = $line -split "`t", 3
+            if ($parts.Count -lt 2) { continue }
+            $rid = [int]::Parse($parts[0].Trim())
+            if ($rid -eq 0) { continue }
+            $embJson = $parts[1].Trim()
+            $modStr = if ($parts.Count -ge 3 -and -not [string]::IsNullOrWhiteSpace($parts[2])) { $parts[2].Trim() } else { $null }
+            $cmd.Parameters.Clear()
+            $null = $cmd.Parameters.AddWithValue('@rid', $rid)
+            $null = $cmd.Parameters.AddWithValue('@emb', $embJson)
+            if ($null -ne $modStr) {
+                try {
+                    $modDate = [DateTime]::Parse($modStr)
+                    $null = $cmd.Parameters.AddWithValue('@mod', $modDate)
+                } catch {
+                    $null = $cmd.Parameters.AddWithValue('@mod', [DateTime]::UtcNow)
+                }
+            } else {
+                $null = $cmd.Parameters.AddWithValue('@mod', [DateTime]::UtcNow)
+            }
+            try {
+                $n = $cmd.ExecuteNonQuery()
+                if ($n -gt 0) { $applied++ }
+            } catch {
+                Write-Log "  Warning: Embedding update failed for ProductReviewID $rid : $($_.Exception.Message)"
+            }
+        }
+        Write-Log "  Applied $applied ProductReview embedding updates from ProductReview-ai-Embeddings.csv"
+    }
+
     # Remove any stray ProductDescriptionID 0 row (placeholder from malformed CSV or parse fallback)
     try {
         $cmd.CommandText = "DELETE FROM Production.ProductDescription WHERE ProductDescriptionID = 0"
