@@ -218,15 +218,6 @@ function Import-JsonTable {
     Write-Log "  Loading [$SchemaName].[$TableName] from JSON file..."
     
     try {
-        # Check if table already has data
-        $Command.CommandText = "SELECT COUNT(*) FROM [$SchemaName].[$TableName]"
-        $existingCount = $Command.ExecuteScalar()
-        
-        if ($existingCount -gt 0) {
-            Write-Log "    Table already contains $existingCount rows - Skipping"
-            return $true
-        }
-        
         # Read and parse JSON file
         if (-not (Test-Path $JsonFilePath)) {
             Write-Warning "    JSON file not found: $JsonFilePath - Skipping"
@@ -507,7 +498,6 @@ try {
                 $errorMsg -match 'A full-text index for table' -or
                 $errorMsg -match 'The specified namespace already exists in the specified XML schema collection') {
                 $alreadyExistsCount++
-                Write-Verbose "Batch ${batchNum} object already exists (idempotent): $errorMsg" -Verbose
             } else {
                 $unexpectedErrorCount++
                 Write-Log "  ✗ UNEXPECTED ERROR in batch ${batchNum}: $errorMsg"
@@ -934,9 +924,9 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture-ai.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModelIllustration'; File='ProductModelIllustration.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.Product'; File='Product.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        @{ Table='Production.ProductReview'; File='ProductReview.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments') }
-        # AI-generated product reviews: Comments are plain text (not hex); CommentsEmbedding is VECTOR
-        @{ Table='Production.ProductReview'; File='ProductReview-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('CommentsEmbedding') }
+        @{ Table='Production.ProductReview'; File='ProductReview.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments'); DefaultColumns=@('CommentsEmbedding','HelpfulVotes','UserID') }
+        # AI-generated product reviews: Comments are plain text (not hex); CommentsEmbedding is VECTOR; HelpfulVotes/UserID not in CSV
+        @{ Table='Production.ProductReview'; File='ProductReview-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('CommentsEmbedding'); DefaultColumns=@('HelpfulVotes','UserID') }
         @{ Table='Production.ProductCostHistory'; File='ProductCostHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductListPriceHistory'; File='ProductListPriceHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductInventory'; File='ProductInventory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -1005,21 +995,6 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
     $csvLoadFailed = 0
     $csvLoadSkipped = 0
     
-    # Define base record counts for -ai.csv files (additive data)
-    # These files should only be loaded when table has exactly the base AdventureWorks count
-    $aiCsvBaseRecordCounts = @{
-        'Culture-ai.csv' = 7
-        'Currency-ai.csv' = 105
-        'StateProvince-ai.csv' = 181
-        'CountryRegionCurrency-ai.csv' = 109
-        'SalesTaxRate-ai.csv' = 29
-        'ProductProductPhoto-ai.csv' = 504
-        'ProductDescription-ai.csv' = 762
-        'ProductDescription-ai-translations.csv' = 2610    # 762 base + 1848 AI descriptions
-        'ProductReview-ai.csv' = 4
-        'ProductModelProductDescriptionCulture-ai.csv' = 762  # base culture mappings only
-    }
-    
     Write-Log "  Total CSV files to process: $($csvLoadConfig.Count)"
     $csvProcessed = 0
     foreach ($config in $csvLoadConfig) {
@@ -1045,54 +1020,9 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
             }
             $schemaName = $tableParts[0]
             $tableName = $tableParts[1]
+            $isAiCsv = $config.File -match '-ai\.csv$' -or $config.File -eq 'ProductDescription-ai-translations.csv'
             
-            # Check if table already has data
-            $cmd.CommandText = "SELECT COUNT(*) FROM [$schemaName].[$tableName]"
-            $existingCount = $cmd.ExecuteScalar()
-            
-            # Production.ProductPhoto: load base images (ProductPhoto.csv) when no base rows exist (ID < 1000).
-            # PNG upload job inserts rows using ProductPhotoIDs from ProductProductPhoto-ai.csv (e.g. 182, 731); we still load base CSV so both base and AI images are present.
-            if ($config.File -eq 'ProductPhoto.csv' -and $schemaName -eq 'Production' -and $tableName -eq 'ProductPhoto') {
-                $cmd.CommandText = "SELECT COUNT(*) FROM [Production].[ProductPhoto] WHERE ProductPhotoID < 1000"
-                $basePhotoCount = $cmd.ExecuteScalar()
-                if ($basePhotoCount -gt 0) {
-                    Write-Log "    Base product photos already loaded ($basePhotoCount rows with ProductPhotoID < 1000) - Skipping"
-                    $csvLoadSkipped++
-                    continue
-                }
-                if ($existingCount -gt 0) {
-                    Write-Log "    Table has $existingCount rows (PNG upload); loading base ProductPhoto.csv (IDs < 1000) as well..."
-                }
-            }
-            else {
-                # Determine if this is an additive AI CSV file (registered in base record counts)
-                $isAiCsv = $aiCsvBaseRecordCounts.ContainsKey($config.File)
-                $baseRecordCount = $aiCsvBaseRecordCounts[$config.File]
-                
-                if ($isAiCsv -and $baseRecordCount) {
-                    # For -ai.csv files, only load if table has exactly the base record count
-                    if ($existingCount -eq $baseRecordCount) {
-                        Write-Log "    Table contains base $existingCount rows, adding AI enhancements..."
-                    }
-                    elseif ($existingCount -gt $baseRecordCount) {
-                        Write-Log "    Table already contains $existingCount rows (expected $baseRecordCount) - AI data already loaded, skipping"
-                        $csvLoadSkipped++
-                        continue
-                    }
-                    else {
-                        Write-Log "    Table contains $existingCount rows (expected $baseRecordCount) - Base data not loaded yet, skipping AI data"
-                        $csvLoadSkipped++
-                        continue
-                    }
-                }
-                elseif ($existingCount -gt 0) {
-                    # For regular CSV files, skip if any data exists
-                    Write-Log "    Table already contains $existingCount rows - Skipping"
-                    $csvLoadSkipped++
-                    continue
-                }
-            }
-            
+            # Schema script drops tables if they exist before create; we assume empty tables for CSV load.
             # Read CSV with proper encoding
             $encoding = if ($config.IsWideChar) { [System.Text.Encoding]::Unicode } else { [System.Text.Encoding]::UTF8 }
             $csvContent = [System.IO.File]::ReadAllText($csvPath, $encoding)
@@ -1212,7 +1142,10 @@ ORDER BY c.ORDINAL_POSITION
                     }
                 }
                 foreach ($col in $columns) {
-                    $col.CSVIndex = ($allColumns | Where-Object { $_.Name -eq $col.Name })[0].CSVIndex
+                    # Wrap in @() to prevent PowerShell's single-result unwrap: without @(), Where-Object
+                    # returns the hashtable directly when there's exactly one match, and [0] then treats
+                    # it as a hashtable key lookup (returning $null) instead of an array element access.
+                    $col.CSVIndex = @($allColumns | Where-Object { $_.Name -eq $col.Name })[0].CSVIndex
                     $col.UseDefault = ($col.Name -in $defaultCols)
                 }
                 $expectedCsvColumnCount = $allColumns.Count - $defaultCols.Count
@@ -1235,10 +1168,13 @@ ORDER BY c.ORDINAL_POSITION
                 if ($values.Count -gt 0 -and [string]::IsNullOrWhiteSpace($values[0])) {
                     $values = $values[1..($values.Count-1)]
                 }
+                # Strip trailing empty fields (e.g. ProductReview.csv has two trailing tabs)
+                $values = Remove-TrailingEmptyFields -Values $values
                 
-                # Check against expected column count (may be less than allColumns if DefaultColumns specified)
-                if ($values.Count -ne $expectedCsvColumnCount) {
-                    continue 
+                # Skip header row: if first column looks like a header (not a number), skip
+                if ($values.Count -ge 1) {
+                    $firstVal = $values[0].Trim()
+                    if ($firstVal -and $firstVal -notmatch '^\d+$') { continue }
                 }
                 
                 $dataRow = $dataTable.NewRow()
@@ -1251,7 +1187,10 @@ ORDER BY c.ORDINAL_POSITION
                     if ($col.CSVIndex -lt 0) {
                         $val = $null  # Column uses DB DEFAULT - placeholder for row cell
                     } else {
-                        $val = $values[$col.CSVIndex].Trim()
+                        # Guard against out-of-bounds: if CSV has fewer fields than expected,
+                        # treat the missing field as null (will use column default or DBNull)
+                        $raw = if ($col.CSVIndex -lt $values.Count) { $values[$col.CSVIndex] } else { $null }
+                        $val = if ($null -ne $raw) { $raw.Trim() } else { $null }
                     }
                     
                     # Column uses DB DEFAULT - no value from CSV (use placeholder so non-nullable columns accept the row; INSERT will use DEFAULT/NULL)
@@ -1285,7 +1224,10 @@ ORDER BY c.ORDINAL_POSITION
                             # Provide default values for non-nullable columns
                             switch ($col.Type) {
                                 'bit' { $dataRow[$dataTableColIndex] = $false }
-                                'int' { $dataRow[$dataTableColIndex] = 0 }
+                                'int' {
+                                    # Rating CHECK constraint (1-5): use 1 not 0 to satisfy constraint when value is missing
+                                    $dataRow[$dataTableColIndex] = if ($col.Name -eq 'Rating') { 1 } else { 0 }
+                                }
                                 'bigint' { $dataRow[$dataTableColIndex] = 0 }
                                 'smallint' { $dataRow[$dataTableColIndex] = 0 }
                                 'tinyint' { $dataRow[$dataTableColIndex] = 0 }
@@ -1310,7 +1252,12 @@ ORDER BY c.ORDINAL_POSITION
                                     $dataRow[$dataTableColIndex] = $val -in @('1', 'true', 'True', 'TRUE')
                                 }
                                 'int' {
-                                    $dataRow[$dataTableColIndex] = [int]::Parse($val)
+                                    $parsed = [int]::Parse($val)
+                                    # Production.ProductReview.Rating has CHECK (1-5); clamp to avoid constraint violation
+                                    if ($schemaName -eq 'Production' -and $tableName -eq 'ProductReview' -and $col.Name -eq 'Rating') {
+                                        if ($parsed -lt 1) { $parsed = 1 }; if ($parsed -gt 5) { $parsed = 5 }
+                                    }
+                                    $dataRow[$dataTableColIndex] = $parsed
                                 }
                                 'bigint' {
                                     $dataRow[$dataTableColIndex] = [long]::Parse($val)
@@ -1440,7 +1387,8 @@ ORDER BY c.ORDINAL_POSITION
                                 switch ($col.Type) {
                                     'bit' { $dataRow[$dataTableColIndex] = $false }
                                     { $_ -in @('int', 'bigint', 'smallint', 'tinyint', 'decimal', 'numeric', 'money', 'float') } {
-                                        $dataRow[$dataTableColIndex] = 0
+                                        # Rating on Production.ProductReview must be 1-5 (CHECK constraint); use 1 not 0 on parse failure
+                                        $dataRow[$dataTableColIndex] = if ($col.Name -eq 'Rating') { 1 } else { 0 }
                                     }
                                     { $_ -in @('datetime', 'datetime2', 'date') } { $dataRow[$dataTableColIndex] = [datetime]::new(1900, 1, 1, 0, 0, 0) }
                                     'uniqueidentifier' { $dataRow[$dataTableColIndex] = [guid]::Empty }
@@ -1455,6 +1403,14 @@ ORDER BY c.ORDINAL_POSITION
                     }
                     
                     $dataTableColIndex++
+                }
+                # Skip placeholder/invalid row: Production.ProductDescription must not have ProductDescriptionID 0
+                if ($schemaName -eq 'Production' -and $tableName -eq 'ProductDescription') {
+                    $pidx = [array]::IndexOf(($columns | ForEach-Object { $_.Name }), 'ProductDescriptionID')
+                    if ($pidx -ge 0) {
+                        $pkVal = $dataRow[$pidx]
+                        if ($null -ne $pkVal -and [int]$pkVal -eq 0) { continue }
+                    }
                 }
                 $dataTable.Rows.Add($dataRow)
                 $rowCount++
@@ -1511,7 +1467,11 @@ ORDER BY ORDINAL_POSITION
                         $batchEnd = [Math]::Min($batchStart + $batchSize, $dataTable.Rows.Count)
                         
                         # Build INSERT statement for this batch - use MERGE for AI CSV files to avoid duplicates
-                        $columnList = ($loadedColumns | ForEach-Object { "[$($_.Name)]" }) -join ', '
+                        # Exclude UseDefault columns from the column list; SQL Server will apply their defaults
+                        # automatically. Using the DEFAULT keyword in VALUES with IDENTITY_INSERT ON can trigger
+                        # spurious CHECK constraint violations on adjacent columns (e.g. CK_ProductReview_Rating).
+                        $insertColumns = $loadedColumns | Where-Object { -not $_.UseDefault }
+                        $columnList = ($insertColumns | ForEach-Object { "[$($_.Name)]" }) -join ', '
                         
                         # For AI CSV files with PK, use parameterized INSERT...SELECT WHERE NOT EXISTS (no IF batch)
                         if ($isAiCsv -and $pkColumns.Count -gt 0) {
@@ -1707,8 +1667,8 @@ ORDER BY ORDINAL_POSITION
                                 $value = $row[$c]
                                 
                                 if ($col.UseDefault) {
-                                    # Use DEFAULT only if column has a default constraint; otherwise NULL
-                                    $values += if ($col.Default -and [string]::IsNullOrWhiteSpace($col.Default) -eq $false) { "DEFAULT" } else { "NULL" }
+                                    # Column excluded from INSERT column list - skip value entirely
+                                    continue
                                 }
                                 elseif ($value -is [DBNull] -or $null -eq $value) {
                                     $values += "NULL"
@@ -1792,17 +1752,12 @@ ORDER BY ORDINAL_POSITION
                     
                     $transaction.Commit()
                     $loadedCount = $insertedRows + $updatedRows
-                    if ($loadedCount -gt 0) {
-                        $msg = "Successfully loaded $loadedCount rows"
-                        if ($insertedRows -gt 0 -and $updatedRows -gt 0) { $msg += " ($insertedRows inserted, $updatedRows updated)" }
-                        elseif ($updatedRows -gt 0) { $msg += " ($updatedRows updated)" }
-                        if ($skippedRows -gt 0) { $msg += " ($skippedRows duplicates skipped)" }
-                        Write-Log "    $msg"
-                        $csvLoadSuccess++
-                    } else {
-                        Write-Log "    All $skippedRows rows already exist - Skipping"
-                        $csvLoadSkipped++
-                    }
+                    $msg = "Successfully loaded $loadedCount rows"
+                    if ($insertedRows -gt 0 -and $updatedRows -gt 0) { $msg += " ($insertedRows inserted, $updatedRows updated)" }
+                    elseif ($updatedRows -gt 0) { $msg += " ($updatedRows updated)" }
+                    if ($skippedRows -gt 0) { $msg += " ($skippedRows duplicates skipped)" }
+                    Write-Log "    $msg"
+                    $csvLoadSuccess++
                 }
                 catch {
                     $transaction.Rollback()
@@ -1842,6 +1797,16 @@ ORDER BY ORDINAL_POSITION
         }
         catch {
             Write-Log "    ✗ Failed to load $($config.Table) from $($config.File): $($_.Exception.Message)"
+            if ($_.Exception.InnerException) {
+                Write-Log "    Inner: $($_.Exception.InnerException.Message)"
+            }
+            Write-Log "    Error type: $($_.Exception.GetType().FullName)"
+            if ($_.ScriptStackTrace) {
+                $stackLines = $_.ScriptStackTrace -split "`n"
+                foreach ($line in $stackLines | Select-Object -First 5) {
+                    Write-Log "    at $line"
+                }
+            }
             $csvLoadFailed++
         }
     }
@@ -1856,7 +1821,7 @@ Write-Log "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinutes))
     $elapsed = (Get-Date) - $scriptStartTime
     Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] CSV Data Loading Complete"
     Write-Log "  ✓ Successfully loaded: $csvLoadSuccess tables"
-    Write-Log "  ⊙ Skipped (already loaded): $csvLoadSkipped tables"
+    Write-Log "  ⊙ Skipped (file not found / no data): $csvLoadSkipped tables"
     if ($csvLoadFailed -gt 0) {
         Write-Log "  ✗ Failed: $csvLoadFailed tables"
     }
@@ -1879,6 +1844,7 @@ Write-Log "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinutes))
             $parts = $line -split "`t", 3
             if ($parts.Count -lt 2) { continue }
             $id = [int]::Parse($parts[0].Trim())
+            if ($id -eq 0) { continue }
             $embJson = $parts[1].Trim()
             $modStr = if ($parts.Count -ge 3 -and -not [string]::IsNullOrWhiteSpace($parts[2])) { $parts[2].Trim() } else { $null }
             $cmd.Parameters.Clear()
@@ -1906,6 +1872,55 @@ Write-Log "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinutes))
         }
         Write-Log "  Applied $applied ProductDescription embedding updates from ProductDescription-ai-embeddings.csv"
     }
+
+    # Apply ProductReview UserID from ProductReview-ai-UserID.csv (assigns random Individual Person IDs to reviews).
+    # Generate with: node scripts/utilities/generate-product-review-userids.js (requires API_URL pointing at DAB).
+    $productReviewUserIDPath = Join-Path $csvFolder 'ProductReview-ai-UserID.csv'
+    if (Test-Path $productReviewUserIDPath) {
+        $elapsed = (Get-Date) - $scriptStartTime
+        Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Applying ProductReview UserID from ProductReview-ai-UserID.csv..."
+        $updateUserIDSql = "UPDATE Production.ProductReview SET UserID = @uid, ModifiedDate = GETDATE() WHERE ProductReviewID = @rid"
+        $cmd.Transaction = $null
+        $cmd.CommandText = $updateUserIDSql
+        $lines = Get-Content -Path $productReviewUserIDPath -Encoding UTF8
+        $applied = 0
+        $batchSize = 500
+        for ($i = 1; $i -lt $lines.Count; $i++) {
+            $line = $lines[$i]
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $parts = $line -split "`t", 2
+            if ($parts.Count -lt 2) { continue }
+            $rid = [int]::Parse($parts[0].Trim())
+            $uid = [int]::Parse($parts[1].Trim())
+            $cmd.Parameters.Clear()
+            $null = $cmd.Parameters.AddWithValue('@rid', $rid)
+            $null = $cmd.Parameters.AddWithValue('@uid', $uid)
+            try {
+                $n = $cmd.ExecuteNonQuery()
+                if ($n -gt 0) { $applied++ }
+            } catch {
+                Write-Log "  Warning: Update failed for ProductReviewID $rid : $($_.Exception.Message)"
+            }
+            if ($applied -gt 0 -and $applied % $batchSize -eq 0) {
+                Write-Log "  ...applied $applied UserID updates"
+            }
+        }
+        Write-Log "  Applied $applied ProductReview UserID updates from ProductReview-ai-UserID.csv"
+    }
+
+    # Remove any stray ProductDescriptionID 0 row (placeholder from malformed CSV or parse fallback)
+    try {
+        $cmd.CommandText = "DELETE FROM Production.ProductDescription WHERE ProductDescriptionID = 0"
+        $deleted = $cmd.ExecuteNonQuery()
+        if ($deleted -gt 0) { Write-Log "  Removed $deleted placeholder row(s) (ProductDescriptionID = 0)" }
+    } catch { }
+
+    # Remove any stray ProductReviewID 0 row (parse-error fallback from a failed seed run)
+    try {
+        $cmd.CommandText = "DELETE FROM Production.ProductReview WHERE ProductReviewID = 0"
+        $deleted = $cmd.ExecuteNonQuery()
+        if ($deleted -gt 0) { Write-Log "  Removed $deleted placeholder row(s) (ProductReviewID = 0)" }
+    } catch { }
 
     # Log ProductDescription embedding coverage (after applying source CSV if present)
     try {

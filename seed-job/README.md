@@ -280,12 +280,29 @@ The seed job populates the database with:
 
 ### CSV Import Failures
 
-**Symptoms:** Row count mismatches or import errors
+**Symptoms:** Row count mismatches or import errors; log shows `✗ Failed to load ... from ...`
 
-**Solutions:**
-- Check CSV delimiter is pipe (`|`)
-- Verify CSV encoding (UTF-8 expected)
-- Review logs for specific error messages
+**How to find the error in the seed log:**
+1. Search the log for **`ProductReview`** (or the table that failed) and **`Failed`** to locate the failure line.
+2. The next log line is the exception message: **`✗ Failed to load Production.ProductReview from ProductReview.csv: <message>`**
+3. On the next run, the script also logs **Inner** (if any), **Error type**, and the first 5 lines of **ScriptStackTrace** to narrow down where it failed.
+
+**Common causes by file:**
+
+| File | Delimiter | Common causes |
+|------|-----------|----------------|
+| Most CSVs | Tab (`\t`) | Wrong delimiter; BOM or CRLF vs LF; column count doesn’t match table |
+| **ProductReview.csv** | Tab | **Comments** column must be **UTF-16 LE hex** (even length, 0-9A-F only). Invalid hex or odd length → "Hex string length must be even" or "Could not find any recognizable digits". Ensure no newlines inside a row. |
+| ProductReview-ai.csv | Tab | **CommentsEmbedding** must be a JSON array of 1536 floats; plain text in Comments. |
+
+**ProductReview.csv specifics:**
+- Loaded with `HexColumns=@('Comments')`: the 7th column is decoded from hex to Unicode before INSERT.
+- Validate hex locally: each row’s Comments field must be an even-length string of hex digits (no spaces, no 0x prefix in the CSV). Re-run `scripts/utilities/clean-product-review-csv.py` if the source was plain text or had newlines.
+
+**General:**
+- Delimiter: most seed CSVs use **tab**, not pipe (see `seed-database.ps1` `Delimiter` per file).
+- Encoding: UTF-8 expected; avoid BOM if the script doesn’t strip it.
+- Line endings: script uses `RowTerminator="\n"`; CRLF can cause extra columns if not normalized.
 
 ### Image Upload Failures
 

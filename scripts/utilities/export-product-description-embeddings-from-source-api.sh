@@ -41,14 +41,14 @@ while true; do
     exit 1
   fi
 
-  # Output rows that have a non-null DescriptionEmbedding (tostring for array = compact JSON)
+  # Output rows that have a non-null DescriptionEmbedding and ProductDescriptionID != 0 (skip placeholder)
   echo "$RESP" | jq -r '
     .value[]
-    | select(.DescriptionEmbedding != null)
+    | select(.DescriptionEmbedding != null and .ProductDescriptionID != 0 and .ProductDescriptionID != null)
     | [.ProductDescriptionID, (.DescriptionEmbedding | tostring), (.ModifiedDate // "")]
     | @tsv
   ' >> "$OUTPUT_FILE"
-  ROWS_THIS_PAGE=$(echo "$RESP" | jq -r '[.value[] | select(.DescriptionEmbedding != null)] | length')
+  ROWS_THIS_PAGE=$(echo "$RESP" | jq -r '[.value[] | select(.DescriptionEmbedding != null and .ProductDescriptionID != 0 and .ProductDescriptionID != null)] | length')
   TOTAL_ROWS=$((TOTAL_ROWS + ROWS_THIS_PAGE))
 
   echo "  Page $PAGE: $ROWS_THIS_PAGE rows with embeddings (total: $TOTAL_ROWS)"
