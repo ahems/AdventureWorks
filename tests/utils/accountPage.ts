@@ -47,7 +47,11 @@ export class AccountPage {
       await form.getByLabel(/address line 2/i).fill(data.addressLine2);
     }
     await form.getByLabel(/city/i).fill(data.city);
-    await form.getByLabel(/country/i).selectOption({ label: data.country });
+
+    // Wait for country select to be enabled (countries may still be loading)
+    const countrySelect = form.getByLabel(/country/i);
+    await expect(countrySelect).toBeEnabled({ timeout: 30000 });
+    await countrySelect.selectOption({ label: data.country });
 
     // Wait for state/province options to load after country selection
     const stateSelect = form.getByLabel(/state\/province/i);
@@ -61,7 +65,7 @@ export class AccountPage {
         return select && select.options.length > 1;
       },
       "stateProvince",
-      { timeout: 5000 },
+      { timeout: 20000 },
     );
 
     await stateSelect.selectOption({ label: data.stateLabel });

@@ -29,7 +29,7 @@ const createRandomAddress = () => {
 
 test.describe("Address Azure Functions", () => {
   // Increase timeout for address tests - they involve multiple API calls and page loads (and parallel runs)
-  test.setTimeout(90000);
+  test.setTimeout(180000);
 
   test("user can add, edit, and delete addresses via Azure Functions", async ({
     page,

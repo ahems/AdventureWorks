@@ -27,7 +27,7 @@ const loadCsvFileWithDelimiter = (
   delimiter: string,
   options?: { hasHeader?: boolean; columnNames?: string[] },
 ): CsvRow[] => {
-  const csvPath = path.join(process.cwd(), "seed-job", "sql", filename);
+  const csvPath = path.join(__dirname, "..", "..", "seed-job", "sql", filename);
 
   if (!fs.existsSync(csvPath)) {
     console.warn(`⚠️ CSV file not found: ${csvPath}`);

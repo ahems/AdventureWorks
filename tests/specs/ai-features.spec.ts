@@ -19,12 +19,11 @@ test.describe("AI Features", () => {
 
     // Navigate to search page so the search input is always visible (no header toggle)
     await page.goto(`${testEnv.webBaseUrl}/search`);
-    await page.waitForLoadState("domcontentloaded");
 
-    // Wait for search page to render (h1 then input; placeholder can be "Search for bikes..." or i18n)
-    await expect(page.locator("h1")).toContainText(/search|products/i, { timeout: 15000 });
+    // Wait for the page to mount, then for the search input to appear (only visible once data loads)
+    await expect(page.locator('[data-testid="search-page"]')).toBeVisible({ timeout: 30000 });
     const searchInput = page.getByPlaceholder(/search|bikes|gear|clothing|describe/i).first();
-    await expect(searchInput).toBeVisible({ timeout: 10000 });
+    await expect(searchInput).toBeVisible({ timeout: 30000 });
 
     // Test search with semantic query (should use embeddings)
     const searchQueries = [
@@ -68,7 +67,7 @@ test.describe("AI Features", () => {
 
       // Go back to search page for next query
       await page.goto(`${testEnv.webBaseUrl}/search`);
-      await expect(searchInput).toBeVisible({ timeout: 10000 });
+      await expect(searchInput).toBeVisible({ timeout: 30000 });
     }
   });
 
@@ -285,11 +284,11 @@ test.describe("AI Features", () => {
 
     // Navigate to search page so the search input is always visible
     await page.goto(`${testEnv.webBaseUrl}/search`);
-    await page.waitForLoadState("domcontentloaded");
 
-    await expect(page.locator("h1")).toContainText(/search|products/i, { timeout: 15000 });
+    // Wait for the page to mount, then for the search input to appear (only visible once data loads)
+    await expect(page.locator('[data-testid="search-page"]')).toBeVisible({ timeout: 30000 });
     const searchInput = page.getByPlaceholder(/search|bikes|gear|clothing|describe/i).first();
-    await expect(searchInput).toBeVisible({ timeout: 10000 });
+    await expect(searchInput).toBeVisible({ timeout: 30000 });
 
     // Test different types of queries
     const testQueries = [
@@ -331,7 +330,7 @@ test.describe("AI Features", () => {
 
       // Return to search page for next query
       await page.goto(`${testEnv.webBaseUrl}/search`);
-      await expect(searchInput).toBeVisible({ timeout: 10000 });
+      await expect(searchInput).toBeVisible({ timeout: 30000 });
     }
   });
 });

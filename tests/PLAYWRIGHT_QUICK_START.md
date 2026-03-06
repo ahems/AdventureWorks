@@ -33,6 +33,14 @@ Dashboard URL: https://playwright.microsoft.com/...
 az login
 ```
 
+### 4. Set TEST_EMAIL (required for checkout tests)
+
+Some tests (checkout, sale discounts) send a real order confirmation email during the flow. Set this to an address you can receive mail at:
+
+```bash
+azd env set TEST_EMAIL your@email.com
+```
+
 You're ready to run tests!
 
 ## 🧪 Running Tests

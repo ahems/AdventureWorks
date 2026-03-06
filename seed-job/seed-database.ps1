@@ -1171,12 +1171,6 @@ ORDER BY c.ORDINAL_POSITION
                 # Strip trailing empty fields (e.g. ProductReview.csv has two trailing tabs)
                 $values = Remove-TrailingEmptyFields -Values $values
                 
-                # Skip header row: if first column looks like a header (not a number), skip
-                if ($values.Count -ge 1) {
-                    $firstVal = $values[0].Trim()
-                    if ($firstVal -and $firstVal -notmatch '^\d+$') { continue }
-                }
-                
                 $dataRow = $dataTable.NewRow()
                 $dataTableColIndex = 0
                 

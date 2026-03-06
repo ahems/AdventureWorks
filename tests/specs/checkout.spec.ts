@@ -390,14 +390,16 @@ test.describe("Checkout Flow", () => {
       const cityInput = page.getByLabel(/city/i);
       await cityInput.fill(shippingAddress.city);
 
-      // Country selector - use selectOption for combobox
+      // Country selector - wait for it to be enabled (countries load async) then select
       console.log(`🌍 Selecting country: ${shippingAddress.country}`);
       const countrySelector = page.getByLabel(/country/i);
+      await expect(countrySelector).toBeEnabled({ timeout: 30000 });
       await countrySelector.selectOption({ label: shippingAddress.country });
 
-      // State selector - use selectOption for combobox
+      // State selector - wait for options to populate then select
       console.log(`📍 Selecting state: ${shippingAddress.stateLabel}`);
       const stateSelector = page.getByLabel(/state|province/i);
+      await expect(stateSelector).toBeEnabled({ timeout: 20000 });
       await stateSelector.selectOption({ label: shippingAddress.stateLabel });
 
       const postalCodeInput = page.getByLabel(/postal code|zip code/i);

@@ -328,7 +328,7 @@ const SearchPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col">
+      <div className="min-h-screen flex flex-col" data-testid="search-page">
         <Header />
         <main className="flex-1">
           {/* Search Header Skeleton */}
@@ -420,7 +420,7 @@ const SearchPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col" data-testid="search-page">
       <Header />
       <main className="flex-1">
         {/* Search Header */}
