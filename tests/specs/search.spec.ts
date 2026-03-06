@@ -10,16 +10,10 @@ test.describe("Search Functionality", () => {
     // Navigate directly to search page
     await page.goto("/search");
     await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(5000);
 
-    // Wait for search page to load
-    await expect(page.locator("h1")).toContainText("Search Products", {
-      timeout: 30000,
-    });
-
-    // Enter search query
-    const searchInput = page.locator('input[placeholder*="Search"]');
-    await expect(searchInput).toBeVisible({ timeout: 30000 });
+    // The search input renders immediately outside the loading skeleton
+    const searchInput = page.locator('[data-testid="search-query-input"]');
+    await expect(searchInput).toBeVisible({ timeout: 15000 });
     await searchInput.fill("red bikes");
 
     // Submit search
@@ -28,12 +22,15 @@ test.describe("Search Functionality", () => {
     });
     await searchButton.click();
 
-    // Wait for search results to load
+    // Wait for semantic search results - Azure Functions can be slow on cold start
     console.log("⏳ Waiting for search results...");
-    await page.waitForTimeout(6000);
-
-    // Check for product cards
     const productCards = page.locator('[data-testid^="product-card-"]');
+    try {
+      await expect(productCards.first()).toBeVisible({ timeout: 20000 });
+    } catch {
+      // Count will be 0 and handled below
+    }
+
     const count = await productCards.count();
 
     console.log(`Found ${count} search results for 'red bikes'`);
