@@ -473,10 +473,12 @@ test.describe("Search Functionality", () => {
     await page.goto(`${testEnv.webBaseUrl}/search?q=helmet`);
     await page.waitForLoadState("domcontentloaded");
 
-    // Wait for search page to finish loading (skeleton is replaced by real SearchBar)
+    // The SearchBar renders immediately outside the loading skeleton, so the input
+    // is available before the semantic search results complete. Use a generous
+    // timeout to accommodate Container App cold starts.
     const searchInput = page.locator("[data-testid='search-query-input']");
-    await expect(searchInput).toBeVisible({ timeout: 20000 });
-    await expect(searchInput).toHaveValue("helmet", { timeout: 5000 });
+    await expect(searchInput).toBeVisible({ timeout: 40000 });
+    await expect(searchInput).toHaveValue("helmet", { timeout: 10000 });
     console.log("✓ Search query populated from URL parameter");
 
     // Verify results are shown

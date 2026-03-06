@@ -6,6 +6,10 @@ test.describe("AI Features", () => {
   test("AI search with embeddings returns relevant results", async ({
     page,
   }) => {
+    // Semantic search is unauthenticated - no sign-up needed.
+    // Allow extra time: signup removed but 3 sequential searches × up to 20s each still needs headroom.
+    test.setTimeout(90_000);
+
     // Check if AI services are configured (optional test)
     // If VITE_API_FUNCTIONS_URL is not set, semantic search won't work
     const hasFunctionsUrl = testEnv.functionsBaseUrl && testEnv.functionsBaseUrl.length > 0;
@@ -14,16 +18,12 @@ test.describe("AI Features", () => {
       test.skip();
     }
 
-    // Create a test user
-    await signupThroughUi(page);
-
     // Navigate to search page so the search input is always visible (no header toggle)
     await page.goto(`${testEnv.webBaseUrl}/search`);
 
-    // Wait for the page to mount, then for the search input to appear (only visible once data loads)
-    await expect(page.locator('[data-testid="search-page"]')).toBeVisible({ timeout: 30000 });
-    const searchInput = page.getByPlaceholder(/search|bikes|gear|clothing|describe/i).first();
-    await expect(searchInput).toBeVisible({ timeout: 30000 });
+    // Wait for the search input - it renders immediately outside the loading skeleton
+    const searchInput = page.locator('[data-testid="search-query-input"]');
+    await expect(searchInput).toBeVisible({ timeout: 15000 });
 
     // Test search with semantic query (should use embeddings)
     const searchQueries = [
@@ -67,7 +67,7 @@ test.describe("AI Features", () => {
 
       // Go back to search page for next query
       await page.goto(`${testEnv.webBaseUrl}/search`);
-      await expect(searchInput).toBeVisible({ timeout: 30000 });
+      await expect(page.locator('[data-testid="search-query-input"]')).toBeVisible({ timeout: 10000 });
     }
   });
 
@@ -272,6 +272,10 @@ test.describe("AI Features", () => {
   });
 
   test("AI search handles various query types", async ({ page }) => {
+    // Semantic search is unauthenticated - no sign-up needed.
+    // Allow extra time: 3 sequential searches × up to 20s each needs headroom.
+    test.setTimeout(90_000);
+
     // Check if AI services are configured (optional test)
     const hasFunctionsUrl = testEnv.functionsBaseUrl && testEnv.functionsBaseUrl.length > 0;
     if (!hasFunctionsUrl) {
@@ -279,16 +283,12 @@ test.describe("AI Features", () => {
       test.skip();
     }
 
-    // Create a test user
-    await signupThroughUi(page);
-
     // Navigate to search page so the search input is always visible
     await page.goto(`${testEnv.webBaseUrl}/search`);
 
-    // Wait for the page to mount, then for the search input to appear (only visible once data loads)
-    await expect(page.locator('[data-testid="search-page"]')).toBeVisible({ timeout: 30000 });
-    const searchInput = page.getByPlaceholder(/search|bikes|gear|clothing|describe/i).first();
-    await expect(searchInput).toBeVisible({ timeout: 30000 });
+    // Wait for the search input - it renders immediately outside the loading skeleton
+    const searchInput = page.locator('[data-testid="search-query-input"]');
+    await expect(searchInput).toBeVisible({ timeout: 15000 });
 
     // Test different types of queries
     const testQueries = [
@@ -330,7 +330,7 @@ test.describe("AI Features", () => {
 
       // Return to search page for next query
       await page.goto(`${testEnv.webBaseUrl}/search`);
-      await expect(searchInput).toBeVisible({ timeout: 30000 });
+      await expect(page.locator('[data-testid="search-query-input"]')).toBeVisible({ timeout: 10000 });
     }
   });
 });
