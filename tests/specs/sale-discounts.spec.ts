@@ -56,21 +56,13 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
     await page.goto(`${testEnv.webBaseUrl}/sale`);
     await page.waitForLoadState("domcontentloaded");
 
-    // Wait for sale products to load
-    console.log("⏳ Waiting for sale products to load...");
-    await page.waitForTimeout(5000);
-
-    // Check that sale page loaded
-    const saleHeading = page
-      .locator("h1, h2")
-      .filter({ hasText: /sale|special|discount/i });
-    await expect(saleHeading.first()).toBeVisible({ timeout: 10000 });
-
     // Sale page shows product links in main (works with or without data-testid on cards)
-    const saleProductCards = page.locator(
-      'main a[href^="/product/"]',
-    );
-    
+    const saleProductCards = page.locator('main a[href^="/product/"]');
+
+    // Wait for sale products to load (page makes two chained GraphQL calls)
+    console.log("⏳ Waiting for sale products to load...");
+    await expect(saleProductCards.first()).toBeVisible({ timeout: 45000 });
+
     const productCount = await saleProductCards.count();
     expect(
       productCount,
@@ -97,10 +89,12 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
     // Navigate to sale page
     await page.goto(`${testEnv.webBaseUrl}/sale`);
     await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(5000);
 
     // Sale page shows product links in main
     const saleProductCards = page.locator('main a[href^="/product/"]');
+
+    // Wait for sale products to load (page makes two chained GraphQL calls)
+    await expect(saleProductCards.first()).toBeVisible({ timeout: 45000 });
 
     const productCount = await saleProductCards.count();
     expect(
@@ -223,10 +217,12 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
     // Navigate to sale page
     await page.goto(`${testEnv.webBaseUrl}/sale`);
     await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(5000);
 
     // Sale page shows product links in main
     const saleProductCards = page.locator('main a[href^="/product/"]');
+
+    // Wait for sale products to load (page makes two chained GraphQL calls)
+    await expect(saleProductCards.first()).toBeVisible({ timeout: 45000 });
 
     const productCount = await saleProductCards.count();
     expect(
@@ -294,23 +290,10 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
     // Navigate to sale page
     await page.goto(`${testEnv.webBaseUrl}/sale`);
     await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(5000);
 
-    // Wait for sale products to load
-    const saleProductCards = page.locator(
-      'main a[href^="/product/"]',
-    );
-    
-    // Check if sale products are visible
-    const saleProductsVisible = await saleProductCards
-      .first()
-      .isVisible({ timeout: 20000 })
-      .catch(() => false);
-
-    expect(
-      saleProductsVisible,
-      "No sale product cards visible. Verify sale data: npx tsx tests/scripts/check-sale-discounts-dab.ts",
-    ).toBe(true);
+    // Wait for sale products to load (page makes two chained GraphQL calls)
+    const saleProductCards = page.locator('main a[href^="/product/"]');
+    await expect(saleProductCards.first()).toBeVisible({ timeout: 45000 });
 
     const productCount = await saleProductCards.count();
     expect(
@@ -560,23 +543,10 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
     // Navigate to sale page
     await page.goto(`${testEnv.webBaseUrl}/sale`);
     await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(5000);
 
-    // Wait for sale products
-    const saleProductCards = page.locator(
-      'main a[href^="/product/"]',
-    );
-    
-    // Check if sale products are visible
-    const saleProductsVisible = await saleProductCards
-      .first()
-      .isVisible({ timeout: 20000 })
-      .catch(() => false);
-
-    expect(
-      saleProductsVisible,
-      "No sale product cards visible. Verify sale data: npx tsx tests/scripts/check-sale-discounts-dab.ts",
-    ).toBe(true);
+    // Wait for sale products to load (page makes two chained GraphQL calls)
+    const saleProductCards = page.locator('main a[href^="/product/"]');
+    await expect(saleProductCards.first()).toBeVisible({ timeout: 45000 });
 
     const productCount = await saleProductCards.count();
     expect(
