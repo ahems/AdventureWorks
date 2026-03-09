@@ -7,7 +7,8 @@
     "search": "Rechercher",
     "searchPlaceholder": "Recherchez vélos, équipement, vêtements...",
     "aiSearchPlaceholder": "Recherche IA: Décrivez ce que vous recherchez...",
-    "selectLanguage": "Choisir la Langue"
+    "selectLanguage": "Choisir la Langue",
+    "sale": "Soldes"
   },
   "buttons": {
     "addToCart": "Ajouter au Panier",

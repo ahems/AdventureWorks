@@ -6,7 +6,8 @@
     "myAccount": "Il Mio Account",
     "search": "Cerca",
     "searchPlaceholder": "Cerca bici, attrezzatura, abbigliamento...",
-    "selectLanguage": "Seleziona Lingua"
+    "selectLanguage": "Seleziona Lingua",
+    "sale": "Offerte"
   },
   "buttons": {
     "addToCart": "Aggiungi al Carrello",

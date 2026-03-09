@@ -7,7 +7,8 @@
     "search": "Buscar",
     "searchPlaceholder": "Busca bicicletas, equipo, ropa...",
     "aiSearchPlaceholder": "Búsqueda IA: Describe lo que buscas...",
-    "selectLanguage": "Seleccionar idioma"
+    "selectLanguage": "Seleccionar idioma",
+    "sale": "Ofertas"
   },
   "buttons": {
     "addToCart": "Añadir al carrito",

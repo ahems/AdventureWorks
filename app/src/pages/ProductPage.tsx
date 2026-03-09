@@ -68,7 +68,10 @@ const ProductPage: React.FC = () => {
   const { data: subcategory } = useSubcategory(
     product?.ProductSubcategoryID || 0,
   );
-  const { data: category } = useCategory(subcategory?.ProductCategoryID || 0);
+  const { data: category } = useCategory(
+    subcategory?.ProductCategoryID || 0,
+    selectedLanguage,
+  );
 
   const inWishlist = product ? isInWishlist(product.ProductID) : false;
   const salePrice = product ? getSalePrice(product) : null;

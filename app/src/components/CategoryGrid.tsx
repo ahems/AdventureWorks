@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Bike, Cog, Shirt, Backpack, ArrowRight } from "lucide-react";
 import { useCategories } from "@/hooks/useProducts";
+import { useLanguage } from "@/context/LanguageContext";
 
 const iconMap: Record<string, React.ElementType> = {
   bike: Bike,
@@ -13,7 +14,8 @@ const iconMap: Record<string, React.ElementType> = {
 
 const CategoryGrid: React.FC = () => {
   const { t } = useTranslation("common");
-  const { data: categories = [], isLoading } = useCategories();
+  const { selectedLanguage } = useLanguage();
+  const { data: categories = [], isLoading } = useCategories(selectedLanguage);
 
   if (isLoading) {
     return (

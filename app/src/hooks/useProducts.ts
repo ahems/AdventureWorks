@@ -2,11 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import * as apiService from "@/data/apiService";
 import { Product, ProductCategory, ProductSubcategory } from "@/types/product";
 
-// Hook to fetch all categories
-export const useCategories = () => {
+// Hook to fetch all categories for the given culture
+export const useCategories = (cultureId: string = "en") => {
   return useQuery<ProductCategory[]>({
-    queryKey: ["categories"],
-    queryFn: apiService.getCategories,
+    queryKey: ["categories", cultureId],
+    queryFn: () => apiService.getCategories(cultureId),
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 };
@@ -79,11 +79,11 @@ export const useProductsBySubcategory = (subcategoryId: number) => {
   });
 };
 
-// Hook to fetch category by ID
-export const useCategory = (categoryId: number) => {
+// Hook to fetch category by ID for the given culture
+export const useCategory = (categoryId: number, cultureId: string = "en") => {
   return useQuery<ProductCategory | undefined>({
-    queryKey: ["category", categoryId],
-    queryFn: () => apiService.getCategoryById(categoryId),
+    queryKey: ["category", categoryId, cultureId],
+    queryFn: () => apiService.getCategoryById(categoryId, cultureId),
     enabled: !!categoryId,
     staleTime: 5 * 60 * 1000,
   });

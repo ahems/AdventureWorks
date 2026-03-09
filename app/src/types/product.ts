@@ -117,6 +117,7 @@ export const isVariantAvailable = (
 
 export interface ProductCategory {
   ProductCategoryID: number;
+  CultureID?: string;
   Name: string;
   IconName?: string;
 }
