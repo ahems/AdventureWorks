@@ -139,6 +139,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
             className={`w-full pl-10 pr-10 py-3 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none ${inputClassName}`}
             autoComplete="off"
             autoFocus={autoFocus}
+            data-testid="search-query-input"
           />
           {suggestionsLoading && searchQuery.length >= 2 && (
             <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-accent animate-spin" />

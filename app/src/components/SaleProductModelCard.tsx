@@ -106,6 +106,7 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
     <Link
       to={`/product/${currentProduct.ProductID}`}
       className="doodle-card block p-4 group relative bg-white"
+      data-testid={`sale-product-model-${productGroup.ProductModelID}`}
     >
       {/* Sale Badge */}
       {currentProduct.DiscountPct && (
@@ -220,7 +221,7 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
         </div>
 
         {/* Price */}
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1" data-testid={`sale-product-price-${currentProduct.ProductID}`}>
           <div className="flex items-center gap-2">
             <span className="font-doodle text-sm text-doodle-text/50 line-through">
               {productGroup.priceRange.min === productGroup.priceRange.max

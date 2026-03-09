@@ -6,16 +6,42 @@ The embedding export scripts (`export-product-description-embeddings.js` and `ex
 
 ## Root Cause
 
-- The database stores embeddings in **VECTOR columns** (binary data type)
-- The DAB GraphQL API is configured with `DescriptionEmbedding` and `CommentsEmbedding` as `String` types
-- GraphQL **cannot serialize VECTOR binary data** to strings, resulting in errors:
+- The database stores embeddings in **VECTOR columns** (e.g. `VECTOR(1536)`)
+- The DAB **GraphQL** layer maps/serializes these as strings and fails:
   ```
   "The DescriptionEmbedding value could not be parsed for configured GraphQL data type String"
   ```
+- GraphQL queries that request `DescriptionEmbedding` or `CommentsEmbedding` return errors or `null` for those fields even when the database has valid data.
 
-## Current State
+## Use REST for VECTOR columns
 
-When querying the API with embeddings included:
+The DAB **REST API** (`/api`) returns VECTOR columns correctly as JSON arrays. Prefer REST when you need to read embedding data via DAB.
+
+**Example (ProductDescription with embeddings):**
+
+```http
+GET /api/ProductDescription?$first=10&$select=ProductDescriptionID,Description,DescriptionEmbedding
+```
+
+Response includes `DescriptionEmbedding` as a numeric array, e.g.:
+
+```json
+{
+  "value": [
+    {
+      "ProductDescriptionID": 3,
+      "Description": "...",
+      "DescriptionEmbedding": [0.032786481, -0.012520245, ...]
+    }
+  ]
+}
+```
+
+For validation or tools that query DAB (and need embeddings), use the REST endpoint with `$select` rather than the GraphQL endpoint.
+
+## GraphQL (what not to do)
+
+When querying the API with embeddings included over **GraphQL**:
 
 ```graphql
 query {
@@ -23,19 +49,19 @@ query {
     items {
       ProductDescriptionID
       Description
-      DescriptionEmbedding # ❌ This field causes errors
+      DescriptionEmbedding # ❌ Causes errors or null
     }
   }
 }
 ```
 
-The API returns errors for every record that has embeddings, even though the data exists in the database.
+The API returns errors or null for embedding fields even though the data exists in the database.
 
 ## Solution Options
 
-### Option 1: Keep SQL Server Direct Access (Recommended)
+### Option 1: Keep SQL Server Direct Access (Recommended for export scripts)
 
-The original scripts used SQL Server direct connections, which can properly read VECTOR columns. This is the **correct approach** for embedding exports.
+The original scripts used SQL Server direct connections, which can properly read VECTOR columns. This is the **correct approach** for embedding exports (e.g. generating CSVs for the seed job).
 
 **Pros:**
 
@@ -48,30 +74,31 @@ The original scripts used SQL Server direct connections, which can properly read
 - Requires SQL credentials or Azure AD authentication
 - Direct database access from dev environment
 
-### Option 2: Create Custom Azure Function
+### Option 2: Use DAB REST API for read-only embedding access
 
-Create a dedicated Azure Function endpoint that:
+When you need to read embeddings via DAB (e.g. validation, one-off checks), use the REST API:
 
-- Queries SQL directly with proper VECTOR handling
-- Returns embeddings in JSON format
-- Provides REST API access to embeddings
+- `GET /api/ProductDescription?$select=ProductDescriptionID,Description,DescriptionEmbedding&$first=...`
+- Paginate with `$after` / `nextLink` if needed
 
 **Pros:**
 
-- API-based access
-- No direct SQL connection needed from clients
+- No GraphQL serialization issues; VECTOR returned as JSON array
+- No direct SQL required
 
 **Cons:**
 
-- Requires new Function implementation
-- Additional maintenance overhead
+- Pagination and filtering are REST-style (`$filter`, `$first`, `$after`)
 
-### Option 3: Modify DAB Configuration
+### Option 3: Create Custom Azure Function
 
-Remove `DescriptionEmbedding` and `CommentsEmbedding` from DAB exposed fields, since they can't be properly serialized anyway.
+Create a dedicated Azure Function endpoint that queries SQL directly and returns embeddings. Use when you need server-side logic, not for simple reads (REST is enough).
+
+### Option 4: Modify DAB Configuration
+
+Remove `DescriptionEmbedding` and `CommentsEmbedding` from DAB exposed fields if you never need them via the API. Not recommended if you want to validate or read embeddings via DAB REST.
 
 ## Recommendation
 
-**Revert the scripts to use SQL Server direct connection** for embedding exports. The DAB API is excellent for structured data queries but is not designed for binary/vector data export scenarios.
-
-The embeddings export is a specialized operation that happens during deployment/data migration, not a regular application feature, so direct SQL access is appropriate here.
+- **Export scripts (CSV generation):** Use **SQL Server direct connection** for embedding exports.
+- **Reading/validating embeddings via DAB:** Use the **REST API** (`/api/ProductDescription?$select=...,DescriptionEmbedding`) instead of GraphQL; REST returns VECTOR columns reliably as JSON arrays.

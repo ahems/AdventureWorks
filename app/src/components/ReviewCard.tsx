@@ -25,7 +25,7 @@ const ReviewCard: React.FC<ReviewCardProps> = ({
   });
 
   return (
-    <div className="doodle-card p-4 space-y-3">
+    <div className="doodle-card p-4 space-y-3" data-testid="review-card">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>

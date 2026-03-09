@@ -19,6 +19,7 @@ const convertProductReview = (pr: ProductReview): Review => ({
   createdAt: new Date(pr.ReviewDate).toISOString().split("T")[0],
   helpful: pr.HelpfulVotes || 0, // Use HelpfulVotes from API
   markedUsefulBy: [], // Will track user votes in localStorage
+  userID: pr.UserID,
 });
 
 interface ReviewsResponse {
@@ -150,6 +151,7 @@ export const useReviews = (productId: number) => {
           createdAt: new Date().toISOString().split("T")[0],
           helpful: 0,
           markedUsefulBy: [],
+          userID: userId,
         };
 
         setReviews((prev) => [newReview, ...prev]);
@@ -312,10 +314,13 @@ export const useReviews = (productId: number) => {
     userId: number,
     productId: number,
   ): boolean => {
-    // Check if user already submitted a review for this product
-    // Check API reviews for matching UserID
+    // Only show "already reviewed" when the current user has a review for this product (UserID match).
+    // Legacy or anonymous reviews (userID null/undefined) do not count as "reviewed by this user".
     return reviews.some(
-      (r) => r.id.startsWith("api_") && r.productId === productId,
+      (r) =>
+        r.productId === productId &&
+        r.userID != null &&
+        r.userID === userId,
     );
   };
 

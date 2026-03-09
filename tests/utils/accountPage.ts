@@ -18,7 +18,11 @@ export class AccountPage {
     await this.page.goto(`${testEnv.webBaseUrl}/account`);
     await expect(
       this.page.getByRole("heading", { name: /saved addresses/i }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 15000 });
+    // Wait for address section to be ready (past loading) so add button is available
+    await expect(
+      this.page.getByTestId("add-address-button").first(),
+    ).toBeVisible({ timeout: 10000 });
   }
 
   private addressForm(): Locator {
@@ -43,7 +47,11 @@ export class AccountPage {
       await form.getByLabel(/address line 2/i).fill(data.addressLine2);
     }
     await form.getByLabel(/city/i).fill(data.city);
-    await form.getByLabel(/country/i).selectOption({ label: data.country });
+
+    // Wait for country select to be enabled (countries may still be loading)
+    const countrySelect = form.getByLabel(/country/i);
+    await expect(countrySelect).toBeEnabled({ timeout: 30000 });
+    await countrySelect.selectOption({ label: data.country });
 
     // Wait for state/province options to load after country selection
     const stateSelect = form.getByLabel(/state\/province/i);
@@ -57,7 +65,7 @@ export class AccountPage {
         return select && select.options.length > 1;
       },
       "stateProvince",
-      { timeout: 5000 },
+      { timeout: 20000 },
     );
 
     await stateSelect.selectOption({ label: data.stateLabel });
@@ -67,10 +75,12 @@ export class AccountPage {
   async submitAddressForm(action: "save" | "update" = "save") {
     const buttonLabel = action === "save" ? /save address/i : /update address/i;
     await this.addressForm().getByRole("button", { name: buttonLabel }).click();
-    // Wait for form to close after submission (with longer timeout for Azure cold starts)
-    await expect(this.addressForm()).not.toBeVisible({ timeout: 20000 });
-    // Wait for addresses to refetch and display
-    await this.page.waitForTimeout(2000);
+    // Wait for form to close after submission (longer timeout for Azure cold starts / parallel load)
+    await expect(this.addressForm()).not.toBeVisible({ timeout: 25000 });
+    // Wait for list view to be ready again (add-address-button visible) so addresses have refetched
+    await expect(
+      this.page.getByTestId("add-address-button").first(),
+    ).toBeVisible({ timeout: 15000 });
   }
 
   findAddressCard(matcher: string): Locator {
@@ -98,17 +108,9 @@ export class AccountPage {
 
   async setDefaultAddress(matcher: string) {
     const card = this.findAddressCard(matcher);
-
-    // Wait for any pending operations
-    await this.page.waitForLoadState("networkidle");
-
     await card.getByTestId("address-set-default-button").click();
-
-    // Wait for the API call to complete and UI to update
-    await this.page.waitForTimeout(5000);
-
-    // Wait for addresses to refetch
-    await this.page.waitForLoadState("networkidle");
+    // Wait for UI to update: this card should show "default" (longer timeout under parallel load)
+    await expect(card.getByText(/default/i)).toBeVisible({ timeout: 20000 });
   }
 
   async expectAddressIsDefault(matcher: string) {

@@ -1,35 +1,44 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Downloads all product thumbnail images from the GraphQL API to the images directory.
+    Downloads all product thumbnail images from the GraphQL API to an images directory.
 
 .DESCRIPTION
-    This script queries the GraphQL API for all ProductPhoto records, extracts the 
-    ThumbnailPhoto (base64 encoded) data and ThumbnailPhotoFileName, and writes each image 
-    to disk in the images/ directory.
+    This script queries the GraphQL API for all ProductPhoto records, extracts the
+    ThumbnailPhoto (base64 encoded) data and ThumbnailPhotoFileName, and writes each
+    image to disk. Filenames come from the API (ThumbnailPhotoFileName), so the
+    source deployment determines naming (e.g. product_877_photo_2_small.png).
+    The seed job uses seed-job/images as the source of truth; use -OutDir to write
+    there when pulling images from another deployment.
 
 .PARAMETER ApiUrl
     The GraphQL API endpoint URL. Defaults to the production endpoint.
 
-.EXAMPLE
-    ./download-large-images.ps1
-    Downloads all images using the default API URL.
+.PARAMETER OutDir
+    Directory to save images. Defaults to scripts/utilities/images. Use an absolute
+    or relative path to seed-job/images to populate the seed job image set.
 
 .EXAMPLE
-    ./download-large-images.ps1 -ApiUrl "http://localhost:5000/graphql"
-    Downloads all images from a local API endpoint.
+    ./download-large-images.ps1
+    Downloads all images using the default API URL to scripts/utilities/images.
+
+.EXAMPLE
+    ./download-large-images.ps1 -OutDir (Join-Path $PSScriptRoot "../../seed-job/images")
+    Downloads images into seed-job/images for use as seed job source of truth.
 #>
 
 param(
     [Parameter()]
-    [string]$ApiUrl = "https://av-api-ewphuc52etkbc.purplesky-9d5d92b9.eastus2.azurecontainerapps.io/graphql"
+    [string]$ApiUrl = "https://av-api-ewphuc52etkbc.purplesky-9d5d92b9.eastus2.azurecontainerapps.io/graphql",
+    [Parameter()]
+    [string]$OutDir = ""
 )
 
 # Set error action preference
 $ErrorActionPreference = "Stop"
 
 # Create images directory if it doesn't exist
-$imagesDir = Join-Path $PSScriptRoot "images"
+$imagesDir = if ([string]::IsNullOrWhiteSpace($OutDir)) { Join-Path $PSScriptRoot "images" } else { $OutDir }
 if (-not (Test-Path $imagesDir)) {
     Write-Host "Creating images directory: $imagesDir"
     New-Item -ItemType Directory -Path $imagesDir -Force | Out-Null

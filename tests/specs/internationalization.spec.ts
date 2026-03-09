@@ -259,7 +259,8 @@ test.describe("Internationalization", () => {
     // Check each page for translation key patterns (e.g., "key.name", "translation.missing")
     for (const pageInfo of pagesToTest) {
       await page.goto(pageInfo.url);
-      await page.waitForLoadState("networkidle");
+      await page.waitForLoadState("domcontentloaded");
+      await page.waitForTimeout(2000); // Give time for translations to load
 
       const bodyText = await page.textContent("body");
 

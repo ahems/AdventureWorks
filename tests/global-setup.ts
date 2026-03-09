@@ -16,63 +16,101 @@ async function globalSetup(config: FullConfig) {
     const healthUrl = `${testEnv.webBaseUrl}/health`;
     console.log(`   Navigating to: ${healthUrl}`);
 
-    await page.goto(healthUrl);
+    await page.goto(healthUrl, { waitUntil: "domcontentloaded" });
 
-    // Wait for health checks to complete (max 90 seconds for cold starts)
-    console.log("   ⏳ Waiting for health checks to complete (max 90s)...");
-    await page.waitForSelector(
-      '[data-testid="overall-status-success"], [data-testid="overall-status-failure"]',
-      { timeout: 90000 },
+    // The health check page auto-refreshes every 10 seconds when services are unhealthy
+    // We need to wait for all services to become healthy, allowing for multiple refresh cycles
+    // Azure services can take 2-3 minutes for cold starts
+    console.log(
+      "   ⏳ Waiting for all services to become healthy (max 5 minutes)...",
+    );
+    console.log(
+      "   💡 Page will auto-refresh every 10s until services are ready\n",
     );
 
-    // Give it a moment to finish updating
-    await page.waitForTimeout(2000);
+    const maxWaitTime = 5 * 60 * 1000; // 5 minutes
+    const startTime = Date.now();
+    let lastLogTime = startTime;
 
-    // Check progress reached 100%
-    const progress = await page.getAttribute(
-      '[data-testid="health-check-progress"]',
-      "aria-valuenow",
-    );
+    // Poll until we get the success badge or timeout
+    while (Date.now() - startTime < maxWaitTime) {
+      // Wait for either success or failure status to appear
+      await page
+        .waitForSelector(
+          '[data-testid="overall-status-success"], [data-testid="overall-status-failure"]',
+          { timeout: 30000 },
+        )
+        .catch(() => {
+          // Ignore timeout - page might be refreshing
+        });
 
-    // Get the status counts
-    const healthyCount = await page.textContent(
-      '[data-testid="healthy-count"]',
-    );
-    const unhealthyCount = await page.textContent(
-      '[data-testid="unhealthy-count"]',
-    );
-    const checkingCount = await page.textContent(
-      '[data-testid="checking-count"]',
-    );
+      // Log status every 10 seconds
+      const now = Date.now();
+      if (now - lastLogTime >= 10000) {
+        const healthyCount = await page
+          .textContent('[data-testid="healthy-count"]')
+          .catch(() => "?");
+        const unhealthyCount = await page
+          .textContent('[data-testid="unhealthy-count"]')
+          .catch(() => "?");
+        const checkingCount = await page
+          .textContent('[data-testid="checking-count"]')
+          .catch(() => "?");
 
-    console.log(`   Progress: ${progress}%`);
-    console.log(`   ✅ Healthy: ${healthyCount?.trim()}`);
-    console.log(`   ❌ Unhealthy: ${unhealthyCount?.trim()}`);
-    console.log(`   ⏳ Checking: ${checkingCount?.trim()}\n`);
+        console.log(
+          `   Status: ✅ ${healthyCount?.trim()} healthy | ❌ ${unhealthyCount?.trim()} unhealthy | ⏳ ${checkingCount?.trim()} checking`,
+        );
+        lastLogTime = now;
+      }
 
-    // Verify all checks completed
-    if (checkingCount?.trim() !== "0") {
-      throw new Error(
-        `Health checks did not complete. ${checkingCount} still in progress.`,
+      // Check if all services are healthy
+      const successBadge = page.locator(
+        '[data-testid="overall-status-success"]',
       );
+      const isSuccess = await successBadge.isVisible().catch(() => false);
+
+      if (isSuccess) {
+        // Success! Get final counts
+        const healthyCount = await page.textContent(
+          '[data-testid="healthy-count"]',
+        );
+        const unhealthyCount = await page.textContent(
+          '[data-testid="unhealthy-count"]',
+        );
+        const checkingCount = await page.textContent(
+          '[data-testid="checking-count"]',
+        );
+
+        console.log("\n   Final Status:");
+        console.log(`   ✅ Healthy: ${healthyCount?.trim()}`);
+        console.log(`   ❌ Unhealthy: ${unhealthyCount?.trim()}`);
+        console.log(`   ⏳ Checking: ${checkingCount?.trim()}`);
+        console.log(
+          `   ⏱️  Total time: ${((Date.now() - startTime) / 1000).toFixed(1)}s\n`,
+        );
+
+        console.log("✅ All services are healthy and warmed up!");
+        console.log("🎭 Ready to run Playwright tests\n");
+        await browser.close();
+        return;
+      }
+
+      // Wait a bit before checking again (page auto-refreshes every 10s)
+      await page.waitForTimeout(2000);
     }
 
-    // Check if we have the success badge
-    const successBadge = page.locator('[data-testid="overall-status-success"]');
-    const isSuccess = await successBadge.isVisible();
+    // Timeout reached - get final status for error message
+    const healthyCount = await page
+      .textContent('[data-testid="healthy-count"]')
+      .catch(() => "unknown");
+    const unhealthyCount = await page
+      .textContent('[data-testid="unhealthy-count"]')
+      .catch(() => "unknown");
 
-    if (!isSuccess) {
-      // Get details about failures
-      const failureDetails = await page
-        .locator('[data-testid="service-checks"] .text-red-500')
-        .allTextContents();
-      throw new Error(
-        `Health check failed. Unhealthy services: ${unhealthyCount}\nDetails: ${failureDetails.join(", ")}`,
-      );
-    }
-
-    console.log("✅ All services are healthy and warmed up!");
-    console.log("🎭 Ready to run Playwright tests\n");
+    throw new Error(
+      `Health check timeout after 5 minutes. Services still unhealthy: ${unhealthyCount} (${healthyCount} healthy).\n` +
+        `Azure services may need more time to cold start. Check ${healthUrl} manually.`,
+    );
   } catch (error) {
     console.error("\n❌ Global health check failed:");
     console.error(
@@ -84,8 +122,6 @@ async function globalSetup(config: FullConfig) {
     await browser.close();
     throw error; // This will prevent tests from running
   }
-
-  await browser.close();
 }
 
 export default globalSetup;

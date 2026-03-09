@@ -192,8 +192,8 @@ export const useAddresses = () => {
   }, [fetchAddresses]);
 
   const addAddress = useCallback(
-    async (address: Omit<Address, "id">) => {
-      if (!user?.businessEntityId) return;
+    async (address: Omit<Address, "id">): Promise<string | undefined> => {
+      if (!user?.businessEntityId) return undefined;
 
       setIsLoading(true);
       try {
@@ -256,6 +256,10 @@ export const useAddresses = () => {
 
         // Refresh addresses to show the newly created address
         await fetchAddresses();
+
+        // Return the new address ID so checkout can use it for the order
+        const newId = createdAddress.addressID;
+        return newId != null ? String(newId) : undefined;
       } catch (error) {
         trackError("Error adding address", error as Error, {
           hook: "useAddresses",

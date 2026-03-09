@@ -115,7 +115,7 @@ Contains database initialization files:
 Product images for the catalog:
 
 - **1,739 PNG files**
-- Named by ProductPhotoID (e.g., `1.png`, `2.png`)
+- Named `product_<ProductID>_photo_<2|3|4>.png` (and `_small.png` / `_thumb.png`); ProductPhotoIDs come from `ProductProductPhoto-ai.csv`
 - Uploaded to Azure Blob Storage during seeding
 - Referenced by `Production.ProductPhoto` table
 
@@ -233,6 +233,8 @@ The seed job populates the database with:
 - **CommentsEmbedding**: VECTOR(1536) for product reviews
 - Enables semantic search via Azure SQL vector capabilities
 
+**Backfilling base description embeddings from a source API:** To populate the 762 base rows with embeddings at seed time (instead of running GenerateProductEmbeddings later), run `scripts/utilities/export-product-description-embeddings-from-source-api.sh` to build `sql/ProductDescription-ai-embeddings.csv` from the source DAB REST API. The seed script will then apply those updates after the main CSV import.
+
 ---
 
 ## Customization
@@ -253,7 +255,7 @@ The seed job populates the database with:
 ### Changing Images
 
 1. Replace/add PNG files in `images/` directory
-2. Ensure filenames match ProductPhotoID values
+2. Ensure filenames match `product_<ProductID>_photo_<2|3|4>.png` and that `ProductProductPhoto-ai.csv` lists the ProductPhotoIDs used by the PNG upload
 3. Rebuild container and redeploy
 
 ---
@@ -278,12 +280,29 @@ The seed job populates the database with:
 
 ### CSV Import Failures
 
-**Symptoms:** Row count mismatches or import errors
+**Symptoms:** Row count mismatches or import errors; log shows `✗ Failed to load ... from ...`
 
-**Solutions:**
-- Check CSV delimiter is pipe (`|`)
-- Verify CSV encoding (UTF-8 expected)
-- Review logs for specific error messages
+**How to find the error in the seed log:**
+1. Search the log for **`ProductReview`** (or the table that failed) and **`Failed`** to locate the failure line.
+2. The next log line is the exception message: **`✗ Failed to load Production.ProductReview from ProductReview.csv: <message>`**
+3. On the next run, the script also logs **Inner** (if any), **Error type**, and the first 5 lines of **ScriptStackTrace** to narrow down where it failed.
+
+**Common causes by file:**
+
+| File | Delimiter | Common causes |
+|------|-----------|----------------|
+| Most CSVs | Tab (`\t`) | Wrong delimiter; BOM or CRLF vs LF; column count doesn’t match table |
+| **ProductReview.csv** | Tab | **Comments** column must be **UTF-16 LE hex** (even length, 0-9A-F only). Invalid hex or odd length → "Hex string length must be even" or "Could not find any recognizable digits". Ensure no newlines inside a row. |
+| ProductReview-ai.csv | Tab | **CommentsEmbedding** must be a JSON array of 1536 floats; plain text in Comments. |
+
+**ProductReview.csv specifics:**
+- Loaded with `HexColumns=@('Comments')`: the 7th column is decoded from hex to Unicode before INSERT.
+- Validate hex locally: each row’s Comments field must be an even-length string of hex digits (no spaces, no 0x prefix in the CSV). Re-run `scripts/utilities/clean-product-review-csv.py` if the source was plain text or had newlines.
+
+**General:**
+- Delimiter: most seed CSVs use **tab**, not pipe (see `seed-database.ps1` `Delimiter` per file).
+- Encoding: UTF-8 expected; avoid BOM if the script doesn’t strip it.
+- Line endings: script uses `RowTerminator="\n"`; CRLF can cause extra columns if not normalized.
 
 ### Image Upload Failures
 
@@ -293,6 +312,16 @@ The seed job populates the database with:
 - Verify Storage Account exists and is accessible
 - Check managed identity has Storage Blob Data Contributor role
 - Confirm STORAGE_ACCOUNT_NAME environment variable is set
+
+### Missing Product Description Embeddings
+
+**Symptoms:** Query shows many finished-goods descriptions with `DescriptionEmbedding IS NULL` (e.g. ~1764 of 6175).
+
+**Cause:** The seed loads 762 base rows from `ProductDescription.csv` (no embeddings) and adds 1848 rows from `ProductDescription-ai.csv` (with embeddings). The base 762 never receive embeddings during seed. `ProductDescription-ai-translations.csv` only updates `Description`/`ModifiedDate` and correctly does not overwrite `DescriptionEmbedding`.
+
+**Solutions:**
+1. **Source API CSV (recommended for repeatable seed):** Run `scripts/utilities/export-product-description-embeddings-from-source-api.sh` to generate `sql/ProductDescription-ai-embeddings.csv`; the seed job will apply these updates after import.
+2. **Post-seed backfill:** Run the **GenerateProductEmbeddings** Azure Function (or equivalent) after seeding to backfill descriptions where `DescriptionEmbedding IS NULL`.
 
 ---
 

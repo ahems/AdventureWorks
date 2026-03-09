@@ -113,6 +113,24 @@ High‑level responsibilities:
 
 ---
 
+## Sales Order Status Processing
+
+Demo pipeline that simulates order lifecycle (In Process → Approved/Rejected → Shipped or Backordered) via the `sales-order-status` queue. Used to demonstrate queue‑driven workflows and optional “pretend‑shipped” email. The frontend calls `BeginProcessingOrder` when an order is placed so processing starts automatically.
+
+**Seed script**: To enqueue messages for all existing orders that are still In Process (Status 1), use [scripts/utilities/seed-sales-order-status-queue.sh](../scripts/utilities/seed-sales-order-status-queue.sh). It reads configuration from `azd env` (DAB URL, storage account, resource group), queries the DAB REST API for orders with `Status = 1`, and sends one message per order to the `sales-order-status` queue so the Functions process them as if they had just been placed. Use `--dry-run` to list orders without sending messages. Requires `az login` and `jq`; optional `DAB_ACCESS_TOKEN` if the DAB API requires auth.
+
+### `BeginProcessingOrder`
+
+- **Trigger / Route**: HTTP `POST /api/orders/begin-processing-order`
+- **Purpose**: Entry point to start the order status pipeline. Accepts a body with `salesOrderId` (or `SalesOrderID`), validates it is positive, then enqueues a single message onto the `sales-order-status` queue with `{ "SalesOrderID": <id>, "Status": 1 }` and a random visibility timeout between 5 minutes and 1 hour. Returns `202 Accepted` with a short JSON body. Called by the order confirmation page after checkout so the demo pipeline runs without user action.
+
+### `ProcessSalesOrderStatus_QueueTrigger`
+
+- **Trigger**: Queue `sales-order-status`
+- **Purpose**: Processes each message (JSON with `SalesOrderID` and `Status`). Implements a state machine over `Sales.SalesOrderHeader.Status`: from **1 (In Process)** moves to **2 (Approved)** (95%) or **4 (Rejected)** (5%); from **2 (Approved)** moves to **3 (Backordered)** (10%) or **5 (Shipped)** (90%); when a **3 (Backordered)** message is picked up after its visibility delay, the order is set to **5 (Shipped)**. For each transition the function updates the database, then either re‑queues the next step with a visibility timeout (1–12 hours for Approved, 2–4 days for Backordered) or stops (terminal statuses 4, 5, 6). When status becomes **5 (Shipped)**, it looks up the customer email via `OrderService.GetCustomerEmailInfoBySalesOrderIdAsync` and sends a “pretend‑shipped” demo email via `EmailService`. If the order no longer exists (e.g. removed by the seed job), the function logs “Order not found” and completes successfully so the message is removed without retry or poison queue.
+
+---
+
 ## Product Media Functions (Images & Thumbnails)
 
 ### `GenerateProductImages_HttpStart`
@@ -329,7 +347,7 @@ High‑level responsibilities:
 - **Database access** is handled via services such as `ProductService`, `ReviewService`, `AddressService`, and `ReceiptService`, all using managed identity to reach Azure SQL.
 - **Durable Functions** orchestrate multi‑step AI workflows (embellishment, translations, embeddings) and expose simple HTTP entrypoints that the frontend and scripts can call.
 
-For examples of how these Functions are exercised, see the test scripts in the repo root (e.g. `test-receipt-generation.sh`, `test-send-email.sh`, `test-ai-and-mcp-complete.sh`).
+For examples of how these Functions are exercised, see the test scripts in the repo root (e.g. `test-receipt-generation.sh`, `test-send-email.sh`, `test-ai-and-mcp-complete.sh`) and the utilities in [scripts/utilities/](../scripts/utilities/) (e.g. `seed-sales-order-status-queue.sh` for the sales order status pipeline).
 
 ## Related documentation
 

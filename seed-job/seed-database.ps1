@@ -1,5 +1,6 @@
 # Database Seeding Script for Container App Job
 # Uses Managed Identity for authentication (configured in infrastructure)
+$ScriptVersion = '2026-02-13.3'
 
 # CRITICAL: Setup error handling FIRST before anything else
 $ErrorActionPreference = 'Continue'  # Don't stop on errors initially
@@ -38,6 +39,7 @@ $ErrorActionPreference = 'Stop'
 $scriptStartTime = Get-Date
 Write-Log "=========================================="
 Write-Log "DATABASE SEEDING SCRIPT STARTED"
+Write-Log "Seed script version: $ScriptVersion"
 Write-Log "Start Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 Write-Log "Log File: $logFile"
 Write-Log "PowerShell Version: $($PSVersionTable.PSVersion)"
@@ -216,15 +218,6 @@ function Import-JsonTable {
     Write-Log "  Loading [$SchemaName].[$TableName] from JSON file..."
     
     try {
-        # Check if table already has data
-        $Command.CommandText = "SELECT COUNT(*) FROM [$SchemaName].[$TableName]"
-        $existingCount = $Command.ExecuteScalar()
-        
-        if ($existingCount -gt 0) {
-            Write-Log "    Table already contains $existingCount rows - Skipping"
-            return $true
-        }
-        
         # Read and parse JSON file
         if (-not (Test-Path $JsonFilePath)) {
             Write-Warning "    JSON file not found: $JsonFilePath - Skipping"
@@ -505,7 +498,6 @@ try {
                 $errorMsg -match 'A full-text index for table' -or
                 $errorMsg -match 'The specified namespace already exists in the specified XML schema collection') {
                 $alreadyExistsCount++
-                Write-Verbose "Batch ${batchNum} object already exists (idempotent): $errorMsg" -Verbose
             } else {
                 $unexpectedErrorCount++
                 Write-Log "  ✗ UNEXPECTED ERROR in batch ${batchNum}: $errorMsg"
@@ -603,6 +595,272 @@ try {
     }
     
     # ---------------------------------------------------------------------
+    # Generate ProductProductPhoto-ai.csv from filesystem (source of truth)
+    # Scan images/product_<ProductID>_photo_<N>.png and assign ProductPhotoIDs 1000+; junction table CSV is derived from the file list.
+    # ---------------------------------------------------------------------
+    $imagesDirForCsv = Join-Path $PSScriptRoot "images"
+    $aiCsvPathOut = Join-Path $PSScriptRoot 'sql' 'ProductProductPhoto-ai.csv'
+    if (Test-Path $imagesDirForCsv) {
+        $elapsed = (Get-Date) - $scriptStartTime
+        Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Generating ProductProductPhoto-ai.csv from image files (filesystem is source of truth)..."
+        $pngFilesForCsv = Get-ChildItem -Path $imagesDirForCsv -Filter "*.png" | Sort-Object Name
+        $pairsForCsv = @()
+        $excludeSuffixPattern = '_thumb\.png$|_small\.png$'
+        foreach ($f in $pngFilesForCsv) {
+            $name = $f.Name
+            if ($name -notmatch $excludeSuffixPattern) { continue }
+            $baseName = $name -replace '_thumb\.png$', '.png' -replace '_small\.png$', '.png'
+            $largePath = Join-Path $imagesDirForCsv $baseName
+            if (-not (Test-Path $largePath)) { continue }
+            if ($baseName -match '^product_(\d+)_photo_(\d+)\.png$') {
+                $pairsForCsv += @{ ProductID = [int]$Matches[1]; PhotoNum = [int]$Matches[2]; ThumbPath = $f.FullName; LargePath = $largePath }
+            }
+        }
+        $pairsForCsv = $pairsForCsv | Sort-Object { $_.ProductID }, { $_.PhotoNum }
+        $nextPhotoId = 1000
+        $junctionRows = @()
+        foreach ($p in $pairsForCsv) {
+            $junctionRows += @{ ProductID = $p.ProductID; ProductPhotoID = $nextPhotoId }
+            $nextPhotoId++
+        }
+        $csvDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $csvLinesOut = for ($i = 0; $i -lt $junctionRows.Count; $i++) {
+            $r = $junctionRows[$i]
+            $isLastForProduct = ($i -eq $junctionRows.Count - 1) -or ($junctionRows[$i + 1].ProductID -ne $r.ProductID)
+            $primary = if ($isLastForProduct) { 1 } else { 0 }
+            "$($r.ProductID)`t$($r.ProductPhotoID)`t$primary`t$csvDate"
+        }
+        $csvLinesOut | Set-Content -Path $aiCsvPathOut -Encoding UTF8
+        Write-Log "  Wrote $($junctionRows.Count) rows to ProductProductPhoto-ai.csv (ProductPhotoIDs 1000–$($nextPhotoId - 1)) from $($pairsForCsv.Count) image pairs"
+    } else {
+        Write-Log "`nImages directory not found; ProductProductPhoto-ai.csv will not be regenerated (existing file used if present)."
+    }
+    
+    # ---------------------------------------------------------------------
+    # Start PNG image upload as background job (runs concurrently with CSV loading)
+    # ---------------------------------------------------------------------
+    $elapsed = (Get-Date) - $scriptStartTime
+    Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Starting PNG image upload in background..."
+    
+    $pngUploadJob = Start-ThreadJob -ScriptBlock {
+        param($connString, $scriptRoot, $startTime, $accountId, $tenantId)
+        
+        $result = @{
+            Uploaded = 0
+            Skipped = 0
+            Failed = 0
+            TotalFiles = 0
+            ThumbnailCount = 0
+            ImagePairCount = 0
+            AlreadyLoaded = $false
+            NoFiles = $false
+            NoDirec = $false
+            Error = $null
+            StackTrace = $null
+        }
+        
+        try {
+        try {
+            # Obtain our own token in this thread (passed token may not serialize correctly across runspaces)
+            $threadToken = $null
+            try {
+                Connect-AzAccount -Identity -AccountId $accountId -TenantId $tenantId -ErrorAction Stop -WarningAction SilentlyContinue | Out-Null
+                $rawToken = (Get-AzAccessToken -ResourceUrl 'https://database.windows.net/').Token
+                if (-not $rawToken) { throw 'Access token empty' }
+                if ($rawToken -is [System.Security.SecureString]) {
+                    $ptr = [System.Runtime.InteropServices.Marshal]::SecureStringToGlobalAllocUnicode($rawToken)
+                    try { $threadToken = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($ptr) }
+                    finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeGlobalAllocUnicode($ptr) }
+                } else {
+                    $threadToken = [string]$rawToken
+                }
+            } catch {
+                $result.Failed = -1
+                $result.Error = "Failed to obtain SQL token in PNG job: $($_.Exception.Message)"
+                $result.StackTrace = $_.ScriptStackTrace
+                return $result
+            }
+            
+            # Create connection for idempotency check
+            $connType = [System.Type]::GetType('Microsoft.Data.SqlClient.SqlConnection, Microsoft.Data.SqlClient')
+            if (-not $connType) { $connType = [System.Data.SqlClient.SqlConnection] }
+            
+            $checkConn = [Activator]::CreateInstance($connType, $connString)
+            $accessTokenProp = $connType.GetProperty('AccessToken')
+            if ($accessTokenProp) {
+                $accessTokenProp.SetValue($checkConn, $threadToken)
+            }
+            $checkConn.Open()
+            
+            # Build ProductID -> ordered ProductPhotoIDs from ProductProductPhoto-ai.csv so we use the same IDs the junction table expects.
+            # Filenames are product_877_photo_2_small.png (ProductID 877, photo 2) -> we use the 1st ProductPhotoID for that product from CSV, etc.
+            $aiCsvPath = Join-Path $scriptRoot 'sql' 'ProductProductPhoto-ai.csv'
+            $productToPhotoIds = @{}
+            $firstAiPhotoId = $null
+            if (Test-Path $aiCsvPath) {
+                $csvLines = Get-Content -Path $aiCsvPath -Encoding UTF8
+                foreach ($line in $csvLines) {
+                    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                    $cols = $line -split "`t"
+                    if ($cols.Count -lt 2) { continue }
+                    $productIdFromCsv = [int]$cols[0]
+                    $photoId = [int]$cols[1]
+                    if ($null -eq $firstAiPhotoId) { $firstAiPhotoId = $photoId }
+                    if (-not $productToPhotoIds.ContainsKey($productIdFromCsv)) { $productToPhotoIds[$productIdFromCsv] = @() }
+                    $productToPhotoIds[$productIdFromCsv] += $photoId
+                }
+            }
+            # Idempotency: if any AI CSV ProductPhotoID already exists in ProductPhoto, skip upload
+            if ($null -ne $firstAiPhotoId) {
+                $cmd = $checkConn.CreateCommand()
+                $cmd.CommandText = "SELECT COUNT(*) FROM Production.ProductPhoto WHERE ProductPhotoID = @PhotoID"
+                $null = $cmd.Parameters.AddWithValue("@PhotoID", $firstAiPhotoId)
+                $aiPhotoExists = [int]$cmd.ExecuteScalar()
+                if ($aiPhotoExists -gt 0) {
+                    $checkConn.Close()
+                    $result.AlreadyLoaded = $true
+                    return $result
+                }
+            }
+            $checkConn.Close()
+            
+            $imagesDir = Join-Path $scriptRoot "images"
+            
+            if (-not (Test-Path $imagesDir)) {
+                $result.NoDirec = $true
+                return $result
+            }
+            
+            $pngFiles = Get-ChildItem -Path $imagesDir -Filter "*.png" | Sort-Object Name
+            $result.TotalFiles = $pngFiles.Count
+            
+            if ($result.TotalFiles -eq 0) {
+                $result.NoFiles = $true
+                return $result
+            }
+            
+            $result.ThumbnailCount = ($pngFiles | Where-Object { $_.Name -like "*_thumb.png" -or $_.Name -like "*_small.png" }).Count
+            
+            # Pre-process: create image pairs. Only product_<ProductID>_photo_<2|3|4> files are uploaded (no other filenames).
+            # Use ProductPhotoID from ProductProductPhoto-ai.csv so junction table rows resolve.
+            $imagePairs = @()
+            foreach ($pngFile in $pngFiles) {
+                $fileName = $pngFile.Name
+                $isThumbnail = $fileName -like "*_thumb.png" -or $fileName -like "*_small.png"
+                if (-not $isThumbnail) { continue }
+                $baseFileName = $fileName -replace '_thumb\.png$', '.png' -replace '_small\.png$', '.png'
+                $largeImagePath = Join-Path $imagesDir $baseFileName
+                if (-not (Test-Path $largeImagePath)) { continue }
+                if ($baseFileName -notmatch '^product_(\d+)_photo_(\d+)\.png$') { continue }
+                $productId = [int]$Matches[1]
+                $photoNum = [int]$Matches[2]
+                $photoIndex = $photoNum - 2
+                if (-not $productToPhotoIds.ContainsKey($productId)) { continue }
+                if ($photoIndex -lt 0 -or $photoIndex -ge $productToPhotoIds[$productId].Count) { continue }
+                $assignedPhotoId = $productToPhotoIds[$productId][$photoIndex]
+                $imagePairs += @{
+                    PhotoID = $assignedPhotoId
+                    ThumbPath = $pngFile.FullName
+                    ThumbName = $fileName
+                    LargePath = $largeImagePath
+                    LargeName = $baseFileName
+                }
+            }
+            
+            $result.ImagePairCount = $imagePairs.Count
+            
+            # Parallel upload (2 threads) - use same token obtained in this job
+            $uploadResults = $imagePairs | ForEach-Object -ThrottleLimit 2 -Parallel {
+                $pair = $_
+                $uploadResult = @{ Success = $false; Skipped = $false; Failed = $false }
+                
+                try {
+                    $thumbBytes = [System.IO.File]::ReadAllBytes($pair.ThumbPath)
+                    $largeBytes = [System.IO.File]::ReadAllBytes($pair.LargePath)
+                    
+                    $connStr = $using:connString
+                    $token = $using:threadToken
+                    
+                    $connType = [System.Type]::GetType('Microsoft.Data.SqlClient.SqlConnection, Microsoft.Data.SqlClient')
+                    if (-not $connType) { $connType = [System.Data.SqlClient.SqlConnection] }
+                    
+                    $threadConn = [Activator]::CreateInstance($connType, $connStr)
+                    $accessTokenProp = $connType.GetProperty('AccessToken')
+                    if ($accessTokenProp) {
+                        $accessTokenProp.SetValue($threadConn, $token)
+                    }
+                    
+                    $threadConn.Open()
+                    
+                    try {
+                        $checkCmd = $threadConn.CreateCommand()
+                        $checkCmd.CommandText = "SELECT COUNT(*) FROM Production.ProductPhoto WHERE ProductPhotoID = @PhotoID"
+                        $checkCmd.Parameters.AddWithValue("@PhotoID", $pair.PhotoID) | Out-Null
+                        $exists = [int]$checkCmd.ExecuteScalar()
+                        
+                        if ($exists -eq 0) {
+                            $insertCmd = $threadConn.CreateCommand()
+                            $insertCmd.CommandText = @"
+SET IDENTITY_INSERT Production.ProductPhoto ON;
+INSERT INTO Production.ProductPhoto 
+    (ProductPhotoID, ThumbNailPhoto, ThumbnailPhotoFileName, LargePhoto, LargePhotoFileName, ModifiedDate)
+VALUES 
+    (@PhotoID, @ThumbBytes, @ThumbFileName, @LargeBytes, @LargeFileName, GETDATE());
+SET IDENTITY_INSERT Production.ProductPhoto OFF;
+"@
+                            $insertCmd.Parameters.AddWithValue("@PhotoID", $pair.PhotoID) | Out-Null
+                            $insertCmd.Parameters.Add("@ThumbBytes", [System.Data.SqlDbType]::VarBinary, $thumbBytes.Length).Value = $thumbBytes
+                            $insertCmd.Parameters.AddWithValue("@ThumbFileName", $pair.ThumbName) | Out-Null
+                            $insertCmd.Parameters.Add("@LargeBytes", [System.Data.SqlDbType]::VarBinary, $largeBytes.Length).Value = $largeBytes
+                            $insertCmd.Parameters.AddWithValue("@LargeFileName", $pair.LargeName) | Out-Null
+                            
+                            $insertCmd.ExecuteNonQuery() | Out-Null
+                            $uploadResult.Success = $true
+                        }
+                        else {
+                            $uploadResult.Skipped = $true
+                        }
+                    }
+                    finally {
+                        $threadConn.Close()
+                        $threadConn.Dispose()
+                    }
+                }
+                catch {
+                    $uploadResult.Failed = $true
+                    $uploadResult.Error = $_.Exception.Message
+                }
+                
+                $uploadResult
+            }
+            
+            $result.Uploaded = ($uploadResults | Where-Object { $_.Success }).Count
+            $result.Skipped = ($uploadResults | Where-Object { $_.Skipped }).Count
+            $result.Failed = ($uploadResults | Where-Object { $_.Failed }).Count
+            
+            if ($result.Failed -gt 0) {
+                $result.Errors = ($uploadResults | Where-Object { $_.Failed } | ForEach-Object { $_.Error } | Select-Object -First 5)
+            }
+        }
+        catch {
+            $result.Failed = -1
+            $result.Error = $_.Exception.Message
+            $result.StackTrace = $_.ScriptStackTrace
+        }
+        return $result
+        } catch {
+            # Outer catch: any uncaught failure in the job (e.g. assembly load, serialization)
+            $result.Failed = -1
+            $result.Error = $_.Exception.Message
+            $result.StackTrace = $_.ScriptStackTrace
+            return $result
+        }
+    } -ArgumentList $connectionString, $PSScriptRoot, $scriptStartTime, $azureClientId, $tenantId
+    
+    Write-Log "  PNG upload job started (running in background while CSV data loads)..."
+    Write-Log "  Base product images (ProductPhoto.csv) load later in the CSV step so both base and PNG images are present."
+    
+    # ---------------------------------------------------------------------
     # Load CSV data into tables using SqlBulkCopy
     # ---------------------------------------------------------------------
     $elapsed = (Get-Date) - $scriptStartTime
@@ -655,18 +913,20 @@ try {
         @{ Table='Production.ProductSubcategory'; File='ProductSubcategory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModel'; File='ProductModel.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
         @{ Table='Production.ProductDescription'; File='ProductDescription.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        # Enhanced product descriptions with embeddings (DescriptionEmbedding VECTOR field, JSON array)
+        # Enhanced product descriptions with embeddings (DescriptionEmbedding VECTOR field, JSON array).
+        # ProductDescription-ai.csv adds NEW rows only (IDs 2011+); the 762 base rows from ProductDescription.csv never get embeddings here.
         @{ Table='Production.ProductDescription'; File='ProductDescription-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('DescriptionEmbedding') }
-        # AI-translated product descriptions (actual text content for 16 new cultures)
-        @{ Table='Production.ProductDescription'; File='ProductDescription-ai-translations.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # AI-translated product descriptions (actual text content for 16 new cultures; CSV has only ID, Description, ModifiedDate).
+        # DefaultColumns and Update path omit DescriptionEmbedding so existing embeddings are preserved (not overwritten).
+        @{ Table='Production.ProductDescription'; File='ProductDescription-ai-translations.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false; DefaultColumns=@('rowguid', 'DescriptionEmbedding'); UpdateIfExists=$true }
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # AI-translated product description culture mappings (16 additional cultures beyond base AdventureWorks 7)
-        @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture-ai.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModelIllustration'; File='ProductModelIllustration.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.Product'; File='Product.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        @{ Table='Production.ProductReview'; File='ProductReview.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments') }
-        # AI-generated product reviews with embeddings (CommentsEmbedding VECTOR field, JSON array)
-        @{ Table='Production.ProductReview'; File='ProductReview-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments'); VectorColumns=@('CommentsEmbedding') }
+        @{ Table='Production.ProductReview'; File='ProductReview.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments'); DefaultColumns=@('CommentsEmbedding','HelpfulVotes','UserID') }
+        # AI-generated product reviews: Comments are plain text (not hex); CommentsEmbedding is VECTOR; HelpfulVotes/UserID not in CSV
+        @{ Table='Production.ProductReview'; File='ProductReview-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('CommentsEmbedding'); DefaultColumns=@('HelpfulVotes','UserID') }
         @{ Table='Production.ProductCostHistory'; File='ProductCostHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductListPriceHistory'; File='ProductListPriceHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductInventory'; File='ProductInventory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -735,21 +995,6 @@ try {
     $csvLoadFailed = 0
     $csvLoadSkipped = 0
     
-    # Define base record counts for -ai.csv files (additive data)
-    # These files should only be loaded when table has exactly the base AdventureWorks count
-    $aiCsvBaseRecordCounts = @{
-        'Culture-ai.csv' = 7
-        'Currency-ai.csv' = 105
-        'StateProvince-ai.csv' = 181
-        'CountryRegionCurrency-ai.csv' = 109
-        'SalesTaxRate-ai.csv' = 29
-        'ProductProductPhoto-ai.csv' = 504
-        'ProductDescription-ai.csv' = 762
-        'ProductDescription-ai-translations.csv' = 2921
-        'ProductReview-ai.csv' = 4
-        'ProductModelProductDescriptionCulture-ai.csv' = 874
-    }
-    
     Write-Log "  Total CSV files to process: $($csvLoadConfig.Count)"
     $csvProcessed = 0
     foreach ($config in $csvLoadConfig) {
@@ -775,38 +1020,9 @@ try {
             }
             $schemaName = $tableParts[0]
             $tableName = $tableParts[1]
+            $isAiCsv = $config.File -match '-ai\.csv$' -or $config.File -eq 'ProductDescription-ai-translations.csv'
             
-            # Check if table already has data
-            $cmd.CommandText = "SELECT COUNT(*) FROM [$schemaName].[$tableName]"
-            $existingCount = $cmd.ExecuteScalar()
-            
-            # Determine if this is an additive -ai.csv file
-            $isAiCsv = $config.File -match '-ai\.csv$'
-            $baseRecordCount = $aiCsvBaseRecordCounts[$config.File]
-            
-            if ($isAiCsv -and $baseRecordCount) {
-                # For -ai.csv files, only load if table has exactly the base record count
-                if ($existingCount -eq $baseRecordCount) {
-                    Write-Log "    Table contains base $existingCount rows, adding AI enhancements..."
-                }
-                elseif ($existingCount -gt $baseRecordCount) {
-                    Write-Log "    Table already contains $existingCount rows (expected $baseRecordCount) - AI data already loaded, skipping"
-                    $csvLoadSkipped++
-                    continue
-                }
-                else {
-                    Write-Log "    Table contains $existingCount rows (expected $baseRecordCount) - Base data not loaded yet, skipping AI data"
-                    $csvLoadSkipped++
-                    continue
-                }
-            }
-            elseif ($existingCount -gt 0) {
-                # For regular CSV files, skip if any data exists
-                Write-Log "    Table already contains $existingCount rows - Skipping"
-                $csvLoadSkipped++
-                continue
-            }
-            
+            # Schema script drops tables if they exist before create; we assume empty tables for CSV load.
             # Read CSV with proper encoding
             $encoding = if ($config.IsWideChar) { [System.Text.Encoding]::Unicode } else { [System.Text.Encoding]::UTF8 }
             $csvContent = [System.IO.File]::ReadAllText($csvPath, $encoding)
@@ -911,6 +1127,31 @@ ORDER BY c.ORDINAL_POSITION
             }
             $reader.Close()
             
+            # If config specifies DefaultColumns, CSV has fewer columns - those use DB DEFAULT when inserting
+            $defaultCols = @()
+            if ($config.DefaultColumns) { $defaultCols = @($config.DefaultColumns) }
+            $expectedCsvColumnCount = $allColumns.Count
+            foreach ($col in $columns) { $col.UseDefault = $false }
+            if ($defaultCols.Count -gt 0) {
+                $csvIdx = 0
+                foreach ($ac in $allColumns) {
+                    if ($ac.Name -in $defaultCols) {
+                        $ac.CSVIndex = -1
+                    } else {
+                        $ac.CSVIndex = $csvIdx++
+                    }
+                }
+                foreach ($col in $columns) {
+                    # Wrap in @() to prevent PowerShell's single-result unwrap: without @(), Where-Object
+                    # returns the hashtable directly when there's exactly one match, and [0] then treats
+                    # it as a hashtable key lookup (returning $null) instead of an array element access.
+                    $col.CSVIndex = @($allColumns | Where-Object { $_.Name -eq $col.Name })[0].CSVIndex
+                    $col.UseDefault = ($col.Name -in $defaultCols)
+                }
+                $expectedCsvColumnCount = $allColumns.Count - $defaultCols.Count
+                Write-Log "    CSV has $expectedCsvColumnCount columns (using DB DEFAULT for: $($defaultCols -join ', '))"
+            }
+            
             # Parse CSV rows into DataTable
             $rowCount = 0
             $delimiter = $config.Delimiter
@@ -927,11 +1168,8 @@ ORDER BY c.ORDINAL_POSITION
                 if ($values.Count -gt 0 -and [string]::IsNullOrWhiteSpace($values[0])) {
                     $values = $values[1..($values.Count-1)]
                 }
-                
-                # Check against total column count (CSV should have all columns including IDENTITY/computed)
-                if ($values.Count -ne $allColumns.Count) {
-                    continue 
-                }
+                # Strip trailing empty fields (e.g. ProductReview.csv has two trailing tabs)
+                $values = Remove-TrailingEmptyFields -Values $values
                 
                 $dataRow = $dataTable.NewRow()
                 $dataTableColIndex = 0
@@ -939,14 +1177,39 @@ ORDER BY c.ORDINAL_POSITION
                 # Process only the columns we're inserting (skip IDENTITY/computed)
                 for ($i = 0; $i -lt $columns.Count; $i++) {
                     $col = $columns[$i]
-                    # Use the CSVIndex to get the correct value from the CSV
-                    $val = $values[$col.CSVIndex].Trim()
+                    # Use the CSVIndex to get the correct value from the CSV (or use default for DefaultColumns)
+                    if ($col.CSVIndex -lt 0) {
+                        $val = $null  # Column uses DB DEFAULT - placeholder for row cell
+                    } else {
+                        # Guard against out-of-bounds: if CSV has fewer fields than expected,
+                        # treat the missing field as null (will use column default or DBNull)
+                        $raw = if ($col.CSVIndex -lt $values.Count) { $values[$col.CSVIndex] } else { $null }
+                        $val = if ($null -ne $raw) { $raw.Trim() } else { $null }
+                    }
                     
-                        # BCP with -w (Unicode) and -t delimiter may add & prefix to fields - remove it
-                        if ($config.IsWideChar -and $val.StartsWith('&')) {
-                            $val = $val.Substring(1).Trim()
-                        
+                    # Column uses DB DEFAULT - no value from CSV (use placeholder so non-nullable columns accept the row; INSERT will use DEFAULT/NULL)
+                    if ($col.UseDefault) {
+                        if ($col.IsNullable) {
+                            $dataRow[$dataTableColIndex] = [DBNull]::Value
+                        } else {
+                            # Placeholder so DataTable accepts the row; INSERT builder will use DEFAULT
+                            switch ($col.Type) {
+                                'uniqueidentifier' { $dataRow[$dataTableColIndex] = [guid]::Empty }
+                                'bit' { $dataRow[$dataTableColIndex] = $false }
+                                'int' { $dataRow[$dataTableColIndex] = 0 }
+                                'datetime' { $dataRow[$dataTableColIndex] = [datetime]::new(1900, 1, 1, 0, 0, 0) }
+                                'datetime2' { $dataRow[$dataTableColIndex] = [datetime]::new(1900, 1, 1, 0, 0, 0) }
+                                default { $dataRow[$dataTableColIndex] = [DBNull]::Value }
+                            }
                         }
+                        $dataTableColIndex++
+                        continue
+                    }
+                    
+                    # BCP with -w (Unicode) and -t delimiter may add & prefix to fields - remove it
+                    if ($config.IsWideChar -and $null -ne $val -and $val.StartsWith('&')) {
+                        $val = $val.Substring(1).Trim()
+                    }
                     # Handle NULL values
                     $isNull = [string]::IsNullOrWhiteSpace($val) -or $val -in @('NULL', '\N', 'null')
                     
@@ -955,7 +1218,10 @@ ORDER BY c.ORDINAL_POSITION
                             # Provide default values for non-nullable columns
                             switch ($col.Type) {
                                 'bit' { $dataRow[$dataTableColIndex] = $false }
-                                'int' { $dataRow[$dataTableColIndex] = 0 }
+                                'int' {
+                                    # Rating CHECK constraint (1-5): use 1 not 0 to satisfy constraint when value is missing
+                                    $dataRow[$dataTableColIndex] = if ($col.Name -eq 'Rating') { 1 } else { 0 }
+                                }
                                 'bigint' { $dataRow[$dataTableColIndex] = 0 }
                                 'smallint' { $dataRow[$dataTableColIndex] = 0 }
                                 'tinyint' { $dataRow[$dataTableColIndex] = 0 }
@@ -980,7 +1246,12 @@ ORDER BY c.ORDINAL_POSITION
                                     $dataRow[$dataTableColIndex] = $val -in @('1', 'true', 'True', 'TRUE')
                                 }
                                 'int' {
-                                    $dataRow[$dataTableColIndex] = [int]::Parse($val)
+                                    $parsed = [int]::Parse($val)
+                                    # Production.ProductReview.Rating has CHECK (1-5); clamp to avoid constraint violation
+                                    if ($schemaName -eq 'Production' -and $tableName -eq 'ProductReview' -and $col.Name -eq 'Rating') {
+                                        if ($parsed -lt 1) { $parsed = 1 }; if ($parsed -gt 5) { $parsed = 5 }
+                                    }
+                                    $dataRow[$dataTableColIndex] = $parsed
                                 }
                                 'bigint' {
                                     $dataRow[$dataTableColIndex] = [long]::Parse($val)
@@ -1110,7 +1381,8 @@ ORDER BY c.ORDINAL_POSITION
                                 switch ($col.Type) {
                                     'bit' { $dataRow[$dataTableColIndex] = $false }
                                     { $_ -in @('int', 'bigint', 'smallint', 'tinyint', 'decimal', 'numeric', 'money', 'float') } {
-                                        $dataRow[$dataTableColIndex] = 0
+                                        # Rating on Production.ProductReview must be 1-5 (CHECK constraint); use 1 not 0 on parse failure
+                                        $dataRow[$dataTableColIndex] = if ($col.Name -eq 'Rating') { 1 } else { 0 }
                                     }
                                     { $_ -in @('datetime', 'datetime2', 'date') } { $dataRow[$dataTableColIndex] = [datetime]::new(1900, 1, 1, 0, 0, 0) }
                                     'uniqueidentifier' { $dataRow[$dataTableColIndex] = [guid]::Empty }
@@ -1125,6 +1397,14 @@ ORDER BY c.ORDINAL_POSITION
                     }
                     
                     $dataTableColIndex++
+                }
+                # Skip placeholder/invalid row: Production.ProductDescription must not have ProductDescriptionID 0
+                if ($schemaName -eq 'Production' -and $tableName -eq 'ProductDescription') {
+                    $pidx = [array]::IndexOf(($columns | ForEach-Object { $_.Name }), 'ProductDescriptionID')
+                    if ($pidx -ge 0) {
+                        $pkVal = $dataRow[$pidx]
+                        if ($null -ne $pkVal -and [int]$pkVal -eq 0) { continue }
+                    }
                 }
                 $dataTable.Rows.Add($dataRow)
                 $rowCount++
@@ -1141,7 +1421,7 @@ ORDER BY c.ORDINAL_POSITION
             # Use different insert method depending on whether table has special columns, hex encoding, identity columns, or AI CSV files
             # SqlBulkCopy does NOT support IDENTITY_INSERT or idempotent inserts, so we must use batched INSERT for:
             # - Identity columns, special columns (hierarchyid, geography, etc.)
-            # - AI CSV files (need IF NOT EXISTS checks to avoid duplicate key errors)
+            # - AI CSV files (use INSERT...SELECT WHERE NOT EXISTS for idempotent load; no IF batch to avoid PowerShell parse errors)
             if ($hasSpecialColumns -or $hasIdentityColumn -or $isAiCsv) {
                 # Use batched INSERT statements for special tables (hierarchyid, geography, hex-encoded columns)
                 Write-Log "    Inserting $rowCount rows using batched INSERT (special columns)..."
@@ -1149,6 +1429,7 @@ ORDER BY c.ORDINAL_POSITION
                 $batchSize = 100
                 $insertedRows = 0
                 $skippedRows = 0
+                $updatedRows = 0
                 $transaction = $conn.BeginTransaction()
                 
                 # Enable IDENTITY_INSERT if needed
@@ -1174,15 +1455,22 @@ ORDER BY ORDINAL_POSITION
                 }
                 $pkReader.Close()
                 
+                $updateErrorLogged = $false
                 try {
                     for ($batchStart = 0; $batchStart -lt $dataTable.Rows.Count; $batchStart += $batchSize) {
                         $batchEnd = [Math]::Min($batchStart + $batchSize, $dataTable.Rows.Count)
                         
                         # Build INSERT statement for this batch - use MERGE for AI CSV files to avoid duplicates
-                        $columnList = ($loadedColumns | ForEach-Object { "[$($_.Name)]" }) -join ', '
+                        # Exclude UseDefault columns from the column list; SQL Server will apply their defaults
+                        # automatically. Using the DEFAULT keyword in VALUES with IDENTITY_INSERT ON can trigger
+                        # spurious CHECK constraint violations on adjacent columns (e.g. CK_ProductReview_Rating).
+                        $insertColumns = $loadedColumns | Where-Object { -not $_.UseDefault }
+                        $columnList = ($insertColumns | ForEach-Object { "[$($_.Name)]" }) -join ', '
                         
-                        # For AI CSV files with duplicates, use individual INSERT IF NOT EXISTS
+                        # For AI CSV files with PK, use parameterized INSERT...SELECT WHERE NOT EXISTS (no IF batch)
                         if ($isAiCsv -and $pkColumns.Count -gt 0) {
+                            if ($batchStart -eq 0) { Write-Log "    Using parameterized INSERT...SELECT for idempotent load (version $ScriptVersion)" }
+                            $doUpdateIfExists = ($config.UpdateIfExists -eq $true) -or ($config.File -eq 'ProductDescription-ai-translations.csv')
                             for ($r = $batchStart; $r -lt $batchEnd; $r++) {
                                 $row = $dataTable.Rows[$r]
                                 $values = @()
@@ -1208,82 +1496,154 @@ ORDER BY ORDINAL_POSITION
                                     }
                                 }
                                 
-                                $whereClause = $whereConditions -join ' AND '
-                                
-                                # Build values for INSERT
+                                # Build INSERT: use parameterized INSERT...SELECT (no IF) to avoid "if" parse errors; omit UseDefault columns so SELECT has no DEFAULT
+                                $insertColumnListParam = @()
+                                $selectPlaceholdersParam = @()
+                                $insertParamValues = @()
+                                $values = @()
+                                $paramIdx = 0
+                                $canParameterize = @('int', 'bigint', 'smallint', 'tinyint', 'bit', 'datetime', 'datetime2', 'date', 'time', 'datetimeoffset', 'nvarchar', 'varchar', 'nchar', 'char', 'uniqueidentifier', 'decimal', 'numeric', 'money', 'float', 'real')
                                 for ($c = 0; $c -lt $loadedColumns.Count; $c++) {
                                     $col = $loadedColumns[$c]
                                     $value = $row[$c]
-                                    
-                                    if ($value -is [DBNull] -or $null -eq $value) {
+                                    if ($col.UseDefault) {
+                                        $defaultOrNull = if ($col.Default -and [string]::IsNullOrWhiteSpace($col.Default) -eq $false) { "DEFAULT" } else { "NULL" }
+                                        $values += $defaultOrNull
+                                        continue
+                                    }
+                                    $insertColumnListParam += "[$($col.Name)]"
+                                    if ($col.Type -in $canParameterize -and ($null -eq $value -or $value -is [DBNull] -or $value -is [string] -or $value -is [DateTime] -or $value -is [decimal] -or $value -is [Guid] -or ($null -ne $value -and $value.GetType().IsPrimitive))) {
+                                        if ($col.Name -in $pkColumns) {
+                                            $pkIdx = [array]::IndexOf($pkColumns, $col.Name)
+                                            $selectPlaceholdersParam += "@pk$pkIdx"
+                                        } else {
+                                            $selectPlaceholdersParam += "@ins$paramIdx"
+                                            $insVal = if ($null -eq $value -or $value -is [DBNull]) { [DBNull]::Value } else { $value }
+                                            $insertParamValues += $insVal
+                                            $paramIdx++
+                                        }
                                         $values += "NULL"
                                     }
-                                    elseif ($col.Type -eq 'hierarchyid') {
-                                        $values += "CAST(0x$($value.ToString()) AS hierarchyid)"
-                                    }
-                                    elseif ($col.Type -eq 'geography') {
-                                        $values += "CAST(0x$($value.ToString()) AS geography)"
-                                    }
-                                    elseif ($col.Type -eq 'geometry') {
-                                        $values += "CAST(0x$($value.ToString()) AS geometry)"
-                                    }
-                                    elseif ($col.Type -eq 'varbinary') {
-                                        $hexStr = ($value | ForEach-Object { $_.ToString('X2') }) -join ''
-                                        $values += "0x$hexStr"
-                                    }
-                                    elseif ($col.Type -eq 'vector') {
-                                        # VECTOR columns need CAST from JSON string
-                                        $escapedVal = $value.ToString().Replace("'", "''")
-                                        $values += "CAST(N'$escapedVal' AS VECTOR(1536))"
-                                    }
-                                    elseif ($col.Type -in @('varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext', 'uniqueidentifier', 'xml')) {
-                                        $escapedVal = $value.ToString().Replace("'", "''")
-                                        $values += "N'$escapedVal'"
-                                    }
-                                    elseif ($col.Type -eq 'bit') {
-                                        $values += if ($value) { '1' } else { '0' }
-                                    }
-                                    elseif ($col.Type -in @('datetime', 'datetime2', 'date', 'time', 'datetimeoffset')) {
-                                        if ($col.Type -eq 'date') {
-                                            $dateStr = ([datetime]$value).ToString('yyyy-MM-dd')
-                                        }
-                                        elseif ($col.Type -eq 'datetime') {
-                                            $dateStr = ([datetime]$value).ToString('yyyy-MM-dd HH:mm:ss.fff')
-                                        }
-                                        else {
-                                            $dateStr = ([datetime]$value).ToString('yyyy-MM-dd HH:mm:ss.fffffff')
-                                        }
-                                        $values += "'$dateStr'"
-                                    }
                                     else {
-                                        $values += $value.ToString()
+                                        if ($value -is [DBNull] -or $null -eq $value) { $lit = "NULL" }
+                                        elseif ($col.Type -eq 'hierarchyid') { $lit = "CAST(0x$($value.ToString()) AS hierarchyid)" }
+                                        elseif ($col.Type -eq 'geography') { $lit = "CAST(0x$($value.ToString()) AS geography)" }
+                                        elseif ($col.Type -eq 'geometry') { $lit = "CAST(0x$($value.ToString()) AS geometry)" }
+                                        elseif ($col.Type -eq 'varbinary') { $hexStr = ($value | ForEach-Object { $_.ToString('X2') }) -join ''; $lit = "0x$hexStr" }
+                                        elseif ($col.Type -eq 'vector') { $escapedVal = $value.ToString().Replace("'", "''"); $lit = "CAST(N'$escapedVal' AS VECTOR(1536))" }
+                                        elseif ($col.Type -in @('varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext', 'uniqueidentifier', 'xml')) { $escapedVal = $value.ToString().Replace("'", "''"); $lit = "N'$escapedVal'" }
+                                        elseif ($col.Type -eq 'bit') { $bitVal = if ($value) { '1' } else { '0' }; $lit = $bitVal }
+                                        elseif ($col.Type -in @('datetime', 'datetime2', 'date', 'time', 'datetimeoffset')) {
+                                            if ($col.Type -eq 'date') { $dateStr = ([datetime]$value).ToString('yyyy-MM-dd') }
+                                            elseif ($col.Type -eq 'datetime') { $dateStr = ([datetime]$value).ToString('yyyy-MM-dd HH:mm:ss.fff') }
+                                            else { $dateStr = ([datetime]$value).ToString('yyyy-MM-dd HH:mm:ss.fffffff') }
+                                            $lit = "'$dateStr'"
+                                        }
+                                        else { $lit = $value.ToString() }
+                                        $selectPlaceholdersParam += $lit
+                                        $values += $lit
                                     }
                                 }
-                                
-                                $insertSql = @"
-IF NOT EXISTS (SELECT 1 FROM [$schemaName].[$tableName] WHERE $whereClause)
-BEGIN
-    INSERT INTO [$schemaName].[$tableName] ($columnList) VALUES ($(($values -join ', ')))
-END
-"@
-                                
+                                $whereParamParts = @()
+                                $whereParamValues = @()
+                                $pkIdx = 0
+                                foreach ($pkCol in $pkColumns) {
+                                    $colIdx = [array]::IndexOf(($loadedColumns | ForEach-Object { $_.Name }), $pkCol)
+                                    if ($colIdx -ge 0) {
+                                        $whereParamParts += "[$pkCol] = @pk$pkIdx"
+                                        $whereParamValues += $row[$colIdx]
+                                        $pkIdx++
+                                    }
+                                }
+                                $insertColList = $insertColumnListParam -join ', '
+                                $insertSql = "INSERT INTO [$schemaName].[$tableName] ($insertColList) SELECT " + ($selectPlaceholdersParam -join ', ') + " FROM (SELECT 1 AS _d) AS _t WHERE NOT EXISTS (SELECT 1 FROM [$schemaName].[$tableName] WHERE " + ($whereParamParts -join ' AND ') + ")"
                                 $cmd.Transaction = $transaction
                                 $cmd.CommandText = $insertSql
+                                $cmd.Parameters.Clear()
+                                for ($i = 0; $i -lt $whereParamValues.Count; $i++) {
+                                    $v = $whereParamValues[$i]
+                                    $pval = if ($null -eq $v -or $v -is [DBNull]) { [DBNull]::Value } else { $v }
+                                    $null = $cmd.Parameters.AddWithValue("@pk$i", $pval)
+                                }
+                                for ($i = 0; $i -lt $insertParamValues.Count; $i++) {
+                                    $null = $cmd.Parameters.AddWithValue("@ins$i", $insertParamValues[$i])
+                                }
                                 try {
                                     $affected = $cmd.ExecuteNonQuery()
+                                    $cmd.Parameters.Clear()
                                     if ($affected -gt 0) {
                                         $insertedRows++
                                     } else {
-                                        $skippedRows++
+                                        # Row already exists: update non-PK columns if config requests it (e.g. translations)
+                                        if ($doUpdateIfExists -and $pkColumns.Count -gt 0) {
+                                            $setParts = @()
+                                            $setParamValues = @()
+                                            $paramIdx = 0
+                                            for ($c = 0; $c -lt $loadedColumns.Count; $c++) {
+                                                $col = $loadedColumns[$c]
+                                                if ($col.Name -in $pkColumns -or $col.UseDefault) { continue }
+                                                $setParts += "[$($col.Name)] = @set$paramIdx"
+                                                $setParamValues += $row[$c]
+                                                $paramIdx++
+                                            }
+                                            if ($setParts.Count -gt 0) {
+                                                $whereParamParts = @()
+                                                $whereParamValues = @()
+                                                $pkIdx = 0
+                                                foreach ($pkCol in $pkColumns) {
+                                                    $colIdx = [array]::IndexOf(($loadedColumns | ForEach-Object { $_.Name }), $pkCol)
+                                                    if ($colIdx -ge 0) {
+                                                        $whereParamParts += "[$pkCol] = @pk$pkIdx"
+                                                        $whereParamValues += $row[$colIdx]
+                                                        $pkIdx++
+                                                    }
+                                                }
+                                                $updateSql = "UPDATE [$schemaName].[$tableName] SET " + ($setParts -join ', ') + " WHERE " + ($whereParamParts -join ' AND ')
+                                                $cmd.CommandText = $updateSql
+                                                $cmd.Parameters.Clear()
+                                                for ($i = 0; $i -lt $setParamValues.Count; $i++) {
+                                                    $val = $setParamValues[$i]
+                                                    $paramVal = if ($null -eq $val -or $val -is [DBNull]) { [DBNull]::Value } else { $val }
+                                                    $null = $cmd.Parameters.AddWithValue("@set$i", $paramVal)
+                                                }
+                                                for ($i = 0; $i -lt $whereParamValues.Count; $i++) {
+                                                    $val = $whereParamValues[$i]
+                                                    $paramVal = if ($null -eq $val -or $val -is [DBNull]) { [DBNull]::Value } else { $val }
+                                                    $null = $cmd.Parameters.AddWithValue("@pk$i", $paramVal)
+                                                }
+                                                try {
+                                                    $cmd.ExecuteNonQuery() | Out-Null
+                                                    $updatedRows++
+                                                } catch {
+                                                    if (-not $updateErrorLogged) {
+                                                        Write-Log "    Update failed (first row): $($_.Exception.Message)"
+                                                        $updateErrorLogged = $true
+                                                    }
+                                                    $skippedRows++
+                                                }
+                                                $cmd.Parameters.Clear()
+                                            } else {
+                                                $skippedRows++
+                                            }
+                                        } else {
+                                            $skippedRows++
+                                        }
                                     }
                                 }
                                 catch {
                                     # If we still get duplicate errors, just skip this row
+                                    if (-not $updateErrorLogged) {
+                                        Write-Log "    Insert/Update failed (first row): $($_.Exception.Message)"
+                                        if ($_.ScriptStackTrace) { Write-Log "    Stack: $($_.ScriptStackTrace)" }
+                                        $updateErrorLogged = $true
+                                    }
                                     $skippedRows++
                                 }
                                 
-                                if (($insertedRows + $skippedRows) % 500 -eq 0) {
-                                    Write-Log "    ...processed $($insertedRows + $skippedRows) rows ($insertedRows inserted, $skippedRows skipped)"
+                                $processed = $insertedRows + $updatedRows + $skippedRows
+                                if ($processed % 500 -eq 0) {
+                                    $msg = "    ...processed $processed rows ($insertedRows inserted, $updatedRows updated, $skippedRows skipped)"
+                                    Write-Log $msg
                                 }
                             }
                         }
@@ -1300,7 +1660,11 @@ END
                                 $col = $loadedColumns[$c]
                                 $value = $row[$c]
                                 
-                                if ($value -is [DBNull] -or $null -eq $value) {
+                                if ($col.UseDefault) {
+                                    # Column excluded from INSERT column list - skip value entirely
+                                    continue
+                                }
+                                elseif ($value -is [DBNull] -or $null -eq $value) {
                                     $values += "NULL"
                                 }
                                 elseif ($col.Type -eq 'hierarchyid') {
@@ -1381,23 +1745,26 @@ END
                     }
                     
                     $transaction.Commit()
-                    if ($insertedRows -gt 0) {
-                        if ($skippedRows -gt 0) {
-                            Write-Log "    Successfully loaded $insertedRows rows ($skippedRows duplicates skipped)"
-                        } else {
-                            Write-Log "    Successfully loaded $insertedRows rows"
-                        }
-                        $csvLoadSuccess++
-                    } else {
-                        Write-Log "    All $skippedRows rows already exist - Skipping"
-                        $csvLoadSkipped++
-                    }
+                    $loadedCount = $insertedRows + $updatedRows
+                    $msg = "Successfully loaded $loadedCount rows"
+                    if ($insertedRows -gt 0 -and $updatedRows -gt 0) { $msg += " ($insertedRows inserted, $updatedRows updated)" }
+                    elseif ($updatedRows -gt 0) { $msg += " ($updatedRows updated)" }
+                    if ($skippedRows -gt 0) { $msg += " ($skippedRows duplicates skipped)" }
+                    Write-Log "    $msg"
+                    $csvLoadSuccess++
                 }
                 catch {
                     $transaction.Rollback()
                     throw
                 }
                 finally {
+                    if ($hasIdentityColumn) {
+                        $cmd.Transaction = $null
+                        try {
+                            $cmd.CommandText = "SET IDENTITY_INSERT [$schemaName].[$tableName] OFF"
+                            $cmd.ExecuteNonQuery() | Out-Null
+                        } catch { }
+                    }
                     $cmd.Transaction = $null
                 }
             }
@@ -1423,7 +1790,17 @@ END
             }
         }
         catch {
-            Write-Warning "    Failed to load $($config.File): $($_.Exception.Message)"
+            Write-Log "    ✗ Failed to load $($config.Table) from $($config.File): $($_.Exception.Message)"
+            if ($_.Exception.InnerException) {
+                Write-Log "    Inner: $($_.Exception.InnerException.Message)"
+            }
+            Write-Log "    Error type: $($_.Exception.GetType().FullName)"
+            if ($_.ScriptStackTrace) {
+                $stackLines = $_.ScriptStackTrace -split "`n"
+                foreach ($line in $stackLines | Select-Object -First 5) {
+                    Write-Log "    at $line"
+                }
+            }
             $csvLoadFailed++
         }
     }
@@ -1438,133 +1815,251 @@ Write-Log "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinutes))
     $elapsed = (Get-Date) - $scriptStartTime
     Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] CSV Data Loading Complete"
     Write-Log "  ✓ Successfully loaded: $csvLoadSuccess tables"
-    Write-Log "  ⊙ Skipped (already loaded): $csvLoadSkipped tables"
+    Write-Log "  ⊙ Skipped (file not found / no data): $csvLoadSkipped tables"
     if ($csvLoadFailed -gt 0) {
         Write-Log "  ✗ Failed: $csvLoadFailed tables"
     }
-    
-    # Upload AI-generated PNG images from images directory
-    $elapsed = (Get-Date) - $scriptStartTime
-    Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Adding AI-generated PNG images to Database..."
-    
-    # Check if AI photos already uploaded (idempotency check)
-    # AI photos from PNG files use ProductPhotoIDs starting at 1000
-    # (ProductPhotoIDs 1-100 are base AdventureWorks, 101-999 may be from CSV AI data)
-    $cmd.CommandText = "SELECT COUNT(*) FROM Production.ProductPhoto WHERE ProductPhotoID >= 1000"
-    $aiPhotoCount = $cmd.ExecuteScalar()
-    
-    if ($aiPhotoCount -gt 0) {
-        Write-Log "  AI-generated photos already uploaded ($aiPhotoCount AI photos found) - Skipping"
-    }
-    else {
-        $imagesDir = Join-Path $PSScriptRoot "images"
-        
-        if (Test-Path $imagesDir) {
-            $pngFiles = Get-ChildItem -Path $imagesDir -Filter "*.png" | Sort-Object Name
-            $totalPngFiles = $pngFiles.Count
-            
-            if ($totalPngFiles -gt 0) {
-                # Count thumbnails and large images separately
-                $thumbnailCount = ($pngFiles | Where-Object { $_.Name -like "*_thumb.png" -or $_.Name -like "*_small.png" }).Count
-                $largeImageCount = $totalPngFiles - $thumbnailCount
-                
-                Write-Log "  Found $totalPngFiles PNG files to upload ($thumbnailCount thumbnails, $largeImageCount large images)"
-                
-                $uploadedCount = 0
-                $skippedCount = 0
-                $failedCount = 0
-                $currentFile = 0
-                
-                # Start ProductPhotoID at 1000 to match AI-generated photo range
-                $nextPhotoId = 1000
-            
-            foreach ($pngFile in $pngFiles) {
-                $currentFile++
-                $fileName = $pngFile.Name
-                
+
+    # Apply ProductDescription embeddings from source API CSV (updates existing rows only).
+    # Build the CSV with: scripts/utilities/export-product-description-embeddings-from-source-api.sh
+    $embeddingsFromSourcePath = Join-Path $csvFolder 'ProductDescription-ai-embeddings.csv'
+    if (Test-Path $embeddingsFromSourcePath) {
+        $elapsed = (Get-Date) - $scriptStartTime
+        Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Applying ProductDescription embeddings from source API CSV..."
+        $updateEmbeddingSql = "UPDATE Production.ProductDescription SET DescriptionEmbedding = CAST(@emb AS VECTOR(1536)), ModifiedDate = @mod WHERE ProductDescriptionID = @id"
+        $cmd.Transaction = $null
+        $cmd.CommandText = $updateEmbeddingSql
+        $lines = Get-Content -Path $embeddingsFromSourcePath -Encoding UTF8
+        $applied = 0
+        $batchSize = 100
+        for ($i = 1; $i -lt $lines.Count; $i++) {
+            $line = $lines[$i]
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $parts = $line -split "`t", 3
+            if ($parts.Count -lt 2) { continue }
+            $id = [int]::Parse($parts[0].Trim())
+            if ($id -eq 0) { continue }
+            $embJson = $parts[1].Trim()
+            $modStr = if ($parts.Count -ge 3 -and -not [string]::IsNullOrWhiteSpace($parts[2])) { $parts[2].Trim() } else { $null }
+            $cmd.Parameters.Clear()
+            $null = $cmd.Parameters.AddWithValue('@id', $id)
+            $null = $cmd.Parameters.AddWithValue('@emb', $embJson)
+            if ($null -ne $modStr) {
                 try {
-                    # Read image bytes
-                    $imageBytes = [System.IO.File]::ReadAllBytes($pngFile.FullName)
-                    
-                    # Determine if this is a thumbnail or large image
-                    $isThumbnail = $fileName -like "*_thumb.png" -or $fileName -like "*_small.png"
-                    
-                    if ($isThumbnail) {
-                        # Extract the base filename to find corresponding large image
-                        $baseFileName = $fileName -replace '_thumb\.png$', '.png' -replace '_small\.png$', '.png'
-                        $largeImagePath = Join-Path $imagesDir $baseFileName
-                        
-                        if (Test-Path $largeImagePath) {
-                            # Read large image
-                            $largeImageBytes = [System.IO.File]::ReadAllBytes($largeImagePath)
-                            
-                            # Check if this ProductPhotoID already exists (idempotency)
-                            $checkCmd = $conn.CreateCommand()
-                            $checkCmd.CommandText = "SELECT COUNT(*) FROM Production.ProductPhoto WHERE ProductPhotoID = @PhotoID"
-                            $checkCmd.Parameters.AddWithValue("@PhotoID", $nextPhotoId) | Out-Null
-                            $exists = [int]$checkCmd.ExecuteScalar()
-                            
-                            if ($exists -eq 0) {
-                                # Insert with both thumbnail and large image
-                                $cmd = $conn.CreateCommand()
-                                $cmd.CommandText = @"
-SET IDENTITY_INSERT Production.ProductPhoto ON;
-INSERT INTO Production.ProductPhoto 
-    (ProductPhotoID, ThumbNailPhoto, ThumbnailPhotoFileName, LargePhoto, LargePhotoFileName, ModifiedDate)
-VALUES 
-    (@PhotoID, @ThumbBytes, @ThumbFileName, @LargeBytes, @LargeFileName, GETDATE());
-SET IDENTITY_INSERT Production.ProductPhoto OFF;
-"@
-                                $cmd.Parameters.AddWithValue("@PhotoID", $nextPhotoId) | Out-Null
-                                $cmd.Parameters.Add("@ThumbBytes", [System.Data.SqlDbType]::VarBinary, $imageBytes.Length).Value = $imageBytes
-                                $cmd.Parameters.AddWithValue("@ThumbFileName", $fileName) | Out-Null
-                                $cmd.Parameters.Add("@LargeBytes", [System.Data.SqlDbType]::VarBinary, $largeImageBytes.Length).Value = $largeImageBytes
-                                $cmd.Parameters.AddWithValue("@LargeFileName", $baseFileName) | Out-Null
-                                
-                                $cmd.ExecuteNonQuery() | Out-Null
-                                $uploadedCount++
-                            }
-                            else {
-                                $skippedCount++
-                            }
-                            $nextPhotoId++
-                            
-                            if ($currentFile % 100 -eq 0) {
-                                Write-Log "    ...uploaded $currentFile of $totalPngFiles images"
-                            }
-                        }
-                        else {
-                            Write-Warning "    [$currentFile/$totalPngFiles] Skipping $fileName - no corresponding large image found"
-                            $skippedCount++
-                        }
-                    }
-                    else {
-                        # Skip large images - they're processed with their thumbnails (don't count as skipped)
-                        # Large images are intentionally processed when their thumbnail is handled
-                    }
+                    $modDate = [DateTime]::Parse($modStr)
+                    $null = $cmd.Parameters.AddWithValue('@mod', $modDate)
+                } catch {
+                    $null = $cmd.Parameters.AddWithValue('@mod', [DateTime]::UtcNow)
                 }
-                catch {
-                    Write-Warning "    [$currentFile/$totalPngFiles] Failed to upload $fileName : $($_.Exception.Message)"
-                    $failedCount++
-                }
+            } else {
+                $null = $cmd.Parameters.AddWithValue('@mod', [DateTime]::UtcNow)
             }
-            
-            $elapsed = (Get-Date) - $scriptStartTime
-            Write-Log "`nPNG Upload Summary: [+$([math]::Floor($elapsed.TotalMinutes))m]"
-            Write-Log "  - $uploadedCount image pairs uploaded successfully"
-            if ($skippedCount -gt 0) {
-                Write-Log "  - $skippedCount files skipped (non-product images or missing pairs)"
+            try {
+                $n = $cmd.ExecuteNonQuery()
+                if ($n -gt 0) { $applied++ }
+            } catch {
+                Write-Log "  Warning: Update failed for ProductDescriptionID $id : $($_.Exception.Message)"
             }
-            Write-Log "  - $failedCount files failed"
+            if ($applied -gt 0 -and $applied % $batchSize -eq 0) {
+                Write-Log "  ...applied $applied embedding updates"
+            }
         }
-        else {
-            Write-Log "  No PNG files found in images directory"
+        Write-Log "  Applied $applied ProductDescription embedding updates from ProductDescription-ai-embeddings.csv"
+    }
+
+    # Apply ProductReview UserID from ProductReview-ai-UserID.csv (assigns random Individual Person IDs to reviews).
+    # Generate with: node scripts/utilities/generate-product-review-userids.js (requires API_URL pointing at DAB).
+    $productReviewUserIDPath = Join-Path $csvFolder 'ProductReview-ai-UserID.csv'
+    if (Test-Path $productReviewUserIDPath) {
+        $elapsed = (Get-Date) - $scriptStartTime
+        Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Applying ProductReview UserID from ProductReview-ai-UserID.csv..."
+        $updateUserIDSql = "UPDATE Production.ProductReview SET UserID = @uid, ModifiedDate = GETDATE() WHERE ProductReviewID = @rid"
+        $cmd.Transaction = $null
+        $cmd.CommandText = $updateUserIDSql
+        $lines = Get-Content -Path $productReviewUserIDPath -Encoding UTF8
+        $applied = 0
+        $batchSize = 500
+        for ($i = 1; $i -lt $lines.Count; $i++) {
+            $line = $lines[$i]
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $parts = $line -split "`t", 2
+            if ($parts.Count -lt 2) { continue }
+            $rid = [int]::Parse($parts[0].Trim())
+            $uid = [int]::Parse($parts[1].Trim())
+            $cmd.Parameters.Clear()
+            $null = $cmd.Parameters.AddWithValue('@rid', $rid)
+            $null = $cmd.Parameters.AddWithValue('@uid', $uid)
+            try {
+                $n = $cmd.ExecuteNonQuery()
+                if ($n -gt 0) { $applied++ }
+            } catch {
+                Write-Log "  Warning: Update failed for ProductReviewID $rid : $($_.Exception.Message)"
+            }
+            if ($applied -gt 0 -and $applied % $batchSize -eq 0) {
+                Write-Log "  ...applied $applied UserID updates"
+            }
+        }
+        Write-Log "  Applied $applied ProductReview UserID updates from ProductReview-ai-UserID.csv"
+    }
+
+    # Apply CommentsEmbedding for the 4 original AdventureWorks ProductReview records.
+    # These rows are seeded from ProductReview.csv with CommentsEmbedding left NULL because
+    # the hex-encoded comments cannot be embedded at bulk-insert time.
+    # Generate this file with: scripts/generators/generate-original-review-embeddings.sh
+    $reviewEmbeddingsPath = Join-Path $csvFolder 'ProductReview-ai-Embeddings.csv'
+    if (Test-Path $reviewEmbeddingsPath) {
+        $elapsed = (Get-Date) - $scriptStartTime
+        Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Applying ProductReview embeddings from ProductReview-ai-Embeddings.csv..."
+        $updateReviewEmbSql = "UPDATE Production.ProductReview SET CommentsEmbedding = CAST(@emb AS VECTOR(1536)), ModifiedDate = @mod WHERE ProductReviewID = @rid AND CommentsEmbedding IS NULL"
+        $cmd.Transaction = $null
+        $cmd.CommandText = $updateReviewEmbSql
+        $lines = Get-Content -Path $reviewEmbeddingsPath -Encoding UTF8
+        $applied = 0
+        $batchSize = 10
+        for ($i = 1; $i -lt $lines.Count; $i++) {
+            $line = $lines[$i]
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $parts = $line -split "`t", 3
+            if ($parts.Count -lt 2) { continue }
+            $rid = [int]::Parse($parts[0].Trim())
+            if ($rid -eq 0) { continue }
+            $embJson = $parts[1].Trim()
+            $modStr = if ($parts.Count -ge 3 -and -not [string]::IsNullOrWhiteSpace($parts[2])) { $parts[2].Trim() } else { $null }
+            $cmd.Parameters.Clear()
+            $null = $cmd.Parameters.AddWithValue('@rid', $rid)
+            $null = $cmd.Parameters.AddWithValue('@emb', $embJson)
+            if ($null -ne $modStr) {
+                try {
+                    $modDate = [DateTime]::Parse($modStr)
+                    $null = $cmd.Parameters.AddWithValue('@mod', $modDate)
+                } catch {
+                    $null = $cmd.Parameters.AddWithValue('@mod', [DateTime]::UtcNow)
+                }
+            } else {
+                $null = $cmd.Parameters.AddWithValue('@mod', [DateTime]::UtcNow)
+            }
+            try {
+                $n = $cmd.ExecuteNonQuery()
+                if ($n -gt 0) { $applied++ }
+            } catch {
+                Write-Log "  Warning: Embedding update failed for ProductReviewID $rid : $($_.Exception.Message)"
+            }
+        }
+        Write-Log "  Applied $applied ProductReview embedding updates from ProductReview-ai-Embeddings.csv"
+    }
+
+    # Remove any stray ProductDescriptionID 0 row (placeholder from malformed CSV or parse fallback)
+    try {
+        $cmd.CommandText = "DELETE FROM Production.ProductDescription WHERE ProductDescriptionID = 0"
+        $deleted = $cmd.ExecuteNonQuery()
+        if ($deleted -gt 0) { Write-Log "  Removed $deleted placeholder row(s) (ProductDescriptionID = 0)" }
+    } catch { }
+
+    # Remove any stray ProductReviewID 0 row (parse-error fallback from a failed seed run)
+    try {
+        $cmd.CommandText = "DELETE FROM Production.ProductReview WHERE ProductReviewID = 0"
+        $deleted = $cmd.ExecuteNonQuery()
+        if ($deleted -gt 0) { Write-Log "  Removed $deleted placeholder row(s) (ProductReviewID = 0)" }
+    } catch { }
+
+    # Log ProductDescription embedding coverage (after applying source CSV if present)
+    try {
+        $cmd.CommandText = "SELECT SUM(CASE WHEN DescriptionEmbedding IS NOT NULL THEN 1 ELSE 0 END) AS WithEmb, SUM(CASE WHEN DescriptionEmbedding IS NULL THEN 1 ELSE 0 END) AS MissingEmb, COUNT(*) AS Total FROM Production.ProductDescription"
+        $cmd.Transaction = $null
+        $rd = $cmd.ExecuteReader()
+        if ($rd.Read()) {
+            $withEmb = [int64]($rd.GetValue(0)); $missEmb = [int64]($rd.GetValue(1)); $tot = [int64]($rd.GetValue(2))
+            $rd.Close()
+            Write-Log "  ProductDescription embeddings: $withEmb with embedding, $missEmb missing (of $tot total). Backfill NULLs via GenerateProductEmbeddings if needed."
+        } else { $rd.Close() }
+    } catch {
+        # Non-fatal: schema or table may differ
+    }
+
+    # Remove placeholder image (ProductPhotoID 1 "no image available") from product-photo mappings.
+    # This must run AFTER ProductProductPhoto.csv and ProductProductPhoto-ai.csv are loaded;
+    # AdventureWorks-AI.sql used to run this before any CSV load (empty table), so it had no effect.
+    $elapsed = (Get-Date) - $scriptStartTime
+    Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Removing placeholder ProductPhotoID 1 and setting Primary photo..."
+    try {
+        $cmd.CommandText = "DELETE FROM [Production].[ProductProductPhoto] WHERE [ProductPhotoID] = 1"
+        $deleted = $cmd.ExecuteNonQuery()
+        Write-Log "  Removed $deleted ProductProductPhoto row(s) referencing placeholder image (ProductPhotoID 1)"
+        $cmd.CommandText = @"
+WITH RankedPhotos AS (
+    SELECT ProductID, ProductPhotoID,
+           ROW_NUMBER() OVER (PARTITION BY ProductID ORDER BY ModifiedDate DESC) AS PhotoRank
+    FROM [Production].[ProductProductPhoto]
+)
+UPDATE pp
+SET pp.[Primary] = CASE WHEN rp.PhotoRank = 1 THEN 1 ELSE 0 END
+FROM [Production].[ProductProductPhoto] pp
+INNER JOIN RankedPhotos rp ON pp.ProductID = rp.ProductID AND pp.ProductPhotoID = rp.ProductPhotoID
+"@
+        $null = $cmd.ExecuteNonQuery()
+        Write-Log "  Updated Primary flag: most recent photo set as Primary for all products"
+    } catch {
+        Write-Warning "  Placeholder photo cleanup failed: $($_.Exception.Message)"
+    }
+    
+    # Wait for background PNG upload job to complete
+    $elapsed = (Get-Date) - $scriptStartTime
+    Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Waiting for PNG image upload to complete..."
+    
+    # Wait for the job and get results
+    $pngResult = Receive-Job -Job $pngUploadJob -Wait
+    $pngJobState = $pngUploadJob.State
+    $pngJobError = $pngUploadJob.Error
+    Remove-Job -Job $pngUploadJob
+    
+    $elapsed = (Get-Date) - $scriptStartTime
+    Write-Log "`nPNG Upload Summary: [+$([math]::Floor($elapsed.TotalMinutes))m]"
+    
+    # Job failed before returning (e.g. runspace/assembly error)
+    if ($pngJobState -eq 'Failed') {
+        Write-Log "  PNG upload job failed (job state: Failed). Error: $($pngJobError | Out-String)"
+    }
+    # No result object (serialization or job never produced output)
+    elseif ($null -eq $pngResult) {
+        Write-Log "  PNG upload job returned no output (job may have failed or serialization issue). Job state: $pngJobState"
+    }
+    # Result may be a hashtable with string keys from deserialization
+    elseif ($true -eq $pngResult.AlreadyLoaded) {
+        Write-Log "  AI-generated photos already uploaded - Skipping"
+    }
+    elseif ($true -eq $pngResult.NoDirec) {
+        Write-Log "  Images directory not found - Skipping"
+    }
+    elseif ($true -eq $pngResult.NoFiles) {
+        Write-Log "  No PNG files found in images directory"
+    }
+    elseif ($pngResult.Failed -eq -1) {
+        Write-Log "  PNG upload job failed: $($pngResult.Error)"
+        if ($pngResult.StackTrace) {
+            Write-Log "  Stack trace: $($pngResult.StackTrace)"
+        }
+    }
+    elseif ($null -ne $pngResult.TotalFiles -or $null -ne $pngResult.Uploaded) {
+        $largeImageCount = [int]$pngResult.TotalFiles - [int]$pngResult.ThumbnailCount
+        Write-Log "  Found $($pngResult.TotalFiles) PNG files ($($pngResult.ThumbnailCount) thumbnails, $largeImageCount large images)"
+        Write-Log "  Processed $($pngResult.ImagePairCount) image pairs using parallel upload (2 threads)"
+        if ($pngResult.ImagePairCount -eq 0 -and $pngResult.TotalFiles -gt 0) {
+            Write-Log "  No image pairs formed (expected *_thumb.png / *_small.png with matching .png; check images/ naming)"
+        }
+        Write-Log "  - $($pngResult.Uploaded) image pairs uploaded successfully"
+        if ($pngResult.Skipped -gt 0) {
+            Write-Log "  - $($pngResult.Skipped) files skipped (already exist)"
+        }
+        if ($pngResult.Failed -gt 0) {
+            Write-Log "  - $($pngResult.Failed) files failed"
+            if ($pngResult.Errors) {
+                Write-Log "  First few errors: $($pngResult.Errors -join '; ')"
+            }
         }
     }
     else {
-        Write-Log "  Images directory not found: $imagesDir"
+        Write-Log "  PNG upload result was unexpected. Job state: $pngJobState. Result: $($pngResult | ConvertTo-Json -Compress -Depth 3)"
     }
-    }  # End idempotency check for AI photos
     
     # Note: ProductProductPhoto-ai.csv mappings are loaded earlier in the CSV data loading section
     

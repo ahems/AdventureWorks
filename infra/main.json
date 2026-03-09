@@ -1,11 +1,12 @@
 {
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "languageVersion": "2.0",
   "contentVersion": "1.0.0.0",
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.39.26.7824",
-      "templateHash": "17518204086370327636"
+      "version": "0.40.2.10011",
+      "templateHash": "12950208936402140158"
     }
   },
   "parameters": {
@@ -16,7 +17,7 @@
     "environmentName": {
       "type": "string"
     },
-    "cognitiveservicesname": {
+    "foundryname": {
       "type": "string"
     },
     "identityName": {
@@ -43,7 +44,7 @@
       "type": "string",
       "defaultValue": "[format('acr-diagnostics-{0}', toLower(parameters('resourceToken')))]"
     },
-    "cognitiveservicesLocation": {
+    "foundryLocation": {
       "type": "string",
       "defaultValue": "[resourceGroup().location]"
     },
@@ -140,6 +141,19 @@
     },
     "sqlDatabaseName": {
       "type": "string"
+    },
+    "playwrightLocation": {
+      "type": "string",
+      "defaultValue": "westeurope",
+      "allowedValues": [
+        "eastus",
+        "westus3",
+        "westeurope",
+        "eastasia"
+      ],
+      "metadata": {
+        "description": "Location for Playwright Testing workspace. Must be one of: eastus, westus3, westeurope, eastasia. Defaults to resource group location."
+      }
     }
   },
   "variables": {
@@ -147,8 +161,8 @@
     "embeddingDeploymentCapacity": "[div(parameters('availableEmbeddingDeploymentCapacity'), 10)]",
     "imageDeploymentCapacity": "[if(greater(parameters('availableImageDeploymentCapacity'), 0), div(parameters('availableImageDeploymentCapacity'), 10), 0)]"
   },
-  "resources": [
-    {
+  "resources": {
+    "identity": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "Deploy-User-Managed-Identity",
@@ -171,8 +185,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.39.26.7824",
-              "templateHash": "5121089533769249485"
+              "version": "0.40.2.10011",
+              "templateHash": "11190867807421824630"
             }
           },
           "parameters": {
@@ -186,7 +200,7 @@
             }
           },
           "variables": {
-            "roleName": "av-deployment-script-role",
+            "roleName": "[format('av-deployment-script-role-{0}', uniqueString(resourceGroup().id))]",
             "roleDescription": "Role to deploy custom CLI scripts for the AdventureWorks deployment",
             "roleDefName": "[guid(parameters('identityName'))]",
             "managedIdentityOperatorRoleId": "f1a07417-d97a-45cb-824c-7a7467783830"
@@ -746,7 +760,7 @@
         }
       }
     },
-    {
+    "storage": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "Deploy-Storage-Account",
@@ -760,7 +774,7 @@
             "value": "[parameters('location')]"
           },
           "identityId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-User-Managed-Identity'), '2025-04-01').outputs.principalId.value]"
+            "value": "[reference('identity').outputs.principalId.value]"
           },
           "aadAdminObjectId": {
             "value": "[parameters('aadAdminObjectId')]"
@@ -772,8 +786,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.39.26.7824",
-              "templateHash": "15013106653090063123"
+              "version": "0.40.2.10011",
+              "templateHash": "3565291302805417722"
             }
           },
           "parameters": {
@@ -819,7 +833,7 @@
                     "value": false
                   },
                   "allowSharedKeyAccess": {
-                    "value": false
+                    "value": true
                   },
                   "minimumTlsVersion": {
                     "value": "TLS1_2"
@@ -857,16 +871,16 @@
                         },
                         {
                           "name": "adventureworks-receipts",
-                          "publicAccess": "Blob",
+                          "publicAccess": "None",
                           "metadata": {
-                            "description": "Public container for customer order receipt PDFs"
+                            "description": "Container for customer order receipt PDFs"
                           }
                         },
                         {
                           "name": "locales",
-                          "publicAccess": "Blob",
+                          "publicAccess": "None",
                           "metadata": {
-                            "description": "Public container for translated language files"
+                            "description": "Container for translated language files"
                           }
                         }
                       ]
@@ -904,6 +918,12 @@
                           "metadata": {
                             "description": "Queue for generating AI product reviews"
                           }
+                        },
+                        {
+                          "name": "sales-order-status",
+                          "metadata": {
+                            "description": "Queue for tracking the status of sales orders"
+                          }
                         }
                       ]
                     }
@@ -911,6 +931,18 @@
                   "tableServices": {
                     "value": {
                       "tables": []
+                    }
+                  },
+                  "fileServices": {
+                    "value": {
+                      "shares": [
+                        {
+                          "name": "seed-job-logs",
+                          "accessTier": "TransactionOptimized",
+                          "enabledProtocols": "SMB",
+                          "shareQuota": 5
+                        }
+                      ]
                     }
                   },
                   "roleAssignments": {
@@ -943,6 +975,11 @@
                       {
                         "principalId": "[parameters('aadAdminObjectId')]",
                         "roleDefinitionIdOrName": "Storage Table Data Contributor",
+                        "principalType": "User"
+                      },
+                      {
+                        "principalId": "[parameters('aadAdminObjectId')]",
+                        "roleDefinitionIdOrName": "Storage File Data SMB Share Contributor",
                         "principalType": "User"
                       }
                     ]
@@ -6666,10 +6703,10 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-User-Managed-Identity')]"
+        "identity"
       ]
     },
-    {
+    "communication": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "Deploy-Communication-Service",
@@ -6701,8 +6738,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.39.26.7824",
-              "templateHash": "14899578617943290710"
+              "version": "0.40.2.10011",
+              "templateHash": "10524795596647106547"
             }
           },
           "parameters": {
@@ -6743,7 +6780,7 @@
             {
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
-              "scope": "[format('Microsoft.Communication/communicationServices/{0}', parameters('communicationServiceName'))]",
+              "scope": "[resourceId('Microsoft.Communication/communicationServices', parameters('communicationServiceName'))]",
               "name": "[guid(resourceId('Microsoft.Communication/communicationServices', parameters('communicationServiceName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), 'Contributor')]",
               "properties": {
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",
@@ -6757,7 +6794,7 @@
             {
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
-              "scope": "[format('Microsoft.Communication/communicationServices/{0}', parameters('communicationServiceName'))]",
+              "scope": "[resourceId('Microsoft.Communication/communicationServices', parameters('communicationServiceName'))]",
               "name": "[guid(resourceId('Microsoft.Communication/communicationServices', parameters('communicationServiceName')), parameters('aadAdminObjectId'), 'Contributor')]",
               "properties": {
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",
@@ -6792,36 +6829,11 @@
             {
               "type": "Microsoft.Insights/diagnosticSettings",
               "apiVersion": "2021-05-01-preview",
-              "scope": "[format('Microsoft.Communication/communicationServices/{0}', parameters('communicationServiceName'))]",
+              "scope": "[resourceId('Microsoft.Communication/communicationServices', parameters('communicationServiceName'))]",
               "name": "email-diagnostics",
               "properties": {
                 "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
-                "logs": [
-                  {
-                    "category": "EmailSendMailLogs",
-                    "enabled": true,
-                    "retentionPolicy": {
-                      "enabled": false,
-                      "days": 0
-                    }
-                  },
-                  {
-                    "category": "EmailStatusUpdateLogs",
-                    "enabled": true,
-                    "retentionPolicy": {
-                      "enabled": false,
-                      "days": 0
-                    }
-                  },
-                  {
-                    "category": "EmailUserEngagementLogs",
-                    "enabled": true,
-                    "retentionPolicy": {
-                      "enabled": false,
-                      "days": 0
-                    }
-                  }
-                ],
+                "logs": [],
                 "metrics": [
                   {
                     "category": "AllMetrics",
@@ -6867,11 +6879,11 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-Application-Insights')]",
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-User-Managed-Identity')]"
+        "appinsights",
+        "identity"
       ]
     },
-    {
+    "aifoundry": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "Deploy-AI-Foundry",
@@ -6882,16 +6894,16 @@
         "mode": "Incremental",
         "parameters": {
           "name": {
-            "value": "[parameters('cognitiveservicesname')]"
+            "value": "[parameters('foundryname')]"
           },
           "location": {
-            "value": "[parameters('cognitiveservicesLocation')]"
+            "value": "[parameters('foundryLocation')]"
           },
           "identityName": {
             "value": "[parameters('identityName')]"
           },
           "customSubDomainName": {
-            "value": "[parameters('cognitiveservicesname')]"
+            "value": "[parameters('foundryname')]"
           },
           "restoreOpenAi": {
             "value": "[parameters('restoreOpenAi')]"
@@ -6955,6 +6967,24 @@
           },
           "projectName": {
             "value": "[format('av-aiproject-{0}', parameters('resourceToken'))]"
+          },
+          "appInsightsId": {
+            "value": "[reference('appinsights').outputs.resourceId.value]"
+          },
+          "appInsightConnectionString": {
+            "value": "[reference('appinsights').outputs.connectionString.value]"
+          },
+          "appInsightConnectionName": {
+            "value": "[format('av-appinsights-connection-{0}', parameters('resourceToken'))]"
+          },
+          "aoaiConnectionName": {
+            "value": "[format('av-aoai-connection-{0}', parameters('resourceToken'))]"
+          },
+          "storageAccountName": {
+            "value": "[reference('storage').outputs.storageAccountName.value]"
+          },
+          "storageAccountConnectionName": {
+            "value": "[format('av-storage-connection-{0}', parameters('resourceToken'))]"
           }
         },
         "template": {
@@ -6963,14 +6993,14 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.39.26.7824",
-              "templateHash": "3774223244675840502"
+              "version": "0.40.2.10011",
+              "templateHash": "6938674455398123390"
             }
           },
           "parameters": {
             "name": {
               "type": "string",
-              "defaultValue": "[format('av-openai-{0}', uniqueString(resourceGroup().id))]"
+              "defaultValue": "[format('av-ai-{0}', uniqueString(resourceGroup().id))]"
             },
             "location": {
               "type": "string",
@@ -7003,6 +7033,24 @@
               "type": "string"
             },
             "projectName": {
+              "type": "string"
+            },
+            "appInsightsId": {
+              "type": "string"
+            },
+            "appInsightConnectionString": {
+              "type": "string"
+            },
+            "appInsightConnectionName": {
+              "type": "string"
+            },
+            "aoaiConnectionName": {
+              "type": "string"
+            },
+            "storageAccountName": {
+              "type": "string"
+            },
+            "storageAccountConnectionName": {
               "type": "string"
             },
             "publicNetworkAccess": {
@@ -7175,6 +7223,42 @@
               "sku": "[parameters('sku')]"
             },
             {
+              "type": "Microsoft.CognitiveServices/accounts/connections",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[format('{0}/{1}', parameters('name'), parameters('aoaiConnectionName'))]",
+              "properties": {
+                "category": "AzureOpenAI",
+                "authType": "AAD",
+                "isSharedToAll": true,
+                "target": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('name')), '2025-06-01').endpoints['OpenAI Language Model Instance API']]",
+                "metadata": {
+                  "ApiType": "azure",
+                  "ResourceId": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.CognitiveServices/accounts/connections",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[format('{0}/{1}', parameters('name'), parameters('storageAccountConnectionName'))]",
+              "properties": {
+                "category": "AzureStorageAccount",
+                "target": "[reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2022-09-01').primaryEndpoints.blob]",
+                "authType": "AAD",
+                "isSharedToAll": true,
+                "metadata": {
+                  "ApiType": "Azure",
+                  "ResourceId": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]"
+              ]
+            },
+            {
               "type": "Microsoft.CognitiveServices/accounts/projects",
               "apiVersion": "2025-04-01-preview",
               "name": "[format('{0}/{1}', parameters('name'), parameters('projectName'))]",
@@ -7196,7 +7280,7 @@
             {
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2020-04-01-preview",
-              "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', parameters('name'))]",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]",
               "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('name')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), 'a001fd3d-188f-4b5d-821b-7da978bf7442')]",
               "properties": {
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a001fd3d-188f-4b5d-821b-7da978bf7442')]",
@@ -7210,7 +7294,7 @@
             {
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2020-04-01-preview",
-              "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', parameters('name'))]",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]",
               "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('name')), parameters('aadAdminObjectId'), 'a001fd3d-188f-4b5d-821b-7da978bf7442')]",
               "properties": {
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a001fd3d-188f-4b5d-821b-7da978bf7442')]",
@@ -7252,12 +7336,53 @@
             "name": {
               "type": "string",
               "value": "[parameters('name')]"
+            },
+            "projectResourceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName'))]"
+            },
+            "projectName": {
+              "type": "string",
+              "value": "[parameters('projectName')]"
+            },
+            "serviceName": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "projectEndpoint": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName')), '2025-04-01-preview').endpoints['AI Foundry API']]"
+            },
+            "PrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').principalId]"
+            },
+            "accountPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').principalId]"
+            },
+            "projectPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').principalId]"
+            },
+            "storageConnectionId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts/connections', parameters('name'), parameters('storageAccountConnectionName'))]"
+            },
+            "storageConnectionName": {
+              "type": "string",
+              "value": "[parameters('storageAccountConnectionName')]"
             }
           }
         }
-      }
+      },
+      "dependsOn": [
+        "appinsights",
+        "identity",
+        "storage"
+      ]
     },
-    {
+    "database": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "Deploy-Database",
@@ -7295,8 +7420,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.39.26.7824",
-              "templateHash": "5739138383676411341"
+              "version": "0.40.2.10011",
+              "templateHash": "15034638105019224682"
             }
           },
           "parameters": {
@@ -13418,9 +13543,12 @@
             }
           }
         }
-      }
+      },
+      "dependsOn": [
+        "identity"
+      ]
     },
-    {
+    "acr": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "Deploy-ACR",
@@ -13455,8 +13583,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.39.26.7824",
-              "templateHash": "8235608542667726651"
+              "version": "0.40.2.10011",
+              "templateHash": "8541907332397782866"
             }
           },
           "parameters": {
@@ -16697,10 +16825,10 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-User-Managed-Identity')]"
+        "identity"
       ]
     },
-    {
+    "appinsights": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "Deploy-Application-Insights",
@@ -16716,14 +16844,8 @@
           "workspaceName": {
             "value": "[parameters('workspaceName')]"
           },
-          "identityName": {
-            "value": "[parameters('identityName')]"
-          },
           "location": {
             "value": "[parameters('location')]"
-          },
-          "aadAdminObjectId": {
-            "value": "[parameters('aadAdminObjectId')]"
           }
         },
         "template": {
@@ -16733,8 +16855,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.39.26.7824",
-              "templateHash": "13649341301367651268"
+              "version": "0.40.2.10011",
+              "templateHash": "9100731201620414801"
             }
           },
           "parameters": {
@@ -16746,25 +16868,12 @@
               "type": "string",
               "defaultValue": "[format('av-workspace-{0}', toLower(uniqueString(resourceGroup().id)))]"
             },
-            "identityName": {
-              "type": "string",
-              "defaultValue": "[format('av-identity-{0}', uniqueString(resourceGroup().id))]"
-            },
             "location": {
               "type": "string",
               "defaultValue": "[resourceGroup().location]"
-            },
-            "aadAdminObjectId": {
-              "type": "string"
             }
           },
           "resources": {
-            "azidentity": {
-              "existing": true,
-              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
-              "apiVersion": "2023-01-31",
-              "name": "[parameters('identityName')]"
-            },
             "workspace": {
               "type": "Microsoft.Resources/deployments",
               "apiVersion": "2025-04-01",
@@ -19886,246 +19995,206 @@
                   "metadata": {
                     "_generator": {
                       "name": "bicep",
-                      "version": "0.38.33.27573",
-                      "templateHash": "12909562776696883702"
+                      "version": "0.29.47.4906",
+                      "templateHash": "10653241142071426932"
                     },
                     "name": "Application Insights",
-                    "description": "This component deploys an Application Insights instance."
+                    "description": "This component deploys an Application Insights instance.",
+                    "owner": "Azure/module-maintainers"
                   },
                   "definitions": {
-                    "diagnosticSettingFullType": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string",
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. The name of the diagnostic setting."
-                          }
-                        },
-                        "logCategoriesAndGroups": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "category": {
-                                "type": "string",
-                                "nullable": true,
-                                "metadata": {
-                                  "description": "Optional. Name of a Diagnostic Log category for a resource type this setting is applied to. Set the specific logs to collect here."
-                                }
-                              },
-                              "categoryGroup": {
-                                "type": "string",
-                                "nullable": true,
-                                "metadata": {
-                                  "description": "Optional. Name of a Diagnostic Log category group for a resource type this setting is applied to. Set to `allLogs` to collect all logs."
-                                }
-                              },
-                              "enabled": {
-                                "type": "bool",
-                                "nullable": true,
-                                "metadata": {
-                                  "description": "Optional. Enable or disable the category explicitly. Default is `true`."
-                                }
-                              }
-                            }
-                          },
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. The name of logs that will be streamed. \"allLogs\" includes all possible logs for the resource. Set to `[]` to disable log collection."
-                          }
-                        },
-                        "metricCategories": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "category": {
-                                "type": "string",
-                                "metadata": {
-                                  "description": "Required. Name of a Diagnostic Metric category for a resource type this setting is applied to. Set to `AllMetrics` to collect all metrics."
-                                }
-                              },
-                              "enabled": {
-                                "type": "bool",
-                                "nullable": true,
-                                "metadata": {
-                                  "description": "Optional. Enable or disable the category explicitly. Default is `true`."
-                                }
-                              }
-                            }
-                          },
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. The name of metrics that will be streamed. \"allMetrics\" includes all possible metrics for the resource. Set to `[]` to disable metric collection."
-                          }
-                        },
-                        "logAnalyticsDestinationType": {
-                          "type": "string",
-                          "allowedValues": [
-                            "AzureDiagnostics",
-                            "Dedicated"
-                          ],
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. A string indicating whether the export to Log Analytics should use the default destination type, i.e. AzureDiagnostics, or use a destination type."
-                          }
-                        },
-                        "workspaceResourceId": {
-                          "type": "string",
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. Resource ID of the diagnostic log analytics workspace. For security reasons, it is recommended to set diagnostic settings to send data to either storage account, log analytics workspace or event hub."
-                          }
-                        },
-                        "storageAccountResourceId": {
-                          "type": "string",
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. Resource ID of the diagnostic storage account. For security reasons, it is recommended to set diagnostic settings to send data to either storage account, log analytics workspace or event hub."
-                          }
-                        },
-                        "eventHubAuthorizationRuleResourceId": {
-                          "type": "string",
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. Resource ID of the diagnostic event hub authorization rule for the Event Hubs namespace in which the event hub should be created or streamed to."
-                          }
-                        },
-                        "eventHubName": {
-                          "type": "string",
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. Name of the diagnostic event hub within the namespace to which logs are streamed. Without this, an event hub is created for each log category. For security reasons, it is recommended to set diagnostic settings to send data to either storage account, log analytics workspace or event hub."
-                          }
-                        },
-                        "marketplacePartnerResourceId": {
-                          "type": "string",
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. The full ARM resource ID of the Marketplace resource to which you would like to send Diagnostic Logs."
-                          }
-                        }
-                      },
-                      "metadata": {
-                        "description": "An AVM-aligned type for a diagnostic setting. To be used if both logs & metrics are supported by the resource provider.",
-                        "__bicep_imported_from!": {
-                          "sourceTemplate": "br:mcr.microsoft.com/bicep/avm/utl/types/avm-common-types:0.3.0"
-                        }
-                      }
-                    },
-                    "lockType": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string",
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. Specify the name of lock."
-                          }
-                        },
-                        "kind": {
-                          "type": "string",
-                          "allowedValues": [
-                            "CanNotDelete",
-                            "None",
-                            "ReadOnly"
-                          ],
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. Specify the type of lock."
-                          }
-                        },
-                        "notes": {
-                          "type": "string",
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. Specify the notes of the lock."
-                          }
-                        }
-                      },
-                      "metadata": {
-                        "description": "An AVM-aligned type for a lock.",
-                        "__bicep_imported_from!": {
-                          "sourceTemplate": "br:mcr.microsoft.com/bicep/avm/utl/types/avm-common-types:0.6.0"
-                        }
-                      }
-                    },
                     "roleAssignmentType": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string",
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. The name (as GUID) of the role assignment. If not provided, a GUID will be generated."
-                          }
-                        },
-                        "roleDefinitionIdOrName": {
-                          "type": "string",
-                          "metadata": {
-                            "description": "Required. The role to assign. You can provide either the display name of the role definition, the role definition GUID, or its fully qualified ID in the following format: '/providers/Microsoft.Authorization/roleDefinitions/c2f4ef07-c644-48eb-af81-4b1b4947fb11'."
-                          }
-                        },
-                        "principalId": {
-                          "type": "string",
-                          "metadata": {
-                            "description": "Required. The principal ID of the principal (user/group/identity) to assign the role to."
-                          }
-                        },
-                        "principalType": {
-                          "type": "string",
-                          "allowedValues": [
-                            "Device",
-                            "ForeignGroup",
-                            "Group",
-                            "ServicePrincipal",
-                            "User"
-                          ],
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. The principal type of the assigned principal ID."
-                          }
-                        },
-                        "description": {
-                          "type": "string",
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. The description of the role assignment."
-                          }
-                        },
-                        "condition": {
-                          "type": "string",
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. The conditions on the role assignment. This limits the resources it can be assigned to. e.g.: @Resource[Microsoft.Storage/storageAccounts/blobServices/containers:ContainerName] StringEqualsIgnoreCase \"foo_storage_container\"."
-                          }
-                        },
-                        "conditionVersion": {
-                          "type": "string",
-                          "allowedValues": [
-                            "2.0"
-                          ],
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. Version of the condition."
-                          }
-                        },
-                        "delegatedManagedIdentityResourceId": {
-                          "type": "string",
-                          "nullable": true,
-                          "metadata": {
-                            "description": "Optional. The Resource Id of the delegated managed identity resource."
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "nullable": true,
+                            "metadata": {
+                              "description": "Optional. The name (as GUID) of the role assignment. If not provided, a GUID will be generated."
+                            }
+                          },
+                          "roleDefinitionIdOrName": {
+                            "type": "string",
+                            "metadata": {
+                              "description": "Required. The role to assign. You can provide either the display name of the role definition, the role definition GUID, or its fully qualified ID in the following format: '/providers/Microsoft.Authorization/roleDefinitions/c2f4ef07-c644-48eb-af81-4b1b4947fb11'."
+                            }
+                          },
+                          "principalId": {
+                            "type": "string",
+                            "metadata": {
+                              "description": "Required. The principal ID of the principal (user/group/identity) to assign the role to."
+                            }
+                          },
+                          "principalType": {
+                            "type": "string",
+                            "allowedValues": [
+                              "Device",
+                              "ForeignGroup",
+                              "Group",
+                              "ServicePrincipal",
+                              "User"
+                            ],
+                            "nullable": true,
+                            "metadata": {
+                              "description": "Optional. The principal type of the assigned principal ID."
+                            }
+                          },
+                          "description": {
+                            "type": "string",
+                            "nullable": true,
+                            "metadata": {
+                              "description": "Optional. The description of the role assignment."
+                            }
+                          },
+                          "condition": {
+                            "type": "string",
+                            "nullable": true,
+                            "metadata": {
+                              "description": "Optional. The conditions on the role assignment. This limits the resources it can be assigned to. e.g.: @Resource[Microsoft.Storage/storageAccounts/blobServices/containers:ContainerName] StringEqualsIgnoreCase \"foo_storage_container\"."
+                            }
+                          },
+                          "conditionVersion": {
+                            "type": "string",
+                            "allowedValues": [
+                              "2.0"
+                            ],
+                            "nullable": true,
+                            "metadata": {
+                              "description": "Optional. Version of the condition."
+                            }
+                          },
+                          "delegatedManagedIdentityResourceId": {
+                            "type": "string",
+                            "nullable": true,
+                            "metadata": {
+                              "description": "Optional. The Resource Id of the delegated managed identity resource."
+                            }
                           }
                         }
                       },
-                      "metadata": {
-                        "description": "An AVM-aligned type for a role assignment.",
-                        "__bicep_imported_from!": {
-                          "sourceTemplate": "br:mcr.microsoft.com/bicep/avm/utl/types/avm-common-types:0.3.0"
+                      "nullable": true
+                    },
+                    "diagnosticSettingType": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "nullable": true,
+                            "metadata": {
+                              "description": "Optional. The name of diagnostic setting."
+                            }
+                          },
+                          "logCategoriesAndGroups": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "category": {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "metadata": {
+                                    "description": "Optional. Name of a Diagnostic Log category for a resource type this setting is applied to. Set the specific logs to collect here."
+                                  }
+                                },
+                                "categoryGroup": {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "metadata": {
+                                    "description": "Optional. Name of a Diagnostic Log category group for a resource type this setting is applied to. Set to `allLogs` to collect all logs."
+                                  }
+                                },
+                                "enabled": {
+                                  "type": "bool",
+                                  "nullable": true,
+                                  "metadata": {
+                                    "description": "Optional. Enable or disable the category explicitly. Default is `true`."
+                                  }
+                                }
+                              }
+                            },
+                            "nullable": true,
+                            "metadata": {
+                              "description": "Optional. The name of logs that will be streamed. \"allLogs\" includes all possible logs for the resource. Set to `[]` to disable log collection."
+                            }
+                          },
+                          "metricCategories": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "category": {
+                                  "type": "string",
+                                  "metadata": {
+                                    "description": "Required. Name of a Diagnostic Metric category for a resource type this setting is applied to. Set to `AllMetrics` to collect all metrics."
+                                  }
+                                },
+                                "enabled": {
+                                  "type": "bool",
+                                  "nullable": true,
+                                  "metadata": {
+                                    "description": "Optional. Enable or disable the category explicitly. Default is `true`."
+                                  }
+                                }
+                              }
+                            },
+                            "nullable": true,
+                            "metadata": {
+                              "description": "Optional. The name of metrics that will be streamed. \"allMetrics\" includes all possible metrics for the resource. Set to `[]` to disable metric collection."
+                            }
+                          },
+                          "logAnalyticsDestinationType": {
+                            "type": "string",
+                            "allowedValues": [
+                              "AzureDiagnostics",
+                              "Dedicated"
+                            ],
+                            "nullable": true,
+                            "metadata": {
+                              "description": "Optional. A string indicating whether the export to Log Analytics should use the default destination type, i.e. AzureDiagnostics, or use a destination type."
+                            }
+                          },
+                          "workspaceResourceId": {
+                            "type": "string",
+                            "nullable": true,
+                            "metadata": {
+                              "description": "Optional. Resource ID of the diagnostic log analytics workspace. For security reasons, it is recommended to set diagnostic settings to send data to either storage account, log analytics workspace or event hub."
+                            }
+                          },
+                          "storageAccountResourceId": {
+                            "type": "string",
+                            "nullable": true,
+                            "metadata": {
+                              "description": "Optional. Resource ID of the diagnostic storage account. For security reasons, it is recommended to set diagnostic settings to send data to either storage account, log analytics workspace or event hub."
+                            }
+                          },
+                          "eventHubAuthorizationRuleResourceId": {
+                            "type": "string",
+                            "nullable": true,
+                            "metadata": {
+                              "description": "Optional. Resource ID of the diagnostic event hub authorization rule for the Event Hubs namespace in which the event hub should be created or streamed to."
+                            }
+                          },
+                          "eventHubName": {
+                            "type": "string",
+                            "nullable": true,
+                            "metadata": {
+                              "description": "Optional. Name of the diagnostic event hub within the namespace to which logs are streamed. Without this, an event hub is created for each log category. For security reasons, it is recommended to set diagnostic settings to send data to either storage account, log analytics workspace or event hub."
+                            }
+                          },
+                          "marketplacePartnerResourceId": {
+                            "type": "string",
+                            "nullable": true,
+                            "metadata": {
+                              "description": "Optional. The full ARM resource ID of the Marketplace resource to which you would like to send Diagnostic Logs."
+                            }
+                          }
                         }
-                      }
+                      },
+                      "nullable": true
                     }
                   },
                   "parameters": {
@@ -20175,7 +20244,7 @@
                     },
                     "linkedStorageAccountResourceId": {
                       "type": "string",
-                      "nullable": true,
+                      "defaultValue": "",
                       "metadata": {
                         "description": "Optional. Linked storage account resource ID."
                       }
@@ -20229,20 +20298,6 @@
                         "description": "Optional. Percentage of the data produced by the application being monitored that is being sampled for Application Insights telemetry."
                       }
                     },
-                    "flowType": {
-                      "type": "string",
-                      "nullable": true,
-                      "metadata": {
-                        "description": "Optional. Used by the Application Insights system to determine what kind of flow this component was created by. This is to be set to 'Bluefield' when creating/updating a component via the REST API."
-                      }
-                    },
-                    "requestSource": {
-                      "type": "string",
-                      "nullable": true,
-                      "metadata": {
-                        "description": "Optional. Describes what tool created this Application Insights component. Customers using this API should set this to the default 'rest'."
-                      }
-                    },
                     "kind": {
                       "type": "string",
                       "defaultValue": "",
@@ -20257,32 +20312,18 @@
                         "description": "Optional. Location for all Resources."
                       }
                     },
-                    "lock": {
-                      "$ref": "#/definitions/lockType",
-                      "nullable": true,
-                      "metadata": {
-                        "description": "Optional. The lock settings of the service."
-                      }
-                    },
                     "roleAssignments": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/definitions/roleAssignmentType"
-                      },
-                      "nullable": true,
+                      "$ref": "#/definitions/roleAssignmentType",
                       "metadata": {
                         "description": "Optional. Array of role assignments to create."
                       }
                     },
                     "tags": {
                       "type": "object",
+                      "nullable": true,
                       "metadata": {
-                        "__bicep_resource_derived_type!": {
-                          "source": "Microsoft.Insights/components@2020-10-01#properties/tags"
-                        },
                         "description": "Optional. Tags of the resource."
-                      },
-                      "nullable": true
+                      }
                     },
                     "enableTelemetry": {
                       "type": "bool",
@@ -20292,11 +20333,7 @@
                       }
                     },
                     "diagnosticSettings": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/definitions/diagnosticSettingFullType"
-                      },
-                      "nullable": true,
+                      "$ref": "#/definitions/diagnosticSettingType",
                       "metadata": {
                         "description": "Optional. The diagnostic settings of the service."
                       }
@@ -20327,7 +20364,7 @@
                       "condition": "[parameters('enableTelemetry')]",
                       "type": "Microsoft.Resources/deployments",
                       "apiVersion": "2024-03-01",
-                      "name": "[format('46d3xbcp.res.insights-component.{0}.{1}', replace('0.6.1', '.', '-'), substring(uniqueString(deployment().name, parameters('location')), 0, 4))]",
+                      "name": "[format('46d3xbcp.res.insights-component.{0}.{1}', replace('0.4.1', '.', '-'), substring(uniqueString(deployment().name, parameters('location')), 0, 4))]",
                       "properties": {
                         "mode": "Incremental",
                         "template": {
@@ -20359,9 +20396,7 @@
                         "publicNetworkAccessForIngestion": "[parameters('publicNetworkAccessForIngestion')]",
                         "publicNetworkAccessForQuery": "[parameters('publicNetworkAccessForQuery')]",
                         "RetentionInDays": "[parameters('retentionInDays')]",
-                        "SamplingPercentage": "[parameters('samplingPercentage')]",
-                        "Flow_Type": "[parameters('flowType')]",
-                        "Request_Source": "[parameters('requestSource')]"
+                        "SamplingPercentage": "[parameters('samplingPercentage')]"
                       }
                     },
                     "appInsights_roleAssignments": {
@@ -20381,20 +20416,6 @@
                         "condition": "[tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'condition')]",
                         "conditionVersion": "[if(not(empty(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'condition'))), coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'conditionVersion'), '2.0'), null())]",
                         "delegatedManagedIdentityResourceId": "[tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'delegatedManagedIdentityResourceId')]"
-                      },
-                      "dependsOn": [
-                        "appInsights"
-                      ]
-                    },
-                    "appInsights_lock": {
-                      "condition": "[and(not(empty(coalesce(parameters('lock'), createObject()))), not(equals(tryGet(parameters('lock'), 'kind'), 'None')))]",
-                      "type": "Microsoft.Authorization/locks",
-                      "apiVersion": "2020-05-01",
-                      "scope": "[format('Microsoft.Insights/components/{0}', parameters('name'))]",
-                      "name": "[coalesce(tryGet(parameters('lock'), 'name'), format('lock-{0}', parameters('name')))]",
-                      "properties": {
-                        "level": "[coalesce(tryGet(parameters('lock'), 'kind'), '')]",
-                        "notes": "[coalesce(tryGet(parameters('lock'), 'notes'), if(equals(tryGet(parameters('lock'), 'kind'), 'CanNotDelete'), 'Cannot delete resource or child resources.', 'Cannot delete or modify the resource or child resources.'))]"
                       },
                       "dependsOn": [
                         "appInsights"
@@ -20444,7 +20465,7 @@
                     "linkedStorageAccount": {
                       "condition": "[not(empty(parameters('linkedStorageAccountResourceId')))]",
                       "type": "Microsoft.Resources/deployments",
-                      "apiVersion": "2025-04-01",
+                      "apiVersion": "2022-09-01",
                       "name": "[format('{0}-appInsights-linkedStorageAccount', uniqueString(deployment().name, parameters('location')))]",
                       "properties": {
                         "expressionEvaluationOptions": {
@@ -20456,7 +20477,7 @@
                             "value": "[parameters('name')]"
                           },
                           "storageAccountResourceId": {
-                            "value": "[coalesce(parameters('linkedStorageAccountResourceId'), '')]"
+                            "value": "[parameters('linkedStorageAccountResourceId')]"
                           }
                         },
                         "template": {
@@ -20465,11 +20486,12 @@
                           "metadata": {
                             "_generator": {
                               "name": "bicep",
-                              "version": "0.38.33.27573",
-                              "templateHash": "9567302051678045750"
+                              "version": "0.29.47.4906",
+                              "templateHash": "216781367921725873"
                             },
                             "name": "Application Insights Linked Storage Account",
-                            "description": "This component deploys an Application Insights Linked Storage Account."
+                            "description": "This component deploys an Application Insights Linked Storage Account.",
+                            "owner": "Azure/module-maintainers"
                           },
                           "parameters": {
                             "appInsightsName": {
@@ -20604,10 +20626,201 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-User-Managed-Identity')]"
+        "identity"
       ]
     },
-    {
+    "playwright": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "Deploy-Playwright-Testing-Workspace",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "playwrightWorkspaceName": {
+            "value": "[format('pw{0}', parameters('resourceToken'))]"
+          },
+          "location": {
+            "value": "[parameters('playwrightLocation')]"
+          },
+          "identityName": {
+            "value": "[parameters('identityName')]"
+          },
+          "aadAdminObjectId": {
+            "value": "[parameters('aadAdminObjectId')]"
+          },
+          "storageAccountName": {
+            "value": "[reference('storage').outputs.storageAccountName.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.40.2.10011",
+              "templateHash": "2294863583891070145"
+            }
+          },
+          "parameters": {
+            "playwrightWorkspaceName": {
+              "type": "string",
+              "defaultValue": "[format('pw{0}', toLower(uniqueString(resourceGroup().id)))]"
+            },
+            "location": {
+              "type": "string",
+              "allowedValues": [
+                "eastus",
+                "westus3",
+                "westeurope",
+                "eastasia"
+              ],
+              "metadata": {
+                "description": "Location for Playwright Workspaces in Azure LoadTest Service. Supported: eastus, westus3, westeurope, eastasia"
+              }
+            },
+            "identityName": {
+              "type": "string"
+            },
+            "aadAdminObjectId": {
+              "type": "string"
+            },
+            "storageAccountName": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}', parameters('storageAccountName'), 'default')]",
+              "properties": {
+                "cors": {
+                  "corsRules": [
+                    {
+                      "allowedOrigins": [
+                        "https://trace.playwright.dev"
+                      ],
+                      "allowedMethods": [
+                        "GET",
+                        "OPTIONS"
+                      ],
+                      "maxAgeInSeconds": 86400,
+                      "exposedHeaders": [
+                        "*"
+                      ],
+                      "allowedHeaders": [
+                        "*"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}/{2}', parameters('storageAccountName'), 'default', 'playwright-reports')]",
+              "properties": {
+                "publicAccess": "None",
+                "metadata": {
+                  "description": "Container for Playwright test reports, traces, and artifacts",
+                  "createdBy": "Bicep deployment"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccountName'), 'default')]"
+              ]
+            },
+            {
+              "type": "Microsoft.LoadTestService/playwrightWorkspaces",
+              "apiVersion": "2026-01-01-preview",
+              "name": "[parameters('playwrightWorkspaceName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "regionalAffinity": "Disabled",
+                "localAuth": "Disabled",
+                "storageUri": "[reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').primaryEndpoints.blob]"
+              },
+              "tags": {
+                "Environment": "Development",
+                "Purpose": "E2E Testing",
+                "Service": "Playwright Workspaces (Azure LoadTest Service)"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName'))]",
+              "name": "[guid(resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName')), parameters('aadAdminObjectId'), 'LoadTestOwner')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '45bb0b16-2f0c-4e78-afaa-a07599b003f6')]",
+                "principalId": "[parameters('aadAdminObjectId')]",
+                "principalType": "User"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName'))]",
+              "name": "[guid(resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName')), parameters('identityName'), 'LoadTestContributor')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '749a398d-560b-491b-bb21-08924219302e')]",
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "playwrightWorkspaceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName'))]"
+            },
+            "playwrightWorkspaceName": {
+              "type": "string",
+              "value": "[parameters('playwrightWorkspaceName')]"
+            },
+            "playwrightWorkspaceGuid": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName')), '2026-01-01-preview').workspaceId]"
+            },
+            "playwrightDashboardUrl": {
+              "type": "string",
+              "value": "[format('https://portal.azure.com/#resource{0}', resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName')))]"
+            },
+            "playwrightServiceUrl": {
+              "type": "string",
+              "value": "[format('{0}/browsers', replace(reference(resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName')), '2026-01-01-preview').dataplaneUri, 'https://', 'wss://'))]"
+            },
+            "storageAccountName": {
+              "type": "string",
+              "value": "[parameters('storageAccountName')]"
+            },
+            "reportsContainerName": {
+              "type": "string",
+              "value": "playwright-reports"
+            },
+            "reportsContainerUrl": {
+              "type": "string",
+              "value": "[format('{0}playwright-reports', reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').primaryEndpoints.blob)]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "storage"
+      ]
+    },
+    "containerApp": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "Deploy-Container-App-Environment",
@@ -20634,6 +20847,9 @@
           },
           "identityName": {
             "value": "[parameters('identityName')]"
+          },
+          "storageAccountName": {
+            "value": "[reference('storage').outputs.storageAccountName.value]"
           }
         },
         "template": {
@@ -20642,8 +20858,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.39.26.7824",
-              "templateHash": "15521487392449841754"
+              "version": "0.40.2.10011",
+              "templateHash": "15047973306588195116"
             }
           },
           "parameters": {
@@ -20670,13 +20886,16 @@
             "workspaceName": {
               "type": "string",
               "defaultValue": "[format('av-workspace-{0}', toLower(uniqueString(resourceGroup().id)))]"
+            },
+            "storageAccountName": {
+              "type": "string"
             }
           },
           "resources": [
             {
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
-              "scope": "[format('Microsoft.ContainerRegistry/registries/{0}', parameters('containerRegistryName'))]",
+              "scope": "[resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName'))]",
               "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), 'acrpull')]",
               "properties": {
                 "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').principalId]",
@@ -20719,12 +20938,32 @@
               "dependsOn": [
                 "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppEnvName'))]"
               ]
+            },
+            {
+              "type": "Microsoft.App/managedEnvironments/storages",
+              "apiVersion": "2023-11-02-preview",
+              "name": "[format('{0}/{1}', parameters('containerAppEnvName'), 'seed-job')]",
+              "properties": {
+                "azureFile": {
+                  "accountName": "[parameters('storageAccountName')]",
+                  "accountKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').keys[0].value]",
+                  "shareName": "seed-job-logs",
+                  "accessMode": "ReadWrite"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppEnvName'))]"
+              ]
             }
           ],
           "outputs": {
             "containerAppEnvId": {
               "type": "string",
               "value": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppEnvName'))]"
+            },
+            "containerAppEnvName": {
+              "type": "string",
+              "value": "[parameters('containerAppEnvName')]"
             },
             "applicationInsightsConnectionString": {
               "type": "string",
@@ -20734,12 +20973,13 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-ACR')]",
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-Application-Insights')]",
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-User-Managed-Identity')]"
+        "acr",
+        "appinsights",
+        "identity",
+        "storage"
       ]
     },
-    {
+    "containerAppApi": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "Deploy-Container-App-API",
@@ -20765,13 +21005,13 @@
             "value": "[parameters('identityName')]"
           },
           "sqlConnectionString": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Database'), '2025-04-01').outputs.connectionString.value]"
+            "value": "[reference('database').outputs.connectionString.value]"
           },
           "revisionSuffix": {
             "value": "[parameters('revisionSuffix')]"
           },
           "containerAppEnvId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Container-App-Environment'), '2025-04-01').outputs.containerAppEnvId.value]"
+            "value": "[reference('containerApp').outputs.containerAppEnvId.value]"
           },
           "minReplica": {
             "value": 0
@@ -20786,8 +21026,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.39.26.7824",
-              "templateHash": "11425259447467745640"
+              "version": "0.40.2.10011",
+              "templateHash": "12280757635552445652"
             }
           },
           "parameters": {
@@ -20867,7 +21107,7 @@
                   ],
                   "ingress": {
                     "external": true,
-                    "targetPort": 5000,
+                    "targetPort": 80,
                     "allowInsecure": false,
                     "transport": "http",
                     "clientCertificateMode": "ignore",
@@ -20932,6 +21172,22 @@
                         {
                           "name": "APP_URL",
                           "value": "[parameters('appUrl')]"
+                        },
+                        {
+                          "name": "ASPNETCORE_URLS",
+                          "value": "http://+:80"
+                        },
+                        {
+                          "name": "Logging__LogLevel__Default",
+                          "value": "Warning"
+                        },
+                        {
+                          "name": "Logging__LogLevel__Microsoft",
+                          "value": "Warning"
+                        },
+                        {
+                          "name": "Logging__LogLevel__Azure",
+                          "value": "Warning"
                         }
                       ]
                     }
@@ -20987,37 +21243,52 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-Container-App-Environment')]",
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-Database')]"
+        "containerApp",
+        "database"
       ]
     },
-    {
+    "containerAppApiMcp": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
-      "name": "Deploy-Static-Web-App-Frontend",
+      "name": "Deploy-Container-App-API-MCP",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
         },
         "mode": "Incremental",
         "parameters": {
-          "swaName": {
-            "value": "[format('av-swa-{0}', parameters('resourceToken'))]"
-          },
           "location": {
             "value": "[parameters('location')]"
+          },
+          "appInsightsName": {
+            "value": "[parameters('appInsightsName')]"
+          },
+          "apiMcpName": {
+            "value": "[format('av-mcp-{0}', parameters('resourceToken'))]"
+          },
+          "containerRegistryName": {
+            "value": "[parameters('acrName')]"
           },
           "identityName": {
             "value": "[parameters('identityName')]"
           },
-          "apiUrl": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Container-App-API'), '2025-04-01').outputs.apiUrl.value]"
+          "sqlConnectionString": {
+            "value": "[reference('database').outputs.connectionString.value]"
           },
-          "apiFunctionsUrl": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Container-App-API-Functions'), '2025-04-01').outputs.apiFunctionsUrl.value]"
+          "aiFoundryEndpoint": {
+            "value": "[reference('aifoundry').outputs.endpoint.value]"
           },
-          "appInsightsConnectionString": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Application-Insights'), '2025-04-01').outputs.connectionString.value]"
+          "minReplica": {
+            "value": 0
+          },
+          "maxReplica": {
+            "value": 3
+          },
+          "revisionSuffix": {
+            "value": "[parameters('revisionSuffix')]"
+          },
+          "containerAppEnvId": {
+            "value": "[reference('containerApp').outputs.containerAppEnvId.value]"
           }
         },
         "template": {
@@ -21026,108 +21297,200 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.39.26.7824",
-              "templateHash": "8459503557174096866"
+              "version": "0.40.2.10011",
+              "templateHash": "17487525082917372675"
             }
           },
           "parameters": {
-            "swaName": {
-              "type": "string"
+            "appInsightsName": {
+              "type": "string",
+              "defaultValue": "[format('av-appinsights-{0}', toLower(uniqueString(resourceGroup().id)))]"
+            },
+            "apiMcpName": {
+              "type": "string",
+              "defaultValue": "[format('av-mcp-{0}', uniqueString(resourceGroup().id))]"
             },
             "location": {
               "type": "string",
               "defaultValue": "[resourceGroup().location]"
             },
+            "containerRegistryName": {
+              "type": "string",
+              "defaultValue": "[format('avacr{0}', toLower(uniqueString(resourceGroup().id)))]"
+            },
             "identityName": {
+              "type": "string",
+              "defaultValue": "[format('av-identity-{0}', uniqueString(resourceGroup().id))]"
+            },
+            "containerAppEnvId": {
               "type": "string"
             },
-            "apiUrl": {
+            "bootstrapImage": {
+              "type": "string",
+              "defaultValue": "mcr.microsoft.com/dotnet/aspnet:8.0"
+            },
+            "minReplica": {
+              "type": "int",
+              "defaultValue": 0,
+              "minValue": 0,
+              "maxValue": 25
+            },
+            "maxReplica": {
+              "type": "int",
+              "defaultValue": 3,
+              "minValue": 0,
+              "maxValue": 25
+            },
+            "revisionSuffix": {
+              "type": "securestring"
+            },
+            "sqlConnectionString": {
+              "type": "securestring"
+            },
+            "aiFoundryEndpoint": {
               "type": "string"
-            },
-            "apiFunctionsUrl": {
-              "type": "string",
-              "defaultValue": ""
-            },
-            "appInsightsConnectionString": {
-              "type": "string",
-              "defaultValue": ""
             }
           },
           "resources": [
             {
-              "type": "Microsoft.Web/staticSites",
-              "apiVersion": "2023-01-01",
-              "name": "[parameters('swaName')]",
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2025-10-02-preview",
+              "name": "[parameters('apiMcpName')]",
               "location": "[parameters('location')]",
-              "tags": {
-                "azd-service-name": "app"
-              },
-              "sku": {
-                "name": "Standard",
-                "tier": "Standard"
-              },
               "identity": {
                 "type": "UserAssigned",
                 "userAssignedIdentities": {
                   "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')))]": {}
                 }
               },
-              "properties": {
-                "repositoryUrl": null,
-                "branch": null,
-                "provider": "None",
-                "buildProperties": {
-                  "appLocation": "/",
-                  "apiLocation": "",
-                  "outputLocation": "dist"
-                },
-                "stagingEnvironmentPolicy": "Enabled",
-                "allowConfigFileUpdates": true,
-                "enterpriseGradeCdnStatus": "Disabled"
-              }
-            },
-            {
-              "type": "Microsoft.Web/staticSites/config",
-              "apiVersion": "2023-01-01",
-              "name": "[format('{0}/{1}', parameters('swaName'), 'functionappsettings')]",
-              "properties": {
-                "API_URL": "[parameters('apiUrl')]",
-                "API_FUNCTIONS_URL": "[parameters('apiFunctionsUrl')]",
-                "APPINSIGHTS_CONNECTIONSTRING": "[parameters('appInsightsConnectionString')]"
+              "tags": {
+                "azd-service-name": "api-mcp"
               },
-              "dependsOn": [
-                "[resourceId('Microsoft.Web/staticSites', parameters('swaName'))]"
-              ]
+              "properties": {
+                "managedEnvironmentId": "[parameters('containerAppEnvId')]",
+                "configuration": {
+                  "secrets": [
+                    {
+                      "name": "sql-connection-string",
+                      "value": "[parameters('sqlConnectionString')]"
+                    }
+                  ],
+                  "runtime": {
+                    "dotnet": {
+                      "autoConfigureDataProtection": true
+                    }
+                  },
+                  "ingress": {
+                    "external": true,
+                    "targetPort": 8080,
+                    "allowInsecure": false,
+                    "transport": "http",
+                    "clientCertificateMode": "ignore",
+                    "corsPolicy": {
+                      "allowedOrigins": [
+                        "*"
+                      ],
+                      "allowedMethods": [
+                        "GET",
+                        "POST",
+                        "PUT",
+                        "DELETE",
+                        "OPTIONS"
+                      ],
+                      "allowedHeaders": [
+                        "*"
+                      ],
+                      "allowCredentials": false
+                    },
+                    "traffic": [
+                      {
+                        "latestRevision": true,
+                        "weight": 100
+                      }
+                    ]
+                  },
+                  "registries": [
+                    {
+                      "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName'))]",
+                      "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-07-01').loginServer]"
+                    }
+                  ]
+                },
+                "template": {
+                  "revisionSuffix": "[parameters('revisionSuffix')]",
+                  "containers": [
+                    {
+                      "name": "[parameters('apiMcpName')]",
+                      "image": "[parameters('bootstrapImage')]",
+                      "resources": {
+                        "cpu": "[json('1.0')]",
+                        "memory": "2Gi"
+                      },
+                      "env": [
+                        {
+                          "name": "ConnectionStrings__AdventureWorks",
+                          "value": "[parameters('sqlConnectionString')]"
+                        },
+                        {
+                          "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                          "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').ConnectionString]"
+                        },
+                        {
+                          "name": "AZURE_CLIENT_ID",
+                          "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').clientId]"
+                        },
+                        {
+                          "name": "AZURE_OPENAI_ENDPOINT",
+                          "value": "[parameters('aiFoundryEndpoint')]"
+                        },
+                        {
+                          "name": "ASPNETCORE_URLS",
+                          "value": "http://+:8080"
+                        }
+                      ]
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": "[parameters('minReplica')]",
+                    "maxReplicas": "[parameters('maxReplica')]",
+                    "rules": [
+                      {
+                        "name": "http-requests",
+                        "http": {
+                          "metadata": {
+                            "concurrentRequests": "10"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
             }
           ],
           "outputs": {
-            "appRedirectUri": {
+            "apiMcpUrl": {
               "type": "string",
-              "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/staticSites', parameters('swaName')), '2023-01-01').defaultHostname)]"
+              "value": "[format('https://{0}/mcp', reference(resourceId('Microsoft.App/containerApps', parameters('apiMcpName')), '2025-10-02-preview').configuration.ingress.fqdn)]"
             },
-            "appFqdn": {
+            "apiMcpFqdn": {
               "type": "string",
-              "value": "[reference(resourceId('Microsoft.Web/staticSites', parameters('swaName')), '2023-01-01').defaultHostname]"
+              "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('apiMcpName')), '2025-10-02-preview').configuration.ingress.fqdn]"
             },
-            "deploymentToken": {
+            "apiMcpName": {
               "type": "string",
-              "value": "[listSecrets(resourceId('Microsoft.Web/staticSites', parameters('swaName')), '2023-01-01').properties.apiKey]"
-            },
-            "staticWebAppName": {
-              "type": "string",
-              "value": "[parameters('swaName')]"
+              "value": "[parameters('apiMcpName')]"
             }
           }
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-Application-Insights')]",
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-AI-Foundry')]",
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-Container-App-API')]",
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-Container-App-API-Functions')]"
+        "aifoundry",
+        "containerApp",
+        "database"
       ]
     },
-    {
+    "containerAppApiFunctions": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "Deploy-Container-App-API-Functions",
@@ -21153,22 +21516,25 @@
             "value": "[parameters('identityName')]"
           },
           "sqlConnectionString": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Database'), '2025-04-01').outputs.connectionString.value]"
+            "value": "[reference('database').outputs.connectionString.value]"
           },
           "aiFoundryEndpoint": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-AI-Foundry'), '2025-04-01').outputs.endpoint.value]"
+            "value": "[reference('aifoundry').outputs.endpoint.value]"
           },
           "chatGptDeploymentName": {
             "value": "[parameters('chatGptDeploymentName')]"
           },
           "storageAccountName": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Storage-Account'), '2025-04-01').outputs.storageAccountName.value]"
+            "value": "[reference('storage').outputs.storageAccountName.value]"
           },
           "communicationServiceEndpoint": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Communication-Service'), '2025-04-01').outputs.communicationServiceEndpoint.value]"
+            "value": "[reference('communication').outputs.communicationServiceEndpoint.value]"
           },
           "emailSenderDomain": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Communication-Service'), '2025-04-01').outputs.senderDomain.value]"
+            "value": "[reference('communication').outputs.senderDomain.value]"
+          },
+          "mcpServiceUrl": {
+            "value": "[reference('containerAppApiMcp').outputs.apiMcpUrl.value]"
           },
           "minReplica": {
             "value": 0
@@ -21180,7 +21546,7 @@
             "value": "[parameters('revisionSuffix')]"
           },
           "containerAppEnvId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Container-App-Environment'), '2025-04-01').outputs.containerAppEnvId.value]"
+            "value": "[reference('containerApp').outputs.containerAppEnvId.value]"
           }
         },
         "template": {
@@ -21189,8 +21555,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.39.26.7824",
-              "templateHash": "5439666561588658948"
+              "version": "0.40.2.10011",
+              "templateHash": "7295919853122924794"
             }
           },
           "parameters": {
@@ -21256,6 +21622,10 @@
               "defaultValue": ""
             },
             "emailSenderDomain": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "mcpServiceUrl": {
               "type": "string",
               "defaultValue": ""
             }
@@ -21393,6 +21763,10 @@
                           "value": "~4"
                         },
                         {
+                          "name": "WEBSITES_PORT",
+                          "value": "80"
+                        },
+                        {
                           "name": "WEBSITE_HOSTNAME",
                           "value": "[format('{0}.{1}.azurecontainerapps.io', parameters('apiFunctionsName'), replace(replace(parameters('containerAppEnvId'), '/subscriptions/', ''), '/resourceGroups/', ''))]"
                         },
@@ -21403,6 +21777,10 @@
                         {
                           "name": "EMAIL_SENDER_DOMAIN",
                           "value": "[parameters('emailSenderDomain')]"
+                        },
+                        {
+                          "name": "MCP_SERVICE_URL",
+                          "value": "[parameters('mcpServiceUrl')]"
                         }
                       ]
                     }
@@ -21417,6 +21795,42 @@
                           "metadata": {
                             "concurrentRequests": "10"
                           }
+                        }
+                      },
+                      {
+                        "name": "sales-order-status-queue",
+                        "custom": {
+                          "type": "azure-queue",
+                          "metadata": {
+                            "accountName": "[parameters('storageAccountName')]",
+                            "queueName": "sales-order-status",
+                            "queueLength": "1"
+                          },
+                          "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName'))]"
+                        }
+                      },
+                      {
+                        "name": "order-receipt-generation-queue",
+                        "custom": {
+                          "type": "azure-queue",
+                          "metadata": {
+                            "accountName": "[parameters('storageAccountName')]",
+                            "queueName": "order-receipt-generation",
+                            "queueLength": "1"
+                          },
+                          "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName'))]"
+                        }
+                      },
+                      {
+                        "name": "order-email-generation-queue",
+                        "custom": {
+                          "type": "azure-queue",
+                          "metadata": {
+                            "accountName": "[parameters('storageAccountName')]",
+                            "queueName": "order-email-generation",
+                            "queueLength": "1"
+                          },
+                          "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName'))]"
                         }
                       }
                     ]
@@ -21442,42 +21856,392 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-AI-Foundry')]",
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-Communication-Service')]",
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-Container-App-Environment')]",
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-Database')]",
-        "[resourceId('Microsoft.Resources/deployments', 'Deploy-Storage-Account')]"
+        "aifoundry",
+        "communication",
+        "containerApp",
+        "containerAppApiMcp",
+        "database",
+        "storage"
+      ]
+    },
+    "containerAppSeedJob": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "Deploy-Container-App-Seed-Job",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "appInsightsName": {
+            "value": "[parameters('appInsightsName')]"
+          },
+          "seedJobName": {
+            "value": "[format('av-seed-job-{0}', parameters('resourceToken'))]"
+          },
+          "containerRegistryName": {
+            "value": "[parameters('acrName')]"
+          },
+          "identityName": {
+            "value": "[parameters('identityName')]"
+          },
+          "sqlServerName": {
+            "value": "[parameters('sqlServerName')]"
+          },
+          "sqlDatabaseName": {
+            "value": "[parameters('sqlDatabaseName')]"
+          },
+          "containerAppEnvId": {
+            "value": "[reference('containerApp').outputs.containerAppEnvId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.40.2.10011",
+              "templateHash": "573951883846473012"
+            }
+          },
+          "parameters": {
+            "appInsightsName": {
+              "type": "string",
+              "defaultValue": "[format('av-appinsights-{0}', toLower(uniqueString(resourceGroup().id)))]"
+            },
+            "seedJobName": {
+              "type": "string",
+              "defaultValue": "[format('av-seed-job-{0}', uniqueString(resourceGroup().id))]"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]"
+            },
+            "containerRegistryName": {
+              "type": "string",
+              "defaultValue": "[format('avacr{0}', toLower(uniqueString(resourceGroup().id)))]"
+            },
+            "identityName": {
+              "type": "string",
+              "defaultValue": "[format('av-identity-{0}', uniqueString(resourceGroup().id))]"
+            },
+            "containerAppEnvId": {
+              "type": "string"
+            },
+            "bootstrapImage": {
+              "type": "string",
+              "defaultValue": "mcr.microsoft.com/azure-powershell:latest"
+            },
+            "imageName": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "sqlServerName": {
+              "type": "string"
+            },
+            "sqlDatabaseName": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/jobs",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('seedJobName')]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')))]": {}
+                }
+              },
+              "tags": {
+                "azd-service-name": "seed-job"
+              },
+              "properties": {
+                "environmentId": "[parameters('containerAppEnvId')]",
+                "configuration": {
+                  "triggerType": "Manual",
+                  "replicaTimeout": 2000,
+                  "replicaRetryLimit": 0,
+                  "secrets": [],
+                  "registries": [
+                    {
+                      "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName'))]",
+                      "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-07-01').loginServer]"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "[parameters('seedJobName')]",
+                      "image": "[if(not(empty(parameters('imageName'))), format('{0}/{1}', reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-07-01').loginServer, parameters('imageName')), parameters('bootstrapImage'))]",
+                      "resources": {
+                        "cpu": "[json('2.0')]",
+                        "memory": "4Gi"
+                      },
+                      "volumeMounts": [
+                        {
+                          "volumeName": "logs",
+                          "mountPath": "/logs"
+                        }
+                      ],
+                      "env": [
+                        {
+                          "name": "AZURE_RESOURCE_GROUP",
+                          "value": "[resourceGroup().name]"
+                        },
+                        {
+                          "name": "SQL_SERVER_NAME",
+                          "value": "[parameters('sqlServerName')]"
+                        },
+                        {
+                          "name": "SQL_DATABASE_NAME",
+                          "value": "[parameters('sqlDatabaseName')]"
+                        },
+                        {
+                          "name": "USER_MANAGED_IDENTITY_NAME",
+                          "value": "[parameters('identityName')]"
+                        },
+                        {
+                          "name": "TENANT_ID",
+                          "value": "[subscription().tenantId]"
+                        },
+                        {
+                          "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                          "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').ConnectionString]"
+                        },
+                        {
+                          "name": "AZURE_CLIENT_ID",
+                          "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').clientId]"
+                        }
+                      ]
+                    }
+                  ],
+                  "volumes": [
+                    {
+                      "name": "logs",
+                      "storageType": "AzureFile",
+                      "storageName": "seed-job"
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "seedJobName": {
+              "type": "string",
+              "value": "[parameters('seedJobName')]"
+            },
+            "seedJobId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.App/jobs', parameters('seedJobName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "acr",
+        "appinsights",
+        "containerApp",
+        "database",
+        "identity"
+      ]
+    },
+    "staticWebAppFrontend": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "Deploy-Static-Web-App-Frontend",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "swaName": {
+            "value": "[format('av-swa-{0}', parameters('resourceToken'))]"
+          },
+          "location": {
+            "value": "eastus2"
+          },
+          "identityName": {
+            "value": "[parameters('identityName')]"
+          },
+          "apiUrl": {
+            "value": "[reference('containerAppApi').outputs.apiUrl.value]"
+          },
+          "apiFunctionsUrl": {
+            "value": "[reference('containerAppApiFunctions').outputs.apiFunctionsUrl.value]"
+          },
+          "apiMcpUrl": {
+            "value": "[reference('containerAppApiMcp').outputs.apiMcpUrl.value]"
+          },
+          "appInsightsConnectionString": {
+            "value": "[reference('appinsights').outputs.connectionString.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.40.2.10011",
+              "templateHash": "13019198738329069472"
+            }
+          },
+          "parameters": {
+            "swaName": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "eastus2",
+              "allowedValues": [
+                "westus2",
+                "centralus",
+                "eastus2",
+                "westeurope",
+                "eastasia"
+              ]
+            },
+            "identityName": {
+              "type": "string"
+            },
+            "apiUrl": {
+              "type": "string"
+            },
+            "apiFunctionsUrl": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "apiMcpUrl": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "appInsightsConnectionString": {
+              "type": "string",
+              "defaultValue": ""
+            }
+          },
+          "resources": {
+            "azidentity": {
+              "existing": true,
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[parameters('identityName')]"
+            },
+            "staticWebApp": {
+              "type": "Microsoft.Web/staticSites",
+              "apiVersion": "2023-01-01",
+              "name": "[parameters('swaName')]",
+              "location": "[parameters('location')]",
+              "tags": {
+                "azd-service-name": "app"
+              },
+              "sku": {
+                "name": "Standard",
+                "tier": "Standard"
+              },
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')))]": {}
+                }
+              },
+              "properties": {
+                "repositoryUrl": null,
+                "branch": null,
+                "provider": "None",
+                "buildProperties": {
+                  "appLocation": "/",
+                  "apiLocation": "",
+                  "outputLocation": "dist"
+                },
+                "stagingEnvironmentPolicy": "Enabled",
+                "allowConfigFileUpdates": true,
+                "enterpriseGradeCdnStatus": "Disabled"
+              }
+            },
+            "swaConfig": {
+              "type": "Microsoft.Web/staticSites/config",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}', parameters('swaName'), 'functionappsettings')]",
+              "properties": {
+                "API_URL": "[parameters('apiUrl')]",
+                "API_FUNCTIONS_URL": "[parameters('apiFunctionsUrl')]",
+                "API_MCP_URL": "[parameters('apiMcpUrl')]",
+                "APPINSIGHTS_CONNECTIONSTRING": "[parameters('appInsightsConnectionString')]"
+              },
+              "dependsOn": [
+                "staticWebApp"
+              ]
+            }
+          },
+          "outputs": {
+            "appRedirectUri": {
+              "type": "string",
+              "value": "[format('https://{0}', reference('staticWebApp').defaultHostname)]"
+            },
+            "appFqdn": {
+              "type": "string",
+              "value": "[reference('staticWebApp').defaultHostname]"
+            },
+            "deploymentToken": {
+              "type": "securestring",
+              "value": "[listSecrets('staticWebApp', '2023-01-01').properties.apiKey]"
+            },
+            "staticWebAppName": {
+              "type": "string",
+              "value": "[parameters('swaName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "appinsights",
+        "containerAppApi",
+        "containerAppApiFunctions",
+        "containerAppApiMcp"
       ]
     }
-  ],
+  },
   "outputs": {
     "AZURE_CONTAINER_REGISTRY_ENDPOINT": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-ACR'), '2025-04-01').outputs.loginServer.value]"
+      "value": "[reference('acr').outputs.loginServer.value]"
     },
     "APP_REDIRECT_URI": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Static-Web-App-Frontend'), '2025-04-01').outputs.appRedirectUri.value]"
+      "value": "[reference('staticWebAppFrontend').outputs.appRedirectUri.value]"
     },
     "APPLICATIONINSIGHTS_CONNECTION_STRING": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Container-App-Environment'), '2025-04-01').outputs.applicationInsightsConnectionString.value]"
+      "value": "[reference('containerApp').outputs.applicationInsightsConnectionString.value]"
     },
     "APPINSIGHTS_INSTRUMENTATIONKEY": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Application-Insights'), '2025-04-01').outputs.instrumentationKey.value]"
+      "value": "[reference('appinsights').outputs.instrumentationKey.value]"
     },
     "APPINSIGHTS_CONNECTIONSTRING": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Application-Insights'), '2025-04-01').outputs.connectionString.value]"
+      "value": "[reference('appinsights').outputs.connectionString.value]"
     },
     "API_URL": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Container-App-API'), '2025-04-01').outputs.apiUrl.value]"
+      "value": "[reference('containerAppApi').outputs.apiUrl.value]"
     },
     "AZURE_CLIENT_ID": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-User-Managed-Identity'), '2025-04-01').outputs.clientId.value]"
+      "value": "[reference('identity').outputs.clientId.value]"
     },
     "USER_MANAGED_IDENTITY_NAME": {
       "type": "string",
@@ -21489,11 +22253,11 @@
     },
     "STORAGE_ACCOUNT_NAME": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Storage-Account'), '2025-04-01').outputs.storageAccountName.value]"
+      "value": "[reference('storage').outputs.storageAccountName.value]"
     },
     "SERVICE_APP_NAME": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Static-Web-App-Frontend'), '2025-04-01').outputs.staticWebAppName.value]"
+      "value": "[reference('staticWebAppFrontend').outputs.staticWebAppName.value]"
     },
     "SERVICE_API_NAME": {
       "type": "string",
@@ -21503,25 +22267,85 @@
       "type": "string",
       "value": "[format('av-func-{0}', parameters('resourceToken'))]"
     },
+    "SERVICE_API_MCP_NAME": {
+      "type": "string",
+      "value": "[format('av-mcp-{0}', parameters('resourceToken'))]"
+    },
+    "SERVICE_SEED_JOB_NAME": {
+      "type": "string",
+      "value": "[reference('containerAppSeedJob').outputs.seedJobName.value]"
+    },
     "API_FUNCTIONS_URL": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Container-App-API-Functions'), '2025-04-01').outputs.apiFunctionsUrl.value]"
+      "value": "[reference('containerAppApiFunctions').outputs.apiFunctionsUrl.value]"
+    },
+    "MCP_SERVICE_URL": {
+      "type": "string",
+      "value": "[reference('containerAppApiMcp').outputs.apiMcpUrl.value]"
+    },
+    "API_MCP_URL": {
+      "type": "string",
+      "value": "[reference('containerAppApiMcp').outputs.apiMcpUrl.value]"
     },
     "AZURE_STATIC_WEB_APP_DEPLOYMENT_TOKEN": {
-      "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Static-Web-App-Frontend'), '2025-04-01').outputs.deploymentToken.value]"
+      "type": "securestring",
+      "value": "[listOutputsWithSecureValues('staticWebAppFrontend', '2025-04-01').deploymentToken]"
     },
     "COMMUNICATION_SERVICE_NAME": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Communication-Service'), '2025-04-01').outputs.communicationServiceName.value]"
+      "value": "[reference('communication').outputs.communicationServiceName.value]"
     },
     "COMMUNICATION_SERVICE_ENDPOINT": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Communication-Service'), '2025-04-01').outputs.communicationServiceEndpoint.value]"
+      "value": "[reference('communication').outputs.communicationServiceEndpoint.value]"
     },
     "EMAIL_SENDER_DOMAIN": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'Deploy-Communication-Service'), '2025-04-01').outputs.senderDomain.value]"
+      "value": "[reference('communication').outputs.senderDomain.value]"
+    },
+    "PROJECT_NAME": {
+      "type": "string",
+      "value": "[reference('aifoundry').outputs.projectName.value]"
+    },
+    "PROJECT_RESOURCE_ID": {
+      "type": "string",
+      "value": "[reference('aifoundry').outputs.projectResourceId.value]"
+    },
+    "CONTAINER_APP_ENVIRONMENT_NAME": {
+      "type": "string",
+      "value": "[reference('containerApp').outputs.containerAppEnvName.value]"
+    },
+    "PLAYWRIGHT_WORKSPACE_ID": {
+      "type": "string",
+      "value": "[reference('playwright').outputs.playwrightWorkspaceId.value]"
+    },
+    "PLAYWRIGHT_WORKSPACE_NAME": {
+      "type": "string",
+      "value": "[reference('playwright').outputs.playwrightWorkspaceName.value]"
+    },
+    "PLAYWRIGHT_WORKSPACE_GUID": {
+      "type": "string",
+      "value": "[reference('playwright').outputs.playwrightWorkspaceGuid.value]"
+    },
+    "PLAYWRIGHT_DASHBOARD_URL": {
+      "type": "string",
+      "value": "[reference('playwright').outputs.playwrightDashboardUrl.value]"
+    },
+    "PLAYWRIGHT_SERVICE_URL": {
+      "type": "string",
+      "value": "[reference('playwright').outputs.playwrightServiceUrl.value]"
+    },
+    "PLAYWRIGHT_STORAGE_ACCOUNT": {
+      "type": "string",
+      "value": "[reference('playwright').outputs.storageAccountName.value]"
+    },
+    "PLAYWRIGHT_REPORTS_CONTAINER": {
+      "type": "string",
+      "value": "[reference('playwright').outputs.reportsContainerName.value]"
+    },
+    "PLAYWRIGHT_REPORTS_URL": {
+      "type": "string",
+      "value": "[reference('playwright').outputs.reportsContainerUrl.value]"
     }
   }
 }

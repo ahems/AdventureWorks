@@ -49,6 +49,16 @@ export const useProduct = (productId: number, cultureId?: string) => {
   });
 };
 
+// Hook to fetch products by multiple IDs (optimized for cart)
+export const useProductsByIds = (productIds: number[]) => {
+  return useQuery<Product[]>({
+    queryKey: ["products", "byIds", productIds.sort().join(",")],
+    queryFn: () => apiService.getProductsByIds(productIds),
+    enabled: productIds.length > 0,
+    staleTime: 2 * 60 * 1000,
+  });
+};
+
 // Hook to fetch products by category ID
 export const useProductsByCategory = (categoryId: number) => {
   return useQuery<Product[]>({

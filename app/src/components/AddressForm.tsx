@@ -47,7 +47,8 @@ export const AddressForm: React.FC<AddressFormProps> = ({
   const {
     countries,
     states,
-    isLoading: isLoadingCountriesStates,
+    isCountriesLoading,
+    isStatesLoading,
   } = useCountriesAndStates(selectedCountry);
 
   const [formData, setFormData] = useState({
@@ -221,7 +222,7 @@ export const AddressForm: React.FC<AddressFormProps> = ({
             value={formData.countryRegionCode}
             onChange={(e) => handleCountryChange(e.target.value)}
             className="doodle-input w-full"
-            disabled={isLoadingCountriesStates}
+            disabled={isCountriesLoading}
           >
             <option value="">{t("addressForm.selectCountry")}</option>
             {countries.map((country) => (
@@ -256,7 +257,7 @@ export const AddressForm: React.FC<AddressFormProps> = ({
               handleChange("stateProvinceId", parseInt(e.target.value))
             }
             className="doodle-input w-full"
-            disabled={isLoadingCountriesStates || states.length === 0}
+            disabled={isStatesLoading || states.length === 0}
           >
             <option value="0">{t("addressForm.selectStateProvince")}</option>
             {states.map((state) => (

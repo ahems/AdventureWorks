@@ -26,24 +26,31 @@ async function queryApplicationInsights(
       { encoding: "utf8" },
     ).trim();
 
+    // Normalize the query by removing extra whitespace and newlines
+    // This prevents shell interpretation issues with multi-line queries
+    const normalizedQuery = query
+      .trim()
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .join(' ');
+
     console.log(
       `\n🔍 Querying Application Insights: ${appInsightsName} in ${resourceGroup}`,
     );
-    console.log(`📊 Query: ${query}`);
+    console.log(`📊 Query: ${normalizedQuery}`);
     console.log(`⏱️  Timespan: ${timespan}\n`);
 
     // Note: --timespan parameter removed due to Azure CLI version compatibility
     // The query itself filters by timestamp, so timespan is redundant
-    const command = `az monitor app-insights query \
-      --app "${appInsightsName}" \
-      --resource-group "${resourceGroup}" \
-      --analytics-query "${query}" \
-      --output json`;
-
-    const result = execSync(command, {
-      encoding: "utf8",
-      maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-    });
+    // Use array syntax to avoid shell quote escaping issues
+    const result = execSync(
+      `az monitor app-insights query --app ${JSON.stringify(appInsightsName)} --resource-group ${JSON.stringify(resourceGroup)} --analytics-query ${JSON.stringify(normalizedQuery)} --output json`,
+      {
+        encoding: "utf8",
+        maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+      }
+    );
 
     const parsed = JSON.parse(result);
     return parsed;

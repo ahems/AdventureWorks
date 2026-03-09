@@ -188,6 +188,42 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
               }
             }
           }
+          {
+            name: 'sales-order-status-queue'
+            custom: {
+              type: 'azure-queue'
+              metadata: {
+                accountName: storageAccountName
+                queueName: 'sales-order-status'
+                queueLength: '1'
+              }
+              identity: azidentity.id
+            }
+          }
+          {
+            name: 'order-receipt-generation-queue'
+            custom: {
+              type: 'azure-queue'
+              metadata: {
+                accountName: storageAccountName
+                queueName: 'order-receipt-generation'
+                queueLength: '1'
+              }
+              identity: azidentity.id
+            }
+          }
+          {
+            name: 'order-email-generation-queue'
+            custom: {
+              type: 'azure-queue'
+              metadata: {
+                accountName: storageAccountName
+                queueName: 'order-email-generation'
+                queueLength: '1'
+              }
+              identity: azidentity.id
+            }
+          }
         ]
       }
     }

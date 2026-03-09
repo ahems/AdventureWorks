@@ -137,6 +137,7 @@ If `IDENTITY_ENDPOINT` is not set (e.g., running locally), the wait logic is ski
 - Enabled at path `/graphql`
 - Supports flexible query and mutation capabilities
 - Supports nested queries and filtering
+- **Note:** For tables with VECTOR columns (e.g. `ProductDescription.DescriptionEmbedding`), use the REST API with `$select`; GraphQL can fail to serialize VECTOR. See [EMBEDDING_EXPORT_LIMITATION.md](../docs/data-management/EMBEDDING_EXPORT_LIMITATION.md).
 
 **CORS:**
 

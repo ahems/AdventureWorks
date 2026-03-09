@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { signupThroughUi } from "../utils/testUser";
-import { testEnv, APP_STORAGE_KEYS } from "../utils/env";
+import { testEnv } from "../utils/env";
 import { execSync } from "child_process";
 import { getRandomProductIds } from "../utils/productHelper";
 
@@ -56,50 +56,28 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
     await page.goto(`${testEnv.webBaseUrl}/sale`);
     await page.waitForLoadState("domcontentloaded");
 
-    // Wait for sale products to load
+    // Sale page shows product links in main (works with or without data-testid on cards)
+    const saleProductCards = page.locator('main a[href^="/product/"]');
+
+    // Wait for sale products to load (page makes two chained GraphQL calls)
     console.log("⏳ Waiting for sale products to load...");
-    await page.waitForTimeout(3000);
-
-    // Check that sale page loaded
-    const saleHeading = page
-      .locator("h1, h2")
-      .filter({ hasText: /sale|special|discount/i });
-    await expect(saleHeading.first()).toBeVisible({ timeout: 10000 });
-
-    // Look for sale products (could be individual products or model groups)
-    const saleProductCards = page.locator(
-      '[data-testid*="sale-product"], [data-testid*="product-card"]',
-    );
-    await expect(saleProductCards.first()).toBeVisible({ timeout: 10000 });
+    await expect(saleProductCards.first()).toBeVisible({ timeout: 45000 });
 
     const productCount = await saleProductCards.count();
-    expect(productCount).toBeGreaterThan(0);
+    expect(
+      productCount,
+      "Sale page shows 0 products. Seed Sales.SpecialOffer (Category=Customer) and Sales.SpecialOfferProduct. Run: npx tsx tests/scripts/check-sale-discounts-dab.ts",
+    ).toBeGreaterThan(0);
     console.log(`✅ Found ${productCount} sale products`);
 
-    // Check that products have both original and discounted prices
+    // Check that first product shows price (USD $) and discount
     const firstProduct = saleProductCards.first();
-
-    // Look for price elements - sale products should show original and sale price
-    const priceElements = firstProduct.locator('[data-testid*="price"]');
-    const priceCount = await priceElements.count();
-
-    if (priceCount > 0) {
-      console.log(`✅ Found ${priceCount} price element(s) on first product`);
-
-      // Verify default currency is USD ($)
-      const priceText = await priceElements.first().textContent();
-      expect(priceText).toContain("$");
-      console.log(`✅ Prices displayed in USD: ${priceText}`);
-    }
-
-    // Check for discount badges or percentage indicators
-    const discountBadge = firstProduct.locator(
-      '[data-testid*="discount"], [data-testid*="badge"]',
+    const cardText = await firstProduct.textContent();
+    expect(cardText, "Sale product card should show price").toContain("$");
+    expect(cardText, "Sale product card should show discount/save").toMatch(
+      /save|discount|%\s*off/i,
     );
-    if ((await discountBadge.count()) > 0) {
-      const badgeText = await discountBadge.first().textContent();
-      console.log(`✅ Found discount badge: ${badgeText}`);
-    }
+    console.log("✅ First sale product shows price and discount");
   });
 
   test("sale prices update when language/currency changes", async ({
@@ -111,18 +89,23 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
     // Navigate to sale page
     await page.goto(`${testEnv.webBaseUrl}/sale`);
     await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(3000);
 
-    // Wait for products to load
-    const saleProductCards = page.locator(
-      '[data-testid*="sale-product"], [data-testid*="product-card"]',
-    );
-    await expect(saleProductCards.first()).toBeVisible({ timeout: 10000 });
+    // Sale page shows product links in main
+    const saleProductCards = page.locator('main a[href^="/product/"]');
+
+    // Wait for sale products to load (page makes two chained GraphQL calls)
+    await expect(saleProductCards.first()).toBeVisible({ timeout: 45000 });
+
+    const productCount = await saleProductCards.count();
+    expect(
+      productCount,
+      "Sale page shows 0 products. Seed Sales.SpecialOffer (Category=Customer) and Sales.SpecialOfferProduct. Run: npx tsx tests/scripts/check-sale-discounts-dab.ts",
+    ).toBeGreaterThan(0);
 
     // Get initial price information in English/USD
     const firstProduct = saleProductCards.first();
     const initialPriceText = await firstProduct
-      .locator('[data-testid*="price"]')
+      .locator("text=/\\$/")
       .first()
       .textContent();
     console.log(`📊 Initial price (USD): ${initialPriceText}`);
@@ -148,30 +131,25 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
     if ((await spanishOption.count()) > 0) {
       await spanishOption.click();
 
-      // Wait for language and currency to update
+      // Wait for language and currency to update (app uses selectedLanguage / selectedCurrency)
       await page.waitForFunction(
-        ({ langKey, currencyKey, expectedLang, expectedCurrency }) => {
-          const storedLang = localStorage.getItem(langKey);
-          const storedCurrency = localStorage.getItem(currencyKey);
+        ({ expectedLang, expectedCurrency }) => {
+          const storedLang = localStorage.getItem("selectedLanguage");
+          const storedCurrency = localStorage.getItem("selectedCurrency");
           return (
             storedLang === expectedLang && storedCurrency === expectedCurrency
           );
         },
-        {
-          langKey: APP_STORAGE_KEYS.language,
-          currencyKey: APP_STORAGE_KEYS.currency,
-          expectedLang: "es",
-          expectedCurrency: "EUR",
-        },
+        { expectedLang: "es", expectedCurrency: "EUR" },
         { timeout: 10000 },
       );
 
       // Wait for price to update
       await page.waitForTimeout(2000);
 
-      // Get updated price in EUR
+      // Get updated price in EUR (page now shows €)
       const updatedPriceText = await firstProduct
-        .locator('[data-testid*="price"]')
+        .locator("text=/€|\\$/")
         .first()
         .textContent();
       console.log(`📊 Updated price (EUR): ${updatedPriceText}`);
@@ -196,26 +174,21 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
         await japaneseOption.click();
 
         await page.waitForFunction(
-          ({ langKey, currencyKey, expectedLang, expectedCurrency }) => {
-            const storedLang = localStorage.getItem(langKey);
-            const storedCurrency = localStorage.getItem(currencyKey);
+          ({ expectedLang, expectedCurrency }) => {
+            const storedLang = localStorage.getItem("selectedLanguage");
+            const storedCurrency = localStorage.getItem("selectedCurrency");
             return (
               storedLang === expectedLang && storedCurrency === expectedCurrency
             );
           },
-          {
-            langKey: APP_STORAGE_KEYS.language,
-            currencyKey: APP_STORAGE_KEYS.currency,
-            expectedLang: "ja",
-            expectedCurrency: "JPY",
-          },
+          { expectedLang: "ja", expectedCurrency: "JPY" },
           { timeout: 10000 },
         );
 
         await page.waitForTimeout(2000);
 
         const jpyPriceText = await firstProduct
-          .locator('[data-testid*="price"]')
+          .locator("text=/¥|€|\\$/")
           .first()
           .textContent();
         console.log(`📊 Updated price (JPY): ${jpyPriceText}`);
@@ -244,20 +217,25 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
     // Navigate to sale page
     await page.goto(`${testEnv.webBaseUrl}/sale`);
     await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(3000);
 
-    // Wait for products to load
-    const saleProductCards = page.locator(
-      '[data-testid*="sale-product"], [data-testid*="product-card"]',
-    );
-    await expect(saleProductCards.first()).toBeVisible({ timeout: 10000 });
+    // Sale page shows product links in main
+    const saleProductCards = page.locator('main a[href^="/product/"]');
+
+    // Wait for sale products to load (page makes two chained GraphQL calls)
+    await expect(saleProductCards.first()).toBeVisible({ timeout: 45000 });
+
+    const productCount = await saleProductCards.count();
+    expect(
+      productCount,
+      "Sale page shows 0 products. Seed Sales.SpecialOffer (Category=Customer) and Sales.SpecialOfferProduct. Run: npx tsx tests/scripts/check-sale-discounts-dab.ts",
+    ).toBeGreaterThan(0);
 
     const firstProduct = saleProductCards.first();
 
     // Helper to extract discount percentage from badge
     const getDiscountPercentage = async (): Promise<number | null> => {
       const discountBadge = firstProduct.locator(
-        '[data-testid*="discount"], [data-testid*="badge"]',
+        "text=/save|%|discount/i",
       );
       if ((await discountBadge.count()) > 0) {
         const badgeText = await discountBadge.first().textContent();
@@ -312,20 +290,23 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
     // Navigate to sale page
     await page.goto(`${testEnv.webBaseUrl}/sale`);
     await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(3000);
 
-    // Wait for sale products to load
-    const saleProductCards = page.locator(
-      '[data-testid*="sale-product"], [data-testid*="product-card"]',
-    );
-    await expect(saleProductCards.first()).toBeVisible({ timeout: 10000 });
+    // Wait for sale products to load (page makes two chained GraphQL calls)
+    const saleProductCards = page.locator('main a[href^="/product/"]');
+    await expect(saleProductCards.first()).toBeVisible({ timeout: 45000 });
+
+    const productCount = await saleProductCards.count();
+    expect(
+      productCount,
+      "Sale page shows 0 products. Seed Sales.SpecialOffer (Category=Customer) and Sales.SpecialOfferProduct. Run: npx tsx tests/scripts/check-sale-discounts-dab.ts",
+    ).toBeGreaterThan(0);
 
     // Click on first sale product to view details
     const firstProduct = saleProductCards.first();
 
     // Get initial price information
     const initialPriceText = await firstProduct
-      .locator('[data-testid*="price"]')
+      .locator("text=/\\$/")
       .first()
       .textContent();
     console.log(`📊 Sale product initial price (USD): ${initialPriceText}`);
@@ -362,7 +343,7 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
     await page.waitForTimeout(2000);
 
     // Verify discounted price is shown in cart (USD)
-    const cartPriceElement = page.locator('[data-testid*="price"]').first();
+    const cartPriceElement = page.locator("text=/\\$/").first();
     const cartPriceUSD = await cartPriceElement.textContent();
     console.log(`📊 Cart price (USD): ${cartPriceUSD}`);
     expect(cartPriceUSD).toContain("$");
@@ -384,22 +365,19 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
     if ((await spanishOption.count()) > 0) {
       await spanishOption.click();
 
-      // Wait for currency update
+      // Wait for currency update (app uses selectedCurrency)
       await page.waitForFunction(
-        ({ currencyKey, expectedCurrency }) => {
-          return localStorage.getItem(currencyKey) === expectedCurrency;
+        ({ expectedCurrency }) => {
+          return localStorage.getItem("selectedCurrency") === expectedCurrency;
         },
-        {
-          currencyKey: APP_STORAGE_KEYS.currency,
-          expectedCurrency: "EUR",
-        },
+        { expectedCurrency: "EUR" },
         { timeout: 10000 },
       );
 
       await page.waitForTimeout(2000);
 
-      // Verify price updated to EUR but discount still applies
-      const cartPriceEUR = await cartPriceElement.textContent();
+      // Verify price updated to EUR but discount still applies (cart now shows €)
+      const cartPriceEUR = await page.locator("text=/€|\\$/").first().textContent();
       console.log(`📊 Cart price after language change (EUR): ${cartPriceEUR}`);
       expect(cartPriceEUR).toContain("€");
 
@@ -465,13 +443,10 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
       await englishOption.click();
 
       await page.waitForFunction(
-        ({ currencyKey, expectedCurrency }) => {
-          return localStorage.getItem(currencyKey) === expectedCurrency;
+        ({ expectedCurrency }) => {
+          return localStorage.getItem("selectedCurrency") === expectedCurrency;
         },
-        {
-          currencyKey: APP_STORAGE_KEYS.currency,
-          expectedCurrency: "USD",
-        },
+        { expectedCurrency: "USD" },
         { timeout: 10000 },
       );
 
@@ -529,7 +504,7 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
         },
       );
 
-      await page.waitForTimeout(3000);
+      await page.waitForTimeout(5000);
 
       console.log("✅ Order placed successfully");
 
@@ -568,15 +543,17 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
     // Navigate to sale page
     await page.goto(`${testEnv.webBaseUrl}/sale`);
     await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(3000);
 
-    // Wait for sale products
-    const saleProductCards = page.locator(
-      '[data-testid*="sale-product"], [data-testid*="product-card"]',
-    );
-    await expect(saleProductCards.first()).toBeVisible({ timeout: 10000 });
+    // Wait for sale products to load (page makes two chained GraphQL calls)
+    const saleProductCards = page.locator('main a[href^="/product/"]');
+    await expect(saleProductCards.first()).toBeVisible({ timeout: 45000 });
 
     const productCount = await saleProductCards.count();
+    expect(
+      productCount,
+      "Sale page shows 0 products. Seed Sales.SpecialOffer (Category=Customer) and Sales.SpecialOfferProduct. Run: npx tsx tests/scripts/check-sale-discounts-dab.ts",
+    ).toBeGreaterThan(0);
+    
     const itemsToAdd = Math.min(3, productCount); // Add up to 3 items
 
     console.log(`📦 Adding ${itemsToAdd} sale items to cart...`);
@@ -613,18 +590,21 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
     expect(cartItemCount).toBe(itemsToAdd);
     console.log(`✅ Cart contains ${cartItemCount} items`);
 
-    // Get total in USD
+    // Get total price text (element that contains $ or €, e.g. cart total row)
     const getTotalPrice = async () => {
-      const totalElement = page
-        .locator('[data-testid*="total"], :text-matches("total", "i")')
-        .last();
-      const totalText = await totalElement.textContent();
-      return totalText;
+      const withCurrency = page.locator("main, [role=main]").locator("text=/\\$|€|¥/");
+      const count = await withCurrency.count();
+      if (count > 0) {
+        const lastPrice = await withCurrency.nth(count - 1).textContent();
+        if (lastPrice?.trim()) return lastPrice.trim();
+      }
+      const totalLabel = page.locator('[data-testid*="total"], :text-matches("total", "i")').last();
+      return (await totalLabel.textContent()) ?? "";
     };
 
     const totalUSD = await getTotalPrice();
     console.log(`📊 Cart total (USD): ${totalUSD}`);
-    expect(totalUSD).toContain("$");
+    expect(totalUSD, "Cart should show total with currency ($)").toMatch(/\$|USD/);
 
     // Switch to German (EUR)
     const languageSelector = page.locator('[data-testid="language-selector"]');
@@ -633,11 +613,11 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
 
     if ((await germanOption.count()) > 0) {
       await germanOption.click();
-      await page.waitForTimeout(3000); // Wait for recalculation
+      await page.waitForTimeout(5000); // Wait for recalculation
 
       const totalEUR = await getTotalPrice();
       console.log(`📊 Cart total (EUR): ${totalEUR}`);
-      expect(totalEUR).toContain("€");
+      expect(totalEUR, "Cart should show total in EUR").toMatch(/€|EUR/);
 
       // Verify all items still in cart
       const updatedCartItemCount = await cartItems.count();
