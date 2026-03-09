@@ -17,7 +17,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TESTS_DIR="${SCRIPT_DIR}/tests"
+TESTS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Color output
 GREEN='\033[0;32m'
@@ -27,8 +27,6 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}=== Azure Playwright Testing - Test Runner ===${NC}\n"
-echo -e "${YELLOW}Note: Using Playwright Workspaces (Azure LoadTest Service)${NC}"
-echo -e "${YELLOW}The old Microsoft Playwright Testing service is deprecated.${NC}\n"
 
 # Check if tests directory exists
 if [ ! -d "$TESTS_DIR" ]; then

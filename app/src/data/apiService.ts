@@ -6,6 +6,7 @@ import {
   GET_SUBCATEGORIES,
   GET_SUBCATEGORIES_BY_CATEGORY,
   GET_PRODUCTS,
+  GET_PRODUCTS_BY_IDS,
   GET_PRODUCT_BY_ID,
   GET_PRODUCTS_BY_SUBCATEGORY,
   GET_PRODUCTS_BY_SUBCATEGORY_IDS,
@@ -565,6 +566,34 @@ export const getProductById = async (
       productId: productId,
     });
     return undefined;
+  }
+};
+
+// Fetch products by multiple IDs (optimized for cart)
+export const getProductsByIds = async (
+  productIds: number[],
+): Promise<Product[]> => {
+  try {
+    if (productIds.length === 0) return [];
+    
+    const data = await graphqlClient.request<ProductsResponse>(
+      GET_PRODUCTS_BY_IDS,
+      { ids: productIds },
+    );
+    let products = data.products.items;
+
+    // Always attach discounts and inventory
+    products = await attachDiscountsToProducts(products);
+    products = await attachInventoryToProducts(products);
+    
+    return products;
+  } catch (error) {
+    trackError("Error fetching products by IDs", error, {
+      service: "apiService",
+      function: "getProductsByIds",
+      productIds: productIds.join(","),
+    });
+    return [];
   }
 };
 

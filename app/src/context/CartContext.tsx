@@ -16,7 +16,7 @@ import {
   useClearCart,
 } from "@/hooks/useShoppingCart";
 import { trackEvent, trackError } from "@/lib/appInsights";
-import { useProducts } from "@/hooks/useProducts";
+import { useProductsByIds } from "@/hooks/useProducts";
 
 interface CartContextType {
   items: CartItem[];
@@ -56,7 +56,16 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
   // Fetch cart items from API
   const { data: cartItems = [], isLoading: cartLoading } =
     useShoppingCart(shoppingCartId);
-  const { data: allProducts = [], isLoading: productsLoading } = useProducts();
+
+  // Extract product IDs from cart items
+  const productIds = useMemo(
+    () => cartItems.map((item) => item.ProductID),
+    [cartItems],
+  );
+
+  // Fetch only the products that are in the cart (optimized)
+  const { data: cartProducts = [], isLoading: productsLoading } =
+    useProductsByIds(productIds);
 
   // Mutations
   const addToCartMutation = useAddToCart();
@@ -69,21 +78,21 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
   // Combine cart items with product details to create CartItem objects
   const items = useMemo<CartItem[]>(() => {
     // Return empty if cart items haven't loaded yet (loading state)
-    // But allow empty cart if products are loaded and cart is genuinely empty
     if (!cartItems.length) return [];
 
-    // If we have cart items but products haven't loaded, return empty but this is a loading state
-    if (!allProducts.length) {
+    // If we have cart items but products haven't loaded yet, show loading
+    if (productsLoading) {
       return [];
     }
 
+    // Map cart items to products
     return cartItems
       .map((cartItem) => {
-        const product = allProducts.find(
+        const product = cartProducts.find(
           (p) => p.ProductID === cartItem.ProductID,
         );
         if (!product) {
-          trackError(`Product not found in products list`, undefined, {
+          trackError(`Product not found for cart item`, undefined, {
             component: "CartContext",
             productId: cartItem.ProductID,
           });
@@ -100,7 +109,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
         (item): item is CartItem & { ShoppingCartItemID: number } =>
           item !== null,
       );
-  }, [cartItems, allProducts]);
+  }, [cartItems, cartProducts, productsLoading]);
 
   const addToCart = async (
     product: Product,

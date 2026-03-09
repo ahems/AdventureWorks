@@ -45,10 +45,21 @@ const getTestEmail = (): string => {
 };
 
 test.describe("Checkout Flow", () => {
+  // Allow time for signup (cold start), cart API, checkout form
+  test.setTimeout(180000);
+
   test("user can complete full checkout process with order confirmation", async ({
     page,
   }) => {
-    test.setTimeout(60000); // Increase timeout to 60 seconds
+    // Log any failed HTTP response (400/404/etc.) so we can identify the failing request
+    page.on("response", (response) => {
+      const status = response.status();
+      if (status >= 400) {
+        const url = response.url();
+        const method = response.request().method();
+        console.log(`🔴 HTTP ${status} ${method} ${url}`);
+      }
+    });
 
     // Listen for browser console errors
     page.on("console", (msg) => {
@@ -179,16 +190,11 @@ test.describe("Checkout Flow", () => {
       const toastText = await toast.first().textContent();
       console.log(`📢 Toast message: ${toastText}`);
 
-      // Check if it's an error toast
-      if (
-        toastText &&
-        (toastText.toLowerCase().includes("error") ||
-          toastText.toLowerCase().includes("failed"))
-      ) {
-        console.log("❌ Failed to add item to cart - error toast detected");
-        console.log("   Skipping test due to cart API failure");
-        test.skip();
-      }
+      // Fail explicitly if add-to-cart returned an error (do not skip)
+      expect(
+        toastText?.toLowerCase(),
+        "Add to cart failed (error toast). Check cart API; run: npx tsx tests/scripts/check-checkout-dab.ts",
+      ).not.toMatch(/error|failed/);
 
       console.log("✅ First item added to cart successfully");
     } catch (error) {
@@ -251,9 +257,15 @@ test.describe("Checkout Flow", () => {
     await page.goto(`${testEnv.webBaseUrl}/cart`);
     await expect(page).toHaveURL(/\/cart/);
 
-    // Wait for cart to load and verify it has items
+    // Wait for cart page to be ready (cart content or empty state)
     console.log("⏳ Waiting for cart page to load and fetch items...");
-    await page.waitForTimeout(5000); // Increased wait for React Query refetch
+    await expect(
+      page
+        .locator('[data-testid*="cart-item"]')
+        .or(page.getByRole("link", { name: /checkout/i }))
+        .or(page.getByText(/your cart is empty|no items/i))
+        .first(),
+    ).toBeVisible({ timeout: 15000 });
 
     // Get current user's businessEntityId from localStorage
     const currentUser = await page.evaluate(() => {
@@ -297,33 +309,22 @@ test.describe("Checkout Flow", () => {
       console.log(`⚠️  Could not query cart API directly:`, error);
     }
 
-    // Retry logic: Wait for cart items to appear (up to 10 seconds with polling)
+    // Retry logic: Wait for cart items to appear (longer under parallel load / cold start)
     let cartItemCount = 0;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 8; attempt++) {
       const cartItems = page.locator('[data-testid*="cart-item"]');
       cartItemCount = await cartItems.count();
       console.log(
-        `📦 Attempt ${attempt + 1}/5: Cart has ${cartItemCount} items displayed on page`,
+        `📦 Attempt ${attempt + 1}/8: Cart has ${cartItemCount} items displayed on page`,
       );
       if (cartItemCount > 0) break;
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(2500);
     }
 
-    if (cartItemCount === 0) {
-      console.log(
-        "⚠️  Cart is empty after adding products - investigating cause:",
-      );
-      console.log("   ✅ Items were successfully added (toast confirmed)");
-      console.log("   ❓ Items may exist in DB but not retrieved correctly");
-      console.log(
-        "   ❓ Possible ShoppingCartID mismatch between add/retrieve",
-      );
-      console.log("   ❓ Possible React Query cache invalidation issue");
-      console.log("   Skipping checkout flow test due to empty cart");
-      test.skip();
-    }
-
-    expect(cartItemCount).toBeGreaterThan(0);
+    expect(
+      cartItemCount,
+      "Cart empty after add. Possible ShoppingCartID/cache/API issue. Run: npx tsx tests/scripts/check-checkout-dab.ts",
+    ).toBeGreaterThan(0);
 
     // Proceed to checkout - use link role since it's a Link component
     const checkoutButton = page.getByRole("link", {
@@ -335,9 +336,16 @@ test.describe("Checkout Flow", () => {
     // Should be on checkout page
     await expect(page).toHaveURL(/\/checkout/);
 
-    // Wait for checkout page to fully load
-    await page.waitForTimeout(2000);
+    // Wait for checkout form to be ready (address or Place Order visible) before filling
     console.log("⏳ Waiting for checkout form to load");
+    await expect(
+      page
+        .getByRole("button", {
+          name: /add a different email|place order|pay/i,
+        })
+        .or(page.getByLabel(/address line 1|street address/i))
+        .first(),
+    ).toBeVisible({ timeout: 20000 });
 
     // CRITICAL: Click "Add a different email" to enter TEST_EMAIL for order confirmation
     const addEmailButton = page.getByRole("button", {
@@ -382,14 +390,16 @@ test.describe("Checkout Flow", () => {
       const cityInput = page.getByLabel(/city/i);
       await cityInput.fill(shippingAddress.city);
 
-      // Country selector - use selectOption for combobox
+      // Country selector - wait for it to be enabled (countries load async) then select
       console.log(`🌍 Selecting country: ${shippingAddress.country}`);
       const countrySelector = page.getByLabel(/country/i);
+      await expect(countrySelector).toBeEnabled({ timeout: 30000 });
       await countrySelector.selectOption({ label: shippingAddress.country });
 
-      // State selector - use selectOption for combobox
+      // State selector - wait for options to populate then select
       console.log(`📍 Selecting state: ${shippingAddress.stateLabel}`);
       const stateSelector = page.getByLabel(/state|province/i);
+      await expect(stateSelector).toBeEnabled({ timeout: 20000 });
       await stateSelector.selectOption({ label: shippingAddress.stateLabel });
 
       const postalCodeInput = page.getByLabel(/postal code|zip code/i);
@@ -442,35 +452,41 @@ test.describe("Checkout Flow", () => {
       }
     }
 
-    // Fill payment information - card is already selected, just fill the fields
-    const cardNumberInput = page
-      .locator(
-        'input[placeholder*="4242"], input[placeholder*="card"], input[type="text"]',
-      )
-      .first();
+    // Fill payment information - use label or placeholder to target correct inputs
+    const cardNumberInput = page.getByLabel(/card number/i).or(
+      page.locator('input[placeholder*="4242"]').first(),
+    );
     if ((await cardNumberInput.count()) > 0) {
       console.log("💳 Filling payment information");
 
-      // Use a valid test card number (Visa)
-      await cardNumberInput.fill("4111111111111111");
+      // Use valid Luhn test card (Visa format with spaces - app formats on change)
+      await cardNumberInput.fill("4242 4242 4242 4242");
+      await cardNumberInput.blur();
+      await page.waitForTimeout(200);
 
-      // Fill cardholder name (placeholder is just a name like "John Doe")
-      const cardholderNameInput = page.getByPlaceholder(/john|doe|name/i);
+      const cardholderNameInput = page.getByLabel(/cardholder|name/i).first();
       if ((await cardholderNameInput.count()) > 0) {
         await cardholderNameInput.fill("Test User");
+        await cardholderNameInput.blur();
+        await page.waitForTimeout(200);
         console.log("✅ Filled cardholder name");
       }
 
-      // Fill expiry date in the future (12/28) - placeholder is "MM/YY"
-      const expiryInput = page.getByPlaceholder(/mm.*yy/i);
-      await expiryInput.fill("12/28");
-      console.log("✅ Filled expiry date: 12/28");
+      const expiryInput = page.getByPlaceholder(/mm.*yy/i).first();
+      if ((await expiryInput.count()) > 0) {
+        await expiryInput.fill("12/28");
+        await expiryInput.blur();
+        await page.waitForTimeout(200);
+        console.log("✅ Filled expiry date: 12/28");
+      }
 
-      // Fill CVV with random 3-digit number - placeholder is "123"
-      const cvvInput = page.getByPlaceholder(/123|cvv/i);
-      const randomCvv = Math.floor(100 + Math.random() * 900).toString();
-      await cvvInput.fill(randomCvv);
-      console.log(`✅ Filled CVV: ${randomCvv}`);
+      const cvvInput = page.getByPlaceholder(/123|cvv/i).first();
+      if ((await cvvInput.count()) > 0) {
+        await cvvInput.fill("123");
+        await cvvInput.blur();
+        await page.waitForTimeout(500);
+        console.log("✅ Filled CVV");
+      }
     } else {
       console.log(
         "⚠️  Card number input not found - payment form may not be visible",
@@ -483,22 +499,9 @@ test.describe("Checkout Flow", () => {
       .getByRole("button", { name: /pay|place order|complete order/i })
       .or(page.getByTestId("place-order-button"));
 
-    const isVisible = await placeOrderButton.isVisible();
-    const isEnabled = await placeOrderButton.isEnabled();
-    console.log(
-      `🔍 Place Order button - Visible: ${isVisible}, Enabled: ${isEnabled}`,
-    );
-
-    if (!isEnabled) {
-      // Check card validation
-      const cardNum = await page
-        .locator('input[placeholder*="4242"]')
-        .inputValue();
-      console.log(`🔍 Card number value: ${cardNum}`);
-    }
-
     await expect(placeOrderButton).toBeVisible();
-    await expect(placeOrderButton).toBeEnabled();
+    // Wait for validation to pass and button to become enabled (Luhn + all fields)
+    await expect(placeOrderButton).toBeEnabled({ timeout: 15000 });
     await placeOrderButton.click();
     console.log("✅ Clicked Place Order button");
 
@@ -638,22 +641,22 @@ test.describe("Checkout Flow", () => {
     await page.goto(`${testEnv.webBaseUrl}/cart`);
     await page.waitForLoadState("domcontentloaded");
 
-    // Wait for cart to load and verify it has items with retry logic
+    // Wait for cart to load and verify it has items with retry logic (more attempts under parallel load)
     let cartItemCount = 0;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 8; attempt++) {
       const cartItems = page.locator('[data-testid*="cart-item"]');
       cartItemCount = await cartItems.count();
       console.log(
-        `📦 Cart check attempt ${attempt + 1}/5: Cart has ${cartItemCount} items`,
+        `📦 Cart check attempt ${attempt + 1}/8: Cart has ${cartItemCount} items`,
       );
       if (cartItemCount > 0) break;
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(2500);
     }
 
-    if (cartItemCount === 0) {
-      console.log("⚠️  Cart is empty - skipping validation test");
-      test.skip();
-    }
+    expect(
+      cartItemCount,
+      "Cart empty before validation. Run: npx tsx tests/scripts/check-checkout-dab.ts",
+    ).toBeGreaterThan(0);
 
     // Navigate to checkout - use link role since it's a Link component
     const checkoutButton = page.getByRole("link", { name: /checkout/i });
@@ -661,6 +664,11 @@ test.describe("Checkout Flow", () => {
     await checkoutButton.click();
 
     await expect(page).toHaveURL(/\/checkout/);
+    await expect(
+      page
+        .getByRole("button", { name: /place order|pay|complete order/i })
+        .or(page.getByLabel(/address line 1/i)),
+    ).toBeVisible({ timeout: 15000 });
 
     // Try to submit without filling required fields - button shows "Pay $XX.XX"
     const submitButton = page
@@ -782,46 +790,49 @@ test.describe("Checkout Flow", () => {
     // Go to cart and verify items
     await page.goto(`${testEnv.webBaseUrl}/cart`);
 
-    // Wait for cart items to load with retry logic
+    // Wait for cart items to load with retry logic (more attempts under parallel load)
     let initialCount = 0;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 8; attempt++) {
       const cartItems = page.locator('[data-testid*="cart-item"]');
       initialCount = await cartItems.count();
       console.log(
-        `📦 Attempt ${attempt + 1}/5: Cart has ${initialCount} items initially`,
+        `📦 Attempt ${attempt + 1}/8: Cart has ${initialCount} items initially`,
       );
       if (initialCount > 0) break;
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(2500);
     }
     console.log(`📦 Cart has ${initialCount} items initially`);
 
-    if (initialCount === 0) {
-      console.log("⚠️  Cart is empty - skipping persistence test");
-      test.skip();
-    }
-
-    expect(initialCount).toBeGreaterThan(0);
+    expect(
+      initialCount,
+      "Cart empty before persistence check. Run: npx tsx tests/scripts/check-checkout-dab.ts",
+    ).toBeGreaterThan(0);
 
     // Proceed to checkout - use link role since it's a Link component
     const checkoutButton = page.getByRole("link", { name: /checkout/i });
     await expect(checkoutButton).toBeVisible({ timeout: 10000 });
     await checkoutButton.click();
     await expect(page).toHaveURL(/\/checkout/);
+    await expect(
+      page
+        .getByRole("button", { name: /place order|pay/i })
+        .or(page.getByLabel(/address line 1/i)),
+    ).toBeVisible({ timeout: 15000 });
 
     // Go back to cart
     await page.goto(`${testEnv.webBaseUrl}/cart`);
     await page.waitForLoadState("domcontentloaded");
 
-    // Wait for cart to refetch with retry logic (same as initial check)
+    // Wait for cart to refetch with retry logic (more attempts under parallel load)
     let finalCount = 0;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 8; attempt++) {
       const cartItems = page.locator('[data-testid*="cart-item"]');
       finalCount = await cartItems.count();
       console.log(
-        `📦 After navigation attempt ${attempt + 1}/5: Cart has ${finalCount} items`,
+        `📦 After navigation attempt ${attempt + 1}/8: Cart has ${finalCount} items`,
       );
       if (finalCount >= initialCount) break;
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(2500);
     }
 
     expect(finalCount).toBe(initialCount);

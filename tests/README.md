@@ -55,9 +55,14 @@ npm run test:e2e:azure
 
 These tests run directly against the Azure deployment—no local services (DAB, Functions, or Vite) are needed.
 
-1. Sign in to Azure: `az login` (or `azd login`).
-2. Select the environment: `azd env refresh` (or ensure `AZURE_ENV_NAME` is set).
-3. Confirm the required values exist by running:
+1. **Install Playwright browsers** (if not already installed):
+   ```bash
+   npx playwright install
+   ```
+
+2. Sign in to Azure: `az login` (or `azd login`).
+3. Select the environment: `azd env refresh` (or ensure `AZURE_ENV_NAME` is set).
+4. Confirm the required values exist by running:
    - `azd env get-value "APP_REDIRECT_URI"`
    - `azd env get-value "VITE_API_FUNCTIONS_URL"`
    - `azd env get-value "VITE_API_URL"`
@@ -73,6 +78,17 @@ The helper in `tests/utils/env.ts` automatically pulls remote URLs from `azd env
 | `WEB_BASE_URL`       | `azd env get-value "APP_REDIRECT_URI"`       |
 | `FUNCTIONS_BASE_URL` | `azd env get-value "VITE_API_FUNCTIONS_URL"` |
 | `REST_API_BASE_URL`  | `azd env get-value "VITE_API_URL"` → `/api`  |
+| `TEST_EMAIL`         | `azd env get-value "TEST_EMAIL"` (must be set manually) |
+
+### Required: TEST_EMAIL
+
+Some tests (checkout, sale discounts) send a real order confirmation email during the flow. You must set `TEST_EMAIL` to a real address you can receive mail at before running those tests:
+
+```bash
+azd env set TEST_EMAIL your@email.com
+```
+
+Tests that require this variable will fail immediately with a clear error message if it is not set.
 
 ## Running tests
 

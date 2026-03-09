@@ -8,6 +8,8 @@ export interface Review {
   createdAt: string;
   helpful: number;
   markedUsefulBy: string[]; // User IDs who marked this as useful
+  /** Set for API reviews: Person.BusinessEntityID of the reviewer; used to show "already reviewed" only for the current user */
+  userID?: number;
 }
 
 // API ProductReview structure

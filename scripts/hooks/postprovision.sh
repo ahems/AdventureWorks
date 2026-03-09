@@ -222,7 +222,23 @@ echo "Starting seed job to populate database..."
 
 echo "  ✓ Seed job started successfully"
 echo "  Note: The job runs asynchronously. Check execution status with:"
-echo "    az containerapp job execution list --name $SEED_JOB_NAME --resource-group $RESOURCE_GROUP"
+echo "    az containerapp job execution list --name $SEED_JOB_NAME --resource-group $RESOURCE_GROUP --query \"[0].properties.status\" -o tsv"
+
+echo ""
+echo "=========================================="
+echo "Refreshing azd environment with deployment outputs..."
+echo "=========================================="
+# Ensure all Bicep outputs (e.g. PLAYWRIGHT_SERVICE_URL) are in the azd environment
+# so that 'npm run test:e2e:azure' and run-tests-on-azure-playwright.sh work without manual setup
+if azd env refresh --no-prompt 2>/dev/null; then
+    echo "  ✓ Environment refreshed; Playwright and other outputs are available."
+    PLAYWRIGHT_URL=$(azd env get-value PLAYWRIGHT_SERVICE_URL 2>/dev/null | tr -d '\n\r ')
+    if [ -n "$PLAYWRIGHT_URL" ]; then
+        echo "  ✓ PLAYWRIGHT_SERVICE_URL is set (Azure Playwright tests will use the service)."
+    fi
+else
+    echo "  Note: azd env refresh skipped or failed; Bicep outputs may already be present."
+fi
 
 echo ""
 echo "=========================================="

@@ -87,6 +87,12 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
             description: 'Queue for generating AI product reviews'
           }
         }
+        {
+          name: 'sales-order-status'
+          metadata: {
+            description: 'Queue for tracking the status of sales orders'
+          }
+        }
       ]
     }
     

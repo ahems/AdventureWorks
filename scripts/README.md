@@ -82,6 +82,7 @@ Development and maintenance utilities:
 
 - **batch-translate-language-file.sh** - Batch translate UI language files
 - **check-product-photo-duplicates.sh** - Detect duplicate product photos in database
+- **dab-seed-comparison.sh** - Compare Known Good vs Clean (seed) DAB deployment; cross-check discrepancies with seed CSVs
 - **download-large-images.ps1** - Download large product images from Azure
 - **playwright-quick-ref.sh** - Quick reference commands for Playwright tests
 

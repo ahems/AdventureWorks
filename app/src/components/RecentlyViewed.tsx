@@ -56,13 +56,14 @@ const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
     : recentlyViewed.slice(0, 4);
 
   // Fetch thumbnails for recently viewed products
+  const productIdsForDep = productsToShow.map((p) => p.ProductID).join(",");
   useEffect(() => {
     const fetchThumbnails = async () => {
       if (productsToShow.length === 0) return;
 
+      const productIds = productsToShow.map((p) => p.ProductID);
       setLoading(true);
       try {
-        const productIds = productsToShow.map((p) => p.ProductID);
         const response = await graphqlClient.request<{
           productProductPhotos: {
             items: Array<{
@@ -96,7 +97,7 @@ const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
     };
 
     fetchThumbnails();
-  }, [productsToShow.map((p) => p.ProductID).join(",")]);
+  }, [productIdsForDep]);
 
   if (productsToShow.length === 0) {
     return null;

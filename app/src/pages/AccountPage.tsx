@@ -39,6 +39,7 @@ import {
   useOrders,
   getOrderStatusText,
   getOrderStatusColor,
+  type Order,
 } from "@/hooks/useOrders";
 import { useProfile, useUpdateProfile } from "@/hooks/useProfile";
 import {
@@ -54,7 +55,8 @@ import { AddressCard } from "@/components/AddressCard";
 import { toast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { formatPhoneNumber, parsePhoneNumber } from "@/lib/phoneFormatter";
-import { trackError } from "@/lib/appInsights";
+import { trackError, trackEvent } from "@/lib/appInsights";
+import { getFunctionsApiUrl } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrency } from "@/context/CurrencyContext";
 
@@ -124,6 +126,12 @@ const AccountPage: React.FC = () => {
   const updateEmailMutation = useUpdateEmailAddress();
   const deleteEmailMutation = useDeleteEmailAddress();
   const [expandedOrder, setExpandedOrder] = useState<number | null>(null);
+  const [orderReceiptEmailId, setOrderReceiptEmailId] = useState<
+    Record<number, number>
+  >({});
+  const [resendingReceiptOrderId, setResendingReceiptOrderId] = useState<
+    number | null
+  >(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editProfileData, setEditProfileData] = useState({
     title: "",
@@ -255,6 +263,62 @@ const AccountPage: React.FC = () => {
     }
   }, [profileData]);
 
+  const handleResendReceipt = async (order: Order) => {
+    if (!customerId || !emailAddresses.length) return;
+    const emailId =
+      orderReceiptEmailId[order.SalesOrderID] ??
+      emailAddresses[0]?.EmailAddressID;
+    if (!emailId) return;
+    setResendingReceiptOrderId(order.SalesOrderID);
+    try {
+      const url = `${getFunctionsApiUrl()}/api/orders/generate-and-send-receipt`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          salesOrderId: order.SalesOrderID,
+          customerId,
+          emailAddressId: emailId,
+        }),
+      });
+      if (res.ok) {
+        toast({
+          title: t("account.receiptSent"),
+          description: t("account.receiptSentDescription"),
+        });
+        trackEvent("Order_ReceiptResent", {
+          salesOrderId: order.SalesOrderID,
+          emailAddressId: emailId,
+        });
+      } else {
+        const text = await res.text();
+        toast({
+          variant: "destructive",
+          title: t("account.receiptSendFailed"),
+          description: text.slice(0, 100) || undefined,
+        });
+        trackError("Failed to re-send receipt", undefined, {
+          page: "AccountPage",
+          salesOrderId: order.SalesOrderID,
+          status: res.status,
+          responseText: text,
+        });
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: t("account.receiptSendFailed"),
+        description: error instanceof Error ? error.message : undefined,
+      });
+      trackError("Error re-sending receipt", error, {
+        page: "AccountPage",
+        salesOrderId: order.SalesOrderID,
+      });
+    } finally {
+      setResendingReceiptOrderId(null);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -282,9 +346,9 @@ const AccountPage: React.FC = () => {
               {/* Order History Skeleton */}
               <div className="doodle-card p-6 mb-6">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="w-6 h-6 bg-doodle-text/10 animate-pulse"></div>
-                  <div className="h-6 w-32 bg-doodle-text/10 animate-pulse"></div>
-                  <div className="h-4 w-16 bg-doodle-text/10 animate-pulse"></div>
+                  <Skeleton className="w-6 h-6 rounded" />
+                  <Skeleton className="h-6 w-32" />
+                  <Skeleton className="h-4 w-16" />
                 </div>
                 <div className="space-y-4">
                   {[1, 2, 3].map((i) => (
@@ -293,14 +357,16 @@ const AccountPage: React.FC = () => {
                       className="border-2 border-dashed border-doodle-text/20 p-4"
                     >
                       <div className="flex items-center justify-between">
-                        <div className="space-y-2 flex-1">
-                          <div className="flex items-center gap-2">
-                            <div className="h-5 w-32 bg-doodle-text/10 animate-pulse"></div>
-                            <div className="h-6 w-20 bg-doodle-text/10 animate-pulse rounded-full"></div>
+                        <div className="flex items-center gap-4 flex-1">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Skeleton className="h-5 w-32" />
+                              <Skeleton className="h-6 w-20 rounded-full" />
+                            </div>
+                            <Skeleton className="h-4 w-40" />
                           </div>
-                          <div className="h-4 w-40 bg-doodle-text/10 animate-pulse"></div>
                         </div>
-                        <div className="h-5 w-20 bg-doodle-text/10 animate-pulse"></div>
+                        <Skeleton className="h-5 w-20" />
                       </div>
                     </div>
                   ))}
@@ -483,13 +549,13 @@ const AccountPage: React.FC = () => {
               </div>
 
               {ordersLoading ? (
-                <div className="space-y-4">
+                <div className="space-y-4" data-testid="order-history-skeleton">
                   {[1, 2, 3].map((i) => (
                     <div
                       key={i}
                       className="border-2 border-dashed border-doodle-text/20 p-4"
                     >
-                      <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4 flex-1">
                           <div className="space-y-2">
                             <div className="flex items-center gap-2">
@@ -633,6 +699,67 @@ const AccountPage: React.FC = () => {
                               </div>
                             </>
                           )}
+
+                          {customerId &&
+                            emailAddresses.length > 0 && (
+                              <>
+                                <hr className="border-dashed border-doodle-text/20 my-3" />
+                                <div className="flex flex-wrap items-center gap-2 font-doodle text-sm">
+                                  <label
+                                    htmlFor={`receipt-email-${order.SalesOrderID}`}
+                                    className="text-doodle-text/70 shrink-0"
+                                  >
+                                    {t("account.sendReceiptTo")}
+                                  </label>
+                                  <select
+                                    id={`receipt-email-${order.SalesOrderID}`}
+                                    className="border-2 border-doodle-text/30 rounded-md px-3 py-1.5 bg-doodle-bg text-doodle-text min-w-[180px]"
+                                    value={
+                                      orderReceiptEmailId[order.SalesOrderID] ??
+                                      emailAddresses[0]?.EmailAddressID ??
+                                      ""
+                                    }
+                                    onChange={(e) =>
+                                      setOrderReceiptEmailId((prev) => ({
+                                        ...prev,
+                                        [order.SalesOrderID]: parseInt(
+                                          e.target.value,
+                                          10,
+                                        ),
+                                      }))
+                                    }
+                                  >
+                                    {emailAddresses.map((em) => (
+                                      <option
+                                        key={em.EmailAddressID}
+                                        value={em.EmailAddressID}
+                                      >
+                                        {em.EmailAddress}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleResendReceipt(order)}
+                                    disabled={
+                                      resendingReceiptOrderId ===
+                                      order.SalesOrderID
+                                    }
+                                    className="doodle-button doodle-button-primary inline-flex items-center gap-2 py-1.5 px-3 text-sm"
+                                  >
+                                    {resendingReceiptOrderId ===
+                                    order.SalesOrderID ? (
+                                      <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        {t("account.sendingReceipt")}
+                                      </>
+                                    ) : (
+                                      t("account.resendReceipt")
+                                    )}
+                                  </button>
+                                </div>
+                              </>
+                            )}
                         </div>
                       )}
                     </div>

@@ -373,4 +373,36 @@ public class OrderService
 
         return result.ToString();
     }
+
+    /// <summary>
+    /// Updates the status of a sales order in Sales.SalesOrderHeader.
+    /// </summary>
+    /// <returns>Number of rows affected (0 or 1).</returns>
+    public async Task<int> UpdateOrderStatusAsync(int salesOrderId, byte status)
+    {
+        using var connection = await GetConnectionAsync();
+        const string sql = @"
+            UPDATE Sales.SalesOrderHeader
+            SET Status = @Status, ModifiedDate = GETDATE()
+            WHERE SalesOrderID = @SalesOrderId";
+        return await connection.ExecuteAsync(sql, new { SalesOrderId = salesOrderId, Status = status });
+    }
+
+    /// <summary>
+    /// Gets (CustomerId, EmailAddressId) for the customer of the given order, using the first email address for that customer.
+    /// Used when sending shipped notification so only SalesOrderID is needed in the queue message.
+    /// </summary>
+    public async Task<(int CustomerId, int EmailAddressId)?> GetCustomerEmailInfoBySalesOrderIdAsync(int salesOrderId)
+    {
+        using var connection = await GetConnectionAsync();
+        const string sql = @"
+            SELECT TOP 1 c.CustomerID AS CustomerId, ea.EmailAddressID AS EmailAddressId
+            FROM Sales.SalesOrderHeader soh
+            INNER JOIN Sales.Customer c ON soh.CustomerID = c.CustomerID
+            INNER JOIN Person.EmailAddress ea ON c.PersonID = ea.BusinessEntityID
+            WHERE soh.SalesOrderID = @SalesOrderId
+            ORDER BY ea.EmailAddressID";
+        var row = await connection.QueryFirstOrDefaultAsync<(int CustomerId, int EmailAddressId)>(sql, new { SalesOrderId = salesOrderId });
+        return row.CustomerId != 0 ? row : null;
+    }
 }

@@ -1,12 +1,18 @@
 import { test, expect } from "@playwright/test";
 import { signupThroughUi } from "../utils/testUser";
 import { testEnv } from "../utils/env";
-import { getInStockProductIds } from "../utils/productHelper";
+import {
+  getInStockProductIds,
+  getProductIdsWithPhotos,
+} from "../utils/productHelper";
 
 test.describe("User Browsing and Shopping", () => {
   test("user can browse categories, view products, and add items to cart", async ({
     page,
   }) => {
+    // Allow time for cold starts and multiple product page loads
+    test.setTimeout(60000);
+
     // Create a test user
     await signupThroughUi(page);
 
@@ -49,8 +55,9 @@ test.describe("User Browsing and Shopping", () => {
         console.log(
           "⚠️  No products found in category after extended wait - database may still be waking up",
         );
-        // Go directly to a known product page instead
-        await page.goto(`${testEnv.webBaseUrl}/product/680`);
+        // Go directly to a product that has photo mappings (try until one shows real image)
+        const idsToTry = await getProductIdsWithPhotos(10);
+        await page.goto(`${testEnv.webBaseUrl}/product/${idsToTry[0]}`);
         await page.waitForLoadState("domcontentloaded");
         await page.waitForTimeout(3000);
       }
@@ -72,36 +79,76 @@ test.describe("User Browsing and Shopping", () => {
       page.locator("h1, h2, [data-testid='product-name']").first(),
     ).toBeVisible({ timeout: 10000 });
 
-    // Verify product images or image gallery is shown
-    // Real images have alt like "Product Name - Image 1", fallback shows emojis
-    const hasRealImages = await page.locator("img[alt*='Image']").count();
-    const hasImageGallery = await page
-      .locator('[class*="doodle-card"]')
-      .count();
+    // Wait for gallery to render (main image or fallback)
+    const mainImage = page.locator("[data-testid='product-gallery-main-image']");
+    const fallback = page.locator("[data-testid='product-gallery-fallback']");
+    await expect(mainImage.or(fallback)).toBeVisible({ timeout: 15000 });
 
-    if (hasRealImages > 0) {
-      console.log("✅ Real product images loaded");
-      await expect(page.locator("img[alt*='Image']").first()).toBeVisible();
-    } else if (hasImageGallery > 0) {
-      console.log("⚠️  Using fallback image gallery (no real photos in DB)");
+    // If this product shows fallback (no photo data), try a few products that have photo mappings
+    if ((await fallback.count()) > 0 && (await mainImage.count()) === 0) {
+      const idsToTry = await getProductIdsWithPhotos(5);
+      let mainFound = false;
+      for (const pid of idsToTry) {
+        await page.goto(`${testEnv.webBaseUrl}/product/${pid}`);
+        await page.waitForLoadState("domcontentloaded");
+        await expect(
+          page.locator("h1, h2, [data-testid='product-name']").first(),
+        ).toBeVisible({ timeout: 10000 });
+        await expect(mainImage.or(fallback)).toBeVisible({ timeout: 10000 });
+        if (await mainImage.isVisible().catch(() => false)) {
+          mainFound = true;
+          break;
+        }
+      }
+      if (!mainFound) {
+        console.warn(
+          "⚠️ No product showed a real image (all fallback). Check seed job and ProductPhoto ThumbNailPhoto if images are required.",
+        );
+      }
     } else {
-      console.log("⚠️  No images found after wait - possible cold start delay");
+      await expect(mainImage).toBeVisible({ timeout: 5000 });
     }
+    console.log("✅ Product image area loaded (real or fallback)");
 
-    // Try to find a product that's in stock
+    // Try to find a product that's in stock (API-based list + fallback IDs from known catalog)
     console.log(
       "🔍 Fetching random products from database to find one in stock...",
     );
-    const productIdsToTry = await getInStockProductIds(10); // Get 10 potential products
-    console.log(
-      `📚 Testing products: ${productIdsToTry.slice(0, 5).join(", ")}...`,
-    );
+    let productIdsToTry: number[];
+    try {
+      productIdsToTry = await getInStockProductIds(12);
+      console.log(
+        `📚 Testing products: ${productIdsToTry.slice(0, 5).join(", ")}...`,
+      );
+    } catch {
+      productIdsToTry = [];
+    }
+    // Fallback: known product IDs that are often in stock (finished goods from AdventureWorks)
+    const fallbackIds = [965, 940, 870, 707, 711, 752, 749, 942, 913, 848];
+    const allIds = [...productIdsToTry];
+    for (const id of fallbackIds) {
+      if (!allIds.includes(id)) allIds.push(id);
+    }
+    productIdsToTry = allIds.slice(0, 18);
+
     let productAdded = false;
 
     for (const productId of productIdsToTry) {
       await page.goto(`${testEnv.webBaseUrl}/product/${productId}`);
       await page.waitForLoadState("domcontentloaded");
-      await page.waitForTimeout(2000);
+
+      // Wait for product page to load - add-to-cart button appears after data loads (cold start can be slow)
+      const addToCartButton = page.locator(
+        '[data-testid="add-to-cart-button"]',
+      );
+      try {
+        await expect(addToCartButton).toBeVisible({ timeout: 20000 });
+      } catch {
+        console.log(
+          `⚠️  Product ${productId} page didn't show add-to-cart in time, trying another...`,
+        );
+        continue;
+      }
 
       // Check if product is out of stock
       const outOfStockMessage = page.getByText(/out of stock/i);
@@ -114,24 +161,9 @@ test.describe("User Browsing and Shopping", () => {
         continue;
       }
 
-      // Product is in stock - try to add to cart
-      const addToCartButton = page.locator(
-        '[data-testid="add-to-cart-button"]',
-      );
-      await expect(addToCartButton).toBeVisible();
-
       // Wait for button to be enabled (product data must load)
       try {
-        await page.waitForFunction(
-          () => {
-            const btn = document.querySelector(
-              '[data-testid="add-to-cart-button"]',
-            );
-            return btn && !btn.hasAttribute("disabled");
-          },
-          { timeout: 5000 },
-        );
-
+        await expect(addToCartButton).toBeEnabled({ timeout: 8000 });
         await addToCartButton.click();
         productAdded = true;
         console.log(`✅ Successfully added product ${productId} to cart`);
@@ -147,12 +179,9 @@ test.describe("User Browsing and Shopping", () => {
     // Verify at least one product was added
     expect(productAdded).toBe(true);
 
-    // Verify cart was updated - look for success message or cart badge update
+    // Verify cart was updated - cart count badge or toast (either indicates success)
     await expect(
-      page
-        .getByText(/added to cart|item added|successfully added/i)
-        .first()
-        .or(page.locator('[data-testid="cart-count"]')),
+      page.locator('[data-testid="cart-count"]'),
     ).toBeVisible({ timeout: 5000 });
 
     // Browse another category
@@ -241,24 +270,32 @@ test.describe("User Browsing and Shopping", () => {
   });
 
   test("user can view product details and images", async ({ page }) => {
+    test.setTimeout(60000);
     // Create a test user
     await signupThroughUi(page);
 
-    // Go directly to a known product page to test product details
-    await page.goto(`${testEnv.webBaseUrl}/product/680`); // Mountain-100 Silver, 38
+    // Use a product that has photo mappings; try a few until gallery is visible (real or fallback)
+    const idsToTry = await getProductIdsWithPhotos(5);
+    const mainImage = page.locator("[data-testid='product-gallery-main-image']");
+    const galleryFallback = page.locator(
+      "[data-testid='product-gallery-fallback']",
+    );
+
+    await page.goto(`${testEnv.webBaseUrl}/product/${idsToTry[0]}`);
     await page.waitForLoadState("domcontentloaded");
 
-    // Wait longer for images to load on cold start
-    console.log(
-      "⏳ Waiting for product page to fully load (including images)...",
-    );
-    await page.waitForTimeout(5000); // Increased from 2s to 5s
-
-    // Verify product name is visible
     const productName = page
       .locator("h1, h2, [data-testid='product-name']")
       .first();
-    await expect(productName).toBeVisible();
+    await expect(productName).toBeVisible({ timeout: 15000 });
+    await expect(mainImage.or(galleryFallback)).toBeVisible({ timeout: 15000 });
+
+    const hasRealImage = await mainImage.isVisible().catch(() => false);
+    if (!hasRealImage) {
+      console.warn(
+        "⚠️ Product showed fallback image. Check seed job and ProductPhoto ThumbNailPhoto if real images are required.",
+      );
+    }
 
     // Verify product price is visible
     const price = page
@@ -266,35 +303,11 @@ test.describe("User Browsing and Shopping", () => {
       .first();
     await expect(price).toBeVisible();
 
-    // Verify product image gallery exists
-    // Real images have alt like "Product Name - Image 1", fallback shows emojis
-    const realImages = page.locator("img[alt*='Image']");
-    const imageGallery = page.locator('[class*="doodle-card"]');
-
-    // Check for real images first
-    const hasRealImages = (await realImages.count()) > 0;
-
-    if (hasRealImages) {
-      const imageCount = await realImages.count();
-      console.log(`✅ Found ${imageCount} real product images`);
-
-      // Verify at least one image is loaded
-      const firstImage = realImages.first();
-      await expect(firstImage).toBeVisible();
-    } else {
-      // Check for fallback image gallery (emoji display)
-      const galleryCount = await imageGallery.count();
-      if (galleryCount > 0) {
-        console.log(
-          "⚠️  Using fallback image gallery - no real photos in database",
-        );
-        await expect(imageGallery.first()).toBeVisible();
-      } else {
-        console.log(
-          "⚠️  No images or image gallery found - possible loading issue",
-        );
-      }
-    }
+    console.log(
+      hasRealImage
+        ? "✅ Real product image displayed (from ProductPhoto)"
+        : "✅ Product details and fallback image displayed",
+    );
 
     // Check if product description exists
     const description = page.locator(

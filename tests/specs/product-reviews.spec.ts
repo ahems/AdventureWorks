@@ -108,21 +108,18 @@ test.describe("Product Reviews", () => {
     // Step 7: Verify the review appears in the list
     console.log("🔍 Step 7: Verifying review appears in the list...");
 
-    // Look for the review in the reviews list
-    // The review should contain the title or comment we just submitted
-    const reviewCard = page.locator(
-      `[data-testid*="review-card"], .doodle-card:has-text("${reviewTitle}")`,
-    );
+    // Find the specific review card containing the submitted title
+    const reviewCard = page
+      .locator('[data-testid="review-card"]')
+      .filter({ hasText: reviewTitle });
 
-    // Wait for the review to appear
-    await expect(reviewCard.first()).toBeVisible({ timeout: 10000 });
+    // Wait for the review to appear (optimistic update should be immediate,
+    // but allow extra time for re-renders under load)
+    await expect(reviewCard.first()).toBeVisible({ timeout: 15000 });
     console.log("✅ Review is visible in the reviews list");
 
-    // Verify review content
-    const reviewText = page.locator(
-      `text="${reviewTitle}", text="${reviewComment}"`,
-    );
-    await expect(reviewText.first()).toBeVisible({ timeout: 5000 });
+    // Verify the card also contains the comment text
+    await expect(reviewCard.first()).toContainText(reviewComment.substring(0, 80));
     console.log("✅ Review content verified");
 
     // Verify the rating stars appear
