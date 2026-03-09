@@ -24,6 +24,7 @@ import {
 } from "@/hooks/useProducts";
 import { Product, getSalePrice } from "@/types/product";
 import { useAllReviews } from "@/hooks/useReviews";
+import { useLanguage } from "@/context/LanguageContext";
 import { useSemanticSearch } from "@/hooks/useSemanticSearch";
 import {
   Select,
@@ -42,6 +43,7 @@ type SortOption =
 
 const SearchPage: React.FC = () => {
   const { t } = useTranslation("common");
+  const { selectedLanguage } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
 
@@ -56,7 +58,7 @@ const SearchPage: React.FC = () => {
 
   const { data: products = [], isLoading: productsLoading } = useProducts();
   const { data: categories = [], isLoading: categoriesLoading } =
-    useCategories();
+    useCategories(selectedLanguage);
   const { data: subcategories = [] } = useSubcategories();
   const { data: allReviews = [] } = useAllReviews();
 

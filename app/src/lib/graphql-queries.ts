@@ -65,13 +65,14 @@ export const GET_SPECIAL_OFFER_PRODUCTS = gql`
   }
 `;
 
-// Query to get all product categories
+// Query to get all product categories for a specific culture
 // Note: Data API Builder uses plural entity names and returns items directly
 export const GET_CATEGORIES = gql`
-  query GetCategories {
-    productCategories {
+  query GetCategories($cultureId: String!) {
+    productCategories(filter: { CultureID: { eq: $cultureId } }) {
       items {
         ProductCategoryID
+        CultureID
         Name
       }
     }
@@ -378,12 +379,13 @@ export const GET_PRODUCTS_BY_SUBCATEGORY = gql`
   }
 `;
 
-// Query to get category by ID
+// Query to get category by ID for a specific culture
 export const GET_CATEGORY_BY_ID = gql`
-  query GetCategoryById($id: Int!) {
-    productCategories(filter: { ProductCategoryID: { eq: $id } }) {
+  query GetCategoryById($id: Int!, $cultureId: String!) {
+    productCategories(filter: { and: [{ ProductCategoryID: { eq: $id } }, { CultureID: { eq: $cultureId } }] }) {
       items {
         ProductCategoryID
+        CultureID
         Name
       }
     }

@@ -7,7 +7,8 @@
     "search": "검색",
     "searchPlaceholder": "자전거, 장비, 의류 검색...",
     "aiSearchPlaceholder": "AI 검색: 찾으시는 것을 설명해 주세요...",
-    "selectLanguage": "언어 선택"
+    "selectLanguage": "언어 선택",
+    "sale": "세일"
   },
   "buttons": {
     "addToCart": "장바구니에 담기",
@@ -16,7 +17,9 @@
     "search": "검색",
     "backToHome": "홈으로 돌아가기"
   },
-  "navigation": { "home": "홈" },
+  "navigation": {
+    "home": "홈"
+  },
   "newsletter": {
     "title": "모험 클럽에 참여하세요!",
     "description": "독점 할인, 트레일 팁, 장비 가이드를 이메일로 받아보세요.",
@@ -319,7 +322,10 @@
     "loading": "로딩 중...",
     "cardholderPlaceholder": "존 도",
     "expiryPlaceholder": "MM/YY",
-    "placeholders": { "cardNumber": "4242 4242 4242 4242", "cvv": "123" }
+    "placeholders": {
+      "cardNumber": "4242 4242 4242 4242",
+      "cvv": "123"
+    }
   },
   "compare": {
     "bestRated": "최고 평점",
@@ -571,7 +577,10 @@
     "noReviewsYet": "아직 리뷰가 없습니다",
     "beFirstToShare": "이 제품에 대한 첫 번째 후기를 남겨보세요!"
   },
-  "recentlyViewed": { "recentlyViewed": "최근 본 항목", "clear": "지우기" },
+  "recentlyViewed": {
+    "recentlyViewed": "최근 본 항목",
+    "clear": "지우기"
+  },
   "quickViewModal": {
     "quickView": "빠른 보기",
     "viewProductDetails": "제품 상세 정보를 확인하고, 옵션을 선택한 후 장바구니에 담으세요.",

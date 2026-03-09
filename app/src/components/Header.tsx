@@ -33,9 +33,9 @@ const Header: React.FC = () => {
   const { t, i18n } = useTranslation("common");
   const { getTotalItems } = useCart();
   const { user, isAuthenticated, logout } = useAuth();
-  const { data: categories = [], isLoading: categoriesLoading } =
-    useCategories();
   const { selectedLanguage, setSelectedLanguage, languages } = useLanguage();
+  const { data: categories = [], isLoading: categoriesLoading } =
+    useCategories(selectedLanguage);
   const { setSelectedCurrency, getCurrencyForLanguage } = useCurrency();
   const { setUnitSystem } = useUnitMeasure();
   const navigate = useNavigate();
@@ -129,7 +129,7 @@ const Header: React.FC = () => {
                     location.pathname === "/sale" ? "squiggle" : ""
                   }`}
                 >
-                  <Twemoji emoji="🏷️" size="1rem" /> Sale
+                  <Twemoji emoji="🏷️" size="1rem" /> {t("header.sale")}
                 </Link>
               </>
             )}
@@ -321,7 +321,7 @@ const Header: React.FC = () => {
                     className="font-doodle text-lg text-doodle-accent font-bold hover:text-doodle-green py-2 flex items-center gap-2"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    * <Twemoji emoji="🏷️" size="1.25rem" /> Sale
+                    * <Twemoji emoji="🏷️" size="1.25rem" /> {t("header.sale")}
                   </Link>
                 </>
               )}

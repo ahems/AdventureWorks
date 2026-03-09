@@ -7,7 +7,8 @@
     "search": "Zoeken",
     "searchPlaceholder": "Zoek naar fietsen, uitrusting, kleding...",
     "aiSearchPlaceholder": "AI-zoeken: Beschrijf wat je zoekt...",
-    "selectLanguage": "Selecteer taal"
+    "selectLanguage": "Selecteer taal",
+    "sale": "Aanbiedingen"
   },
   "buttons": {
     "addToCart": "Toevoegen aan winkelwagen",
@@ -16,7 +17,9 @@
     "search": "Zoeken",
     "backToHome": "Terug naar Home"
   },
-  "navigation": { "home": "Home" },
+  "navigation": {
+    "home": "Home"
+  },
   "newsletter": {
     "title": "Word lid van de Avonturenclub!",
     "description": "Ontvang exclusieve aanbiedingen, trailtips en uitrustingsgidsen rechtstreeks in je inbox.",
@@ -319,7 +322,10 @@
     "loading": "Bezig met laden...",
     "cardholderPlaceholder": "John Doe",
     "expiryPlaceholder": "MM/JJ",
-    "placeholders": { "cardNumber": "4242 4242 4242 4242", "cvv": "123" }
+    "placeholders": {
+      "cardNumber": "4242 4242 4242 4242",
+      "cvv": "123"
+    }
   },
   "compare": {
     "bestRated": "Best beoordeeld",
@@ -571,7 +577,10 @@
     "noReviewsYet": "Nog geen beoordelingen",
     "beFirstToShare": "Wees de eerste die uw mening over dit product deelt!"
   },
-  "recentlyViewed": { "recentlyViewed": "Recent bekeken", "clear": "Wissen" },
+  "recentlyViewed": {
+    "recentlyViewed": "Recent bekeken",
+    "clear": "Wissen"
+  },
   "quickViewModal": {
     "quickView": "Snelle weergave",
     "viewProductDetails": "Bekijk productdetails, selecteer opties en voeg toe aan winkelwagen.",

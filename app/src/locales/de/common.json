@@ -7,7 +7,8 @@
     "search": "Suche",
     "searchPlaceholder": "Suche nach Fahrrädern, Ausrüstung, Kleidung...",
     "aiSearchPlaceholder": "KI-Suche: Beschreiben Sie, wonach Sie suchen...",
-    "selectLanguage": "Sprache auswählen"
+    "selectLanguage": "Sprache auswählen",
+    "sale": "Angebote"
   },
   "buttons": {
     "addToCart": "In den Warenkorb legen",
@@ -16,7 +17,9 @@
     "search": "Suche",
     "backToHome": "Zurück zur Startseite"
   },
-  "navigation": { "home": "Startseite" },
+  "navigation": {
+    "home": "Startseite"
+  },
   "newsletter": {
     "title": "Tritt dem Abenteuer-Club bei!",
     "description": "Erhalten Sie exklusive Angebote, Trail-Tipps und Ausrüstungsratgeber direkt in Ihren Posteingang.",
@@ -319,7 +322,10 @@
     "loading": "Wird geladen...",
     "cardholderPlaceholder": "John Doe",
     "expiryPlaceholder": "MM/JJ",
-    "placeholders": { "cardNumber": "4242 4242 4242 4242", "cvv": "123" }
+    "placeholders": {
+      "cardNumber": "4242 4242 4242 4242",
+      "cvv": "123"
+    }
   },
   "compare": {
     "bestRated": "Bestbewertet",

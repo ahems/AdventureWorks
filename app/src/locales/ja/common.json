@@ -7,7 +7,8 @@
     "search": "検索",
     "searchPlaceholder": "自転車、ギア、ウェアを検索...",
     "aiSearchPlaceholder": "AI検索: お探しのものを説明してください...",
-    "selectLanguage": "言語を選択してください"
+    "selectLanguage": "言語を選択してください",
+    "sale": "セール"
   },
   "buttons": {
     "addToCart": "カートに追加する",
@@ -16,7 +17,9 @@
     "search": "検索",
     "backToHome": "ホームに戻る"
   },
-  "navigation": { "home": "ホーム" },
+  "navigation": {
+    "home": "ホーム"
+  },
   "newsletter": {
     "title": "アドベンチャークラブに参加しよう！",
     "description": "限定のお得情報、トレイルのコツ、ギアガイドをあなたのメールボックスにお届けします。",
@@ -319,7 +322,10 @@
     "loading": "読み込み中...",
     "cardholderPlaceholder": "ジョン・ドウ",
     "expiryPlaceholder": "MM/YY",
-    "placeholders": { "cardNumber": "4242 4242 4242 4242", "cvv": "123" }
+    "placeholders": {
+      "cardNumber": "4242 4242 4242 4242",
+      "cvv": "123"
+    }
   },
   "compare": {
     "bestRated": "最高評価",
@@ -571,7 +577,10 @@
     "noReviewsYet": "まだレビューはありません",
     "beFirstToShare": "この製品について最初に感想を共有しましょう！"
   },
-  "recentlyViewed": { "recentlyViewed": "最近表示した商品", "clear": "クリア" },
+  "recentlyViewed": {
+    "recentlyViewed": "最近表示した商品",
+    "clear": "クリア"
+  },
   "quickViewModal": {
     "quickView": "クイックビュー",
     "viewProductDetails": "商品詳細を表示し、オプションを選択してカートに追加してください。",

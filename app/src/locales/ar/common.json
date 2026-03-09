@@ -7,7 +7,8 @@
     "search": "بحث",
     "searchPlaceholder": "ابحث عن الدراجات، المعدات، الملابس...",
     "selectLanguage": "اختر اللغة",
-    "aiSearchPlaceholder": "بحث الذكاء الاصطناعي: صِف ما تبحث عنه..."
+    "aiSearchPlaceholder": "بحث الذكاء الاصطناعي: صِف ما تبحث عنه...",
+    "sale": "تخفيضات"
   },
   "buttons": {
     "addToCart": "أضف إلى السلة",

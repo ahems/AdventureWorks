@@ -7,7 +7,8 @@
     "search": "搜索",
     "searchPlaceholder": "搜索自行车、装备、服装…",
     "aiSearchPlaceholder": "AI搜索：描述您要找的东西...",
-    "selectLanguage": "选择语言"
+    "selectLanguage": "选择语言",
+    "sale": "促销"
   },
   "buttons": {
     "addToCart": "加入购物车",

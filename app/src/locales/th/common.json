@@ -7,7 +7,8 @@
     "search": "ค้นหา",
     "searchPlaceholder": "ค้นหาจักรยาน อุปกรณ์ เสื้อผ้า...",
     "aiSearchPlaceholder": "การค้นหาด้วย AI: อธิบายสิ่งที่คุณกำลังมองหา...",
-    "selectLanguage": "เลือกภาษา"
+    "selectLanguage": "เลือกภาษา",
+    "sale": "ลดราคา"
   },
   "buttons": {
     "addToCart": "เพิ่มลงในรถเข็น",
@@ -16,7 +17,9 @@
     "search": "ค้นหา",
     "backToHome": "กลับสู่หน้าหลัก"
   },
-  "navigation": { "home": "หน้าหลัก" },
+  "navigation": {
+    "home": "หน้าหลัก"
+  },
   "newsletter": {
     "title": "เข้าร่วมคลับผจญภัย!",
     "description": "รับข้อเสนอพิเศษ เคล็ดลับเส้นทาง และคู่มืออุปกรณ์ ส่งตรงถึงกล่องจดหมายของคุณ",
@@ -319,7 +322,10 @@
     "loading": "กำลังโหลด...",
     "cardholderPlaceholder": "จอห์น โด",
     "expiryPlaceholder": "ดด/ปป",
-    "placeholders": { "cardNumber": "4242 4242 4242 4242", "cvv": "123" }
+    "placeholders": {
+      "cardNumber": "4242 4242 4242 4242",
+      "cvv": "123"
+    }
   },
   "compare": {
     "bestRated": "ได้รับการจัดอันดับดีที่สุด",
@@ -571,7 +577,10 @@
     "noReviewsYet": "ยังไม่มีรีวิว",
     "beFirstToShare": "เป็นคนแรกที่แสดงความคิดเห็นเกี่ยวกับผลิตภัณฑ์นี้!"
   },
-  "recentlyViewed": { "recentlyViewed": "ดูล่าสุด", "clear": "ล้างข้อมูล" },
+  "recentlyViewed": {
+    "recentlyViewed": "ดูล่าสุด",
+    "clear": "ล้างข้อมูล"
+  },
   "quickViewModal": {
     "quickView": "ดูอย่างรวดเร็ว",
     "viewProductDetails": "ดูรายละเอียดสินค้า เลือกตัวเลือก และเพิ่มลงในรถเข็นสินค้า",

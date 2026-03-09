@@ -7,7 +7,8 @@
     "search": "Поиск",
     "searchPlaceholder": "Ищите велосипеды, снаряжение, одежду...",
     "selectLanguage": "Выберите язык",
-    "aiSearchPlaceholder": "Поиск с ИИ: Опишите, что вы ищете..."
+    "aiSearchPlaceholder": "Поиск с ИИ: Опишите, что вы ищете...",
+    "sale": "Скидки"
   },
   "buttons": {
     "addToCart": "Добавить в корзину",

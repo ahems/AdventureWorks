@@ -7,7 +7,8 @@
     "search": "Search",
     "searchPlaceholder": "Search for bikes, gear, clothing...",
     "aiSearchPlaceholder": "AI Search: Describe what you're looking for...",
-    "selectLanguage": "Select Language"
+    "selectLanguage": "Select Language",
+    "sale": "Sale"
   },
   "buttons": {
     "addToCart": "Add to Cart",

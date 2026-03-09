@@ -413,27 +413,33 @@ const attachInventoryToProducts = async (
 };
 
 // Helper function to add icon names to categories (since they're not in the database)
+// Maps by ProductCategoryID so it works regardless of the translated Name.
 const addIconsToCategories = (
   categories: ProductCategory[],
 ): ProductCategory[] => {
-  const iconMap: Record<string, string> = {
-    Bikes: "bike",
-    Components: "cog",
-    Clothing: "shirt",
-    Accessories: "backpack",
+  const iconMap: Record<number, string> = {
+    1: "bike",       // Bikes
+    2: "cog",        // Components
+    3: "shirt",      // Clothing
+    4: "backpack",   // Accessories
   };
 
   return categories.map((cat) => ({
     ...cat,
-    IconName: iconMap[cat.Name] || "box",
+    IconName: iconMap[cat.ProductCategoryID] || "box",
   }));
 };
 
-// Fetch all categories
-export const getCategories = async (): Promise<ProductCategory[]> => {
+// Fetch all categories for the given culture (padded to 6 chars for nchar(6) DB column)
+export const getCategories = async (
+  cultureId: string = "en",
+): Promise<ProductCategory[]> => {
   try {
-    const data =
-      await graphqlClient.request<CategoriesResponse>(GET_CATEGORIES);
+    const paddedCultureId = cultureId.padEnd(6, " ");
+    const data = await graphqlClient.request<CategoriesResponse>(
+      GET_CATEGORIES,
+      { cultureId: paddedCultureId },
+    );
     return addIconsToCategories(data.productCategories.items);
   } catch (error) {
     trackError("Error fetching categories", error, {
@@ -653,14 +659,16 @@ export const getProductsByCategory = async (
   }
 };
 
-// Fetch category by ID
+// Fetch category by ID for the given culture (padded to 6 chars for nchar(6) DB column)
 export const getCategoryById = async (
   categoryId: number,
+  cultureId: string = "en",
 ): Promise<ProductCategory | undefined> => {
   try {
+    const paddedCultureId = cultureId.padEnd(6, " ");
     const data = await graphqlClient.request<CategoriesResponse>(
       GET_CATEGORY_BY_ID,
-      { id: categoryId },
+      { id: categoryId, cultureId: paddedCultureId },
     );
     const categories = addIconsToCategories(data.productCategories.items);
     return categories[0];

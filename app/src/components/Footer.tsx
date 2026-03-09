@@ -3,11 +3,13 @@ import { Link } from "react-router-dom";
 import { Bike, Mail, MapPin, Phone } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useCategories } from "@/hooks/useProducts";
+import { useLanguage } from "@/context/LanguageContext";
 import { TwemojiText } from "@/components/TwemojiText";
 
 const Footer: React.FC = () => {
   const { t } = useTranslation("footer");
-  const { data: categories = [] } = useCategories();
+  const { selectedLanguage } = useLanguage();
+  const { data: categories = [] } = useCategories(selectedLanguage);
 
   return (
     <footer className="bg-doodle-text text-doodle-bg mt-16">
