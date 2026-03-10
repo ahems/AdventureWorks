@@ -36,7 +36,7 @@
     "browseAccessories": "Browse Accessories",
     "products": "Products",
     "freeShipping": "Free",
-    "shippingThreshold": "Shipping {{symbol}}50+",
+    "shippingThreshold": "Shipping {{threshold}}+",
     "returns": "30-Day",
     "returnsLabel": "Returns",
     "support": "24/7",

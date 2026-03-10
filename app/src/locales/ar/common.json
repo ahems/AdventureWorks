@@ -36,7 +36,7 @@
     "browseAccessories": "تصفح الإكسسوارات",
     "products": "المنتجات",
     "freeShipping": "مجاني",
-    "shippingThreshold": "الشحن للطلبات التي تزيد عن {{symbol}}50",
+    "shippingThreshold": "الشحن للطلبات التي تزيد عن {{threshold}}",
     "returns": "30 يومًا",
     "returnsLabel": "الإرجاع",
     "support": "٢٤/٧",

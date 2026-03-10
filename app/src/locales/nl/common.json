@@ -36,7 +36,7 @@
     "browseAccessories": "Bekijk accessoires",
     "products": "Producten",
     "freeShipping": "Gratis",
-    "shippingThreshold": "Verzending vanaf {{symbol}}50",
+    "shippingThreshold": "Verzending vanaf {{threshold}}",
     "returns": "30-Daags",
     "returnsLabel": "Retouren",
     "support": "24/7",

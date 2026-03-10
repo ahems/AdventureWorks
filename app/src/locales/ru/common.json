@@ -36,7 +36,7 @@
     "browseAccessories": "Просмотреть аксессуары",
     "products": "Товары",
     "freeShipping": "Бесплатно",
-    "shippingThreshold": "Доставка от {{symbol}}50",
+    "shippingThreshold": "Доставка от {{threshold}}",
     "returns": "30-дневный",
     "returnsLabel": "Возврат",
     "support": "24/7",

@@ -36,7 +36,7 @@
     "browseAccessories": "เรียกดูอุปกรณ์เสริม",
     "products": "สินค้า",
     "freeShipping": "ฟรี",
-    "shippingThreshold": "จัดส่งฟรีเมื่อซื้อครบ {{symbol}}50 ขึ้นไป",
+    "shippingThreshold": "จัดส่งฟรีเมื่อซื้อครบ {{threshold}} ขึ้นไป",
     "returns": "30 วัน",
     "returnsLabel": "การคืนสินค้า",
     "support": "24/7",

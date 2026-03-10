@@ -36,7 +36,7 @@
     "browseAccessories": "Duyệt Phụ Kiện",
     "products": "Sản Phẩm",
     "freeShipping": "Miễn Phí",
-    "shippingThreshold": "Vận Chuyển trên {{symbol}}50",
+    "shippingThreshold": "Vận Chuyển trên {{threshold}}",
     "returns": "30 Ngày",
     "returnsLabel": "Hoàn Trả",
     "support": "24/7",

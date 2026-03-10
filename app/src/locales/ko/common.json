@@ -36,7 +36,7 @@
     "browseAccessories": "액세서리 둘러보기",
     "products": "제품",
     "freeShipping": "무료",
-    "shippingThreshold": "배송비 {{symbol}}50 이상 무료",
+    "shippingThreshold": "배송비 {{threshold}} 이상 무료",
     "returns": "30일간",
     "returnsLabel": "반품",
     "support": "24시간 연중무휴",

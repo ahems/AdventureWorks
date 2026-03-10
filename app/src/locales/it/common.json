@@ -35,7 +35,7 @@
     "browseAccessories": "Sfoglia Accessori",
     "products": "Prodotti",
     "freeShipping": "Spedizione",
-    "shippingThreshold": "Gratuita sopra i {{symbol}}50",
+    "shippingThreshold": "Gratuita sopra i {{threshold}}",
     "returns": "Resi",
     "returnsLabel": "30 Giorni",
     "support": "Assistenza",

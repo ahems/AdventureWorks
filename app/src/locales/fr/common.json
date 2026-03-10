@@ -36,7 +36,7 @@
     "browseAccessories": "Parcourir les Accessoires",
     "products": "Produits",
     "freeShipping": "Livraison Gratuite",
-    "shippingThreshold": "Livraison dès {{symbol}}50 d’achat",
+    "shippingThreshold": "Livraison dès {{threshold}} d’achat",
     "returns": "Retours sous 30 jours",
     "returnsLabel": "Retours",
     "support": "Assistance 24/7",

@@ -36,7 +36,7 @@
     "browseAccessories": "Aksesuarlara Göz Atın",
     "products": "Ürünler",
     "freeShipping": "Ücretsiz",
-    "shippingThreshold": "{{symbol}}50 ve üzeri gönderim",
+    "shippingThreshold": "{{threshold}} ve üzeri gönderim",
     "returns": "30 Günlük",
     "returnsLabel": "İadeler",
     "support": "7/24",

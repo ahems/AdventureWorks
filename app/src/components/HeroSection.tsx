@@ -4,13 +4,14 @@ import { useTranslation } from "react-i18next";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { useProducts } from "@/hooks/useProducts";
 import { Twemoji } from "@/components/Twemoji";
-import { useCurrency, CURRENCY_SYMBOLS } from "@/context/CurrencyContext";
+import { useCurrency } from "@/context/CurrencyContext";
 
 const HeroSection: React.FC = () => {
   const { t } = useTranslation("common");
-  const { selectedCurrency } = useCurrency();
+  const { formatPrice } = useCurrency();
   const { data: products = [] } = useProducts();
-  const currencySymbol = CURRENCY_SYMBOLS[selectedCurrency] ?? selectedCurrency;
+  // Convert $50 threshold to local currency to match checkout logic
+  const shippingThresholdDisplay = formatPrice(50);
 
   // Calculate available products count (in stock and for sale)
   const availableProductsCount = useMemo(() => {
@@ -116,7 +117,7 @@ const HeroSection: React.FC = () => {
                 {t("hero.freeShipping")}
               </div>
               <div className="font-doodle text-sm text-doodle-text/60">
-                {t("hero.shippingThreshold", { symbol: currencySymbol })}
+                {t("hero.shippingThreshold", { threshold: shippingThresholdDisplay })}
               </div>
             </div>
             <div className="text-center">
