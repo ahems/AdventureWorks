@@ -450,11 +450,16 @@ export const getCategories = async (
   }
 };
 
-// Fetch all subcategories
-export const getSubcategories = async (): Promise<ProductSubcategory[]> => {
+// Fetch all subcategories for the given culture (padded to 6 chars for nchar(6) DB column)
+export const getSubcategories = async (
+  cultureId: string = "en",
+): Promise<ProductSubcategory[]> => {
   try {
-    const data =
-      await graphqlClient.request<SubcategoriesResponse>(GET_SUBCATEGORIES);
+    const paddedCultureId = cultureId.padEnd(6, " ");
+    const data = await graphqlClient.request<SubcategoriesResponse>(
+      GET_SUBCATEGORIES,
+      { cultureId: paddedCultureId },
+    );
     return data.productSubcategories.items;
   } catch (error) {
     trackError("Error fetching subcategories", error, {
@@ -465,14 +470,16 @@ export const getSubcategories = async (): Promise<ProductSubcategory[]> => {
   }
 };
 
-// Fetch subcategories by category ID
+// Fetch subcategories by category ID for the given culture (padded to 6 chars)
 export const getSubcategoriesByCategory = async (
   categoryId: number,
+  cultureId: string = "en",
 ): Promise<ProductSubcategory[]> => {
   try {
+    const paddedCultureId = cultureId.padEnd(6, " ");
     const data = await graphqlClient.request<SubcategoriesResponse>(
       GET_SUBCATEGORIES_BY_CATEGORY,
-      { categoryId },
+      { categoryId, cultureId: paddedCultureId },
     );
     return data.productSubcategories.items;
   } catch (error) {
@@ -626,13 +633,14 @@ export const getProductsBySubcategory = async (
   }
 };
 
-// Fetch products by category ID (needs to get subcategories first)
+// Fetch products by category ID (needs to get subcategories first for the given culture)
 export const getProductsByCategory = async (
   categoryId: number,
+  cultureId: string = "en",
 ): Promise<Product[]> => {
   try {
-    // First, get all subcategory IDs for this category
-    const subcategories = await getSubcategoriesByCategory(categoryId);
+    // First, get all subcategory IDs for this category in the given culture
+    const subcategories = await getSubcategoriesByCategory(categoryId, cultureId);
     const subcategoryIds = subcategories.map((s) => s.ProductSubcategoryID);
 
     // If no subcategories, return empty array
@@ -682,14 +690,16 @@ export const getCategoryById = async (
   }
 };
 
-// Fetch subcategory by ID
+// Fetch subcategory by ID for the given culture (padded to 6 chars)
 export const getSubcategoryById = async (
   subcategoryId: number,
+  cultureId: string = "en",
 ): Promise<ProductSubcategory | undefined> => {
   try {
+    const paddedCultureId = cultureId.padEnd(6, " ");
     const data = await graphqlClient.request<SubcategoriesResponse>(
       GET_SUBCATEGORY_BY_ID,
-      { id: subcategoryId },
+      { id: subcategoryId, cultureId: paddedCultureId },
     );
     return data.productSubcategories.items[0];
   } catch (error) {
@@ -769,12 +779,12 @@ export let categories: ProductCategory[] = [];
 export let subcategories: ProductSubcategory[] = [];
 export let products: Product[] = [];
 
-// Initialize data on module load
+// Initialize data on module load (default culture "en" for categories/subcategories)
 (async () => {
   try {
     [categories, subcategories, products] = await Promise.all([
-      getCategories(),
-      getSubcategories(),
+      getCategories("en"),
+      getSubcategories("en"),
       getProducts(),
     ]);
   } catch (error) {

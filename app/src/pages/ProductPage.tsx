@@ -69,6 +69,7 @@ const ProductPage: React.FC = () => {
   );
   const { data: subcategory } = useSubcategory(
     product?.ProductSubcategoryID || 0,
+    selectedLanguage,
   );
   const { data: category } = useCategory(
     subcategory?.ProductCategoryID || 0,

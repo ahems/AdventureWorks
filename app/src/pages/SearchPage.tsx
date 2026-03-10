@@ -59,7 +59,7 @@ const SearchPage: React.FC = () => {
   const { data: products = [], isLoading: productsLoading } = useProducts();
   const { data: categories = [], isLoading: categoriesLoading } =
     useCategories(selectedLanguage);
-  const { data: subcategories = [] } = useSubcategories();
+  const { data: subcategories = [] } = useSubcategories(selectedLanguage);
   const { data: allReviews = [] } = useAllReviews();
 
   // Semantic search hook - always enabled when query is submitted

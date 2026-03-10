@@ -127,7 +127,7 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
         {currentProduct.ThumbNailPhoto ? (
           <OptimizedImage
             src={`data:image/gif;base64,${currentProduct.ThumbNailPhoto}`}
-            alt={`${productGroup.modelName}${
+            alt={`${localizedName}${
               currentProduct.Color ? ` - ${currentProduct.Color}` : ""
             }`}
             className="!aspect-square"
@@ -153,7 +153,7 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
       {/* Product Info */}
       <div className="space-y-3">
         <h3 className="font-doodle text-lg font-bold text-doodle-text group-hover:text-doodle-accent transition-colors line-clamp-2">
-          {productGroup.modelName}
+          {localizedName}
         </h3>
 
         {/* Variant Selectors */}

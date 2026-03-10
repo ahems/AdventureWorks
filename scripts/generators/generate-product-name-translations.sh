@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
-# Generates translated product names and their vector embeddings for all 23 cultures
+# Generates translated product names and vector embeddings for all 23 cultures
 # and writes them to seed-job/sql/ProductNames-ai.csv for use by the seed job.
 #
-# For each culture, this script performs two API calls:
-#   1. Translation (non-English only): all product names in one chat completions call,
-#      returning a JSON array of translated strings in the same order.
-#   2. Embedding: all (translated) product names in one embeddings call,
-#      returning a sorted array of 1536-dim vectors.
+# Only products with FinishedGoodsFlag = 1 (in Product.csv) get translations and
+# embeddings. All other products get one row per culture with the original English
+# name and NULL for ProductNameEmbedding, reducing file size and API usage.
+#
+# For each culture, for finished-goods only:
+#   1. Translation (non-English only): one chat completions call returning a JSON array.
+#   2. Embedding: one embeddings call returning 1536-dim vectors.
 #
 # English variants (en, en-au, en-ca, en-gb, en-ie, en-nz) skip translation and
-# use the original English names, but still generate embeddings.
+# use the original English names for finished goods, but still generate embeddings.
 #
 # Output CSV format (tab-delimited, no header row):
 #   ProductID  CultureID  Name  ProductNameEmbedding  rowguid  ModifiedDate
+#   (ProductNameEmbedding is empty for non-finished-goods products → NULL in DB.)
 #
 # Prerequisites:
 #   az login (or Managed Identity)    -- for Azure access token
@@ -103,37 +106,42 @@ EMBEDDINGS_FILE=$(mktemp /tmp/aw_embeddings_XXXXXX.json)
 trap 'rm -f "$PRODUCTS_JSON_FILE" "$ENGLISH_NAMES_FILE" "$TRANSLATED_NAMES_FILE" "$EMBEDDINGS_FILE"' EXIT
 
 # ── Read all products from Product.csv ───────────────────────────────────────────
-# Product.csv: tab-delimited, no header. Col 1 = ProductID, Col 2 = Name.
+# Product.csv: tab-delimited, no header. Col 1 = ProductID, Col 2 = Name, Col 5 = FinishedGoodsFlag (1 = true).
+# Only products with FinishedGoodsFlag = 1 get translations and embeddings; others get English name only and NULL embedding.
 
 python3 - "$INPUT_CSV" <<'PYEOF' > "$PRODUCTS_JSON_FILE"
 import json, sys
 
-products = []
+products = []  # all products in file order: {id, name, finished_goods}
 with open(sys.argv[1], 'r', encoding='utf-8') as f:
     for line in f:
         line = line.rstrip('\n\r')
         if not line.strip():
             continue
         parts = line.split('\t')
-        if len(parts) < 2:
+        if len(parts) < 5:
             continue
         pid = parts[0].strip()
         name = parts[1].strip()
         if not pid.isdigit():
             continue
-        products.append({'id': int(pid), 'name': name})
+        # FinishedGoodsFlag is 5th column (index 4); 1 = true
+        finished = parts[4].strip() == '1'
+        products.append({'id': int(pid), 'name': name, 'finished_goods': finished})
 
 print(json.dumps(products))
 PYEOF
 
 PRODUCT_COUNT=$(python3 -c "import json; print(len(json.load(open('$PRODUCTS_JSON_FILE'))))")
-echo "Read $PRODUCT_COUNT products from Product.csv."
+FINISHED_COUNT=$(python3 -c "import json; p=json.load(open('$PRODUCTS_JSON_FILE')); print(sum(1 for x in p if x.get('finished_goods')))")
+echo "Read $PRODUCT_COUNT products from Product.csv ($FINISHED_COUNT finished goods; only these get translations and embeddings)."
 
-# Write the English names array to a temp file
+# English names for finished-goods only (used for translation and embedding batches)
 python3 -c "
 import json
 products = json.load(open('$PRODUCTS_JSON_FILE'))
-print(json.dumps([p['name'] for p in products]))
+finished_names = [p['name'] for p in products if p.get('finished_goods')]
+print(json.dumps(finished_names))
 " > "$ENGLISH_NAMES_FILE"
 
 echo ""
@@ -179,8 +187,8 @@ translate_names_batch() {
 
     local system_prompt="You are a professional translator for an outdoor sports and bicycle retail company. Translate product names from English to ${language_name}. Rules: 1) Keep all model numbers, product codes, and numeric size/dimension values unchanged (e.g. '42', 'SB-2394B', '-100', '58'). 2) Translate descriptive English words such as colors and product type names into ${language_name}. 3) Return ONLY a valid JSON array of translated strings in the exact same order and count as the input array. No markdown, no explanations — just the JSON array."
 
-    local product_count="$PRODUCT_COUNT"
-    local user_prompt="Translate these ${product_count} bicycle/outdoor product names into ${language_name} (locale: ${culture_code}). Return a JSON array with exactly ${product_count} translated strings."
+    local finished_count="$FINISHED_COUNT"
+    local user_prompt="Translate these ${finished_count} bicycle/outdoor product names into ${language_name} (locale: ${culture_code}). Return a JSON array with exactly ${finished_count} translated strings."
 
     local json_payload
     json_payload=$(python3 -c "
@@ -238,8 +246,8 @@ except Exception as e:
     # Validate count
     local translated_count
     translated_count=$(python3 -c "import json; print(len(json.load(open('$TRANSLATED_NAMES_FILE'))))" 2>/dev/null || echo "0")
-    if [ "$translated_count" != "$PRODUCT_COUNT" ]; then
-        echo "  Warning: Expected $PRODUCT_COUNT translations, got $translated_count." >&2
+    if [ "$translated_count" != "$FINISHED_COUNT" ]; then
+        echo "  Warning: Expected $FINISHED_COUNT translations, got $translated_count." >&2
         return 1
     fi
 }
@@ -273,14 +281,14 @@ print(json.dumps({'input': names}))
 
     local embedding_count
     embedding_count=$(python3 -c "import json; print(len(json.load(open('$EMBEDDINGS_FILE'))))" 2>/dev/null || echo "0")
-    if [ "$embedding_count" != "$PRODUCT_COUNT" ]; then
-        echo "  Warning: Expected $PRODUCT_COUNT embeddings, got $embedding_count." >&2
+    if [ "$embedding_count" != "$FINISHED_COUNT" ]; then
+        echo "  Warning: Expected $FINISHED_COUNT embeddings, got $embedding_count." >&2
         return 1
     fi
 }
 
 # ── Helper: write CSV rows for one culture ────────────────────────────────────────
-# Reads PRODUCTS_JSON_FILE, TRANSLATED_NAMES_FILE, EMBEDDINGS_FILE and appends to OUTPUT_CSV.
+# All products get a row: finished goods use translated name + embedding; others use English name + empty embedding (NULL).
 
 write_csv_rows() {
     local culture_id_padded="$1"
@@ -295,16 +303,23 @@ output_file        = sys.argv[4]
 culture_id_padded  = sys.argv[5]
 modified_date      = sys.argv[6]
 
-products       = json.load(open(products_file))
-translated     = json.load(open(translated_file))
-embeddings     = json.load(open(embeddings_file))
+products  = json.load(open(products_file))
+translated = json.load(open(translated_file))
+embeddings = json.load(open(embeddings_file))
 
+finished_idx = 0
 written = 0
 with open(output_file, 'a', encoding='utf-8') as f:
-    for product, name, embedding in zip(products, translated, embeddings):
-        rowguid        = str(uuid.uuid4()).upper()
-        embedding_json = json.dumps(embedding, separators=(',', ':'))
-        f.write(f"{product['id']}\t{culture_id_padded}\t{name}\t{embedding_json}\t{rowguid}\t{modified_date}\n")
+    for p in products:
+        rowguid = str(uuid.uuid4()).upper()
+        if p.get('finished_goods'):
+            name = translated[finished_idx]
+            emb = json.dumps(embeddings[finished_idx], separators=(',', ':'))
+            finished_idx += 1
+        else:
+            name = p['name']
+            emb = ''   # NULL in DB
+        f.write(f"{p['id']}\t{culture_id_padded}\t{name}\t{emb}\t{rowguid}\t{modified_date}\n")
         written += 1
 
 print(f"  Wrote {written} rows.")
@@ -329,10 +344,10 @@ for culture_entry in "${CULTURES[@]}"; do
 
     # Step 1: Translation
     if [ "$is_english" = "yes" ]; then
-        echo "  Using English names (English variant — no translation needed)"
+        echo "  Using English names for $FINISHED_COUNT finished goods (no translation needed)"
         cp "$ENGLISH_NAMES_FILE" "$TRANSLATED_NAMES_FILE"
     else
-        echo "  Translating $PRODUCT_COUNT names to $language_name..."
+        echo "  Translating $FINISHED_COUNT finished-goods names to $language_name..."
         if ! translate_names_batch "$culture_id_trimmed" "$language_name"; then
             echo "  Falling back to English names for $culture_id_trimmed." >&2
             cp "$ENGLISH_NAMES_FILE" "$TRANSLATED_NAMES_FILE"
@@ -342,8 +357,8 @@ for culture_entry in "${CULTURES[@]}"; do
         fi
     fi
 
-    # Step 2: Embeddings
-    echo "  Generating embeddings for $PRODUCT_COUNT names..."
+    # Step 2: Embeddings (finished goods only)
+    echo "  Generating embeddings for $FINISHED_COUNT names..."
     if ! generate_embeddings_batch; then
         echo "  Error: Embedding generation failed for $culture_id_trimmed — skipping culture." >&2
         TOTAL_FAILED=$((TOTAL_FAILED + PRODUCT_COUNT))
@@ -351,7 +366,7 @@ for culture_entry in "${CULTURES[@]}"; do
     fi
     echo "  Embeddings complete."
 
-    # Step 3: Write CSV rows
+    # Step 3: Write CSV rows (all products: finished with translation+embedding, others English+empty embedding)
     write_csv_rows "$culture_id_padded"
     TOTAL_ROWS=$((TOTAL_ROWS + PRODUCT_COUNT))
 done

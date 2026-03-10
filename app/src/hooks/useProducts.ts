@@ -11,20 +11,24 @@ export const useCategories = (cultureId: string = "en") => {
   });
 };
 
-// Hook to fetch all subcategories
-export const useSubcategories = () => {
+// Hook to fetch all subcategories for the given culture
+export const useSubcategories = (cultureId: string = "en") => {
   return useQuery<ProductSubcategory[]>({
-    queryKey: ["subcategories"],
-    queryFn: apiService.getSubcategories,
+    queryKey: ["subcategories", cultureId],
+    queryFn: () => apiService.getSubcategories(cultureId),
     staleTime: 5 * 60 * 1000,
   });
 };
 
-// Hook to fetch subcategories by category ID
-export const useSubcategoriesByCategory = (categoryId: number) => {
+// Hook to fetch subcategories by category ID for the given culture
+export const useSubcategoriesByCategory = (
+  categoryId: number,
+  cultureId: string = "en",
+) => {
   return useQuery<ProductSubcategory[]>({
-    queryKey: ["subcategories", "category", categoryId],
-    queryFn: () => apiService.getSubcategoriesByCategory(categoryId),
+    queryKey: ["subcategories", "category", categoryId, cultureId],
+    queryFn: () =>
+      apiService.getSubcategoriesByCategory(categoryId, cultureId),
     enabled: !!categoryId,
     staleTime: 5 * 60 * 1000,
   });
@@ -59,11 +63,14 @@ export const useProductsByIds = (productIds: number[]) => {
   });
 };
 
-// Hook to fetch products by category ID
-export const useProductsByCategory = (categoryId: number) => {
+// Hook to fetch products by category ID for the given culture
+export const useProductsByCategory = (
+  categoryId: number,
+  cultureId: string = "en",
+) => {
   return useQuery<Product[]>({
-    queryKey: ["products", "category", categoryId],
-    queryFn: () => apiService.getProductsByCategory(categoryId),
+    queryKey: ["products", "category", categoryId, cultureId],
+    queryFn: () => apiService.getProductsByCategory(categoryId, cultureId),
     enabled: !!categoryId,
     staleTime: 2 * 60 * 1000,
   });
@@ -89,11 +96,14 @@ export const useCategory = (categoryId: number, cultureId: string = "en") => {
   });
 };
 
-// Hook to fetch subcategory by ID
-export const useSubcategory = (subcategoryId: number) => {
+// Hook to fetch subcategory by ID for the given culture
+export const useSubcategory = (
+  subcategoryId: number,
+  cultureId: string = "en",
+) => {
   return useQuery<ProductSubcategory | undefined>({
-    queryKey: ["subcategory", subcategoryId],
-    queryFn: () => apiService.getSubcategoryById(subcategoryId),
+    queryKey: ["subcategory", subcategoryId, cultureId],
+    queryFn: () => apiService.getSubcategoryById(subcategoryId, cultureId),
     enabled: !!subcategoryId,
     staleTime: 5 * 60 * 1000,
   });

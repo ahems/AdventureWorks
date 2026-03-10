@@ -45,9 +45,13 @@ const CategoryPage: React.FC = () => {
   );
   const { data: subcategories = [] } = useSubcategoriesByCategory(
     categoryId ? parseInt(categoryId) : 0,
+    selectedLanguage,
   );
   const { data: allCategoryProducts = [], isLoading: categoryProductsLoading } =
-    useProductsByCategory(categoryId ? parseInt(categoryId) : 0);
+    useProductsByCategory(
+      categoryId ? parseInt(categoryId) : 0,
+      selectedLanguage,
+    );
   const {
     data: subcategoryProducts = [],
     isLoading: subcategoryProductsLoading,

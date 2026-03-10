@@ -79,26 +79,28 @@ export const GET_CATEGORIES = gql`
   }
 `;
 
-// Query to get all product subcategories
+// Query to get all product subcategories for a specific culture
 export const GET_SUBCATEGORIES = gql`
-  query GetSubcategories {
-    productSubcategories {
+  query GetSubcategories($cultureId: String!) {
+    productSubcategories(filter: { CultureID: { eq: $cultureId } }) {
       items {
         ProductSubcategoryID
         ProductCategoryID
+        CultureID
         Name
       }
     }
   }
 `;
 
-// Query to get subcategories by category ID
+// Query to get subcategories by category ID for a specific culture
 export const GET_SUBCATEGORIES_BY_CATEGORY = gql`
-  query GetSubcategoriesByCategory($categoryId: Int!) {
-    productSubcategories(filter: { ProductCategoryID: { eq: $categoryId } }) {
+  query GetSubcategoriesByCategory($categoryId: Int!, $cultureId: String!) {
+    productSubcategories(filter: { and: [{ ProductCategoryID: { eq: $categoryId } }, { CultureID: { eq: $cultureId } }] }) {
       items {
         ProductSubcategoryID
         ProductCategoryID
+        CultureID
         Name
       }
     }
@@ -392,13 +394,14 @@ export const GET_CATEGORY_BY_ID = gql`
   }
 `;
 
-// Query to get subcategory by ID
+// Query to get subcategory by ID for a specific culture
 export const GET_SUBCATEGORY_BY_ID = gql`
-  query GetSubcategoryById($id: Int!) {
-    productSubcategories(filter: { ProductSubcategoryID: { eq: $id } }) {
+  query GetSubcategoryById($id: Int!, $cultureId: String!) {
+    productSubcategories(filter: { and: [{ ProductSubcategoryID: { eq: $id } }, { CultureID: { eq: $cultureId } }] }) {
       items {
         ProductSubcategoryID
         ProductCategoryID
+        CultureID
         Name
       }
     }
