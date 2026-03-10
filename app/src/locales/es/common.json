@@ -36,7 +36,7 @@
     "browseAccessories": "Explorar accesorios",
     "products": "Productos",
     "freeShipping": "Gratis",
-    "shippingThreshold": "Envío desde $50",
+    "shippingThreshold": "Envío desde {{symbol}}50",
     "returns": "30 Días",
     "returnsLabel": "Devoluciones",
     "support": "24/7",

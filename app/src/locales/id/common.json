@@ -36,7 +36,7 @@
     "browseAccessories": "Jelajahi Aksesori",
     "products": "Produk",
     "freeShipping": "Gratis",
-    "shippingThreshold": "Pengiriman $50+",
+    "shippingThreshold": "Pengiriman {{symbol}}50+",
     "returns": "30-Hari",
     "returnsLabel": "Pengembalian Barang",
     "support": "24/7",

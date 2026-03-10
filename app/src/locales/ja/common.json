@@ -36,7 +36,7 @@
     "browseAccessories": "アクセサリーを閲覧する",
     "products": "製品",
     "freeShipping": "無料",
-    "shippingThreshold": "50ドル以上の発送",
+    "shippingThreshold": "{{symbol}}50以上の発送",
     "returns": "30日間",
     "returnsLabel": "返品",
     "support": "24時間年中無休",

@@ -36,7 +36,7 @@
     "browseAccessories": "עיין באביזרים",
     "products": "מוצרים",
     "freeShipping": "חינם",
-    "shippingThreshold": "משלוח בהזמנות מעל $50",
+    "shippingThreshold": "משלוח בהזמנות מעל {{symbol}}50",
     "returns": "30 יום",
     "returnsLabel": "החזרות",
     "support": "24/7",

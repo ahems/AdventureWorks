@@ -36,7 +36,7 @@
     "browseAccessories": "Zubehör durchsuchen",
     "products": "Produkte",
     "freeShipping": "Kostenlos",
-    "shippingThreshold": "Versand ab 50 $",
+    "shippingThreshold": "Versand ab {{symbol}}50",
     "returns": "30-Tage",
     "returnsLabel": "Rücksendungen",
     "support": "24/7",

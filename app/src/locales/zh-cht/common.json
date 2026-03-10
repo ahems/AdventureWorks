@@ -36,7 +36,7 @@
     "browseAccessories": "瀏覽配件",
     "products": "產品",
     "freeShipping": "免運費",
-    "shippingThreshold": "訂單滿 $50",
+    "shippingThreshold": "訂單滿 {{symbol}}50",
     "returns": "30 天",
     "returnsLabel": "退貨保障",
     "support": "24/7",

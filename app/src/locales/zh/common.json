@@ -36,7 +36,7 @@
     "browseAccessories": "浏览配件",
     "products": "产品",
     "freeShipping": "免邮",
-    "shippingThreshold": "购物满$50免邮",
+    "shippingThreshold": "购物满{{symbol}}50免邮",
     "returns": "30天",
     "returnsLabel": "退货",
     "support": "全天候",
