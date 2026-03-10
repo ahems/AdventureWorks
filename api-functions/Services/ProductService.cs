@@ -436,7 +436,7 @@ public class ProductService
         });
     }
 
-    public async Task<List<SemanticSearchResult>> SearchProductsByDescriptionEmbeddingAsync(float[] queryEmbedding, int topN = 20)
+    public async Task<List<SemanticSearchResult>> SearchProductsByDescriptionEmbeddingAsync(float[] queryEmbedding, int topN = 20, string cultureId = "en")
     {
         using var connection = await GetConnectionAsync();
 
@@ -466,13 +466,50 @@ public class ProductService
             LEFT JOIN Production.ProductPhoto pp ON ppp.ProductPhotoID = pp.ProductPhotoID
             WHERE p.FinishedGoodsFlag = 1
               AND pd.DescriptionEmbedding IS NOT NULL
-              AND pmpdc.CultureID = 'en'
+              AND pmpdc.CultureID = @CultureId
             ORDER BY VECTOR_DISTANCE('cosine', pd.DescriptionEmbedding, CAST(@QueryEmbedding AS VECTOR(1536)))";
 
         var results = await connection.QueryAsync<SemanticSearchResult>(sql, new
         {
             TopN = topN,
-            QueryEmbedding = embeddingJson
+            QueryEmbedding = embeddingJson,
+            CultureId = cultureId
+        });
+
+        return results.ToList();
+    }
+
+    public async Task<List<SemanticSearchResult>> SearchProductsByNameEmbeddingAsync(float[] queryEmbedding, int topN = 20, string cultureId = "en")
+    {
+        using var connection = await GetConnectionAsync();
+
+        var embeddingJson = System.Text.Json.JsonSerializer.Serialize(queryEmbedding);
+
+        var sql = @"
+            SELECT TOP (@TopN)
+                pn.ProductID,
+                p.Name,
+                NULL AS Description,
+                p.ListPrice,
+                p.Color,
+                pp.ThumbNailPhoto,
+                VECTOR_DISTANCE('cosine', pn.ProductNameEmbedding, CAST(@QueryEmbedding AS VECTOR(1536))) AS SimilarityScore,
+                'ProductName' AS MatchSource,
+                pn.Name AS MatchText
+            FROM Production.ProductName pn
+            INNER JOIN Production.Product p ON pn.ProductID = p.ProductID
+            LEFT JOIN Production.ProductProductPhoto ppp ON p.ProductID = ppp.ProductID AND ppp.[Primary] = 1
+            LEFT JOIN Production.ProductPhoto pp ON ppp.ProductPhotoID = pp.ProductPhotoID
+            WHERE p.FinishedGoodsFlag = 1
+              AND pn.ProductNameEmbedding IS NOT NULL
+              AND pn.CultureID = @CultureId
+            ORDER BY VECTOR_DISTANCE('cosine', pn.ProductNameEmbedding, CAST(@QueryEmbedding AS VECTOR(1536)))";
+
+        var results = await connection.QueryAsync<SemanticSearchResult>(sql, new
+        {
+            TopN = topN,
+            QueryEmbedding = embeddingJson,
+            CultureId = cultureId
         });
 
         return results.ToList();

@@ -11,6 +11,7 @@ import { useReviews } from "@/hooks/useReviews";
 import { useCurrency } from "@/context/CurrencyContext";
 import { useUnitMeasure } from "@/context/UnitMeasureContext";
 import QuickViewModal from "./QuickViewModal";
+import { useProductNames } from "@/context/ProductNamesContext";
 
 interface ProductCardProps {
   product: Product;
@@ -28,7 +29,10 @@ const ProductCard: React.FC<ProductCardProps> = ({
   const { averageRating, reviewCount } = useReviews(product.ProductID);
   const { formatPrice } = useCurrency();
   const { formatSize } = useUnitMeasure();
+  const { getLocalizedName } = useProductNames();
   const [quickViewOpen, setQuickViewOpen] = useState(false);
+
+  const localizedName = getLocalizedName(product.ProductID) ?? product.Name;
 
   const inWishlist = isInWishlist(product.ProductID);
   const inCompare = isInCompare(product.ProductID);
@@ -141,7 +145,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
           {product.ThumbNailPhoto ? (
             <OptimizedImage
               src={`data:image/gif;base64,${product.ThumbNailPhoto}`}
-              alt={`${product.Name}${
+              alt={`${localizedName}${
                 product.Color ? ` - ${product.Color}` : ""
               }`}
               className="!aspect-square"
@@ -173,7 +177,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
             className="font-doodle text-lg font-bold text-doodle-text group-hover:text-doodle-accent transition-colors line-clamp-2"
             data-testid={`product-name-${product.ProductID}`}
           >
-            {product.Name}
+            {localizedName}
           </h3>
 
           <div className="flex items-center gap-2 flex-wrap">

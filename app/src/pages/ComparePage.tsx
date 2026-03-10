@@ -19,6 +19,7 @@ import { useCart } from "@/context/CartContext";
 import { useReviews } from "@/hooks/useReviews";
 import { getSalePrice, Product } from "@/types/product";
 import { useCurrency } from "@/context/CurrencyContext";
+import { useProductNames } from "@/context/ProductNamesContext";
 
 const CompareProductReview: React.FC<{
   productId: number;
@@ -88,6 +89,7 @@ const ComparePage: React.FC = () => {
   const { items, removeFromCompare, clearCompare } = useCompare();
   const { addToCart } = useCart();
   const { formatPrice } = useCurrency();
+  const { getLocalizedName } = useProductNames();
 
   // Calculate best values for highlighting
   const highlights = useMemo(() => {
@@ -293,7 +295,7 @@ const ComparePage: React.FC = () => {
                       <button
                         onClick={() => removeFromCompare(product.ProductID)}
                         className="absolute top-2 right-2 p-1 hover:bg-doodle-accent/10 rounded transition-colors"
-                        aria-label={`Remove ${product.Name}`}
+                        aria-label={`Remove ${getLocalizedName(product.ProductID) ?? product.Name}`}
                       >
                         <X className="w-4 h-4 text-doodle-accent" />
                       </button>
@@ -305,7 +307,7 @@ const ComparePage: React.FC = () => {
                           to={`/product/${product.ProductID}`}
                           className="font-doodle font-bold text-doodle-text hover:text-doodle-accent transition-colors text-center line-clamp-2"
                         >
-                          {product.Name}
+                          {getLocalizedName(product.ProductID) ?? product.Name}
                         </Link>
                       </div>
                     </th>

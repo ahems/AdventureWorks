@@ -10,6 +10,7 @@ import { useAuth } from "@/context/AuthContext";
 import { getSalePrice } from "@/types/product";
 import { useCurrency } from "@/context/CurrencyContext";
 import { useUnitMeasure } from "@/context/UnitMeasureContext";
+import { useProductNames } from "@/context/ProductNamesContext";
 
 const WishlistPage: React.FC = () => {
   const { t } = useTranslation("common");
@@ -18,6 +19,7 @@ const WishlistPage: React.FC = () => {
   const { user } = useAuth();
   const { formatPrice } = useCurrency();
   const { formatSize } = useUnitMeasure();
+  const { getLocalizedName } = useProductNames();
 
   const handleAddToCart = (product: (typeof items)[0]) => {
     addToCart(product);
@@ -135,7 +137,7 @@ const WishlistPage: React.FC = () => {
                 <div className="space-y-2">
                   <Link to={`/product/${product.ProductID}`}>
                     <h3 className="font-doodle text-lg font-bold text-doodle-text hover:text-doodle-accent transition-colors line-clamp-2">
-                      {product.Name}
+                      {getLocalizedName(product.ProductID) ?? product.Name}
                     </h3>
                   </Link>
 

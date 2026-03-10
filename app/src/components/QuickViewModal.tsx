@@ -24,6 +24,7 @@ import { useCompare } from "@/context/CompareContext";
 import { useReviews } from "@/hooks/useReviews";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/context/CurrencyContext";
+import { useProductNames } from "@/context/ProductNamesContext";
 
 interface QuickViewModalProps {
   product: Product;
@@ -42,6 +43,8 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
   const { averageRating, reviewCount } = useReviews(product.ProductID);
   const { t } = useTranslation("common");
   const { formatPrice } = useCurrency();
+  const { getLocalizedName } = useProductNames();
+  const localizedName = getLocalizedName(product.ProductID) ?? product.Name;
 
   const [selectedSize, setSelectedSize] = useState<string | undefined>(
     product.availableSizes?.[0],
@@ -101,7 +104,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl p-0 overflow-hidden bg-doodle-bg border-4 border-doodle-text">
         <DialogTitle className="sr-only">
-          {product.Name} - {t("quickViewModal.quickView")}
+          {localizedName} - {t("quickViewModal.quickView")}
         </DialogTitle>
         <DialogDescription className="sr-only">
           {t("quickViewModal.viewProductDetails")}
@@ -135,7 +138,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
               {product.ThumbNailPhoto ? (
                 <img
                   src={`data:image/gif;base64,${product.ThumbNailPhoto}`}
-                  alt={`${product.Name}${
+                  alt={`${localizedName}${
                     product.Color ? ` - ${product.Color}` : ""
                   }`}
                   className="max-w-full max-h-96 object-contain"
@@ -155,7 +158,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
           <div className="p-6 space-y-4">
             <div>
               <h2 className="font-doodle text-2xl font-bold text-doodle-text mb-2">
-                {product.Name}
+                {localizedName}
               </h2>
 
               {/* Star Rating */}

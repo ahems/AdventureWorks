@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/context/CurrencyContext";
 import { trackError } from "@/lib/appInsights";
+import { useProductNames } from "@/context/ProductNamesContext";
 
 // Query to fetch thumbnail photos for recently viewed products
 const GET_PRODUCT_THUMBNAILS = gql`
@@ -45,6 +46,7 @@ const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
   const { recentlyViewed, clearRecentlyViewed } = useRecentlyViewed();
   const { t } = useTranslation("common");
   const { formatPrice } = useCurrency();
+  const { getLocalizedName } = useProductNames();
   const [thumbnails, setThumbnails] = useState<Map<number, string | null>>(
     new Map(),
   );
@@ -140,7 +142,7 @@ const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
                   ) : thumbnail ? (
                     <img
                       src={`data:image/gif;base64,${thumbnail}`}
-                      alt={product.Name}
+                      alt={getLocalizedName(product.ProductID) ?? product.Name}
                       className="w-full h-full object-contain"
                     />
                   ) : (
@@ -157,7 +159,7 @@ const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
 
                 {/* Info */}
                 <h3 className="font-doodle text-sm font-bold text-doodle-text line-clamp-2 mb-1 group-hover:text-doodle-accent transition-colors">
-                  {product.Name}
+                  {getLocalizedName(product.ProductID) ?? product.Name}
                 </h3>
 
                 {/* Price */}

@@ -8,6 +8,7 @@ import { useCart } from "@/context/CartContext";
 import { useReviews } from "@/hooks/useReviews";
 import { toast } from "@/hooks/use-toast";
 import { useCurrency } from "@/context/CurrencyContext";
+import { useProductNames } from "@/context/ProductNamesContext";
 import NotifyWhenAvailable from "@/components/NotifyWhenAvailable";
 import { TwemojiText } from "@/components/TwemojiText";
 import {
@@ -27,6 +28,8 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
   const { addToCart } = useCart();
   const { averageRating } = useReviews(product.ProductID);
   const { formatPrice } = useCurrency();
+  const { getLocalizedName } = useProductNames();
+  const localizedName = getLocalizedName(product.ProductID) ?? product.Name;
   const [selectedSize, setSelectedSize] = useState<string | undefined>(
     undefined
   );
@@ -90,7 +93,7 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
           {product.ThumbNailPhoto ? (
             <OptimizedImage
               src={`data:image/gif;base64,${product.ThumbNailPhoto}`}
-              alt={`${product.Name}${
+              alt={`${localizedName}${
                 product.Color ? ` - ${product.Color}` : ""
               }`}
               className="!aspect-square group-hover:scale-110 transition-transform duration-300"
@@ -125,7 +128,7 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
         {/* Title & Rating */}
         <Link to={`/product/${product.ProductID}`}>
           <h3 className="font-doodle font-bold text-doodle-text group-hover:text-doodle-accent transition-colors line-clamp-2 mb-1">
-            {product.Name}
+            {localizedName}
           </h3>
         </Link>
 
@@ -224,7 +227,7 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
               />
             </p>
             <NotifyWhenAvailable
-              productName={product.Name}
+              productName={localizedName}
               size={selectedSize}
               color={selectedColor}
               trigger={

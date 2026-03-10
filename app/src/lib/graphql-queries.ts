@@ -626,3 +626,17 @@ export const DELETE_CART_ITEM = gql`
     }
   }
 `;
+
+// Query to get all translated product names for a given culture.
+// ProductNameEmbedding is intentionally excluded — it is large and only needed server-side.
+// DAB defaults to 100 items; request enough to cover all products (~504).
+export const GET_PRODUCT_NAMES_BY_CULTURE = gql`
+  query GetProductNamesByCulture($cultureId: String!) {
+    productNames(filter: { CultureID: { eq: $cultureId } }, first: 2000) {
+      items {
+        ProductID
+        Name
+      }
+    }
+  }
+`;

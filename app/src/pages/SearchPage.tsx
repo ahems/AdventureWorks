@@ -375,8 +375,9 @@ const SearchPage: React.FC = () => {
                     {semanticSearchData && semanticQuerySubmitted && (
                       <p className="font-doodle text-xs text-doodle-text/60 mt-1">
                         Found {semanticSearchData.descriptionMatches}{" "}
-                        description matches and{" "}
-                        {semanticSearchData.reviewMatches} review matches
+                        description matches,{" "}
+                        {semanticSearchData.reviewMatches} review matches, and{" "}
+                        {semanticSearchData.nameMatches ?? 0} name matches
                       </p>
                     )}
                   </div>

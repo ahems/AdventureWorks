@@ -389,8 +389,23 @@
           "target.entity": "ProductProductPhoto",
           "source.fields": ["ProductID"],
           "target.fields": ["ProductID"]
+        },
+        "productNames": {
+          "cardinality": "many",
+          "target.entity": "ProductName",
+          "source.fields": ["ProductID"],
+          "target.fields": ["ProductID"]
         }
       }
+    },
+    "ProductName": {
+      "source": "Production.ProductName",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["read"]
+        }
+      ]
     },
     "ProductCostHistory": {
       "source": "Production.ProductCostHistory",

@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getFunctionsApiUrl } from "@/lib/utils";
+import { useLanguage } from "@/context/LanguageContext";
 
 export interface SemanticSearchResult {
   ProductID: number;
@@ -8,7 +9,7 @@ export interface SemanticSearchResult {
   ListPrice: number | null;
   Color: string | null;
   SimilarityScore: number;
-  MatchSource: string;
+  MatchSource: "Description" | "Review" | "ProductName" | string;
   MatchText: string | null;
 }
 
@@ -18,12 +19,15 @@ export interface SemanticSearchResponse {
   totalResults: number;
   descriptionMatches: number;
   reviewMatches: number;
+  nameMatches: number;
 }
 
 // Hook to perform semantic search
 export const useSemanticSearch = (query: string, enabled: boolean = false) => {
+  const { selectedLanguage } = useLanguage();
+
   return useQuery<SemanticSearchResponse>({
-    queryKey: ["semanticSearch", query],
+    queryKey: ["semanticSearch", query, selectedLanguage],
     queryFn: async () => {
       if (!query || query.trim().length === 0) {
         return {
@@ -32,6 +36,7 @@ export const useSemanticSearch = (query: string, enabled: boolean = false) => {
           totalResults: 0,
           descriptionMatches: 0,
           reviewMatches: 0,
+          nameMatches: 0,
         };
       }
 
@@ -44,6 +49,7 @@ export const useSemanticSearch = (query: string, enabled: boolean = false) => {
         body: JSON.stringify({
           query: query.trim(),
           topN: 20,
+          cultureId: selectedLanguage,
         }),
       });
 
@@ -60,6 +66,8 @@ export const useSemanticSearch = (query: string, enabled: boolean = false) => {
 
 // Hook to manually trigger semantic search
 export const useSemanticSearchMutation = () => {
+  const { selectedLanguage } = useLanguage();
+
   return useMutation({
     mutationFn: async ({
       query,
@@ -77,6 +85,7 @@ export const useSemanticSearchMutation = () => {
         body: JSON.stringify({
           query: query.trim(),
           topN,
+          cultureId: selectedLanguage,
         }),
       });
 

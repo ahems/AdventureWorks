@@ -1,6 +1,12 @@
 # Database Seeding Script for Container App Job
 # Uses Managed Identity for authentication (configured in infrastructure)
-$ScriptVersion = '2026-02-13.3'
+
+# Script version = short hash of this file (so logs reflect exact script that ran)
+try {
+    $ScriptVersion = (Get-FileHash -Path $PSCommandPath -Algorithm SHA256).Hash.Substring(0, 8)
+} catch {
+    $ScriptVersion = 'unknown'
+}
 
 # CRITICAL: Setup error handling FIRST before anything else
 $ErrorActionPreference = 'Continue'  # Don't stop on errors initially
@@ -404,6 +410,28 @@ try {
     $conn.Open()
     Write-Log "  ✓ Successfully connected to SQL Database"
     $cmd = $conn.CreateCommand()
+
+    # ---------------------------------------------------------------------
+    # Drop tables that reference base schema tables (FKs) so AdventureWorks.sql
+    # can drop/recreate those base tables. AdventureWorks.sql drops Culture at
+    # batch 67 but drops ProductCategory (which has FK to Culture) much later,
+    # so Culture cannot be dropped until we drop ProductCategory first.
+    # ---------------------------------------------------------------------
+    $aiTablesPreCleanup = @(
+        "IF OBJECT_ID(N'[Production].[ProductName]', 'U') IS NOT NULL DROP TABLE [Production].[ProductName]",
+        "IF OBJECT_ID(N'[Production].[ProductCategory]', 'U') IS NOT NULL DROP TABLE [Production].[ProductCategory]"
+    )
+    Write-Log "`nDropping AI-specific tables that may reference base schema tables..."
+    foreach ($cleanupSql in $aiTablesPreCleanup) {
+        try {
+            $cmd.CommandText = $cleanupSql
+            $null = $cmd.ExecuteNonQuery()
+        }
+        catch {
+            Write-Log "  Note: Pre-cleanup: $($_.Exception.Message)"
+        }
+    }
+    Write-Log "  ✓ Pre-cleanup complete"
 
     # ---------------------------------------------------------------------
     # Load and execute SQL to create table(s)
@@ -926,6 +954,10 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture-ai.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModelIllustration'; File='ProductModelIllustration.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.Product'; File='Product.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # Translated product names with vector embeddings for all 23 cultures.
+        # ProductNameEmbedding is VECTOR(1536) - stored as JSON array in CSV, loaded via CAST(N'...' AS VECTOR(1536)).
+        # Must be loaded AFTER Product.csv (FK to Production.Product) and Culture data (FK to Production.Culture).
+        @{ Table='Production.ProductName'; File='ProductNames-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('ProductNameEmbedding') }
         @{ Table='Production.ProductReview'; File='ProductReview.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments'); DefaultColumns=@('CommentsEmbedding','HelpfulVotes','UserID') }
         # AI-generated product reviews: Comments are plain text (not hex); CommentsEmbedding is VECTOR; HelpfulVotes/UserID not in CSV
         @{ Table='Production.ProductReview'; File='ProductReview-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('CommentsEmbedding'); DefaultColumns=@('HelpfulVotes','UserID') }

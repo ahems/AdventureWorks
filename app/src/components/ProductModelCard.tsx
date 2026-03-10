@@ -18,6 +18,7 @@ import { useCompare } from "@/context/CompareContext";
 import { useReviews } from "@/hooks/useReviews";
 import { useCurrency } from "@/context/CurrencyContext";
 import { useUnitMeasure } from "@/context/UnitMeasureContext";
+import { useProductNames } from "@/context/ProductNamesContext";
 import QuickViewModal from "./QuickViewModal";
 import {
   Select,
@@ -42,6 +43,7 @@ const ProductModelCard: React.FC<ProductModelCardProps> = ({
   const { addToCompare, removeFromCompare, isInCompare } = useCompare();
   const { formatPrice } = useCurrency();
   const { formatSize } = useUnitMeasure();
+  const { getLocalizedName } = useProductNames();
 
   // State for selected variants
   const [selectedColor, setSelectedColor] = useState<string | undefined>(
@@ -56,6 +58,9 @@ const ProductModelCard: React.FC<ProductModelCardProps> = ({
   const currentProduct = useMemo(() => {
     return getProductVariant(productGroup, selectedColor, selectedSize);
   }, [productGroup, selectedColor, selectedSize]);
+
+  const localizedModelName =
+    getLocalizedName(currentProduct.ProductID) ?? productGroup.modelName;
 
   const { averageRating, reviewCount } = useReviews(currentProduct.ProductID);
 
@@ -179,7 +184,7 @@ const ProductModelCard: React.FC<ProductModelCardProps> = ({
           {currentProduct.ThumbNailPhoto ? (
             <OptimizedImage
               src={`data:image/gif;base64,${currentProduct.ThumbNailPhoto}`}
-              alt={`${productGroup.modelName}${
+              alt={`${localizedModelName}${
                 currentProduct.Color ? ` - ${currentProduct.Color}` : ""
               }`}
               className="!aspect-square"
@@ -218,7 +223,7 @@ const ProductModelCard: React.FC<ProductModelCardProps> = ({
         {/* Product Info */}
         <div className="space-y-3">
           <h3 className="font-doodle text-lg font-bold text-doodle-text group-hover:text-doodle-accent transition-colors line-clamp-2">
-            {productGroup.modelName}
+            {localizedModelName}
           </h3>
 
           {/* Variant Selectors */}

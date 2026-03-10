@@ -3,10 +3,12 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { X, ArrowRight, Scale } from "lucide-react";
 import { useCompare } from "@/context/CompareContext";
+import { useProductNames } from "@/context/ProductNamesContext";
 
 const CompareBar: React.FC = () => {
   const { t } = useTranslation("common");
   const { items, removeFromCompare, clearCompare } = useCompare();
+  const { getLocalizedName } = useProductNames();
 
   if (items.length === 0) return null;
 
@@ -28,13 +30,13 @@ const CompareBar: React.FC = () => {
                 className="flex items-center gap-2 bg-doodle-text/5 border-2 border-dashed border-doodle-text/20 px-3 py-2"
               >
                 <span className="font-doodle text-sm text-doodle-text truncate max-w-[120px]">
-                  {product.Name}
+                  {getLocalizedName(product.ProductID) ?? product.Name}
                 </span>
                 <button
                   onClick={() => removeFromCompare(product.ProductID)}
                   className="p-1 hover:bg-doodle-accent/10 rounded transition-colors"
                   aria-label={t("compareBar.removeFromComparison", {
-                    name: product.Name,
+                    name: getLocalizedName(product.ProductID) ?? product.Name,
                   })}
                 >
                   <X className="w-4 h-4 text-doodle-accent" />

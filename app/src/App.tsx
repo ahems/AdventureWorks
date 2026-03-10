@@ -11,6 +11,7 @@ import { CompareProvider } from "@/context/CompareContext";
 import { LanguageProvider } from "@/context/LanguageContext";
 import { CurrencyProvider } from "@/context/CurrencyContext";
 import { UnitMeasureProvider } from "@/context/UnitMeasureContext";
+import { ProductNamesProvider } from "@/context/ProductNamesContext";
 import CompareBar from "@/components/CompareBar";
 import { AIChatOverlay } from "@/components/AIChatOverlay";
 import { AppInsightsContext } from "@microsoft/applicationinsights-react-js";
@@ -47,6 +48,7 @@ const App = () => (
         <LanguageProvider>
           <CurrencyProvider>
             <UnitMeasureProvider>
+              <ProductNamesProvider>
               <AuthProvider>
                 <WishlistProvider>
                   <RecentlyViewedProvider>
@@ -117,6 +119,7 @@ const App = () => (
                   </RecentlyViewedProvider>
                 </WishlistProvider>
               </AuthProvider>
+              </ProductNamesProvider>
             </UnitMeasureProvider>
           </CurrencyProvider>
         </LanguageProvider>
