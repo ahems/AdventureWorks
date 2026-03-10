@@ -1,0 +1,50 @@
+name: Build-Checker
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Every Sunday at midnight CST (6:00 AM UTC)
+    - cron: '0 6 * * 0'
+
+permissions:
+  contents: read
+
+jobs:
+  build-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: app
+        id: app
+        continue-on-error: true
+        run: docker build ./app
+
+      - name: api-functions
+        id: api-functions
+        continue-on-error: true
+        run: docker build ./api-functions
+
+      - name: api-mcp
+        id: api-mcp
+        continue-on-error: true
+        run: docker build ./api-mcp
+
+      - name: .devcontainer
+        id: devcontainer
+        continue-on-error: true
+        run: docker build ./.devcontainer
+
+      - name: Check build results
+        if: always()
+        run: |
+          if [[ "${{ steps.app.outcome }}" == "failure" || \
+                "${{ steps.api-functions.outcome }}" == "failure" || \
+                "${{ steps.api-mcp.outcome }}" == "failure" || \
+                "${{ steps.devcontainer.outcome }}" == "failure" ]]; then
+            echo "One or more Docker builds failed."
+            exit 1
+          fi
+          echo "All Docker builds succeeded."
