@@ -537,6 +537,7 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
   test("multiple sale items maintain discounts in cart across language changes", async ({
     page,
   }) => {
+    test.setTimeout(120000); // Sale page + multiple adds + cart + language switch (call first so it applies)
     // Create a test user
     await signupThroughUi(page);
 
@@ -559,33 +560,38 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
     console.log(`📦 Adding ${itemsToAdd} sale items to cart...`);
 
     // Add multiple items to cart
+    const addToCartButtonSel = page.locator(
+      'button:has-text("Add to Cart"), button:has-text("Add to Bag")',
+    );
     for (let i = 0; i < itemsToAdd; i++) {
       const product = saleProductCards.nth(i);
       await product.click();
 
-      // Wait for product page
-      await page.waitForTimeout(2000);
-
-      // Add to cart
-      const addToCartButton = page.locator(
-        'button:has-text("Add to Cart"), button:has-text("Add to Bag")',
-      );
-      await addToCartButton.first().click();
-      await page.waitForTimeout(1500);
+      // Wait for product page and Add to cart button
+      await expect(addToCartButtonSel.first()).toBeVisible({ timeout: 15000 });
+      await addToCartButtonSel.first().click();
+      await expect(page.locator('text=/added to cart|added to bag/i')).toBeVisible({ timeout: 5000 }).catch(() => {});
 
       console.log(`✅ Added item ${i + 1} to cart`);
 
-      // Go back to sale page
+      // Go back to sale page and wait for sale products
       await page.goto(`${testEnv.webBaseUrl}/sale`);
-      await page.waitForTimeout(2000);
+      await expect(saleProductCards.first()).toBeVisible({ timeout: 15000 });
     }
 
-    // Navigate to cart
+    // Navigate to cart and wait for cart content (items load via GraphQL after navigation)
     await page.goto(`${testEnv.webBaseUrl}/cart`);
-    await page.waitForTimeout(2000);
+    await page.waitForLoadState("domcontentloaded");
 
-    // Count items in cart
     const cartItems = page.locator('[data-testid*="cart-item"]');
+    // Wait for cart to show expected number of items (GraphQL fetch can be delayed)
+    await expect
+      .poll(
+        async () => await cartItems.count(),
+        { timeout: 15000, intervals: [500, 1000, 2000] },
+      )
+      .toBeGreaterThanOrEqual(itemsToAdd);
+
     const cartItemCount = await cartItems.count();
     expect(cartItemCount).toBe(itemsToAdd);
     console.log(`✅ Cart contains ${cartItemCount} items`);
@@ -613,7 +619,10 @@ test.describe("Sale/Discount Browsing with Language Switching", () => {
 
     if ((await germanOption.count()) > 0) {
       await germanOption.click();
-      await page.waitForTimeout(5000); // Wait for recalculation
+      // Wait for cart total to show in EUR (recalculation)
+      await expect(
+        page.locator("main, [role=main]").locator("text=/€|EUR/").first(),
+      ).toBeVisible({ timeout: 8000 });
 
       const totalEUR = await getTotalPrice();
       console.log(`📊 Cart total (EUR): ${totalEUR}`);

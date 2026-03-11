@@ -27,7 +27,7 @@ const isAzureRun = !!process.env.PLAYWRIGHT_SERVICE_URL;
 const baseConfig = defineConfig({
   testDir: "./specs",
   globalSetup: require.resolve("./global-setup"),
-  timeout: 45_000,
+  timeout: 90_000, // Long flows (sale+cart+language, checkout) need headroom on Azure workers
   expect: {
     timeout: 5_000,
   },

@@ -128,6 +128,11 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
         roleDefinitionIdOrName: 'Storage Table Data Contributor'
         principalType: 'ServicePrincipal'
       }
+      {
+        principalId: identityId
+        roleDefinitionIdOrName: 'Storage File Data Reader'
+        principalType: 'ServicePrincipal'
+      }
       // Grant current user permissions for local development
       {
         principalId: aadAdminObjectId

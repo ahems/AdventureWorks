@@ -59,6 +59,32 @@ fi
 
 export PLAYWRIGHT_SERVICE_URL
 
+# Export app/API URLs so cloud workers get correct base URLs (env.ts prefers these over azd)
+# Workers don't have azd; without these they fall back to localhost and tests fail
+echo -e "${BLUE}Fetching app/API URLs for test environment...${NC}"
+WEB_BASE_URL=$(azd env get-value APP_REDIRECT_URI 2>/dev/null || echo "")
+VITE_API_URL_RAW=$(azd env get-value VITE_API_URL 2>/dev/null || echo "")
+FUNCTIONS_BASE_URL=$(azd env get-value VITE_API_FUNCTIONS_URL 2>/dev/null || echo "")
+
+if [ -n "$VITE_API_URL_RAW" ]; then
+    REST_API_BASE_URL="${VITE_API_URL_RAW%/}"
+    REST_API_BASE_URL="${REST_API_BASE_URL%/graphql}"
+    REST_API_BASE_URL="${REST_API_BASE_URL%/graphql/}"
+    REST_API_BASE_URL="${REST_API_BASE_URL}/api"
+else
+    REST_API_BASE_URL=""
+fi
+
+export WEB_BASE_URL
+export REST_API_BASE_URL
+export FUNCTIONS_BASE_URL
+
+if [ -n "$WEB_BASE_URL" ] && [ -n "$REST_API_BASE_URL" ] && [ -n "$FUNCTIONS_BASE_URL" ]; then
+    echo -e "${GREEN}✓ Test env URLs set (workers will use these if env is forwarded)${NC}"
+else
+    echo -e "${YELLOW}Warning: Some URL env vars are empty. Cloud workers may fall back to localhost.${NC}"
+fi
+
 # Check if user is logged in to Azure CLI
 echo -e "\n${BLUE}Verifying Azure CLI authentication...${NC}"
 if ! az account show &>/dev/null; then

@@ -424,6 +424,94 @@ const HealthCheckPage: React.FC = () => {
     }
   };
 
+  const checkSeedJobStatus = async (): Promise<void> => {
+    const name = "Seed Job";
+    const start = performance.now();
+    updateCheckStatus(name, "checking");
+
+    try {
+      const functionsUrl = getFunctionsApiUrl();
+      const endpoint = `${functionsUrl}/api/seed/status`;
+      updateCheckStatus(name, "checking", undefined, undefined, endpoint);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+
+      const response = await fetch(endpoint, {
+        method: "GET",
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      const responseTime = Math.round(performance.now() - start);
+
+      if (!response.ok) {
+        updateCheckStatus(
+          name,
+          "unhealthy",
+          `HTTP ${response.status}: ${response.statusText}`,
+          responseTime,
+          endpoint,
+        );
+        return;
+      }
+
+      const data = await response.json();
+      const status = data.status as string;
+      const message = (data.message as string) || "";
+
+      if (status === "completed") {
+        updateCheckStatus(
+          name,
+          "healthy",
+          message || "Seed job completed successfully",
+          responseTime,
+          endpoint,
+        );
+      } else if (status === "running") {
+        const runningMessage =
+          data.runningForHuman != null
+            ? `Running for ${data.runningForHuman}`
+            : "Seed job running";
+        updateCheckStatus(name, "unhealthy", runningMessage, responseTime, endpoint);
+      } else if (status === "failed") {
+        updateCheckStatus(
+          name,
+          "unhealthy",
+          message || "Seed job failed",
+          responseTime,
+          endpoint,
+        );
+      } else {
+        // unknown
+        updateCheckStatus(
+          name,
+          "healthy",
+          message || "No seed log found (or unable to read)",
+          responseTime,
+          endpoint,
+        );
+      }
+    } catch (error: unknown) {
+      const responseTime = Math.round(performance.now() - start);
+      if ((error as Error).name === "AbortError") {
+        updateCheckStatus(
+          name,
+          "timeout",
+          "Request timeout (>60s)",
+          responseTime,
+        );
+      } else {
+        updateCheckStatus(
+          name,
+          "unhealthy",
+          (error as Error).message,
+          responseTime,
+        );
+      }
+    }
+  };
+
   useEffect(() => {
     const runHealthChecks = async () => {
       setStartTime(Date.now());
@@ -431,7 +519,7 @@ const HealthCheckPage: React.FC = () => {
       setProgress(0);
       setRefreshCountdown(null);
 
-      const totalChecks = 3 + functionEndpoints.length; // DAB + MCP + AI Images + Functions
+      const totalChecks = 4 + functionEndpoints.length; // DAB + MCP + AI Images + Seed Job + Functions
       let completedChecks = 0;
 
       const updateProgress = () => {
@@ -444,6 +532,7 @@ const HealthCheckPage: React.FC = () => {
         checkGraphQLAPI().finally(updateProgress),
         checkMCPAPI().finally(updateProgress),
         checkAIGeneratedImages().finally(updateProgress),
+        checkSeedJobStatus().finally(updateProgress),
         ...functionEndpoints.map((func) =>
           checkFunction(func).finally(updateProgress),
         ),

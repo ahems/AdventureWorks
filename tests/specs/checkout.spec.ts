@@ -487,17 +487,23 @@ test.describe("Checkout Flow", () => {
         await page.waitForTimeout(500);
         console.log("✅ Filled CVV");
       }
+      // Brief wait for React validation (Luhn) to run and enable Place Order
+      await page.waitForTimeout(500);
     } else {
       console.log(
         "⚠️  Card number input not found - payment form may not be visible",
       );
     }
 
-    // Submit order - button shows "Pay $XX.XX" or use data-testid
+    // Submit order - prefer data-testid for reliable selection across locales
     console.log("🔍 Looking for Place Order button...");
     const placeOrderButton = page
-      .getByRole("button", { name: /pay|place order|complete order/i })
-      .or(page.getByTestId("place-order-button"));
+      .getByTestId("place-order-button")
+      .or(
+        page.getByRole("button", {
+          name: /pay|place order|complete order/i,
+        }),
+      );
 
     await expect(placeOrderButton).toBeVisible();
     // Wait for validation to pass and button to become enabled (Luhn + all fields)
@@ -610,8 +616,10 @@ test.describe("Checkout Flow", () => {
       await expect(page).toHaveURL(/\/product\//);
     }
 
-    // Wait for product page to fully load
-    await page.waitForTimeout(2000);
+    // Wait for product page content so Add to cart is present (not out-of-stock or loading)
+    await expect(
+      page.locator("h1, h2, [data-testid='product-name']").first(),
+    ).toBeVisible({ timeout: 15000 });
 
     // Check if product is in stock before attempting to add to cart
     const outOfStockMsg = page.getByText(/out of stock|unavailable/i);
@@ -625,8 +633,11 @@ test.describe("Checkout Flow", () => {
       await page.waitForTimeout(2000);
     }
 
-    const addToCartButton = page.getByRole("button", { name: /add to cart/i });
-    await expect(addToCartButton).toBeVisible({ timeout: 10000 });
+    // Prefer data-testid for Add to cart (ProductPage uses add-to-cart-button); fallback for locale
+    const addToCartButton = page
+      .getByTestId("add-to-cart-button")
+      .or(page.getByRole("button", { name: /add to cart|add to bag/i }));
+    await expect(addToCartButton).toBeVisible({ timeout: 15000 });
 
     // Ensure button is enabled
     await expect(addToCartButton).toBeEnabled({ timeout: 5000 });

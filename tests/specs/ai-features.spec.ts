@@ -61,8 +61,9 @@ test.describe("AI Features", () => {
         await expect(firstResult).toBeVisible();
         console.log(`✅ Search for "${query}" returned ${resultCount} results`);
       } else {
-        console.warn(`⚠️ No AI search results for "${query}" after 20s - embeddings may not be seeded or search is slow`);
-        test.skip();
+        throw new Error(
+          `Search for "${query}" returned no results after 20s. Check base URL (WEB_BASE_URL), Functions URL (FUNCTIONS_BASE_URL), and that semantic search/embeddings are available.`,
+        );
       }
 
       // Go back to search page for next query
@@ -88,7 +89,6 @@ test.describe("AI Features", () => {
 
     // Check if chat is available
     if ((await chatButton.count()) === 0) {
-      console.log("⚠️ AI chat button not found on page");
       // Try looking for floating action button or sidebar
       const floatingChat = page.locator(
         '[class*="chat-fab"], [class*="floating-chat"], [class*="chat-widget"]',
@@ -96,7 +96,9 @@ test.describe("AI Features", () => {
       if ((await floatingChat.count()) > 0) {
         await floatingChat.first().click();
       } else {
-        test.skip();
+        throw new Error(
+          "AI chat button not found on page. Check WEB_BASE_URL and that the app has loaded (e.g. home page shows content).",
+        );
       }
     } else {
       await chatButton.first().click();
@@ -164,8 +166,9 @@ test.describe("AI Features", () => {
       .or(page.locator('[data-testid*="chat"]'));
 
     if ((await chatButton.count()) === 0) {
-      test.skip();
-      return;
+      throw new Error(
+        "AI chat button not found on home page. Check WEB_BASE_URL and that the app has loaded.",
+      );
     }
 
     await chatButton.first().click();
@@ -229,9 +232,9 @@ test.describe("AI Features", () => {
     const productCardCount = await productCards.count();
 
     if (productCardCount === 0) {
-      console.log("⚠️ No product cards found on home page - skipping test");
-      test.skip();
-      return;
+      throw new Error(
+        "No product cards found on home page. Check WEB_BASE_URL and that the app/API have loaded (e.g. REST_API_BASE_URL).",
+      );
     }
 
     console.log(`Found ${productCardCount} product cards`);
@@ -324,8 +327,9 @@ test.describe("AI Features", () => {
           `✅ Search by ${type} ("${query}") returned ${count} results`,
         );
       } else {
-        console.warn(`⚠️ No results for ${type} search: "${query}" after 20s - AI search may not be working`);
-        test.skip();
+        throw new Error(
+          `Search for "${query}" (${type}) returned no results after 20s. Check Functions URL and semantic search availability.`,
+        );
       }
 
       // Return to search page for next query

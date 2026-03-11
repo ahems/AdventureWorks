@@ -142,11 +142,10 @@ test.describe("Internationalization", () => {
     console.log("✅ Language and currency persist across different pages");
   });
 
-  test.skip("checkout currency follows shipping address, not language", async ({
+  test("checkout currency follows shipping address, not language", async ({
     page,
   }) => {
-    // SKIPPED: Add-to-cart button is disabled on product pages, preventing cart addition
-    // This test needs to be re-enabled once product availability/inventory is resolved
+    test.setTimeout(90000); // Cart + checkout + language switch can exceed 45s on Azure workers
     // Create a test user
     await signupThroughUi(page);
 
@@ -177,12 +176,14 @@ test.describe("Internationalization", () => {
 
     // Go to cart
     await page.goto(`${testEnv.webBaseUrl}/cart`);
+    await page.waitForLoadState("domcontentloaded");
 
-    // Get cart price before checkout
-    const cartPrice = await page
+    // Get cart price before checkout (wait for cart to render)
+    const cartPriceLocator = page
       .locator('[data-testid*="product-price"]')
-      .first()
-      .textContent();
+      .first();
+    await expect(cartPriceLocator).toBeVisible({ timeout: 15000 });
+    const cartPrice = await cartPriceLocator.textContent();
 
     // Proceed to checkout
     const checkoutButton = page.locator('[data-testid="checkout-button"]');
