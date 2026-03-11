@@ -445,7 +445,7 @@ try {
 
     Write-Log "`nLoading AdventureWorks schema SQL script..."
     Write-Log "  Path: $createTableSqlPath"
-    $tableSql = Get-Content -Path $createTableSqlPath -Raw
+    $tableSql = Get-Content -Path $createTableSqlPath -Raw -Encoding UTF8
     Write-Log "  ✓ SQL script loaded ($($tableSql.Length) characters)"
     
     # Process SQLCMD variables and split into batches
@@ -1059,6 +1059,13 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
             $encoding = if ($config.IsWideChar) { [System.Text.Encoding]::Unicode } else { [System.Text.Encoding]::UTF8 }
             $csvContent = [System.IO.File]::ReadAllText($csvPath, $encoding)
             
+            # Detect Git LFS pointer: file was not pulled, so we cannot load real data
+            if ($csvContent -match '^\s*version\s+https://git-lfs\.github\.com') {
+                Write-Log "    ⚠ File appears to be a Git LFS pointer (actual CSV not present). Run 'git lfs pull' before building the seed-job image, then rebuild and re-run the seed job to load this file."
+                $csvLoadSkipped++
+                continue
+            }
+            
             # Parse CSV into DataTable
             $dataTable = New-Object System.Data.DataTable
             
@@ -1113,7 +1120,8 @@ ORDER BY c.ORDINAL_POSITION
                 $isNullable = $reader['IS_NULLABLE'] -eq 'YES'
                 $colDefault = $reader['COLUMN_DEFAULT']
                 $isComputed = $reader['IsComputed'] -eq 1
-                $isIdentity = $reader['IsIdentity'] -eq 1
+                $rawIdentity = $reader['IsIdentity']
+                $isIdentity = ($rawIdentity -eq 1 -or $rawIdentity -eq $true -or [string]$rawIdentity -eq '1')
                 
                 # Track all columns for CSV parsing (to know CSV column positions)
                 $allColumns += @{
@@ -1191,6 +1199,17 @@ ORDER BY c.ORDINAL_POSITION
             # Track which columns we're actually loading (all columns now, including hierarchyid)
             $loadedColumns = $columns
             
+            # For Production.ProductName, only insert rows whose ProductID exists in Production.Product (FK)
+            $validProductIds = $null
+            if ($schemaName -eq 'Production' -and $tableName -eq 'ProductName') {
+                $cmd.CommandText = "SELECT ProductID FROM Production.Product"
+                $readerProd = $cmd.ExecuteReader()
+                $validProductIds = [System.Collections.Generic.HashSet[int]]::new()
+                while ($readerProd.Read()) { $null = $validProductIds.Add([int]$readerProd['ProductID']) }
+                $readerProd.Close()
+                Write-Log "    Filtering to ProductIDs present in Production.Product ($($validProductIds.Count) products)"
+            }
+            
             foreach ($row in $rows) {
                 if ([string]::IsNullOrWhiteSpace($row)) { continue }
                 
@@ -1198,7 +1217,7 @@ ORDER BY c.ORDINAL_POSITION
                 
                 # Handle leading delimiter (empty first value)
                 if ($values.Count -gt 0 -and [string]::IsNullOrWhiteSpace($values[0])) {
-                    $values = $values[1..($values.Count-1)]
+                    $values = @($values[1..($values.Count-1)])
                 }
                 # Strip trailing empty fields (e.g. ProductReview.csv has two trailing tabs)
                 $values = Remove-TrailingEmptyFields -Values $values
@@ -1216,7 +1235,7 @@ ORDER BY c.ORDINAL_POSITION
                         # Guard against out-of-bounds: if CSV has fewer fields than expected,
                         # treat the missing field as null (will use column default or DBNull)
                         $raw = if ($col.CSVIndex -lt $values.Count) { $values[$col.CSVIndex] } else { $null }
-                        $val = if ($null -ne $raw) { $raw.Trim() } else { $null }
+                        $val = if ($null -ne $raw) { $raw.ToString().Trim() } else { $null }
                     }
                     
                     # Column uses DB DEFAULT - no value from CSV (use placeholder so non-nullable columns accept the row; INSERT will use DEFAULT/NULL)
@@ -1438,6 +1457,14 @@ ORDER BY c.ORDINAL_POSITION
                         if ($null -ne $pkVal -and [int]$pkVal -eq 0) { continue }
                     }
                 }
+                # Skip ProductName rows whose ProductID is not in Production.Product (FK)
+                if ($null -ne $validProductIds) {
+                    $pidx = [array]::IndexOf(($columns | ForEach-Object { $_.Name }), 'ProductID')
+                    if ($pidx -ge 0) {
+                        $pidVal = $dataRow[$pidx]
+                        if ($null -eq $pidVal -or -not $validProductIds.Contains([int]$pidVal)) { continue }
+                    }
+                }
                 $dataTable.Rows.Add($dataRow)
                 $rowCount++
                 
@@ -1457,6 +1484,17 @@ ORDER BY c.ORDINAL_POSITION
             if ($hasSpecialColumns -or $hasIdentityColumn -or $isAiCsv) {
                 # Use batched INSERT statements for special tables (hierarchyid, geography, hex-encoded columns)
                 Write-Log "    Inserting $rowCount rows using batched INSERT (special columns)..."
+                
+                # Fallback: explicitly detect identity columns from DB (COLUMNPROPERTY/reader can vary by driver)
+                if (-not $hasIdentityColumn) {
+                    $cmd.CommandText = @"
+SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c
+WHERE c.TABLE_SCHEMA = '$schemaName' AND c.TABLE_NAME = '$tableName'
+AND COLUMNPROPERTY(OBJECT_ID(QUOTENAME(c.TABLE_SCHEMA)+'.'+QUOTENAME(c.TABLE_NAME)), c.COLUMN_NAME, 'IsIdentity') = 1
+"@
+                    $identityCount = $cmd.ExecuteScalar()
+                    $hasIdentityColumn = $identityCount -gt 0
+                }
                 
                 $batchSize = 100
                 $insertedRows = 0
