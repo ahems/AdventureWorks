@@ -130,7 +130,7 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
       }
       {
         principalId: identityId
-        roleDefinitionIdOrName: 'Storage File Data Reader'
+        roleDefinitionIdOrName: 'Storage File Data SMB Share Reader'
         principalType: 'ServicePrincipal'
       }
       // Grant current user permissions for local development

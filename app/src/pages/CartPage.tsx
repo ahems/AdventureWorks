@@ -223,7 +223,7 @@ const CartPage: React.FC = () => {
 
                       {/* Price with discount display */}
                       {item.DiscountPct ? (
-                        <div className="mt-2">
+                        <div className="mt-2" data-testid="product-price">
                           <div className="flex items-center gap-2">
                             <span className="font-doodle text-sm text-doodle-text/50 line-through">
                               {formatPrice(item.ListPrice)}
@@ -242,7 +242,7 @@ const CartPage: React.FC = () => {
                           </span>
                         </div>
                       ) : (
-                        <p className="font-doodle text-lg font-bold text-doodle-green mt-2">
+                        <p className="font-doodle text-lg font-bold text-doodle-green mt-2" data-testid="product-price">
                           {formatPrice(item.ListPrice)}
                         </p>
                       )}

@@ -459,10 +459,14 @@ test.describe("Checkout Flow", () => {
     if ((await cardNumberInput.count()) > 0) {
       console.log("💳 Filling payment information");
 
-      // Use valid Luhn test card (Visa format with spaces - app formats on change)
+      await cardNumberInput.first().focus();
       await cardNumberInput.fill("4242 4242 4242 4242");
+      await cardNumberInput.first().evaluate((el) => {
+        (el as HTMLInputElement).dispatchEvent(new Event("input", { bubbles: true }));
+        (el as HTMLInputElement).dispatchEvent(new Event("change", { bubbles: true }));
+      });
       await cardNumberInput.blur();
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(300);
 
       const cardholderNameInput = page.getByLabel(/cardholder|name/i).first();
       if ((await cardholderNameInput.count()) > 0) {

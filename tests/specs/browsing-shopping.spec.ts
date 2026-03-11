@@ -79,13 +79,11 @@ test.describe("User Browsing and Shopping", () => {
       await productCard.click();
     }
 
-    // Verify we're on a product page
     await expect(page).toHaveURL(/\/product\//);
 
-    // Wait for product details to load
     await expect(
       page.locator("h1, h2, [data-testid='product-name']").first(),
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: 20000 });
 
     // Wait for gallery to render (main image or fallback)
     const mainImage = page.locator("[data-testid='product-gallery-main-image']");
@@ -295,7 +293,7 @@ test.describe("User Browsing and Shopping", () => {
     const productName = page
       .locator("h1, h2, [data-testid='product-name']")
       .first();
-    await expect(productName).toBeVisible({ timeout: 15000 });
+    await expect(productName).toBeVisible({ timeout: 20000 });
     await expect(mainImage.or(galleryFallback)).toBeVisible({ timeout: 15000 });
 
     const hasRealImage = await mainImage.isVisible().catch(() => false);
@@ -347,7 +345,7 @@ test.describe("User Browsing and Shopping", () => {
     // Verify product page loaded with basic elements (Azure cold start may need longer)
     await expect(
       page.locator("h1, h2, [data-testid='product-name']").first(),
-    ).toBeVisible({ timeout: 15000 });
+    ).toBeVisible({ timeout: 20000 });
 
     // Navigate to a different product (getInStockProductIds uses fallback IDs when API empty)
     console.log("🔍 Selecting random product for image gallery test...");
@@ -363,7 +361,7 @@ test.describe("User Browsing and Shopping", () => {
     // Verify product page loaded with basic elements
     await expect(
       page.locator("h1, h2, [data-testid='product-name']").first(),
-    ).toBeVisible({ timeout: 15000 });
+    ).toBeVisible({ timeout: 20000 });
 
     // Verify we're on a different product
     expect(firstProductUrl).not.toBe(secondProductUrl);

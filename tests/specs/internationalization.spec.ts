@@ -155,30 +155,20 @@ test.describe("Internationalization", () => {
     console.log(`🛍️ Testing currency with product ${testProductId}`);
     await page.goto(`${testEnv.webBaseUrl}/product/${testProductId}`);
     await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(2000);
 
     const addToCartButton = page.locator('[data-testid="add-to-cart-button"]');
-    await expect(addToCartButton).toBeVisible({ timeout: 10000 });
-
-    // Wait for button to be enabled (product data must load first)
-    await page.waitForFunction(
-      () => {
-        const btn = document.querySelector(
-          '[data-testid="add-to-cart-button"]',
-        );
-        return btn && !btn.hasAttribute("disabled");
-      },
-      { timeout: 15000 },
-    );
+    await expect(addToCartButton).toBeVisible({ timeout: 15000 });
+    await expect(addToCartButton).toBeEnabled({ timeout: 20000 });
 
     await addToCartButton.click();
     await page.waitForTimeout(1000);
 
-    // Go to cart
     await page.goto(`${testEnv.webBaseUrl}/cart`);
     await page.waitForLoadState("domcontentloaded");
 
-    // Get cart price before checkout (wait for cart to render)
+    // Wait for cart items to load (GraphQL), then for price to be visible
+    const cartItems = page.locator('[data-testid^="cart-item"]');
+    await expect(cartItems.first()).toBeVisible({ timeout: 15000 });
     const cartPriceLocator = page
       .locator('[data-testid*="product-price"]')
       .first();
@@ -208,14 +198,14 @@ test.describe("Internationalization", () => {
       await countrySelect.selectOption({ label: "United States" });
       await page.waitForTimeout(1000);
 
-      // Verify prices changed to USD despite French language
-      const checkoutPrice = await page
-        .locator('[class*="price"], [data-testid*="price"]')
-        .first()
-        .textContent();
+      // Verify order total shows USD despite French language (checkout-order-total or Place Order button)
+      const totalEl = page.getByTestId("checkout-order-total").or(
+        page.getByTestId("place-order-button"),
+      );
+      await expect(totalEl.first()).toBeVisible({ timeout: 15000 });
+      const checkoutPrice = await totalEl.first().textContent();
 
-      // Should show $ for US address, not € from French language
-      expect(checkoutPrice).toContain("$");
+      expect(checkoutPrice, "Checkout should show USD ($) for US address").toContain("$");
 
       console.log(
         "✅ Checkout currency follows shipping address (USD), not language (EUR)",

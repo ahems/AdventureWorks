@@ -172,6 +172,8 @@ export const AIChatOverlay = () => {
           onClick={() => setIsOpen(true)}
           className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50 bg-primary hover:bg-primary/90"
           size="icon"
+          data-testid="ai-chat-toggle"
+          aria-label={t("chat.title")}
         >
           <MessageCircle className="h-6 w-6" />
         </Button>
@@ -225,6 +227,7 @@ export const AIChatOverlay = () => {
                     "flex",
                     message.role === "user" ? "justify-end" : "justify-start",
                   )}
+                  data-testid="chat-message"
                 >
                   <div
                     className={cn(
@@ -272,6 +275,7 @@ export const AIChatOverlay = () => {
                 disabled={!input.trim() || isLoading}
                 size="icon"
                 className="shrink-0"
+                aria-label="Send"
               >
                 <Send className="h-4 w-4" />
               </Button>
