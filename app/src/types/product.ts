@@ -21,6 +21,7 @@ export interface ProductProductPhoto {
 
 export interface SpecialOffer {
   SpecialOfferID: number;
+  CultureID?: string;
   Description: string;
   DiscountPct: number;
   Type: string;

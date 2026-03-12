@@ -116,13 +116,13 @@ public class ReceiptService
             new { SalesOrderID = (int)header.SalesOrderID }
         );
 
-        // Get applied special offers
+        // Get applied special offers (use English culture for receipt text)
         var offersSql = @"
             SELECT DISTINCT
                 so.Description
             FROM Sales.SalesOrderDetail sod
             INNER JOIN Sales.SpecialOfferProduct sop ON sod.SpecialOfferID = sop.SpecialOfferID AND sod.ProductID = sop.ProductID
-            INNER JOIN Sales.SpecialOffer so ON sop.SpecialOfferID = so.SpecialOfferID
+            INNER JOIN Sales.SpecialOffer so ON sop.SpecialOfferID = so.SpecialOfferID AND so.CultureID = 'en    '
             WHERE sod.SalesOrderID = @SalesOrderID
                 AND so.SpecialOfferID > 1  -- Exclude 'No Discount' offer
             ORDER BY so.Description";

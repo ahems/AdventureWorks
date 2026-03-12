@@ -179,13 +179,17 @@ const attachDescriptionsToProducts = async (
 // Helper function to fetch and attach discounts to products
 const attachDiscountsToProducts = async (
   products: Product[],
+  cultureId: string = "en",
 ): Promise<Product[]> => {
   try {
     if (products.length === 0) return products;
 
-    // Fetch all customer special offers
+    const paddedCultureId = cultureId.padEnd(6, " ");
+
+    // Fetch customer special offers for the given culture
     const offersData = await graphqlClient.request<SpecialOffersResponse>(
       GET_CUSTOMER_SPECIAL_OFFERS,
+      { cultureId: paddedCultureId },
     );
     const specialOffers = offersData.specialOffers.items;
 
@@ -492,16 +496,17 @@ export const getSubcategoriesByCategory = async (
   }
 };
 
-// Fetch all products (with optional photo fetching)
+// Fetch all products (with optional photo fetching and optional culture for discount descriptions)
 export const getProducts = async (
   includePhotos: boolean = false,
+  cultureId: string = "en",
 ): Promise<Product[]> => {
   try {
     const data = await graphqlClient.request<ProductsResponse>(GET_PRODUCTS);
     let products = data.products.items;
 
-    // Always attach discounts and inventory
-    products = await attachDiscountsToProducts(products);
+    // Always attach discounts (in given culture) and inventory
+    products = await attachDiscountsToProducts(products, cultureId);
     products = await attachInventoryToProducts(products);
 
     if (includePhotos) {
@@ -567,6 +572,7 @@ export const getProductById = async (
     );
     productsWithDescriptions = await attachDiscountsToProducts(
       productsWithDescriptions,
+      cultureId,
     );
     const productsWithInventory = await attachInventoryToProducts(
       productsWithDescriptions,
@@ -585,6 +591,7 @@ export const getProductById = async (
 // Fetch products by multiple IDs (optimized for cart)
 export const getProductsByIds = async (
   productIds: number[],
+  cultureId: string = "en",
 ): Promise<Product[]> => {
   try {
     if (productIds.length === 0) return [];
@@ -595,8 +602,8 @@ export const getProductsByIds = async (
     );
     let products = data.products.items;
 
-    // Always attach discounts and inventory
-    products = await attachDiscountsToProducts(products);
+    // Always attach discounts (in given culture) and inventory
+    products = await attachDiscountsToProducts(products, cultureId);
     products = await attachInventoryToProducts(products);
     
     return products;
@@ -613,6 +620,7 @@ export const getProductsByIds = async (
 // Fetch products by subcategory ID
 export const getProductsBySubcategory = async (
   subcategoryId: number,
+  cultureId: string = "en",
 ): Promise<Product[]> => {
   try {
     const data = await graphqlClient.request<ProductsResponse>(
@@ -620,7 +628,7 @@ export const getProductsBySubcategory = async (
       { subcategoryId },
     );
     let products = data.products.items;
-    products = await attachDiscountsToProducts(products);
+    products = await attachDiscountsToProducts(products, cultureId);
     products = await attachInventoryToProducts(products);
     return await attachPhotosToProducts(products);
   } catch (error) {
@@ -654,7 +662,7 @@ export const getProductsByCategory = async (
       { subcategoryIds },
     );
     let products = data.products.items;
-    products = await attachDiscountsToProducts(products);
+    products = await attachDiscountsToProducts(products, cultureId);
     products = await attachInventoryToProducts(products);
     return await attachPhotosToProducts(products);
   } catch (error) {
@@ -753,10 +761,12 @@ export const getFeaturedProducts = async (): Promise<Product[]> => {
 };
 
 // Get sale products (products with Customer category discounts from SpecialOffer table)
-export const getSaleProducts = async (): Promise<Product[]> => {
+export const getSaleProducts = async (
+  cultureId: string = "en",
+): Promise<Product[]> => {
   try {
-    // Load products WITHOUT photos first for better performance
-    const products = await getProducts(false);
+    // Load products WITHOUT photos first, with discount descriptions in the given culture
+    const products = await getProducts(false, cultureId);
 
     // Filter to only products with discounts
     const saleProducts = products.filter(

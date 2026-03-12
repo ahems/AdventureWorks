@@ -3,12 +3,15 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { useSaleProducts } from "@/hooks/useProducts";
+import { useLanguage } from "@/context/LanguageContext";
 import { Twemoji } from "@/components/Twemoji";
 import { useProductNames } from "@/context/ProductNamesContext";
 
 const PromoBanner: React.FC = () => {
   const { t } = useTranslation("common");
-  const { data: saleProducts = [], isLoading } = useSaleProducts();
+  const { selectedLanguage } = useLanguage();
+  const { data: saleProducts = [], isLoading } =
+    useSaleProducts(selectedLanguage);
   const { getLocalizedName } = useProductNames();
   const maxDiscount = Math.max(
     ...saleProducts.map((p) => {

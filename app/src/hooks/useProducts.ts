@@ -54,10 +54,13 @@ export const useProduct = (productId: number, cultureId?: string) => {
 };
 
 // Hook to fetch products by multiple IDs (optimized for cart)
-export const useProductsByIds = (productIds: number[]) => {
+export const useProductsByIds = (
+  productIds: number[],
+  cultureId: string = "en",
+) => {
   return useQuery<Product[]>({
-    queryKey: ["products", "byIds", productIds.sort().join(",")],
-    queryFn: () => apiService.getProductsByIds(productIds),
+    queryKey: ["products", "byIds", productIds.sort().join(","), cultureId],
+    queryFn: () => apiService.getProductsByIds(productIds, cultureId),
     enabled: productIds.length > 0,
     staleTime: 2 * 60 * 1000,
   });
@@ -77,10 +80,14 @@ export const useProductsByCategory = (
 };
 
 // Hook to fetch products by subcategory ID
-export const useProductsBySubcategory = (subcategoryId: number) => {
+export const useProductsBySubcategory = (
+  subcategoryId: number,
+  cultureId: string = "en",
+) => {
   return useQuery<Product[]>({
-    queryKey: ["products", "subcategory", subcategoryId],
-    queryFn: () => apiService.getProductsBySubcategory(subcategoryId),
+    queryKey: ["products", "subcategory", subcategoryId, cultureId],
+    queryFn: () =>
+      apiService.getProductsBySubcategory(subcategoryId, cultureId),
     enabled: !!subcategoryId,
     staleTime: 2 * 60 * 1000,
   });
@@ -119,10 +126,10 @@ export const useFeaturedProducts = () => {
 };
 
 // Hook to fetch sale products
-export const useSaleProducts = () => {
+export const useSaleProducts = (cultureId: string = "en") => {
   return useQuery<Product[]>({
-    queryKey: ["products", "sale"],
-    queryFn: apiService.getSaleProducts,
+    queryKey: ["products", "sale", cultureId],
+    queryFn: () => apiService.getSaleProducts(cultureId),
     staleTime: 2 * 60 * 1000,
   });
 };

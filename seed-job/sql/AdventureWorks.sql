@@ -1825,7 +1825,8 @@ DROP TABLE IF EXISTS [Sales].[SpecialOffer];
 GO
 
 CREATE TABLE [Sales].[SpecialOffer](
-    [SpecialOfferID] [int] IDENTITY (1, 1) NOT NULL,
+    [SpecialOfferID] [int] NOT NULL,
+    [CultureID] [nchar](6) NOT NULL,
     [Description] [nvarchar](255) NOT NULL,
     [DiscountPct] [smallmoney] NOT NULL CONSTRAINT [DF_SpecialOffer_DiscountPct] DEFAULT (0.00),
     [Type] [nvarchar](50) NOT NULL,
@@ -2451,10 +2452,16 @@ ALTER TABLE [Sales].[ShoppingCartItem] WITH CHECK ADD
 GO
 
 ALTER TABLE [Sales].[SpecialOffer] WITH CHECK ADD 
-    CONSTRAINT [PK_SpecialOffer_SpecialOfferID] PRIMARY KEY CLUSTERED 
+    CONSTRAINT [PK_SpecialOffer_SpecialOfferID_CultureID] PRIMARY KEY CLUSTERED 
     (
-        [SpecialOfferID]
+        [SpecialOfferID],
+        [CultureID]
     )  ON [PRIMARY];
+GO
+
+ALTER TABLE [Sales].[SpecialOffer] WITH CHECK ADD
+    CONSTRAINT [FK_SpecialOffer_Culture_CultureID] FOREIGN KEY([CultureID])
+    REFERENCES [Production].[Culture] ([CultureID]);
 GO
 
 ALTER TABLE [Sales].[SpecialOfferProduct] WITH CHECK ADD 

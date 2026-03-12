@@ -55,7 +55,10 @@ const CategoryPage: React.FC = () => {
   const {
     data: subcategoryProducts = [],
     isLoading: subcategoryProductsLoading,
-  } = useProductsBySubcategory(selectedSubcategory || 0);
+  } = useProductsBySubcategory(
+    selectedSubcategory || 0,
+    selectedLanguage,
+  );
   const { data: allReviews = [] } = useAllReviews();
 
   const isLoadingProducts = selectedSubcategory

@@ -38,12 +38,20 @@ export const GET_ALL_REVIEWS = gql`
   }
 `;
 
-// Query to get customer special offers (Category = "Customer")
+// Query to get customer special offers (Category = "Customer") for a specific culture
 export const GET_CUSTOMER_SPECIAL_OFFERS = gql`
-  query GetCustomerSpecialOffers {
-    specialOffers(filter: { Category: { eq: "Customer" } }) {
+  query GetCustomerSpecialOffers($cultureId: String!) {
+    specialOffers(
+      filter: {
+        and: [
+          { Category: { eq: "Customer" } }
+          { CultureID: { eq: $cultureId } }
+        ]
+      }
+    ) {
       items {
         SpecialOfferID
+        CultureID
         Description
         DiscountPct
         Type
