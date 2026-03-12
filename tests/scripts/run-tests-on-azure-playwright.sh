@@ -79,11 +79,12 @@ export WEB_BASE_URL
 export REST_API_BASE_URL
 export FUNCTIONS_BASE_URL
 
-if [ -n "$WEB_BASE_URL" ] && [ -n "$REST_API_BASE_URL" ] && [ -n "$FUNCTIONS_BASE_URL" ]; then
-    echo -e "${GREEN}✓ Test env URLs set (workers will use these if env is forwarded)${NC}"
-else
-    echo -e "${YELLOW}Warning: Some URL env vars are empty. Cloud workers may fall back to localhost.${NC}"
+if [ -z "$WEB_BASE_URL" ] || [ -z "$REST_API_BASE_URL" ] || [ -z "$FUNCTIONS_BASE_URL" ]; then
+    echo -e "${RED}Error: Required test env URLs are missing. Run 'azd up' first, then run this script.${NC}"
+    echo -e "${YELLOW}Missing: WEB_BASE_URL=$WEB_BASE_URL REST_API_BASE_URL=$REST_API_BASE_URL FUNCTIONS_BASE_URL=$FUNCTIONS_BASE_URL${NC}"
+    exit 1
 fi
+echo -e "${GREEN}✓ Test env URLs set (workers will use these if env is forwarded)${NC}"
 
 # Check if user is logged in to Azure CLI
 echo -e "\n${BLUE}Verifying Azure CLI authentication...${NC}"

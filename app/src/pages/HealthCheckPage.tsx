@@ -512,6 +512,93 @@ const HealthCheckPage: React.FC = () => {
     }
   };
 
+  const checkSemanticSearch = async (): Promise<void> => {
+    const name = "Function: Semantic Search";
+    const start = performance.now();
+    updateCheckStatus(name, "checking");
+
+    const functionsUrl = getFunctionsApiUrl();
+    const endpoint = `${functionsUrl}/api/search/semantic`;
+    updateCheckStatus(name, "checking", undefined, undefined, endpoint);
+
+    const doFetch = (timeoutMs: number): Promise<Response> => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      return fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: "red bikes",
+          topN: 5,
+          cultureId: "en",
+        }),
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
+    };
+
+    const timeoutMs = 90000; // 90s for cold start
+    let lastResponseTime = 0;
+
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const response = await doFetch(timeoutMs);
+        lastResponseTime = Math.round(performance.now() - start);
+
+        if (!response.ok) {
+          if (response.status >= 500 && attempt < 2) {
+            await new Promise((r) => setTimeout(r, 15000)); // wait 15s before retry
+            continue;
+          }
+          updateCheckStatus(
+            name,
+            "unhealthy",
+            `HTTP ${response.status}: ${response.statusText}`,
+            lastResponseTime,
+            endpoint,
+          );
+          return;
+        }
+
+        const data = await response.json();
+        const results = data.results as unknown[] | undefined;
+        const count = Array.isArray(results) ? results.length : 0;
+
+        updateCheckStatus(
+          name,
+          "healthy",
+          `${count} results for 'red bikes'`,
+          lastResponseTime,
+          endpoint,
+        );
+        return;
+      } catch (error: unknown) {
+        lastResponseTime = Math.round(performance.now() - start);
+        lastError = error;
+        if ((error as Error).name === "AbortError") {
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 15000)); // wait 15s before retry
+            continue;
+          }
+          updateCheckStatus(
+            name,
+            "timeout",
+            "Request timeout (>90s)",
+            lastResponseTime,
+          );
+          return;
+        } else {
+          updateCheckStatus(
+            name,
+            "unhealthy",
+            (error as Error).message,
+            lastResponseTime,
+          );
+          return;
+        }
+      }
+    }
+  };
+
   useEffect(() => {
     const runHealthChecks = async () => {
       setStartTime(Date.now());
@@ -519,7 +606,7 @@ const HealthCheckPage: React.FC = () => {
       setProgress(0);
       setRefreshCountdown(null);
 
-      const totalChecks = 4 + functionEndpoints.length; // DAB + MCP + AI Images + Seed Job + Functions
+      const totalChecks = 4 + functionEndpoints.length + 1; // DAB + MCP + AI Images + Seed Job + Functions + Semantic Search
       let completedChecks = 0;
 
       const updateProgress = () => {
@@ -533,6 +620,7 @@ const HealthCheckPage: React.FC = () => {
         checkMCPAPI().finally(updateProgress),
         checkAIGeneratedImages().finally(updateProgress),
         checkSeedJobStatus().finally(updateProgress),
+        checkSemanticSearch().finally(updateProgress),
         ...functionEndpoints.map((func) =>
           checkFunction(func).finally(updateProgress),
         ),

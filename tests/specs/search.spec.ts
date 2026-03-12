@@ -30,16 +30,16 @@ test.describe("Search Functionality", () => {
     });
     await searchButton.click();
 
-    // Wait for semantic search results - Azure Functions can be slow on cold start
-    console.log("⏳ Waiting for search results (up to 30s)...");
+    // Wait for semantic search results - health check warms the endpoint; allow time for first result
+    console.log("⏳ Waiting for search results (up to 45s)...");
     const productCards = page.locator('[data-testid^="product-card-"]');
     try {
-      await expect(productCards.first()).toBeVisible({ timeout: 30000 });
+      await expect(productCards.first()).toBeVisible({ timeout: 45000 });
     } catch {
-      // Retry: submit search again in case of cold start
+      // Retry: submit search again in case of slow response
       await searchButton.click();
       try {
-        await expect(productCards.first()).toBeVisible({ timeout: 15000 });
+        await expect(productCards.first()).toBeVisible({ timeout: 25000 });
       } catch {
         // Count will be 0 and handled below
       }
@@ -99,16 +99,10 @@ test.describe("Search Functionality", () => {
       // Including product 750: "Road-150 Red, 44"
       console.log("✓ Search successfully returned bike products");
     } else {
-      console.log(
-        "⚠️  No results found - semantic search may be cold or not indexed.",
-      );
-      console.log(
-        "   Expected to find products like 'Road-150 Red, 44' (Product 750).",
-      );
-      test.skip(
-        true,
-        "Semantic search returned no results; search service may be cold or not indexed. Run API with cultureId: 'en' to verify backend.",
-      );
+      expect(
+        count,
+        "Semantic search must return results when service is healthy; health check warms this endpoint.",
+      ).toBeGreaterThan(0);
     }
   });
 

@@ -46,17 +46,27 @@ test.describe("AI Features", () => {
       });
       await searchButton.click();
 
-      // Wait for semantic search API and product cards to appear (can be slow)
+      // Wait for semantic search API and product cards (health check warms endpoint; allow 30s)
       const searchResults = page.locator(
         '[data-testid^="product-card-"], [class*="product-card"]',
       );
-      const hasSearchUrl = page.url().includes("/search");
       let resultCount = 0;
       try {
-        await expect(searchResults.first()).toBeVisible({ timeout: 20000 });
+        await expect(searchResults.first()).toBeVisible({ timeout: 30000 });
         resultCount = await searchResults.count();
       } catch {
         resultCount = await searchResults.count();
+      }
+
+      // If 0 results, retry once (transient cold/slow backend from cloud workers)
+      if (resultCount === 0) {
+        await searchButton.click();
+        try {
+          await expect(searchResults.first()).toBeVisible({ timeout: 30000 });
+          resultCount = await searchResults.count();
+        } catch {
+          resultCount = await searchResults.count();
+        }
       }
 
       if (resultCount > 0) {
@@ -65,10 +75,10 @@ test.describe("AI Features", () => {
         await expect(firstResult).toBeVisible();
         console.log(`✅ Search for "${query}" returned ${resultCount} results`);
       } else {
-        test.skip(
-          true,
-          `Search for "${query}" returned no results after 20s. Semantic search may be cold or not indexed.`,
-        );
+        expect(
+          resultCount,
+          "Semantic search should return results; health check should have warmed the endpoint.",
+        ).toBeGreaterThan(0);
       }
 
       // Go back to search page for next query
@@ -291,16 +301,27 @@ test.describe("AI Features", () => {
       });
       await searchButton.click();
 
-      // Wait for product cards (semantic search can be slow)
+      // Wait for product cards (health check warms semantic search; allow 30s)
       const results = page.locator(
         '[data-testid^="product-card-"], [class*="product-card"]',
       );
       let count = 0;
       try {
-        await expect(results.first()).toBeVisible({ timeout: 20000 });
+        await expect(results.first()).toBeVisible({ timeout: 30000 });
         count = await results.count();
       } catch {
         count = await results.count();
+      }
+
+      // If 0 results, retry once (transient cold/slow backend from cloud workers)
+      if (count === 0) {
+        await searchButton.click();
+        try {
+          await expect(results.first()).toBeVisible({ timeout: 30000 });
+          count = await results.count();
+        } catch {
+          count = await results.count();
+        }
       }
 
       if (count > 0) {
@@ -308,10 +329,10 @@ test.describe("AI Features", () => {
           `✅ Search by ${type} ("${query}") returned ${count} results`,
         );
       } else {
-        test.skip(
-          true,
-          `Search for "${query}" (${type}) returned no results after 20s. Semantic search may be cold or not indexed.`,
-        );
+        expect(
+          count,
+          "Semantic search should return results; health check should have warmed the endpoint.",
+        ).toBeGreaterThan(0);
       }
 
       // Return to search page for next query

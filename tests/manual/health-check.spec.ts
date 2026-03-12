@@ -46,8 +46,8 @@ test.describe("Health Check Page", () => {
     await expect(overallStatus).toBeVisible();
     await expect(overallStatus).toHaveText("All Systems Operational");
 
-    // Verify all checks are healthy (9 total: 1 DAB + 1 MCP + 1 AI Generated Images + 1 Seed Job + 5 Functions)
-    expect(healthyCount?.trim()).toBe("9");
+    // Verify all checks are healthy (10 total: 1 DAB + 1 MCP + 1 AI Generated Images + 1 Seed Job + 6 Functions including Semantic Search)
+    expect(healthyCount?.trim()).toBe("10");
     expect(unhealthyCount?.trim()).toBe("0");
   });
 
