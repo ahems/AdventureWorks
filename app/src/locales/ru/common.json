@@ -105,7 +105,8 @@
     "showingResults": "Показано {{start}}-{{end}} из {{total}} результатов",
     "placeholder": "Ищите велосипеды, снаряжение, одежду...",
     "previousPage": "Предыдущая страница",
-    "nextPage": "Следующая страница"
+    "nextPage": "Следующая страница",
+    "pageTitle": "Search Products"
   },
   "sale": {
     "title": "Товары со скидкой",
@@ -251,7 +252,8 @@
       "lastName": "Иванов",
       "email": "ivan@email.ru",
       "phone": "555-123-4567"
-    }
+    },
+    "sending": "Sending..."
   },
   "checkout": {
     "backToCart": "Вернуться в корзину",
@@ -473,7 +475,12 @@
     "save": "Экономия {{percent}}%",
     "addToCart": "Добавить в корзину",
     "add": "Добавить",
-    "notAvailable": "Н/Д"
+    "notAvailable": "Н/Д",
+    "color": "Color",
+    "selectSize": "Select Size",
+    "variants": "variants",
+    "variants_one": "variant",
+    "variants_other": "variants"
   },
   "saleProductCard": {
     "limitedTimeSpecial": "Специальное предложение ограниченного времени",

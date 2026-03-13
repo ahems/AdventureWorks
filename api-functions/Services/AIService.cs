@@ -999,18 +999,20 @@ Return the complete translated version with all values translated to {languageNa
         string languageCode,
         string languageName)
     {
-        var credential = new DefaultAzureCredential();
-        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
-        var chatClient = client.GetChatClient(_deploymentName);
+        try
+        {
+            var credential = new DefaultAzureCredential();
+            var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+            var chatClient = client.GetChatClient(_deploymentName);
 
-        // Get region-specific information
-        var regionalInfo = GetRegionalInfo(languageCode);
+            // Get region-specific information
+            var regionalInfo = GetRegionalInfo(languageCode);
 
-        // Check if this is an English regional variant
-        var isEnglishVariant = languageCode.ToLowerInvariant().StartsWith("en-");
+            // Check if this is an English regional variant
+            var isEnglishVariant = languageCode.ToLowerInvariant().StartsWith("en-");
 
-        var systemPrompt = isEnglishVariant
-            ? $@"You are a professional localizer adapting text from American English to {languageName}.
+            var systemPrompt = isEnglishVariant
+                ? $@"You are a professional localizer adapting text from American English to {languageName}.
 
 CRITICAL INSTRUCTIONS:
 1. Apply regional spelling conventions (e.g., 'colour' vs 'color', 'favourite' vs 'favorite')
@@ -1021,7 +1023,7 @@ CRITICAL INSTRUCTIONS:
 6. For email addresses: use regional suffix {regionalInfo.EmailSuffix}
 7. For cities/locations: use realistic names from {string.Join(", ", regionalInfo.ExampleCities)}
 8. Return ONLY the adapted text, nothing else"
-            : $@"You are a professional translator translating from English to {languageName}.
+                : $@"You are a professional translator translating from English to {languageName}.
 
 CRITICAL INSTRUCTIONS:
 1. Translate the text naturally while maintaining its original tone and intent
@@ -1032,32 +1034,41 @@ CRITICAL INSTRUCTIONS:
 6. Ensure cultural appropriateness for {languageName}-speaking audiences
 7. Return ONLY the translated text, nothing else";
 
-        var userPrompt = $"Text to {(isEnglishVariant ? "adapt" : "translate")}:\n\n{text}";
+            var userPrompt = $"Text to {(isEnglishVariant ? "adapt" : "translate")}:\n\n{text}";
 
-        var messages = new List<ChatMessage>
-        {
-            new SystemChatMessage(systemPrompt),
-            new UserChatMessage(userPrompt)
-        };
+            var messages = new List<ChatMessage>
+            {
+                new SystemChatMessage(systemPrompt),
+                new UserChatMessage(userPrompt)
+            };
 
-        var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
-        {
-            Temperature = 0.3f, // Lower temperature for more consistent translations
-            MaxOutputTokenCount = 1000
-        });
+            var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+            {
+                Temperature = 0.3f, // Lower temperature for more consistent translations
+                MaxOutputTokenCount = 1000
+            });
 
-        // Safely extract the translated text
-        var translatedText = response?.Value?.Content?.Count > 0
-            ? response.Value.Content[0].Text?.Trim() ?? text
-            : text;
+            // Safely extract the translated text
+            var translatedText = response?.Value?.Content?.Count > 0
+                ? response.Value.Content[0].Text?.Trim() ?? text
+                : text;
 
-        if (string.IsNullOrWhiteSpace(translatedText))
-        {
-            _logger.LogWarning("Empty translation response for text: {Text}", text);
-            return text; // Return original if translation fails
+            if (string.IsNullOrWhiteSpace(translatedText))
+            {
+                _logger.LogWarning("Empty translation response for text: {Text}", text);
+                return text; // Return original if translation fails
+            }
+
+            return translatedText;
         }
-
-        return translatedText;
+        catch (Exception ex)
+        {
+            // Wrap so SDK exception types (e.g. ClientResultException) never escape this assembly.
+            // The Durable Task host reflects on exception type names and throws AmbiguousMatchException
+            // when multiple assemblies define the same type name. Do not set inner exception.
+            _logger.LogError(ex, "Translation failed for {Language}: {Message}", languageName, ex.Message);
+            throw new InvalidOperationException($"Translation failed for {languageName}: {ex.Message}");
+        }
     }
 
     private RegionalInfo GetRegionalInfo(string languageCode)

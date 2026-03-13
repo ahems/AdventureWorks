@@ -64,7 +64,8 @@
     "tryDifferentSubcategory": "Tente selecionar uma subcategoria diferente",
     "title": "Comprar por Categoria",
     "subtitle": "Encontre exatamente o que precisa para a sua próxima aventura",
-    "browse": "Navegar"
+    "browse": "Navegar",
+    "sortRating": "Highest Rated"
   },
   "featured": {
     "title": "Equipamento em Destaque",
@@ -251,7 +252,8 @@
       "lastName": "Doe",
       "email": "john@example.pt",
       "phone": "555-123-4567"
-    }
+    },
+    "sending": "Sending..."
   },
   "checkout": {
     "backToCart": "Voltar ao Carrinho",
@@ -473,7 +475,12 @@
     "save": "Poupe {{percent}}%",
     "addToCart": "Adicionar ao carrinho",
     "add": "Adicionar",
-    "notAvailable": "N/D"
+    "notAvailable": "N/D",
+    "color": "Color",
+    "selectSize": "Select Size",
+    "variants": "variants",
+    "variants_one": "variant",
+    "variants_other": "variants"
   },
   "saleProductCard": {
     "limitedTimeSpecial": "Oferta Especial por Tempo Limitado",

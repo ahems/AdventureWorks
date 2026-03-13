@@ -252,7 +252,8 @@
       "lastName": "陳",
       "email": "john@email.tw",
       "phone": "02-1234-5678"
-    }
+    },
+    "sending": "Sending..."
   },
   "checkout": {
     "backToCart": "回購物車",
@@ -474,7 +475,12 @@
     "save": "省下 {{percent}}%",
     "addToCart": "加入購物車",
     "add": "加入",
-    "notAvailable": "無法使用"
+    "notAvailable": "無法使用",
+    "color": "Color",
+    "selectSize": "Select Size",
+    "variants": "variants",
+    "variants_one": "variant",
+    "variants_other": "variants"
   },
   "saleProductCard": {
     "limitedTimeSpecial": "限時特惠",

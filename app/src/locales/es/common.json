@@ -252,7 +252,8 @@
       "lastName": "Pérez",
       "email": "juan@ejemplo.es",
       "phone": "555-123-4567"
-    }
+    },
+    "sending": "Sending..."
   },
   "checkout": {
     "backToCart": "Volver al carrito",

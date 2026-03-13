@@ -1,34 +1,48 @@
 #!/bin/bash
 
 # Batch Language File Translation Script
-# Translates all English language files to all supported languages using the Azure Function
+# Translates all English language files to all supported languages using the Azure Function,
+# then downloads each result from blob storage into app/src/locales (when run from repo root).
 #
-# Usage: ./batch-translate-language-file.sh [--missing-only]
+# Usage: run from repository root.
+#   ./scripts/utilities/batch-translate-language-file.sh [--missing-only] [-y|--yes]
 #   --missing-only: Only translate files that don't exist yet (skip existing translations)
-# This script automatically uses the deployed Azure Function URL from azd
+#   -y, --yes: Skip the "Continue? (y/n)" prompt
+# This script uses the deployed Azure Function URL and storage account from azd env.
 
 set -e  # Exit on error
 
 # Parse command line arguments
 MISSING_ONLY=false
+YES=false
 while [[ $# -gt 0 ]]; do
   case $1 in
     --missing-only)
       MISSING_ONLY=true
       shift
       ;;
+    -y|--yes)
+      YES=true
+      shift
+      ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: ./batch-translate-language-file.sh [--missing-only]"
+      echo "Usage: ./scripts/utilities/batch-translate-language-file.sh [--missing-only] [-y|--yes]"
       exit 1
       ;;
   esac
 done
 
-# Configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOCALES_DIR="$SCRIPT_DIR/app/src/locales"
+# Require run from repo root; use repo app/src/locales
+if [ ! -d "app/src/locales/en" ] || [ ! -f "seed-job/sql/Culture.csv" ]; then
+  echo "Error: Run this script from the repository root." >&2
+  echo "  Example: ./scripts/utilities/batch-translate-language-file.sh" >&2
+  exit 1
+fi
+LOCALES_DIR="$PWD/app/src/locales"
 SOURCE_DIR="$LOCALES_DIR/en"
+BLOB_CONTAINER="locales"
+STORAGE_ACCOUNT_NAME=$(azd env get-values 2>/dev/null | grep "^STORAGE_ACCOUNT_NAME=" | cut -d'=' -f2 | tr -d '"' | tr -d '\r' || true)
 
 # All supported languages (excluding source English)
 LANGUAGES=(
@@ -142,12 +156,13 @@ else
 fi
 echo ""
 
-read -p "Continue? (y/n) " -n 1 -r
-echo ""
-
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-  echo "Cancelled."
-  exit 0
+if [ "$YES" != true ]; then
+  read -p "Continue? (y/n) " -n 1 -r
+  echo ""
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "Cancelled."
+    exit 0
+  fi
 fi
 
 # Track statistics with temp files for parallel processing
@@ -157,11 +172,15 @@ trap "rm -rf $TEMP_DIR" EXIT
 SUCCESS_FILE="$TEMP_DIR/success_count"
 FAILED_FILE="$TEMP_DIR/failed_count"
 FAILED_ITEMS_FILE="$TEMP_DIR/failed_items"
+CURRENT_INSTANCE_FILE="$TEMP_DIR/current_translation_instance_id"
 
 echo "0" > "$SUCCESS_FILE"
 echo "0" > "$FAILED_FILE"
 touch "$FAILED_ITEMS_FILE"
 
+echo ""
+echo "If you cancel (Ctrl+C), the current job will keep running in Azure."
+echo "To stop it: curl -X POST \"${FUNCTION_APP_URL}/api/TranslateLanguageFile_Terminate?instanceId=\$(cat $CURRENT_INSTANCE_FILE 2>/dev/null)\""
 echo ""
 echo "Starting translations (parallel processing)..."
 echo "========================================="
@@ -203,9 +222,10 @@ translate_job() {
       -d "$REQUEST_PAYLOAD")
     
     if [ "$HTTP_STATUS" -eq 202 ]; then
-      # Orchestration started - get status URL
+      # Orchestration started - get status URL and save instance ID for cancel
       STATUS_URL=$(jq -r '.statusUrl' "$TEMP_FILE" 2>/dev/null)
-      
+      jq -r '.id' "$TEMP_FILE" 2>/dev/null > "$CURRENT_INSTANCE_FILE"
+
       if [ -z "$STATUS_URL" ] || [ "$STATUS_URL" = "null" ]; then
         echo "[$FILE_NAME → $lang_name] ✗ Failed: No status URL returned"
         echo "$FILE_NAME → $lang_code: No status URL" >> "$FAILED_ITEMS_FILE"
@@ -238,7 +258,18 @@ translate_job() {
             return 1
           fi
           
-          echo "[$FILE_NAME → $lang_name] ✓ Success (saved to: $BLOB_PATH, ${POLL_ATTEMPT} polls)"
+          # Download blob to app/src/locales when storage account and az are available
+          if [ -n "$STORAGE_ACCOUNT_NAME" ] && command -v az &>/dev/null; then
+            DEST_FILE="$LOCALES_DIR/$BLOB_PATH"
+            mkdir -p "$(dirname "$DEST_FILE")"
+            if az storage blob download --account-name "$STORAGE_ACCOUNT_NAME" --container-name "$BLOB_CONTAINER" --name "$BLOB_PATH" --file "$DEST_FILE" --auth-mode login 2>/dev/null; then
+              echo "[$FILE_NAME → $lang_name] ✓ Success (downloaded to $DEST_FILE, ${POLL_ATTEMPT} polls)"
+            else
+              echo "[$FILE_NAME → $lang_name] ✓ Success (saved to blob: $BLOB_PATH, ${POLL_ATTEMPT} polls; download failed)"
+            fi
+          else
+            echo "[$FILE_NAME → $lang_name] ✓ Success (saved to: $BLOB_PATH, ${POLL_ATTEMPT} polls)"
+          fi
           echo $(($(cat "$SUCCESS_FILE") + 1)) > "$SUCCESS_FILE"
           rm -f "$TEMP_FILE"
           return 0
@@ -296,7 +327,7 @@ translate_job() {
 # Export function and variables for use in subshells
 export -f translate_job
 export FUNCTION_URL LOCALES_DIR TEMP_DIR SUCCESS_FILE FAILED_FILE FAILED_ITEMS_FILE
-export MAX_RETRIES BASE_DELAY
+export MAX_RETRIES BASE_DELAY STORAGE_ACCOUNT_NAME BLOB_CONTAINER
 
 # Process each source file
 for SOURCE_FILE in "${SOURCE_FILES[@]}"; do
@@ -363,18 +394,20 @@ if [ $FAILED -gt 0 ]; then
 fi
 
 echo ""
-echo "Translations are saved in Azure Blob Storage:"
-echo "  Storage Account: avstoragewje2yrjsuipbs"
-echo "  Container: locales"
-echo "  Structure: {language-code}/{filename}.json"
-echo ""
-echo "To download all translated files:"
-echo "  az storage blob download-batch \\"
-echo "    --account-name avstoragewje2yrjsuipbs \\"
-echo "    --source locales \\"
-echo "    --destination $LOCALES_DIR \\"
-echo "    --auth-mode login \\"
-echo "    --overwrite"
+echo "Translations are saved in Azure Blob Storage (and downloaded to $LOCALES_DIR when az + STORAGE_ACCOUNT_NAME are available)."
+if [ -n "$STORAGE_ACCOUNT_NAME" ]; then
+  echo "  Storage Account: $STORAGE_ACCOUNT_NAME"
+  echo "  Container: $BLOB_CONTAINER"
+  echo "  To re-download all translated files:"
+  echo "  az storage blob download-batch \\"
+  echo "    --account-name $STORAGE_ACCOUNT_NAME \\"
+  echo "    --source $BLOB_CONTAINER \\"
+  echo "    --destination $LOCALES_DIR \\"
+  echo "    --auth-mode login \\"
+  echo "    --overwrite"
+else
+  echo "  Set STORAGE_ACCOUNT_NAME in azd env and run 'az storage blob download-batch' to download to $LOCALES_DIR."
+fi
 echo "========================================="
 
 # Exit with error if any translations failed

@@ -252,7 +252,8 @@
       "lastName": "Dupont",
       "email": "jean@email.fr",
       "phone": "06-12-34-56-78"
-    }
+    },
+    "sending": "Sending..."
   },
   "checkout": {
     "backToCart": "Retour au Panier",
