@@ -13,8 +13,13 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && rm -rf /var/lib/apt/lists/*
 
 # Add Microsoft repository and install SQL Server command-line tools (includes bcp)
-RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - \
-    && curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list | tee /etc/apt/sources.list.d/msprod.list \
+# Uses the modern /etc/apt/keyrings/ signed-by approach instead of deprecated apt-key
+RUN mkdir -p /etc/apt/keyrings \
+    && curl -sSL https://packages.microsoft.com/keys/microsoft.asc \
+        | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg \
+    && chmod a+r /etc/apt/keyrings/microsoft.gpg \
+    && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" \
+        | tee /etc/apt/sources.list.d/msprod.list \
     && apt-get update \
     && ACCEPT_EULA=Y apt-get install -y --no-install-recommends \
         mssql-tools18 \
@@ -31,8 +36,8 @@ RUN wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh \
     && rm dotnet-install.sh \
     && ln -s /usr/share/dotnet/dotnet /usr/local/bin/dotnet
 
-# Install Node.js 20.x (LTS)
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+# Install Node.js 22.x (LTS - Node 20 reaches EOL April 2026)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
