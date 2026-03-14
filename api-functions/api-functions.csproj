@@ -21,12 +21,13 @@
     <PackageReference Include="Azure.Communication.Email" Version="1.1.0" />
     
     <!-- Microsoft Agent Framework for durable agents in Azure Functions -->
-    <PackageReference Include="Microsoft.Agents.AI" Version="1.0.0-rc4" />
-    <PackageReference Include="Microsoft.Agents.AI.AzureAI" Version="1.0.0-rc4" />
-    <PackageReference Include="Microsoft.Agents.AI.Hosting.AzureFunctions" Version="1.0.0-preview.260311.1" />
-    <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.0.0-rc4" />
+    <PackageReference Include="Microsoft.Agents.AI" Version="*-*" />
+    <PackageReference Include="Microsoft.Agents.AI.AzureAI" Version="*-*" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting.AzureFunctions" Version="*-*" />
+    <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="*-*" />
     <PackageReference Include="Azure.Storage.Blobs" Version="12.27.0" />
     <PackageReference Include="Azure.Storage.Queues" Version="12.25.0" />
+    <PackageReference Include="Azure.Storage.Files.Shares" Version="12.21.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Storage.Queues" Version="5.5.3" />
     <PackageReference Include="Dapper" Version="2.1.66" />
     <PackageReference Include="Microsoft.ApplicationInsights.WorkerService" Version="2.23.0" />

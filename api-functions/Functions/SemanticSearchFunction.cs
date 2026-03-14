@@ -57,15 +57,23 @@ public class SemanticSearchFunction
                 return badRequestResponse;
             }
 
-            _logger.LogInformation("Searching for: {Query}", searchRequest.Query);
+            if (string.IsNullOrWhiteSpace(searchRequest.CultureId))
+            {
+                var badRequestResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+                await badRequestResponse.WriteAsJsonAsync(new { error = "CultureId parameter is required" });
+                return badRequestResponse;
+            }
+
+            _logger.LogInformation("Searching for: {Query} (culture: {CultureId})", searchRequest.Query, searchRequest.CultureId);
 
             // Step 1: Generate embedding for the search query
             var queryEmbedding = await _aiService.GenerateQueryEmbeddingAsync(searchRequest.Query);
 
-            // Step 2: Search both descriptions and reviews in parallel
+            // Step 2: Search descriptions, reviews, and product names in parallel
             var descriptionSearchTask = _productService.SearchProductsByDescriptionEmbeddingAsync(
                 queryEmbedding,
-                searchRequest.TopN ?? 10
+                searchRequest.TopN ?? 10,
+                searchRequest.CultureId
             );
 
             var reviewSearchTask = _reviewService.SearchProductsByReviewEmbeddingAsync(
@@ -73,16 +81,22 @@ public class SemanticSearchFunction
                 searchRequest.TopN ?? 10
             );
 
-            await Task.WhenAll(descriptionSearchTask, reviewSearchTask);
+            var nameSearchTask = _productService.SearchProductsByNameEmbeddingAsync(
+                queryEmbedding,
+                searchRequest.TopN ?? 10,
+                searchRequest.CultureId
+            );
+
+            await Task.WhenAll(descriptionSearchTask, reviewSearchTask, nameSearchTask);
 
             var descriptionResults = await descriptionSearchTask;
             var reviewResults = await reviewSearchTask;
+            var nameResults = await nameSearchTask;
 
-            // Step 3: Combine and deduplicate results
+            // Step 3: Combine and deduplicate results — keep the best (lowest cosine distance) per product
             var combinedResults = new Dictionary<int, SemanticSearchResult>();
 
-            // Add description results
-            foreach (var result in descriptionResults)
+            foreach (var result in descriptionResults.Concat(reviewResults).Concat(nameResults))
             {
                 if (!combinedResults.ContainsKey(result.ProductID))
                 {
@@ -90,21 +104,6 @@ public class SemanticSearchFunction
                 }
                 else if (result.SimilarityScore < combinedResults[result.ProductID].SimilarityScore)
                 {
-                    // Keep the result with the better (lower) similarity score
-                    combinedResults[result.ProductID] = result;
-                }
-            }
-
-            // Add review results
-            foreach (var result in reviewResults)
-            {
-                if (!combinedResults.ContainsKey(result.ProductID))
-                {
-                    combinedResults[result.ProductID] = result;
-                }
-                else if (result.SimilarityScore < combinedResults[result.ProductID].SimilarityScore)
-                {
-                    // Keep the result with the better (lower) similarity score
                     combinedResults[result.ProductID] = result;
                 }
             }
@@ -116,10 +115,11 @@ public class SemanticSearchFunction
                 .ToList();
 
             _logger.LogInformation(
-                "Semantic search completed: {count} results (from {descCount} description matches, {reviewCount} review matches)",
+                "Semantic search completed: {count} results (from {descCount} description matches, {reviewCount} review matches, {nameCount} name matches)",
                 finalResults.Count,
                 descriptionResults.Count,
-                reviewResults.Count
+                reviewResults.Count,
+                nameResults.Count
             );
 
             // Return results
@@ -130,7 +130,8 @@ public class SemanticSearchFunction
                 results = finalResults,
                 totalResults = finalResults.Count,
                 descriptionMatches = descriptionResults.Count,
-                reviewMatches = reviewResults.Count
+                reviewMatches = reviewResults.Count,
+                nameMatches = nameResults.Count
             });
 
             return response;
@@ -149,4 +150,5 @@ public class SemanticSearchRequest
 {
     public string Query { get; set; } = string.Empty;
     public int? TopN { get; set; } = 10;
+    public string CultureId { get; set; } = string.Empty;
 }

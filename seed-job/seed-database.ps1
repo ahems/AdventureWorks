@@ -1,6 +1,12 @@
 # Database Seeding Script for Container App Job
 # Uses Managed Identity for authentication (configured in infrastructure)
-$ScriptVersion = '2026-02-13.3'
+
+# Script version = short hash of this file (so logs reflect exact script that ran)
+try {
+    $ScriptVersion = (Get-FileHash -Path $PSCommandPath -Algorithm SHA256).Hash.Substring(0, 8)
+} catch {
+    $ScriptVersion = 'unknown'
+}
 
 # CRITICAL: Setup error handling FIRST before anything else
 $ErrorActionPreference = 'Continue'  # Don't stop on errors initially
@@ -406,6 +412,33 @@ try {
     $cmd = $conn.CreateCommand()
 
     # ---------------------------------------------------------------------
+    # Drop tables that reference base schema tables (FKs) so AdventureWorks.sql
+    # can drop/recreate those base tables. Culture is dropped early in the SQL
+    # script; ProductCategory, ProductSubcategory, SpecialOffer, and
+    # ProductModelProductDescriptionCulture all reference Culture, so they must
+    # be dropped first (here and/or in the SQL script's early drop block).
+    # ---------------------------------------------------------------------
+    $aiTablesPreCleanup = @(
+        "IF OBJECT_ID(N'[Production].[ProductName]', 'U') IS NOT NULL DROP TABLE [Production].[ProductName]",
+        "IF OBJECT_ID(N'[Production].[ProductCategory]', 'U') IS NOT NULL DROP TABLE [Production].[ProductCategory]",
+        "IF OBJECT_ID(N'[Production].[ProductSubcategory]', 'U') IS NOT NULL DROP TABLE [Production].[ProductSubcategory]",
+        "IF OBJECT_ID(N'[Sales].[SpecialOfferProduct]', 'U') IS NOT NULL DROP TABLE [Sales].[SpecialOfferProduct]",
+        "IF OBJECT_ID(N'[Sales].[SpecialOffer]', 'U') IS NOT NULL DROP TABLE [Sales].[SpecialOffer]",
+        "IF OBJECT_ID(N'[Production].[ProductModelProductDescriptionCulture]', 'U') IS NOT NULL DROP TABLE [Production].[ProductModelProductDescriptionCulture]"
+    )
+    Write-Log "`nDropping AI-specific tables that may reference base schema tables..."
+    foreach ($cleanupSql in $aiTablesPreCleanup) {
+        try {
+            $cmd.CommandText = $cleanupSql
+            $null = $cmd.ExecuteNonQuery()
+        }
+        catch {
+            Write-Log "  Note: Pre-cleanup: $($_.Exception.Message)"
+        }
+    }
+    Write-Log "  ✓ Pre-cleanup complete"
+
+    # ---------------------------------------------------------------------
     # Load and execute SQL to create table(s)
     # ---------------------------------------------------------------------
     $createTableSqlPath = Join-Path $PSScriptRoot 'sql' 'AdventureWorks.sql'
@@ -417,7 +450,7 @@ try {
 
     Write-Log "`nLoading AdventureWorks schema SQL script..."
     Write-Log "  Path: $createTableSqlPath"
-    $tableSql = Get-Content -Path $createTableSqlPath -Raw
+    $tableSql = Get-Content -Path $createTableSqlPath -Raw -Encoding UTF8
     Write-Log "  ✓ SQL script loaded ($($tableSql.Length) characters)"
     
     # Process SQLCMD variables and split into batches
@@ -875,6 +908,8 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         # ===== LOOKUP/REFERENCE TABLES =====
         @{ Table='Production.UnitMeasure'; File='UnitMeasure.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.Culture'; File='Culture.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # Additional cultures for languages added to the website (must be before ProductCategory due to FK)
+        @{ Table='Production.Culture'; File='Culture-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Sales.Currency'; File='Currency.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # Modern Turkish Lira (TRY, post-2005) to replace old TRL
         @{ Table='Sales.Currency'; File='Currency-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -924,6 +959,10 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture-ai.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModelIllustration'; File='ProductModelIllustration.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.Product'; File='Product.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # Translated product names with vector embeddings for all 23 cultures.
+        # ProductNameEmbedding is VECTOR(1536) - stored as JSON array in CSV, loaded via CAST(N'...' AS VECTOR(1536)).
+        # Must be loaded AFTER Product.csv (FK to Production.Product) and Culture data (FK to Production.Culture).
+        @{ Table='Production.ProductName'; File='ProductNames-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('ProductNameEmbedding') }
         @{ Table='Production.ProductReview'; File='ProductReview.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments'); DefaultColumns=@('CommentsEmbedding','HelpfulVotes','UserID') }
         # AI-generated product reviews: Comments are plain text (not hex); CommentsEmbedding is VECTOR; HelpfulVotes/UserID not in CSV
         @{ Table='Production.ProductReview'; File='ProductReview-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('CommentsEmbedding'); DefaultColumns=@('HelpfulVotes','UserID') }
@@ -975,8 +1014,6 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         @{ Table='Production.ProductProductPhoto'; File='ProductProductPhoto.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # AI-generated photo mappings (links AI photos to products)
         @{ Table='Production.ProductProductPhoto'; File='ProductProductPhoto-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        # Additional cultures for languages added to the website
-        @{ Table='Production.Culture'; File='Culture-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # Document has hierarchyid DocumentNode (hex-encoded), varbinary Document field (hex-encoded), and nvarchar DocumentSummary (hex-encoded to handle newlines)
         @{ Table='Production.Document'; File='Document.csv'; Delimiter="+|"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('DocumentNode', 'DocumentSummary', 'Document') }
         # ProductDocument references ProductIDs that all exist in Product.csv - load order ensures Product is loaded first
@@ -1026,6 +1063,13 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
             # Read CSV with proper encoding
             $encoding = if ($config.IsWideChar) { [System.Text.Encoding]::Unicode } else { [System.Text.Encoding]::UTF8 }
             $csvContent = [System.IO.File]::ReadAllText($csvPath, $encoding)
+            
+            # Detect Git LFS pointer: file was not pulled, so we cannot load real data
+            if ($csvContent -match '^\s*version\s+https://git-lfs\.github\.com') {
+                Write-Log "    ⚠ File appears to be a Git LFS pointer (actual CSV not present). Run 'git lfs pull' before building the seed-job image, then rebuild and re-run the seed job to load this file."
+                $csvLoadSkipped++
+                continue
+            }
             
             # Parse CSV into DataTable
             $dataTable = New-Object System.Data.DataTable
@@ -1081,7 +1125,8 @@ ORDER BY c.ORDINAL_POSITION
                 $isNullable = $reader['IS_NULLABLE'] -eq 'YES'
                 $colDefault = $reader['COLUMN_DEFAULT']
                 $isComputed = $reader['IsComputed'] -eq 1
-                $isIdentity = $reader['IsIdentity'] -eq 1
+                $rawIdentity = $reader['IsIdentity']
+                $isIdentity = ($rawIdentity -eq 1 -or $rawIdentity -eq $true -or [string]$rawIdentity -eq '1')
                 
                 # Track all columns for CSV parsing (to know CSV column positions)
                 $allColumns += @{
@@ -1159,6 +1204,17 @@ ORDER BY c.ORDINAL_POSITION
             # Track which columns we're actually loading (all columns now, including hierarchyid)
             $loadedColumns = $columns
             
+            # For Production.ProductName, only insert rows whose ProductID exists in Production.Product (FK)
+            $validProductIds = $null
+            if ($schemaName -eq 'Production' -and $tableName -eq 'ProductName') {
+                $cmd.CommandText = "SELECT ProductID FROM Production.Product"
+                $readerProd = $cmd.ExecuteReader()
+                $validProductIds = [System.Collections.Generic.HashSet[int]]::new()
+                while ($readerProd.Read()) { $null = $validProductIds.Add([int]$readerProd['ProductID']) }
+                $readerProd.Close()
+                Write-Log "    Filtering to ProductIDs present in Production.Product ($($validProductIds.Count) products)"
+            }
+            
             foreach ($row in $rows) {
                 if ([string]::IsNullOrWhiteSpace($row)) { continue }
                 
@@ -1166,7 +1222,7 @@ ORDER BY c.ORDINAL_POSITION
                 
                 # Handle leading delimiter (empty first value)
                 if ($values.Count -gt 0 -and [string]::IsNullOrWhiteSpace($values[0])) {
-                    $values = $values[1..($values.Count-1)]
+                    $values = @($values[1..($values.Count-1)])
                 }
                 # Strip trailing empty fields (e.g. ProductReview.csv has two trailing tabs)
                 $values = Remove-TrailingEmptyFields -Values $values
@@ -1184,7 +1240,7 @@ ORDER BY c.ORDINAL_POSITION
                         # Guard against out-of-bounds: if CSV has fewer fields than expected,
                         # treat the missing field as null (will use column default or DBNull)
                         $raw = if ($col.CSVIndex -lt $values.Count) { $values[$col.CSVIndex] } else { $null }
-                        $val = if ($null -ne $raw) { $raw.Trim() } else { $null }
+                        $val = if ($null -ne $raw) { $raw.ToString().Trim() } else { $null }
                     }
                     
                     # Column uses DB DEFAULT - no value from CSV (use placeholder so non-nullable columns accept the row; INSERT will use DEFAULT/NULL)
@@ -1406,6 +1462,14 @@ ORDER BY c.ORDINAL_POSITION
                         if ($null -ne $pkVal -and [int]$pkVal -eq 0) { continue }
                     }
                 }
+                # Skip ProductName rows whose ProductID is not in Production.Product (FK)
+                if ($null -ne $validProductIds) {
+                    $pidx = [array]::IndexOf(($columns | ForEach-Object { $_.Name }), 'ProductID')
+                    if ($pidx -ge 0) {
+                        $pidVal = $dataRow[$pidx]
+                        if ($null -eq $pidVal -or -not $validProductIds.Contains([int]$pidVal)) { continue }
+                    }
+                }
                 $dataTable.Rows.Add($dataRow)
                 $rowCount++
                 
@@ -1425,6 +1489,17 @@ ORDER BY c.ORDINAL_POSITION
             if ($hasSpecialColumns -or $hasIdentityColumn -or $isAiCsv) {
                 # Use batched INSERT statements for special tables (hierarchyid, geography, hex-encoded columns)
                 Write-Log "    Inserting $rowCount rows using batched INSERT (special columns)..."
+                
+                # Fallback: explicitly detect identity columns from DB (COLUMNPROPERTY/reader can vary by driver)
+                if (-not $hasIdentityColumn) {
+                    $cmd.CommandText = @"
+SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c
+WHERE c.TABLE_SCHEMA = '$schemaName' AND c.TABLE_NAME = '$tableName'
+AND COLUMNPROPERTY(OBJECT_ID(QUOTENAME(c.TABLE_SCHEMA)+'.'+QUOTENAME(c.TABLE_NAME)), c.COLUMN_NAME, 'IsIdentity') = 1
+"@
+                    $identityCount = $cmd.ExecuteScalar()
+                    $hasIdentityColumn = $identityCount -gt 0
+                }
                 
                 $batchSize = 100
                 $insertedRows = 0

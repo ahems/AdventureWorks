@@ -17,6 +17,7 @@ import {
 } from "@/hooks/useShoppingCart";
 import { trackEvent, trackError } from "@/lib/appInsights";
 import { useProductsByIds } from "@/hooks/useProducts";
+import { useLanguage } from "@/context/LanguageContext";
 
 interface CartContextType {
   items: CartItem[];
@@ -51,6 +52,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const { user } = useAuth();
+  const { selectedLanguage } = useLanguage();
   const shoppingCartId = user?.businessEntityId?.toString() || null;
 
   // Fetch cart items from API
@@ -63,9 +65,9 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
     [cartItems],
   );
 
-  // Fetch only the products that are in the cart (optimized)
+  // Fetch only the products that are in the cart (optimized), with discount text in current culture
   const { data: cartProducts = [], isLoading: productsLoading } =
-    useProductsByIds(productIds);
+    useProductsByIds(productIds, selectedLanguage);
 
   // Mutations
   const addToCartMutation = useAddToCart();

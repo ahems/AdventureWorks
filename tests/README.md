@@ -80,6 +80,8 @@ The helper in `tests/utils/env.ts` automatically pulls remote URLs from `azd env
 | `REST_API_BASE_URL`  | `azd env get-value "VITE_API_URL"` → `/api`  |
 | `TEST_EMAIL`         | `azd env get-value "TEST_EMAIL"` (must be set manually) |
 
+When running tests on **Azure Playwright** (cloud workers), the script `tests/scripts/run-tests-on-azure-playwright.sh` exports `WEB_BASE_URL`, `REST_API_BASE_URL`, and `FUNCTIONS_BASE_URL` from azd before invoking Playwright so workers can resolve the correct app/API URLs. If your runner does not forward these env vars to cloud workers, set them in the Azure Playwright Testing / Workspaces run configuration so tests do not fall back to localhost.
+
 ### Required: TEST_EMAIL
 
 Some tests (checkout, sale discounts) send a real order confirmation email during the flow. You must set `TEST_EMAIL` to a real address you can receive mail at before running those tests:

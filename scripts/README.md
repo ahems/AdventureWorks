@@ -78,9 +78,13 @@ These are typically used during development or for populating demo environments.
 
 **Location:** `utilities/`
 
+**Run from repository root** for scripts that use `app/src/locales` or `seed-job/sql` (e.g. `./scripts/utilities/script-name.sh`).
+
 Development and maintenance utilities:
 
-- **batch-translate-language-file.sh** - Batch translate UI language files
+- **audit-locale-gaps.sh** - Audit translation gaps: missing locale folders, missing namespace files, keys missing/extra vs `en`, and wrapped keys. Use `--json` for machine-readable output.
+- **flatten-locale-json.sh** - Flatten locale JSONs: replace `{"": "value"}` with `"value"` so i18next resolves keys correctly. Dry run by default; use `--write` to apply.
+- **batch-translate-language-file.sh** - Batch translate UI language files via Azure Function; downloads results to `app/src/locales` when `az` and `STORAGE_ACCOUNT_NAME` (azd env) are available.
 - **check-product-photo-duplicates.sh** - Detect duplicate product photos in database
 - **dab-seed-comparison.sh** - Compare Known Good vs Clean (seed) DAB deployment; cross-check discrepancies with seed CSVs
 - **download-large-images.ps1** - Download large product images from Azure
@@ -93,6 +97,22 @@ Development and maintenance utilities:
 Database scripts and seed data (CSV files, initialization scripts, schema updates).
 
 ## Usage Examples
+
+### Locale translation gaps (audit and fill)
+
+Workflow to ensure every locale has complete, correctly structured translations (run from repo root):
+
+1. **Audit** – Report missing folders/files, key gaps, and wrapped keys:  
+   `./scripts/utilities/audit-locale-gaps.sh`
+2. **Re-translate** (optional) – Regenerate all non-en locale files:  
+   `./scripts/utilities/batch-translate-language-file.sh`  
+   Completed translations are downloaded to `app/src/locales` when `az` and `STORAGE_ACCOUNT_NAME` are available.
+3. **Flatten** – Fix wrapped keys (`{"": "value"}` → `"value"`):  
+   `./scripts/utilities/flatten-locale-json.sh --write`
+4. **Re-audit** – Confirm no remaining gaps:  
+   `./scripts/utilities/audit-locale-gaps.sh`
+
+Required locales are taken from `seed-job/sql/Culture.csv` and `Culture-ai.csv`.
 
 ### Running Data Exports
 
@@ -119,12 +139,20 @@ Database scripts and seed data (CSV files, initialization scripts, schema update
 
 ### Running Utilities
 
+Run from repository root:
+
 ```bash
+# Audit locale translation gaps
+./scripts/utilities/audit-locale-gaps.sh
+
+# Flatten wrapped keys in locale JSONs (dry run; use --write to apply)
+./scripts/utilities/flatten-locale-json.sh --write
+
+# Batch translate UI language files (downloads to app/src/locales when az + storage env set)
+./scripts/utilities/batch-translate-language-file.sh   # or --missing-only
+
 # Check for duplicate photos
 ./scripts/utilities/check-product-photo-duplicates.sh
-
-# Translate language files
-./scripts/utilities/batch-translate-language-file.sh <language-code>
 ```
 
 ## Prerequisites

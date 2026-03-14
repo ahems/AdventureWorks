@@ -18,6 +18,7 @@ import { useWishlist } from "@/context/WishlistContext";
 import { getSalePrice } from "@/types/product";
 import { useCurrency } from "@/context/CurrencyContext";
 import { OptimizedImage } from "@/components/OptimizedImage";
+import { useProductNames } from "@/context/ProductNamesContext";
 
 const CartPage: React.FC = () => {
   const { t } = useTranslation(["cart", "common"]);
@@ -25,6 +26,7 @@ const CartPage: React.FC = () => {
     useCart();
   const { addToWishlist, isInWishlist } = useWishlist();
   const { formatPrice } = useCurrency();
+  const { getLocalizedName } = useProductNames();
 
   // Calculate totals with sale prices
   const { subtotalBeforeDiscount, totalAfterDiscount, totalDiscount } =
@@ -165,7 +167,7 @@ const CartPage: React.FC = () => {
                       {item.ThumbNailPhoto ? (
                         <OptimizedImage
                           src={`data:image/gif;base64,${item.ThumbNailPhoto}`}
-                          alt={`${item.Name}${
+                          alt={`${getLocalizedName(item.ProductID) ?? item.Name}${
                             item.selectedColor
                               ? ` - ${item.selectedColor}`
                               : item.Color
@@ -193,7 +195,7 @@ const CartPage: React.FC = () => {
                         to={`/product/${item.ProductID}`}
                         className="font-doodle font-bold text-lg text-doodle-text hover:text-doodle-accent transition-colors line-clamp-1"
                       >
-                        {item.Name}
+                        {getLocalizedName(item.ProductID) ?? item.Name}
                       </Link>
 
                       <div className="flex flex-wrap gap-2 mt-1">
@@ -221,7 +223,7 @@ const CartPage: React.FC = () => {
 
                       {/* Price with discount display */}
                       {item.DiscountPct ? (
-                        <div className="mt-2">
+                        <div className="mt-2" data-testid="product-price">
                           <div className="flex items-center gap-2">
                             <span className="font-doodle text-sm text-doodle-text/50 line-through">
                               {formatPrice(item.ListPrice)}
@@ -240,7 +242,7 @@ const CartPage: React.FC = () => {
                           </span>
                         </div>
                       ) : (
-                        <p className="font-doodle text-lg font-bold text-doodle-green mt-2">
+                        <p className="font-doodle text-lg font-bold text-doodle-green mt-2" data-testid="product-price">
                           {formatPrice(item.ListPrice)}
                         </p>
                       )}

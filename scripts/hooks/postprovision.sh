@@ -185,6 +185,15 @@ echo "ACR Name: $ACR_NAME"
 echo "ACR Endpoint: $ACR_ENDPOINT"
 echo "Seed Job Name: $SEED_JOB_NAME"
 
+# Ensure Git LFS files (e.g. seed-job/sql/ProductNames-ai.csv) are present so the build context includes real content, not pointers
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/.git" ] && git lfs version &>/dev/null; then
+    echo ""
+    echo "Pulling Git LFS files for seed-job build context..."
+    (cd "$REPO_ROOT" && git lfs pull) || true
+    echo "  LFS pull done."
+fi
+
 # Build and push the image to ACR
 echo ""
 echo "Building and pushing seed-job image to ACR..."

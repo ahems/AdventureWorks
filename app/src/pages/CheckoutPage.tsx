@@ -1998,7 +1998,7 @@ const CheckoutPage: React.FC = () => {
                   <hr className="border-dashed border-doodle-text/30" />
                   <div className="flex justify-between text-lg font-bold">
                     <span>{t("checkout.total")}</span>
-                    <span className="text-doodle-green">
+                    <span className="text-doodle-green" data-testid="checkout-order-total">
                       {CURRENCY_SYMBOLS[currencyCode] || currencyCode}
                       {grandTotal.toFixed(2)}
                     </span>

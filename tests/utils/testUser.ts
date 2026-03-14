@@ -52,75 +52,86 @@ const seedLocaleStorage = async (
   );
 };
 
+const SIGNUP_MAX_ATTEMPTS = 3;
+
 export const signupThroughUi = async (
   page: Page,
   overrides: SignupOverrides = {},
 ): Promise<TestAccount> => {
-  const creds = createRandomCredentials(overrides);
-  await seedLocaleStorage(page, { clearUser: true });
-  await page.goto(`${testEnv.webBaseUrl}/auth`);
+  let lastError: Error | null = null;
 
-  const toggleButton = page
-    .getByRole("button", { name: /create one here/i })
-    .first();
-  await toggleButton.click();
+  for (let attempt = 1; attempt <= SIGNUP_MAX_ATTEMPTS; attempt++) {
+    const creds = createRandomCredentials(overrides);
+    await seedLocaleStorage(page, { clearUser: true });
+    await page.goto(`${testEnv.webBaseUrl}/auth`);
 
-  await page.getByLabel(/first name/i).fill(creds.firstName);
-  await page.getByLabel(/last name/i).fill(creds.lastName);
-  await page.getByLabel(/email address/i).fill(creds.email);
-  await page.getByLabel(/^password$/i).fill(creds.password);
-  await page.getByLabel(/confirm password/i).fill(creds.password);
+    const toggleButton = page
+      .getByRole("button", { name: /create one here/i })
+      .first();
+    await toggleButton.click();
 
-  await page.getByRole("button", { name: /create account/i }).click();
+    await page.getByLabel(/first name/i).fill(creds.firstName);
+    await page.getByLabel(/last name/i).fill(creds.lastName);
+    await page.getByLabel(/email address/i).fill(creds.email);
+    await page.getByLabel(/^password$/i).fill(creds.password);
+    await page.getByLabel(/confirm password/i).fill(creds.password);
 
-  // Wait for signup to resolve: either user in localStorage (success) or error toast (failure).
-  // Fails fast on API error instead of waiting full timeout.
-  const signupResultHandle = await page.waitForFunction(
-    (key) => {
-      if (localStorage.getItem(key) !== null) return "success";
-      const body = document.body.innerText;
-      if (
-        /signup failed|error during signup|an error occurred|timed out|try again/i.test(
-          body,
+    await page.getByRole("button", { name: /create account/i }).click();
+
+    // Wait for signup to resolve: either user in localStorage (success) or error toast (failure).
+    const signupResultHandle = await page.waitForFunction(
+      (key) => {
+        if (localStorage.getItem(key) !== null) return "success";
+        const body = document.body.innerText;
+        if (
+          /signup failed|error during signup|an error occurred|timed out|try again/i.test(
+            body,
+          )
         )
-      )
-        return "failure";
-      return false;
-    },
-    APP_STORAGE_KEYS.currentUser,
-    { timeout: 120000 },
-  );
-  const result = await signupResultHandle.jsonValue();
-  if (result === "failure") {
+          return "failure";
+        return false;
+      },
+      APP_STORAGE_KEYS.currentUser,
+      { timeout: 120000 },
+    );
+    const result = await signupResultHandle.jsonValue();
+    if (result === "success") {
+      // Navigate to home page after successful signup
+      await page.goto(testEnv.webBaseUrl);
+      await page.waitForLoadState("domcontentloaded");
+
+      const storedUser = await page.evaluate((key) => {
+        return localStorage.getItem(key);
+      }, APP_STORAGE_KEYS.currentUser);
+
+      expect(storedUser, "User should be persisted after signup").toBeTruthy();
+      const parsedUser = JSON.parse(storedUser!);
+
+      console.log(
+        `\n📧 Test User Created:\n   Email: ${creds.email}\n   Password: ${creds.password}\n`,
+      );
+
+      return {
+        ...creds,
+        businessEntityId: Number(parsedUser.businessEntityId || parsedUser.id),
+      };
+    }
+
+    // Failure: capture error and retry if attempts remain
     const errorSnippet = await page
       .locator('[role="status"], [data-state="open"]')
       .first()
       .textContent()
       .catch(() => "");
-    throw new Error(
+    lastError = new Error(
       `Signup failed (API/backend error). Check Azure Functions signup endpoint. ${errorSnippet ? `Toast: ${errorSnippet.slice(0, 200)}` : ""}`,
     );
+    if (attempt < SIGNUP_MAX_ATTEMPTS) {
+      await page.waitForTimeout(3000); // brief delay before retry
+    }
   }
 
-  // Navigate to home page after successful signup
-  await page.goto(testEnv.webBaseUrl);
-  await page.waitForLoadState("domcontentloaded");
-
-  const storedUser = await page.evaluate((key) => {
-    return localStorage.getItem(key);
-  }, APP_STORAGE_KEYS.currentUser);
-
-  expect(storedUser, "User should be persisted after signup").toBeTruthy();
-  const parsedUser = JSON.parse(storedUser!);
-
-  console.log(
-    `\n📧 Test User Created:\n   Email: ${creds.email}\n   Password: ${creds.password}\n`,
-  );
-
-  return {
-    ...creds,
-    businessEntityId: Number(parsedUser.businessEntityId || parsedUser.id),
-  };
+  throw lastError!;
 };
 
 export const logoutFromAccount = async (page: Page) => {

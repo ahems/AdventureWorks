@@ -11,7 +11,7 @@ color_red() { echo -e "\033[31m$1\033[0m"; }
 
 get_azd_value() {
   local name=$1
-  local raw exit_code
+  local raw exit_code first_line
   
   raw=$(azd env get-value "$name" 2>&1 || true)
   exit_code=$?
@@ -24,7 +24,10 @@ get_azd_value() {
     return
   fi
   
-  echo "$raw" | xargs
+  # Use only first line; azd may append warnings to stdout (e.g. "WARNING: your version of azd is out of date")
+  first_line=$(echo "$raw" | head -n1)
+  first_line="${first_line%% WARNING*}"
+  echo "$first_line" | xargs
 }
 
 color_cyan "Configuring API Container App CORS..."
@@ -48,12 +51,35 @@ if [[ -z "$api_service_name" ]] || [[ -z "$resource_group_name" ]]; then
   exit 0
 fi
 
-# Update the Container App with APP_URL environment variable for CORS
+# Get current env vars and merge APP_URL so we don't replace/wipe other variables
+current_env_json=$(az containerapp show \
+  --name "$api_service_name" \
+  --resource-group "$resource_group_name" \
+  --query "properties.template.containers[0].env" -o json 2>/dev/null || echo "[]")
+if [[ -z "$current_env_json" ]] || [[ "$current_env_json" == "[]" ]]; then
+  color_yellow "Warning: Could not read current env vars; updating APP_URL only."
+  set_env_args=("APP_URL=$app_url")
+else
+  set_env_args=()
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    name="${line%%=*}"
+    value="${line#*=}"
+    if [[ "$name" == "APP_URL" ]]; then
+      value="$app_url"
+    fi
+    set_env_args+=("$name=$value")
+  done < <(echo "$current_env_json" | jq -r '.[] | select(.value != null) | "\(.name)=\(.value)"' 2>/dev/null)
+  if ! printf '%s\n' "${set_env_args[@]}" | grep -q '^APP_URL='; then
+    set_env_args+=("APP_URL=$app_url")
+  fi
+fi
+
 if az containerapp update \
   --name "$api_service_name" \
   --resource-group "$resource_group_name" \
-  --set-env-vars "APP_URL=$app_url" \
-  --output none 2>/dev/null; then
+  --set-env-vars "${set_env_args[@]}" \
+  --output none; then
   color_green "✓ Successfully updated APP_URL for CORS (value: $app_url)"
 else
   color_red "✗ Failed to update Container App environment variables."

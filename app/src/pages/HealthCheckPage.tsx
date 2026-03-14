@@ -424,6 +424,186 @@ const HealthCheckPage: React.FC = () => {
     }
   };
 
+  const checkSeedJobStatus = async (): Promise<void> => {
+    const name = "Seed Job";
+    const start = performance.now();
+    updateCheckStatus(name, "checking");
+
+    try {
+      const functionsUrl = getFunctionsApiUrl();
+      const endpoint = `${functionsUrl}/api/seed/status`;
+      updateCheckStatus(name, "checking", undefined, undefined, endpoint);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+
+      const response = await fetch(endpoint, {
+        method: "GET",
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      const responseTime = Math.round(performance.now() - start);
+
+      if (!response.ok) {
+        updateCheckStatus(
+          name,
+          "unhealthy",
+          `HTTP ${response.status}: ${response.statusText}`,
+          responseTime,
+          endpoint,
+        );
+        return;
+      }
+
+      const data = await response.json();
+      const status = data.status as string;
+      const message = (data.message as string) || "";
+      const durationHuman = data.durationHuman as string | undefined;
+
+      if (status === "completed") {
+        const completedMessage =
+          durationHuman != null
+            ? `Seed job completed successfully (ran for ${durationHuman})`
+            : message || "Seed job completed successfully";
+        updateCheckStatus(
+          name,
+          "healthy",
+          completedMessage,
+          responseTime,
+          endpoint,
+        );
+      } else if (status === "running") {
+        const runningMessage =
+          data.runningForHuman != null
+            ? `Running for ${data.runningForHuman}`
+            : "Seed job running";
+        updateCheckStatus(name, "unhealthy", runningMessage, responseTime, endpoint);
+      } else if (status === "failed") {
+        updateCheckStatus(
+          name,
+          "unhealthy",
+          message || "Seed job failed",
+          responseTime,
+          endpoint,
+        );
+      } else {
+        // unknown
+        updateCheckStatus(
+          name,
+          "healthy",
+          message || "No seed log found (or unable to read)",
+          responseTime,
+          endpoint,
+        );
+      }
+    } catch (error: unknown) {
+      const responseTime = Math.round(performance.now() - start);
+      if ((error as Error).name === "AbortError") {
+        updateCheckStatus(
+          name,
+          "timeout",
+          "Request timeout (>60s)",
+          responseTime,
+        );
+      } else {
+        updateCheckStatus(
+          name,
+          "unhealthy",
+          (error as Error).message,
+          responseTime,
+        );
+      }
+    }
+  };
+
+  const checkSemanticSearch = async (): Promise<void> => {
+    const name = "Function: Semantic Search";
+    const start = performance.now();
+    updateCheckStatus(name, "checking");
+
+    const functionsUrl = getFunctionsApiUrl();
+    const endpoint = `${functionsUrl}/api/search/semantic`;
+    updateCheckStatus(name, "checking", undefined, undefined, endpoint);
+
+    const doFetch = (timeoutMs: number): Promise<Response> => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      return fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: "red bikes",
+          topN: 5,
+          cultureId: "en",
+        }),
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
+    };
+
+    const timeoutMs = 90000; // 90s for cold start
+    let lastResponseTime = 0;
+
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const response = await doFetch(timeoutMs);
+        lastResponseTime = Math.round(performance.now() - start);
+
+        if (!response.ok) {
+          if (response.status >= 500 && attempt < 2) {
+            await new Promise((r) => setTimeout(r, 15000)); // wait 15s before retry
+            continue;
+          }
+          updateCheckStatus(
+            name,
+            "unhealthy",
+            `HTTP ${response.status}: ${response.statusText}`,
+            lastResponseTime,
+            endpoint,
+          );
+          return;
+        }
+
+        const data = await response.json();
+        const results = data.results as unknown[] | undefined;
+        const count = Array.isArray(results) ? results.length : 0;
+
+        updateCheckStatus(
+          name,
+          "healthy",
+          `${count} results for 'red bikes'`,
+          lastResponseTime,
+          endpoint,
+        );
+        return;
+      } catch (error: unknown) {
+        lastResponseTime = Math.round(performance.now() - start);
+        lastError = error;
+        if ((error as Error).name === "AbortError") {
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 15000)); // wait 15s before retry
+            continue;
+          }
+          updateCheckStatus(
+            name,
+            "timeout",
+            "Request timeout (>90s)",
+            lastResponseTime,
+          );
+          return;
+        } else {
+          updateCheckStatus(
+            name,
+            "unhealthy",
+            (error as Error).message,
+            lastResponseTime,
+          );
+          return;
+        }
+      }
+    }
+  };
+
   useEffect(() => {
     const runHealthChecks = async () => {
       setStartTime(Date.now());
@@ -431,7 +611,7 @@ const HealthCheckPage: React.FC = () => {
       setProgress(0);
       setRefreshCountdown(null);
 
-      const totalChecks = 3 + functionEndpoints.length; // DAB + MCP + AI Images + Functions
+      const totalChecks = 4 + functionEndpoints.length + 1; // DAB + MCP + AI Images + Seed Job + Functions + Semantic Search
       let completedChecks = 0;
 
       const updateProgress = () => {
@@ -444,6 +624,8 @@ const HealthCheckPage: React.FC = () => {
         checkGraphQLAPI().finally(updateProgress),
         checkMCPAPI().finally(updateProgress),
         checkAIGeneratedImages().finally(updateProgress),
+        checkSeedJobStatus().finally(updateProgress),
+        checkSemanticSearch().finally(updateProgress),
         ...functionEndpoints.map((func) =>
           checkFunction(func).finally(updateProgress),
         ),

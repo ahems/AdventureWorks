@@ -30,6 +30,7 @@ import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { useRecentlyViewed } from "@/context/RecentlyViewedContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { useProductNames } from "@/context/ProductNamesContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import { useUnitMeasure } from "@/context/UnitMeasureContext";
 import { useProduct, useSubcategory, useCategory } from "@/hooks/useProducts";
@@ -53,6 +54,7 @@ const ProductPage: React.FC = () => {
   const { selectedLanguage } = useLanguage();
   const { formatPrice } = useCurrency();
   const { formatWeight, formatSize } = useUnitMeasure();
+  const { getLocalizedName } = useProductNames();
   const [quantity, setQuantity] = React.useState(1);
   const [selectedSize, setSelectedSize] = React.useState<string | undefined>(
     undefined,
@@ -67,12 +69,19 @@ const ProductPage: React.FC = () => {
   );
   const { data: subcategory } = useSubcategory(
     product?.ProductSubcategoryID || 0,
+    selectedLanguage,
   );
-  const { data: category } = useCategory(subcategory?.ProductCategoryID || 0);
+  const { data: category } = useCategory(
+    subcategory?.ProductCategoryID || 0,
+    selectedLanguage,
+  );
 
   const inWishlist = product ? isInWishlist(product.ProductID) : false;
   const salePrice = product ? getSalePrice(product) : null;
   const { averageRating, reviewCount } = useReviews(product?.ProductID || 0);
+  const localizedName = product
+    ? (getLocalizedName(product.ProductID) ?? product.Name)
+    : "";
 
   // Check if this is a clothing item with variants
   const hasVariants = product?.availableSizes || product?.availableColors;
@@ -99,7 +108,7 @@ const ProductPage: React.FC = () => {
     }
 
     items.push({
-      name: product.Name,
+      name: getLocalizedName(product.ProductID) ?? product.Name,
       url: window.location.href,
     });
 
@@ -113,7 +122,7 @@ const ProductPage: React.FC = () => {
     const price = salePrice || product.ListPrice;
 
     return generateProductStructuredData({
-      name: product.Name,
+      name: getLocalizedName(product.ProductID) ?? product.Name,
       description: product.Description || product.Name,
       image: product.ThumbNailPhoto || "",
       price: price,
@@ -131,7 +140,7 @@ const ProductPage: React.FC = () => {
       // Track product view in Application Insights
       trackEvent("Product_View", {
         productId: product.ProductID,
-        productName: product.Name,
+        productName: localizedName,
         category: product.ProductSubcategory?.ProductCategory?.Name,
         subcategory: product.ProductSubcategory?.Name,
         price: product.ListPrice,
@@ -301,10 +310,10 @@ const ProductPage: React.FC = () => {
     <div className="min-h-screen flex flex-col">
       {product && (
         <SEO
-          title={`${product.Name} | Adventure Works`}
+          title={`${localizedName} | Adventure Works`}
           description={
             product.Description ||
-            `Buy ${product.Name} at Adventure Works. Premium quality outdoor adventure and sports gear.`
+            `Buy ${localizedName} at Adventure Works. Premium quality outdoor adventure and sports gear.`
           }
           image={product.ThumbNailPhoto}
           type="product"
@@ -331,7 +340,7 @@ const ProductPage: React.FC = () => {
                 <span>/</span>
               </>
             )}
-            <span className="text-doodle-text">{product.Name}</span>
+            <span className="text-doodle-text">{localizedName}</span>
           </div>
         </div>
 
@@ -340,7 +349,7 @@ const ProductPage: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
             {/* Product Image Gallery */}
             <ProductImageGallery
-              productName={product.Name}
+              productName={localizedName}
               color={selectedColor || product.Color}
               thumbnailPhoto={product.ThumbNailPhoto}
               productPhotos={product.productPhotos}
@@ -367,7 +376,7 @@ const ProductPage: React.FC = () => {
                   className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text mt-1"
                   data-testid="product-name"
                 >
-                  {product.Name}
+                  {localizedName}
                 </h1>
                 <div className="flex items-center gap-3 mt-2">
                   <div className="flex items-center gap-1 text-doodle-accent">
@@ -631,7 +640,7 @@ const ProductPage: React.FC = () => {
                       </p>
                     </div>
                     <NotifyWhenAvailable
-                      productName={product.Name}
+                      productName={localizedName}
                       size={selectedSize}
                       color={selectedColor}
                       trigger={

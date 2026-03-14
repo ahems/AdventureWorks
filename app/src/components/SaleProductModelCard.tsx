@@ -14,6 +14,7 @@ import { useReviews } from "@/hooks/useReviews";
 import { toast } from "@/hooks/use-toast";
 import { useCurrency } from "@/context/CurrencyContext";
 import { useUnitMeasure } from "@/context/UnitMeasureContext";
+import { useProductNames } from "@/context/ProductNamesContext";
 import NotifyWhenAvailable from "@/components/NotifyWhenAvailable";
 import { TwemojiText } from "@/components/TwemojiText";
 import {
@@ -49,6 +50,10 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
     return getProductVariant(productGroup, selectedColor, selectedSize);
   }, [productGroup, selectedColor, selectedSize]);
 
+  const { getLocalizedName } = useProductNames();
+  const localizedName =
+    getLocalizedName(currentProduct.ProductID) ?? currentProduct.Name;
+
   const { averageRating } = useReviews(currentProduct.ProductID);
   const salePrice = getSalePrice(currentProduct);
   const hasVariants =
@@ -72,7 +77,7 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
         addToCart(currentProduct, 1, selectedSize, selectedColor);
         toast({
           title: t("toast.addedToCart"),
-          description: `${currentProduct.Name} ${t(
+          description: `${localizedName} ${t(
             "toast.addedToCartDescription"
           )}`,
         });
@@ -122,7 +127,7 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
         {currentProduct.ThumbNailPhoto ? (
           <OptimizedImage
             src={`data:image/gif;base64,${currentProduct.ThumbNailPhoto}`}
-            alt={`${productGroup.modelName}${
+            alt={`${localizedName}${
               currentProduct.Color ? ` - ${currentProduct.Color}` : ""
             }`}
             className="!aspect-square"
@@ -148,7 +153,7 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
       {/* Product Info */}
       <div className="space-y-3">
         <h3 className="font-doodle text-lg font-bold text-doodle-text group-hover:text-doodle-accent transition-colors line-clamp-2">
-          {productGroup.modelName}
+          {localizedName}
         </h3>
 
         {/* Variant Selectors */}
@@ -255,7 +260,7 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
               />
             </p>
             <NotifyWhenAvailable
-              productName={currentProduct.Name}
+              productName={localizedName}
               size={selectedSize}
               color={selectedColor}
               trigger={

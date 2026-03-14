@@ -3,11 +3,16 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { useSaleProducts } from "@/hooks/useProducts";
+import { useLanguage } from "@/context/LanguageContext";
 import { Twemoji } from "@/components/Twemoji";
+import { useProductNames } from "@/context/ProductNamesContext";
 
 const PromoBanner: React.FC = () => {
   const { t } = useTranslation("common");
-  const { data: saleProducts = [], isLoading } = useSaleProducts();
+  const { selectedLanguage } = useLanguage();
+  const { data: saleProducts = [], isLoading } =
+    useSaleProducts(selectedLanguage);
+  const { getLocalizedName } = useProductNames();
   const maxDiscount = Math.max(
     ...saleProducts.map((p) => {
       // Convert DiscountPct (decimal) to percentage
@@ -129,7 +134,7 @@ const PromoBanner: React.FC = () => {
           <div className="flex gap-8 animate-marquee whitespace-nowrap font-doodle text-xs text-white/70">
             {saleProducts.map((product) => (
               <span key={product.ProductID} className="flex items-center gap-1">
-                🏷️ {product.Name} -{" "}
+                🏷️ {getLocalizedName(product.ProductID) ?? product.Name} -{" "}
                 {Math.round((product.DiscountPct || 0) * 100)}% OFF
               </span>
             ))}
@@ -138,7 +143,7 @@ const PromoBanner: React.FC = () => {
                 key={`dup-${product.ProductID}`}
                 className="flex items-center gap-1"
               >
-                🏷️ {product.Name} -{" "}
+                🏷️ {getLocalizedName(product.ProductID) ?? product.Name} -{" "}
                 {Math.round((product.DiscountPct || 0) * 100)}% OFF
               </span>
             ))}

@@ -11,6 +11,7 @@ import {
   isProductModelGroup,
 } from "@/utils/productGrouping";
 import { useSaleProducts } from "@/hooks/useProducts";
+import { useLanguage } from "@/context/LanguageContext";
 import {
   Select,
   SelectContent,
@@ -21,7 +22,9 @@ import {
 
 const SalePage: React.FC = () => {
   const { t } = useTranslation("common");
-  const { data: allSaleProducts = [], isLoading } = useSaleProducts();
+  const { selectedLanguage } = useLanguage();
+  const { data: allSaleProducts = [], isLoading } =
+    useSaleProducts(selectedLanguage);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [itemsPerPage, setItemsPerPage] = React.useState(12);
   const [sortBy, setSortBy] = React.useState("discount-desc");

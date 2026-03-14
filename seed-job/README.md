@@ -172,6 +172,10 @@ Once started, the Container App Job:
 
 ## Monitoring
 
+### Health Page
+
+The **Health page** (`/health`) in the web app shows Seed Job status by reading the latest log from the `seed-job-logs` Azure File Share via the `GET /api/seed/status` Azure Function. When the job is running, the page displays “Running for X minutes Y seconds” (derived from the `Start Time:` line in the log). When the job has completed or failed, the status card reflects that. No need to run CLI commands to see whether the seed has finished.
+
 ### Check Job Execution Status
 
 ```bash

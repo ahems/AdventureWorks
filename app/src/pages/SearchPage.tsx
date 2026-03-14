@@ -24,6 +24,7 @@ import {
 } from "@/hooks/useProducts";
 import { Product, getSalePrice } from "@/types/product";
 import { useAllReviews } from "@/hooks/useReviews";
+import { useLanguage } from "@/context/LanguageContext";
 import { useSemanticSearch } from "@/hooks/useSemanticSearch";
 import {
   Select,
@@ -42,6 +43,7 @@ type SortOption =
 
 const SearchPage: React.FC = () => {
   const { t } = useTranslation("common");
+  const { selectedLanguage } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
 
@@ -56,8 +58,8 @@ const SearchPage: React.FC = () => {
 
   const { data: products = [], isLoading: productsLoading } = useProducts();
   const { data: categories = [], isLoading: categoriesLoading } =
-    useCategories();
-  const { data: subcategories = [] } = useSubcategories();
+    useCategories(selectedLanguage);
+  const { data: subcategories = [] } = useSubcategories(selectedLanguage);
   const { data: allReviews = [] } = useAllReviews();
 
   // Semantic search hook - always enabled when query is submitted
@@ -360,21 +362,23 @@ const SearchPage: React.FC = () => {
                   <Sparkles className="w-5 h-5 text-doodle-accent flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="font-doodle text-sm text-doodle-text font-bold mb-1">
-                      AI-Powered Search Features
+                      {t("search.aiFeaturesTitle")}
                     </p>
                     <p className="font-doodle text-xs text-doodle-text/80">
-                      <strong>Type-ahead suggestions:</strong> Start typing to
-                      get AI-powered search completions.{" "}
-                      <strong>Semantic search:</strong> Uses AI embeddings to
-                      understand natural language queries. Try: "red bikes",
-                      "waterproof gear for rainy hikes", or "lightweight
-                      equipment for cyclists"
+                      <strong>{t("search.aiFeaturesTypeAhead")}</strong>{" "}
+                      {t("search.aiFeaturesTypeAheadDesc")}{" "}
+                      <strong>{t("search.aiFeaturesSemantic")}</strong>{" "}
+                      {t("search.aiFeaturesSemanticDesc")}
                     </p>
                     {semanticSearchData && semanticQuerySubmitted && (
                       <p className="font-doodle text-xs text-doodle-text/60 mt-1">
-                        Found {semanticSearchData.descriptionMatches}{" "}
-                        description matches and{" "}
-                        {semanticSearchData.reviewMatches} review matches
+                        {t("search.matchCounts", {
+                          descriptionMatches:
+                            semanticSearchData.descriptionMatches,
+                          reviewMatches: semanticSearchData.reviewMatches,
+                          nameMatches:
+                            semanticSearchData.nameMatches ?? 0,
+                        })}
                       </p>
                     )}
                   </div>
@@ -384,8 +388,7 @@ const SearchPage: React.FC = () => {
               {semanticSearchError && (
                 <div className="bg-red-50 border-2 border-red-200 p-3">
                   <p className="font-doodle text-xs text-red-600">
-                    ⚠️ Semantic search service unavailable. Please check that
-                    the AI service is running and embeddings are indexed.
+                    ⚠️ {t("search.semanticUnavailable")}
                   </p>
                 </div>
               )}
@@ -619,40 +622,33 @@ const SearchPage: React.FC = () => {
                     {/* Middle: Sort options */}
                     <div className="flex items-center gap-3">
                       <span className="font-doodle text-sm text-doodle-text">
-                        Sort by:
+                        {t("search.sortBy")}
                       </span>
                       <Select value={sortBy} onValueChange={handleSortChange}>
                         <SelectTrigger className="w-48 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="bg-white border-2 border-doodle-text">
-                          <SelectItem value="relevance" className="font-doodle">
-                            Relevance
-                          </SelectItem>
-                          <SelectItem value="price-asc" className="font-doodle">
-                            Price (Low to High)
-                          </SelectItem>
-                          <SelectItem
-                            value="price-desc"
-                            className="font-doodle"
-                          >
-                            Price (High to Low)
-                          </SelectItem>
-                          <SelectItem value="discount" className="font-doodle">
-                            Biggest Discount
-                          </SelectItem>
-                          <SelectItem value="rating" className="font-doodle">
-                            Highest Rated
-                          </SelectItem>
+                          {sortOptions.map((opt) => (
+                            <SelectItem
+                              key={opt.value}
+                              value={opt.value}
+                              className="font-doodle"
+                            >
+                              {opt.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
 
                     {/* Right side: Results count */}
                     <div className="font-doodle text-sm text-doodle-text">
-                      Showing {startIndex + 1}-
-                      {Math.min(endIndex, groupedProducts.length)} of{" "}
-                      {groupedProducts.length}
+                      {t("search.showingResults", {
+                        start: startIndex + 1,
+                        end: Math.min(endIndex, groupedProducts.length),
+                        total: groupedProducts.length,
+                      })}
                     </div>
                   </div>
                 </div>
@@ -729,23 +725,15 @@ const SearchPage: React.FC = () => {
                   <span className="text-6xl block mb-4">🔍</span>
                   <h3 className="font-doodle text-xl font-bold text-doodle-text mb-2">
                     {semanticQuerySubmitted
-                      ? "No matching products found"
-                      : "Enter a search query to find products"}
+                      ? t("search.noMatchingProducts")
+                      : t("search.enterSearchQuery")}
                   </h3>
                   <p className="font-doodle text-doodle-text/60 mb-4">
-                    {semanticQuerySubmitted ? (
-                      <>
-                        Our AI-powered search didn't find products matching "
-                        {semanticQuerySubmitted}". Try different keywords or
-                        phrases.
-                      </>
-                    ) : (
-                      <>
-                        Use the search box above to find products. Our AI
-                        understands natural language like "red bikes" or
-                        "waterproof gear for hiking".
-                      </>
-                    )}
+                    {semanticQuerySubmitted
+                      ? t("search.noResultsForQuery", {
+                          query: semanticQuerySubmitted,
+                        })
+                      : t("search.enterQueryHint")}
                   </p>
                   {semanticQuerySubmitted && (
                     <button
@@ -756,7 +744,7 @@ const SearchPage: React.FC = () => {
                       }}
                       className="doodle-button doodle-button-primary"
                     >
-                      Clear Search
+                      {t("search.clearSearch")}
                     </button>
                   )}
                 </div>

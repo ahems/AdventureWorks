@@ -26,10 +26,18 @@ async function main() {
   console.log("DAB URL:", graphqlUrl);
   console.log("");
 
-  // 1. Customer special offers (same filter as app: Category = "Customer")
+  // 1. Customer special offers (same filter as app: Category = "Customer", CultureID = "en" for check)
+  const cultureIdPadded = "en    ";
   const offersQuery = `
-    query {
-      specialOffers(filter: { Category: { eq: "Customer" } }) {
+    query GetCustomerSpecialOffers($cultureId: String!) {
+      specialOffers(
+        filter: {
+          and: [
+            { Category: { eq: "Customer" } }
+            { CultureID: { eq: $cultureId } }
+          ]
+        }
+      ) {
         items {
           SpecialOfferID
           Description
@@ -40,7 +48,9 @@ async function main() {
       }
     }
   `;
-  const offersData = await queryGraphQL(offersQuery);
+  const offersData = await queryGraphQL(offersQuery, {
+    cultureId: cultureIdPadded,
+  });
   const offers = offersData.specialOffers?.items ?? [];
   console.log(`SpecialOffer (Category = "Customer"): ${offers.length} offer(s)`);
   if (offers.length === 0) {

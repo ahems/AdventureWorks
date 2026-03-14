@@ -7,6 +7,7 @@ using api_functions.Services;
 using api_functions.Models;
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Azure.Storage.Blobs;
 using Azure.Storage.Sas;
 using Azure.Identity;
@@ -221,6 +222,55 @@ public class TranslateLanguageFile
         }
     }
 
+    /// <summary>
+    /// Terminate a running translation orchestration. Use when the batch script is cancelled
+    /// and you want to stop the in-flight job. Instance ID is in the script output or in
+    /// the file written by the batch script (see batch-translate-language-file.sh).
+    /// </summary>
+    [Function("TranslateLanguageFile_Terminate")]
+    public async Task<HttpResponseData> Terminate(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", "get")] HttpRequestData req,
+        [DurableClient] DurableTaskClient client)
+    {
+        var queryString = req.Url.Query ?? "";
+        var instanceId = "";
+
+        if (!string.IsNullOrEmpty(queryString) && queryString.StartsWith("?"))
+        {
+            foreach (var pair in queryString.Substring(1).Split('&'))
+            {
+                var parts = pair.Split('=');
+                if (parts.Length == 2 && parts[0] == "instanceId")
+                {
+                    instanceId = Uri.UnescapeDataString(parts[1]);
+                    break;
+                }
+            }
+        }
+
+        if (string.IsNullOrEmpty(instanceId))
+        {
+            return await CreateErrorResponse(req, HttpStatusCode.BadRequest,
+                "Missing instanceId. Example: POST /api/TranslateLanguageFile_Terminate?instanceId=abc123");
+        }
+
+        try
+        {
+            await client.TerminateInstanceAsync(instanceId);
+            _logger.LogInformation("Terminated orchestration {InstanceId}", instanceId);
+
+            var response = req.CreateResponse(HttpStatusCode.OK);
+            await response.WriteAsJsonAsync(new { terminated = true, instanceId });
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error terminating instance {InstanceId}", instanceId);
+            return await CreateErrorResponse(req, HttpStatusCode.InternalServerError,
+                $"Failed to terminate: {ex.Message}");
+        }
+    }
+
     [Function(nameof(TranslateLanguageFile_Orchestrator))]
     public async Task<string> TranslateLanguageFile_Orchestrator(
         [OrchestrationTrigger] TaskOrchestrationContext context)
@@ -301,6 +351,36 @@ public class TranslateLanguageFile
 
             var jsonResult = "{\n  " + string.Join(",\n  ", jsonParts) + "\n}";
 
+            // Key-count validation: log warning when a translated section has fewer leaf keys than the source
+            foreach (var section in sections)
+            {
+                var sectionName = section.Key;
+                var inputSection = section.Value;
+                var translatedSection = translatedSections.First(s => s.SectionName == sectionName);
+                var inputCount = CountLeafPaths(inputSection);
+                var translatedEl = JsonSerializer.Deserialize<JsonElement>(translatedSection.TranslatedDataJson);
+                var translatedCount = CountLeafPaths(translatedEl);
+                if (translatedCount < inputCount)
+                {
+                    logger.LogWarning(
+                        "Section '{Section}' for {Language} has fewer keys in translated output ({TranslatedCount}) than in source ({InputCount}). Missing keys will be backfilled from source.",
+                        sectionName, input.TargetLanguageCode, translatedCount, inputCount);
+                }
+            }
+
+            // Merge missing keys from source into translated result so we never emit fewer keys than input
+            var sourceNode = JsonNode.Parse(input.LanguageDataJson);
+            var translatedNode = JsonNode.Parse(jsonResult);
+            if (sourceNode is JsonObject sourceObj && translatedNode is JsonObject translatedObj)
+            {
+                MergeMissingKeys(sourceObj, translatedObj);
+                jsonResult = translatedNode.ToJsonString(new JsonSerializerOptions
+                {
+                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                    WriteIndented = false
+                });
+            }
+
             logger.LogInformation("Translation orchestration completed successfully. Result length: {Length} chars", jsonResult.Length);
             logger.LogInformation("Result preview: {Preview}", jsonResult.Substring(0, Math.Min(200, jsonResult.Length)));
 
@@ -331,26 +411,38 @@ public class TranslateLanguageFile
         FunctionContext context)
     {
         var logger = context.GetLogger(nameof(TranslateSectionActivity));
-        logger.LogInformation("Translating section '{Section}' to {Language}", input.SectionName, input.TargetLanguageName);
-
-        var translatedPairs = new Dictionary<string, object>();
-
-        // Parse the JSON string
-        var sectionData = JsonSerializer.Deserialize<JsonElement>(input.SectionDataJson);
-
-        // Process each key-value pair in the section
-        await ProcessJsonElement(sectionData, "", translatedPairs, input, logger);
-
-        var translatedDataJson = JsonSerializer.Serialize(translatedPairs, new JsonSerializerOptions
+        try
         {
-            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-        });
+            logger.LogInformation("Translating section '{Section}' to {Language}", input.SectionName, input.TargetLanguageName);
 
-        return new TranslatedSection
+            var translatedPairs = new Dictionary<string, object>();
+
+            // Parse the JSON string
+            var sectionData = JsonSerializer.Deserialize<JsonElement>(input.SectionDataJson);
+
+            // Process each key-value pair in the section
+            await ProcessJsonElement(sectionData, "", translatedPairs, input, logger);
+
+            var translatedDataJson = JsonSerializer.Serialize(translatedPairs, new JsonSerializerOptions
+            {
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            });
+
+            return new TranslatedSection
+            {
+                SectionName = input.SectionName,
+                TranslatedDataJson = translatedDataJson
+            };
+        }
+        catch (Exception ex)
         {
-            SectionName = input.SectionName,
-            TranslatedDataJson = translatedDataJson
-        };
+            // Wrap without inner exception so the host never reflects on SDK exception types
+            // (e.g. ClientResultException), which causes AmbiguousMatchException when multiple
+            // assemblies define the same type name. Full details are already logged above.
+            logger.LogError(ex, "Translation failed for section '{Section}'", input.SectionName);
+            throw new InvalidOperationException(
+                $"Translation failed for section '{input.SectionName}': {ex.Message}");
+        }
     }
 
     private async Task ProcessJsonElement(
@@ -397,6 +489,19 @@ public class TranslateLanguageFile
                 var stringValue = element.GetString() ?? "";
                 if (!string.IsNullOrWhiteSpace(stringValue))
                 {
+                    // Skip sending values that commonly trigger Azure OpenAI content filter (e.g. "Min" as "minor")
+                    if (IsContentFilterSensitive(stringValue))
+                    {
+                        var pathPartsSkip = currentPath.Split('.');
+                        var lastKeySkip = !string.IsNullOrEmpty(currentPath) && pathPartsSkip.Length > 0
+                            ? pathPartsSkip[^1]
+                            : currentPath;
+                        result[lastKeySkip] = stringValue;
+                        break;
+                    }
+
+                    logger.LogInformation("Translating key '{Key}' in section '{Section}'", currentPath, input.SectionName);
+
                     // Translate the string value
                     var translationInput = new ValueTranslationInput
                     {
@@ -486,6 +591,18 @@ public class TranslateLanguageFile
                 await Task.Delay(delayMs);
                 delayMs *= 2; // Exponential backoff
             }
+            catch (Exception ex)
+            {
+                // Include key and section in message so failures show which key triggered (e.g. content_filter).
+                var valuePreview = input.Value.Length > 80
+                    ? input.Value.Substring(0, 80) + "..."
+                    : input.Value;
+                logger.LogError(ex,
+                    "Translation failed for key '{Key}' in section '{Section}' (value preview: \"{ValuePreview}\"): {Message}",
+                    input.Key, input.SectionName, valuePreview.Replace("\"", "'"), ex.Message);
+                throw new InvalidOperationException(
+                    $"Translation failed for key '{input.Key}' in section '{input.SectionName}': {ex.Message}");
+            }
         }
 
         return input.Value; // Fallback to original value
@@ -497,6 +614,75 @@ public class TranslateLanguageFile
         return ex.Message.Contains("429") ||
                ex.Message.Contains("rate limit", StringComparison.OrdinalIgnoreCase) ||
                ex.Message.Contains("quota", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Counts leaf key paths (paths to string, number, boolean, or null values) in a JSON element.
+    /// Used for key-count validation in the orchestrator.
+    /// </summary>
+    private static int CountLeafPaths(JsonElement element)
+    {
+        var count = 0;
+        CountLeafPathsCore(element, ref count);
+        return count;
+    }
+
+    private static void CountLeafPathsCore(JsonElement element, ref int count)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                    CountLeafPathsCore(property.Value, ref count);
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                    CountLeafPathsCore(item, ref count);
+                break;
+            case JsonValueKind.String:
+            case JsonValueKind.Number:
+            case JsonValueKind.True:
+            case JsonValueKind.False:
+            case JsonValueKind.Null:
+                count++;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Merges missing keys from source into target. Only adds keys present in source but missing in target;
+    /// never overwrites existing values in target. Mutates target.
+    /// </summary>
+    private static void MergeMissingKeys(JsonObject source, JsonObject target)
+    {
+        foreach (var kvp in source)
+        {
+            var key = kvp.Key;
+            var sourceValue = kvp.Value;
+            if (sourceValue == null)
+                continue;
+
+            if (!target.ContainsKey(key))
+            {
+                target[key] = sourceValue.DeepClone();
+                continue;
+            }
+
+            var targetValue = target[key];
+            if (sourceValue is JsonObject sourceObj && targetValue is JsonObject targetObj)
+                MergeMissingKeys(sourceObj, targetObj);
+        }
+    }
+
+    /// <summary>
+    /// Values that commonly trigger Azure OpenAI prompt content filter. We skip sending these
+    /// to the API and keep the original; they are often kept as-is in UIs (placeholders, labels).
+    /// </summary>
+    private static bool IsContentFilterSensitive(string value)
+    {
+        return value is "Min" or "Max"
+            or "your@email.com"
+            or "Clear all";
     }
 
     private async Task<HttpResponseData> CreateErrorResponse(HttpRequestData req, HttpStatusCode statusCode, string message)
@@ -566,18 +752,10 @@ public class TranslateLanguageFile
         var blobName = $"{input.TargetLanguageCode}/{filename}.json";
         var blobClient = containerClient.GetBlobClient(blobName);
 
-        // Check if blob already exists - skip if it does
-        bool exists = await blobClient.ExistsAsync();
-        if (exists)
-        {
-            logger.LogInformation("Translation already exists at {BlobName}, skipping upload", blobName);
-            return blobName; // Return existing blob path
-        }
-
-        // Upload JSON content
+        // Always overwrite with the current run's result so the latest translation wins
         using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(input.JsonResult)))
         {
-            await blobClient.UploadAsync(stream, overwrite: false);
+            await blobClient.UploadAsync(stream, overwrite: true);
         }
 
         logger.LogInformation("Uploaded translation result to blob: {BlobName}", blobName);

@@ -21,6 +21,7 @@ export interface ProductProductPhoto {
 
 export interface SpecialOffer {
   SpecialOfferID: number;
+  CultureID?: string;
   Description: string;
   DiscountPct: number;
   Type: string;
@@ -117,6 +118,7 @@ export const isVariantAvailable = (
 
 export interface ProductCategory {
   ProductCategoryID: number;
+  CultureID: string;
   Name: string;
   IconName?: string;
 }
@@ -124,6 +126,7 @@ export interface ProductCategory {
 export interface ProductSubcategory {
   ProductSubcategoryID: number;
   ProductCategoryID: number;
+  CultureID: string;
   Name: string;
 }
 

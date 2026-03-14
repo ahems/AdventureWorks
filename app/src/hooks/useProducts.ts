@@ -2,29 +2,33 @@ import { useQuery } from "@tanstack/react-query";
 import * as apiService from "@/data/apiService";
 import { Product, ProductCategory, ProductSubcategory } from "@/types/product";
 
-// Hook to fetch all categories
-export const useCategories = () => {
+// Hook to fetch all categories for the given culture
+export const useCategories = (cultureId: string = "en") => {
   return useQuery<ProductCategory[]>({
-    queryKey: ["categories"],
-    queryFn: apiService.getCategories,
+    queryKey: ["categories", cultureId],
+    queryFn: () => apiService.getCategories(cultureId),
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 };
 
-// Hook to fetch all subcategories
-export const useSubcategories = () => {
+// Hook to fetch all subcategories for the given culture
+export const useSubcategories = (cultureId: string = "en") => {
   return useQuery<ProductSubcategory[]>({
-    queryKey: ["subcategories"],
-    queryFn: apiService.getSubcategories,
+    queryKey: ["subcategories", cultureId],
+    queryFn: () => apiService.getSubcategories(cultureId),
     staleTime: 5 * 60 * 1000,
   });
 };
 
-// Hook to fetch subcategories by category ID
-export const useSubcategoriesByCategory = (categoryId: number) => {
+// Hook to fetch subcategories by category ID for the given culture
+export const useSubcategoriesByCategory = (
+  categoryId: number,
+  cultureId: string = "en",
+) => {
   return useQuery<ProductSubcategory[]>({
-    queryKey: ["subcategories", "category", categoryId],
-    queryFn: () => apiService.getSubcategoriesByCategory(categoryId),
+    queryKey: ["subcategories", "category", categoryId, cultureId],
+    queryFn: () =>
+      apiService.getSubcategoriesByCategory(categoryId, cultureId),
     enabled: !!categoryId,
     staleTime: 5 * 60 * 1000,
   });
@@ -50,69 +54,82 @@ export const useProduct = (productId: number, cultureId?: string) => {
 };
 
 // Hook to fetch products by multiple IDs (optimized for cart)
-export const useProductsByIds = (productIds: number[]) => {
+export const useProductsByIds = (
+  productIds: number[],
+  cultureId: string = "en",
+) => {
   return useQuery<Product[]>({
-    queryKey: ["products", "byIds", productIds.sort().join(",")],
-    queryFn: () => apiService.getProductsByIds(productIds),
+    queryKey: ["products", "byIds", productIds.sort().join(","), cultureId],
+    queryFn: () => apiService.getProductsByIds(productIds, cultureId),
     enabled: productIds.length > 0,
     staleTime: 2 * 60 * 1000,
   });
 };
 
-// Hook to fetch products by category ID
-export const useProductsByCategory = (categoryId: number) => {
+// Hook to fetch products by category ID for the given culture
+export const useProductsByCategory = (
+  categoryId: number,
+  cultureId: string = "en",
+) => {
   return useQuery<Product[]>({
-    queryKey: ["products", "category", categoryId],
-    queryFn: () => apiService.getProductsByCategory(categoryId),
+    queryKey: ["products", "category", categoryId, cultureId],
+    queryFn: () => apiService.getProductsByCategory(categoryId, cultureId),
     enabled: !!categoryId,
     staleTime: 2 * 60 * 1000,
   });
 };
 
 // Hook to fetch products by subcategory ID
-export const useProductsBySubcategory = (subcategoryId: number) => {
+export const useProductsBySubcategory = (
+  subcategoryId: number,
+  cultureId: string = "en",
+) => {
   return useQuery<Product[]>({
-    queryKey: ["products", "subcategory", subcategoryId],
-    queryFn: () => apiService.getProductsBySubcategory(subcategoryId),
+    queryKey: ["products", "subcategory", subcategoryId, cultureId],
+    queryFn: () =>
+      apiService.getProductsBySubcategory(subcategoryId, cultureId),
     enabled: !!subcategoryId,
     staleTime: 2 * 60 * 1000,
   });
 };
 
-// Hook to fetch category by ID
-export const useCategory = (categoryId: number) => {
+// Hook to fetch category by ID for the given culture
+export const useCategory = (categoryId: number, cultureId: string = "en") => {
   return useQuery<ProductCategory | undefined>({
-    queryKey: ["category", categoryId],
-    queryFn: () => apiService.getCategoryById(categoryId),
+    queryKey: ["category", categoryId, cultureId],
+    queryFn: () => apiService.getCategoryById(categoryId, cultureId),
     enabled: !!categoryId,
     staleTime: 5 * 60 * 1000,
   });
 };
 
-// Hook to fetch subcategory by ID
-export const useSubcategory = (subcategoryId: number) => {
+// Hook to fetch subcategory by ID for the given culture
+export const useSubcategory = (
+  subcategoryId: number,
+  cultureId: string = "en",
+) => {
   return useQuery<ProductSubcategory | undefined>({
-    queryKey: ["subcategory", subcategoryId],
-    queryFn: () => apiService.getSubcategoryById(subcategoryId),
+    queryKey: ["subcategory", subcategoryId, cultureId],
+    queryFn: () => apiService.getSubcategoryById(subcategoryId, cultureId),
     enabled: !!subcategoryId,
     staleTime: 5 * 60 * 1000,
   });
 };
 
-// Hook to fetch featured products
-export const useFeaturedProducts = () => {
+// Hook to fetch featured products (cultureId used for localized special offer text e.g. "Half Price Pedal Sale")
+export const useFeaturedProducts = (cultureId: string = "en") => {
   return useQuery<Product[]>({
-    queryKey: ["products", "featured"],
-    queryFn: apiService.getFeaturedProducts,
+    queryKey: ["products", "featured", cultureId],
+    queryFn: () => apiService.getFeaturedProducts(cultureId),
     staleTime: 2 * 60 * 1000,
   });
 };
 
 // Hook to fetch sale products
-export const useSaleProducts = () => {
+export const useSaleProducts = (cultureId: string = "en") => {
   return useQuery<Product[]>({
-    queryKey: ["products", "sale"],
-    queryFn: apiService.getSaleProducts,
+    queryKey: ["products", "sale", cultureId],
+    queryFn: () => apiService.getSaleProducts(cultureId),
     staleTime: 2 * 60 * 1000,
   });
 };

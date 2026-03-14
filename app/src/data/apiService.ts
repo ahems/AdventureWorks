@@ -179,13 +179,17 @@ const attachDescriptionsToProducts = async (
 // Helper function to fetch and attach discounts to products
 const attachDiscountsToProducts = async (
   products: Product[],
+  cultureId: string = "en",
 ): Promise<Product[]> => {
   try {
     if (products.length === 0) return products;
 
-    // Fetch all customer special offers
+    const paddedCultureId = cultureId.padEnd(6, " ");
+
+    // Fetch customer special offers for the given culture
     const offersData = await graphqlClient.request<SpecialOffersResponse>(
       GET_CUSTOMER_SPECIAL_OFFERS,
+      { cultureId: paddedCultureId },
     );
     const specialOffers = offersData.specialOffers.items;
 
@@ -413,27 +417,33 @@ const attachInventoryToProducts = async (
 };
 
 // Helper function to add icon names to categories (since they're not in the database)
+// Maps by ProductCategoryID so it works regardless of the translated Name.
 const addIconsToCategories = (
   categories: ProductCategory[],
 ): ProductCategory[] => {
-  const iconMap: Record<string, string> = {
-    Bikes: "bike",
-    Components: "cog",
-    Clothing: "shirt",
-    Accessories: "backpack",
+  const iconMap: Record<number, string> = {
+    1: "bike",       // Bikes
+    2: "cog",        // Components
+    3: "shirt",      // Clothing
+    4: "backpack",   // Accessories
   };
 
   return categories.map((cat) => ({
     ...cat,
-    IconName: iconMap[cat.Name] || "box",
+    IconName: iconMap[cat.ProductCategoryID] || "box",
   }));
 };
 
-// Fetch all categories
-export const getCategories = async (): Promise<ProductCategory[]> => {
+// Fetch all categories for the given culture (padded to 6 chars for nchar(6) DB column)
+export const getCategories = async (
+  cultureId: string = "en",
+): Promise<ProductCategory[]> => {
   try {
-    const data =
-      await graphqlClient.request<CategoriesResponse>(GET_CATEGORIES);
+    const paddedCultureId = cultureId.padEnd(6, " ");
+    const data = await graphqlClient.request<CategoriesResponse>(
+      GET_CATEGORIES,
+      { cultureId: paddedCultureId },
+    );
     return addIconsToCategories(data.productCategories.items);
   } catch (error) {
     trackError("Error fetching categories", error, {
@@ -444,11 +454,16 @@ export const getCategories = async (): Promise<ProductCategory[]> => {
   }
 };
 
-// Fetch all subcategories
-export const getSubcategories = async (): Promise<ProductSubcategory[]> => {
+// Fetch all subcategories for the given culture (padded to 6 chars for nchar(6) DB column)
+export const getSubcategories = async (
+  cultureId: string = "en",
+): Promise<ProductSubcategory[]> => {
   try {
-    const data =
-      await graphqlClient.request<SubcategoriesResponse>(GET_SUBCATEGORIES);
+    const paddedCultureId = cultureId.padEnd(6, " ");
+    const data = await graphqlClient.request<SubcategoriesResponse>(
+      GET_SUBCATEGORIES,
+      { cultureId: paddedCultureId },
+    );
     return data.productSubcategories.items;
   } catch (error) {
     trackError("Error fetching subcategories", error, {
@@ -459,14 +474,16 @@ export const getSubcategories = async (): Promise<ProductSubcategory[]> => {
   }
 };
 
-// Fetch subcategories by category ID
+// Fetch subcategories by category ID for the given culture (padded to 6 chars)
 export const getSubcategoriesByCategory = async (
   categoryId: number,
+  cultureId: string = "en",
 ): Promise<ProductSubcategory[]> => {
   try {
+    const paddedCultureId = cultureId.padEnd(6, " ");
     const data = await graphqlClient.request<SubcategoriesResponse>(
       GET_SUBCATEGORIES_BY_CATEGORY,
-      { categoryId },
+      { categoryId, cultureId: paddedCultureId },
     );
     return data.productSubcategories.items;
   } catch (error) {
@@ -479,16 +496,17 @@ export const getSubcategoriesByCategory = async (
   }
 };
 
-// Fetch all products (with optional photo fetching)
+// Fetch all products (with optional photo fetching and optional culture for discount descriptions)
 export const getProducts = async (
   includePhotos: boolean = false,
+  cultureId: string = "en",
 ): Promise<Product[]> => {
   try {
     const data = await graphqlClient.request<ProductsResponse>(GET_PRODUCTS);
     let products = data.products.items;
 
-    // Always attach discounts and inventory
-    products = await attachDiscountsToProducts(products);
+    // Always attach discounts (in given culture) and inventory
+    products = await attachDiscountsToProducts(products, cultureId);
     products = await attachInventoryToProducts(products);
 
     if (includePhotos) {
@@ -554,6 +572,7 @@ export const getProductById = async (
     );
     productsWithDescriptions = await attachDiscountsToProducts(
       productsWithDescriptions,
+      cultureId,
     );
     const productsWithInventory = await attachInventoryToProducts(
       productsWithDescriptions,
@@ -572,6 +591,7 @@ export const getProductById = async (
 // Fetch products by multiple IDs (optimized for cart)
 export const getProductsByIds = async (
   productIds: number[],
+  cultureId: string = "en",
 ): Promise<Product[]> => {
   try {
     if (productIds.length === 0) return [];
@@ -582,8 +602,8 @@ export const getProductsByIds = async (
     );
     let products = data.products.items;
 
-    // Always attach discounts and inventory
-    products = await attachDiscountsToProducts(products);
+    // Always attach discounts (in given culture) and inventory
+    products = await attachDiscountsToProducts(products, cultureId);
     products = await attachInventoryToProducts(products);
     
     return products;
@@ -600,6 +620,7 @@ export const getProductsByIds = async (
 // Fetch products by subcategory ID
 export const getProductsBySubcategory = async (
   subcategoryId: number,
+  cultureId: string = "en",
 ): Promise<Product[]> => {
   try {
     const data = await graphqlClient.request<ProductsResponse>(
@@ -607,7 +628,7 @@ export const getProductsBySubcategory = async (
       { subcategoryId },
     );
     let products = data.products.items;
-    products = await attachDiscountsToProducts(products);
+    products = await attachDiscountsToProducts(products, cultureId);
     products = await attachInventoryToProducts(products);
     return await attachPhotosToProducts(products);
   } catch (error) {
@@ -620,13 +641,14 @@ export const getProductsBySubcategory = async (
   }
 };
 
-// Fetch products by category ID (needs to get subcategories first)
+// Fetch products by category ID (needs to get subcategories first for the given culture)
 export const getProductsByCategory = async (
   categoryId: number,
+  cultureId: string = "en",
 ): Promise<Product[]> => {
   try {
-    // First, get all subcategory IDs for this category
-    const subcategories = await getSubcategoriesByCategory(categoryId);
+    // First, get all subcategory IDs for this category in the given culture
+    const subcategories = await getSubcategoriesByCategory(categoryId, cultureId);
     const subcategoryIds = subcategories.map((s) => s.ProductSubcategoryID);
 
     // If no subcategories, return empty array
@@ -640,7 +662,7 @@ export const getProductsByCategory = async (
       { subcategoryIds },
     );
     let products = data.products.items;
-    products = await attachDiscountsToProducts(products);
+    products = await attachDiscountsToProducts(products, cultureId);
     products = await attachInventoryToProducts(products);
     return await attachPhotosToProducts(products);
   } catch (error) {
@@ -653,14 +675,16 @@ export const getProductsByCategory = async (
   }
 };
 
-// Fetch category by ID
+// Fetch category by ID for the given culture (padded to 6 chars for nchar(6) DB column)
 export const getCategoryById = async (
   categoryId: number,
+  cultureId: string = "en",
 ): Promise<ProductCategory | undefined> => {
   try {
+    const paddedCultureId = cultureId.padEnd(6, " ");
     const data = await graphqlClient.request<CategoriesResponse>(
       GET_CATEGORY_BY_ID,
-      { id: categoryId },
+      { id: categoryId, cultureId: paddedCultureId },
     );
     const categories = addIconsToCategories(data.productCategories.items);
     return categories[0];
@@ -674,14 +698,16 @@ export const getCategoryById = async (
   }
 };
 
-// Fetch subcategory by ID
+// Fetch subcategory by ID for the given culture (padded to 6 chars)
 export const getSubcategoryById = async (
   subcategoryId: number,
+  cultureId: string = "en",
 ): Promise<ProductSubcategory | undefined> => {
   try {
+    const paddedCultureId = cultureId.padEnd(6, " ");
     const data = await graphqlClient.request<SubcategoriesResponse>(
       GET_SUBCATEGORY_BY_ID,
-      { id: subcategoryId },
+      { id: subcategoryId, cultureId: paddedCultureId },
     );
     return data.productSubcategories.items[0];
   } catch (error) {
@@ -694,11 +720,13 @@ export const getSubcategoryById = async (
   }
 };
 
-// Get featured products (first 6 products with photos)
-export const getFeaturedProducts = async (): Promise<Product[]> => {
+// Get featured products (first 6 products with photos). Uses cultureId for localized discount/special offer text.
+export const getFeaturedProducts = async (
+  cultureId: string = "en",
+): Promise<Product[]> => {
   try {
-    // Load products WITHOUT photos first for better performance
-    const products = await getProducts(false);
+    // Load products WITHOUT photos first, with discount descriptions in the given culture
+    const products = await getProducts(false, cultureId);
     // Filter to only in-stock products
     const inStockProducts = products.filter((p) => p.inStock);
 
@@ -735,10 +763,12 @@ export const getFeaturedProducts = async (): Promise<Product[]> => {
 };
 
 // Get sale products (products with Customer category discounts from SpecialOffer table)
-export const getSaleProducts = async (): Promise<Product[]> => {
+export const getSaleProducts = async (
+  cultureId: string = "en",
+): Promise<Product[]> => {
   try {
-    // Load products WITHOUT photos first for better performance
-    const products = await getProducts(false);
+    // Load products WITHOUT photos first, with discount descriptions in the given culture
+    const products = await getProducts(false, cultureId);
 
     // Filter to only products with discounts
     const saleProducts = products.filter(
@@ -761,12 +791,12 @@ export let categories: ProductCategory[] = [];
 export let subcategories: ProductSubcategory[] = [];
 export let products: Product[] = [];
 
-// Initialize data on module load
+// Initialize data on module load (default culture "en" for categories/subcategories)
 (async () => {
   try {
     [categories, subcategories, products] = await Promise.all([
-      getCategories(),
-      getSubcategories(),
+      getCategories("en"),
+      getSubcategories("en"),
       getProducts(),
     ]);
   } catch (error) {

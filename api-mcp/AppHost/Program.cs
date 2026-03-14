@@ -1,10 +1,10 @@
-using Aspire.Hosting.Azure;
+using Aspire.Hosting.Azure.Functions;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
 builder.AddProject<Projects.AdventureWorks>("adventureworks-mcp")
 	   .WithExternalHttpEndpoints();
 
-builder.AddAzureFunctionsProject<Projects.api_functions>("api-functions");
+builder.AddAzureFunctionsProject<Projects.ApiFunctions>("api-functions");
 
 builder.Build().Run();

@@ -128,6 +128,12 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
         roleDefinitionIdOrName: 'Storage Table Data Contributor'
         principalType: 'ServicePrincipal'
       }
+      // REST API (ShareTokenIntent.Backup) requires Privileged Reader; SMB Share Reader is SMB-only
+      {
+        principalId: identityId
+        roleDefinitionIdOrName: 'Storage File Data Privileged Reader'
+        principalType: 'ServicePrincipal'
+      }
       // Grant current user permissions for local development
       {
         principalId: aadAdminObjectId

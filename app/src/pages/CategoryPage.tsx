@@ -18,6 +18,7 @@ import {
   useSubcategoriesByCategory,
   useProductsBySubcategory,
 } from "@/hooks/useProducts";
+import { useLanguage } from "@/context/LanguageContext";
 import { useAllReviews } from "@/hooks/useReviews";
 import {
   Select,
@@ -30,6 +31,7 @@ import {
 const CategoryPage: React.FC = () => {
   const { t } = useTranslation("common");
   const { categoryId } = useParams<{ categoryId: string }>();
+  const { selectedLanguage } = useLanguage();
   const [selectedSubcategory, setSelectedSubcategory] = React.useState<
     number | null
   >(null);
@@ -39,16 +41,24 @@ const CategoryPage: React.FC = () => {
 
   const { data: category, isLoading: categoryLoading } = useCategory(
     categoryId ? parseInt(categoryId) : 0,
+    selectedLanguage,
   );
   const { data: subcategories = [] } = useSubcategoriesByCategory(
     categoryId ? parseInt(categoryId) : 0,
+    selectedLanguage,
   );
   const { data: allCategoryProducts = [], isLoading: categoryProductsLoading } =
-    useProductsByCategory(categoryId ? parseInt(categoryId) : 0);
+    useProductsByCategory(
+      categoryId ? parseInt(categoryId) : 0,
+      selectedLanguage,
+    );
   const {
     data: subcategoryProducts = [],
     isLoading: subcategoryProductsLoading,
-  } = useProductsBySubcategory(selectedSubcategory || 0);
+  } = useProductsBySubcategory(
+    selectedSubcategory || 0,
+    selectedLanguage,
+  );
   const { data: allReviews = [] } = useAllReviews();
 
   const isLoadingProducts = selectedSubcategory

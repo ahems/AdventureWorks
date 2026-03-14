@@ -7,7 +7,8 @@
     "search": "Search",
     "searchPlaceholder": "Search for bikes, gear, clothing...",
     "aiSearchPlaceholder": "AI Search: Describe what you're looking for...",
-    "selectLanguage": "Select Language"
+    "selectLanguage": "Select Language",
+    "sale": "Sale"
   },
   "buttons": {
     "addToCart": "Add to Cart",
@@ -35,7 +36,7 @@
     "browseAccessories": "Browse Accessories",
     "products": "Products",
     "freeShipping": "Free",
-    "shippingThreshold": "Shipping $50+",
+    "shippingThreshold": "Shipping {{threshold}}+",
     "returns": "30-Day",
     "returnsLabel": "Returns",
     "support": "24/7",
@@ -87,8 +88,8 @@
     "category": "Category",
     "allCategories": "All Categories",
     "priceRange": "Price Range",
-    "min": "Min",
-    "max": "Max",
+    "min": "Minimum",
+    "max": "Maximum",
     "applyFilters": "Apply Filters",
     "show": "Show:",
     "perPage": "per page",
@@ -105,7 +106,19 @@
     "showingResults": "Showing {{start}}-{{end}} of {{total}} results",
     "placeholder": "Search for bikes, gear, clothing...",
     "previousPage": "Previous page",
-    "nextPage": "Next page"
+    "nextPage": "Next page",
+    "aiFeaturesTitle": "AI-Powered Search Features",
+    "aiFeaturesTypeAhead": "Type-ahead suggestions:",
+    "aiFeaturesTypeAheadDesc": "Start typing to get AI-powered search completions.",
+    "aiFeaturesSemantic": "Semantic search:",
+    "aiFeaturesSemanticDesc": "Uses AI embeddings to understand natural language queries. Try: \"red bikes\", \"waterproof gear for rainy hikes\", or \"lightweight equipment for cyclists\"",
+    "matchCounts": "Found {{descriptionMatches}} description matches, {{reviewMatches}} review matches, and {{nameMatches}} name matches",
+    "semanticUnavailable": "Semantic search service unavailable. Please check that the AI service is running and embeddings are indexed.",
+    "noMatchingProducts": "No matching products found",
+    "enterSearchQuery": "Enter a search query to find products",
+    "noResultsForQuery": "Our AI-powered search didn't find products matching \"{{query}}\". Try different keywords or phrases.",
+    "enterQueryHint": "Use the search box above to find products. Our AI understands natural language like \"red bikes\" or \"waterproof gear for hiking\".",
+    "clearSearch": "Clear Search"
   },
   "sale": {
     "title": "Sale Items",

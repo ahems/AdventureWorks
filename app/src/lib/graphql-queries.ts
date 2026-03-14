@@ -38,12 +38,20 @@ export const GET_ALL_REVIEWS = gql`
   }
 `;
 
-// Query to get customer special offers (Category = "Customer")
+// Query to get customer special offers (Category = "Customer") for a specific culture
 export const GET_CUSTOMER_SPECIAL_OFFERS = gql`
-  query GetCustomerSpecialOffers {
-    specialOffers(filter: { Category: { eq: "Customer" } }) {
+  query GetCustomerSpecialOffers($cultureId: String!) {
+    specialOffers(
+      filter: {
+        and: [
+          { Category: { eq: "Customer" } }
+          { CultureID: { eq: $cultureId } }
+        ]
+      }
+    ) {
       items {
         SpecialOfferID
+        CultureID
         Description
         DiscountPct
         Type
@@ -65,39 +73,42 @@ export const GET_SPECIAL_OFFER_PRODUCTS = gql`
   }
 `;
 
-// Query to get all product categories
+// Query to get all product categories for a specific culture
 // Note: Data API Builder uses plural entity names and returns items directly
 export const GET_CATEGORIES = gql`
-  query GetCategories {
-    productCategories {
+  query GetCategories($cultureId: String!) {
+    productCategories(filter: { CultureID: { eq: $cultureId } }) {
       items {
         ProductCategoryID
+        CultureID
         Name
       }
     }
   }
 `;
 
-// Query to get all product subcategories
+// Query to get all product subcategories for a specific culture
 export const GET_SUBCATEGORIES = gql`
-  query GetSubcategories {
-    productSubcategories {
+  query GetSubcategories($cultureId: String!) {
+    productSubcategories(filter: { CultureID: { eq: $cultureId } }) {
       items {
         ProductSubcategoryID
         ProductCategoryID
+        CultureID
         Name
       }
     }
   }
 `;
 
-// Query to get subcategories by category ID
+// Query to get subcategories by category ID for a specific culture
 export const GET_SUBCATEGORIES_BY_CATEGORY = gql`
-  query GetSubcategoriesByCategory($categoryId: Int!) {
-    productSubcategories(filter: { ProductCategoryID: { eq: $categoryId } }) {
+  query GetSubcategoriesByCategory($categoryId: Int!, $cultureId: String!) {
+    productSubcategories(filter: { and: [{ ProductCategoryID: { eq: $categoryId } }, { CultureID: { eq: $cultureId } }] }) {
       items {
         ProductSubcategoryID
         ProductCategoryID
+        CultureID
         Name
       }
     }
@@ -378,25 +389,27 @@ export const GET_PRODUCTS_BY_SUBCATEGORY = gql`
   }
 `;
 
-// Query to get category by ID
+// Query to get category by ID for a specific culture
 export const GET_CATEGORY_BY_ID = gql`
-  query GetCategoryById($id: Int!) {
-    productCategories(filter: { ProductCategoryID: { eq: $id } }) {
+  query GetCategoryById($id: Int!, $cultureId: String!) {
+    productCategories(filter: { and: [{ ProductCategoryID: { eq: $id } }, { CultureID: { eq: $cultureId } }] }) {
       items {
         ProductCategoryID
+        CultureID
         Name
       }
     }
   }
 `;
 
-// Query to get subcategory by ID
+// Query to get subcategory by ID for a specific culture
 export const GET_SUBCATEGORY_BY_ID = gql`
-  query GetSubcategoryById($id: Int!) {
-    productSubcategories(filter: { ProductSubcategoryID: { eq: $id } }) {
+  query GetSubcategoryById($id: Int!, $cultureId: String!) {
+    productSubcategories(filter: { and: [{ ProductSubcategoryID: { eq: $id } }, { CultureID: { eq: $cultureId } }] }) {
       items {
         ProductSubcategoryID
         ProductCategoryID
+        CultureID
         Name
       }
     }
@@ -621,6 +634,20 @@ export const DELETE_CART_ITEM = gql`
   mutation DeleteCartItem($shoppingCartItemId: Int!) {
     deleteShoppingCartItem(ShoppingCartItemID: $shoppingCartItemId) {
       ShoppingCartItemID
+    }
+  }
+`;
+
+// Query to get all translated product names for a given culture.
+// ProductNameEmbedding is intentionally excluded — it is large and only needed server-side.
+// DAB defaults to 100 items; request enough to cover all products (~504).
+export const GET_PRODUCT_NAMES_BY_CULTURE = gql`
+  query GetProductNamesByCulture($cultureId: String!) {
+    productNames(filter: { CultureID: { eq: $cultureId } }, first: 2000) {
+      items {
+        ProductID
+        Name
+      }
     }
   }
 `;

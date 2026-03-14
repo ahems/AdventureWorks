@@ -9,10 +9,13 @@ import {
   isProductModelGroup,
 } from "@/utils/productGrouping";
 import { useFeaturedProducts } from "@/hooks/useProducts";
+import { useLanguage } from "@/context/LanguageContext";
 
 const FeaturedProducts: React.FC = () => {
   const { t } = useTranslation("common");
-  const { data: featuredProducts = [], isLoading } = useFeaturedProducts();
+  const { selectedLanguage } = useLanguage();
+  const { data: featuredProducts = [], isLoading } =
+    useFeaturedProducts(selectedLanguage);
 
   // Group products by model for display
   const groupedProducts = React.useMemo(() => {

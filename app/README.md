@@ -12,6 +12,7 @@ A modern e-commerce web application built with React, TypeScript, and Vite, feat
 - ⭐ Product reviews and ratings
 - 🔐 User authentication
 - 🌐 GraphQL API integration
+- 🏥 **Health page** (`/health`) — status of all backend services (GraphQL API, MCP, Azure Functions) and the **Seed Job** (whether the database seed has finished; when running, shows “Running for X minutes Y seconds”)
 
 ## GraphQL API Integration
 

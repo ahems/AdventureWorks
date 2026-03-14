@@ -339,6 +339,11 @@ Demo pipeline that simulates order lifecycle (In Process → Approved/Rejected �
 - **Trigger / Route**: HTTP `GET /api/swagger/ui`
 - **Purpose**: Serves a static HTML page that hosts Swagger UI, preconfigured to load the OpenAPI spec from `/api/openapi.json` for interactive API exploration.
 
+### `SeedJobStatus`
+
+- **Trigger / Route**: HTTP `GET /api/seed/status`
+- **Purpose**: Returns the status of the database seed job by reading the newest log file from the `seed-job-logs` Azure File Share. Response includes `status` (running / completed / failed / unknown), and when the job is running, a human-readable duration (e.g. `runningForHuman: "9m 42s"`) derived from the `Start Time:` line in the log. Used by the frontend Health page (`/health`) to show a Seed Job status card. Requires the Functions app’s managed identity to have **Storage File Data Privileged Reader** on the storage account (REST API with `ShareTokenIntent.Backup`; SMB Share Reader is SMB-only). See [infra/modules/storage.bicep](../infra/modules/storage.bicep).
+
 ---
 
 ## How This Project Fits Into The Overall Architecture
