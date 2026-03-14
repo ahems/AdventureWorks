@@ -413,13 +413,18 @@ try {
 
     # ---------------------------------------------------------------------
     # Drop tables that reference base schema tables (FKs) so AdventureWorks.sql
-    # can drop/recreate those base tables. AdventureWorks.sql drops Culture at
-    # batch 67 but drops ProductCategory (which has FK to Culture) much later,
-    # so Culture cannot be dropped until we drop ProductCategory first.
+    # can drop/recreate those base tables. Culture is dropped early in the SQL
+    # script; ProductCategory, ProductSubcategory, SpecialOffer, and
+    # ProductModelProductDescriptionCulture all reference Culture, so they must
+    # be dropped first (here and/or in the SQL script's early drop block).
     # ---------------------------------------------------------------------
     $aiTablesPreCleanup = @(
         "IF OBJECT_ID(N'[Production].[ProductName]', 'U') IS NOT NULL DROP TABLE [Production].[ProductName]",
-        "IF OBJECT_ID(N'[Production].[ProductCategory]', 'U') IS NOT NULL DROP TABLE [Production].[ProductCategory]"
+        "IF OBJECT_ID(N'[Production].[ProductCategory]', 'U') IS NOT NULL DROP TABLE [Production].[ProductCategory]",
+        "IF OBJECT_ID(N'[Production].[ProductSubcategory]', 'U') IS NOT NULL DROP TABLE [Production].[ProductSubcategory]",
+        "IF OBJECT_ID(N'[Sales].[SpecialOfferProduct]', 'U') IS NOT NULL DROP TABLE [Sales].[SpecialOfferProduct]",
+        "IF OBJECT_ID(N'[Sales].[SpecialOffer]', 'U') IS NOT NULL DROP TABLE [Sales].[SpecialOffer]",
+        "IF OBJECT_ID(N'[Production].[ProductModelProductDescriptionCulture]', 'U') IS NOT NULL DROP TABLE [Production].[ProductModelProductDescriptionCulture]"
     )
     Write-Log "`nDropping AI-specific tables that may reference base schema tables..."
     foreach ($cleanupSql in $aiTablesPreCleanup) {

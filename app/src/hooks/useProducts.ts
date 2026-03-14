@@ -116,11 +116,11 @@ export const useSubcategory = (
   });
 };
 
-// Hook to fetch featured products
-export const useFeaturedProducts = () => {
+// Hook to fetch featured products (cultureId used for localized special offer text e.g. "Half Price Pedal Sale")
+export const useFeaturedProducts = (cultureId: string = "en") => {
   return useQuery<Product[]>({
-    queryKey: ["products", "featured"],
-    queryFn: apiService.getFeaturedProducts,
+    queryKey: ["products", "featured", cultureId],
+    queryFn: () => apiService.getFeaturedProducts(cultureId),
     staleTime: 2 * 60 * 1000,
   });
 };

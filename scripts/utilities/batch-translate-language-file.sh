@@ -9,6 +9,22 @@
 #   --missing-only: Only translate files that don't exist yet (skip existing translations)
 #   -y, --yes: Skip the "Continue? (y/n)" prompt
 # This script uses the deployed Azure Function URL and storage account from azd env.
+#
+# Why audit-locale-gaps.sh can still show gaps after running this script:
+#   1. --missing-only: If you use this flag, the script SKIPS any locale that already has
+#      the file. So when you add NEW KEYS to en/*.json, those keys are never translated
+#      or written for locales that already had the file. Use --missing-only only for
+#      initial seeding of brand-new locale files, not after adding keys to en.
+#   2. Failed jobs: If a translation times out or fails (e.g. common.json → tr, vi),
+#      that locale file is not updated. The old file (possibly missing keys) remains.
+#      Re-run with a retry script for failed locales, or run fill-locale-missing-keys.sh
+#      to copy missing keys from en (English fallback).
+# Recommended workflow after adding new keys to en:
+#   ./scripts/utilities/fill-locale-missing-keys.sh   # add missing keys from en (English)
+#   ./scripts/utilities/batch-translate-language-file.sh -y   # full translate, no --missing-only
+#   ./scripts/utilities/audit-locale-gaps.sh          # verify; fix any failed locales
+# This script runs flatten-locale-json.sh at the end so translation output with wrapped
+# keys (e.g. {"": "text"}) is fixed and the audit can pass.
 
 set -e  # Exit on error
 
@@ -409,6 +425,31 @@ else
   echo "  Set STORAGE_ACCOUNT_NAME in azd env and run 'az storage blob download-batch' to download to $LOCALES_DIR."
 fi
 echo "========================================="
+
+# Flatten wrapped keys ({"": "value"} -> "value") so audit-locale-gaps.sh passes.
+# The translation service sometimes returns wrapped values, especially in footer/chat.
+if [ -f "$PWD/scripts/utilities/flatten-locale-json.sh" ]; then
+  echo ""
+  "$PWD/scripts/utilities/flatten-locale-json.sh" --write
+fi
+
+# Backfill any keys the translation pipeline dropped (e.g. some locales get truncated output).
+# fill-locale-missing-keys copies missing keys from en and runs flatten again.
+if [ -f "$PWD/scripts/utilities/fill-locale-missing-keys.sh" ]; then
+  echo ""
+  "$PWD/scripts/utilities/fill-locale-missing-keys.sh"
+fi
+
+# Run audit so we can verify locale gaps in one go; fail the script if audit reports any gaps.
+if [ -f "$PWD/scripts/utilities/audit-locale-gaps.sh" ]; then
+  echo ""
+  if "$PWD/scripts/utilities/audit-locale-gaps.sh"; then
+    echo "Audit passed."
+  else
+    echo "Audit failed: locale gaps (missing keys, wrapped keys, or missing files) were reported. Fix gaps and re-run."
+    exit 1
+  fi
+fi
 
 # Exit with error if any translations failed
 if [ $FAILED -gt 0 ]; then

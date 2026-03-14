@@ -1063,6 +1063,13 @@ DROP TABLE IF EXISTS [Production].[ProductSubcategory];
 GO
 DROP TABLE IF EXISTS [Production].[ProductCategory];
 GO
+-- SpecialOffer and ProductModelProductDescriptionCulture reference Culture; drop before Culture (SpecialOfferProduct references SpecialOffer)
+DROP TABLE IF EXISTS [Sales].[SpecialOfferProduct];
+GO
+DROP TABLE IF EXISTS [Sales].[SpecialOffer];
+GO
+DROP TABLE IF EXISTS [Production].[ProductModelProductDescriptionCulture];
+GO
 DROP TABLE IF EXISTS [Production].[Culture];
 GO
 

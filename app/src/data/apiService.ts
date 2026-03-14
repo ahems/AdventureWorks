@@ -720,11 +720,13 @@ export const getSubcategoryById = async (
   }
 };
 
-// Get featured products (first 6 products with photos)
-export const getFeaturedProducts = async (): Promise<Product[]> => {
+// Get featured products (first 6 products with photos). Uses cultureId for localized discount/special offer text.
+export const getFeaturedProducts = async (
+  cultureId: string = "en",
+): Promise<Product[]> => {
   try {
-    // Load products WITHOUT photos first for better performance
-    const products = await getProducts(false);
+    // Load products WITHOUT photos first, with discount descriptions in the given culture
+    const products = await getProducts(false, cultureId);
     // Filter to only in-stock products
     const inStockProducts = products.filter((p) => p.inStock);
 

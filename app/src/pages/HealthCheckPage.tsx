@@ -459,12 +459,17 @@ const HealthCheckPage: React.FC = () => {
       const data = await response.json();
       const status = data.status as string;
       const message = (data.message as string) || "";
+      const durationHuman = data.durationHuman as string | undefined;
 
       if (status === "completed") {
+        const completedMessage =
+          durationHuman != null
+            ? `Seed job completed successfully (ran for ${durationHuman})`
+            : message || "Seed job completed successfully";
         updateCheckStatus(
           name,
           "healthy",
-          message || "Seed job completed successfully",
+          completedMessage,
           responseTime,
           endpoint,
         );

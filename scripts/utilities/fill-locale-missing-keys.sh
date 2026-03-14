@@ -2,12 +2,15 @@
 #
 # Fill missing keys in locale JSON files by copying values from en.
 # Only adds key paths that exist in en but are missing in the locale (setpath per path).
+# Then runs flatten-locale-json.sh so the audit (audit-locale-gaps.sh) passes:
+# the audit treats both "missing keys" and "wrapped keys" (e.g. {"": "value"}) as gaps.
 # Run from repository root.
 #
 set -e
 REPO_ROOT="${PWD}"
 LOCALES_DIR="${REPO_ROOT}/app/src/locales"
 NAMESPACES="common account product cart footer chat"
+SCRIPT_DIR="${REPO_ROOT}/scripts/utilities"
 
 if [ ! -d "$LOCALES_DIR/en" ]; then
   echo "Error: Run from repo root. Expected $LOCALES_DIR/en" >&2
@@ -57,3 +60,9 @@ for ns in $NAMESPACES; do
   done
 done
 echo "Filled missing keys in $filled file(s)."
+
+# Flatten wrapped keys ({"": "value"} -> "value") so audit-locale-gaps.sh passes
+if [ -x "$SCRIPT_DIR/flatten-locale-json.sh" ]; then
+  echo ""
+  "$SCRIPT_DIR/flatten-locale-json.sh" --write
+fi

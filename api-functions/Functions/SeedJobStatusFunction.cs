@@ -18,6 +18,7 @@ public class SeedJobStatusFunction
     private const string FatalErrorSentinel = "FATAL ERROR TRAPPED";
     private const string FailedSentinel = "Failed to execute database seeding";
     private const string StartTimePrefix = "Start Time: ";
+    private const string TotalDurationPrefix = "Total duration: ";
     private const int TailBytes = 10 * 1024;
     private const int HeadBytes = 2048;
     private static readonly TimeSpan RunningThreshold = TimeSpan.FromHours(4);
@@ -91,8 +92,10 @@ public class SeedJobStatusFunction
             if (tailContent.Contains(SuccessSentinel, StringComparison.Ordinal))
             {
                 var durationHint = $"Last run: {lastModified:yyyy-MM-dd HH:mm:ss} UTC";
+                var durationHuman = ParseTotalDurationFromLog(tailContent);
                 await WriteStatus(response, "completed", isRunning: false, logFile: newestFile.Name,
-                    lastRunTime: lastModified, message: "Seed job completed successfully", durationHint: durationHint);
+                    lastRunTime: lastModified, message: "Seed job completed successfully", durationHint: durationHint,
+                    durationHuman: durationHuman);
                 return response;
             }
 
@@ -156,6 +159,24 @@ public class SeedJobStatusFunction
         return response;
     }
 
+    /// <summary>
+    /// Parses "Total duration: Xm Ys" from the log tail (e.g. "Total duration: 0m 7s").
+    /// </summary>
+    private static string? ParseTotalDurationFromLog(string tailContent)
+    {
+        var idx = tailContent.LastIndexOf(TotalDurationPrefix, StringComparison.Ordinal);
+        if (idx < 0)
+            return null;
+        var start = idx + TotalDurationPrefix.Length;
+        var end = start;
+        while (end < tailContent.Length && tailContent[end] != '\r' && tailContent[end] != '\n')
+            end++;
+        if (end <= start)
+            return null;
+        var segment = tailContent.AsSpan(start, end - start).Trim();
+        return segment.Length > 0 ? segment.ToString() : null;
+    }
+
     private static async Task WriteStatus(
         HttpResponseData response,
         string status,
@@ -164,6 +185,7 @@ public class SeedJobStatusFunction
         string? logFile = null,
         DateTime? lastRunTime = null,
         string? durationHint = null,
+        string? durationHuman = null,
         string? runningForHuman = null,
         DateTime? runningStartTime = null)
     {
@@ -175,6 +197,7 @@ public class SeedJobStatusFunction
             logFile,
             message,
             durationHint,
+            durationHuman,
             runningForHuman,
             runningStartTime = runningStartTime?.ToString("o")
         };

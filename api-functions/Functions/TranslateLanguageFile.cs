@@ -7,6 +7,7 @@ using api_functions.Services;
 using api_functions.Models;
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Azure.Storage.Blobs;
 using Azure.Storage.Sas;
 using Azure.Identity;
@@ -350,6 +351,36 @@ public class TranslateLanguageFile
 
             var jsonResult = "{\n  " + string.Join(",\n  ", jsonParts) + "\n}";
 
+            // Key-count validation: log warning when a translated section has fewer leaf keys than the source
+            foreach (var section in sections)
+            {
+                var sectionName = section.Key;
+                var inputSection = section.Value;
+                var translatedSection = translatedSections.First(s => s.SectionName == sectionName);
+                var inputCount = CountLeafPaths(inputSection);
+                var translatedEl = JsonSerializer.Deserialize<JsonElement>(translatedSection.TranslatedDataJson);
+                var translatedCount = CountLeafPaths(translatedEl);
+                if (translatedCount < inputCount)
+                {
+                    logger.LogWarning(
+                        "Section '{Section}' for {Language} has fewer keys in translated output ({TranslatedCount}) than in source ({InputCount}). Missing keys will be backfilled from source.",
+                        sectionName, input.TargetLanguageCode, translatedCount, inputCount);
+                }
+            }
+
+            // Merge missing keys from source into translated result so we never emit fewer keys than input
+            var sourceNode = JsonNode.Parse(input.LanguageDataJson);
+            var translatedNode = JsonNode.Parse(jsonResult);
+            if (sourceNode is JsonObject sourceObj && translatedNode is JsonObject translatedObj)
+            {
+                MergeMissingKeys(sourceObj, translatedObj);
+                jsonResult = translatedNode.ToJsonString(new JsonSerializerOptions
+                {
+                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                    WriteIndented = false
+                });
+            }
+
             logger.LogInformation("Translation orchestration completed successfully. Result length: {Length} chars", jsonResult.Length);
             logger.LogInformation("Result preview: {Preview}", jsonResult.Substring(0, Math.Min(200, jsonResult.Length)));
 
@@ -586,6 +617,64 @@ public class TranslateLanguageFile
     }
 
     /// <summary>
+    /// Counts leaf key paths (paths to string, number, boolean, or null values) in a JSON element.
+    /// Used for key-count validation in the orchestrator.
+    /// </summary>
+    private static int CountLeafPaths(JsonElement element)
+    {
+        var count = 0;
+        CountLeafPathsCore(element, ref count);
+        return count;
+    }
+
+    private static void CountLeafPathsCore(JsonElement element, ref int count)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                    CountLeafPathsCore(property.Value, ref count);
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                    CountLeafPathsCore(item, ref count);
+                break;
+            case JsonValueKind.String:
+            case JsonValueKind.Number:
+            case JsonValueKind.True:
+            case JsonValueKind.False:
+            case JsonValueKind.Null:
+                count++;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Merges missing keys from source into target. Only adds keys present in source but missing in target;
+    /// never overwrites existing values in target. Mutates target.
+    /// </summary>
+    private static void MergeMissingKeys(JsonObject source, JsonObject target)
+    {
+        foreach (var kvp in source)
+        {
+            var key = kvp.Key;
+            var sourceValue = kvp.Value;
+            if (sourceValue == null)
+                continue;
+
+            if (!target.ContainsKey(key))
+            {
+                target[key] = sourceValue.DeepClone();
+                continue;
+            }
+
+            var targetValue = target[key];
+            if (sourceValue is JsonObject sourceObj && targetValue is JsonObject targetObj)
+                MergeMissingKeys(sourceObj, targetObj);
+        }
+    }
+
+    /// <summary>
     /// Values that commonly trigger Azure OpenAI prompt content filter. We skip sending these
     /// to the API and keep the original; they are often kept as-is in UIs (placeholders, labels).
     /// </summary>
@@ -663,18 +752,10 @@ public class TranslateLanguageFile
         var blobName = $"{input.TargetLanguageCode}/{filename}.json";
         var blobClient = containerClient.GetBlobClient(blobName);
 
-        // Check if blob already exists - skip if it does
-        bool exists = await blobClient.ExistsAsync();
-        if (exists)
-        {
-            logger.LogInformation("Translation already exists at {BlobName}, skipping upload", blobName);
-            return blobName; // Return existing blob path
-        }
-
-        // Upload JSON content
+        // Always overwrite with the current run's result so the latest translation wins
         using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(input.JsonResult)))
         {
-            await blobClient.UploadAsync(stream, overwrite: false);
+            await blobClient.UploadAsync(stream, overwrite: true);
         }
 
         logger.LogInformation("Uploaded translation result to blob: {BlobName}", blobName);
