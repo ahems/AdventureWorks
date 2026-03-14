@@ -11,7 +11,9 @@
       "version": "latest",
       "lfs": true
     },
-    "ghcr.io/azure/azure-dev/azd:latest": {},
+    "ghcr.io/azure/azure-dev/azd:latest": {
+      "version": "1.23.8"
+    },
     "ghcr.io/devcontainers/features/powershell:1": {
       "version": "latest"
     },
@@ -56,7 +58,7 @@
       }
     }
   },
-  "postCreateCommand": "az bicep install && npm ci && (cd app && npm ci) && npm install --prefix app @playwright/test faker csv-parse csv-writer && (cd app && npx --yes playwright install --with-deps)",
+  "postCreateCommand": "az bicep install && npm ci && (cd app && npm ci) && npm install --prefix app @playwright/test csv-parse && (cd app && npx --yes playwright install --with-deps)",
   "hostRequirements": {
     "memory": "8gb"
   }
