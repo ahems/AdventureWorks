@@ -10,20 +10,22 @@ color_yellow() { echo -e "\033[33m$1\033[0m"; }
 
 get_azd_value() {
   local name=$1
-  local raw exit_code
+  local raw first_line
   
   raw=$(azd env get-value "$name" 2>&1 || true)
-  exit_code=$?
   
-  if [[ $exit_code -ne 0 ]] || \
-     [[ "$raw" =~ [Ee][Rr][Rr][Oo][Rr].*not\ found ]] || \
+  if [[ "$raw" =~ [Ee][Rr][Rr][Oo][Rr].*not\ found ]] || \
      [[ "$raw" =~ [Nn]o\ value\ found ]] || \
      [[ -z "$raw" ]]; then
     echo ""
     return
   fi
   
-  echo "$raw" | xargs
+  # Take only the first line: older azd versions emit a multi-line upgrade warning
+  # to stdout after the value (e.g. "WARNING: your version of azd is out of date").
+  first_line=$(echo "$raw" | head -n1)
+  first_line="${first_line%% WARNING*}"
+  echo "$first_line" | xargs
 }
 
 color_cyan "Configuring Static Web App settings..."

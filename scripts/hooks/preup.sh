@@ -25,22 +25,23 @@ fi
 get_azd_value() {
   local name=$1
   local default=${2:-}
-  local raw exit_code
+  local raw first_line
   
   raw=$(azd env get-value "$name" 2>&1 || true)
-  exit_code=$?
   
   # Check for error patterns or empty result
-  if [[ $exit_code -ne 0 ]] || \
-     [[ "$raw" =~ [Ee][Rr][Rr][Oo][Rr].*not\ found ]] || \
+  if [[ "$raw" =~ [Ee][Rr][Rr][Oo][Rr].*not\ found ]] || \
      [[ "$raw" =~ [Nn]o\ value\ found ]] || \
      [[ -z "$raw" ]]; then
     echo "$default"
     return
   fi
   
-  # Trim whitespace and return
-  echo "$raw" | xargs
+  # Take only the first line: older azd versions emit a multi-line upgrade warning
+  # to stdout after the value (e.g. "WARNING: your version of azd is out of date").
+  first_line=$(echo "$raw" | head -n1)
+  first_line="${first_line%% WARNING*}"
+  echo "$first_line" | xargs
 }
 
 set_azd_value() {
