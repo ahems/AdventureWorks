@@ -453,17 +453,21 @@ test.describe("Checkout Flow", () => {
     }
 
     // Fill payment information - use label or placeholder to target correct inputs
-    const cardNumberInput = page.getByLabel(/card number/i).or(
-      page.locator('input[placeholder*="4242"]').first(),
-    );
+    const cardNumberInput = page
+      .getByLabel(/card number/i)
+      .or(page.locator('input[placeholder*="4242"]').first());
     if ((await cardNumberInput.count()) > 0) {
       console.log("💳 Filling payment information");
 
       await cardNumberInput.first().focus();
       await cardNumberInput.fill("4242 4242 4242 4242");
       await cardNumberInput.first().evaluate((el) => {
-        (el as HTMLInputElement).dispatchEvent(new Event("input", { bubbles: true }));
-        (el as HTMLInputElement).dispatchEvent(new Event("change", { bubbles: true }));
+        (el as HTMLInputElement).dispatchEvent(
+          new Event("input", { bubbles: true }),
+        );
+        (el as HTMLInputElement).dispatchEvent(
+          new Event("change", { bubbles: true }),
+        );
       });
       await cardNumberInput.blur();
       await page.waitForTimeout(300);
@@ -501,13 +505,11 @@ test.describe("Checkout Flow", () => {
 
     // Submit order - prefer data-testid for reliable selection across locales
     console.log("🔍 Looking for Place Order button...");
-    const placeOrderButton = page
-      .getByTestId("place-order-button")
-      .or(
-        page.getByRole("button", {
-          name: /pay|place order|complete order/i,
-        }),
-      );
+    const placeOrderButton = page.getByTestId("place-order-button").or(
+      page.getByRole("button", {
+        name: /pay|place order|complete order/i,
+      }),
+    );
 
     await expect(placeOrderButton).toBeVisible();
     // Wait for validation to pass and button to become enabled (Luhn + all fields)
@@ -771,6 +773,18 @@ test.describe("Checkout Flow", () => {
         await page.waitForLoadState("domcontentloaded");
         await page.waitForTimeout(1000);
 
+        // Check if product is in stock before attempting to add to cart
+        const firstOutOfStock = page.getByText(/out of stock|unavailable/i);
+        if ((await firstOutOfStock.count()) > 0) {
+          console.log(
+            "⚠️  First homepage product is out of stock, using in-stock product from database",
+          );
+          const inStockIds = await getInStockProductIds(1);
+          await page.goto(`${testEnv.webBaseUrl}/product/${inStockIds[0]}`);
+          await page.waitForLoadState("domcontentloaded");
+          await page.waitForTimeout(1000);
+        }
+
         const firstAddButton = page.getByRole("button", {
           name: /add to cart/i,
         });
@@ -790,6 +804,18 @@ test.describe("Checkout Flow", () => {
           await page.goto(`${testEnv.webBaseUrl}${secondHref}`);
           await page.waitForLoadState("domcontentloaded");
           await page.waitForTimeout(1000);
+
+          // Check if product is in stock before attempting to add to cart
+          const secondOutOfStock = page.getByText(/out of stock|unavailable/i);
+          if ((await secondOutOfStock.count()) > 0) {
+            console.log(
+              "⚠️  Second homepage product is out of stock, using in-stock product from database",
+            );
+            const inStockIds = await getInStockProductIds(1);
+            await page.goto(`${testEnv.webBaseUrl}/product/${inStockIds[0]}`);
+            await page.waitForLoadState("domcontentloaded");
+            await page.waitForTimeout(1000);
+          }
 
           const secondAddButton = page.getByRole("button", {
             name: /add to cart/i,

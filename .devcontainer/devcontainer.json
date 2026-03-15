@@ -16,23 +16,13 @@
     },
     "ghcr.io/devcontainers/features/powershell:1": {
       "version": "latest"
-    },
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {
-      "version": "latest"
     }
-  },
-  "remoteEnv": {
-    "DOTNET_ROOT": "/usr/share/dotnet"
   },
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-azuretools.vscode-bicep",
         "ms-vscode.powershell",
-        "ms-dotnettools.csharp",
-        "ms-dotnettools.csdevkit",
-        "ms-azuretools.vscode-azurefunctions",
-        "ms-vscode.vscode-node-azure-pack",
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
         "bradlc.vscode-tailwindcss",
@@ -46,19 +36,14 @@
         "powershell.powerShellDefaultVersion": "PowerShell (x64)",
         "powershell.enableStartUpBanner": false,
 
-        // .NET settings
-        "dotnet.defaultSolution": "AdventureWorks.sln",
-
         // Format settings
         "editor.formatOnSave": true,
         "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "[csharp]": {
-          "editor.defaultFormatter": "ms-dotnettools.csharp"
-        }
+
       }
     }
   },
-  "postCreateCommand": "az bicep install && npm ci && (cd app && npm ci) && npm install --prefix app @playwright/test csv-parse && (cd app && npx --yes playwright install --with-deps)",
+  "postCreateCommand": "az bicep install && npm ci && npx playwright install --with-deps chromium && (cd app && npm ci) && npm install --prefix app @playwright/test csv-parse",
   "hostRequirements": {
     "memory": "8gb"
   }
