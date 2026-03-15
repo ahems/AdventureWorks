@@ -16,6 +16,9 @@
     },
     "ghcr.io/devcontainers/features/powershell:1": {
       "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/dotnet:2": {
+      "version": "8.0"
     }
   },
   "customizations": {
@@ -38,8 +41,7 @@
 
         // Format settings
         "editor.formatOnSave": true,
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
-
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
       }
     }
   },
