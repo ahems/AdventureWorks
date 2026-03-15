@@ -7,7 +7,7 @@ set -e
 echo "Starting post-provision script at $(date '+%Y-%m-%d %H:%M:%S')"
 
 # Set VITE_API_URL for Static Web App build
-API_URL=$(azd env get-value 'API_URL' 2>/dev/null | tr -d '\n\r ')
+API_URL=$(azd env get-value 'API_URL' 2>/dev/null | head -n1 | tr -d '\n\r ')
 if [ -n "$API_URL" ]; then
     echo ""
     echo "Setting VITE_API_URL for Static Web App build: $API_URL"
@@ -17,7 +17,7 @@ else
 fi
 
 # Set VITE_API_FUNCTIONS_URL for Static Web App build
-API_FUNCTIONS_URL=$(azd env get-value 'API_FUNCTIONS_URL' 2>/dev/null | tr -d '\n\r ')
+API_FUNCTIONS_URL=$(azd env get-value 'API_FUNCTIONS_URL' 2>/dev/null | head -n1 | tr -d '\n\r ')
 if [ -n "$API_FUNCTIONS_URL" ]; then
     echo ""
     echo "Setting VITE_API_FUNCTIONS_URL for Static Web App build: $API_FUNCTIONS_URL"
@@ -27,8 +27,8 @@ else
 fi
 
 # Grant current user Contributor role on Container Apps Environment for Aspire Dashboard access
-CONTAINER_APP_ENV_NAME=$(azd env get-value 'CONTAINER_APP_ENVIRONMENT_NAME' 2>/dev/null | tr -d '\n\r ')
-RESOURCE_GROUP=$(azd env get-value 'AZURE_RESOURCE_GROUP' 2>/dev/null | tr -d '\n\r ')
+CONTAINER_APP_ENV_NAME=$(azd env get-value 'CONTAINER_APP_ENVIRONMENT_NAME' 2>/dev/null | head -n1 | tr -d '\n\r ')
+RESOURCE_GROUP=$(azd env get-value 'AZURE_RESOURCE_GROUP' 2>/dev/null | head -n1 | tr -d '\n\r ')
 
 if [ -n "$CONTAINER_APP_ENV_NAME" ] && [ "$CONTAINER_APP_ENV_NAME" != "ERROR: key 'CONTAINER_APP_ENVIRONMENT_NAME' not found in the environment values" ]; then
     echo ""
@@ -84,9 +84,9 @@ fi
 echo "  ✓ Azure CLI login verified"
 
 # Get required values
-SQL_SERVER_NAME=$(azd env get-value SQL_SERVER_NAME 2>/dev/null | tr -d '\n\r ')
-SQL_DATABASE_NAME=$(azd env get-value SQL_DATABASE_NAME 2>/dev/null | tr -d '\n\r ')
-USER_MANAGED_IDENTITY_NAME=$(azd env get-value USER_MANAGED_IDENTITY_NAME 2>/dev/null | tr -d '\n\r ')
+SQL_SERVER_NAME=$(azd env get-value SQL_SERVER_NAME 2>/dev/null | head -n1 | tr -d '\n\r ')
+SQL_DATABASE_NAME=$(azd env get-value SQL_DATABASE_NAME 2>/dev/null | head -n1 | tr -d '\n\r ')
+USER_MANAGED_IDENTITY_NAME=$(azd env get-value USER_MANAGED_IDENTITY_NAME 2>/dev/null | head -n1 | tr -d '\n\r ')
 
 if [ -n "$SQL_SERVER_NAME" ] && [ -n "$SQL_DATABASE_NAME" ] && [ -n "$USER_MANAGED_IDENTITY_NAME" ]; then
     echo "SQL Server: $SQL_SERVER_NAME"
@@ -166,8 +166,8 @@ echo "Building and deploying seed-job image..."
 echo "=========================================="
 
 # Get Azure environment values for seed job deployment
-ACR_ENDPOINT=$(azd env get-value AZURE_CONTAINER_REGISTRY_ENDPOINT 2>/dev/null | tr -d '\n\r ')
-SEED_JOB_NAME=$(azd env get-value SERVICE_SEED_JOB_NAME 2>/dev/null | tr -d '\n\r ')
+ACR_ENDPOINT=$(azd env get-value AZURE_CONTAINER_REGISTRY_ENDPOINT 2>/dev/null | head -n1 | tr -d '\n\r ')
+SEED_JOB_NAME=$(azd env get-value SERVICE_SEED_JOB_NAME 2>/dev/null | head -n1 | tr -d '\n\r ')
 
 if [ -z "$RESOURCE_GROUP" ] || [ -z "$ACR_ENDPOINT" ] || [ -z "$SEED_JOB_NAME" ]; then
     echo "ERROR: Required environment variables not found for seed-job deployment."
@@ -241,7 +241,7 @@ echo "=========================================="
 # so that 'npm run test:e2e:azure' and run-tests-on-azure-playwright.sh work without manual setup
 if azd env refresh --no-prompt 2>/dev/null; then
     echo "  ✓ Environment refreshed; Playwright and other outputs are available."
-    PLAYWRIGHT_URL=$(azd env get-value PLAYWRIGHT_SERVICE_URL 2>/dev/null | tr -d '\n\r ')
+    PLAYWRIGHT_URL=$(azd env get-value PLAYWRIGHT_SERVICE_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
     if [ -n "$PLAYWRIGHT_URL" ]; then
         echo "  ✓ PLAYWRIGHT_SERVICE_URL is set (Azure Playwright tests will use the service)."
     fi

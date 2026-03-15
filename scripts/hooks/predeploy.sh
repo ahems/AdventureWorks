@@ -4,10 +4,10 @@ set -e
 # Set environment variables for the SWA build process
 # This ensures that when npm run build is called, the VITE_* variables are available
 
-API_URL=$(azd env get-value API_URL)
-API_FUNC_URL=$(azd env get-value API_FUNCTIONS_URL)
-API_MCP_URL=$(azd env get-value API_MCP_URL)
-APPINSIGHTS_CONN_STR=$(azd env get-value APPINSIGHTS_CONNECTIONSTRING)
+API_URL=$(azd env get-value API_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
+API_FUNC_URL=$(azd env get-value API_FUNCTIONS_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
+API_MCP_URL=$(azd env get-value API_MCP_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
+APPINSIGHTS_CONN_STR=$(azd env get-value APPINSIGHTS_CONNECTIONSTRING 2>/dev/null | head -n1 | tr -d '\n\r ')
 
 echo "[PreDeploy] Setting environment variables for SWA build"
 echo "  VITE_API_URL: $API_URL"

@@ -1,7 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { signupThroughUi } from "../utils/testUser";
 import { testEnv, APP_STORAGE_KEYS } from "../utils/env";
-import { getRandomProductIds } from "../utils/productHelper";
+import {
+  getRandomProductIds,
+  getInStockProductIds,
+} from "../utils/productHelper";
 
 const LANGUAGES = [
   { code: "en", name: "English", sample: "Home" },
@@ -149,8 +152,8 @@ test.describe("Internationalization", () => {
     // Create a test user
     await signupThroughUi(page);
 
-    // Navigate directly to a product and add to cart
-    const testProductIds = await getRandomProductIds(1);
+    // Navigate directly to an in-stock product and add to cart
+    const testProductIds = await getInStockProductIds(1);
     const testProductId = testProductIds[0];
     console.log(`🛍️ Testing currency with product ${testProductId}`);
     await page.goto(`${testEnv.webBaseUrl}/product/${testProductId}`);
@@ -199,13 +202,16 @@ test.describe("Internationalization", () => {
       await page.waitForTimeout(1000);
 
       // Verify order total shows USD despite French language (checkout-order-total or Place Order button)
-      const totalEl = page.getByTestId("checkout-order-total").or(
-        page.getByTestId("place-order-button"),
-      );
+      const totalEl = page
+        .getByTestId("checkout-order-total")
+        .or(page.getByTestId("place-order-button"));
       await expect(totalEl.first()).toBeVisible({ timeout: 15000 });
       const checkoutPrice = await totalEl.first().textContent();
 
-      expect(checkoutPrice, "Checkout should show USD ($) for US address").toContain("$");
+      expect(
+        checkoutPrice,
+        "Checkout should show USD ($) for US address",
+      ).toContain("$");
 
       console.log(
         "✅ Checkout currency follows shipping address (USD), not language (EUR)",

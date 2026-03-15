@@ -56,6 +56,12 @@ You're ready to run tests!
 
 # Run tests matching pattern
 ../tests/scripts/run-tests-on-azure-playwright.sh "checkout*"
+
+# Run all tests and save output to a log file (also prints to console)
+../tests/scripts/run-tests-on-azure-playwright.sh 2>&1 | tee run-tests.log
+
+# Run all tests and save output to a log file only (no console output)
+../tests/scripts/run-tests-on-azure-playwright.sh > run-tests.log 2>&1
 ```
 
 ### Option 2: NPM Script
