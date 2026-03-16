@@ -1,49 +1,47 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { useSearchParams, Navigate } from 'react-router-dom';
-import { Search, SlidersHorizontal } from 'lucide-react';
-import AdminHeader from '@/components/AdminHeader';
-import Footer from '@/components/Footer';
-import AdminProductCard from '@/components/AdminProductCard';
-import AdminProductCardSkeleton from '@/components/AdminProductCardSkeleton';
-import { products, categories, subcategories } from '@/data/mockData';
-import { Product, getSalePrice } from '@/types/product';
-import { useAuth } from '@/context/AuthContext';
-import { getAverageRating } from '@/data/mockReviews';
+import React, { useState, useMemo } from "react";
+import { useSearchParams, Navigate } from "react-router-dom";
+import { Search, SlidersHorizontal } from "lucide-react";
+import AdminHeader from "@/components/AdminHeader";
+import Footer from "@/components/Footer";
+import AdminProductCard from "@/components/AdminProductCard";
+import AdminProductCardSkeleton from "@/components/AdminProductCardSkeleton";
+import {
+  useAdminAllProducts,
+  useAdminCategories,
+  useAdminSubcategoriesByCategory,
+} from "@/hooks/useAdminProducts";
+import { Product, getSalePrice } from "@/types/product";
+import { useAuth } from "@/context/AuthContext";
 
-type SortOption = 'relevance' | 'price-asc' | 'price-desc' | 'rating' | 'sku';
+type SortOption = "relevance" | "price-asc" | "price-desc" | "rating" | "sku";
 
 const SearchPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialQuery = searchParams.get('q') || '';
-  
+  const initialQuery = searchParams.get("q") || "";
+
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 5000]);
-  const [sortBy, setSortBy] = useState<SortOption>('relevance');
+  const [sortBy, setSortBy] = useState<SortOption>("relevance");
   const [showFilters, setShowFilters] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
-  // Redirect if not authenticated
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // Simulate loading state
-  useEffect(() => {
-    setIsLoading(true);
-    const timer = setTimeout(() => setIsLoading(false), 400);
-    return () => clearTimeout(timer);
-  }, [searchQuery, selectedCategory, priceRange, sortBy]);
+  const { data: products = [], isLoading } = useAdminAllProducts();
+  const { data: categories = [] } = useAdminCategories();
+  // We fetch subcategories for the selected category (or use all products' subcategory IDs)
+  const { data: allSubcategories = [] } = useAdminSubcategoriesByCategory(
+    selectedCategory ?? 0,
+  );
 
   // Get min/max prices from products
   const priceStats = useMemo(() => {
-    const prices = products.map(p => p.ListPrice);
+    if (products.length === 0) return { min: 0, max: 5000 };
+    const prices = products.map((p) => p.ListPrice);
     return {
       min: Math.floor(Math.min(...prices)),
-      max: Math.ceil(Math.max(...prices))
+      max: Math.ceil(Math.max(...prices)),
     };
-  }, []);
+  }, [products]);
 
   // Filter and sort products
   const filteredProducts = useMemo(() => {
@@ -52,53 +50,50 @@ const SearchPage: React.FC = () => {
     // Search by name
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      result = result.filter(p => 
-        p.Name.toLowerCase().includes(query) ||
-        p.Description?.toLowerCase().includes(query) ||
-        p.ProductNumber.toLowerCase().includes(query)
+      result = result.filter(
+        (p) =>
+          p.Name.toLowerCase().includes(query) ||
+          p.Description?.toLowerCase().includes(query) ||
+          p.ProductNumber.toLowerCase().includes(query),
       );
     }
 
-    // Filter by category
+    // Filter by category (using subcategory membership)
     if (selectedCategory !== null) {
-      const categorySubcategoryIds = subcategories
-        .filter(s => s.ProductCategoryID === selectedCategory)
-        .map(s => s.ProductSubcategoryID);
-      result = result.filter(p => 
-        p.ProductSubcategoryID && categorySubcategoryIds.includes(p.ProductSubcategoryID)
+      const subIds = allSubcategories.map((s) => s.ProductSubcategoryID);
+      result = result.filter(
+        (p) =>
+          p.ProductSubcategoryID && subIds.includes(p.ProductSubcategoryID),
       );
     }
 
     // Filter by price range
-    result = result.filter(p => {
+    result = result.filter((p) => {
       const price = getSalePrice(p) || p.ListPrice;
       return price >= priceRange[0] && price <= priceRange[1];
     });
 
     // Sort
     switch (sortBy) {
-      case 'price-asc':
+      case "price-asc":
         result.sort((a, b) => {
           const priceA = getSalePrice(a) || a.ListPrice;
           const priceB = getSalePrice(b) || b.ListPrice;
           return priceA - priceB;
         });
         break;
-      case 'price-desc':
+      case "price-desc":
         result.sort((a, b) => {
           const priceA = getSalePrice(a) || a.ListPrice;
           const priceB = getSalePrice(b) || b.ListPrice;
           return priceB - priceA;
         });
         break;
-      case 'rating':
-        result.sort((a, b) => {
-          const ratingA = getAverageRating(a.ProductID);
-          const ratingB = getAverageRating(b.ProductID);
-          return ratingB - ratingA;
-        });
+      case "rating":
+        // No average rating available from API without extra fetch — sort alphabetically as fallback
+        result.sort((a, b) => a.Name.localeCompare(b.Name));
         break;
-      case 'sku':
+      case "sku":
         result.sort((a, b) => a.ProductNumber.localeCompare(b.ProductNumber));
         break;
       default:
@@ -114,7 +109,19 @@ const SearchPage: React.FC = () => {
     }
 
     return result;
-  }, [searchQuery, selectedCategory, priceRange, sortBy]);
+  }, [
+    searchQuery,
+    selectedCategory,
+    priceRange,
+    sortBy,
+    products,
+    allSubcategories,
+  ]);
+
+  // Redirect if not authenticated
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,15 +131,15 @@ const SearchPage: React.FC = () => {
   const clearFilters = () => {
     setSelectedCategory(null);
     setPriceRange([priceStats.min, priceStats.max]);
-    setSortBy('relevance');
+    setSortBy("relevance");
   };
 
   const sortOptions: { value: SortOption; label: string }[] = [
-    { value: 'relevance', label: 'Relevance' },
-    { value: 'price-asc', label: 'Price: Low to High' },
-    { value: 'price-desc', label: 'Price: High to Low' },
-    { value: 'rating', label: 'Highest Rated' },
-    { value: 'sku', label: 'SKU' },
+    { value: "relevance", label: "Relevance" },
+    { value: "price-asc", label: "Price: Low to High" },
+    { value: "price-desc", label: "Price: High to Low" },
+    { value: "rating", label: "Highest Rated" },
+    { value: "sku", label: "SKU" },
   ];
 
   return (
@@ -145,7 +152,7 @@ const SearchPage: React.FC = () => {
             <h1 className="font-doodle text-2xl md:text-3xl font-bold text-doodle-text mb-4">
               Search Products
             </h1>
-            
+
             {/* Search Form */}
             <form onSubmit={handleSearch} className="flex gap-2">
               <div className="relative flex-1">
@@ -179,10 +186,14 @@ const SearchPage: React.FC = () => {
         <section className="container mx-auto px-4 py-8">
           <div className="flex flex-col lg:flex-row gap-8">
             {/* Filters Sidebar */}
-            <aside className={`lg:w-64 flex-shrink-0 ${showFilters ? 'block' : 'hidden lg:block'}`}>
+            <aside
+              className={`lg:w-64 flex-shrink-0 ${showFilters ? "block" : "hidden lg:block"}`}
+            >
               <div className="doodle-card p-4 space-y-6 sticky top-24">
                 <div className="flex items-center justify-between">
-                  <h2 className="font-doodle text-lg font-bold text-doodle-text">Filters</h2>
+                  <h2 className="font-doodle text-lg font-bold text-doodle-text">
+                    Filters
+                  </h2>
                   <button
                     onClick={clearFilters}
                     className="font-doodle text-xs text-doodle-accent hover:text-doodle-text transition-colors"
@@ -193,14 +204,16 @@ const SearchPage: React.FC = () => {
 
                 {/* Category Filter */}
                 <div>
-                  <h3 className="font-doodle font-bold text-doodle-text mb-2">Category</h3>
+                  <h3 className="font-doodle font-bold text-doodle-text mb-2">
+                    Category
+                  </h3>
                   <div className="space-y-2">
                     <button
                       onClick={() => setSelectedCategory(null)}
                       className={`w-full text-left font-doodle text-sm px-3 py-2 border-2 transition-all ${
                         selectedCategory === null
-                          ? 'border-doodle-accent bg-doodle-accent/10'
-                          : 'border-transparent hover:border-doodle-text/20'
+                          ? "border-doodle-accent bg-doodle-accent/10"
+                          : "border-transparent hover:border-doodle-text/20"
                       }`}
                     >
                       All Categories
@@ -208,11 +221,13 @@ const SearchPage: React.FC = () => {
                     {categories.map((cat) => (
                       <button
                         key={cat.ProductCategoryID}
-                        onClick={() => setSelectedCategory(cat.ProductCategoryID)}
+                        onClick={() =>
+                          setSelectedCategory(cat.ProductCategoryID)
+                        }
                         className={`w-full text-left font-doodle text-sm px-3 py-2 border-2 transition-all ${
                           selectedCategory === cat.ProductCategoryID
-                            ? 'border-doodle-accent bg-doodle-accent/10'
-                            : 'border-transparent hover:border-doodle-text/20'
+                            ? "border-doodle-accent bg-doodle-accent/10"
+                            : "border-transparent hover:border-doodle-text/20"
                         }`}
                       >
                         {cat.Name}
@@ -223,27 +238,45 @@ const SearchPage: React.FC = () => {
 
                 {/* Price Range Filter */}
                 <div>
-                  <h3 className="font-doodle font-bold text-doodle-text mb-2">Price Range</h3>
+                  <h3 className="font-doodle font-bold text-doodle-text mb-2">
+                    Price Range
+                  </h3>
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="flex-1">
-                        <label className="font-doodle text-xs text-doodle-text/60">Min</label>
+                        <label className="font-doodle text-xs text-doodle-text/60">
+                          Min
+                        </label>
                         <input
                           type="number"
                           value={priceRange[0]}
-                          onChange={(e) => setPriceRange([Number(e.target.value), priceRange[1]])}
+                          onChange={(e) =>
+                            setPriceRange([
+                              Number(e.target.value),
+                              priceRange[1],
+                            ])
+                          }
                           min={priceStats.min}
                           max={priceRange[1]}
                           className="w-full px-2 py-1 font-doodle text-sm border-2 border-doodle-text/30 focus:border-doodle-accent focus:outline-none"
                         />
                       </div>
-                      <span className="font-doodle text-doodle-text/50 mt-4">-</span>
+                      <span className="font-doodle text-doodle-text/50 mt-4">
+                        -
+                      </span>
                       <div className="flex-1">
-                        <label className="font-doodle text-xs text-doodle-text/60">Max</label>
+                        <label className="font-doodle text-xs text-doodle-text/60">
+                          Max
+                        </label>
                         <input
                           type="number"
                           value={priceRange[1]}
-                          onChange={(e) => setPriceRange([priceRange[0], Number(e.target.value)])}
+                          onChange={(e) =>
+                            setPriceRange([
+                              priceRange[0],
+                              Number(e.target.value),
+                            ])
+                          }
                           min={priceRange[0]}
                           max={priceStats.max}
                           className="w-full px-2 py-1 font-doodle text-sm border-2 border-doodle-text/30 focus:border-doodle-accent focus:outline-none"
@@ -255,7 +288,9 @@ const SearchPage: React.FC = () => {
                       min={priceStats.min}
                       max={priceStats.max}
                       value={priceRange[1]}
-                      onChange={(e) => setPriceRange([priceRange[0], Number(e.target.value)])}
+                      onChange={(e) =>
+                        setPriceRange([priceRange[0], Number(e.target.value)])
+                      }
                       className="w-full accent-doodle-accent"
                     />
                   </div>
@@ -276,20 +311,28 @@ const SearchPage: React.FC = () => {
               {/* Sort & Results Count */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <p className="font-doodle text-doodle-text/70">
-                  {filteredProducts.length} {filteredProducts.length === 1 ? 'product' : 'products'} found
-                  {searchQuery && <span> for "<strong>{searchQuery}</strong>"</span>}
+                  {filteredProducts.length}{" "}
+                  {filteredProducts.length === 1 ? "product" : "products"} found
+                  {searchQuery && (
+                    <span>
+                      {" "}
+                      for "<strong>{searchQuery}</strong>"
+                    </span>
+                  )}
                 </p>
-                
+
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-doodle text-sm text-doodle-text/60">Sort by:</span>
+                  <span className="font-doodle text-sm text-doodle-text/60">
+                    Sort by:
+                  </span>
                   {sortOptions.map((option) => (
                     <button
                       key={option.value}
                       onClick={() => setSortBy(option.value)}
                       className={`font-doodle text-xs px-2 py-1 border-2 transition-all ${
                         sortBy === option.value
-                          ? 'border-doodle-accent bg-doodle-accent text-white'
-                          : 'border-doodle-text/20 hover:border-doodle-accent hover:text-doodle-accent'
+                          ? "border-doodle-accent bg-doodle-accent text-white"
+                          : "border-doodle-text/20 hover:border-doodle-accent hover:text-doodle-accent"
                       }`}
                     >
                       {option.label}
@@ -308,7 +351,10 @@ const SearchPage: React.FC = () => {
               ) : filteredProducts.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredProducts.map((product) => (
-                    <AdminProductCard key={product.ProductID} product={product} />
+                    <AdminProductCard
+                      key={product.ProductID}
+                      product={product}
+                    />
                   ))}
                 </div>
               ) : (
@@ -318,11 +364,12 @@ const SearchPage: React.FC = () => {
                     No products found
                   </h3>
                   <p className="font-doodle text-doodle-text/60 mb-4">
-                    Try adjusting your search or filters to find what you're looking for.
+                    Try adjusting your search or filters to find what you're
+                    looking for.
                   </p>
                   <button
                     onClick={() => {
-                      setSearchQuery('');
+                      setSearchQuery("");
                       clearFilters();
                     }}
                     className="doodle-button doodle-button-primary"

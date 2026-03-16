@@ -1,11 +1,23 @@
-import React, { useState, useMemo } from 'react';
-import { Search, X, Package, Check, FolderOpen, ChevronDown, ChevronRight } from 'lucide-react';
-import { Product } from '@/types/product';
-import { products, categories, subcategories } from '@/data/mockData';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import React, { useState, useMemo } from "react";
+import {
+  Search,
+  X,
+  Package,
+  Check,
+  FolderOpen,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
+import { Product } from "@/types/product";
+import {
+  useAdminAllProducts,
+  useAdminCategories,
+  useAdminAllSubcategories,
+} from "@/hooks/useAdminProducts";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
@@ -13,12 +25,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+} from "@/components/ui/collapsible";
 
 interface ProductAssignmentDialogProps {
   open: boolean;
@@ -35,16 +47,24 @@ const ProductAssignmentDialog: React.FC<ProductAssignmentDialogProps> = ({
   assignedProductIds,
   onSave,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set(assignedProductIds));
-  const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(
+    new Set(assignedProductIds),
+  );
+  const [expandedCategories, setExpandedCategories] = useState<Set<number>>(
+    new Set(),
+  );
   const [showCategoryView, setShowCategoryView] = useState(false);
+
+  const { data: products = [] } = useAdminAllProducts();
+  const { data: categories = [] } = useAdminCategories();
+  const { data: subcategories = [] } = useAdminAllSubcategories();
 
   // Reset selection when dialog opens
   React.useEffect(() => {
     if (open) {
       setSelectedIds(new Set(assignedProductIds));
-      setSearchQuery('');
+      setSearchQuery("");
       setShowCategoryView(false);
       setExpandedCategories(new Set());
     }
@@ -53,29 +73,30 @@ const ProductAssignmentDialog: React.FC<ProductAssignmentDialogProps> = ({
   // Group products by category and subcategory
   const productsByCategory = useMemo(() => {
     const grouped: Record<number, Record<number, Product[]>> = {};
-    
+
     categories.forEach((cat) => {
       grouped[cat.ProductCategoryID] = {};
       subcategories
         .filter((sub) => sub.ProductCategoryID === cat.ProductCategoryID)
         .forEach((sub) => {
-          grouped[cat.ProductCategoryID][sub.ProductSubcategoryID] = products.filter(
-            (p) => p.ProductSubcategoryID === sub.ProductSubcategoryID
-          );
+          grouped[cat.ProductCategoryID][sub.ProductSubcategoryID] =
+            products.filter(
+              (p) => p.ProductSubcategoryID === sub.ProductSubcategoryID,
+            );
         });
     });
-    
+
     return grouped;
-  }, []);
+  }, [categories, subcategories, products]);
 
   const filteredProducts = useMemo(() => {
     const query = searchQuery.toLowerCase();
     return products.filter(
       (p) =>
         p.Name.toLowerCase().includes(query) ||
-        p.ProductNumber.toLowerCase().includes(query)
+        p.ProductNumber.toLowerCase().includes(query),
     );
-  }, [searchQuery]);
+  }, [searchQuery, products]);
 
   const toggleProduct = (productId: number) => {
     setSelectedIds((prev) => {
@@ -98,9 +119,13 @@ const ProductAssignmentDialog: React.FC<ProductAssignmentDialogProps> = ({
   };
 
   const toggleCategory = (categoryId: number) => {
-    const categoryProducts = Object.values(productsByCategory[categoryId] || {}).flat();
-    const allSelected = categoryProducts.every((p) => selectedIds.has(p.ProductID));
-    
+    const categoryProducts = Object.values(
+      productsByCategory[categoryId] || {},
+    ).flat();
+    const allSelected = categoryProducts.every((p) =>
+      selectedIds.has(p.ProductID),
+    );
+
     setSelectedIds((prev) => {
       const newSet = new Set(prev);
       categoryProducts.forEach((p) => {
@@ -115,9 +140,13 @@ const ProductAssignmentDialog: React.FC<ProductAssignmentDialogProps> = ({
   };
 
   const toggleSubcategory = (subcategoryId: number) => {
-    const subcategoryProducts = products.filter((p) => p.ProductSubcategoryID === subcategoryId);
-    const allSelected = subcategoryProducts.every((p) => selectedIds.has(p.ProductID));
-    
+    const subcategoryProducts = products.filter(
+      (p) => p.ProductSubcategoryID === subcategoryId,
+    );
+    const allSelected = subcategoryProducts.every((p) =>
+      selectedIds.has(p.ProductID),
+    );
+
     setSelectedIds((prev) => {
       const newSet = new Set(prev);
       subcategoryProducts.forEach((p) => {
@@ -144,21 +173,29 @@ const ProductAssignmentDialog: React.FC<ProductAssignmentDialogProps> = ({
   };
 
   const getCategorySelectionState = (categoryId: number) => {
-    const categoryProducts = Object.values(productsByCategory[categoryId] || {}).flat();
-    if (categoryProducts.length === 0) return 'none';
-    const selectedCount = categoryProducts.filter((p) => selectedIds.has(p.ProductID)).length;
-    if (selectedCount === 0) return 'none';
-    if (selectedCount === categoryProducts.length) return 'all';
-    return 'partial';
+    const categoryProducts = Object.values(
+      productsByCategory[categoryId] || {},
+    ).flat();
+    if (categoryProducts.length === 0) return "none";
+    const selectedCount = categoryProducts.filter((p) =>
+      selectedIds.has(p.ProductID),
+    ).length;
+    if (selectedCount === 0) return "none";
+    if (selectedCount === categoryProducts.length) return "all";
+    return "partial";
   };
 
   const getSubcategorySelectionState = (subcategoryId: number) => {
-    const subcategoryProducts = products.filter((p) => p.ProductSubcategoryID === subcategoryId);
-    if (subcategoryProducts.length === 0) return 'none';
-    const selectedCount = subcategoryProducts.filter((p) => selectedIds.has(p.ProductID)).length;
-    if (selectedCount === 0) return 'none';
-    if (selectedCount === subcategoryProducts.length) return 'all';
-    return 'partial';
+    const subcategoryProducts = products.filter(
+      (p) => p.ProductSubcategoryID === subcategoryId,
+    );
+    if (subcategoryProducts.length === 0) return "none";
+    const selectedCount = subcategoryProducts.filter((p) =>
+      selectedIds.has(p.ProductID),
+    ).length;
+    if (selectedCount === 0) return "none";
+    if (selectedCount === subcategoryProducts.length) return "all";
+    return "partial";
   };
 
   const handleSave = () => {
@@ -167,7 +204,8 @@ const ProductAssignmentDialog: React.FC<ProductAssignmentDialogProps> = ({
   };
 
   const selectedCount = selectedIds.size;
-  const allSelected = filteredProducts.length > 0 && selectedIds.size === filteredProducts.length;
+  const allSelected =
+    filteredProducts.length > 0 && selectedIds.size === filteredProducts.length;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -195,7 +233,7 @@ const ProductAssignmentDialog: React.FC<ProductAssignmentDialogProps> = ({
             />
             {searchQuery && (
               <button
-                onClick={() => setSearchQuery('')}
+                onClick={() => setSearchQuery("")}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-doodle-text/40 hover:text-doodle-text"
               >
                 <X className="w-4 h-4" />
@@ -205,10 +243,10 @@ const ProductAssignmentDialog: React.FC<ProductAssignmentDialogProps> = ({
           <Button
             variant="outline"
             onClick={() => setShowCategoryView(!showCategoryView)}
-            className={`font-doodle border-2 border-doodle-text/20 ${showCategoryView ? 'bg-doodle-accent/20 border-doodle-accent' : ''}`}
+            className={`font-doodle border-2 border-doodle-text/20 ${showCategoryView ? "bg-doodle-accent/20 border-doodle-accent" : ""}`}
           >
             <FolderOpen className="w-4 h-4 mr-2" />
-            {showCategoryView ? 'List View' : 'By Category'}
+            {showCategoryView ? "List View" : "By Category"}
           </Button>
         </div>
 
@@ -238,17 +276,23 @@ const ProductAssignmentDialog: React.FC<ProductAssignmentDialogProps> = ({
           {showCategoryView ? (
             <div className="space-y-2 pr-4">
               {categories.map((category) => {
-                const categoryState = getCategorySelectionState(category.ProductCategoryID);
-                const isExpanded = expandedCategories.has(category.ProductCategoryID);
+                const categoryState = getCategorySelectionState(
+                  category.ProductCategoryID,
+                );
+                const isExpanded = expandedCategories.has(
+                  category.ProductCategoryID,
+                );
                 const categorySubcategories = subcategories.filter(
-                  (sub) => sub.ProductCategoryID === category.ProductCategoryID
+                  (sub) => sub.ProductCategoryID === category.ProductCategoryID,
                 );
 
                 return (
                   <Collapsible
                     key={category.ProductCategoryID}
                     open={isExpanded}
-                    onOpenChange={() => toggleExpandCategory(category.ProductCategoryID)}
+                    onOpenChange={() =>
+                      toggleExpandCategory(category.ProductCategoryID)
+                    }
                   >
                     <div className="border-2 border-doodle-text/20">
                       <div className="flex items-center gap-2 p-3 bg-doodle-bg">
@@ -261,15 +305,19 @@ const ProductAssignmentDialog: React.FC<ProductAssignmentDialogProps> = ({
                         >
                           <div
                             className={`w-5 h-5 border-2 flex items-center justify-center transition-colors ${
-                              categoryState === 'all'
-                                ? 'border-doodle-accent bg-doodle-accent text-doodle-bg'
-                                : categoryState === 'partial'
-                                ? 'border-doodle-accent bg-doodle-accent/30'
-                                : 'border-doodle-text/40'
+                              categoryState === "all"
+                                ? "border-doodle-accent bg-doodle-accent text-doodle-bg"
+                                : categoryState === "partial"
+                                  ? "border-doodle-accent bg-doodle-accent/30"
+                                  : "border-doodle-text/40"
                             }`}
                           >
-                            {categoryState === 'all' && <Check className="w-3 h-3" />}
-                            {categoryState === 'partial' && <div className="w-2 h-0.5 bg-doodle-accent" />}
+                            {categoryState === "all" && (
+                              <Check className="w-3 h-3" />
+                            )}
+                            {categoryState === "partial" && (
+                              <div className="w-2 h-0.5 bg-doodle-accent" />
+                            )}
                           </div>
                         </button>
                         <CollapsibleTrigger className="flex-1 flex items-center justify-between text-left hover:text-doodle-accent">
@@ -286,28 +334,40 @@ const ProductAssignmentDialog: React.FC<ProductAssignmentDialogProps> = ({
                       <CollapsibleContent>
                         <div className="border-t-2 border-doodle-text/10">
                           {categorySubcategories.map((subcategory) => {
-                            const subcatState = getSubcategorySelectionState(subcategory.ProductSubcategoryID);
+                            const subcatState = getSubcategorySelectionState(
+                              subcategory.ProductSubcategoryID,
+                            );
                             const productCount = products.filter(
-                              (p) => p.ProductSubcategoryID === subcategory.ProductSubcategoryID
+                              (p) =>
+                                p.ProductSubcategoryID ===
+                                subcategory.ProductSubcategoryID,
                             ).length;
 
                             return (
                               <button
                                 key={subcategory.ProductSubcategoryID}
-                                onClick={() => toggleSubcategory(subcategory.ProductSubcategoryID)}
+                                onClick={() =>
+                                  toggleSubcategory(
+                                    subcategory.ProductSubcategoryID,
+                                  )
+                                }
                                 className="w-full flex items-center gap-3 p-3 pl-10 hover:bg-doodle-accent/5 transition-colors"
                               >
                                 <div
                                   className={`w-5 h-5 border-2 flex items-center justify-center transition-colors ${
-                                    subcatState === 'all'
-                                      ? 'border-doodle-accent bg-doodle-accent text-doodle-bg'
-                                      : subcatState === 'partial'
-                                      ? 'border-doodle-accent bg-doodle-accent/30'
-                                      : 'border-doodle-text/40'
+                                    subcatState === "all"
+                                      ? "border-doodle-accent bg-doodle-accent text-doodle-bg"
+                                      : subcatState === "partial"
+                                        ? "border-doodle-accent bg-doodle-accent/30"
+                                        : "border-doodle-text/40"
                                   }`}
                                 >
-                                  {subcatState === 'all' && <Check className="w-3 h-3" />}
-                                  {subcatState === 'partial' && <div className="w-2 h-0.5 bg-doodle-accent" />}
+                                  {subcatState === "all" && (
+                                    <Check className="w-3 h-3" />
+                                  )}
+                                  {subcatState === "partial" && (
+                                    <div className="w-2 h-0.5 bg-doodle-accent" />
+                                  )}
                                 </div>
                                 <span className="font-doodle text-sm text-doodle-text flex-1 text-left">
                                   {subcategory.Name}
@@ -340,15 +400,15 @@ const ProductAssignmentDialog: React.FC<ProductAssignmentDialogProps> = ({
                       onClick={() => toggleProduct(product.ProductID)}
                       className={`w-full flex items-center gap-3 p-3 border-2 transition-all ${
                         isSelected
-                          ? 'border-doodle-accent bg-doodle-accent/10'
-                          : 'border-doodle-text/20 hover:border-doodle-text/40'
+                          ? "border-doodle-accent bg-doodle-accent/10"
+                          : "border-doodle-text/20 hover:border-doodle-text/40"
                       }`}
                     >
                       <div
                         className={`w-5 h-5 border-2 flex items-center justify-center transition-colors ${
                           isSelected
-                            ? 'border-doodle-accent bg-doodle-accent text-doodle-bg'
-                            : 'border-doodle-text/40'
+                            ? "border-doodle-accent bg-doodle-accent text-doodle-bg"
+                            : "border-doodle-text/40"
                         }`}
                       >
                         {isSelected && <Check className="w-3 h-3" />}
@@ -358,7 +418,8 @@ const ProductAssignmentDialog: React.FC<ProductAssignmentDialogProps> = ({
                           {product.Name}
                         </p>
                         <p className="font-doodle text-xs text-doodle-text/50">
-                          {product.ProductNumber} · ${product.ListPrice.toFixed(2)}
+                          {product.ProductNumber} · $
+                          {product.ListPrice.toFixed(2)}
                         </p>
                       </div>
                       {product.salePercent && (
@@ -382,7 +443,10 @@ const ProductAssignmentDialog: React.FC<ProductAssignmentDialogProps> = ({
           >
             Cancel
           </Button>
-          <Button onClick={handleSave} className="doodle-button doodle-button-primary">
+          <Button
+            onClick={handleSave}
+            className="doodle-button doodle-button-primary"
+          >
             Save ({selectedCount} products)
           </Button>
         </DialogFooter>

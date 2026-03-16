@@ -1,10 +1,15 @@
-import React, { useState } from 'react';
-import { AlertTriangle, Info, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown } from 'lucide-react';
-import UtilityStatusPanel from './UtilityStatusPanel';
+import React, { useState } from "react";
+import { AlertTriangle, Info, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
+import UtilityStatusPanel from "./UtilityStatusPanel";
+import { JobResponse } from "@/services/utilityService";
 
 interface UtilityFunctionCardProps {
   title: string;
@@ -13,7 +18,7 @@ interface UtilityFunctionCardProps {
   warningBadge?: string;
   infoBadge?: string;
   children?: React.ReactNode;
-  onExecute: () => Promise<{ id: string }>;
+  onExecute: () => Promise<JobResponse>;
   actionLabel?: string;
 }
 
@@ -25,20 +30,20 @@ const UtilityFunctionCard: React.FC<UtilityFunctionCardProps> = ({
   infoBadge,
   children,
   onExecute,
-  actionLabel = 'Execute',
+  actionLabel = "Execute",
 }) => {
   const [isLoading, setIsLoading] = useState(false);
-  const [instanceId, setInstanceId] = useState<string | null>(null);
+  const [jobResponse, setJobResponse] = useState<JobResponse | null>(null);
   const [inputsOpen, setInputsOpen] = useState(true);
 
   const handleExecute = async () => {
     setIsLoading(true);
-    setInstanceId(null);
+    setJobResponse(null);
     try {
       const response = await onExecute();
-      setInstanceId(response.id);
+      setJobResponse(response);
     } catch (error) {
-      console.error('Execution failed:', error);
+      console.error("Execution failed:", error);
     } finally {
       setIsLoading(false);
     }
@@ -52,12 +57,14 @@ const UtilityFunctionCard: React.FC<UtilityFunctionCardProps> = ({
     <div className="doodle-card p-5 hover:shadow-md transition-shadow">
       {/* Header */}
       <div className="flex items-start gap-3 mb-3">
-        <div className="p-2 bg-primary/10 rounded-lg text-primary">
-          {icon}
-        </div>
+        <div className="p-2 bg-primary/10 rounded-lg text-primary">{icon}</div>
         <div className="flex-1">
-          <h3 className="font-doodle font-bold text-lg text-foreground">{title}</h3>
-          <p className="text-sm text-muted-foreground font-doodle mt-1">{description}</p>
+          <h3 className="font-doodle font-bold text-lg text-foreground">
+            {title}
+          </h3>
+          <p className="text-sm text-muted-foreground font-doodle mt-1">
+            {description}
+          </p>
         </div>
       </div>
 
@@ -79,11 +86,21 @@ const UtilityFunctionCard: React.FC<UtilityFunctionCardProps> = ({
 
       {/* Collapsible Inputs */}
       {children && (
-        <Collapsible open={inputsOpen} onOpenChange={setInputsOpen} className="mb-4">
+        <Collapsible
+          open={inputsOpen}
+          onOpenChange={setInputsOpen}
+          className="mb-4"
+        >
           <CollapsibleTrigger asChild>
-            <Button variant="ghost" size="sm" className="w-full justify-between mb-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-between mb-2"
+            >
               <span className="font-doodle text-sm">Options</span>
-              <ChevronDown className={`w-4 h-4 transition-transform ${inputsOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown
+                className={`w-4 h-4 transition-transform ${inputsOpen ? "rotate-180" : ""}`}
+              />
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="p-3 bg-muted/30 rounded-lg">
@@ -109,8 +126,11 @@ const UtilityFunctionCard: React.FC<UtilityFunctionCardProps> = ({
       </Button>
 
       {/* Status Panel */}
-      {instanceId && (
-        <UtilityStatusPanel instanceId={instanceId} onComplete={handleComplete} />
+      {jobResponse && (
+        <UtilityStatusPanel
+          jobResponse={jobResponse}
+          onComplete={handleComplete}
+        />
       )}
     </div>
   );

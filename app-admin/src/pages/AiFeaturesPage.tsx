@@ -1,28 +1,28 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { 
-  Mic, 
-  Brain, 
-  Bot, 
-  Sparkles, 
-  ArrowRight, 
-  MessageSquare, 
-  BarChart3, 
-  Mail, 
-  Target, 
+import React from "react";
+import { Link } from "react-router-dom";
+import {
+  Mic,
+  Brain,
+  Bot,
+  Sparkles,
+  ArrowRight,
+  MessageSquare,
+  BarChart3,
+  Mail,
+  Target,
   Zap,
   Volume2,
   Search,
   TrendingUp,
   Users,
   ShoppingCart,
-  CheckCircle
-} from 'lucide-react';
-import AdminHeader from '@/components/AdminHeader';
-import Footer from '@/components/Footer';
-import { useVoiceAssistant } from '@/components/AdminHeader';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+  CheckCircle,
+} from "lucide-react";
+import AdminHeader from "@/components/AdminHeader";
+import Footer from "@/components/Footer";
+import { useVoiceAssistant } from "@/components/AdminHeader";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 interface FeatureCardProps {
   icon: React.ReactNode;
@@ -45,7 +45,7 @@ const FeatureCard: React.FC<FeatureCardProps> = ({
   demoLabel,
   linkTo,
   linkLabel,
-  badge
+  badge,
 }) => (
   <div className="doodle-card p-6 md:p-8 h-full flex flex-col">
     <div className="flex items-start justify-between mb-4">
@@ -58,36 +58,48 @@ const FeatureCard: React.FC<FeatureCardProps> = ({
         </Badge>
       )}
     </div>
-    
-    <h3 className="font-doodle text-xl font-bold text-doodle-text mb-2">{title}</h3>
-    <p className="font-doodle text-doodle-text/70 mb-4 flex-grow">{description}</p>
-    
+
+    <h3 className="font-doodle text-xl font-bold text-doodle-text mb-2">
+      {title}
+    </h3>
+    <p className="font-doodle text-doodle-text/70 mb-4 flex-grow">
+      {description}
+    </p>
+
     <div className="space-y-2 mb-6">
-      <p className="font-doodle text-sm font-bold text-doodle-text/80">Capabilities:</p>
+      <p className="font-doodle text-sm font-bold text-doodle-text/80">
+        Capabilities:
+      </p>
       <ul className="space-y-1">
         {capabilities.map((cap, i) => (
-          <li key={i} className="flex items-center gap-2 font-doodle text-sm text-doodle-text/70">
+          <li
+            key={i}
+            className="flex items-center gap-2 font-doodle text-sm text-doodle-text/70"
+          >
             <CheckCircle className="w-4 h-4 text-doodle-green shrink-0" />
             {cap}
           </li>
         ))}
       </ul>
     </div>
-    
+
     <div className="flex flex-wrap gap-2 mt-auto">
       {demoAction && (
-        <Button 
+        <Button
           onClick={demoAction}
           className="doodle-button doodle-button-primary flex items-center gap-2"
         >
           <Zap className="w-4 h-4" />
-          {demoLabel || 'Try Demo'}
+          {demoLabel || "Try Demo"}
         </Button>
       )}
       {linkTo && (
         <Link to={linkTo}>
-          <Button variant="outline" className="doodle-button flex items-center gap-2">
-            {linkLabel || 'Learn More'}
+          <Button
+            variant="outline"
+            className="doodle-button flex items-center gap-2"
+          >
+            {linkLabel || "Learn More"}
             <ArrowRight className="w-4 h-4" />
           </Button>
         </Link>
@@ -96,11 +108,17 @@ const FeatureCard: React.FC<FeatureCardProps> = ({
   </div>
 );
 
-const SampleQueryCard: React.FC<{ query: string; category: string; icon: React.ReactNode }> = ({ query, category, icon }) => (
+const SampleQueryCard: React.FC<{
+  query: string;
+  category: string;
+  icon: React.ReactNode;
+}> = ({ query, category, icon }) => (
   <div className="p-4 border-2 border-doodle-text/20 hover:border-doodle-accent transition-colors bg-doodle-bg/50">
     <div className="flex items-center gap-2 mb-2">
       {icon}
-      <span className="font-doodle text-xs text-doodle-text/50 uppercase">{category}</span>
+      <span className="font-doodle text-xs text-doodle-text/50 uppercase">
+        {category}
+      </span>
     </div>
     <p className="font-doodle text-sm text-doodle-text">"{query}"</p>
   </div>
@@ -108,24 +126,28 @@ const SampleQueryCard: React.FC<{ query: string; category: string; icon: React.R
 
 const AiFeaturesPage: React.FC = () => {
   const voiceContext = React.useContext(
-    React.createContext<{ isVoiceOpen: boolean; setIsVoiceOpen: React.Dispatch<React.SetStateAction<boolean>> } | null>(null)
+    React.createContext<{
+      isVoiceOpen: boolean;
+      setIsVoiceOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    } | null>(null),
   );
-  
+  const voiceAssistant = useVoiceAssistant();
+  void voiceContext; // context kept for future use
+
   // Safe way to access voice context
   const openVoiceAssistant = () => {
     try {
-      const { setIsVoiceOpen } = useVoiceAssistant();
-      setIsVoiceOpen(true);
+      voiceAssistant.setIsVoiceOpen(true);
     } catch {
       // Fallback if context not available
-      console.log('Voice assistant demo triggered');
+      console.log("Voice assistant demo triggered");
     }
   };
 
   return (
     <div className="min-h-screen flex flex-col bg-doodle-bg">
       <AdminHeader />
-      
+
       <main className="flex-1">
         {/* Hero Section */}
         <section className="container mx-auto px-4 py-12">
@@ -139,8 +161,9 @@ const AiFeaturesPage: React.FC = () => {
               AI-Powered Features
             </h1>
             <p className="font-doodle text-lg text-doodle-text/70 max-w-2xl mx-auto mb-6">
-              Experience the future of e-commerce management with our intelligent AI assistants. 
-              Voice commands, natural language queries, and automated recovery strategies.
+              Experience the future of e-commerce management with our
+              intelligent AI assistants. Voice commands, natural language
+              queries, and automated recovery strategies.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
               <Badge className="bg-doodle-accent text-white border-2 border-doodle-text font-doodle text-sm px-3 py-1">
@@ -169,11 +192,13 @@ const AiFeaturesPage: React.FC = () => {
                 "Customer lookup by ID or name",
                 "Real-time order status checks",
                 "Product information retrieval",
-                "Sales performance summaries"
+                "Sales performance summaries",
               ]}
               demoAction={() => {
                 // Trigger via header button
-                const btn = document.querySelector('[aria-label="Toggle Voice Assistant"]') as HTMLButtonElement;
+                const btn = document.querySelector(
+                  '[aria-label="Toggle Voice Assistant"]',
+                ) as HTMLButtonElement;
                 if (btn) btn.click();
               }}
               demoLabel="Open Voice Assistant"
@@ -190,7 +215,7 @@ const AiFeaturesPage: React.FC = () => {
                 "Auto-generated charts & graphs",
                 "Customer analytics",
                 "Revenue breakdowns",
-                "Order trend analysis"
+                "Order trend analysis",
               ]}
               linkTo="/"
               linkLabel="Go to Dashboard"
@@ -207,7 +232,7 @@ const AiFeaturesPage: React.FC = () => {
                 "Personalized email generation",
                 "Campaign simulation",
                 "Automatic prioritization",
-                "One-click outreach"
+                "One-click outreach",
               ]}
               linkTo="/stale-carts"
               linkLabel="View Stale Carts"
@@ -221,39 +246,42 @@ const AiFeaturesPage: React.FC = () => {
           <div className="doodle-card p-6 md:p-8">
             <div className="flex items-center gap-3 mb-6">
               <MessageSquare className="w-6 h-6 text-doodle-accent" />
-              <h2 className="font-doodle text-2xl font-bold text-doodle-text">Sample AI Queries</h2>
+              <h2 className="font-doodle text-2xl font-bold text-doodle-text">
+                Sample AI Queries
+              </h2>
             </div>
             <p className="font-doodle text-doodle-text/70 mb-6">
-              Try these example queries with our Voice Assistant or Natural Language BI:
+              Try these example queries with our Voice Assistant or Natural
+              Language BI:
             </p>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <SampleQueryCard 
+              <SampleQueryCard
                 query="Who are my top 5 customers by revenue?"
                 category="Customers"
                 icon={<Users className="w-4 h-4 text-doodle-green" />}
               />
-              <SampleQueryCard 
+              <SampleQueryCard
                 query="What's the status of order 70003?"
                 category="Orders"
                 icon={<ShoppingCart className="w-4 h-4 text-doodle-blue" />}
               />
-              <SampleQueryCard 
+              <SampleQueryCard
                 query="Show me revenue breakdown by state"
                 category="Analytics"
                 icon={<BarChart3 className="w-4 h-4 text-doodle-accent" />}
               />
-              <SampleQueryCard 
+              <SampleQueryCard
                 query="Tell me about the Road-150 bike"
                 category="Products"
                 icon={<Search className="w-4 h-4 text-doodle-text" />}
               />
-              <SampleQueryCard 
+              <SampleQueryCard
                 query="How are sales looking this month?"
                 category="Performance"
                 icon={<TrendingUp className="w-4 h-4 text-doodle-green" />}
               />
-              <SampleQueryCard 
+              <SampleQueryCard
                 query="What orders are pending?"
                 category="Operations"
                 icon={<Target className="w-4 h-4 text-doodle-accent" />}
@@ -268,35 +296,50 @@ const AiFeaturesPage: React.FC = () => {
             <h2 className="font-doodle text-2xl font-bold text-doodle-text mb-6 text-center">
               How It Works
             </h2>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full bg-doodle-accent/20 border-3 border-doodle-text flex items-center justify-center mx-auto mb-4">
-                  <span className="font-doodle text-2xl font-bold text-doodle-accent">1</span>
+                  <span className="font-doodle text-2xl font-bold text-doodle-accent">
+                    1
+                  </span>
                 </div>
-                <h3 className="font-doodle font-bold text-doodle-text mb-2">Ask Naturally</h3>
+                <h3 className="font-doodle font-bold text-doodle-text mb-2">
+                  Ask Naturally
+                </h3>
                 <p className="font-doodle text-sm text-doodle-text/70">
-                  Use voice or text to ask questions in plain English. No technical knowledge required.
+                  Use voice or text to ask questions in plain English. No
+                  technical knowledge required.
                 </p>
               </div>
-              
+
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full bg-doodle-green/20 border-3 border-doodle-text flex items-center justify-center mx-auto mb-4">
-                  <span className="font-doodle text-2xl font-bold text-doodle-green">2</span>
+                  <span className="font-doodle text-2xl font-bold text-doodle-green">
+                    2
+                  </span>
                 </div>
-                <h3 className="font-doodle font-bold text-doodle-text mb-2">AI Processes</h3>
+                <h3 className="font-doodle font-bold text-doodle-text mb-2">
+                  AI Processes
+                </h3>
                 <p className="font-doodle text-sm text-doodle-text/70">
-                  Our AI understands your intent and queries the relevant data from your business systems.
+                  Our AI understands your intent and queries the relevant data
+                  from your business systems.
                 </p>
               </div>
-              
+
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full bg-doodle-blue/20 border-3 border-doodle-text flex items-center justify-center mx-auto mb-4">
-                  <span className="font-doodle text-2xl font-bold text-doodle-blue">3</span>
+                  <span className="font-doodle text-2xl font-bold text-doodle-blue">
+                    3
+                  </span>
                 </div>
-                <h3 className="font-doodle font-bold text-doodle-text mb-2">Get Insights</h3>
+                <h3 className="font-doodle font-bold text-doodle-text mb-2">
+                  Get Insights
+                </h3>
                 <p className="font-doodle text-sm text-doodle-text/70">
-                  Receive instant answers, visualizations, and actionable recommendations.
+                  Receive instant answers, visualizations, and actionable
+                  recommendations.
                 </p>
               </div>
             </div>
@@ -310,12 +353,15 @@ const AiFeaturesPage: React.FC = () => {
               Ready to Experience AI-Powered Management?
             </h2>
             <p className="font-doodle text-doodle-text/70 mb-6 max-w-lg mx-auto">
-              Start using voice commands and natural language queries to supercharge your workflow.
+              Start using voice commands and natural language queries to
+              supercharge your workflow.
             </p>
             <div className="flex flex-wrap justify-center gap-4">
-              <Button 
+              <Button
                 onClick={() => {
-                  const btn = document.querySelector('[aria-label="Toggle Voice Assistant"]') as HTMLButtonElement;
+                  const btn = document.querySelector(
+                    '[aria-label="Toggle Voice Assistant"]',
+                  ) as HTMLButtonElement;
                   if (btn) btn.click();
                 }}
                 className="doodle-button doodle-button-primary flex items-center gap-2"
@@ -324,7 +370,10 @@ const AiFeaturesPage: React.FC = () => {
                 Try Voice Assistant
               </Button>
               <Link to="/">
-                <Button variant="outline" className="doodle-button flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  className="doodle-button flex items-center gap-2"
+                >
                   <Brain className="w-5 h-5" />
                   Explore BI Dashboard
                 </Button>

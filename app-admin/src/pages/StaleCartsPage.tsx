@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import CartRecoveryAgent from "@/components/CartRecoveryAgent";
@@ -51,14 +51,15 @@ import {
   CheckCircle,
   RefreshCw,
 } from "lucide-react";
-import { mockStaleCarts } from "@/data/mockStaleCarts";
+import { useAdminShoppingCarts } from "@/hooks/useAdminCatalog";
 import { StaleCart } from "@/types/shoppingCart";
 import { format } from "date-fns";
 
 type StaleFilter = "all" | "7days" | "14days" | "30days" | "60days";
 
 const StaleCartsPage = () => {
-  const [carts, setCarts] = useState<StaleCart[]>(mockStaleCarts);
+  const { data: apiCarts = [] } = useAdminShoppingCarts();
+  const [carts, setCarts] = useState<StaleCart[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [staleFilter, setStaleFilter] = useState<StaleFilter>("all");
   const [selectedCarts, setSelectedCarts] = useState<Set<string>>(new Set());
@@ -67,6 +68,10 @@ const StaleCartsPage = () => {
     type: "clear" | "remind" | "bulkClear" | "bulkRemind";
     cart?: StaleCart;
   } | null>(null);
+
+  useEffect(() => {
+    setCarts(apiCarts);
+  }, [apiCarts]);
 
   const filteredCarts = carts.filter((cart) => {
     const matchesSearch =
@@ -97,7 +102,7 @@ const StaleCartsPage = () => {
     totalCarts: carts.length,
     totalValue: carts.reduce((sum, c) => sum + c.totalValue, 0),
     avgDaysStale: Math.round(
-      carts.reduce((sum, c) => sum + c.daysStale, 0) / carts.length
+      carts.reduce((sum, c) => sum + c.daysStale, 0) / carts.length,
     ),
     criticalCarts: carts.filter((c) => c.daysStale >= 30).length,
   };
@@ -127,7 +132,9 @@ const StaleCartsPage = () => {
   };
 
   const handleClearCart = (cart: StaleCart) => {
-    setCarts((prev) => prev.filter((c) => c.ShoppingCartID !== cart.ShoppingCartID));
+    setCarts((prev) =>
+      prev.filter((c) => c.ShoppingCartID !== cart.ShoppingCartID),
+    );
     setSelectedCarts((prev) => {
       const newSet = new Set(prev);
       newSet.delete(cart.ShoppingCartID);
@@ -144,7 +151,7 @@ const StaleCartsPage = () => {
 
   const handleBulkClear = () => {
     setCarts((prev) =>
-      prev.filter((c) => !selectedCarts.has(c.ShoppingCartID))
+      prev.filter((c) => !selectedCarts.has(c.ShoppingCartID)),
     );
     toast.success(`${selectedCarts.size} carts cleared successfully`);
     setSelectedCarts(new Set());
@@ -171,7 +178,10 @@ const StaleCartsPage = () => {
               Manage abandoned shopping carts and re-engage customers
             </p>
           </div>
-          <Button variant="outline" onClick={() => toast.info("Refreshing cart data...")}>
+          <Button
+            variant="outline"
+            onClick={() => toast.info("Refreshing cart data...")}
+          >
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
@@ -184,7 +194,9 @@ const StaleCartsPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Stale Carts</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Total Stale Carts
+              </CardTitle>
               <ShoppingCart className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -193,31 +205,44 @@ const StaleCartsPage = () => {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Potential Revenue</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Potential Revenue
+              </CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                ${stats.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                $
+                {stats.totalValue.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                })}
               </div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avg Days Stale</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Avg Days Stale
+              </CardTitle>
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.avgDaysStale} days</div>
+              <div className="text-2xl font-bold">
+                {stats.avgDaysStale} days
+              </div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Critical (30+ days)</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Critical (30+ days)
+              </CardTitle>
               <AlertTriangle className="h-4 w-4 text-destructive" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-destructive">{stats.criticalCarts}</div>
+              <div className="text-2xl font-bold text-destructive">
+                {stats.criticalCarts}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -233,7 +258,10 @@ const StaleCartsPage = () => {
               className="pl-10"
             />
           </div>
-          <Select value={staleFilter} onValueChange={(v) => setStaleFilter(v as StaleFilter)}>
+          <Select
+            value={staleFilter}
+            onValueChange={(v) => setStaleFilter(v as StaleFilter)}
+          >
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Filter by age" />
             </SelectTrigger>
@@ -301,7 +329,9 @@ const StaleCartsPage = () => {
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8">
                       <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
-                      <p className="text-muted-foreground">No stale carts found</p>
+                      <p className="text-muted-foreground">
+                        No stale carts found
+                      </p>
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -311,7 +341,10 @@ const StaleCartsPage = () => {
                         <Checkbox
                           checked={selectedCarts.has(cart.ShoppingCartID)}
                           onCheckedChange={(checked) =>
-                            handleSelectCart(cart.ShoppingCartID, checked as boolean)
+                            handleSelectCart(
+                              cart.ShoppingCartID,
+                              checked as boolean,
+                            )
                           }
                         />
                       </TableCell>
@@ -326,7 +359,9 @@ const StaleCartsPage = () => {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-center">{cart.totalItems}</TableCell>
+                      <TableCell className="text-center">
+                        {cart.totalItems}
+                      </TableCell>
                       <TableCell className="text-right font-medium">
                         ${cart.totalValue.toFixed(2)}
                       </TableCell>
@@ -346,19 +381,25 @@ const StaleCartsPage = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setViewCartDialog(cart)}>
+                            <DropdownMenuItem
+                              onClick={() => setViewCartDialog(cart)}
+                            >
                               <Eye className="h-4 w-4 mr-2" />
                               View Details
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() => setConfirmDialog({ type: "remind", cart })}
+                              onClick={() =>
+                                setConfirmDialog({ type: "remind", cart })
+                              }
                             >
                               <Mail className="h-4 w-4 mr-2" />
                               Send Reminder
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive"
-                              onClick={() => setConfirmDialog({ type: "clear", cart })}
+                              onClick={() =>
+                                setConfirmDialog({ type: "clear", cart })
+                              }
                             >
                               <Trash2 className="h-4 w-4 mr-2" />
                               Clear Cart
@@ -378,19 +419,27 @@ const StaleCartsPage = () => {
       <Footer />
 
       {/* View Cart Dialog */}
-      <Dialog open={!!viewCartDialog} onOpenChange={() => setViewCartDialog(null)}>
+      <Dialog
+        open={!!viewCartDialog}
+        onOpenChange={() => setViewCartDialog(null)}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Cart Details - {viewCartDialog?.ShoppingCartID}</DialogTitle>
+            <DialogTitle>
+              Cart Details - {viewCartDialog?.ShoppingCartID}
+            </DialogTitle>
             <DialogDescription>
-              Customer: {viewCartDialog?.customerName} ({viewCartDialog?.customerEmail})
+              Customer: {viewCartDialog?.customerName} (
+              {viewCartDialog?.customerEmail})
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-muted-foreground">Total Items:</span>
-                <span className="ml-2 font-medium">{viewCartDialog?.totalItems}</span>
+                <span className="ml-2 font-medium">
+                  {viewCartDialog?.totalItems}
+                </span>
               </div>
               <div>
                 <span className="text-muted-foreground">Total Value:</span>
@@ -400,12 +449,18 @@ const StaleCartsPage = () => {
               </div>
               <div>
                 <span className="text-muted-foreground">Days Stale:</span>
-                <span className="ml-2 font-medium">{viewCartDialog?.daysStale} days</span>
+                <span className="ml-2 font-medium">
+                  {viewCartDialog?.daysStale} days
+                </span>
               </div>
               <div>
                 <span className="text-muted-foreground">Last Activity:</span>
                 <span className="ml-2 font-medium">
-                  {viewCartDialog && format(new Date(viewCartDialog.lastActivity), "MMM d, yyyy")}
+                  {viewCartDialog &&
+                    format(
+                      new Date(viewCartDialog.lastActivity),
+                      "MMM d, yyyy",
+                    )}
                 </span>
               </div>
             </div>
@@ -418,9 +473,12 @@ const StaleCartsPage = () => {
                     className="p-3 flex justify-between items-center"
                   >
                     <div>
-                      <div className="font-medium">Product #{item.ProductID}</div>
+                      <div className="font-medium">
+                        Product #{item.ProductID}
+                      </div>
                       <div className="text-sm text-muted-foreground">
-                        Added: {format(new Date(item.DateCreated), "MMM d, yyyy")}
+                        Added:{" "}
+                        {format(new Date(item.DateCreated), "MMM d, yyyy")}
                       </div>
                     </div>
                     <Badge variant="outline">Qty: {item.Quantity}</Badge>
@@ -448,7 +506,10 @@ const StaleCartsPage = () => {
       </Dialog>
 
       {/* Confirm Dialog */}
-      <Dialog open={!!confirmDialog} onOpenChange={() => setConfirmDialog(null)}>
+      <Dialog
+        open={!!confirmDialog}
+        onOpenChange={() => setConfirmDialog(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>

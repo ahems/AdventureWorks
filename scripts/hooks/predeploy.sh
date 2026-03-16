@@ -42,3 +42,25 @@ echo "[PreDeploy] Generating staticwebapp.config.json with Functions URL: $API_F
 sed "s|{{API_FUNCTIONS_URL}}|$API_FUNC_URL|g" app/staticwebapp.config.template.json > app/staticwebapp.config.json
 
 echo "[PreDeploy] Configuration completed"
+
+# --- app-admin ---
+echo "[PreDeploy] Setting up app-admin build environment"
+
+cat > app-admin/.env.production << EOF
+VITE_API_URL=$API_URL
+VITE_API_FUNCTIONS_URL=$API_FUNC_URL
+VITE_API_MCP_URL=$API_MCP_URL
+VITE_APPINSIGHTS_CONNECTIONSTRING=$APPINSIGHTS_CONN_STR
+EOF
+
+echo "[PreDeploy] Created app-admin/.env.production with Azure URLs"
+
+if [ -d "app-admin/dist" ]; then
+  echo "[PreDeploy] Cleaning app-admin/dist folder"
+  rm -rf app-admin/dist
+fi
+
+echo "[PreDeploy] Generating app-admin/staticwebapp.config.json with Functions URL: $API_FUNC_URL"
+sed "s|{{API_FUNCTIONS_URL}}|$API_FUNC_URL|g" app-admin/staticwebapp.config.template.json > app-admin/staticwebapp.config.json
+
+echo "[PreDeploy] app-admin configuration completed"

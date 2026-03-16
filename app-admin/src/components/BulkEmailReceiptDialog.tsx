@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -6,16 +6,23 @@ import {
   DialogTitle,
   DialogFooter,
   DialogDescription,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Mail, Send, Loader2, CheckCircle2, XCircle, Users } from 'lucide-react';
-import { Order, getCustomerById } from '@/data/mockCustomers';
-import { generateReceiptData } from '@/services/mockReceiptService';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Progress } from '@/components/ui/progress';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Mail,
+  Send,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  Users,
+} from "lucide-react";
+import { Order } from "@/types/order";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
+import { getFunctionsApiUrl } from "@/lib/utils";
 
 interface BulkEmailReceiptDialogProps {
   open: boolean;
@@ -26,8 +33,8 @@ interface BulkEmailReceiptDialogProps {
 
 interface EmailStatus {
   orderId: number;
-  email: string;
-  status: 'pending' | 'sending' | 'success' | 'failed';
+  customerId: number;
+  status: "pending" | "sending" | "success" | "failed";
   error?: string;
 }
 
@@ -37,9 +44,11 @@ const BulkEmailReceiptDialog: React.FC<BulkEmailReceiptDialogProps> = ({
   selectedOrders,
   onComplete,
 }) => {
-  const [subject, setSubject] = useState('Your Order Receipt from AdventureWorks');
+  const [subject, setSubject] = useState(
+    "Your Order Receipt from AdventureWorks",
+  );
   const [message, setMessage] = useState(
-    `Dear Customer,\n\nPlease find attached your order receipt.\n\nThank you for shopping with AdventureWorks!\n\nBest regards,\nThe AdventureWorks Team`
+    `Dear Customer,\n\nPlease find attached your order receipt.\n\nThank you for shopping with AdventureWorks!\n\nBest regards,\nThe AdventureWorks Team`,
   );
   const [isSending, setIsSending] = useState(false);
   const [emailStatuses, setEmailStatuses] = useState<EmailStatus[]>([]);
@@ -51,58 +60,124 @@ const BulkEmailReceiptDialog: React.FC<BulkEmailReceiptDialogProps> = ({
       setIsSending(false);
       setSendingComplete(false);
       setEmailStatuses(
-        selectedOrders.map((order) => {
-          const customer = getCustomerById(order.CustomerID);
-          return {
-            orderId: order.SalesOrderID,
-            email: customer?.EmailAddress || 'unknown@example.com',
-            status: 'pending' as const,
-          };
-        })
+        selectedOrders.map((order) => ({
+          orderId: order.SalesOrderID,
+          customerId: order.CustomerID,
+          status: "pending" as const,
+        })),
       );
     }
   }, [open, selectedOrders]);
 
-  const progress = emailStatuses.length > 0
-    ? (emailStatuses.filter((s) => s.status === 'success' || s.status === 'failed').length / emailStatuses.length) * 100
-    : 0;
+  const progress =
+    emailStatuses.length > 0
+      ? (emailStatuses.filter(
+          (s) => s.status === "success" || s.status === "failed",
+        ).length /
+          emailStatuses.length) *
+        100
+      : 0;
 
-  const successCount = emailStatuses.filter((s) => s.status === 'success').length;
-  const failedCount = emailStatuses.filter((s) => s.status === 'failed').length;
+  const successCount = emailStatuses.filter(
+    (s) => s.status === "success",
+  ).length;
+  const failedCount = emailStatuses.filter((s) => s.status === "failed").length;
 
   const handleSendAll = async () => {
     if (!subject.trim()) return;
-    
+
     setIsSending(true);
 
-    for (let i = 0; i < selectedOrders.length; i++) {
-      const order = selectedOrders[i];
-      const receiptData = generateReceiptData(order);
-
-      // Update status to sending
-      setEmailStatuses((prev) =>
-        prev.map((s) =>
-          s.orderId === order.SalesOrderID ? { ...s, status: 'sending' as const } : s
-        )
-      );
-
-      // Simulate sending delay
-      await new Promise((resolve) => setTimeout(resolve, 500 + Math.random() * 500));
-
-      // 15% chance of failure for realism
-      const failed = Math.random() < 0.15;
-
+    for (const order of selectedOrders) {
       setEmailStatuses((prev) =>
         prev.map((s) =>
           s.orderId === order.SalesOrderID
-            ? {
-                ...s,
-                status: failed ? ('failed' as const) : ('success' as const),
-                error: failed ? 'Connection timeout' : undefined,
-              }
-            : s
-        )
+            ? { ...s, status: "sending" as const }
+            : s,
+        ),
       );
+
+      try {
+        // Fetch the customer's first email address via GraphQL, then call the receipt API
+        const gqlResponse = await fetch(
+          `${import.meta.env.VITE_API_URL ?? ""}/graphql`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              query: `query GetEmail($custId: Int!) {
+                customers(filter: { CustomerID: { eq: $custId } }) {
+                  items { PersonID }
+                }
+              }`,
+              variables: { custId: order.CustomerID },
+            }),
+          },
+        );
+        const gqlData = await gqlResponse.json();
+        const personId = gqlData?.data?.customers?.items?.[0]?.PersonID;
+
+        if (!personId) throw new Error("Customer has no person record");
+
+        const emailGqlResponse = await fetch(
+          `${import.meta.env.VITE_API_URL ?? ""}/graphql`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              query: `query GetEmailAddr($personId: Int!) {
+                emailAddresses(filter: { BusinessEntityID: { eq: $personId } }, first: 1) {
+                  items { EmailAddressID }
+                }
+              }`,
+              variables: { personId },
+            }),
+          },
+        );
+        const emailData = await emailGqlResponse.json();
+        const emailAddressId =
+          emailData?.data?.emailAddresses?.items?.[0]?.EmailAddressID;
+
+        if (!emailAddressId) throw new Error("No email address on file");
+
+        const res = await fetch(
+          `${getFunctionsApiUrl()}/api/orders/generate-and-send-receipt`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              SalesOrderId: order.SalesOrderID,
+              CustomerId: order.CustomerID,
+              EmailAddressId: emailAddressId,
+            }),
+          },
+        );
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(text || `Server ${res.status}`);
+        }
+
+        setEmailStatuses((prev) =>
+          prev.map((s) =>
+            s.orderId === order.SalesOrderID
+              ? { ...s, status: "success" as const }
+              : s,
+          ),
+        );
+      } catch (err) {
+        setEmailStatuses((prev) =>
+          prev.map((s) =>
+            s.orderId === order.SalesOrderID
+              ? {
+                  ...s,
+                  status: "failed" as const,
+                  error: err instanceof Error ? err.message : "Unknown error",
+                }
+              : s,
+          ),
+        );
+      }
     }
 
     setIsSending(false);
@@ -166,25 +241,23 @@ const BulkEmailReceiptDialog: React.FC<BulkEmailReceiptDialogProps> = ({
                 <Label className="font-doodle">Recipients</Label>
                 <ScrollArea className="h-[150px] border-2 border-doodle-text/20 rounded p-2">
                   <div className="space-y-1">
-                    {selectedOrders.map((order) => {
-                      const customer = getCustomerById(order.CustomerID);
-                      const receiptData = generateReceiptData(order);
-                      return (
-                        <div
-                          key={order.SalesOrderID}
-                          className="flex justify-between items-center p-2 bg-doodle-text/5 rounded text-sm"
-                        >
-                          <div className="font-doodle">
-                            <span className="font-bold">{receiptData.orderNumber}</span>
-                            <span className="text-doodle-text/60 mx-2">•</span>
-                            <span>{customer?.FirstName} {customer?.LastName}</span>
-                          </div>
-                          <span className="font-doodle text-doodle-text/60 text-xs">
-                            {customer?.EmailAddress}
+                    {selectedOrders.map((order) => (
+                      <div
+                        key={order.SalesOrderID}
+                        className="flex justify-between items-center p-2 bg-doodle-text/5 rounded text-sm"
+                      >
+                        <div className="font-doodle">
+                          <span className="font-bold">
+                            SO{order.SalesOrderID}
                           </span>
+                          <span className="text-doodle-text/60 mx-2">•</span>
+                          <span>Customer #{order.CustomerID}</span>
                         </div>
-                      );
-                    })}
+                        <span className="font-doodle text-doodle-text/60 text-xs">
+                          ${order.TotalDue.toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </ScrollArea>
               </div>
@@ -215,7 +288,7 @@ const BulkEmailReceiptDialog: React.FC<BulkEmailReceiptDialogProps> = ({
               <div className="space-y-2">
                 <div className="flex justify-between text-sm font-doodle">
                   <span>
-                    {sendingComplete ? 'Sending Complete' : 'Sending emails...'}
+                    {sendingComplete ? "Sending Complete" : "Sending emails..."}
                   </span>
                   <span>{Math.round(progress)}%</span>
                 </div>
@@ -245,25 +318,27 @@ const BulkEmailReceiptDialog: React.FC<BulkEmailReceiptDialogProps> = ({
                       className="flex justify-between items-center p-2 bg-doodle-text/5 rounded text-sm"
                     >
                       <div className="font-doodle flex items-center gap-2">
-                        {status.status === 'pending' && (
+                        {status.status === "pending" && (
                           <div className="w-4 h-4 rounded-full border-2 border-doodle-text/30" />
                         )}
-                        {status.status === 'sending' && (
+                        {status.status === "sending" && (
                           <Loader2 className="w-4 h-4 animate-spin text-doodle-accent" />
                         )}
-                        {status.status === 'success' && (
+                        {status.status === "success" && (
                           <CheckCircle2 className="w-4 h-4 text-green-600" />
                         )}
-                        {status.status === 'failed' && (
+                        {status.status === "failed" && (
                           <XCircle className="w-4 h-4 text-red-600" />
                         )}
                         <span>SO{status.orderId}</span>
                       </div>
                       <div className="font-doodle text-xs">
-                        {status.status === 'failed' ? (
+                        {status.status === "failed" ? (
                           <span className="text-red-600">{status.error}</span>
                         ) : (
-                          <span className="text-doodle-text/60">{status.email}</span>
+                          <span className="text-doodle-text/60">
+                            Customer #{status.customerId}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -274,7 +349,7 @@ const BulkEmailReceiptDialog: React.FC<BulkEmailReceiptDialogProps> = ({
 
             <DialogFooter>
               <Button onClick={handleClose} className="font-doodle">
-                {sendingComplete ? 'Done' : 'Cancel'}
+                {sendingComplete ? "Done" : "Cancel"}
               </Button>
             </DialogFooter>
           </>

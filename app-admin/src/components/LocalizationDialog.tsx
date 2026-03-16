@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Search, Plus, Trash2, FileText, Package, Pencil, Check, X } from "lucide-react";
+import { Search, Plus, Trash2, FileText, Package, Pencil, Check, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,15 +32,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { Culture } from "@/types/culture";
 import {
-  ProductDescription,
-  ProductModel,
-  ProductModelProductDescriptionCulture,
-} from "@/types/productLocalization";
-import {
-  productModels,
-  productDescriptions as initialDescriptions,
-  productModelDescriptionCultures as initialLinks,
-} from "@/data/mockProductLocalizations";
+  useAdminLocalizationsForCulture,
+  useAdminProductModels,
+  useProductDescriptionsByIds,
+  useCreateLocalization,
+  useDeleteLocalizationLink,
+  useUpdateProductDescription,
+} from "@/hooks/useAdminCatalog";
 
 interface LocalizationDialogProps {
   culture: Culture;
@@ -55,43 +53,54 @@ const LocalizationDialog = ({
 }: LocalizationDialogProps) => {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const [links, setLinks] = useState<ProductModelProductDescriptionCulture[]>(initialLinks);
-  const [descriptions, setDescriptions] = useState<ProductDescription[]>(initialDescriptions);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [selectedModelId, setSelectedModelId] = useState<string>("");
   const [newDescription, setNewDescription] = useState("");
   const [editingDescriptionId, setEditingDescriptionId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
 
-  // Get localizations for this culture
-  const cultureLinks = useMemo(() => {
-    return links.filter((link) => link.CultureID === culture.CultureID);
-  }, [links, culture.CultureID]);
+  const { data: cultureLinks = [], isLoading: isLoadingLinks } =
+    useAdminLocalizationsForCulture(open ? culture.CultureID : null);
 
-  // Enrich with model and description data
+  const descriptionIds = useMemo(
+    () => cultureLinks.map((l) => l.ProductDescriptionID),
+    [cultureLinks],
+  );
+
+  const { data: descriptions = [], isLoading: isLoadingDescs } =
+    useProductDescriptionsByIds(descriptionIds);
+
+  const { data: allModels = [], isLoading: isLoadingModels } =
+    useAdminProductModels();
+
+  const createLocalization = useCreateLocalization(culture.CultureID);
+  const deleteLink = useDeleteLocalizationLink(culture.CultureID);
+  const updateDescription = useUpdateProductDescription();
+
+  // Enrich links with model + description data
   const enrichedLocalizations = useMemo(() => {
     return cultureLinks.map((link) => {
-      const model = productModels.find((m) => m.ProductModelID === link.ProductModelID);
+      const model = allModels.find((m) => m.ProductModelID === link.ProductModelID);
       const description = descriptions.find(
-        (d) => d.ProductDescriptionID === link.ProductDescriptionID
+        (d) => d.ProductDescriptionID === link.ProductDescriptionID,
       );
       return { ...link, model, description };
     });
-  }, [cultureLinks, descriptions]);
+  }, [cultureLinks, allModels, descriptions]);
 
   const filteredLocalizations = enrichedLocalizations.filter(
     (loc) =>
       loc.model?.Name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      loc.description?.Description.toLowerCase().includes(searchQuery.toLowerCase())
+      loc.description?.Description.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  // Get models not yet localized for this culture
+  // Models not yet localized for this culture
   const availableModels = useMemo(() => {
-    const localizedModelIds = cultureLinks.map((l) => l.ProductModelID);
-    return productModels.filter((m) => !localizedModelIds.includes(m.ProductModelID));
-  }, [cultureLinks]);
+    const localizedIds = new Set(cultureLinks.map((l) => l.ProductModelID));
+    return allModels.filter((m) => !localizedIds.has(m.ProductModelID));
+  }, [allModels, cultureLinks]);
 
-  const handleAddLocalization = () => {
+  const handleAddLocalization = async () => {
     if (!selectedModelId || !newDescription.trim()) {
       toast({
         title: "Validation Error",
@@ -101,54 +110,50 @@ const LocalizationDialog = ({
       return;
     }
 
-    const modelId = parseInt(selectedModelId);
-    
-    // Create new description
-    const newDescriptionId = Math.max(...descriptions.map((d) => d.ProductDescriptionID)) + 1;
-    const newDesc: ProductDescription = {
-      ProductDescriptionID: newDescriptionId,
-      Description: newDescription.trim(),
-      rowguid: crypto.randomUUID(),
-      ModifiedDate: new Date().toISOString(),
-    };
-    setDescriptions((prev) => [...prev, newDesc]);
-
-    // Create the link
-    const newLink: ProductModelProductDescriptionCulture = {
-      ProductModelID: modelId,
-      ProductDescriptionID: newDescriptionId,
-      CultureID: culture.CultureID,
-      ModifiedDate: new Date().toISOString(),
-    };
-    setLinks((prev) => [...prev, newLink]);
-
-    const model = productModels.find((m) => m.ProductModelID === modelId);
-    toast({
-      title: "Localization Added",
-      description: `Added ${culture.Name} description for "${model?.Name}".`,
-    });
-
-    setIsAddingNew(false);
-    setSelectedModelId("");
-    setNewDescription("");
+    try {
+      await createLocalization.mutateAsync({
+        productModelId: parseInt(selectedModelId),
+        description: newDescription.trim(),
+      });
+      const modelName = allModels.find(
+        (m) => m.ProductModelID === parseInt(selectedModelId),
+      )?.Name;
+      toast({
+        title: "Localization Added",
+        description: `Added ${culture.Name} description for "${modelName}".`,
+      });
+      setIsAddingNew(false);
+      setSelectedModelId("");
+      setNewDescription("");
+    } catch (err) {
+      toast({
+        title: "Failed to add localization",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleRemoveLocalization = (link: ProductModelProductDescriptionCulture) => {
-    setLinks((prev) =>
-      prev.filter(
-        (l) =>
-          !(
-            l.ProductModelID === link.ProductModelID &&
-            l.ProductDescriptionID === link.ProductDescriptionID &&
-            l.CultureID === link.CultureID
-          )
-      )
-    );
-    const model = productModels.find((m) => m.ProductModelID === link.ProductModelID);
-    toast({
-      title: "Localization Removed",
-      description: `Removed ${culture.Name} description from "${model?.Name}".`,
-    });
+  const handleRemoveLocalization = async (link: {
+    ProductModelID: number;
+    ProductDescriptionID: number;
+  }) => {
+    try {
+      await deleteLink.mutateAsync({
+        productModelId: link.ProductModelID,
+        productDescriptionId: link.ProductDescriptionID,
+      });
+      toast({
+        title: "Localization Removed",
+        description: `Removed ${culture.Name} description successfully.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Failed to remove localization",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleStartEdit = (descriptionId: number, currentText: string) => {
@@ -161,7 +166,7 @@ const LocalizationDialog = ({
     setEditingText("");
   };
 
-  const handleSaveEdit = (descriptionId: number) => {
+  const handleSaveEdit = async (descriptionId: number) => {
     if (!editingText.trim()) {
       toast({
         title: "Validation Error",
@@ -171,22 +176,27 @@ const LocalizationDialog = ({
       return;
     }
 
-    setDescriptions((prev) =>
-      prev.map((desc) =>
-        desc.ProductDescriptionID === descriptionId
-          ? { ...desc, Description: editingText.trim(), ModifiedDate: new Date().toISOString() }
-          : desc
-      )
-    );
-
-    toast({
-      title: "Description Updated",
-      description: "Product description has been saved.",
-    });
-
-    setEditingDescriptionId(null);
-    setEditingText("");
+    try {
+      await updateDescription.mutateAsync({
+        productDescriptionId: descriptionId,
+        description: editingText.trim(),
+      });
+      toast({
+        title: "Description Updated",
+        description: "Product description has been saved.",
+      });
+      setEditingDescriptionId(null);
+      setEditingText("");
+    } catch (err) {
+      toast({
+        title: "Failed to update description",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
   };
+
+  const isLoading = isLoadingLinks || isLoadingDescs || isLoadingModels;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -202,6 +212,13 @@ const LocalizationDialog = ({
         </DialogHeader>
 
         <div className="flex flex-col gap-4 flex-1 overflow-hidden">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+              Loading localizations…
+            </div>
+          ) : (
+            <>
           {/* Stats */}
           <div className="flex items-center justify-between">
             <Badge variant="secondary" className="text-sm">
@@ -210,7 +227,7 @@ const LocalizationDialog = ({
             <Button
               size="sm"
               onClick={() => setIsAddingNew(true)}
-              disabled={availableModels.length === 0}
+              disabled={availableModels.length === 0 || isAddingNew}
             >
               <Plus className="h-4 w-4 mr-2" />
               Add Localization
@@ -261,10 +278,18 @@ const LocalizationDialog = ({
                     setSelectedModelId("");
                     setNewDescription("");
                   }}
+                  disabled={createLocalization.isPending}
                 >
                   Cancel
                 </Button>
-                <Button size="sm" onClick={handleAddLocalization}>
+                <Button
+                  size="sm"
+                  onClick={handleAddLocalization}
+                  disabled={createLocalization.isPending}
+                >
+                  {createLocalization.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : null}
                   Add Localization
                 </Button>
               </div>
@@ -328,9 +353,14 @@ const LocalizationDialog = ({
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleSaveEdit(loc.ProductDescriptionID)}
+                                  disabled={updateDescription.isPending}
                                   className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-100"
                                 >
-                                  <Check className="h-4 w-4" />
+                                  {updateDescription.isPending ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Check className="h-4 w-4" />
+                                  )}
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -345,7 +375,12 @@ const LocalizationDialog = ({
                           ) : (
                             <div
                               className="group cursor-pointer flex items-start gap-2 text-muted-foreground hover:text-foreground"
-                              onClick={() => handleStartEdit(loc.ProductDescriptionID, loc.description?.Description || "")}
+                              onClick={() =>
+                                handleStartEdit(
+                                  loc.ProductDescriptionID,
+                                  loc.description?.Description || "",
+                                )
+                              }
                             >
                               <span className="flex-1">{loc.description?.Description || "—"}</span>
                               <Pencil className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 shrink-0" />
@@ -358,9 +393,13 @@ const LocalizationDialog = ({
                             size="sm"
                             onClick={() => handleRemoveLocalization(loc)}
                             className="text-destructive hover:text-destructive"
-                            disabled={isEditing}
+                            disabled={isEditing || deleteLink.isPending}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            {deleteLink.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -370,6 +409,8 @@ const LocalizationDialog = ({
               </TableBody>
             </Table>
           </ScrollArea>
+            </>
+          )}
         </div>
 
         <DialogFooter>

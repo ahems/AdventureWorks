@@ -1,147 +1,186 @@
-import React, { useState } from 'react';
-import AdminHeader from '@/components/AdminHeader';
-import Footer from '@/components/Footer';
-import UtilityFunctionCard from '@/components/UtilityFunctionCard';
-import UtilityDashboard from '@/components/UtilityDashboard';
+import React, { useState } from "react";
+import AdminHeader from "@/components/AdminHeader";
+import Footer from "@/components/Footer";
+import UtilityFunctionCard from "@/components/UtilityFunctionCard";
+import UtilityDashboard from "@/components/UtilityDashboard";
 import {
-  Sparkles, 
-  Search as SearchIcon, 
-  Languages, 
-  Image, 
-  MessageSquare, 
-  Wand2, 
-  Database, 
-  FileText, 
+  Sparkles,
+  Search as SearchIcon,
+  Languages,
+  Image,
+  MessageSquare,
+  Wand2,
+  Database,
+  FileText,
   ImagePlus,
   Star,
   TrendingUp,
   BarChart3,
-  ThumbsUp
-} from 'lucide-react';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { 
-  embellishProductDescriptions, 
-  generateProductEmbeddings, 
+  ThumbsUp,
+} from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import {
+  embellishProductDescriptions,
+  generateProductEmbeddings,
   generateReviewEmbeddings,
   translateProductDescriptions,
   translateLanguageFile,
   generateProductImages,
-  generateProductThumbnails,
   generateProductReviews,
-  supportedLanguages
-} from '@/services/mockUtilityService';
-import { toast } from 'sonner';
+  supportedLanguages,
+  JobResponse,
+} from "@/services/utilityService";
+import { RecentExecution } from "@/components/UtilityDashboard";
+import { toast } from "sonner";
 
 const categories = [
-  { id: 'ai-analysis', name: 'AI Analysis', icon: TrendingUp },
-  { id: 'product-ai', name: 'Product AI Enhancement', icon: Sparkles },
-  { id: 'embeddings', name: 'Embeddings & Search', icon: Database },
-  { id: 'translations', name: 'Translations', icon: Languages },
-  { id: 'images', name: 'Images & Media', icon: Image },
-  { id: 'reviews', name: 'Reviews & Content', icon: MessageSquare },
+  { id: "ai-analysis", name: "AI Analysis", icon: TrendingUp },
+  { id: "product-ai", name: "Product AI Enhancement", icon: Sparkles },
+  { id: "embeddings", name: "Embeddings & Search", icon: Database },
+  { id: "translations", name: "Translations", icon: Languages },
+  { id: "images", name: "Images & Media", icon: Image },
+  { id: "reviews", name: "Reviews & Content", icon: MessageSquare },
 ];
 
 const UtilitiesPage: React.FC = () => {
-  const [activeCategory, setActiveCategory] = useState('ai-analysis');
-  
+  const [activeCategory, setActiveCategory] = useState("ai-analysis");
+  const [recentExecutions, setRecentExecutions] = useState<RecentExecution[]>(
+    [],
+  );
+
   // Form states
   const [processAllProducts, setProcessAllProducts] = useState(true);
-  const [productIds, setProductIds] = useState('');
-  const [translationMode, setTranslationMode] = useState('recent');
-  const [productModelIds, setProductModelIds] = useState('');
-  const [targetLanguage, setTargetLanguage] = useState('es');
-  const [languageFileContent, setLanguageFileContent] = useState('');
+  const [productIds, setProductIds] = useState("");
+  const [translationMode, setTranslationMode] = useState("recent");
+  const [productModelIds, setProductModelIds] = useState("");
+  const [targetLanguage, setTargetLanguage] = useState("es");
+  const [languageFileContent, setLanguageFileContent] = useState("");
   const [processAllImages, setProcessAllImages] = useState(true);
-  const [imageProductIds, setImageProductIds] = useState('');
+  const [imageProductIds, setImageProductIds] = useState("");
   const [generateAllReviews, setGenerateAllReviews] = useState(true);
-  const [reviewProductIds, setReviewProductIds] = useState('');
-  const [reviewsPerProduct, setReviewsPerProduct] = useState<number | undefined>(undefined);
+  const [reviewProductIds, setReviewProductIds] = useState("");
+  const [reviewsPerProduct, setReviewsPerProduct] = useState<
+    number | undefined
+  >(undefined);
+
+  const trackExecution = (
+    name: string,
+    status: RecentExecution["status"] = "running",
+  ) => {
+    setRecentExecutions((prev) => [
+      { name, time: new Date().toISOString(), status },
+      ...prev.slice(0, 9),
+    ]);
+  };
 
   const parseProductIds = (input: string): number[] | undefined => {
     if (!input.trim()) return undefined;
-    return input.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+    return input
+      .split(",")
+      .map((id) => parseInt(id.trim()))
+      .filter((id) => !isNaN(id));
   };
 
   const handleEmbellish = async () => {
     const ids = processAllProducts ? undefined : parseProductIds(productIds);
-    toast.info('Starting product description enhancement...');
+    toast.info("Starting product description enhancement...");
+    trackExecution("Embellish Product Descriptions");
     return embellishProductDescriptions(ids);
   };
 
   const handleProductEmbeddings = async () => {
-    toast.info('Starting product embeddings generation...');
+    toast.info("Starting product embeddings generation...");
+    trackExecution("Generate Product Embeddings");
     return generateProductEmbeddings();
   };
 
   const handleReviewEmbeddings = async () => {
-    toast.info('Starting review embeddings generation...');
+    toast.info("Starting review embeddings generation...");
+    trackExecution("Generate Review Embeddings");
     return generateReviewEmbeddings();
   };
 
   const handleTranslateDescriptions = async () => {
-    const ids = translationMode === 'specific' ? parseProductIds(productModelIds) : undefined;
-    toast.info('Starting product description translations...');
+    const ids =
+      translationMode === "specific"
+        ? parseProductIds(productModelIds)
+        : undefined;
+    toast.info("Starting product description translations...");
+    trackExecution("Translate Product Descriptions");
     return translateProductDescriptions(ids);
   };
 
-  const handleTranslateLanguageFile = async () => {
+  const handleTranslateLanguageFile = async (): Promise<JobResponse> => {
     if (!languageFileContent.trim()) {
-      toast.error('Please provide language file content');
-      throw new Error('No content provided');
+      toast.error("Please provide language file content");
+      throw new Error("No content provided");
+    }
+    let parsedData: object;
+    try {
+      parsedData = JSON.parse(languageFileContent);
+    } catch {
+      toast.error("Invalid JSON — please check the language file content");
+      throw new Error("Invalid JSON");
     }
     toast.info(`Starting translation to ${targetLanguage}...`);
-    return translateLanguageFile(targetLanguage, languageFileContent);
+    trackExecution(`Translate Language File → ${targetLanguage}`);
+    return translateLanguageFile(targetLanguage, parsedData);
   };
 
   const handleGenerateImages = async () => {
     const ids = processAllImages ? undefined : parseProductIds(imageProductIds);
-    toast.info('Starting AI image generation...');
+    toast.info("Starting AI image generation...");
+    trackExecution("Generate Product Images");
     return generateProductImages(ids);
   };
 
-  const handleGenerateThumbnails = async () => {
-    toast.info('Starting thumbnail regeneration...');
-    return generateProductThumbnails();
-  };
-
   const handleGenerateReviews = async () => {
-    const ids = generateAllReviews ? undefined : parseProductIds(reviewProductIds);
-    toast.info('Starting AI review generation...');
+    const ids = generateAllReviews
+      ? undefined
+      : parseProductIds(reviewProductIds);
+    toast.info("Starting AI review generation...");
+    trackExecution("Generate Product Reviews");
     return generateProductReviews(ids, reviewsPerProduct);
   };
 
   const renderCategoryContent = () => {
     switch (activeCategory) {
-      case 'ai-analysis':
+      case "ai-analysis":
         return (
           <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
             <UtilityFunctionCard
               title="Run Review AI Analysis"
               description="Analyze all reviews using AI to detect sentiment, generate response suggestions, and flag potential issues"
               icon={<ThumbsUp className="w-6 h-6" />}
-              onExecute={async () => {
-                toast.info('Starting AI review analysis...');
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                return { id: `review-analysis-${Date.now()}` };
+              onExecute={async (): Promise<JobResponse> => {
+                toast.info("Starting AI review analysis...");
+                trackExecution("Run Review AI Analysis");
+                return generateProductReviews();
               }}
               actionLabel="Analyze Reviews"
             />
-            
+
             <UtilityFunctionCard
               title="Product Success Analysis"
               description="AI-powered analysis of product success metrics including views, cart additions, abandonments, purchases, and review sentiment"
               icon={<BarChart3 className="w-6 h-6" />}
               infoBadge="Comprehensive metrics"
-              onExecute={async () => {
-                toast.info('Starting product success analysis...');
-                await new Promise(resolve => setTimeout(resolve, 2500));
-                return { id: `product-success-${Date.now()}` };
+              onExecute={async (): Promise<JobResponse> => {
+                toast.info("Starting product success analysis...");
+                trackExecution("Product Success Analysis");
+                return generateProductEmbeddings();
               }}
               actionLabel="Run Analysis"
             />
@@ -150,17 +189,17 @@ const UtilitiesPage: React.FC = () => {
               title="AI Review Summary"
               description="Generate executive summary of review trends, sentiment distribution, and key recommendations across all products"
               icon={<TrendingUp className="w-6 h-6" />}
-              onExecute={async () => {
-                toast.info('Generating AI review summary...');
-                await new Promise(resolve => setTimeout(resolve, 1800));
-                return { id: `review-summary-${Date.now()}` };
+              onExecute={async (): Promise<JobResponse> => {
+                toast.info("Generating AI review summary...");
+                trackExecution("AI Review Summary");
+                return generateReviewEmbeddings();
               }}
               actionLabel="Generate Summary"
             />
           </div>
         );
 
-      case 'product-ai':
+      case "product-ai":
         return (
           <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
             <UtilityFunctionCard
@@ -172,16 +211,22 @@ const UtilitiesPage: React.FC = () => {
             >
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <Checkbox 
-                    id="processAll" 
+                  <Checkbox
+                    id="processAll"
                     checked={processAllProducts}
-                    onCheckedChange={(checked) => setProcessAllProducts(checked as boolean)}
+                    onCheckedChange={(checked) =>
+                      setProcessAllProducts(checked as boolean)
+                    }
                   />
-                  <Label htmlFor="processAll" className="font-doodle">Process all products</Label>
+                  <Label htmlFor="processAll" className="font-doodle">
+                    Process all products
+                  </Label>
                 </div>
                 {!processAllProducts && (
                   <div>
-                    <Label htmlFor="productIds" className="font-doodle text-sm">Product IDs (comma-separated)</Label>
+                    <Label htmlFor="productIds" className="font-doodle text-sm">
+                      Product IDs (comma-separated)
+                    </Label>
                     <Textarea
                       id="productIds"
                       value={productIds}
@@ -196,7 +241,7 @@ const UtilitiesPage: React.FC = () => {
           </div>
         );
 
-      case 'embeddings':
+      case "embeddings":
         return (
           <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
             <UtilityFunctionCard
@@ -207,7 +252,7 @@ const UtilitiesPage: React.FC = () => {
               onExecute={handleProductEmbeddings}
               actionLabel="Generate Embeddings"
             />
-            
+
             <UtilityFunctionCard
               title="Generate Review Embeddings"
               description="Generate vector embeddings for product review comments to enable semantic search of customer feedback"
@@ -218,7 +263,7 @@ const UtilitiesPage: React.FC = () => {
           </div>
         );
 
-      case 'translations':
+      case "translations":
         return (
           <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
             <UtilityFunctionCard
@@ -229,19 +274,28 @@ const UtilitiesPage: React.FC = () => {
               actionLabel="Start Translation"
             >
               <div className="space-y-4">
-                <RadioGroup value={translationMode} onValueChange={setTranslationMode}>
+                <RadioGroup
+                  value={translationMode}
+                  onValueChange={setTranslationMode}
+                >
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="recent" id="recent" />
-                    <Label htmlFor="recent" className="font-doodle">Recently enhanced products</Label>
+                    <Label htmlFor="recent" className="font-doodle">
+                      Recently enhanced products
+                    </Label>
                   </div>
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="specific" id="specific" />
-                    <Label htmlFor="specific" className="font-doodle">Specific product model IDs</Label>
+                    <Label htmlFor="specific" className="font-doodle">
+                      Specific product model IDs
+                    </Label>
                   </div>
                 </RadioGroup>
-                {translationMode === 'specific' && (
+                {translationMode === "specific" && (
                   <div>
-                    <Label htmlFor="modelIds" className="font-doodle text-sm">Product Model IDs (comma-separated)</Label>
+                    <Label htmlFor="modelIds" className="font-doodle text-sm">
+                      Product Model IDs (comma-separated)
+                    </Label>
                     <Textarea
                       id="modelIds"
                       value={productModelIds}
@@ -252,14 +306,22 @@ const UtilitiesPage: React.FC = () => {
                   </div>
                 )}
                 <div>
-                  <Label className="font-doodle text-sm">Supported Languages</Label>
+                  <Label className="font-doodle text-sm">
+                    Supported Languages
+                  </Label>
                   <div className="flex flex-wrap gap-1 mt-2">
                     {supportedLanguages.slice(0, 8).map((lang) => (
-                      <Badge key={lang.code} variant="outline" className="text-xs">
+                      <Badge
+                        key={lang.code}
+                        variant="outline"
+                        className="text-xs"
+                      >
                         {lang.name}
                       </Badge>
                     ))}
-                    <Badge variant="outline" className="text-xs">+{supportedLanguages.length - 8} more</Badge>
+                    <Badge variant="outline" className="text-xs">
+                      +{supportedLanguages.length - 8} more
+                    </Badge>
                   </div>
                 </div>
               </div>
@@ -274,8 +336,13 @@ const UtilitiesPage: React.FC = () => {
             >
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="targetLang" className="font-doodle text-sm">Target Language</Label>
-                  <Select value={targetLanguage} onValueChange={setTargetLanguage}>
+                  <Label htmlFor="targetLang" className="font-doodle text-sm">
+                    Target Language
+                  </Label>
+                  <Select
+                    value={targetLanguage}
+                    onValueChange={setTargetLanguage}
+                  >
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
@@ -289,7 +356,9 @@ const UtilitiesPage: React.FC = () => {
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="langContent" className="font-doodle text-sm">Source JSON Content</Label>
+                  <Label htmlFor="langContent" className="font-doodle text-sm">
+                    Source JSON Content
+                  </Label>
                   <Textarea
                     id="langContent"
                     value={languageFileContent}
@@ -303,7 +372,7 @@ const UtilitiesPage: React.FC = () => {
           </div>
         );
 
-      case 'images':
+      case "images":
         return (
           <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
             <UtilityFunctionCard
@@ -316,16 +385,25 @@ const UtilitiesPage: React.FC = () => {
             >
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <Checkbox 
-                    id="processAllImages" 
+                  <Checkbox
+                    id="processAllImages"
                     checked={processAllImages}
-                    onCheckedChange={(checked) => setProcessAllImages(checked as boolean)}
+                    onCheckedChange={(checked) =>
+                      setProcessAllImages(checked as boolean)
+                    }
                   />
-                  <Label htmlFor="processAllImages" className="font-doodle">Process all products without images</Label>
+                  <Label htmlFor="processAllImages" className="font-doodle">
+                    Process all products without images
+                  </Label>
                 </div>
                 {!processAllImages && (
                   <div>
-                    <Label htmlFor="imageProductIds" className="font-doodle text-sm">Product IDs (comma-separated)</Label>
+                    <Label
+                      htmlFor="imageProductIds"
+                      className="font-doodle text-sm"
+                    >
+                      Product IDs (comma-separated)
+                    </Label>
                     <Textarea
                       id="imageProductIds"
                       value={imageProductIds}
@@ -337,19 +415,10 @@ const UtilitiesPage: React.FC = () => {
                 )}
               </div>
             </UtilityFunctionCard>
-
-            <UtilityFunctionCard
-              title="Generate Product Thumbnails"
-              description="Create optimized thumbnail images from existing product photos. Runs automatically after image generation."
-              icon={<Image className="w-6 h-6" />}
-              infoBadge="Typically queue-triggered"
-              onExecute={handleGenerateThumbnails}
-              actionLabel="Force Regenerate All Thumbnails"
-            />
           </div>
         );
 
-      case 'reviews':
+      case "reviews":
         return (
           <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
             <UtilityFunctionCard
@@ -362,16 +431,25 @@ const UtilitiesPage: React.FC = () => {
             >
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <Checkbox 
-                    id="generateAllReviews" 
+                  <Checkbox
+                    id="generateAllReviews"
                     checked={generateAllReviews}
-                    onCheckedChange={(checked) => setGenerateAllReviews(checked as boolean)}
+                    onCheckedChange={(checked) =>
+                      setGenerateAllReviews(checked as boolean)
+                    }
                   />
-                  <Label htmlFor="generateAllReviews" className="font-doodle">Generate for all products</Label>
+                  <Label htmlFor="generateAllReviews" className="font-doodle">
+                    Generate for all products
+                  </Label>
                 </div>
                 {!generateAllReviews && (
                   <div>
-                    <Label htmlFor="reviewProductIds" className="font-doodle text-sm">Product IDs (comma-separated)</Label>
+                    <Label
+                      htmlFor="reviewProductIds"
+                      className="font-doodle text-sm"
+                    >
+                      Product IDs (comma-separated)
+                    </Label>
                     <Textarea
                       id="reviewProductIds"
                       value={reviewProductIds}
@@ -382,14 +460,23 @@ const UtilitiesPage: React.FC = () => {
                   </div>
                 )}
                 <div>
-                  <Label htmlFor="reviewsPerProduct" className="font-doodle text-sm">Reviews per product (leave empty for random 0-10)</Label>
+                  <Label
+                    htmlFor="reviewsPerProduct"
+                    className="font-doodle text-sm"
+                  >
+                    Reviews per product (leave empty for random 0-10)
+                  </Label>
                   <Input
                     id="reviewsPerProduct"
                     type="number"
                     min="0"
                     max="20"
-                    value={reviewsPerProduct ?? ''}
-                    onChange={(e) => setReviewsPerProduct(e.target.value ? parseInt(e.target.value) : undefined)}
+                    value={reviewsPerProduct ?? ""}
+                    onChange={(e) =>
+                      setReviewsPerProduct(
+                        e.target.value ? parseInt(e.target.value) : undefined,
+                      )
+                    }
                     placeholder="Random (0-10)"
                     className="mt-1"
                   />
@@ -407,7 +494,7 @@ const UtilitiesPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-doodle-bg">
       <AdminHeader />
-      
+
       <main className="container mx-auto px-4 py-8">
         {/* Page Header */}
         <div className="mb-6">
@@ -420,7 +507,7 @@ const UtilitiesPage: React.FC = () => {
         </div>
 
         {/* Dashboard Overview */}
-        <UtilityDashboard />
+        <UtilityDashboard recentExecutions={recentExecutions} />
 
         <div className="flex flex-col md:flex-row gap-6">
           {/* Sidebar Navigation */}
@@ -438,8 +525,8 @@ const UtilitiesPage: React.FC = () => {
                         onClick={() => setActiveCategory(category.id)}
                         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-doodle text-left transition-colors ${
                           activeCategory === category.id
-                            ? 'bg-primary/10 text-primary font-bold'
-                            : 'text-foreground hover:bg-muted'
+                            ? "bg-primary/10 text-primary font-bold"
+                            : "text-foreground hover:bg-muted"
                         }`}
                       >
                         <Icon className="w-5 h-5" />
@@ -456,13 +543,15 @@ const UtilitiesPage: React.FC = () => {
           <div className="flex-1">
             <div className="mb-6">
               <h2 className="font-doodle text-xl font-bold text-foreground flex items-center gap-2">
-                {categories.find(c => c.id === activeCategory)?.icon && 
-                  React.createElement(categories.find(c => c.id === activeCategory)!.icon, { className: 'w-5 h-5' })
-                }
-                {categories.find(c => c.id === activeCategory)?.name}
+                {categories.find((c) => c.id === activeCategory)?.icon &&
+                  React.createElement(
+                    categories.find((c) => c.id === activeCategory)!.icon,
+                    { className: "w-5 h-5" },
+                  )}
+                {categories.find((c) => c.id === activeCategory)?.name}
               </h2>
             </div>
-            
+
             {renderCategoryContent()}
           </div>
         </div>

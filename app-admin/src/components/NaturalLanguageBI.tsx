@@ -1,10 +1,29 @@
-import React, { useState } from 'react';
-import { Search, Sparkles, Loader2, BarChart3, PieChart, TrendingUp, Users, ShoppingBag, Package, HelpCircle } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import BIResultsChart from '@/components/BIResultsChart';
-import { mockCustomers, mockOrders } from '@/data/mockCustomers';
-import { products, categories } from '@/data/mockData';
+import React, { useState, useMemo } from "react";
+import {
+  Search,
+  Sparkles,
+  Loader2,
+  BarChart3,
+  PieChart,
+  TrendingUp,
+  Users,
+  ShoppingBag,
+  Package,
+  HelpCircle,
+} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import BIResultsChart from "@/components/BIResultsChart";
+import { useAdminCustomers } from "@/hooks/useAdminCustomers";
+import { useAdminOrders } from "@/hooks/useAdminOrders";
+import {
+  useAdminAllProducts,
+  useAdminCategories,
+  useAdminAllSubcategories,
+} from "@/hooks/useAdminProducts";
+import { Customer } from "@/types/customer";
+import { Order } from "@/types/order";
+import { Product, ProductCategory, ProductSubcategory } from "@/types/product";
 
 interface BIQuery {
   id: string;
@@ -14,184 +33,311 @@ interface BIQuery {
 }
 
 interface BIResult {
-  type: 'bar' | 'pie' | 'line' | 'table' | 'metric';
+  type: "bar" | "pie" | "line" | "table" | "metric";
   title: string;
   insight: string;
-  data: any[];
+  data: Record<string, unknown>[];
   dataKey?: string;
   nameKey?: string;
 }
 
 const suggestedQueries = [
-  { label: 'Top Customers', query: 'Show me top customers by total spend', icon: Users },
-  { label: 'Orders by Status', query: 'What is the breakdown of orders by status?', icon: PieChart },
-  { label: 'Revenue by State', query: 'Show me revenue by state', icon: BarChart3 },
-  { label: 'Product Sales', query: 'Which product categories sell the most?', icon: Package },
-  { label: 'Recent Orders', query: 'List recent orders', icon: ShoppingBag },
-  { label: 'Sales Trend', query: 'Show me the sales trend', icon: TrendingUp },
+  {
+    label: "Top Customers",
+    query: "Show me top customers by total spend",
+    icon: Users,
+  },
+  {
+    label: "Orders by Status",
+    query: "What is the breakdown of orders by status?",
+    icon: PieChart,
+  },
+  {
+    label: "Revenue by State",
+    query: "Show me revenue by state",
+    icon: BarChart3,
+  },
+  {
+    label: "Product Sales",
+    query: "Which product categories sell the most?",
+    icon: Package,
+  },
+  { label: "Recent Orders", query: "List recent orders", icon: ShoppingBag },
+  { label: "Sales Trend", query: "Show me the sales trend", icon: TrendingUp },
 ];
 
-const processQuery = (query: string): BIResult => {
+interface DataContext {
+  customers: Customer[];
+  orders: Order[];
+  products: Product[];
+  categories: ProductCategory[];
+  subcategories: ProductSubcategory[];
+}
+
+const processQuery = (query: string, ctx: DataContext): BIResult => {
   const lowerQuery = query.toLowerCase();
 
   // Top Customers
-  if (lowerQuery.includes('customer') && (lowerQuery.includes('top') || lowerQuery.includes('best') || lowerQuery.includes('spend'))) {
-    const topCustomers = [...mockCustomers]
-      .sort((a, b) => b.TotalSpent - a.TotalSpent)
-      .slice(0, 5)
-      .map(c => ({
+  if (
+    lowerQuery.includes("customer") &&
+    (lowerQuery.includes("top") ||
+      lowerQuery.includes("best") ||
+      lowerQuery.includes("spend"))
+  ) {
+    // Compute per-customer totals from real orders
+    const customerOrderTotals = ctx.orders.reduce(
+      (acc, order) => {
+        acc[order.CustomerID] =
+          (acc[order.CustomerID] || 0) + (order.TotalDue || 0);
+        return acc;
+      },
+      {} as Record<number, number>,
+    );
+    const topCustomers = [...ctx.customers]
+      .map((c) => ({
         name: `${c.FirstName} ${c.LastName}`,
-        value: c.TotalSpent,
+        value: customerOrderTotals[c.CustomerID] || c.TotalSpent || 0,
         orders: c.TotalOrders,
-        city: c.City
-      }));
+        city: c.City,
+      }))
+      .filter((c) => c.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+
+    if (topCustomers.length === 0) {
+      return {
+        type: "metric",
+        title: "Top Customers by Spend",
+        insight: "No customer spend data is available yet.",
+        data: [],
+      };
+    }
 
     return {
-      type: 'bar',
-      title: 'Top 5 Customers by Total Spend',
+      type: "bar",
+      title: "Top 5 Customers by Total Spend",
       insight: `🏆 ${topCustomers[0].name} leads with $${topCustomers[0].value.toLocaleString()} in purchases. The top 5 customers account for $${topCustomers.reduce((sum, c) => sum + c.value, 0).toLocaleString()} in total revenue.`,
       data: topCustomers,
-      dataKey: 'value',
-      nameKey: 'name'
+      dataKey: "value",
+      nameKey: "name",
     };
   }
 
   // Orders by Status
-  if (lowerQuery.includes('order') && lowerQuery.includes('status')) {
-    const statusCounts = mockOrders.reduce((acc, order) => {
-      acc[order.Status] = (acc[order.Status] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+  if (lowerQuery.includes("order") && lowerQuery.includes("status")) {
+    const statusCounts = ctx.orders.reduce(
+      (acc, order) => {
+        const status =
+          typeof order.Status === "number"
+            ? String(order.Status)
+            : order.Status || "Unknown";
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
-    const data = Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
+    const data = Object.entries(statusCounts).map(([name, value]) => ({
+      name,
+      value,
+    }));
 
     return {
-      type: 'pie',
-      title: 'Orders by Status',
-      insight: `📊 You have ${mockOrders.length} total orders. ${statusCounts['Pending'] || 0} are pending attention and ${statusCounts['Delivered'] || 0} have been successfully delivered.`,
+      type: "pie",
+      title: "Orders by Status",
+      insight: `📊 You have ${ctx.orders.length} total orders in the system.`,
       data,
-      dataKey: 'value',
-      nameKey: 'name'
+      dataKey: "value",
+      nameKey: "name",
     };
   }
 
   // Revenue by State
-  if (lowerQuery.includes('revenue') && lowerQuery.includes('state')) {
+  if (lowerQuery.includes("revenue") && lowerQuery.includes("state")) {
     const stateRevenue: Record<string, number> = {};
-    mockOrders.forEach(order => {
-      const customer = mockCustomers.find(c => c.CustomerID === order.CustomerID);
-      if (customer) {
-        stateRevenue[customer.StateProvince] = (stateRevenue[customer.StateProvince] || 0) + order.TotalDue;
-      }
+    ctx.orders.forEach((order) => {
+      const customer = ctx.customers.find(
+        (c) => c.CustomerID === order.CustomerID,
+      );
+      const state = customer?.StateProvince || "Unknown";
+      stateRevenue[state] = (stateRevenue[state] || 0) + (order.TotalDue || 0);
     });
 
     const data = Object.entries(stateRevenue)
+      .filter(([name]) => name !== "Unknown")
       .map(([name, value]) => ({ name, value: Math.round(value * 100) / 100 }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 8);
 
+    if (data.length === 0) {
+      return {
+        type: "metric",
+        title: "Revenue by State/Region",
+        insight: "State/region data is not available in the current dataset.",
+        data: [],
+      };
+    }
+
     const topState = data[0];
     return {
-      type: 'bar',
-      title: 'Revenue by State/Region',
-      insight: `📍 ${topState.name} leads with $${topState.value.toLocaleString()} in revenue. Total revenue across all regions: $${Object.values(stateRevenue).reduce((a, b) => a + b, 0).toLocaleString()}.`,
+      type: "bar",
+      title: "Revenue by State/Region",
+      insight: `📍 ${topState.name} leads with $${topState.value.toLocaleString()} in revenue.`,
       data,
-      dataKey: 'value',
-      nameKey: 'name'
+      dataKey: "value",
+      nameKey: "name",
     };
   }
 
   // Product Categories
-  if (lowerQuery.includes('product') || lowerQuery.includes('categor')) {
-    const categoryData = categories.map(cat => {
-      const categoryProducts = products.filter(p => {
-        const subcatIds = cat.ProductCategoryID === 1 ? [1, 2, 3] 
-          : cat.ProductCategoryID === 2 ? [4, 5, 6, 7]
-          : cat.ProductCategoryID === 3 ? [8, 9, 10]
-          : [11, 12, 13];
-        return p.ProductSubcategoryID && subcatIds.includes(p.ProductSubcategoryID);
-      });
+  if (lowerQuery.includes("product") || lowerQuery.includes("categor")) {
+    const categoryData = ctx.categories
+      .map((cat) => {
+        const catSubcatIds = ctx.subcategories
+          .filter((s) => s.ProductCategoryID === cat.ProductCategoryID)
+          .map((s) => s.ProductSubcategoryID);
+        const categoryProducts = ctx.products.filter(
+          (p) =>
+            p.ProductSubcategoryID &&
+            catSubcatIds.includes(p.ProductSubcategoryID),
+        );
+        return {
+          name: cat.Name,
+          value: categoryProducts.length,
+          avgPrice:
+            categoryProducts.length > 0
+              ? Math.round(
+                  categoryProducts.reduce((sum, p) => sum + p.ListPrice, 0) /
+                    categoryProducts.length,
+                )
+              : 0,
+        };
+      })
+      .filter((c) => c.value > 0);
+
+    if (categoryData.length === 0) {
       return {
-        name: cat.Name,
-        value: categoryProducts.length,
-        avgPrice: categoryProducts.length > 0 
-          ? Math.round(categoryProducts.reduce((sum, p) => sum + p.ListPrice, 0) / categoryProducts.length)
-          : 0
+        type: "metric",
+        title: "Products by Category",
+        insight: `You have ${ctx.products.length} total products.`,
+        data: [{ label: "Total Products", value: ctx.products.length }],
       };
-    });
+    }
 
     return {
-      type: 'pie',
-      title: 'Products by Category',
-      insight: `🚲 The ${categoryData[0].name} category has ${categoryData[0].value} products with an average price of $${categoryData[0].avgPrice}. You have ${products.length} total products across all categories.`,
+      type: "pie",
+      title: "Products by Category",
+      insight: `🚲 The ${categoryData[0].name} category has ${categoryData[0].value} products with an average price of $${categoryData[0].avgPrice}. You have ${ctx.products.length} total products across all categories.`,
       data: categoryData,
-      dataKey: 'value',
-      nameKey: 'name'
+      dataKey: "value",
+      nameKey: "name",
     };
   }
 
   // Recent Orders
-  if (lowerQuery.includes('recent') || lowerQuery.includes('list')) {
-    const recentOrders = [...mockOrders]
-      .sort((a, b) => new Date(b.OrderDate).getTime() - new Date(a.OrderDate).getTime())
+  if (lowerQuery.includes("recent") || lowerQuery.includes("list")) {
+    const recentOrders = [...ctx.orders]
+      .sort(
+        (a, b) =>
+          new Date(b.OrderDate).getTime() - new Date(a.OrderDate).getTime(),
+      )
       .slice(0, 5)
-      .map(o => {
-        const customer = mockCustomers.find(c => c.CustomerID === o.CustomerID);
+      .map((o) => {
+        const customer = ctx.customers.find(
+          (c) => c.CustomerID === o.CustomerID,
+        );
         return {
           id: o.SalesOrderID,
-          customer: customer ? `${customer.FirstName} ${customer.LastName}` : 'Unknown',
+          customer: customer
+            ? `${customer.FirstName} ${customer.LastName}`
+            : "Unknown",
           date: new Date(o.OrderDate).toLocaleDateString(),
           status: o.Status,
-          total: o.TotalDue
+          total: o.TotalDue,
         };
       });
 
     return {
-      type: 'table',
-      title: 'Recent Orders',
-      insight: `📦 Showing the 5 most recent orders. Total value: $${recentOrders.reduce((sum, o) => sum + o.total, 0).toLocaleString()}.`,
-      data: recentOrders
+      type: "table",
+      title: "Recent Orders",
+      insight: `📦 Showing the 5 most recent orders. Total value: $${recentOrders.reduce((sum, o) => sum + (o.total || 0), 0).toLocaleString()}.`,
+      data: recentOrders,
     };
   }
 
   // Sales Trend
-  if (lowerQuery.includes('trend') || lowerQuery.includes('time') || lowerQuery.includes('month')) {
-    // Simulate monthly data
-    const months = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
-    const data = months.map((month, i) => ({
-      name: month,
-      value: Math.round(15000 + Math.random() * 10000 + i * 2000)
-    }));
+  if (
+    lowerQuery.includes("trend") ||
+    lowerQuery.includes("time") ||
+    lowerQuery.includes("month")
+  ) {
+    // Build monthly trend from real order data
+    const monthlyRevenue: Record<string, number> = {};
+    ctx.orders.forEach((order) => {
+      const date = new Date(order.OrderDate);
+      const key = `${date.toLocaleString("default", { month: "short" })} ${date.getFullYear()}`;
+      monthlyRevenue[key] = (monthlyRevenue[key] || 0) + (order.TotalDue || 0);
+    });
+    const data = Object.entries(monthlyRevenue)
+      .map(([name, value]) => ({ name, value: Math.round(value) }))
+      .slice(-6);
+
+    if (data.length < 2) {
+      return {
+        type: "metric",
+        title: "Sales Trend",
+        insight: "Not enough order history to show a trend.",
+        data: [],
+      };
+    }
 
     return {
-      type: 'line',
-      title: 'Sales Trend (Last 6 Months)',
-      insight: `📈 Sales have grown ${Math.round(((data[5].value - data[0].value) / data[0].value) * 100)}% over the past 6 months. Peak month: ${data.reduce((max, d) => d.value > max.value ? d : max).name}.`,
+      type: "line",
+      title: "Sales Trend (Last 6 Months)",
+      insight: `📈 Based on ${ctx.orders.length} orders in the dataset.`,
       data,
-      dataKey: 'value',
-      nameKey: 'name'
+      dataKey: "value",
+      nameKey: "name",
     };
   }
 
   // Default fallback
+  const totalRevenue = ctx.orders.reduce(
+    (sum, o) => sum + (o.TotalDue || 0),
+    0,
+  );
   return {
-    type: 'metric',
-    title: 'Quick Stats',
+    type: "metric",
+    title: "Quick Stats",
     insight: `💡 Try asking about "top customers", "orders by status", "revenue by state", or "product categories". I'm here to help visualize your data!`,
     data: [
-      { label: 'Total Products', value: products.length },
-      { label: 'Total Customers', value: mockCustomers.length },
-      { label: 'Total Orders', value: mockOrders.length },
-      { label: 'Total Revenue', value: `$${mockOrders.reduce((sum, o) => sum + o.TotalDue, 0).toLocaleString()}` }
-    ]
+      { label: "Total Products", value: ctx.products.length },
+      { label: "Total Customers", value: ctx.customers.length },
+      { label: "Total Orders", value: ctx.orders.length },
+      {
+        label: "Total Revenue",
+        value: `$${totalRevenue.toLocaleString()}`,
+      },
+    ],
   };
 };
 
 const NaturalLanguageBI: React.FC = () => {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentResult, setCurrentResult] = useState<BIResult | null>(null);
   const [queryHistory, setQueryHistory] = useState<BIQuery[]>([]);
+
+  const { data: customers = [] } = useAdminCustomers();
+  const { data: orders = [] } = useAdminOrders();
+  const { data: products = [] } = useAdminAllProducts();
+  const { data: categories = [] } = useAdminCategories();
+  const { data: subcategories = [] } = useAdminAllSubcategories();
+
+  const dataCtx = useMemo<DataContext>(
+    () => ({ customers, orders, products, categories, subcategories }),
+    [customers, orders, products, categories, subcategories],
+  );
 
   const handleQuery = (queryText: string) => {
     if (!queryText.trim()) return;
@@ -201,14 +347,17 @@ const NaturalLanguageBI: React.FC = () => {
 
     // Simulate AI processing
     setTimeout(() => {
-      const result = processQuery(queryText);
+      const result = processQuery(queryText, dataCtx);
       setCurrentResult(result);
-      setQueryHistory(prev => [{
-        id: Date.now().toString(),
-        query: queryText,
-        timestamp: new Date(),
-        result
-      }, ...prev.slice(0, 4)]);
+      setQueryHistory((prev) => [
+        {
+          id: Date.now().toString(),
+          query: queryText,
+          timestamp: new Date(),
+          result,
+        },
+        ...prev.slice(0, 4),
+      ]);
       setIsProcessing(false);
     }, 1200);
   };
@@ -225,8 +374,12 @@ const NaturalLanguageBI: React.FC = () => {
           <Sparkles className="w-5 h-5 text-white" />
         </div>
         <div>
-          <h2 className="font-doodle text-xl font-bold text-doodle-text">Ask Your Data Anything</h2>
-          <p className="font-doodle text-sm text-doodle-text/60">Natural language business intelligence</p>
+          <h2 className="font-doodle text-xl font-bold text-doodle-text">
+            Ask Your Data Anything
+          </h2>
+          <p className="font-doodle text-sm text-doodle-text/60">
+            Natural language business intelligence
+          </p>
         </div>
       </div>
 
@@ -248,7 +401,11 @@ const NaturalLanguageBI: React.FC = () => {
             disabled={!query.trim() || isProcessing}
             className="doodle-button doodle-button-primary px-6"
           >
-            {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Ask'}
+            {isProcessing ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              "Ask"
+            )}
           </Button>
         </div>
       </form>
@@ -272,14 +429,18 @@ const NaturalLanguageBI: React.FC = () => {
       {isProcessing && (
         <div className="text-center py-12">
           <Loader2 className="w-10 h-10 animate-spin text-doodle-accent mx-auto mb-3" />
-          <p className="font-doodle text-doodle-text/60">Analyzing your data...</p>
+          <p className="font-doodle text-doodle-text/60">
+            Analyzing your data...
+          </p>
         </div>
       )}
 
       {!isProcessing && currentResult && (
         <div className="space-y-4">
           <div className="border-2 border-doodle-text/20 rounded-lg p-4">
-            <h3 className="font-doodle font-bold text-lg text-doodle-text mb-2">{currentResult.title}</h3>
+            <h3 className="font-doodle font-bold text-lg text-doodle-text mb-2">
+              {currentResult.title}
+            </h3>
             <BIResultsChart result={currentResult} />
           </div>
 
@@ -288,8 +449,12 @@ const NaturalLanguageBI: React.FC = () => {
             <div className="flex items-start gap-2">
               <Sparkles className="w-5 h-5 text-doodle-accent shrink-0 mt-0.5" />
               <div>
-                <p className="font-doodle text-xs text-doodle-accent font-bold mb-1">AI INSIGHT</p>
-                <p className="font-doodle text-sm text-doodle-text">{currentResult.insight}</p>
+                <p className="font-doodle text-xs text-doodle-accent font-bold mb-1">
+                  AI INSIGHT
+                </p>
+                <p className="font-doodle text-sm text-doodle-text">
+                  {currentResult.insight}
+                </p>
               </div>
             </div>
           </div>
@@ -299,15 +464,21 @@ const NaturalLanguageBI: React.FC = () => {
       {!isProcessing && !currentResult && (
         <div className="text-center py-8 border-2 border-dashed border-doodle-text/20 rounded-lg">
           <HelpCircle className="w-10 h-10 text-doodle-text/30 mx-auto mb-3" />
-          <p className="font-doodle text-doodle-text/60">Ask a question or click a suggestion above</p>
-          <p className="font-doodle text-sm text-doodle-text/40 mt-1">I'll analyze your data and create visualizations</p>
+          <p className="font-doodle text-doodle-text/60">
+            Ask a question or click a suggestion above
+          </p>
+          <p className="font-doodle text-sm text-doodle-text/40 mt-1">
+            I'll analyze your data and create visualizations
+          </p>
         </div>
       )}
 
       {/* Query History */}
       {queryHistory.length > 0 && (
         <div className="mt-6 pt-4 border-t-2 border-dashed border-doodle-text/20">
-          <p className="font-doodle text-xs text-doodle-text/50 mb-2">Recent queries:</p>
+          <p className="font-doodle text-xs text-doodle-text/50 mb-2">
+            Recent queries:
+          </p>
           <div className="flex flex-wrap gap-2">
             {queryHistory.map((q) => (
               <button

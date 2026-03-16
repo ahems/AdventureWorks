@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Plus, Pencil, Trash2, Globe, Search, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,8 +33,10 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Culture } from "@/types/culture";
-import { cultures as initialCultures } from "@/data/mockCultures";
-import { productModelDescriptionCultures } from "@/data/mockProductLocalizations";
+import {
+  useAdminCultures,
+  useAdminLocalizationCounts,
+} from "@/hooks/useAdminCatalog";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import LocalizationDialog from "@/components/LocalizationDialog";
@@ -42,27 +44,35 @@ import { format } from "date-fns";
 
 const CulturesPage = () => {
   const { toast } = useToast();
-  const [cultures, setCultures] = useState<Culture[]>(initialCultures);
+  const { data: apiCultures = [] } = useAdminCultures();
+  const { data: localizationCounts = {} } = useAdminLocalizationCounts();
+  const [cultures, setCultures] = useState<Culture[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [editingCulture, setEditingCulture] = useState<Culture | null>(null);
   const [deletingCulture, setDeletingCulture] = useState<Culture | null>(null);
-  const [localizationCulture, setLocalizationCulture] = useState<Culture | null>(null);
+  const [localizationCulture, setLocalizationCulture] =
+    useState<Culture | null>(null);
 
   const [formData, setFormData] = useState({
     CultureID: "",
     Name: "",
   });
 
+  // Populate from API
+  useEffect(() => {
+    if (apiCultures.length > 0) setCultures(apiCultures);
+  }, [apiCultures]);
+
   const getLocalizationCount = (cultureId: string) => {
-    return productModelDescriptionCultures.filter((l) => l.CultureID === cultureId).length;
+    return localizationCounts[cultureId] ?? 0;
   };
 
   const filteredCultures = cultures.filter(
     (culture) =>
       culture.Name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      culture.CultureID.toLowerCase().includes(searchQuery.toLowerCase())
+      culture.CultureID.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const openCreateDialog = () => {
@@ -99,9 +109,13 @@ const CulturesPage = () => {
       setCultures((prev) =>
         prev.map((c) =>
           c.CultureID === editingCulture.CultureID
-            ? { ...c, Name: formData.Name, ModifiedDate: new Date().toISOString() }
-            : c
-        )
+            ? {
+                ...c,
+                Name: formData.Name,
+                ModifiedDate: new Date().toISOString(),
+              }
+            : c,
+        ),
       );
       toast({
         title: "Culture Updated",
@@ -132,7 +146,9 @@ const CulturesPage = () => {
 
   const handleDelete = () => {
     if (deletingCulture) {
-      setCultures((prev) => prev.filter((c) => c.CultureID !== deletingCulture.CultureID));
+      setCultures((prev) =>
+        prev.filter((c) => c.CultureID !== deletingCulture.CultureID),
+      );
       toast({
         title: "Culture Deleted",
         description: `"${deletingCulture.Name}" has been removed.`,
@@ -173,8 +189,12 @@ const CulturesPage = () => {
             <CardContent>
               <div className="flex gap-8">
                 <div>
-                  <p className="text-3xl font-bold text-primary">{cultures.length}</p>
-                  <p className="text-sm text-muted-foreground">Total Cultures</p>
+                  <p className="text-3xl font-bold text-primary">
+                    {cultures.length}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Total Cultures
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -207,7 +227,10 @@ const CulturesPage = () => {
                 <TableBody>
                   {filteredCultures.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      <TableCell
+                        colSpan={5}
+                        className="text-center py-8 text-muted-foreground"
+                      >
                         No cultures found.
                       </TableCell>
                     </TableRow>
@@ -225,14 +248,20 @@ const CulturesPage = () => {
                             className="h-auto py-1 px-2"
                             onClick={() => setLocalizationCulture(culture)}
                           >
-                            <Badge variant="secondary" className="cursor-pointer hover:bg-secondary/80">
+                            <Badge
+                              variant="secondary"
+                              className="cursor-pointer hover:bg-secondary/80"
+                            >
                               <FileText className="h-3 w-3 mr-1" />
                               {getLocalizationCount(culture.CultureID)} products
                             </Badge>
                           </Button>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {format(new Date(culture.ModifiedDate), "MMM d, yyyy HH:mm")}
+                          {format(
+                            new Date(culture.ModifiedDate),
+                            "MMM d, yyyy HH:mm",
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
@@ -287,7 +316,10 @@ const CulturesPage = () => {
                 placeholder="e.g., en, fr, de"
                 value={formData.CultureID}
                 onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, CultureID: e.target.value }))
+                  setFormData((prev) => ({
+                    ...prev,
+                    CultureID: e.target.value,
+                  }))
                 }
                 disabled={!!editingCulture}
                 maxLength={6}
@@ -323,13 +355,17 @@ const CulturesPage = () => {
       </Dialog>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Culture</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{deletingCulture?.Name}"? This action
-              cannot be undone and may affect product localizations using this culture.
+              Are you sure you want to delete "{deletingCulture?.Name}"? This
+              action cannot be undone and may affect product localizations using
+              this culture.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

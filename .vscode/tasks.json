@@ -126,6 +126,45 @@
         "kind": "build",
         "isDefault": true
       }
+    },
+    {
+      "label": "test:admin",
+      "type": "shell",
+      "command": "npx",
+      "args": [
+        "playwright",
+        "test",
+        "-c",
+        "tests/playwright.admin.config.ts",
+        "--reporter=list"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "deploy app-admin",
+      "type": "shell",
+      "command": "azd",
+      "args": ["deploy", "app-admin"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "reseed-demo-admin",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "SEED_JOB=$(azd env get-value SERVICE_SEED_JOB_NAME 2>/dev/null | tr -d '\\n\\r ') && RG=$(azd env get-value AZURE_RESOURCE_GROUP 2>/dev/null | tr -d '\\n\\r ') && ACR=$(azd env get-value AZURE_CONTAINER_REGISTRY_ENDPOINT 2>/dev/null | tr -d '\\n\\r ') && echo \"Rebuilding seed-job image...\" && az acr build --registry ${ACR%%/*} --image seed-job:latest --file seed-job/dockerfile seed-job && echo \"Updating Container App Job image...\" && az containerapp job update --name $SEED_JOB --resource-group $RG --image ${ACR}/seed-job:latest && echo \"Starting seed job...\" && az containerapp job start --name $SEED_JOB --resource-group $RG && echo \"Seed job started. Monitor with: az containerapp job execution list --name $SEED_JOB --resource-group $RG\""
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
     }
   ]
 }

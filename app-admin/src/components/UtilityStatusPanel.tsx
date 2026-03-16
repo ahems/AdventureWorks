@@ -1,92 +1,128 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { Loader2, CheckCircle2, XCircle, Clock, Copy, Square, ChevronDown, ChevronUp } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
-import { getOrchestrationStatus, terminateOrchestration, OrchestrationStatus } from '@/services/mockUtilityService';
-import { Progress } from '@/components/ui/progress';
+import React, { useEffect, useState, useCallback } from "react";
+import {
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Copy,
+  Square,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import {
+  getOrchestrationStatus,
+  terminateOrchestration,
+  OrchestrationStatus,
+  JobResponse,
+} from "@/services/utilityService";
 
 interface UtilityStatusPanelProps {
-  instanceId: string;
+  jobResponse: JobResponse;
   onComplete?: () => void;
 }
 
-const UtilityStatusPanel: React.FC<UtilityStatusPanelProps> = ({ instanceId, onComplete }) => {
+const UtilityStatusPanel: React.FC<UtilityStatusPanelProps> = ({
+  jobResponse,
+  onComplete,
+}) => {
   const [status, setStatus] = useState<OrchestrationStatus | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
 
-  const fetchStatus = useCallback(() => {
-    const currentStatus = getOrchestrationStatus(instanceId);
-    setStatus(currentStatus);
-    
-    if (currentStatus?.status === 'Completed' || currentStatus?.status === 'Failed' || currentStatus?.status === 'Terminated') {
-      onComplete?.();
+  const isDurable = jobResponse.statusQueryGetUri !== null;
+
+  const fetchStatus = useCallback(async () => {
+    if (!jobResponse.statusQueryGetUri) return;
+    try {
+      const currentStatus = await getOrchestrationStatus(
+        jobResponse.statusQueryGetUri,
+      );
+      setStatus(currentStatus);
+      if (
+        currentStatus.runtimeStatus === "Completed" ||
+        currentStatus.runtimeStatus === "Failed" ||
+        currentStatus.runtimeStatus === "Terminated"
+      ) {
+        onComplete?.();
+      }
+    } catch {
+      // silently ignore polling errors
     }
-  }, [instanceId, onComplete]);
+  }, [jobResponse.statusQueryGetUri, onComplete]);
 
   useEffect(() => {
+    if (!isDurable) {
+      // Queue-based job: no polling, show "Queued" immediately
+      setStatus({ runtimeStatus: "Completed" });
+      onComplete?.();
+      return;
+    }
     fetchStatus();
-    const statusInterval = setInterval(fetchStatus, 1000);
-    
+    const statusInterval = setInterval(fetchStatus, 2000);
     return () => clearInterval(statusInterval);
-  }, [fetchStatus]);
+  }, [fetchStatus, isDurable, onComplete]);
 
   useEffect(() => {
-    if (status?.status === 'Running') {
+    if (status?.runtimeStatus === "Running") {
       const timer = setInterval(() => {
         setElapsedTime((prev) => prev + 1);
       }, 1000);
       return () => clearInterval(timer);
     }
-  }, [status?.status]);
+  }, [status?.runtimeStatus]);
 
   const handleCopyInstanceId = () => {
-    navigator.clipboard.writeText(instanceId);
-    toast.success('Instance ID copied to clipboard');
+    navigator.clipboard.writeText(jobResponse.id);
+    toast.success("Instance ID copied to clipboard");
   };
 
-  const handleTerminate = () => {
-    const success = terminateOrchestration(instanceId);
-    if (success) {
-      toast.info('Operation terminated');
-      fetchStatus();
+  const handleTerminate = async () => {
+    if (!jobResponse.terminatePostUri) return;
+    const ok = await terminateOrchestration(jobResponse.terminatePostUri);
+    if (ok) {
+      toast.info("Operation terminated");
+      await fetchStatus();
     }
   };
 
   const formatElapsedTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
+  const runtimeStatus = status?.runtimeStatus;
+
   const getStatusIcon = () => {
-    switch (status?.status) {
-      case 'Running':
+    switch (runtimeStatus) {
+      case "Running":
         return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />;
-      case 'Completed':
+      case "Completed":
         return <CheckCircle2 className="w-5 h-5 text-green-500" />;
-      case 'Failed':
+      case "Failed":
         return <XCircle className="w-5 h-5 text-red-500" />;
-      case 'Terminated':
+      case "Terminated":
         return <Square className="w-5 h-5 text-orange-500" />;
-      case 'Pending':
+      case "Pending":
       default:
         return <Clock className="w-5 h-5 text-muted-foreground" />;
     }
   };
 
   const getStatusColor = () => {
-    switch (status?.status) {
-      case 'Running':
-        return 'text-blue-500';
-      case 'Completed':
-        return 'text-green-500';
-      case 'Failed':
-        return 'text-red-500';
-      case 'Terminated':
-        return 'text-orange-500';
+    switch (runtimeStatus) {
+      case "Running":
+        return "text-blue-500";
+      case "Completed":
+        return "text-green-500";
+      case "Failed":
+        return "text-red-500";
+      case "Terminated":
+        return "text-orange-500";
       default:
-        return 'text-muted-foreground';
+        return "text-muted-foreground";
     }
   };
 
@@ -101,6 +137,8 @@ const UtilityStatusPanel: React.FC<UtilityStatusPanelProps> = ({ instanceId, onC
     );
   }
 
+  const displayStatus = !isDurable ? "Queued" : (runtimeStatus ?? "Pending");
+
   return (
     <div className="mt-4 p-4 doodle-card bg-muted/50">
       {/* Header */}
@@ -108,8 +146,13 @@ const UtilityStatusPanel: React.FC<UtilityStatusPanelProps> = ({ instanceId, onC
         <div className="flex items-center gap-2">
           {getStatusIcon()}
           <span className={`font-doodle font-bold ${getStatusColor()}`}>
-            {status.status}
+            {displayStatus}
           </span>
+          {!isDurable && (
+            <span className="text-xs text-muted-foreground font-doodle">
+              (runs in background)
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Clock className="w-4 h-4" />
@@ -119,55 +162,57 @@ const UtilityStatusPanel: React.FC<UtilityStatusPanelProps> = ({ instanceId, onC
 
       {/* Instance ID */}
       <div className="flex items-center gap-2 mb-3 p-2 bg-background/50 rounded">
-        <span className="text-xs text-muted-foreground font-doodle">Instance:</span>
-        <code className="text-xs font-mono flex-1 truncate">{instanceId}</code>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleCopyInstanceId}>
+        <span className="text-xs text-muted-foreground font-doodle">
+          Instance:
+        </span>
+        <code className="text-xs font-mono flex-1 truncate">
+          {jobResponse.id}
+        </code>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          onClick={handleCopyInstanceId}
+        >
           <Copy className="w-3 h-3" />
         </Button>
       </div>
 
-      {/* Progress Bar */}
-      {status.progress !== undefined && (
-        <div className="mb-3">
-          <div className="flex justify-between text-xs text-muted-foreground mb-1">
-            <span className="font-doodle">Progress</span>
-            <span className="font-mono">{Math.round(status.progress)}%</span>
-          </div>
-          <Progress value={status.progress} className="h-2" />
-        </div>
-      )}
-
       {/* Status Message */}
-      {status.message && (
-        <p className="text-sm text-muted-foreground font-doodle mb-3">{status.message}</p>
+      {status.customStatus && (
+        <p className="text-sm text-muted-foreground font-doodle mb-3">
+          {String(status.customStatus)}
+        </p>
       )}
 
       {/* Actions */}
       <div className="flex items-center gap-2">
-        {status.status === 'Running' && (
+        {runtimeStatus === "Running" && jobResponse.terminatePostUri && (
           <Button variant="destructive" size="sm" onClick={handleTerminate}>
             <Square className="w-3 h-3 mr-1" />
             Cancel
           </Button>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowDetails(!showDetails)}
-          className="ml-auto"
-        >
-          {showDetails ? (
-            <>
-              <ChevronUp className="w-3 h-3 mr-1" />
-              Hide Details
-            </>
-          ) : (
-            <>
-              <ChevronDown className="w-3 h-3 mr-1" />
-              View Details
-            </>
-          )}
-        </Button>
+        {isDurable && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowDetails(!showDetails)}
+            className="ml-auto"
+          >
+            {showDetails ? (
+              <>
+                <ChevronUp className="w-3 h-3 mr-1" />
+                Hide Details
+              </>
+            ) : (
+              <>
+                <ChevronDown className="w-3 h-3 mr-1" />
+                View Details
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
       {/* Details Panel */}

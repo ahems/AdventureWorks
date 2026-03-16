@@ -1,6 +1,6 @@
-import React from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
-import { Home } from 'lucide-react';
+import React, { useMemo } from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
+import { Home } from "lucide-react";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -8,9 +8,11 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb';
-import { getCategoryById, getSubcategoryById, getProductById } from '@/data/mockData';
-import { getCustomerById } from '@/data/mockCustomers';
+} from "@/components/ui/breadcrumb";
+import {
+  useAdminCategoryById,
+  useAdminProductById,
+} from "@/hooks/useAdminProducts";
 
 interface BreadcrumbSegment {
   label: string;
@@ -20,101 +22,57 @@ interface BreadcrumbSegment {
 const AppBreadcrumb: React.FC = () => {
   const location = useLocation();
   const params = useParams();
+  const path = location.pathname;
 
-  const getBreadcrumbs = (): BreadcrumbSegment[] => {
-    const path = location.pathname;
+  const catIdNum = path.startsWith("/category/")
+    ? parseInt(params.categoryId || "")
+    : 0;
+  const prodIdNum = path.startsWith("/product/")
+    ? parseInt(params.productId || "")
+    : 0;
+
+  const { data: category } = useAdminCategoryById(catIdNum);
+  const { data: product } = useAdminProductById(prodIdNum);
+
+  const breadcrumbs = useMemo((): BreadcrumbSegment[] => {
     const segments: BreadcrumbSegment[] = [];
 
     // Always start with Dashboard
-    if (path !== '/') {
-      segments.push({ label: 'Dashboard', href: '/' });
+    if (path !== "/") {
+      segments.push({ label: "Dashboard", href: "/" });
     }
 
     // Category page
-    if (path.startsWith('/category/')) {
-      const categoryId = parseInt(params.categoryId || '');
-      const category = getCategoryById(categoryId);
-      segments.push({ label: 'Products', href: '/category/1' });
+    if (path.startsWith("/category/")) {
+      segments.push({ label: "Products", href: "/category/1" });
       if (category) {
         segments.push({ label: category.Name });
       }
     }
 
     // Product page
-    if (path.startsWith('/product/')) {
-      const productId = parseInt(params.productId || '');
-      const product = getProductById(productId);
+    if (path.startsWith("/product/")) {
+      segments.push({ label: "Products", href: "/category/1" });
       if (product) {
-        const subcategory = product.ProductSubcategoryID 
-          ? getSubcategoryById(product.ProductSubcategoryID) 
-          : undefined;
-        const category = subcategory 
-          ? getCategoryById(subcategory.ProductCategoryID) 
-          : undefined;
-
-        segments.push({ label: 'Products', href: '/category/1' });
-        if (category) {
-          segments.push({ 
-            label: category.Name, 
-            href: `/category/${category.ProductCategoryID}` 
-          });
-        }
         segments.push({ label: product.Name });
       }
     }
 
-    // Customers page
-    if (path === '/customers') {
-      segments.push({ label: 'Customers' });
-    }
-
-    // Orders page
-    if (path === '/orders') {
-      segments.push({ label: 'Orders' });
-    }
-
-    // Reviews page
-    if (path === '/reviews') {
-      segments.push({ label: 'Reviews' });
-    }
-
-    // Utilities/AI Tools page
-    if (path === '/utilities') {
-      segments.push({ label: 'AI Tools' });
-    }
-
-    // Promotions page
-    if (path === '/promotions') {
-      segments.push({ label: 'Promotions' });
-    }
-
-    // Cultures page
-    if (path === '/cultures') {
-      segments.push({ label: 'Cultures' });
-    }
-
-    // Currencies page
-    if (path === '/currencies') {
-      segments.push({ label: 'Currencies' });
-    }
-
-    // Stale Carts page
-    if (path === '/stale-carts') {
-      segments.push({ label: 'Stale Carts' });
-    }
-
-    // Search page
-    if (path === '/search') {
-      segments.push({ label: 'Search Results' });
-    }
+    if (path === "/customers") segments.push({ label: "Customers" });
+    if (path === "/orders") segments.push({ label: "Orders" });
+    if (path === "/reviews") segments.push({ label: "Reviews" });
+    if (path === "/utilities") segments.push({ label: "AI Tools" });
+    if (path === "/promotions") segments.push({ label: "Promotions" });
+    if (path === "/cultures") segments.push({ label: "Cultures" });
+    if (path === "/currencies") segments.push({ label: "Currencies" });
+    if (path === "/stale-carts") segments.push({ label: "Stale Carts" });
+    if (path === "/search") segments.push({ label: "Search Results" });
 
     return segments;
-  };
-
-  const breadcrumbs = getBreadcrumbs();
+  }, [path, category, product]);
 
   // Don't show breadcrumbs on dashboard or login
-  if (location.pathname === '/' || location.pathname === '/login') {
+  if (location.pathname === "/" || location.pathname === "/login") {
     return null;
   }
 
@@ -124,20 +82,23 @@ const AppBreadcrumb: React.FC = () => {
         <BreadcrumbList className="font-doodle">
           <BreadcrumbItem>
             <BreadcrumbLink asChild>
-              <Link to="/" className="flex items-center gap-1 text-doodle-text/60 hover:text-doodle-accent">
+              <Link
+                to="/"
+                className="flex items-center gap-1 text-doodle-text/60 hover:text-doodle-accent"
+              >
                 <Home className="w-4 h-4" />
               </Link>
             </BreadcrumbLink>
           </BreadcrumbItem>
-          
+
           {breadcrumbs.map((crumb, index) => (
             <React.Fragment key={index}>
               <BreadcrumbSeparator className="text-doodle-text/40" />
               <BreadcrumbItem>
                 {crumb.href && index < breadcrumbs.length - 1 ? (
                   <BreadcrumbLink asChild>
-                    <Link 
-                      to={crumb.href} 
+                    <Link
+                      to={crumb.href}
                       className="text-doodle-text/60 hover:text-doodle-accent transition-colors"
                     >
                       {crumb.label}

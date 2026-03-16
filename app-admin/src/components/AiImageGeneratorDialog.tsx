@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Wand2, Sparkles, Loader2 } from 'lucide-react';
+import React, { useState } from "react";
+import { Wand2, Loader2, Sparkles } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -7,77 +7,64 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { executeRpc } from '@/services/mockRpcServer';
-import { toast } from '@/hooks/use-toast';
+} from "@/components/ui/select";
+import { getFunctionsApiUrl } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
 
 interface AiImageGeneratorDialogProps {
   productId: number;
   productName: string;
-  onImageGenerated: (imageUrl: string, label: string) => void;
 }
 
 const AiImageGeneratorDialog: React.FC<AiImageGeneratorDialogProps> = ({
   productId,
   productName,
-  onImageGenerated,
 }) => {
   const [open, setOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [description, setDescription] = useState('');
-  const [style, setStyle] = useState('photo');
-  const [background, setBackground] = useState('white');
-  const [generatedImage, setGeneratedImage] = useState<{ url: string; prompt: string } | null>(null);
+  const [description, setDescription] = useState("");
+  const [style, setStyle] = useState("photo");
+  const [background, setBackground] = useState("white");
 
   const handleGenerate = async () => {
     setIsGenerating(true);
-    setGeneratedImage(null);
-
     try {
-      const result = await executeRpc('generateProductImage', {
-        productId,
-        description: description || undefined,
-        style,
-        background,
+      const res = await fetch(
+        `${getFunctionsApiUrl()}/api/GenerateProductImages_HttpStart`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ProductIds: [productId] }),
+        },
+      );
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      toast({
+        title: "Image generation queued",
+        description: `AI image generation for "${productName}" has been queued. Check back in a few minutes — refresh the photo gallery to see the result.`,
       });
-
-      if (result.success && result.data) {
-        const data = result.data as { imageUrl: string; prompt: string };
-        setGeneratedImage({ url: data.imageUrl, prompt: data.prompt });
-        toast({ title: 'Image Generated', description: 'AI image has been created successfully.' });
-      } else {
-        toast({ title: 'Generation Failed', description: result.error || 'Failed to generate image', variant: 'destructive' });
-      }
+      setOpen(false);
+      setDescription("");
     } catch (error) {
-      toast({ title: 'Error', description: 'An error occurred while generating the image', variant: 'destructive' });
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to queue image generation",
+        variant: "destructive",
+      });
     } finally {
       setIsGenerating(false);
-    }
-  };
-
-  const handleAddToGallery = () => {
-    if (generatedImage) {
-      const styleLabels: Record<string, string> = {
-        photo: 'Photo',
-        illustration: 'Illustration',
-        '3d-render': '3D Render',
-        sketch: 'Sketch',
-      };
-      onImageGenerated(generatedImage.url, `AI ${styleLabels[style] || style}`);
-      setOpen(false);
-      setGeneratedImage(null);
-      setDescription('');
-      toast({ title: 'Image Added', description: 'AI-generated image has been added to the product gallery.' });
     }
   };
 
@@ -96,7 +83,8 @@ const AiImageGeneratorDialog: React.FC<AiImageGeneratorDialogProps> = ({
             AI Image Generator
           </DialogTitle>
           <DialogDescription>
-            Generate a product image for <strong>{productName}</strong> using AI.
+            Generate a product image for <strong>{productName}</strong> using
+            AI.
           </DialogDescription>
         </DialogHeader>
 
@@ -152,34 +140,20 @@ const AiImageGeneratorDialog: React.FC<AiImageGeneratorDialogProps> = ({
             {isGenerating ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Generating...
+                Queuing...
               </>
             ) : (
               <>
                 <Wand2 className="w-4 h-4 mr-2" />
-                Generate Image
+                Queue Image Generation
               </>
             )}
           </Button>
 
-          {generatedImage && (
-            <div className="space-y-3 pt-4 border-t">
-              <div className="aspect-square rounded-lg overflow-hidden border bg-muted">
-                <img
-                  src={generatedImage.url}
-                  alt="AI Generated"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground italic">
-                "{generatedImage.prompt}"
-              </p>
-              <Button onClick={handleAddToGallery} className="w-full gap-2">
-                <Sparkles className="w-4 h-4" />
-                Add to Product Gallery
-              </Button>
-            </div>
-          )}
+          <p className="text-xs text-muted-foreground pt-1">
+            Images are generated asynchronously by Azure AI. Refresh the product
+            photo gallery in a few minutes to see the result.
+          </p>
         </div>
       </DialogContent>
     </Dialog>

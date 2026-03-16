@@ -2137,7 +2137,88 @@ INNER JOIN RankedPhotos rp ON pp.ProductID = rp.ProductID AND pp.ProductPhotoID 
     }
     
     # Note: ProductProductPhoto-ai.csv mappings are loaded earlier in the CSV data loading section
-    
+
+    # -------------------------------------------------------------------------
+    # Demo Admin User: create a known employee with a verifiable password so the
+    # admin UI can be demonstrated without any signup flow.
+    #
+    # Algorithm mirrors PasswordService.cs exactly:
+    #   SaltSize=6, HashSize=96, Iterations=100000, SHA256
+    # Fixed salt bytes "AWDemo" (0x41,0x57,0x44,0x65,0x6D,0x6F) -> base64 "QVdEZW1v"
+    # Password: Admin1234!
+    # BusinessEntityID: 99001 (well above seeded CSV data range)
+    # -------------------------------------------------------------------------
+    Write-Log "`nSeeding demo admin user (demo.admin@adventureworks.com)..."
+    try {
+        # Pick random first and last name from Person.csv (field delimiter +|, row terminator &|)
+        # Field indices (0-based): 4 = FirstName, 6 = LastName
+        $personCsvPath = Join-Path $PSScriptRoot 'sql/Person.csv'
+        $personRows = (Get-Content $personCsvPath -Raw) -split '&\|' |
+                      Where-Object { $_.Trim() -ne '' }
+        $fnFields    = ($personRows | Get-Random) -split '\+\|'
+        $lnFields    = ($personRows | Get-Random) -split '\+\|'
+        $demoFirstName = ($fnFields[4].Trim()) -replace "'", "''"
+        $demoLastName  = ($lnFields[6].Trim()) -replace "'", "''"
+        Write-Log "  Random name chosen: $demoFirstName $demoLastName"
+
+        $demoId      = 99001
+        $demoEmail   = 'demo.admin@adventureworks.com'
+        $demoPass    = 'Admin1234!'
+        $demoSaltB64 = 'QVdEZW1v'  # base64([byte[]](0x41,0x57,0x44,0x65,0x6D,0x6F))
+
+        # Compute the PBKDF2-SHA256 hash using .NET (identical to PasswordService.cs)
+        $saltBytes = [System.Convert]::FromBase64String($demoSaltB64)
+        $pbkdf2 = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
+            $demoPass,
+            $saltBytes,
+            100000,
+            [System.Security.Cryptography.HashAlgorithmName]::SHA256
+        )
+        $hashBytes   = $pbkdf2.GetBytes(96)
+        $demoHashB64 = [System.Convert]::ToBase64String($hashBytes)
+        $pbkdf2.Dispose()
+
+        $cmd.CommandText = @"
+-- BusinessEntity
+MERGE Person.BusinessEntity AS tgt
+USING (SELECT $demoId AS BusinessEntityID) AS src ON tgt.BusinessEntityID = src.BusinessEntityID
+WHEN NOT MATCHED THEN
+    INSERT (rowguid, ModifiedDate) VALUES (NEWID(), GETDATE());
+
+-- Person (EM = Employee)
+MERGE Person.Person AS tgt
+USING (SELECT $demoId AS BusinessEntityID) AS src ON tgt.BusinessEntityID = src.BusinessEntityID
+WHEN MATCHED THEN
+    UPDATE SET FirstName='$demoFirstName', LastName='$demoLastName', PersonType='EM', ModifiedDate=GETDATE()
+WHEN NOT MATCHED THEN
+    INSERT (BusinessEntityID, PersonType, FirstName, LastName, rowguid, ModifiedDate)
+    VALUES ($demoId, 'EM', '$demoFirstName', '$demoLastName', NEWID(), GETDATE());
+
+-- EmailAddress (EmailAddressID is IDENTITY – omit it from INSERT)
+MERGE Person.EmailAddress AS tgt
+USING (SELECT $demoId AS BusinessEntityID) AS src ON tgt.BusinessEntityID = src.BusinessEntityID
+WHEN MATCHED THEN
+    UPDATE SET EmailAddress='$demoEmail', ModifiedDate=GETDATE()
+WHEN NOT MATCHED THEN
+    INSERT (BusinessEntityID, EmailAddress, rowguid, ModifiedDate)
+    VALUES ($demoId, '$demoEmail', NEWID(), GETDATE());
+
+-- Password
+MERGE Person.Password AS tgt
+USING (SELECT $demoId AS BusinessEntityID) AS src ON tgt.BusinessEntityID = src.BusinessEntityID
+WHEN MATCHED THEN
+    UPDATE SET PasswordHash='$demoHashB64', PasswordSalt='$demoSaltB64', ModifiedDate=GETDATE()
+WHEN NOT MATCHED THEN
+    INSERT (BusinessEntityID, PasswordHash, PasswordSalt, rowguid, ModifiedDate)
+    VALUES ($demoId, '$demoHashB64', '$demoSaltB64', NEWID(), GETDATE());
+"@
+        $null = $cmd.ExecuteNonQuery()
+        Write-Log "  ✓ Demo admin user seeded (BusinessEntityID=$demoId, name=$demoFirstName $demoLastName, email=$demoEmail)"
+    }
+    catch {
+        Write-Log "  WARNING: Failed to seed demo admin user: $($_.Exception.Message)"
+    }
+
     $conn.Close()
 }
 catch {

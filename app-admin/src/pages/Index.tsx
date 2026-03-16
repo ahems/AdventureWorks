@@ -1,25 +1,43 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Package, Users, ShoppingBag, Star, TrendingUp, AlertCircle, Clock, CheckCircle } from 'lucide-react';
-import AdminHeader from '@/components/AdminHeader';
-import Footer from '@/components/Footer';
-import AiAgentChat from '@/components/AiAgentChat';
-import NaturalLanguageBI from '@/components/NaturalLanguageBI';
-import { useAuth } from '@/context/AuthContext';
-import { products, categories } from '@/data/mockData';
-import { mockCustomers, mockOrders } from '@/data/mockCustomers';
-import { mockReviews } from '@/data/mockReviews';
+import React from "react";
+import { Link } from "react-router-dom";
+import {
+  Package,
+  Users,
+  ShoppingBag,
+  Star,
+  TrendingUp,
+  AlertCircle,
+  Clock,
+  Loader2,
+} from "lucide-react";
+import AdminHeader from "@/components/AdminHeader";
+import Footer from "@/components/Footer";
+import AiAgentChat from "@/components/AiAgentChat";
+import NaturalLanguageBI from "@/components/NaturalLanguageBI";
+import { useAuth } from "@/context/AuthContext";
+import {
+  useDashboardStats,
+  getOrderStatusLabel,
+} from "@/hooks/useDashboardStats";
+
+// Static category shortcuts — same 4 categories in every AdventureWorks database
+const NAV_CATEGORIES = [
+  { ProductCategoryID: 1, Name: "Bikes" },
+  { ProductCategoryID: 2, Name: "Components" },
+  { ProductCategoryID: 3, Name: "Clothing" },
+  { ProductCategoryID: 4, Name: "Accessories" },
+];
 
 const Index: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
+  const { data: stats, isLoading: statsLoading } = useDashboardStats();
 
-  // Calculate stats
-  const totalProducts = products.length;
-  const totalCustomers = mockCustomers.length;
-  const totalOrders = mockOrders.length;
-  const pendingOrders = mockOrders.filter(o => o.Status === 'Pending' || o.Status === 'Processing').length;
-  const totalReviews = mockReviews.length;
-  const recentOrders = mockOrders.slice(0, 5);
+  const totalProducts = stats?.totalProducts ?? "—";
+  const totalCustomers = stats?.totalCustomers ?? "—";
+  const totalOrders = stats?.totalOrders ?? "—";
+  const pendingOrders = stats?.pendingOrders ?? 0;
+  const totalReviews = stats?.totalReviews ?? "—";
+  const recentOrders = stats?.recentOrders ?? [];
 
   if (!isAuthenticated) {
     return (
@@ -30,20 +48,24 @@ const Index: React.FC = () => {
             <div className="doodle-card p-8 md:p-12">
               <span className="text-7xl block mb-6">🏔️</span>
               <h1 className="font-doodle text-3xl md:text-5xl font-bold text-doodle-text mb-4">
-                Welcome to Adventure<span className="text-doodle-accent">Works</span>
+                Welcome to Adventure
+                <span className="text-doodle-accent">Works</span>
               </h1>
               <h2 className="font-doodle text-xl md:text-2xl text-doodle-text/80 mb-6">
                 Internal Admin Portal
               </h2>
               <p className="font-doodle text-lg text-doodle-text/70 mb-8 leading-relaxed">
-                This portal is for AdventureWorks employees only. Manage products, customers, orders, and reviews from one central location.
+                This portal is for AdventureWorks employees only. Manage
+                products, customers, orders, and reviews from one central
+                location.
               </p>
               <div className="doodle-border-light p-6 mb-8 bg-doodle-text/5">
                 <p className="font-doodle text-doodle-text/70 mb-4">
-                  Please sign in with your corporate credentials to access the admin dashboard.
+                  Please sign in with your corporate credentials to access the
+                  admin dashboard.
                 </p>
-                <Link 
-                  to="/login" 
+                <Link
+                  to="/login"
                   className="doodle-button doodle-button-primary text-lg px-8 py-3 inline-flex items-center gap-2"
                 >
                   Employee Login
@@ -79,25 +101,42 @@ const Index: React.FC = () => {
         {/* Stats Grid */}
         <section className="container mx-auto px-4 pb-8">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-            <Link to="/category/1" className="doodle-card p-4 md:p-6 hover:border-doodle-accent transition-colors group">
+            <Link
+              to="/category/1"
+              className="doodle-card p-4 md:p-6 hover:border-doodle-accent transition-colors group"
+            >
               <div className="flex items-center justify-between mb-3">
                 <Package className="w-8 h-8 text-doodle-accent group-hover:scale-110 transition-transform" />
                 <TrendingUp className="w-4 h-4 text-doodle-green" />
               </div>
-              <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">{totalProducts}</p>
-              <p className="font-doodle text-sm text-doodle-text/60">Total Products</p>
+              <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">
+                {totalProducts}
+              </p>
+              <p className="font-doodle text-sm text-doodle-text/60">
+                Total Products
+              </p>
             </Link>
 
-            <Link to="/customers" className="doodle-card p-4 md:p-6 hover:border-doodle-accent transition-colors group">
+            <Link
+              to="/customers"
+              className="doodle-card p-4 md:p-6 hover:border-doodle-accent transition-colors group"
+            >
               <div className="flex items-center justify-between mb-3">
                 <Users className="w-8 h-8 text-doodle-green group-hover:scale-110 transition-transform" />
                 <TrendingUp className="w-4 h-4 text-doodle-green" />
               </div>
-              <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">{totalCustomers}</p>
-              <p className="font-doodle text-sm text-doodle-text/60">Customers</p>
+              <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">
+                {totalCustomers}
+              </p>
+              <p className="font-doodle text-sm text-doodle-text/60">
+                Customers
+              </p>
             </Link>
 
-            <Link to="/orders" className="doodle-card p-4 md:p-6 hover:border-doodle-accent transition-colors group">
+            <Link
+              to="/orders"
+              className="doodle-card p-4 md:p-6 hover:border-doodle-accent transition-colors group"
+            >
               <div className="flex items-center justify-between mb-3">
                 <ShoppingBag className="w-8 h-8 text-doodle-blue group-hover:scale-110 transition-transform" />
                 {pendingOrders > 0 && (
@@ -106,15 +145,22 @@ const Index: React.FC = () => {
                   </span>
                 )}
               </div>
-              <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">{totalOrders}</p>
+              <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">
+                {totalOrders}
+              </p>
               <p className="font-doodle text-sm text-doodle-text/60">Orders</p>
             </Link>
 
-            <Link to="/reviews" className="doodle-card p-4 md:p-6 hover:border-doodle-accent transition-colors group">
+            <Link
+              to="/reviews"
+              className="doodle-card p-4 md:p-6 hover:border-doodle-accent transition-colors group"
+            >
               <div className="flex items-center justify-between mb-3">
                 <Star className="w-8 h-8 text-doodle-accent group-hover:scale-110 transition-transform" />
               </div>
-              <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">{totalReviews}</p>
+              <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">
+                {totalReviews}
+              </p>
               <p className="font-doodle text-sm text-doodle-text/60">Reviews</p>
             </Link>
           </div>
@@ -143,23 +189,14 @@ const Index: React.FC = () => {
                 Quick Actions
               </h2>
               <div className="space-y-3">
-                {categories.map((category) => (
+                {NAV_CATEGORIES.map((category) => (
                   <Link
                     key={category.ProductCategoryID}
                     to={`/category/${category.ProductCategoryID}`}
                     className="flex items-center justify-between p-3 border-2 border-doodle-text/20 hover:border-doodle-accent transition-colors"
                   >
-                    <span className="font-doodle text-doodle-text">Browse {category.Name}</span>
-                    <span className="font-doodle text-sm text-doodle-text/60">
-                      {products.filter(p => {
-                        const subcats = [1, 2, 3].includes(category.ProductCategoryID) 
-                          ? category.ProductCategoryID === 1 ? [1, 2, 3] 
-                            : category.ProductCategoryID === 2 ? [4, 5, 6, 7]
-                            : category.ProductCategoryID === 3 ? [8, 9, 10]
-                            : [11, 12, 13]
-                          : [11, 12, 13];
-                        return p.ProductSubcategoryID && subcats.includes(p.ProductSubcategoryID);
-                      }).length} products
+                    <span className="font-doodle text-doodle-text">
+                      Browse {category.Name}
                     </span>
                   </Link>
                 ))}
@@ -167,8 +204,12 @@ const Index: React.FC = () => {
                   to="/reviews"
                   className="flex items-center justify-between p-3 border-2 border-doodle-text/20 hover:border-doodle-accent transition-colors"
                 >
-                  <span className="font-doodle text-doodle-text">Moderate Reviews</span>
-                  <span className="font-doodle text-sm text-doodle-accent">{totalReviews} to review</span>
+                  <span className="font-doodle text-doodle-text">
+                    Moderate Reviews
+                  </span>
+                  <span className="font-doodle text-sm text-doodle-accent">
+                    {totalReviews} to review
+                  </span>
                 </Link>
               </div>
             </div>
@@ -179,36 +220,50 @@ const Index: React.FC = () => {
                 <Clock className="w-5 h-5 text-doodle-green" />
                 Recent Orders
               </h2>
-              <div className="space-y-3">
-                {recentOrders.map((order) => (
-                  <Link
-                    key={order.SalesOrderID}
-                    to={`/orders/${order.SalesOrderID}`}
-                    className="flex items-center justify-between p-3 border-2 border-doodle-text/20 hover:border-doodle-accent transition-colors"
-                  >
-                    <div>
-                      <span className="font-doodle text-doodle-text font-bold">#{order.SalesOrderID}</span>
-                      <p className="font-doodle text-xs text-doodle-text/60">
-                        {new Date(order.OrderDate).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`font-doodle text-xs px-2 py-1 border-2 border-doodle-text ${
-                        order.Status === 'Delivered' ? 'bg-doodle-green/20 text-doodle-green' :
-                        order.Status === 'Shipped' ? 'bg-doodle-blue/20 text-doodle-blue' :
-                        order.Status === 'Cancelled' ? 'bg-doodle-accent/20 text-doodle-accent' :
-                        'bg-doodle-text/10 text-doodle-text'
-                      }`}>
-                        {order.Status}
-                      </span>
-                      <span className="font-doodle text-sm text-doodle-text">
-                        ${order.TotalDue.toFixed(2)}
-                      </span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-              <Link 
+              {statsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-doodle-accent" />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {recentOrders.map((order) => {
+                    const statusLabel = getOrderStatusLabel(order.Status);
+                    return (
+                      <Link
+                        key={order.SalesOrderID}
+                        to={`/orders?orderId=${order.SalesOrderID}`}
+                        className="flex items-center justify-between p-3 border-2 border-doodle-text/20 hover:border-doodle-accent transition-colors"
+                      >
+                        <div>
+                          <span className="font-doodle text-doodle-text font-bold">
+                            #{order.SalesOrderID}
+                          </span>
+                          <p className="font-doodle text-xs text-doodle-text/60">
+                            {new Date(order.OrderDate).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`font-doodle text-xs px-2 py-1 border-2 border-doodle-text ${
+                              order.Status === 5
+                                ? "bg-doodle-blue/20 text-doodle-blue"
+                                : order.Status === 6
+                                  ? "bg-doodle-accent/20 text-doodle-accent"
+                                  : "bg-doodle-text/10 text-doodle-text"
+                            }`}
+                          >
+                            {statusLabel}
+                          </span>
+                          <span className="font-doodle text-sm text-doodle-text">
+                            ${order.TotalDue.toFixed(2)}
+                          </span>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+              <Link
                 to="/orders"
                 className="block mt-4 text-center font-doodle text-doodle-accent hover:text-doodle-green transition-colors"
               >

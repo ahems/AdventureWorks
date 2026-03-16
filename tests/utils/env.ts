@@ -2,6 +2,7 @@ import { execSync } from "child_process";
 
 export interface TestEnvironment {
   webBaseUrl: string;
+  adminWebBaseUrl: string;
   functionsBaseUrl: string;
   restApiBaseUrl: string;
 }
@@ -23,6 +24,10 @@ const defaultEnv: TestEnvironment = {
     process.env.WEB_BASE_URL ||
     getAzdEnvValue("APP_REDIRECT_URI") ||
     "http://localhost:5173",
+  adminWebBaseUrl:
+    process.env.ADMIN_WEB_BASE_URL ||
+    getAzdEnvValue("APP_ADMIN_REDIRECT_URI") ||
+    "http://localhost:5174",
   functionsBaseUrl:
     process.env.FUNCTIONS_BASE_URL ||
     getAzdEnvValue("VITE_API_FUNCTIONS_URL") ||
@@ -39,4 +44,8 @@ export const APP_STORAGE_KEYS = {
   language: "adventureworks_language",
   currency: "adventureworks_currency",
   currentUser: "adventureworks_current_user",
+};
+
+export const ADMIN_STORAGE_KEYS = {
+  currentUser: "aw_current_admin_user",
 };

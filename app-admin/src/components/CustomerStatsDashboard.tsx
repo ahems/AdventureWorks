@@ -1,31 +1,59 @@
-import React, { useMemo } from 'react';
-import { Users, DollarSign, TrendingUp, MapPin, Calendar } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Area, AreaChart } from 'recharts';
-import { Customer, mockOrders, Order } from '@/data/mockCustomers';
-import { format, parseISO, startOfMonth, endOfMonth, eachMonthOfInterval, isWithinInterval } from 'date-fns';
+import React, { useMemo } from "react";
+import { Users, DollarSign, TrendingUp, MapPin, Calendar } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+  Area,
+  AreaChart,
+} from "recharts";
+import { Customer } from "@/types/customer";
+import { Order } from "@/types/order";
+import {
+  format,
+  parseISO,
+  startOfMonth,
+  endOfMonth,
+  eachMonthOfInterval,
+  isWithinInterval,
+} from "date-fns";
 
 interface CustomerStatsDashboardProps {
   customers: Customer[];
+  orders?: Order[];
 }
 
 const CHART_COLORS = [
-  'hsl(15, 80%, 55%)',   // primary/orange
-  'hsl(145, 45%, 35%)',  // accent/green
-  'hsl(217, 100%, 67%)', // blue
-  'hsl(32, 50%, 70%)',   // warm
-  'hsl(0, 72%, 51%)',    // red
-  'hsl(280, 60%, 50%)',  // purple
-  'hsl(45, 90%, 50%)',   // yellow
-  'hsl(180, 50%, 45%)',  // teal
+  "hsl(15, 80%, 55%)", // primary/orange
+  "hsl(145, 45%, 35%)", // accent/green
+  "hsl(217, 100%, 67%)", // blue
+  "hsl(32, 50%, 70%)", // warm
+  "hsl(0, 72%, 51%)", // red
+  "hsl(280, 60%, 50%)", // purple
+  "hsl(45, 90%, 50%)", // yellow
+  "hsl(180, 50%, 45%)", // teal
 ];
 
-const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({ customers }) => {
+const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({
+  customers,
+  orders = [],
+}) => {
   // Total customers
   const totalCustomers = customers.length;
 
   // Total revenue
-  const totalRevenue = useMemo(() => 
-    customers.reduce((sum, c) => sum + c.TotalSpent, 0), [customers]);
+  const totalRevenue = useMemo(
+    () => customers.reduce((sum, c) => sum + c.TotalSpent, 0),
+    [customers],
+  );
 
   // Average spending
   const avgSpending = totalCustomers > 0 ? totalRevenue / totalCustomers : 0;
@@ -33,8 +61,9 @@ const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({ custome
   // Revenue by state
   const revenueByState = useMemo(() => {
     const stateMap: Record<string, number> = {};
-    customers.forEach(c => {
-      stateMap[c.StateProvince] = (stateMap[c.StateProvince] || 0) + c.TotalSpent;
+    customers.forEach((c) => {
+      stateMap[c.StateProvince] =
+        (stateMap[c.StateProvince] || 0) + c.TotalSpent;
     });
     return Object.entries(stateMap)
       .map(([state, revenue]) => ({ state, revenue }))
@@ -44,12 +73,12 @@ const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({ custome
   // Spending distribution (pie chart data)
   const spendingDistribution = useMemo(() => {
     const ranges = [
-      { name: 'Under $1K', min: 0, max: 1000, count: 0 },
-      { name: '$1K - $5K', min: 1000, max: 5000, count: 0 },
-      { name: '$5K - $10K', min: 5000, max: 10000, count: 0 },
-      { name: 'Over $10K', min: 10000, max: Infinity, count: 0 },
+      { name: "Under $1K", min: 0, max: 1000, count: 0 },
+      { name: "$1K - $5K", min: 1000, max: 5000, count: 0 },
+      { name: "$5K - $10K", min: 5000, max: 10000, count: 0 },
+      { name: "Over $10K", min: 10000, max: Infinity, count: 0 },
     ];
-    customers.forEach(c => {
+    customers.forEach((c) => {
       for (const range of ranges) {
         if (c.TotalSpent >= range.min && c.TotalSpent < range.max) {
           range.count++;
@@ -57,13 +86,15 @@ const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({ custome
         }
       }
     });
-    return ranges.filter(r => r.count > 0).map(r => ({ name: r.name, value: r.count }));
+    return ranges
+      .filter((r) => r.count > 0)
+      .map((r) => ({ name: r.name, value: r.count }));
   }, [customers]);
 
   // Customers by state (for pie chart)
   const customersByState = useMemo(() => {
     const stateMap: Record<string, number> = {};
-    customers.forEach(c => {
+    customers.forEach((c) => {
       stateMap[c.StateProvince] = (stateMap[c.StateProvince] || 0) + 1;
     });
     return Object.entries(stateMap)
@@ -74,27 +105,30 @@ const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({ custome
   // Customer acquisition over time
   const customerAcquisitionTrend = useMemo(() => {
     if (customers.length === 0) return [];
-    
-    const dates = customers.map(c => parseISO(c.CreatedAt));
-    const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
-    const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
-    
+
+    const dates = customers.map((c) => parseISO(c.CreatedAt));
+    const minDate = new Date(Math.min(...dates.map((d) => d.getTime())));
+    const maxDate = new Date(Math.max(...dates.map((d) => d.getTime())));
+
     const months = eachMonthOfInterval({ start: minDate, end: maxDate });
-    
+
     let cumulative = 0;
-    return months.map(month => {
+    return months.map((month) => {
       const monthStart = startOfMonth(month);
       const monthEnd = endOfMonth(month);
-      
-      const newCustomers = customers.filter(c => {
+
+      const newCustomers = customers.filter((c) => {
         const createdDate = parseISO(c.CreatedAt);
-        return isWithinInterval(createdDate, { start: monthStart, end: monthEnd });
+        return isWithinInterval(createdDate, {
+          start: monthStart,
+          end: monthEnd,
+        });
       }).length;
-      
+
       cumulative += newCustomers;
-      
+
       return {
-        month: format(month, 'MMM yyyy'),
+        month: format(month, "MMM yyyy"),
         newCustomers,
         totalCustomers: cumulative,
       };
@@ -103,36 +137,38 @@ const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({ custome
 
   // Revenue growth over time
   const revenueGrowthTrend = useMemo(() => {
-    const orders = mockOrders;
     if (orders.length === 0) return [];
-    
-    const dates = orders.map(o => parseISO(o.OrderDate));
-    const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
-    const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
-    
+
+    const dates = orders.map((o) => parseISO(o.OrderDate));
+    const minDate = new Date(Math.min(...dates.map((d) => d.getTime())));
+    const maxDate = new Date(Math.max(...dates.map((d) => d.getTime())));
+
     const months = eachMonthOfInterval({ start: minDate, end: maxDate });
-    
+
     let cumulative = 0;
-    return months.map(month => {
+    return months.map((month) => {
       const monthStart = startOfMonth(month);
       const monthEnd = endOfMonth(month);
-      
+
       const monthlyRevenue = orders
-        .filter(o => {
+        .filter((o) => {
           const orderDate = parseISO(o.OrderDate);
-          return isWithinInterval(orderDate, { start: monthStart, end: monthEnd });
+          return isWithinInterval(orderDate, {
+            start: monthStart,
+            end: monthEnd,
+          });
         })
         .reduce((sum, o) => sum + o.TotalDue, 0);
-      
+
       cumulative += monthlyRevenue;
-      
+
       return {
-        month: format(month, 'MMM yyyy'),
+        month: format(month, "MMM yyyy"),
         revenue: monthlyRevenue,
         cumulativeRevenue: cumulative,
       };
     });
-  }, []);
+  }, [orders]);
 
   return (
     <section className="container mx-auto px-4 pb-8">
@@ -144,8 +180,12 @@ const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({ custome
               <Users className="w-5 h-5 text-doodle-accent" />
             </div>
             <div>
-              <p className="font-doodle text-sm text-doodle-text/60">Total Customers</p>
-              <p className="font-doodle text-2xl font-bold text-doodle-text">{totalCustomers}</p>
+              <p className="font-doodle text-sm text-doodle-text/60">
+                Total Customers
+              </p>
+              <p className="font-doodle text-2xl font-bold text-doodle-text">
+                {totalCustomers}
+              </p>
             </div>
           </div>
         </div>
@@ -156,8 +196,16 @@ const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({ custome
               <DollarSign className="w-5 h-5 text-doodle-green" />
             </div>
             <div>
-              <p className="font-doodle text-sm text-doodle-text/60">Total Revenue</p>
-              <p className="font-doodle text-2xl font-bold text-doodle-green">${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className="font-doodle text-sm text-doodle-text/60">
+                Total Revenue
+              </p>
+              <p className="font-doodle text-2xl font-bold text-doodle-green">
+                $
+                {totalRevenue.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </p>
             </div>
           </div>
         </div>
@@ -168,8 +216,16 @@ const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({ custome
               <TrendingUp className="w-5 h-5 text-doodle-blue" />
             </div>
             <div>
-              <p className="font-doodle text-sm text-doodle-text/60">Avg. Spending</p>
-              <p className="font-doodle text-2xl font-bold text-doodle-text">${avgSpending.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className="font-doodle text-sm text-doodle-text/60">
+                Avg. Spending
+              </p>
+              <p className="font-doodle text-2xl font-bold text-doodle-text">
+                $
+                {avgSpending.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </p>
             </div>
           </div>
         </div>
@@ -180,8 +236,12 @@ const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({ custome
               <MapPin className="w-5 h-5 text-purple-500" />
             </div>
             <div>
-              <p className="font-doodle text-sm text-doodle-text/60">Active States</p>
-              <p className="font-doodle text-2xl font-bold text-doodle-text">{revenueByState.length}</p>
+              <p className="font-doodle text-sm text-doodle-text/60">
+                Active States
+              </p>
+              <p className="font-doodle text-2xl font-bold text-doodle-text">
+                {revenueByState.length}
+              </p>
             </div>
           </div>
         </div>
@@ -191,26 +251,43 @@ const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({ custome
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Revenue by State Bar Chart */}
         <div className="doodle-card p-4">
-          <h3 className="font-doodle font-bold text-lg text-doodle-text mb-4">Revenue by State</h3>
+          <h3 className="font-doodle font-bold text-lg text-doodle-text mb-4">
+            Revenue by State
+          </h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={revenueByState} layout="vertical" margin={{ left: 10, right: 20 }}>
-                <XAxis 
-                  type="number" 
+              <BarChart
+                data={revenueByState}
+                layout="vertical"
+                margin={{ left: 10, right: 20 }}
+              >
+                <XAxis
+                  type="number"
                   tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`}
-                  tick={{ fontFamily: 'Short Stack', fontSize: 12 }}
+                  tick={{ fontFamily: "Short Stack", fontSize: 12 }}
                 />
-                <YAxis 
-                  type="category" 
-                  dataKey="state" 
+                <YAxis
+                  type="category"
+                  dataKey="state"
                   width={40}
-                  tick={{ fontFamily: 'Short Stack', fontSize: 12 }}
+                  tick={{ fontFamily: "Short Stack", fontSize: 12 }}
                 />
                 <Tooltip
-                  formatter={(value: number) => [`$${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Revenue']}
-                  contentStyle={{ fontFamily: 'Short Stack', border: '2px solid #3c3c3c', borderRadius: '4px' }}
+                  formatter={(value: number) => [
+                    `$${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                    "Revenue",
+                  ]}
+                  contentStyle={{
+                    fontFamily: "Short Stack",
+                    border: "2px solid #3c3c3c",
+                    borderRadius: "4px",
+                  }}
                 />
-                <Bar dataKey="revenue" fill="hsl(15, 80%, 55%)" radius={[0, 4, 4, 0]} />
+                <Bar
+                  dataKey="revenue"
+                  fill="hsl(15, 80%, 55%)"
+                  radius={[0, 4, 4, 0]}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -218,7 +295,9 @@ const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({ custome
 
         {/* Spending Distribution Pie Chart */}
         <div className="doodle-card p-4">
-          <h3 className="font-doodle font-bold text-lg text-doodle-text mb-4">Spending Distribution</h3>
+          <h3 className="font-doodle font-bold text-lg text-doodle-text mb-4">
+            Spending Distribution
+          </h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -230,16 +309,25 @@ const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({ custome
                   outerRadius={80}
                   paddingAngle={2}
                   dataKey="value"
-                  label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                  label={({ name, percent }) =>
+                    `${name} (${(percent * 100).toFixed(0)}%)`
+                  }
                   labelLine={false}
                 >
                   {spendingDistribution.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={CHART_COLORS[index % CHART_COLORS.length]}
+                    />
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value: number) => [`${value} customers`, 'Count']}
-                  contentStyle={{ fontFamily: 'Short Stack', border: '2px solid #3c3c3c', borderRadius: '4px' }}
+                  formatter={(value: number) => [`${value} customers`, "Count"]}
+                  contentStyle={{
+                    fontFamily: "Short Stack",
+                    border: "2px solid #3c3c3c",
+                    borderRadius: "4px",
+                  }}
                 />
               </PieChart>
             </ResponsiveContainer>
@@ -248,25 +336,41 @@ const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({ custome
 
         {/* Customers by State Pie Chart */}
         <div className="doodle-card p-4 lg:col-span-2">
-          <h3 className="font-doodle font-bold text-lg text-doodle-text mb-4">Customers by State</h3>
+          <h3 className="font-doodle font-bold text-lg text-doodle-text mb-4">
+            Customers by State
+          </h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={customersByState} margin={{ left: 10, right: 20, bottom: 20 }}>
-                <XAxis 
-                  dataKey="name" 
-                  tick={{ fontFamily: 'Short Stack', fontSize: 12 }}
+              <BarChart
+                data={customersByState}
+                margin={{ left: 10, right: 20, bottom: 20 }}
+              >
+                <XAxis
+                  dataKey="name"
+                  tick={{ fontFamily: "Short Stack", fontSize: 12 }}
                 />
-                <YAxis 
-                  tick={{ fontFamily: 'Short Stack', fontSize: 12 }}
+                <YAxis
+                  tick={{ fontFamily: "Short Stack", fontSize: 12 }}
                   allowDecimals={false}
                 />
                 <Tooltip
-                  formatter={(value: number) => [`${value} customers`, 'Count']}
-                  contentStyle={{ fontFamily: 'Short Stack', border: '2px solid #3c3c3c', borderRadius: '4px' }}
+                  formatter={(value: number) => [`${value} customers`, "Count"]}
+                  contentStyle={{
+                    fontFamily: "Short Stack",
+                    border: "2px solid #3c3c3c",
+                    borderRadius: "4px",
+                  }}
                 />
-                <Bar dataKey="value" fill="hsl(145, 45%, 35%)" radius={[4, 4, 0, 0]}>
+                <Bar
+                  dataKey="value"
+                  fill="hsl(145, 45%, 35%)"
+                  radius={[4, 4, 0, 0]}
+                >
                   {customersByState.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={CHART_COLORS[index % CHART_COLORS.length]}
+                    />
                   ))}
                 </Bar>
               </BarChart>
@@ -282,44 +386,67 @@ const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({ custome
           </h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={customerAcquisitionTrend} margin={{ left: 10, right: 20, bottom: 20 }}>
+              <AreaChart
+                data={customerAcquisitionTrend}
+                margin={{ left: 10, right: 20, bottom: 20 }}
+              >
                 <defs>
-                  <linearGradient id="customerGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(145, 45%, 35%)" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="hsl(145, 45%, 35%)" stopOpacity={0}/>
+                  <linearGradient
+                    id="customerGradient"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop
+                      offset="5%"
+                      stopColor="hsl(145, 45%, 35%)"
+                      stopOpacity={0.3}
+                    />
+                    <stop
+                      offset="95%"
+                      stopColor="hsl(145, 45%, 35%)"
+                      stopOpacity={0}
+                    />
                   </linearGradient>
                 </defs>
-                <XAxis 
-                  dataKey="month" 
-                  tick={{ fontFamily: 'Short Stack', fontSize: 11 }}
+                <XAxis
+                  dataKey="month"
+                  tick={{ fontFamily: "Short Stack", fontSize: 11 }}
                   angle={-45}
                   textAnchor="end"
                   height={60}
                 />
-                <YAxis 
-                  tick={{ fontFamily: 'Short Stack', fontSize: 12 }}
+                <YAxis
+                  tick={{ fontFamily: "Short Stack", fontSize: 12 }}
                   allowDecimals={false}
                 />
                 <Tooltip
                   formatter={(value: number, name: string) => [
                     value,
-                    name === 'totalCustomers' ? 'Total Customers' : 'New Customers'
+                    name === "totalCustomers"
+                      ? "Total Customers"
+                      : "New Customers",
                   ]}
-                  contentStyle={{ fontFamily: 'Short Stack', border: '2px solid #3c3c3c', borderRadius: '4px' }}
+                  contentStyle={{
+                    fontFamily: "Short Stack",
+                    border: "2px solid #3c3c3c",
+                    borderRadius: "4px",
+                  }}
                 />
-                <Area 
-                  type="monotone" 
-                  dataKey="totalCustomers" 
-                  stroke="hsl(145, 45%, 35%)" 
-                  fill="url(#customerGradient)" 
+                <Area
+                  type="monotone"
+                  dataKey="totalCustomers"
+                  stroke="hsl(145, 45%, 35%)"
+                  fill="url(#customerGradient)"
                   strokeWidth={2}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="newCustomers" 
-                  stroke="hsl(217, 100%, 67%)" 
+                <Line
+                  type="monotone"
+                  dataKey="newCustomers"
+                  stroke="hsl(217, 100%, 67%)"
                   strokeWidth={2}
-                  dot={{ fill: 'hsl(217, 100%, 67%)', strokeWidth: 0, r: 4 }}
+                  dot={{ fill: "hsl(217, 100%, 67%)", strokeWidth: 0, r: 4 }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -344,44 +471,67 @@ const CustomerStatsDashboard: React.FC<CustomerStatsDashboardProps> = ({ custome
           </h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={revenueGrowthTrend} margin={{ left: 10, right: 20, bottom: 20 }}>
+              <AreaChart
+                data={revenueGrowthTrend}
+                margin={{ left: 10, right: 20, bottom: 20 }}
+              >
                 <defs>
-                  <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(15, 80%, 55%)" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="hsl(15, 80%, 55%)" stopOpacity={0}/>
+                  <linearGradient
+                    id="revenueGradient"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop
+                      offset="5%"
+                      stopColor="hsl(15, 80%, 55%)"
+                      stopOpacity={0.3}
+                    />
+                    <stop
+                      offset="95%"
+                      stopColor="hsl(15, 80%, 55%)"
+                      stopOpacity={0}
+                    />
                   </linearGradient>
                 </defs>
-                <XAxis 
-                  dataKey="month" 
-                  tick={{ fontFamily: 'Short Stack', fontSize: 11 }}
+                <XAxis
+                  dataKey="month"
+                  tick={{ fontFamily: "Short Stack", fontSize: 11 }}
                   angle={-45}
                   textAnchor="end"
                   height={60}
                 />
-                <YAxis 
-                  tick={{ fontFamily: 'Short Stack', fontSize: 12 }}
+                <YAxis
+                  tick={{ fontFamily: "Short Stack", fontSize: 12 }}
                   tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`}
                 />
                 <Tooltip
                   formatter={(value: number, name: string) => [
                     `$${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
-                    name === 'cumulativeRevenue' ? 'Cumulative Revenue' : 'Monthly Revenue'
+                    name === "cumulativeRevenue"
+                      ? "Cumulative Revenue"
+                      : "Monthly Revenue",
                   ]}
-                  contentStyle={{ fontFamily: 'Short Stack', border: '2px solid #3c3c3c', borderRadius: '4px' }}
+                  contentStyle={{
+                    fontFamily: "Short Stack",
+                    border: "2px solid #3c3c3c",
+                    borderRadius: "4px",
+                  }}
                 />
-                <Area 
-                  type="monotone" 
-                  dataKey="cumulativeRevenue" 
-                  stroke="hsl(15, 80%, 55%)" 
-                  fill="url(#revenueGradient)" 
+                <Area
+                  type="monotone"
+                  dataKey="cumulativeRevenue"
+                  stroke="hsl(15, 80%, 55%)"
+                  fill="url(#revenueGradient)"
                   strokeWidth={2}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="revenue" 
-                  stroke="hsl(32, 50%, 70%)" 
+                <Line
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke="hsl(32, 50%, 70%)"
                   strokeWidth={2}
-                  dot={{ fill: 'hsl(32, 50%, 70%)', strokeWidth: 0, r: 4 }}
+                  dot={{ fill: "hsl(32, 50%, 70%)", strokeWidth: 0, r: 4 }}
                 />
               </AreaChart>
             </ResponsiveContainer>

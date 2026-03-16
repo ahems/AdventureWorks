@@ -1,0 +1,358 @@
+# Plan: app-admin IaC, Back-End Implementation & Test Suite
+
+## Overview
+
+Three-part plan:
+
+1. **IaC** — provision a second Azure Static Web App for `app-admin` using the same Bicep/azd pattern as `app`
+2. **Back-End** — page-by-page replacement of all mocked data in `app-admin` with real calls to DAB GraphQL and Azure Functions; plus a seeded demo admin user
+3. **Tests** — a dedicated Azure-hosted Playwright test suite in `tests/specs/admin/`
+
+---
+
+## PART 1 — Infrastructure as Code
+
+### Phase 1A: Bicep Module
+
+**Step 1.** Create `infra/modules/swa-app-admin.bicep` by cloning `infra/modules/swa-app.bicep`.
+
+- Change the `tags` block: `'azd-service-name': 'app-admin'`
+- Rename param to `swaAdminName`
+- All other params identical: `location`, `identityName`, `apiUrl`, `apiFunctionsUrl`, `apiMcpUrl`, `appInsightsConnectionString`
+- Outputs: `appAdminRedirectUri`, `appAdminFqdn`, `deploymentToken`, `staticWebAppName`
+
+**Step 2.** Update `infra/main.bicep`:
+
+- Add module call `staticWebAppAdmin 'modules/swa-app-admin.bicep'` after `staticWebAppFrontend`, name `av-swa-admin-${resourceToken}`, same identity + API URL outputs
+- Add new outputs:
+  - `SERVICE_APP_ADMIN_NAME string = staticWebAppAdmin.outputs.staticWebAppName`
+  - `AZURE_STATIC_WEB_APP_ADMIN_DEPLOYMENT_TOKEN string = staticWebAppAdmin.outputs.deploymentToken` (`@secure()`)
+  - `APP_ADMIN_REDIRECT_URI string = staticWebAppAdmin.outputs.appAdminRedirectUri`
+
+### Phase 1B: Build & Deploy Plumbing
+
+**Step 3.** Create `app-admin/scripts/build-with-env.sh` — copy of `app/scripts/build-with-env.sh` (self-relative path logic already handles the parent directory correctly).
+
+**Step 4.** Create `app-admin/scripts/generate-config.sh` — copy of `app/scripts/generate-config.sh`; generates `app-admin/public/config.js` with the same `window.APP_CONFIG` shape.
+
+**Step 5.** Create `app-admin/staticwebapp.config.template.json` — copy of `app/staticwebapp.config.template.json`; remove the `/sitemap.xml` redirect route (admin has no sitemap); keep security headers and SPA fallback identical.
+
+**Step 6.** Edit `app-admin/index.html` — add `<script src="/config.js"></script>` immediately before the `<script type="module">` tag (mirrors `app/index.html` line 47).
+
+**Step 7.** Create `scripts/hooks/app-admin-postdeploy.sh` — copy of `scripts/hooks/app-postdeploy.sh`; replace all references to `SERVICE_APP_NAME` with `SERVICE_APP_ADMIN_NAME` throughout.
+
+**Step 8.** Update `scripts/hooks/predeploy.sh` — after the existing `app/` block, add an identical block targeting `app-admin/`:
+
+- Writes `app-admin/.env.production` with the same four `VITE_*` vars
+- Generates `app-admin/staticwebapp.config.json` from the new template (with `{{API_FUNCTIONS_URL}}` substitution)
+- Cleans `app-admin/dist`
+
+### Phase 1C: azd Integration
+
+**Step 9.** Update `azure.yaml` — add `app-admin` service entry after `app`:
+
+```yaml
+app-admin:
+  project: ./app-admin
+  host: staticwebapp
+  language: js
+  dist: dist
+  config:
+    buildCommand: bash scripts/build-with-env.sh
+    outputLocation: dist
+  hooks:
+    predeploy:
+      shell: sh
+      run: npm install && bash scripts/build-with-env.sh
+      cwd: ./app-admin
+      interactive: false
+    postdeploy:
+      shell: sh
+      run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/app-admin-postdeploy.sh"
+      interactive: false
+```
+
+---
+
+## PART 2 — Back-End Implementation
+
+### Phase 2A: Foundation (_blocks all pages_)
+
+**Step 10.** Verify/add required packages in `app-admin/package.json`: `graphql-request`, `graphql`, `@tanstack/react-query`.
+
+**Step 11.** Create `app-admin/src/lib/graphql-client.ts` — direct copy of `app/src/lib/graphql-client.ts`. Reads `window.APP_CONFIG.API_URL` → `import.meta.env.VITE_API_URL` → `http://localhost:5000/graphql`.
+
+**Step 12.** Create `app-admin/src/lib/utils.ts` — add `getFunctionsApiUrl()` that reads `window.APP_CONFIG.API_FUNCTIONS_URL` → `import.meta.env.VITE_API_FUNCTIONS_URL` → `http://localhost:7071`.
+
+**Step 13.** Wrap `App.tsx` in `QueryClientProvider` from `@tanstack/react-query` (if not already present).
+
+### Phase 2A-extra: Demo Admin User Seeding (_parallel with Steps 10–13; depends on Part 1 IaC_)
+
+The AdventureWorks `Password.csv` seed data contains example hashes generated from unknown plaintexts — they cannot be verified. There is no signup flow in the admin site. The cleanest approach: generate the hash inside the seed job PowerShell script using the exact same algorithm as `PasswordService.cs`, with a **fixed salt** so the operation is idempotent across re-runs.
+
+**Step 13b.** Extend `seed-job/seed-database.ps1` with a "Demo Admin User" block near the end of the seeding run:
+
+1. **Compute the hash in PowerShell** using .NET's `Rfc2898DeriveBytes` with the identical parameters to `api-functions/Services/PasswordService.cs`:
+   - `SaltSize = 6` bytes, `HashSize = 96` bytes, `Iterations = 100000`, `HashAlgorithmName::SHA256`
+   - **Fixed salt bytes**: `[byte[]](0x41,0x57,0x44,0x65,0x6D,0x6F)` (ASCII "AWDemo") → base64 `QVdEZW1v` — fixed so every re-run of the seed job is idempotent and produces the same verifiable hash
+   - Password: `Admin1234!`
+
+2. **MERGE/UPSERT four rows** via the existing ADO.NET connection in the script (safe to re-run):
+   - `Person.BusinessEntity` — MERGE on sentinel `BusinessEntityID = 99001` to avoid conflicts with seeded CSV data
+   - `Person.Person` — `PersonType = 'EM'`, `FirstName = 'Demo'`, `LastName = 'Admin'`, linked to BusinessEntityID 99001
+   - `Person.EmailAddress` — `EmailAddress = 'demo.admin@adventureworks.com'`, linked to BusinessEntityID 99001
+   - `Person.Password` — `PasswordHash = <computed>`, `PasswordSalt = 'QVdEZW1v'`, `ModifiedDate = GETDATE()`, `rowguid = NEWID()` — MERGE on BusinessEntityID
+
+**Step 13c.** Update `app-admin/src/pages/LoginPage.tsx` — add a visible demo-credentials hint card below the login form:
+
+- Email: `demo.admin@adventureworks.com`
+- Password: `Admin1234!`
+- Label: _"Demo credentials — seeded into the database at deploy time"_
+
+**Step 13d.** Add `ADMIN_TEST_EMAIL=demo.admin@adventureworks.com` and `ADMIN_TEST_PASSWORD=Admin1234!` to `tests/README.md` (env vars used by the test helper `adminTestUser.ts`).
+
+> **Why this approach:** Calling `/api/password` POST from the seed job would create a timing dependency (Functions may not be deployed yet). A pre-computed hardcoded hash would silently break if algorithm params change. A fixed-salt in-script hash is fully self-contained, reproducible, and uses the identical algorithm the verify endpoint uses.
+
+### Phase 2B: Authentication (_depends on Steps 11–12_)
+
+**Step 14.** Rewrite `app-admin/src/context/AuthContext.tsx`:
+
+- **Login flow**: DAB GraphQL query — `emailAddresses(filter: { EmailAddress: { eq: $email } }) { items { BusinessEntityID, people { items { FirstName, LastName, PersonType } } } }` — to find user; then POST to `/api/password/verify` with `{ businessEntityID, password }` (same pattern as `app/src/lib/authService.ts`)
+- **Internal-user gate**: After lookup, check `PersonType = 'EM'` (employees only); return auth error if not
+- **Session persistence**: Keep `localStorage.getItem(CURRENT_USER_KEY)` for session restore on reload; remove `MOCK_EMPLOYEES` object entirely
+- Remove `password` field from the `User` type (never store plaintext client-side)
+
+### Phase 2C: Pages (_all parallel with each other; depend on Steps 11–14_)
+
+**Step 15 — Dashboard `pages/Index.tsx`**:
+
+- Replace four mock counts with four DAB GraphQL queries (`products`, `customers`, `salesOrderHeaders`, `productReviews`) using `{ items { <PK only> } }` for efficient counting
+- Recent 5 orders: `salesOrderHeaders(orderBy: { OrderDate: DESC }, first: 5)` with nested `salesOrderDetails`
+- Extract into `app-admin/src/hooks/useDashboardStats.ts`
+
+**Step 16 — Category `pages/CategoryPage.tsx`** _(parallel with 17)_:
+
+- Replace `mockData.categories/subcategories/products` with DAB GraphQL `productCategories`, `productSubcategories`, `products(filter: { ProductSubcategoryID: { in: [...] } })`
+- Create `app-admin/src/hooks/useCategories.ts` and `useProducts.ts`
+
+**Step 17 — Product Detail `pages/ProductPage.tsx`** _(parallel with 16)_:
+
+- Product: DAB GraphQL `products(filter: { ProductID: { eq: $id } })` with nested `productProductPhotos { items { productPhoto { items { LargePhoto } } } }`
+- Reviews on product: `productReviews(filter: { ProductID: { eq: $id } })`
+- Promotions on product: `specialOfferProducts(filter: { ProductID: { eq: $id } })`
+- AI images: replace `aw_product_images_{id}` localStorage with Functions `/api/generate/product-images` (Durable — poll returned status URL)
+
+**Step 18 — Customers `pages/CustomersPage.tsx`**:
+
+- Replace mock customers + localStorage edits with DAB GraphQL: `customers { items { CustomerID, people { items { FirstName, LastName } }, businessEntityAddresses { items { addresses { items { AddressLine1, City, StateProvince, PostalCode } } } } } }`
+- Order history per customer: `salesOrderHeaders(filter: { CustomerID: { eq: $id } })`
+- Edit customer → `updatePeople` + `updateAddresses` DAB mutations
+- Bulk email → Functions `/api/customers/{customerId}/send-email` per selected customer
+- Remove `adventureworks_customers` localStorage key entirely
+
+**Step 19 — Orders `pages/OrdersPage.tsx`**:
+
+- Orders list: DAB GraphQL `salesOrderHeaders` with nested `salesOrderDetails { items { ProductID, OrderQty, LineTotal, products { items { Name } } } }`
+- Order status update: `updateSalesOrderHeaders` DAB mutation; remove `aw_order_statuses` localStorage
+- Begin processing: Functions POST `/api/orders/begin-processing-order`
+- Receipt generate/email: Functions POST `/api/orders/generate-and-send-receipt`
+
+**Step 20 — Reviews `pages/ReviewsPage.tsx`**:
+
+- Reviews: DAB GraphQL `productReviews` with nested `products { items { Name } }`
+- Delete: DAB GraphQL `deleteProductReviews(ProductReviewID: $id)`
+- Mark helpful: `updateProductReviews` mutation (confirm `Helpfulness` column exists; otherwise flag as Follow-up)
+- Sentiment/response: interim — Functions `/api/agent/chat` with structured prompt until F-1 is built
+
+**Step 21 — Promotions `pages/PromotionsPage.tsx`**:
+
+- Special offers: DAB GraphQL `specialOffers` (full CRUD)
+- Offer-product links: DAB GraphQL `specialOfferProducts` (CRUD)
+- Mutations: `createSpecialOffers`, `updateSpecialOffers`, `deleteSpecialOffers`
+
+**Step 22 — Cultures `pages/CulturesPage.tsx`**:
+
+- Cultures: DAB GraphQL `cultures` (CRUD)
+- Product localizations: `productModelProductDescriptionCultures` with nested `productDescriptions`
+- Translation action: Functions POST `/api/translate/product-descriptions`
+
+**Step 23 — Currencies `pages/CurrenciesPage.tsx`**:
+
+- Currency master data: DAB GraphQL `currencies`
+- Currency rates: DAB GraphQL `currencyRates`
+- Live rate refresh: keep `open.er-api.com` call as-is (real external API, not a mock)
+
+**Step 24 — Stale Carts `pages/StaleCartsPage.tsx`**:
+
+- Carts: DAB GraphQL `shoppingCartItems` filtered by `DateCreated lt $cutoffDate`; group by `ShoppingCartID`, enrich with customer data
+- Per-cart email: Functions `/api/customers/{customerId}/send-email`
+- Bulk recovery campaign → **Follow-up F-2** (no existing endpoint)
+
+**Step 25 — Utilities `pages/UtilitiesPage.tsx`**:
+
+- Remove `mockUtilityService.ts` and `mockRpcServer.ts` entirely
+- Wire each card to the corresponding Durable Function:
+  - NLU BI → `/api/agent/chat`
+  - Product enhancement → `/api/embellish-products`
+  - Embeddings → `/api/generate/product-embeddings`, `/api/generate/review-embeddings`
+  - Translations → `/api/translate/product-descriptions`
+  - Images → `/api/generate/product-images`
+  - Reviews → `/api/generate/product-reviews`
+- Implement real Durable Function polling loop (GET `statusQueryGetUri` until terminal status)
+
+**Step 26 — Search `pages/SearchPage.tsx`**:
+
+- Replace naive mock search with Functions POST `/api/search/semantic`
+- Facet filters (category, price): apply post-fetch in-memory on results, or DAB `products` with filters for exact matches
+
+**Step 27 — AI Features `pages/AiFeaturesPage.tsx`**:
+
+- Wire all feature cards to their real endpoints (mapped in Steps 17–26)
+- AI Chat: Functions `/api/agent/chat`
+- Email generation: preview via `/api/agent/chat` prompt, send via `/api/customers/{id}/send-email`
+- Remove `mockReceiptService.ts`
+
+---
+
+## PART 3 — Playwright Test Suite (Azure-hosted)
+
+### Phase 3A: Test Infrastructure (_depends on Part 1 IaC_)
+
+**Step 28.** Update `tests/utils/env.ts` — add `adminWebBaseUrl` to `TestEnvironment`:
+
+- `process.env.ADMIN_WEB_BASE_URL` → `azd env get-value APP_ADMIN_REDIRECT_URI` → `http://localhost:5174`
+
+**Step 29.** Create `tests/utils/adminTestUser.ts` — admin login helper modelled on `tests/utils/testUser.ts`:
+
+- `loginAsAdmin(page, email?, password?)` navigates to `adminWebBaseUrl`, fills login form, waits for `localStorage.getItem('adventureworks_admin_user') !== null`, returns `{ email, firstName }`
+- Reads credentials from env vars `ADMIN_TEST_EMAIL` / `ADMIN_TEST_PASSWORD` (set in step 13d)
+
+**Step 30.** Create `tests/playwright.admin.config.ts` — mirrors `tests/playwright.azure.config.ts`:
+
+- `testDir: './specs/admin'`
+- `baseURL: testEnv.adminWebBaseUrl`
+- Same Azure Playwright block: 20 workers, 2 retries, `@azure/playwright/reporter`, `DefaultAzureCredential`
+
+**Step 31.** Update `tests/global-setup.ts` — add fourth service check:
+
+```typescript
+{ name: "Admin Web App (SWA)", url: testEnv.adminWebBaseUrl }
+```
+
+**Step 32.** Create directory `tests/specs/admin/`.
+
+### Phase 3B: Test Specs (_all parallel; depend on Steps 28–32 and all of Part 2_)
+
+| Step   | Spec file                  | Key assertions                                                                                                                                                                    |
+| ------ | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **33** | `admin/auth.spec.ts`       | Employee login sets session key; bad credentials show error, no session; `PersonType ≠ 'EM'` rejected; session persists on reload; logout clears session + redirects              |
+| **34** | `admin/dashboard.spec.ts`  | 4 KPI stat cards render with real numeric values > 0; recent orders ≤ 5 rows; product count cross-checked against `GET /api/Product?$count=true`                                  |
+| **35** | `admin/products.spec.ts`   | Category listing shows real products; product detail loads name/price/photos; promotions + reviews tabs load; AI image generation reaches Functions and renders (120s timeout)    |
+| **36** | `admin/customers.spec.ts`  | Paginated customer list; search filters; order history expands; edit phone → reload → value persisted (DB confirmed); bulk email asserts Functions HTTP call via `waitForRequest` |
+| **37** | `admin/orders.spec.ts`     | Real orders load; line items expand; status change persists DB after reload; receipt generation asserts 202 via `waitForResponse`; email dialog dismissible                       |
+| **38** | `admin/reviews.spec.ts`    | Reviews load from DB; rating filter narrows results; delete removes item from list; "Analyse with AI" triggers `/api/agent/chat` request                                          |
+| **39** | `admin/promotions.spec.ts` | List loads from DB; full create/edit/delete cycle; status badge (active/upcoming/expired) matches date range                                                                      |
+| **40** | `admin/utilities.spec.ts`  | All 6 utility cards present; "Generate Embeddings" → 202 + status URL asserted; "Translate Descriptions" → 202; polling UI appears within 5s                                      |
+| **41** | `admin/search.spec.ts`     | Search triggers `/api/search/semantic` (`waitForRequest`); results appear; category filter reduces count; price sort reorders                                                     |
+
+### Phase 3C: CI / azd Integration
+
+**Step 42.** Add script to root `package.json`:
+
+```json
+"test:admin:azure": "npx playwright test --config=tests/playwright.admin.config.ts"
+```
+
+**Step 43.** Add "Admin Tests" section to `tests/README.md` with env vars and run instructions, alongside existing guidance.
+
+---
+
+## Follow-up Tasks (no existing API yet)
+
+| ID      | Feature                             | What's Needed                                                                                                                                                                                          |
+| ------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **F-1** | Dedicated Review Sentiment Analysis | New Azure Function `POST /api/reviews/analyze-sentiment`: accepts `{ reviewText, rating }`, calls Azure OpenAI, returns `{ sentiment, suggestedResponse }`. Step 20 uses `/api/agent/chat` as interim. |
+| **F-2** | Bulk Cart Recovery Campaign         | New Azure Durable Function `POST /api/stalecarts/send-recovery-campaign`: takes array of cart+customer IDs, sends templated recovery emails via Communication Services.                                |
+| **F-3** | Employee-scoped auth validation     | Confirm `PersonType = 'EM'` filter on `people` is sufficient, or add `HumanResources.Employee` entity to `api/dab-config.json` for deeper employee validation.                                         |
+
+---
+
+## Verification
+
+1. `azd provision` succeeds; two SWA resources appear in Azure portal.
+2. `azd deploy` produces both `SERVICE_APP_NAME` and `SERVICE_APP_ADMIN_NAME` in `azd env get-values`.
+3. Seed job completes; `demo.admin@adventureworks.com` exists in DB with a verifiable password hash.
+4. Admin URL loads; login with `demo.admin@adventureworks.com` / `Admin1234!` succeeds.
+5. Dashboard shows real counts; cross-check against `curl $API_URL/api/Customer | jq '.value | length'`.
+6. Open each page: browser DevTools → Application → Local Storage shows **no data keys** except the session auth key.
+7. Change an order status; DAB GraphQL query confirms DB change persisted.
+8. Trigger "Generate Embeddings" on Utilities; real Durable Function status URL returned and polling completes.
+9. `grep -r "localStorage" app-admin/src` — only `adventureworks_admin_user` session key remains.
+10. `npm run test:admin:azure` — all 9 admin spec files pass on Azure-hosted Playwright.
+
+---
+
+## Decisions & Exclusions
+
+- **Auth mechanism**: Same custom email+password flow as `app` (DAB GraphQL lookup + `/api/password/verify`), gated to `PersonType = 'EM'`. Full Entra ID SSO is out of scope for this demo.
+- **Demo credential seeding**: Fixed-salt PBKDF2 hash computed in PowerShell inside the seed job — idempotent, self-contained, no external service dependency.
+- **Live currency rates**: `open.er-api.com` call kept as-is (real external API, not mock data).
+- **`swa-app.bicep` unchanged**: New `swa-app-admin.bicep` created rather than modifying existing module, to avoid any risk of breaking the existing `app` deployment.
+- **Test config isolation**: Separate `playwright.admin.config.ts` so existing test runs are completely unaffected.
+- **Voice Sales Assistant**: Out of scope — requires Speech Services SDK integration beyond the current Functions surface.
+
+---
+
+## File Map
+
+### New files to create
+
+| File                                          | Purpose                                 |
+| --------------------------------------------- | --------------------------------------- |
+| `infra/modules/swa-app-admin.bicep`           | Admin SWA Bicep module                  |
+| `app-admin/scripts/build-with-env.sh`         | Build script                            |
+| `app-admin/scripts/generate-config.sh`        | Config generation                       |
+| `app-admin/staticwebapp.config.template.json` | SWA routing config template             |
+| `app-admin/public/config.js`                  | Placeholder (overwritten at build time) |
+| `scripts/hooks/app-admin-postdeploy.sh`       | Post-deploy hook                        |
+| `app-admin/src/lib/graphql-client.ts`         | GraphQL client                          |
+| `app-admin/src/lib/utils.ts`                  | API URL helpers                         |
+| `tests/utils/adminTestUser.ts`                | Admin login test helper                 |
+| `tests/playwright.admin.config.ts`            | Admin Playwright config                 |
+| `tests/specs/admin/auth.spec.ts`              | Auth tests                              |
+| `tests/specs/admin/dashboard.spec.ts`         | Dashboard tests                         |
+| `tests/specs/admin/products.spec.ts`          | Products tests                          |
+| `tests/specs/admin/customers.spec.ts`         | Customers tests                         |
+| `tests/specs/admin/orders.spec.ts`            | Orders tests                            |
+| `tests/specs/admin/reviews.spec.ts`           | Reviews tests                           |
+| `tests/specs/admin/promotions.spec.ts`        | Promotions tests                        |
+| `tests/specs/admin/utilities.spec.ts`         | Utilities tests                         |
+| `tests/specs/admin/search.spec.ts`            | Search tests                            |
+
+### Files to modify
+
+| File                                     | What changes                          |
+| ---------------------------------------- | ------------------------------------- |
+| `infra/main.bicep`                       | Add admin SWA module call + 3 outputs |
+| `azure.yaml`                             | Add `app-admin` service               |
+| `scripts/hooks/predeploy.sh`             | Add app-admin build block             |
+| `app-admin/index.html`                   | Add `config.js` script tag            |
+| `seed-job/seed-database.ps1`             | Add demo admin user MERGE block       |
+| `app-admin/src/context/AuthContext.tsx`  | Replace mock auth with real API       |
+| `app-admin/src/pages/LoginPage.tsx`      | Add demo credentials hint             |
+| `app-admin/src/pages/Index.tsx`          | Real DAB data                         |
+| `app-admin/src/pages/CategoryPage.tsx`   | Real DAB data                         |
+| `app-admin/src/pages/ProductPage.tsx`    | Real DAB data + Functions             |
+| `app-admin/src/pages/CustomersPage.tsx`  | Real DAB data + Functions             |
+| `app-admin/src/pages/OrdersPage.tsx`     | Real DAB data + Functions             |
+| `app-admin/src/pages/ReviewsPage.tsx`    | Real DAB data + Functions             |
+| `app-admin/src/pages/PromotionsPage.tsx` | Real DAB data                         |
+| `app-admin/src/pages/CulturesPage.tsx`   | Real DAB data + Functions             |
+| `app-admin/src/pages/CurrenciesPage.tsx` | Real DAB data                         |
+| `app-admin/src/pages/StaleCartsPage.tsx` | Real DAB data + Functions             |
+| `app-admin/src/pages/UtilitiesPage.tsx`  | Real Functions (remove mock service)  |
+| `app-admin/src/pages/SearchPage.tsx`     | Real Functions semantic search        |
+| `app-admin/src/pages/AiFeaturesPage.tsx` | Wire to real endpoints                |
+| `tests/utils/env.ts`                     | Add `adminWebBaseUrl`                 |
+| `tests/global-setup.ts`                  | Add admin SWA health check            |
+| `tests/README.md`                        | Admin test run instructions           |

@@ -1,5 +1,15 @@
-import { useState } from "react";
-import { Plus, Pencil, Trash2, DollarSign, Search, RefreshCw, TrendingUp } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  DollarSign,
+  Search,
+  RefreshCw,
+  TrendingUp,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,20 +44,41 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Currency, CurrencyRate } from "@/types/currency";
-import { currencies as initialCurrencies, currencyRates as initialRates } from "@/data/mockCurrencies";
+import {
+  useAdminCurrencies,
+  useAdminCurrencyRates,
+} from "@/hooks/useAdminCatalog";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import { format } from "date-fns";
 
 const CurrenciesPage = () => {
   const { toast } = useToast();
-  const [currencies, setCurrencies] = useState<Currency[]>(initialCurrencies);
-  const [currencyRates, setCurrencyRates] = useState<CurrencyRate[]>(initialRates);
+  const { data: apiCurrencies = [] } = useAdminCurrencies();
+  const [ratesCursor, setRatesCursor] = useState<string | null>(null);
+  const [ratesCursorStack, setRatesCursorStack] = useState<string[]>([]);
+  const { data: ratesData } = useAdminCurrencyRates(ratesCursor);
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [currencyRates, setCurrencyRates] = useState<CurrencyRate[]>([]);
+  const [ratesHasMore, setRatesHasMore] = useState(false);
+
+  useEffect(() => {
+    if (apiCurrencies.length > 0) setCurrencies(apiCurrencies);
+  }, [apiCurrencies]);
+  useEffect(() => {
+    const items = ratesData?.items;
+    if (items && items.length > 0) {
+      setCurrencyRates(items);
+      setRatesHasMore(ratesData?.hasNextPage ?? false);
+    }
+  }, [ratesData]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [editingCurrency, setEditingCurrency] = useState<Currency | null>(null);
-  const [deletingCurrency, setDeletingCurrency] = useState<Currency | null>(null);
+  const [deletingCurrency, setDeletingCurrency] = useState<Currency | null>(
+    null,
+  );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
@@ -59,12 +90,14 @@ const CurrenciesPage = () => {
   const filteredCurrencies = currencies.filter(
     (currency) =>
       currency.Name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      currency.CurrencyCode.toLowerCase().includes(searchQuery.toLowerCase())
+      currency.CurrencyCode.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const getRatesForCurrency = (currencyCode: string) => {
     return currencyRates.filter(
-      (rate) => rate.FromCurrencyCode === currencyCode || rate.ToCurrencyCode === currencyCode
+      (rate) =>
+        rate.FromCurrencyCode === currencyCode ||
+        rate.ToCurrencyCode === currencyCode,
     ).length;
   };
 
@@ -111,16 +144,26 @@ const CurrenciesPage = () => {
       setCurrencies((prev) =>
         prev.map((c) =>
           c.CurrencyCode === editingCurrency.CurrencyCode
-            ? { ...c, Name: formData.Name, ModifiedDate: new Date().toISOString() }
-            : c
-        )
+            ? {
+                ...c,
+                Name: formData.Name,
+                ModifiedDate: new Date().toISOString(),
+              }
+            : c,
+        ),
       );
       toast({
         title: "Currency Updated",
         description: `"${formData.Name}" has been updated.`,
       });
     } else {
-      if (currencies.some((c) => c.CurrencyCode.toUpperCase() === formData.CurrencyCode.toUpperCase())) {
+      if (
+        currencies.some(
+          (c) =>
+            c.CurrencyCode.toUpperCase() ===
+            formData.CurrencyCode.toUpperCase(),
+        )
+      ) {
         toast({
           title: "Duplicate Code",
           description: "A currency with this code already exists.",
@@ -144,14 +187,16 @@ const CurrenciesPage = () => {
 
   const handleDelete = () => {
     if (deletingCurrency) {
-      setCurrencies((prev) => prev.filter((c) => c.CurrencyCode !== deletingCurrency.CurrencyCode));
+      setCurrencies((prev) =>
+        prev.filter((c) => c.CurrencyCode !== deletingCurrency.CurrencyCode),
+      );
       // Also remove associated rates
       setCurrencyRates((prev) =>
         prev.filter(
           (r) =>
             r.FromCurrencyCode !== deletingCurrency.CurrencyCode &&
-            r.ToCurrencyCode !== deletingCurrency.CurrencyCode
-        )
+            r.ToCurrencyCode !== deletingCurrency.CurrencyCode,
+        ),
       );
       toast({
         title: "Currency Deleted",
@@ -164,28 +209,32 @@ const CurrenciesPage = () => {
 
   const refreshExchangeRates = async () => {
     setIsRefreshing(true);
-    
+
     try {
       // Using the free ExchangeRate-API (no key required for basic usage)
       const response = await fetch("https://open.er-api.com/v6/latest/USD");
-      
+
       if (!response.ok) {
         throw new Error("Failed to fetch exchange rates");
       }
-      
+
       const data = await response.json();
-      
+
       if (data.result !== "success") {
         throw new Error("API returned an error");
       }
 
       const now = new Date();
       const newRates: CurrencyRate[] = [];
-      let rateId = Math.max(...currencyRates.map((r) => r.CurrencyRateID), 0) + 1;
+      let rateId =
+        Math.max(...currencyRates.map((r) => r.CurrencyRateID), 0) + 1;
 
       // Create rates from USD to each other currency
       currencies.forEach((currency) => {
-        if (currency.CurrencyCode !== "USD" && data.rates[currency.CurrencyCode]) {
+        if (
+          currency.CurrencyCode !== "USD" &&
+          data.rates[currency.CurrencyCode]
+        ) {
           const rate = data.rates[currency.CurrencyCode];
           newRates.push({
             CurrencyRateID: rateId++,
@@ -202,8 +251,13 @@ const CurrenciesPage = () => {
       // Add cross-rates for EUR as base
       if (data.rates["EUR"]) {
         currencies.forEach((currency) => {
-          if (currency.CurrencyCode !== "EUR" && currency.CurrencyCode !== "USD" && data.rates[currency.CurrencyCode]) {
-            const eurRate = data.rates[currency.CurrencyCode] / data.rates["EUR"];
+          if (
+            currency.CurrencyCode !== "EUR" &&
+            currency.CurrencyCode !== "USD" &&
+            data.rates[currency.CurrencyCode]
+          ) {
+            const eurRate =
+              data.rates[currency.CurrencyCode] / data.rates["EUR"];
             newRates.push({
               CurrencyRateID: rateId++,
               CurrencyRateDate: format(now, "yyyy-MM-dd"),
@@ -219,7 +273,7 @@ const CurrenciesPage = () => {
 
       setCurrencyRates(newRates);
       setLastRefresh(now);
-      
+
       toast({
         title: "Exchange Rates Updated",
         description: `Successfully refreshed ${newRates.length} exchange rates from live data.`,
@@ -247,15 +301,23 @@ const CurrenciesPage = () => {
             <div className="flex items-center gap-3">
               <DollarSign className="h-8 w-8 text-primary" />
               <div>
-                <h1 className="text-3xl font-bold text-foreground">Currencies</h1>
+                <h1 className="text-3xl font-bold text-foreground">
+                  Currencies
+                </h1>
                 <p className="text-muted-foreground">
                   Manage currencies and exchange rates for international pricing
                 </p>
               </div>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={refreshExchangeRates} disabled={isRefreshing}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
+              <Button
+                variant="outline"
+                onClick={refreshExchangeRates}
+                disabled={isRefreshing}
+              >
+                <RefreshCw
+                  className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
+                />
                 {isRefreshing ? "Refreshing..." : "Refresh Rates"}
               </Button>
               <Button onClick={openCreateDialog}>
@@ -275,7 +337,9 @@ const CurrenciesPage = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-3xl font-bold text-primary">{currencies.length}</p>
+                <p className="text-3xl font-bold text-primary">
+                  {currencies.length}
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -286,7 +350,10 @@ const CurrenciesPage = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-3xl font-bold text-primary">{currencyRates.length}</p>
+                <p className="text-3xl font-bold text-primary">
+                  {currencyRates.length}
+                  {ratesHasMore ? "+" : ""}
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -298,7 +365,9 @@ const CurrenciesPage = () => {
               </CardHeader>
               <CardContent>
                 <p className="text-lg font-medium text-muted-foreground">
-                  {lastRefresh ? format(lastRefresh, "MMM d, yyyy HH:mm") : "Never"}
+                  {lastRefresh
+                    ? format(lastRefresh, "MMM d, yyyy HH:mm")
+                    : "Never"}
                 </p>
               </CardContent>
             </Card>
@@ -338,7 +407,10 @@ const CurrenciesPage = () => {
                     <TableBody>
                       {filteredCurrencies.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          <TableCell
+                            colSpan={5}
+                            className="text-center py-8 text-muted-foreground"
+                          >
                             No currencies found.
                           </TableCell>
                         </TableRow>
@@ -352,11 +424,17 @@ const CurrenciesPage = () => {
                             <TableCell>
                               <Badge variant="secondary">
                                 <TrendingUp className="h-3 w-3 mr-1" />
-                                {getRatesForCurrency(currency.CurrencyCode)} rates
+                                {getRatesForCurrency(
+                                  currency.CurrencyCode,
+                                )}{" "}
+                                rates
                               </Badge>
                             </TableCell>
                             <TableCell className="text-muted-foreground">
-                              {format(new Date(currency.ModifiedDate), "MMM d, yyyy HH:mm")}
+                              {format(
+                                new Date(currency.ModifiedDate),
+                                "MMM d, yyyy HH:mm",
+                              )}
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-2">
@@ -392,8 +470,15 @@ const CurrenciesPage = () => {
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
                     <span>Current Exchange Rates</span>
-                    <Button variant="outline" size="sm" onClick={refreshExchangeRates} disabled={isRefreshing}>
-                      <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={refreshExchangeRates}
+                      disabled={isRefreshing}
+                    >
+                      <RefreshCw
+                        className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
+                      />
                       Refresh
                     </Button>
                   </CardTitle>
@@ -412,8 +497,12 @@ const CurrenciesPage = () => {
                     <TableBody>
                       {currencyRates.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                            No exchange rates available. Click "Refresh Rates" to fetch current rates.
+                          <TableCell
+                            colSpan={5}
+                            className="text-center py-8 text-muted-foreground"
+                          >
+                            No exchange rates available. Click "Refresh Rates"
+                            to fetch current rates.
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -426,9 +515,14 @@ const CurrenciesPage = () => {
                               {rate.ToCurrencyCode}
                             </TableCell>
                             <TableCell>{rate.AverageRate.toFixed(4)}</TableCell>
-                            <TableCell>{rate.EndOfDayRate.toFixed(4)}</TableCell>
+                            <TableCell>
+                              {rate.EndOfDayRate.toFixed(4)}
+                            </TableCell>
                             <TableCell className="text-muted-foreground">
-                              {format(new Date(rate.CurrencyRateDate), "MMM d, yyyy")}
+                              {format(
+                                new Date(rate.CurrencyRateDate),
+                                "MMM d, yyyy",
+                              )}
                             </TableCell>
                           </TableRow>
                         ))
@@ -437,6 +531,36 @@ const CurrenciesPage = () => {
                   </Table>
                 </CardContent>
               </Card>
+              {/* DAB page navigation for exchange rates */}
+              {(ratesCursorStack.length > 0 || ratesData?.hasNextPage) && (
+                <div className="flex items-center justify-between pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const prev =
+                        ratesCursorStack[ratesCursorStack.length - 1] ?? null;
+                      setRatesCursorStack((s) => s.slice(0, -1));
+                      setRatesCursor(prev);
+                    }}
+                    disabled={ratesCursorStack.length === 0}
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-2" /> Previous 100
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Batch {ratesCursorStack.length + 1}
+                  </span>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setRatesCursorStack((s) => [...s, ratesCursor ?? ""]);
+                      setRatesCursor(ratesData!.endCursor);
+                    }}
+                    disabled={!ratesData?.hasNextPage}
+                  >
+                    Next 100 <ChevronRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </div>
+              )}{" "}
             </TabsContent>
           </Tabs>
         </div>
@@ -466,7 +590,10 @@ const CurrenciesPage = () => {
                 placeholder="e.g., USD, EUR, GBP"
                 value={formData.CurrencyCode}
                 onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, CurrencyCode: e.target.value.toUpperCase() }))
+                  setFormData((prev) => ({
+                    ...prev,
+                    CurrencyCode: e.target.value.toUpperCase(),
+                  }))
                 }
                 disabled={!!editingCurrency}
                 maxLength={3}
@@ -503,13 +630,17 @@ const CurrenciesPage = () => {
       </Dialog>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Currency</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{deletingCurrency?.Name}" ({deletingCurrency?.CurrencyCode})? 
-              This will also remove all associated exchange rates. This action cannot be undone.
+              Are you sure you want to delete "{deletingCurrency?.Name}" (
+              {deletingCurrency?.CurrencyCode})? This will also remove all
+              associated exchange rates. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

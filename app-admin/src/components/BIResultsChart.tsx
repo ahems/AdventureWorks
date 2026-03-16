@@ -1,26 +1,33 @@
-import React from 'react';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import React from "react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   PieChart,
   Pie,
   Cell,
   LineChart,
   Line,
-  Legend
-} from 'recharts';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+  Legend,
+} from "recharts";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface BIResult {
-  type: 'bar' | 'pie' | 'line' | 'table' | 'metric';
+  type: "bar" | "pie" | "line" | "table" | "metric";
   title: string;
   insight: string;
-  data: any[];
+  data: Record<string, unknown>[];
   dataKey?: string;
   nameKey?: string;
 }
@@ -30,23 +37,31 @@ interface BIResultsChartProps {
 }
 
 const COLORS = [
-  'hsl(var(--doodle-accent))',
-  'hsl(var(--doodle-green))',
-  'hsl(var(--doodle-blue))',
-  'hsl(var(--doodle-yellow))',
-  '#8884d8',
-  '#82ca9d',
-  '#ffc658',
-  '#ff7c43'
+  "hsl(var(--doodle-accent))",
+  "hsl(var(--doodle-green))",
+  "hsl(var(--doodle-blue))",
+  "hsl(var(--doodle-yellow))",
+  "#8884d8",
+  "#82ca9d",
+  "#ffc658",
+  "#ff7c43",
 ];
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface TooltipProps {
+  active?: boolean;
+  payload?: Array<{ value: unknown }>;
+  label?: string;
+}
+
+const CustomTooltip = ({ active, payload, label }: TooltipProps) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white border-2 border-doodle-text p-2 shadow-lg">
-        <p className="font-doodle text-sm font-bold text-doodle-text">{label}</p>
+        <p className="font-doodle text-sm font-bold text-doodle-text">
+          {label}
+        </p>
         <p className="font-doodle text-sm text-doodle-accent">
-          {typeof payload[0].value === 'number' 
+          {typeof payload[0].value === "number"
             ? `$${payload[0].value.toLocaleString()}`
             : payload[0].value}
         </p>
@@ -57,27 +72,33 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 const BIResultsChart: React.FC<BIResultsChartProps> = ({ result }) => {
-  const { type, data, dataKey = 'value', nameKey = 'name' } = result;
+  const { type, data, dataKey = "value", nameKey = "name" } = result;
 
-  if (type === 'bar') {
+  if (type === "bar") {
     return (
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--doodle-text) / 0.1)" />
-            <XAxis 
-              dataKey={nameKey} 
-              tick={{ fontSize: 12, fontFamily: 'Patrick Hand' }}
+          <BarChart
+            data={data}
+            margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
+          >
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="hsl(var(--doodle-text) / 0.1)"
+            />
+            <XAxis
+              dataKey={nameKey}
+              tick={{ fontSize: 12, fontFamily: "Patrick Hand" }}
               stroke="hsl(var(--doodle-text))"
             />
-            <YAxis 
-              tick={{ fontSize: 12, fontFamily: 'Patrick Hand' }}
+            <YAxis
+              tick={{ fontSize: 12, fontFamily: "Patrick Hand" }}
               stroke="hsl(var(--doodle-text))"
               tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
             />
             <Tooltip content={<CustomTooltip />} />
-            <Bar 
-              dataKey={dataKey} 
+            <Bar
+              dataKey={dataKey}
               fill="hsl(var(--doodle-accent))"
               radius={[4, 4, 0, 0]}
             />
@@ -87,7 +108,7 @@ const BIResultsChart: React.FC<BIResultsChartProps> = ({ result }) => {
     );
   }
 
-  if (type === 'pie') {
+  if (type === "pie") {
     return (
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
@@ -99,16 +120,23 @@ const BIResultsChart: React.FC<BIResultsChartProps> = ({ result }) => {
               cx="50%"
               cy="50%"
               outerRadius={80}
-              label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-              labelLine={{ stroke: 'hsl(var(--doodle-text))' }}
+              label={({ name, percent }) =>
+                `${name} (${(percent * 100).toFixed(0)}%)`
+              }
+              labelLine={{ stroke: "hsl(var(--doodle-text))" }}
             >
               {data.map((_, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                <Cell
+                  key={`cell-${index}`}
+                  fill={COLORS[index % COLORS.length]}
+                />
               ))}
             </Pie>
             <Tooltip content={<CustomTooltip />} />
-            <Legend 
-              formatter={(value) => <span className="font-doodle text-sm">{value}</span>}
+            <Legend
+              formatter={(value) => (
+                <span className="font-doodle text-sm">{value}</span>
+              )}
             />
           </PieChart>
         </ResponsiveContainer>
@@ -116,30 +144,36 @@ const BIResultsChart: React.FC<BIResultsChartProps> = ({ result }) => {
     );
   }
 
-  if (type === 'line') {
+  if (type === "line") {
     return (
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--doodle-text) / 0.1)" />
-            <XAxis 
+          <LineChart
+            data={data}
+            margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
+          >
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="hsl(var(--doodle-text) / 0.1)"
+            />
+            <XAxis
               dataKey={nameKey}
-              tick={{ fontSize: 12, fontFamily: 'Patrick Hand' }}
+              tick={{ fontSize: 12, fontFamily: "Patrick Hand" }}
               stroke="hsl(var(--doodle-text))"
             />
-            <YAxis 
-              tick={{ fontSize: 12, fontFamily: 'Patrick Hand' }}
+            <YAxis
+              tick={{ fontSize: 12, fontFamily: "Patrick Hand" }}
               stroke="hsl(var(--doodle-text))"
               tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
             />
             <Tooltip content={<CustomTooltip />} />
-            <Line 
-              type="monotone" 
-              dataKey={dataKey} 
+            <Line
+              type="monotone"
+              dataKey={dataKey}
               stroke="hsl(var(--doodle-accent))"
               strokeWidth={3}
-              dot={{ fill: 'hsl(var(--doodle-accent))', strokeWidth: 2 }}
-              activeDot={{ r: 6, fill: 'hsl(var(--doodle-green))' }}
+              dot={{ fill: "hsl(var(--doodle-accent))", strokeWidth: 2 }}
+              activeDot={{ r: 6, fill: "hsl(var(--doodle-green))" }}
             />
           </LineChart>
         </ResponsiveContainer>
@@ -147,7 +181,7 @@ const BIResultsChart: React.FC<BIResultsChartProps> = ({ result }) => {
     );
   }
 
-  if (type === 'table') {
+  if (type === "table") {
     return (
       <div className="overflow-x-auto">
         <Table>
@@ -155,7 +189,7 @@ const BIResultsChart: React.FC<BIResultsChartProps> = ({ result }) => {
             <TableRow>
               {Object.keys(data[0] || {}).map((key) => (
                 <TableHead key={key} className="font-doodle capitalize">
-                  {key.replace(/([A-Z])/g, ' $1').trim()}
+                  {key.replace(/([A-Z])/g, " $1").trim()}
                 </TableHead>
               ))}
             </TableRow>
@@ -163,9 +197,10 @@ const BIResultsChart: React.FC<BIResultsChartProps> = ({ result }) => {
           <TableBody>
             {data.map((row, i) => (
               <TableRow key={i}>
-                {Object.values(row).map((value: any, j) => (
+                {Object.values(row).map((value: unknown, j) => (
                   <TableCell key={j} className="font-doodle">
-                    {typeof value === 'number' && j === Object.keys(row).indexOf('total')
+                    {typeof value === "number" &&
+                    j === Object.keys(row).indexOf("total")
                       ? `$${value.toLocaleString()}`
                       : String(value)}
                   </TableCell>
@@ -178,16 +213,20 @@ const BIResultsChart: React.FC<BIResultsChartProps> = ({ result }) => {
     );
   }
 
-  if (type === 'metric') {
+  if (type === "metric") {
     return (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {data.map((item, i) => (
-          <div 
-            key={i} 
+          <div
+            key={i}
             className="text-center p-4 border-2 border-doodle-text/20 rounded-lg"
           >
-            <p className="font-doodle text-2xl font-bold text-doodle-accent">{item.value}</p>
-            <p className="font-doodle text-sm text-doodle-text/60">{item.label}</p>
+            <p className="font-doodle text-2xl font-bold text-doodle-accent">
+              {item.value}
+            </p>
+            <p className="font-doodle text-sm text-doodle-text/60">
+              {item.label}
+            </p>
           </div>
         ))}
       </div>
