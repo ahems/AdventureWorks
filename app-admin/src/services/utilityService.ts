@@ -131,6 +131,48 @@ export const generateProductReviews = (
       : {}),
   });
 
+// ── Promotion translation ──────────────────────────────────────────────────
+
+export interface PromotionTranslationPayload {
+  specialOfferID: number;
+  description: string;
+  discountPct: number;
+  type: string;
+  category: string;
+  startDate: string;
+  endDate: string;
+  minQty: number;
+  maxQty?: number | null;
+}
+
+export interface PromotionTranslationResult {
+  success: boolean;
+  culturesProcessed: number;
+  message: string;
+}
+
+/**
+ * Fire-and-forget: translates a promotion description to all non-English cultures
+ * by calling the TranslatePromotion Azure Function directly (not a Durable Function).
+ */
+export const translatePromotion = async (
+  payload: PromotionTranslationPayload,
+): Promise<PromotionTranslationResult> => {
+  const url = `${getFunctionsApiUrl()}/api/TranslatePromotion`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `TranslatePromotion HTTP ${res.status}${text ? `: ${text}` : ""}`,
+    );
+  }
+  return res.json();
+};
+
 // ── Queue-based Functions (fire and forget, no status polling) ──────────────
 
 export const generateProductImages = (productIds?: number[]) =>

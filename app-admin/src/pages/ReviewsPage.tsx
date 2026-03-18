@@ -26,7 +26,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/context/AuthContext";
-import { useAdminReviews } from "@/hooks/useAdminReviews";
+import { useAdminReviews, useReviewTotalCount } from "@/hooks/useAdminReviews";
 import { useAdminAllProducts } from "@/hooks/useAdminProducts";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +51,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+import { getFunctionsApiUrl } from "@/lib/utils";
+
 type Sentiment = "positive" | "neutral" | "negative";
 
 interface ReviewWithAI {
@@ -66,86 +68,10 @@ interface ReviewWithAI {
   sentiment?: Sentiment;
   aiSuggestedResponse?: string;
   flags?: string[];
+  aiError?: string;
 }
 
-// Simulated AI analysis functions
-const analyzeSentiment = (review: {
-  rating: number;
-  comment: string;
-  title: string;
-}): Sentiment => {
-  // Simple heuristic based on rating and keywords
-  const positiveWords = [
-    "great",
-    "excellent",
-    "amazing",
-    "love",
-    "best",
-    "fantastic",
-    "perfect",
-    "incredible",
-    "recommend",
-  ];
-  const negativeWords = [
-    "bad",
-    "terrible",
-    "awful",
-    "hate",
-    "worst",
-    "disappointed",
-    "poor",
-    "issue",
-    "problem",
-  ];
-
-  const text = `${review.title} ${review.comment}`.toLowerCase();
-  const positiveCount = positiveWords.filter((w) => text.includes(w)).length;
-  const negativeCount = negativeWords.filter((w) => text.includes(w)).length;
-
-  if (review.rating >= 4 || positiveCount > negativeCount) return "positive";
-  if (review.rating <= 2 || negativeCount > positiveCount) return "negative";
-  return "neutral";
-};
-
-const generateAIResponse = (review: {
-  title: string;
-  comment: string;
-  rating: number;
-  userName: string;
-}): string => {
-  const responses = {
-    positive: [
-      `Thank you so much for your wonderful review, ${review.userName}! We're thrilled to hear that you enjoyed your experience. Your feedback means a lot to our team!`,
-      `We really appreciate you taking the time to share your positive experience, ${review.userName}! It's customers like you that make what we do worthwhile.`,
-      `What a fantastic review, ${review.userName}! Thank you for choosing us and for sharing your experience. We look forward to serving you again!`,
-    ],
-    neutral: [
-      `Thank you for your feedback, ${review.userName}. We appreciate you sharing your thoughts and will use them to improve our products and services.`,
-      `We value your honest review, ${review.userName}. If there's anything we can do to make your next experience better, please let us know.`,
-    ],
-    negative: [
-      `We're sorry to hear about your experience, ${review.userName}. Your feedback is important to us, and we'd love the opportunity to make things right. Please reach out to our support team.`,
-      `Thank you for bringing this to our attention, ${review.userName}. We take all feedback seriously and will work to address the issues you've mentioned. Please contact us so we can help resolve this.`,
-    ],
-  };
-
-  const sentiment = analyzeSentiment(review);
-  const options = responses[sentiment];
-  return options[Math.floor(Math.random() * options.length)];
-};
-
-const detectFlags = (review: { comment: string; title: string }): string[] => {
-  const flags: string[] = [];
-  const text = `${review.title} ${review.comment}`.toLowerCase();
-
-  if (text.length < 20) flags.push("Short Review");
-  if (/\b(spam|fake|scam)\b/.test(text)) flags.push("Potential Spam");
-  if (/\b(refund|money back|return)\b/.test(text)) flags.push("Refund Request");
-  if (/!{3,}/.test(text) || /\?{3,}/.test(text))
-    flags.push("Excessive Punctuation");
-
-  return flags;
-};
+// ─── AI analysis is performed server-side via POST /api/reviews/analyze-batch
 
 const ReviewsPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
@@ -153,6 +79,7 @@ const ReviewsPage: React.FC = () => {
   const [cursorStack, setCursorStack] = useState<string[]>([]);
   const { data: apiData, isLoading: reviewsLoading } =
     useAdminReviews(dabCursor);
+  const { data: totalReviewCount } = useReviewTotalCount();
   const { data: allProducts = [] } = useAdminAllProducts();
   const productMap = useMemo(
     () => new Map(allProducts.map((p) => [p.ProductID, p])),
@@ -246,22 +173,78 @@ const ReviewsPage: React.FC = () => {
   const runAIAnalysis = async () => {
     setIsAnalyzing(true);
 
-    // Simulate AI processing delay
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      const payload = reviews
+        .filter((r) => selectedReviews.has(r.id))
+        .map((r) => ({
+          productReviewId: parseInt(r.id, 10) || 0,
+          rating: r.rating,
+          comments: r.comment,
+          reviewerName: r.userName,
+          productName: productMap.get(r.productId)?.Name,
+        }));
 
-    const analyzedReviews = reviews.map((review) => ({
-      ...review,
-      sentiment: analyzeSentiment(review),
-      aiSuggestedResponse: generateAIResponse(review),
-      flags: detectFlags(review),
-    }));
+      const res = await fetch(
+        `${getFunctionsApiUrl()}/api/reviews/analyze-batch`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reviews: payload }),
+        },
+      );
 
-    setReviews(analyzedReviews);
-    setIsAnalyzing(false);
-    toast({
-      title: "AI Analysis Complete",
-      description: `Analyzed ${reviews.length} reviews with sentiment, flags, and response suggestions.`,
-    });
+      if (!res.ok) {
+        throw new Error(`API returned ${res.status}`);
+      }
+
+      const data: {
+        analyses: Array<{
+          productReviewId: number;
+          sentiment: Sentiment;
+          flags: string[];
+          suggestedResponse?: string;
+          error?: string;
+        }>;
+      } = await res.json();
+
+      const analysisMap = new Map(
+        data.analyses.map((a) => [a.productReviewId, a]),
+      );
+
+      setReviews((prev) =>
+        prev.map((r) => {
+          const analysis = analysisMap.get(parseInt(r.id, 10) || 0);
+          if (!analysis) return r;
+          return {
+            ...r,
+            sentiment: analysis.error ? r.sentiment : analysis.sentiment,
+            aiSuggestedResponse: analysis.error
+              ? undefined
+              : analysis.suggestedResponse,
+            flags: analysis.error ? r.flags : analysis.flags,
+            aiError: analysis.error,
+          };
+        }),
+      );
+
+      const errorCount = data.analyses.filter((a) => a.error).length;
+      toast({
+        title: "AI Analysis Complete",
+        description:
+          errorCount > 0
+            ? `Analysed ${data.analyses.length - errorCount} reviews. ${errorCount} could not be analysed.`
+            : `Analysed ${data.analyses.length} reviews with sentiment, flags, and response suggestions.`,
+      });
+    } catch (err) {
+      console.error("runAIAnalysis error:", err);
+      toast({
+        title: "Analysis Failed",
+        description: "Could not reach the analysis service. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const handleApprove = (id: string) => {
@@ -428,14 +411,14 @@ const ReviewsPage: React.FC = () => {
                 <p className="font-doodle text-doodle-text/70">
                   {hasActiveFilters
                     ? `Showing ${filteredReviews.length} of ${reviews.length} reviews`
-                    : `${reviews.length} reviews to moderate`}
+                    : `${totalReviewCount ?? reviews.length} reviews to moderate`}
                 </p>
               </div>
 
               <div className="flex gap-2 flex-wrap">
                 <Button
                   onClick={runAIAnalysis}
-                  disabled={isAnalyzing}
+                  disabled={isAnalyzing || selectedReviews.size === 0}
                   className="font-doodle gap-2"
                   variant="outline"
                 >
@@ -449,8 +432,8 @@ const ReviewsPage: React.FC = () => {
                   {isAnalyzing
                     ? "Analyzing..."
                     : hasAIAnalysis
-                      ? "Re-analyze"
-                      : "Run AI Analysis"}
+                      ? `Re-analyze (${selectedReviews.size})`
+                      : `Run AI Analysis (${selectedReviews.size})`}
                 </Button>
 
                 {hasAIAnalysis && (
@@ -552,7 +535,7 @@ const ReviewsPage: React.FC = () => {
                           </div>
 
                           <p className="font-doodle text-[10px] text-doodle-text/40 text-center">
-                            Demo mode - simulated AI analysis
+                            Powered by Azure AI
                           </p>
                         </div>
                       )}
@@ -803,18 +786,29 @@ const ReviewsPage: React.FC = () => {
                             <span className="font-doodle text-sm text-doodle-text/60">
                               by {review.userName}
                             </span>
-                            {getSentimentBadge(review.sentiment)}
-                            {review.flags &&
-                              review.flags.length > 0 &&
-                              review.flags.map((flag, i) => (
-                                <Badge
-                                  key={i}
-                                  variant="destructive"
-                                  className="font-doodle text-xs"
-                                >
-                                  {flag}
-                                </Badge>
-                              ))}
+                            {review.aiError ? (
+                              <Badge
+                                variant="outline"
+                                className="font-doodle text-xs opacity-50"
+                              >
+                                Analysis unavailable
+                              </Badge>
+                            ) : (
+                              <>
+                                {getSentimentBadge(review.sentiment)}
+                                {review.flags &&
+                                  review.flags.length > 0 &&
+                                  review.flags.map((flag, i) => (
+                                    <Badge
+                                      key={i}
+                                      variant="destructive"
+                                      className="font-doodle text-xs"
+                                    >
+                                      {flag}
+                                    </Badge>
+                                  ))}
+                              </>
+                            )}
                           </div>
                           <h3 className="font-doodle font-bold text-doodle-text">
                             {review.title}

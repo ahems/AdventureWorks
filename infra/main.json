@@ -145,12 +145,7 @@
     "playwrightLocation": {
       "type": "string",
       "defaultValue": "westeurope",
-      "allowedValues": [
-        "eastus",
-        "westus3",
-        "westeurope",
-        "eastasia"
-      ],
+      "allowedValues": ["eastus", "westus3", "westeurope", "eastasia"],
       "metadata": {
         "description": "Location for Playwright Testing workspace. Must be one of: eastus, westus3, westeurope, eastasia. Defaults to resource group location."
       }
@@ -230,9 +225,7 @@
                     ]
                   }
                 ],
-                "assignableScopes": [
-                  "[resourceGroup().id]"
-                ]
+                "assignableScopes": ["[resourceGroup().id]"]
               }
             },
             {
@@ -647,10 +640,7 @@
                         },
                         "defaultAction": {
                           "type": "string",
-                          "allowedValues": [
-                            "Allow",
-                            "Deny"
-                          ],
+                          "allowedValues": ["Allow", "Deny"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Specifies the default action of allow or deny when no other rules match."
@@ -1014,10 +1004,7 @@
                         },
                         "logAnalyticsDestinationType": {
                           "type": "string",
-                          "allowedValues": [
-                            "AzureDiagnostics",
-                            "Dedicated"
-                          ],
+                          "allowedValues": ["AzureDiagnostics", "Dedicated"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. A string indicating whether the export to Log Analytics should use the default destination type, i.e. AzureDiagnostics, or use a destination type."
@@ -1078,11 +1065,7 @@
                         },
                         "kind": {
                           "type": "string",
-                          "allowedValues": [
-                            "CanNotDelete",
-                            "None",
-                            "ReadOnly"
-                          ],
+                          "allowedValues": ["CanNotDelete", "None", "ReadOnly"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Specify the type of lock."
@@ -1345,9 +1328,7 @@
                         },
                         "conditionVersion": {
                           "type": "string",
-                          "allowedValues": [
-                            "2.0"
-                          ],
+                          "allowedValues": ["2.0"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Version of the condition."
@@ -1474,12 +1455,7 @@
                     "accessTier": {
                       "type": "string",
                       "defaultValue": "Hot",
-                      "allowedValues": [
-                        "Premium",
-                        "Hot",
-                        "Cool",
-                        "Cold"
-                      ],
+                      "allowedValues": ["Premium", "Hot", "Cool", "Cold"],
                       "metadata": {
                         "description": "Conditional. Required if the Storage Account kind is set to BlobStorage. The access tier is used for billing. The \"Premium\" access tier is the default value for premium block blobs storage account type and it cannot be changed for the premium block blobs storage account type."
                       }
@@ -1487,10 +1463,7 @@
                     "largeFileSharesState": {
                       "type": "string",
                       "defaultValue": "Disabled",
-                      "allowedValues": [
-                        "Disabled",
-                        "Enabled"
-                      ],
+                      "allowedValues": ["Disabled", "Enabled"],
                       "metadata": {
                         "description": "Optional. Allow large file shares if sets to 'Enabled'. It cannot be disabled once it is enabled. Only supported on locally redundant and zone redundant file shares. It cannot be set on FileStorage storage accounts (storage accounts for premium file shares)."
                       }
@@ -1571,11 +1544,7 @@
                     "dnsEndpointType": {
                       "type": "string",
                       "defaultValue": "",
-                      "allowedValues": [
-                        "",
-                        "AzureDnsZone",
-                        "Standard"
-                      ],
+                      "allowedValues": ["", "AzureDnsZone", "Standard"],
                       "metadata": {
                         "description": "Optional. Allows you to specify the type of endpoint. Set this to AzureDNSZone to create a large number of accounts in a single subscription, which creates accounts in an Azure DNS Zone and the endpoint URL will have an alphanumeric DNS Zone identifier."
                       }
@@ -1618,10 +1587,7 @@
                     "minimumTlsVersion": {
                       "type": "string",
                       "defaultValue": "TLS1_2",
-                      "allowedValues": [
-                        "TLS1_2",
-                        "TLS1_3"
-                      ],
+                      "allowedValues": ["TLS1_2", "TLS1_3"],
                       "metadata": {
                         "description": "Optional. Set the minimum TLS version on request to storage. The TLS versions 1.0 and 1.1 are deprecated and not supported anymore."
                       }
@@ -1698,11 +1664,7 @@
                     "allowedCopyScope": {
                       "type": "string",
                       "defaultValue": "",
-                      "allowedValues": [
-                        "",
-                        "AAD",
-                        "PrivateLink"
-                      ],
+                      "allowedValues": ["", "AAD", "PrivateLink"],
                       "metadata": {
                         "description": "Optional. Restrict copy to and from Storage Accounts within an AAD tenant or with Private Links to the same VNet."
                       }
@@ -1710,11 +1672,7 @@
                     "publicNetworkAccess": {
                       "type": "string",
                       "defaultValue": "",
-                      "allowedValues": [
-                        "",
-                        "Enabled",
-                        "Disabled"
-                      ],
+                      "allowedValues": ["", "Enabled", "Disabled"],
                       "metadata": {
                         "description": "Optional. Whether or not public network access is allowed for this resource. For security reasons it should be disabled. If not specified, it will be disabled by default if private endpoints are set and networkAcls are not set."
                       }
@@ -1743,10 +1701,7 @@
                     "keyType": {
                       "type": "string",
                       "nullable": true,
-                      "allowedValues": [
-                        "Account",
-                        "Service"
-                      ],
+                      "allowedValues": ["Account", "Service"],
                       "metadata": {
                         "description": "Optional. The keyType to use with Queue & Table services."
                       }
@@ -1882,10 +1837,7 @@
                         "publicNetworkAccess": "[if(not(empty(parameters('publicNetworkAccess'))), parameters('publicNetworkAccess'), if(and(not(empty(parameters('privateEndpoints'))), empty(parameters('networkAcls'))), 'Disabled', null()))]",
                         "azureFilesIdentityBasedAuthentication": "[if(not(empty(parameters('azureFilesIdentityBasedAuthentication'))), parameters('azureFilesIdentityBasedAuthentication'), null())]"
                       },
-                      "dependsOn": [
-                        "cMKKeyVault::cMKKey",
-                        "cMKKeyVault"
-                      ]
+                      "dependsOn": ["cMKKeyVault::cMKKey", "cMKKeyVault"]
                     },
                     "storageAccount_diagnosticSettings": {
                       "copy": {
@@ -1915,9 +1867,7 @@
                         "marketplacePartnerId": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'marketplacePartnerResourceId')]",
                         "logAnalyticsDestinationType": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'logAnalyticsDestinationType')]"
                       },
-                      "dependsOn": [
-                        "storageAccount"
-                      ]
+                      "dependsOn": ["storageAccount"]
                     },
                     "storageAccount_lock": {
                       "condition": "[and(not(empty(coalesce(parameters('lock'), createObject()))), not(equals(tryGet(parameters('lock'), 'kind'), 'None')))]",
@@ -1929,9 +1879,7 @@
                         "level": "[coalesce(tryGet(parameters('lock'), 'kind'), '')]",
                         "notes": "[if(equals(tryGet(parameters('lock'), 'kind'), 'CanNotDelete'), 'Cannot delete resource or child resources.', 'Cannot delete or modify the resource or child resources.')]"
                       },
-                      "dependsOn": [
-                        "storageAccount"
-                      ]
+                      "dependsOn": ["storageAccount"]
                     },
                     "storageAccount_roleAssignments": {
                       "copy": {
@@ -1951,9 +1899,7 @@
                         "conditionVersion": "[if(not(empty(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'condition'))), coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'conditionVersion'), '2.0'), null())]",
                         "delegatedManagedIdentityResourceId": "[tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'delegatedManagedIdentityResourceId')]"
                       },
-                      "dependsOn": [
-                        "storageAccount"
-                      ]
+                      "dependsOn": ["storageAccount"]
                     },
                     "storageAccount_privateEndpoints": {
                       "copy": {
@@ -2305,9 +2251,7 @@
                                 },
                                 "conditionVersion": {
                                   "type": "string",
-                                  "allowedValues": [
-                                    "2.0"
-                                  ],
+                                  "allowedValues": ["2.0"],
                                   "nullable": true,
                                   "metadata": {
                                     "description": "Optional. Version of the condition."
@@ -2523,9 +2467,7 @@
                                 "level": "[coalesce(tryGet(parameters('lock'), 'kind'), '')]",
                                 "notes": "[if(equals(tryGet(parameters('lock'), 'kind'), 'CanNotDelete'), 'Cannot delete resource or child resources.', 'Cannot delete or modify the resource or child resources.')]"
                               },
-                              "dependsOn": [
-                                "privateEndpoint"
-                              ]
+                              "dependsOn": ["privateEndpoint"]
                             },
                             "privateEndpoint_roleAssignments": {
                               "copy": {
@@ -2545,9 +2487,7 @@
                                 "conditionVersion": "[if(not(empty(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'condition'))), coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'conditionVersion'), '2.0'), null())]",
                                 "delegatedManagedIdentityResourceId": "[tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'delegatedManagedIdentityResourceId')]"
                               },
-                              "dependsOn": [
-                                "privateEndpoint"
-                              ]
+                              "dependsOn": ["privateEndpoint"]
                             },
                             "privateEndpoint_privateDnsZoneGroup": {
                               "condition": "[not(empty(parameters('privateDnsZoneGroup')))]",
@@ -2688,9 +2628,7 @@
                                   }
                                 }
                               },
-                              "dependsOn": [
-                                "privateEndpoint"
-                              ]
+                              "dependsOn": ["privateEndpoint"]
                             }
                           },
                           "outputs": {
@@ -2753,9 +2691,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "storageAccount"
-                      ]
+                      "dependsOn": ["storageAccount"]
                     },
                     "storageAccount_managementPolicies": {
                       "condition": "[not(empty(coalesce(parameters('managementPolicyRules'), createArray())))]",
@@ -3051,9 +2987,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "storageAccount"
-                      ]
+                      "dependsOn": ["storageAccount"]
                     },
                     "storageAccount_blobServices": {
                       "condition": "[not(empty(parameters('blobServices')))]",
@@ -3492,9 +3426,7 @@
                                 "lastAccessTimeTrackingPolicy": "[if(not(equals(reference('storageAccount', '2022-09-01', 'full').kind, 'Storage')), createObject('enable', parameters('lastAccessTimeTrackingPolicyEnabled'), 'name', if(equals(parameters('lastAccessTimeTrackingPolicyEnabled'), true()), 'AccessTimeTracking', null()), 'trackingGranularityInDays', if(equals(parameters('lastAccessTimeTrackingPolicyEnabled'), true()), 1, null())), null())]",
                                 "restorePolicy": "[if(parameters('restorePolicyEnabled'), createObject('enabled', true(), 'days', parameters('restorePolicyDays')), null())]"
                               },
-                              "dependsOn": [
-                                "storageAccount"
-                              ]
+                              "dependsOn": ["storageAccount"]
                             },
                             "blobServices_diagnosticSettings": {
                               "copy": {
@@ -3533,9 +3465,7 @@
                                 "marketplacePartnerId": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'marketplacePartnerResourceId')]",
                                 "logAnalyticsDestinationType": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'logAnalyticsDestinationType')]"
                               },
-                              "dependsOn": [
-                                "blobServices"
-                              ]
+                              "dependsOn": ["blobServices"]
                             },
                             "blobServices_container": {
                               "copy": {
@@ -3654,9 +3584,7 @@
                                         },
                                         "conditionVersion": {
                                           "type": "string",
-                                          "allowedValues": [
-                                            "2.0"
-                                          ],
+                                          "allowedValues": ["2.0"],
                                           "nullable": true,
                                           "metadata": {
                                             "description": "Optional. Version of the condition."
@@ -3847,9 +3775,7 @@
                                         "conditionVersion": "[if(not(empty(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'condition'))), coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'conditionVersion'), '2.0'), null())]",
                                         "delegatedManagedIdentityResourceId": "[tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'delegatedManagedIdentityResourceId')]"
                                       },
-                                      "dependsOn": [
-                                        "container"
-                                      ]
+                                      "dependsOn": ["container"]
                                     },
                                     "immutabilityPolicy": {
                                       "condition": "[not(empty(coalesce(parameters('immutabilityPolicyProperties'), createObject())))]",
@@ -3963,9 +3889,7 @@
                                           }
                                         }
                                       },
-                                      "dependsOn": [
-                                        "container"
-                                      ]
+                                      "dependsOn": ["container"]
                                     }
                                   },
                                   "outputs": {
@@ -3993,9 +3917,7 @@
                                   }
                                 }
                               },
-                              "dependsOn": [
-                                "blobServices"
-                              ]
+                              "dependsOn": ["blobServices"]
                             }
                           },
                           "outputs": {
@@ -4023,9 +3945,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "storageAccount"
-                      ]
+                      "dependsOn": ["storageAccount"]
                     },
                     "storageAccount_fileServices": {
                       "condition": "[not(empty(parameters('fileServices')))]",
@@ -4368,9 +4288,7 @@
                                 "marketplacePartnerId": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'marketplacePartnerResourceId')]",
                                 "logAnalyticsDestinationType": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'logAnalyticsDestinationType')]"
                               },
-                              "dependsOn": [
-                                "fileServices"
-                              ]
+                              "dependsOn": ["fileServices"]
                             },
                             "fileServices_shares": {
                               "copy": {
@@ -4477,9 +4395,7 @@
                                         },
                                         "conditionVersion": {
                                           "type": "string",
-                                          "allowedValues": [
-                                            "2.0"
-                                          ],
+                                          "allowedValues": ["2.0"],
                                           "nullable": true,
                                           "metadata": {
                                             "description": "Optional. Version of the condition."
@@ -4545,10 +4461,7 @@
                                     "enabledProtocols": {
                                       "type": "string",
                                       "defaultValue": "SMB",
-                                      "allowedValues": [
-                                        "NFS",
-                                        "SMB"
-                                      ],
+                                      "allowedValues": ["NFS", "SMB"],
                                       "metadata": {
                                         "description": "Optional. The authentication protocol that is used for the file share. Can only be specified when creating a share."
                                       }
@@ -4722,9 +4635,7 @@
                                             },
                                             "conditionVersion": {
                                               "type": "string",
-                                              "allowedValues": [
-                                                "2.0"
-                                              ],
+                                              "allowedValues": ["2.0"],
                                               "defaultValue": "2.0",
                                               "metadata": {
                                                 "description": "Optional. Version of the condition."
@@ -4757,9 +4668,7 @@
                                           ]
                                         }
                                       },
-                                      "dependsOn": [
-                                        "fileShare"
-                                      ]
+                                      "dependsOn": ["fileShare"]
                                     }
                                   },
                                   "outputs": {
@@ -4787,10 +4696,7 @@
                                   }
                                 }
                               },
-                              "dependsOn": [
-                                "fileServices",
-                                "storageAccount"
-                              ]
+                              "dependsOn": ["fileServices", "storageAccount"]
                             }
                           },
                           "outputs": {
@@ -4818,9 +4724,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "storageAccount"
-                      ]
+                      "dependsOn": ["storageAccount"]
                     },
                     "storageAccount_queueServices": {
                       "condition": "[not(empty(parameters('queueServices')))]",
@@ -5134,9 +5038,7 @@
                                 "marketplacePartnerId": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'marketplacePartnerResourceId')]",
                                 "logAnalyticsDestinationType": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'logAnalyticsDestinationType')]"
                               },
-                              "dependsOn": [
-                                "queueServices"
-                              ]
+                              "dependsOn": ["queueServices"]
                             },
                             "queueServices_queues": {
                               "copy": {
@@ -5231,9 +5133,7 @@
                                         },
                                         "conditionVersion": {
                                           "type": "string",
-                                          "allowedValues": [
-                                            "2.0"
-                                          ],
+                                          "allowedValues": ["2.0"],
                                           "nullable": true,
                                           "metadata": {
                                             "description": "Optional. Version of the condition."
@@ -5350,9 +5250,7 @@
                                         "conditionVersion": "[if(not(empty(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'condition'))), coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'conditionVersion'), '2.0'), null())]",
                                         "delegatedManagedIdentityResourceId": "[tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'delegatedManagedIdentityResourceId')]"
                                       },
-                                      "dependsOn": [
-                                        "queue"
-                                      ]
+                                      "dependsOn": ["queue"]
                                     }
                                   },
                                   "outputs": {
@@ -5407,9 +5305,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "storageAccount"
-                      ]
+                      "dependsOn": ["storageAccount"]
                     },
                     "storageAccount_tableServices": {
                       "condition": "[not(empty(parameters('tableServices')))]",
@@ -5723,9 +5619,7 @@
                                 "marketplacePartnerId": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'marketplacePartnerResourceId')]",
                                 "logAnalyticsDestinationType": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'logAnalyticsDestinationType')]"
                               },
-                              "dependsOn": [
-                                "tableServices"
-                              ]
+                              "dependsOn": ["tableServices"]
                             },
                             "tableServices_tables": {
                               "copy": {
@@ -5817,9 +5711,7 @@
                                         },
                                         "conditionVersion": {
                                           "type": "string",
-                                          "allowedValues": [
-                                            "2.0"
-                                          ],
+                                          "allowedValues": ["2.0"],
                                           "nullable": true,
                                           "metadata": {
                                             "description": "Optional. Version of the condition."
@@ -5924,9 +5816,7 @@
                                         "conditionVersion": "[if(not(empty(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'condition'))), coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'conditionVersion'), '2.0'), null())]",
                                         "delegatedManagedIdentityResourceId": "[tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'delegatedManagedIdentityResourceId')]"
                                       },
-                                      "dependsOn": [
-                                        "table"
-                                      ]
+                                      "dependsOn": ["table"]
                                     }
                                   },
                                   "outputs": {
@@ -5981,9 +5871,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "storageAccount"
-                      ]
+                      "dependsOn": ["storageAccount"]
                     },
                     "secretsExport": {
                       "condition": "[not(equals(parameters('secretsExportConfiguration'), null()))]",
@@ -6128,9 +6016,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "storageAccount"
-                      ]
+                      "dependsOn": ["storageAccount"]
                     }
                   },
                   "outputs": {
@@ -6227,9 +6113,7 @@
           }
         }
       },
-      "dependsOn": [
-        "identity"
-      ]
+      "dependsOn": ["identity"]
     },
     "communication": {
       "type": "Microsoft.Resources/deployments",
@@ -6403,10 +6287,7 @@
           }
         }
       },
-      "dependsOn": [
-        "appinsights",
-        "identity"
-      ]
+      "dependsOn": ["appinsights", "identity"]
     },
     "aifoundry": {
       "type": "Microsoft.Resources/deployments",
@@ -6581,10 +6462,7 @@
             "publicNetworkAccess": {
               "type": "string",
               "defaultValue": "Enabled",
-              "allowedValues": [
-                "Enabled",
-                "Disabled"
-              ]
+              "allowedValues": ["Enabled", "Disabled"]
             },
             "sku": {
               "type": "object",
@@ -6901,11 +6779,7 @@
           }
         }
       },
-      "dependsOn": [
-        "appinsights",
-        "identity",
-        "storage"
-      ]
+      "dependsOn": ["appinsights", "identity", "storage"]
     },
     "database": {
       "type": "Microsoft.Resources/deployments",
@@ -7195,10 +7069,7 @@
                         },
                         "state": {
                           "type": "string",
-                          "allowedValues": [
-                            "Disabled",
-                            "Enabled"
-                          ],
+                          "allowedValues": ["Disabled", "Enabled"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Specifies the state of the audit. If state is Enabled, storageEndpoint or isAzureMonitorTargetEnabled are required."
@@ -7249,9 +7120,7 @@
                       "properties": {
                         "administratorType": {
                           "type": "string",
-                          "allowedValues": [
-                            "ActiveDirectory"
-                          ],
+                          "allowedValues": ["ActiveDirectory"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Type of the sever administrator."
@@ -7271,11 +7140,7 @@
                         },
                         "principalType": {
                           "type": "string",
-                          "allowedValues": [
-                            "Application",
-                            "Group",
-                            "User"
-                          ],
+                          "allowedValues": ["Application", "Group", "User"],
                           "metadata": {
                             "description": "Required. Principal Type of the sever administrator."
                           }
@@ -7330,12 +7195,7 @@
                         },
                         "availabilityZone": {
                           "type": "string",
-                          "allowedValues": [
-                            "1",
-                            "2",
-                            "3",
-                            "NoPreference"
-                          ],
+                          "allowedValues": ["1", "2", "3", "NoPreference"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Specifies the availability zone the database is pinned to."
@@ -7406,10 +7266,7 @@
                         },
                         "freeLimitExhaustionBehavior": {
                           "type": "string",
-                          "allowedValues": [
-                            "AutoPause",
-                            "BillOverUsage"
-                          ],
+                          "allowedValues": ["AutoPause", "BillOverUsage"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Specifies the behavior when monthly free limits are exhausted for the free database."
@@ -7431,10 +7288,7 @@
                         },
                         "licenseType": {
                           "type": "string",
-                          "allowedValues": [
-                            "BasePrice",
-                            "LicenseIncluded"
-                          ],
+                          "allowedValues": ["BasePrice", "LicenseIncluded"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. The license type to apply for this database."
@@ -7484,10 +7338,7 @@
                         },
                         "preferredEnclaveType": {
                           "type": "string",
-                          "allowedValues": [
-                            "Default",
-                            "VBS"
-                          ],
+                          "allowedValues": ["Default", "VBS"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Type of enclave requested on the database."
@@ -7495,10 +7346,7 @@
                         },
                         "readScale": {
                           "type": "string",
-                          "allowedValues": [
-                            "Disabled",
-                            "Enabled"
-                          ],
+                          "allowedValues": ["Disabled", "Enabled"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. The state of read-only routing. If enabled, connections that have application intent set to readonly in their connection string may be routed to a readonly secondary replica in the same region. Not applicable to a Hyperscale database within an elastic pool."
@@ -7520,12 +7368,7 @@
                         },
                         "requestedBackupStorageRedundancy": {
                           "type": "string",
-                          "allowedValues": [
-                            "Geo",
-                            "GeoZone",
-                            "Local",
-                            "Zone"
-                          ],
+                          "allowedValues": ["Geo", "GeoZone", "Local", "Zone"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. The storage account type to be used to store backups for this database."
@@ -7554,11 +7397,7 @@
                         },
                         "secondaryType": {
                           "type": "string",
-                          "allowedValues": [
-                            "Geo",
-                            "Named",
-                            "Standby"
-                          ],
+                          "allowedValues": ["Geo", "Named", "Standby"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. The secondary type of the database if it is a secondary."
@@ -7660,12 +7499,7 @@
                         },
                         "availabilityZone": {
                           "type": "string",
-                          "allowedValues": [
-                            "1",
-                            "2",
-                            "3",
-                            "NoPreference"
-                          ],
+                          "allowedValues": ["1", "2", "3", "NoPreference"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Specifies the availability zone the pool's primary replica is pinned to."
@@ -7680,10 +7514,7 @@
                         },
                         "licenseType": {
                           "type": "string",
-                          "allowedValues": [
-                            "BasePrice",
-                            "LicenseIncluded"
-                          ],
+                          "allowedValues": ["BasePrice", "LicenseIncluded"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. The license type to apply for this elastic pool."
@@ -7719,10 +7550,7 @@
                         },
                         "preferredEnclaveType": {
                           "type": "string",
-                          "allowedValues": [
-                            "Default",
-                            "VBS"
-                          ],
+                          "allowedValues": ["Default", "VBS"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Type of enclave requested on the elastic pool."
@@ -7751,10 +7579,7 @@
                         },
                         "serverKeyType": {
                           "type": "string",
-                          "allowedValues": [
-                            "AzureKeyVault",
-                            "ServiceManaged"
-                          ],
+                          "allowedValues": ["AzureKeyVault", "ServiceManaged"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. The encryption protector type."
@@ -7853,10 +7678,7 @@
                         },
                         "serverKeyType": {
                           "type": "string",
-                          "allowedValues": [
-                            "AzureKeyVault",
-                            "ServiceManaged"
-                          ],
+                          "allowedValues": ["AzureKeyVault", "ServiceManaged"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. The server key type."
@@ -7951,10 +7773,7 @@
                         },
                         "state": {
                           "type": "string",
-                          "allowedValues": [
-                            "Disabled",
-                            "Enabled"
-                          ],
+                          "allowedValues": ["Disabled", "Enabled"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Specifies the state of the policy, whether it is enabled or disabled or a policy has not been applied yet on the specific database."
@@ -8028,10 +7847,7 @@
                         },
                         "secondaryType": {
                           "type": "string",
-                          "allowedValues": [
-                            "Geo",
-                            "Standby"
-                          ],
+                          "allowedValues": ["Geo", "Standby"],
                           "metadata": {
                             "description": "Required. Databases secondary type on partner server."
                           }
@@ -8294,10 +8110,7 @@
                         },
                         "logAnalyticsDestinationType": {
                           "type": "string",
-                          "allowedValues": [
-                            "AzureDiagnostics",
-                            "Dedicated"
-                          ],
+                          "allowedValues": ["AzureDiagnostics", "Dedicated"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. A string indicating whether the export to Log Analytics should use the default destination type, i.e. AzureDiagnostics, or use a destination type."
@@ -8440,10 +8253,7 @@
                       "properties": {
                         "failoverPolicy": {
                           "type": "string",
-                          "allowedValues": [
-                            "Disabled",
-                            "Enabled"
-                          ],
+                          "allowedValues": ["Disabled", "Enabled"],
                           "metadata": {
                             "description": "Required. Failover policy of the read-only endpoint for the failover group."
                           }
@@ -8466,10 +8276,7 @@
                       "properties": {
                         "failoverPolicy": {
                           "type": "string",
-                          "allowedValues": [
-                            "Automatic",
-                            "Manual"
-                          ],
+                          "allowedValues": ["Automatic", "Manual"],
                           "metadata": {
                             "description": "Required. Failover policy of the read-write endpoint for the failover group. If failoverPolicy is Automatic then failoverWithDataLossGracePeriodMinutes is required."
                           }
@@ -8500,11 +8307,7 @@
                         },
                         "kind": {
                           "type": "string",
-                          "allowedValues": [
-                            "CanNotDelete",
-                            "None",
-                            "ReadOnly"
-                          ],
+                          "allowedValues": ["CanNotDelete", "None", "ReadOnly"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Specify the type of lock."
@@ -8523,10 +8326,7 @@
                       "properties": {
                         "backupStorageAccessTier": {
                           "type": "string",
-                          "allowedValues": [
-                            "Archive",
-                            "Hot"
-                          ],
+                          "allowedValues": ["Archive", "Hot"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. The BackupStorageAccessTier for the LTR backups."
@@ -8830,9 +8630,7 @@
                         },
                         "conditionVersion": {
                           "type": "string",
-                          "allowedValues": [
-                            "2.0"
-                          ],
+                          "allowedValues": ["2.0"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Version of the condition."
@@ -9054,12 +8852,7 @@
                     "minimalTlsVersion": {
                       "type": "string",
                       "defaultValue": "1.2",
-                      "allowedValues": [
-                        "1.0",
-                        "1.1",
-                        "1.2",
-                        "1.3"
-                      ],
+                      "allowedValues": ["1.0", "1.1", "1.2", "1.3"],
                       "metadata": {
                         "description": "Optional. Minimal TLS version allowed."
                       }
@@ -9067,10 +8860,7 @@
                     "isIPv6Enabled": {
                       "type": "string",
                       "defaultValue": "Disabled",
-                      "allowedValues": [
-                        "Disabled",
-                        "Enabled"
-                      ],
+                      "allowedValues": ["Disabled", "Enabled"],
                       "metadata": {
                         "description": "Optional. Whether or not to enable IPv6 support for this server."
                       }
@@ -9101,11 +8891,7 @@
                     "restrictOutboundNetworkAccess": {
                       "type": "string",
                       "defaultValue": "",
-                      "allowedValues": [
-                        "",
-                        "Enabled",
-                        "Disabled"
-                      ],
+                      "allowedValues": ["", "Enabled", "Disabled"],
                       "metadata": {
                         "description": "Optional. Whether or not to restrict outbound network access for this server."
                       }
@@ -9229,9 +9015,7 @@
                         "level": "[coalesce(tryGet(parameters('lock'), 'kind'), '')]",
                         "notes": "[if(equals(tryGet(parameters('lock'), 'kind'), 'CanNotDelete'), 'Cannot delete resource or child resources.', 'Cannot delete or modify the resource or child resources.')]"
                       },
-                      "dependsOn": [
-                        "server"
-                      ]
+                      "dependsOn": ["server"]
                     },
                     "server_roleAssignments": {
                       "copy": {
@@ -9251,9 +9035,7 @@
                         "conditionVersion": "[if(not(empty(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'condition'))), coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'conditionVersion'), '2.0'), null())]",
                         "delegatedManagedIdentityResourceId": "[tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'delegatedManagedIdentityResourceId')]"
                       },
-                      "dependsOn": [
-                        "server"
-                      ]
+                      "dependsOn": ["server"]
                     },
                     "server_databases": {
                       "copy": {
@@ -9478,10 +9260,7 @@
                               "properties": {
                                 "backupStorageAccessTier": {
                                   "type": "string",
-                                  "allowedValues": [
-                                    "Archive",
-                                    "Hot"
-                                  ],
+                                  "allowedValues": ["Archive", "Hot"],
                                   "nullable": true,
                                   "metadata": {
                                     "description": "Optional. The BackupStorageAccessTier for the LTR backups."
@@ -9683,12 +9462,7 @@
                             },
                             "availabilityZone": {
                               "type": "string",
-                              "allowedValues": [
-                                "1",
-                                "2",
-                                "3",
-                                "NoPreference"
-                              ],
+                              "allowedValues": ["1", "2", "3", "NoPreference"],
                               "defaultValue": "NoPreference",
                               "metadata": {
                                 "description": "Optional. Specifies the availability zone the database is pinned to."
@@ -9759,10 +9533,7 @@
                             },
                             "freeLimitExhaustionBehavior": {
                               "type": "string",
-                              "allowedValues": [
-                                "AutoPause",
-                                "BillOverUsage"
-                              ],
+                              "allowedValues": ["AutoPause", "BillOverUsage"],
                               "nullable": true,
                               "metadata": {
                                 "description": "Optional. Specifies the behavior when monthly free limits are exhausted for the free database."
@@ -9784,10 +9555,7 @@
                             },
                             "licenseType": {
                               "type": "string",
-                              "allowedValues": [
-                                "BasePrice",
-                                "LicenseIncluded"
-                              ],
+                              "allowedValues": ["BasePrice", "LicenseIncluded"],
                               "nullable": true,
                               "metadata": {
                                 "description": "Optional. The license type to apply for this database."
@@ -9837,10 +9605,7 @@
                             },
                             "preferredEnclaveType": {
                               "type": "string",
-                              "allowedValues": [
-                                "Default",
-                                "VBS"
-                              ],
+                              "allowedValues": ["Default", "VBS"],
                               "nullable": true,
                               "metadata": {
                                 "description": "Optional. Type of enclave requested on the database i.e. Default or VBS enclaves."
@@ -9848,10 +9613,7 @@
                             },
                             "readScale": {
                               "type": "string",
-                              "allowedValues": [
-                                "Disabled",
-                                "Enabled"
-                              ],
+                              "allowedValues": ["Disabled", "Enabled"],
                               "defaultValue": "Disabled",
                               "metadata": {
                                 "description": "Optional. The state of read-only routing."
@@ -9907,11 +9669,7 @@
                             },
                             "secondaryType": {
                               "type": "string",
-                              "allowedValues": [
-                                "Geo",
-                                "Named",
-                                "Standby"
-                              ],
+                              "allowedValues": ["Geo", "Named", "Standby"],
                               "nullable": true,
                               "metadata": {
                                 "description": "Optional. The secondary type of the database if it is a secondary."
@@ -10078,9 +9836,7 @@
                                 "marketplacePartnerId": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'marketplacePartnerResourceId')]",
                                 "logAnalyticsDestinationType": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'logAnalyticsDestinationType')]"
                               },
-                              "dependsOn": [
-                                "database"
-                              ]
+                              "dependsOn": ["database"]
                             },
                             "database_backupShortTermRetentionPolicy": {
                               "condition": "[not(empty(parameters('backupShortTermRetentionPolicy')))]",
@@ -10182,9 +9938,7 @@
                                   }
                                 }
                               },
-                              "dependsOn": [
-                                "database"
-                              ]
+                              "dependsOn": ["database"]
                             },
                             "database_backupLongTermRetentionPolicy": {
                               "condition": "[not(empty(parameters('backupLongTermRetentionPolicy')))]",
@@ -10250,10 +10004,7 @@
                                     },
                                     "backupStorageAccessTier": {
                                       "type": "string",
-                                      "allowedValues": [
-                                        "Archive",
-                                        "Hot"
-                                      ],
+                                      "allowedValues": ["Archive", "Hot"],
                                       "nullable": true,
                                       "metadata": {
                                         "description": "Optional. The BackupStorageAccessTier for the LTR backups."
@@ -10347,9 +10098,7 @@
                                   }
                                 }
                               },
-                              "dependsOn": [
-                                "database"
-                              ]
+                              "dependsOn": ["database"]
                             }
                           },
                           "outputs": {
@@ -10384,10 +10133,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "server",
-                        "server_elasticPools"
-                      ]
+                      "dependsOn": ["server", "server_elasticPools"]
                     },
                     "server_elasticPools": {
                       "copy": {
@@ -10596,12 +10342,7 @@
                             },
                             "availabilityZone": {
                               "type": "string",
-                              "allowedValues": [
-                                "1",
-                                "2",
-                                "3",
-                                "NoPreference"
-                              ],
+                              "allowedValues": ["1", "2", "3", "NoPreference"],
                               "defaultValue": "NoPreference",
                               "metadata": {
                                 "description": "Optional. Specifies the availability zone the pool's primary replica is pinned to."
@@ -10617,10 +10358,7 @@
                             "licenseType": {
                               "type": "string",
                               "defaultValue": "LicenseIncluded",
-                              "allowedValues": [
-                                "BasePrice",
-                                "LicenseIncluded"
-                              ],
+                              "allowedValues": ["BasePrice", "LicenseIncluded"],
                               "metadata": {
                                 "description": "Optional. The license type to apply for this elastic pool."
                               }
@@ -10659,10 +10397,7 @@
                             },
                             "preferredEnclaveType": {
                               "type": "string",
-                              "allowedValues": [
-                                "Default",
-                                "VBS"
-                              ],
+                              "allowedValues": ["Default", "VBS"],
                               "defaultValue": "Default",
                               "metadata": {
                                 "description": "Optional. Type of enclave requested on the elastic pool."
@@ -10736,9 +10471,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "server"
-                      ]
+                      "dependsOn": ["server"]
                     },
                     "server_privateEndpoints": {
                       "copy": {
@@ -11046,9 +10779,7 @@
                                 },
                                 "conditionVersion": {
                                   "type": "string",
-                                  "allowedValues": [
-                                    "2.0"
-                                  ],
+                                  "allowedValues": ["2.0"],
                                   "nullable": true,
                                   "metadata": {
                                     "description": "Optional. Version of the condition."
@@ -11264,9 +10995,7 @@
                                 "level": "[coalesce(tryGet(parameters('lock'), 'kind'), '')]",
                                 "notes": "[if(equals(tryGet(parameters('lock'), 'kind'), 'CanNotDelete'), 'Cannot delete resource or child resources.', 'Cannot delete or modify the resource or child resources.')]"
                               },
-                              "dependsOn": [
-                                "privateEndpoint"
-                              ]
+                              "dependsOn": ["privateEndpoint"]
                             },
                             "privateEndpoint_roleAssignments": {
                               "copy": {
@@ -11286,9 +11015,7 @@
                                 "conditionVersion": "[if(not(empty(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'condition'))), coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'conditionVersion'), '2.0'), null())]",
                                 "delegatedManagedIdentityResourceId": "[tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'delegatedManagedIdentityResourceId')]"
                               },
-                              "dependsOn": [
-                                "privateEndpoint"
-                              ]
+                              "dependsOn": ["privateEndpoint"]
                             },
                             "privateEndpoint_privateDnsZoneGroup": {
                               "condition": "[not(empty(parameters('privateDnsZoneGroup')))]",
@@ -11428,9 +11155,7 @@
                                   }
                                 }
                               },
-                              "dependsOn": [
-                                "privateEndpoint"
-                              ]
+                              "dependsOn": ["privateEndpoint"]
                             }
                           },
                           "outputs": {
@@ -11493,9 +11218,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "server"
-                      ]
+                      "dependsOn": ["server"]
                     },
                     "server_firewallRules": {
                       "copy": {
@@ -11600,9 +11323,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "server"
-                      ]
+                      "dependsOn": ["server"]
                     },
                     "server_virtualNetworkRules": {
                       "copy": {
@@ -11706,9 +11427,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "server"
-                      ]
+                      "dependsOn": ["server"]
                     },
                     "server_securityAlertPolicies": {
                       "copy": {
@@ -11817,10 +11536,7 @@
                             "state": {
                               "type": "string",
                               "defaultValue": "Disabled",
-                              "allowedValues": [
-                                "Disabled",
-                                "Enabled"
-                              ],
+                              "allowedValues": ["Disabled", "Enabled"],
                               "metadata": {
                                 "description": "Optional. Specifies the state of the policy, whether it is enabled or disabled or a policy has not been applied yet on the specific database."
                               }
@@ -11893,9 +11609,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "server"
-                      ]
+                      "dependsOn": ["server"]
                     },
                     "server_vulnerabilityAssessment": {
                       "condition": "[not(equals(parameters('vulnerabilityAssessmentsObj'), null()))]",
@@ -12088,9 +11802,7 @@
                                   ]
                                 }
                               },
-                              "dependsOn": [
-                                "server"
-                              ]
+                              "dependsOn": ["server"]
                             }
                           },
                           "outputs": {
@@ -12118,10 +11830,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "server",
-                        "server_securityAlertPolicies"
-                      ]
+                      "dependsOn": ["server", "server_securityAlertPolicies"]
                     },
                     "server_keys": {
                       "copy": {
@@ -12242,9 +11951,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "server"
-                      ]
+                      "dependsOn": ["server"]
                     },
                     "server_encryptionProtector": {
                       "condition": "[not(equals(parameters('encryptionProtectorObj'), null()))]",
@@ -12351,10 +12058,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "server",
-                        "server_keys"
-                      ]
+                      "dependsOn": ["server", "server_keys"]
                     },
                     "server_audit_settings": {
                       "condition": "[not(empty(parameters('auditSettings')))]",
@@ -12430,10 +12134,7 @@
                             "state": {
                               "type": "string",
                               "defaultValue": "Enabled",
-                              "allowedValues": [
-                                "Enabled",
-                                "Disabled"
-                              ],
+                              "allowedValues": ["Enabled", "Disabled"],
                               "metadata": {
                                 "description": "Optional. Specifies the state of the audit. If state is Enabled, storageEndpoint or isAzureMonitorTargetEnabled are required."
                               }
@@ -12576,9 +12277,7 @@
                                   ]
                                 }
                               },
-                              "dependsOn": [
-                                "server"
-                              ]
+                              "dependsOn": ["server"]
                             }
                           },
                           "outputs": {
@@ -12606,9 +12305,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "server"
-                      ]
+                      "dependsOn": ["server"]
                     },
                     "secretsExport": {
                       "condition": "[not(equals(parameters('secretsExportConfiguration'), null()))]",
@@ -12753,9 +12450,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "server"
-                      ]
+                      "dependsOn": ["server"]
                     },
                     "failover_groups": {
                       "copy": {
@@ -12815,10 +12510,7 @@
                               "properties": {
                                 "failoverPolicy": {
                                   "type": "string",
-                                  "allowedValues": [
-                                    "Disabled",
-                                    "Enabled"
-                                  ],
+                                  "allowedValues": ["Disabled", "Enabled"],
                                   "metadata": {
                                     "description": "Required. Failover policy of the read-only endpoint for the failover group."
                                   }
@@ -12839,10 +12531,7 @@
                               "properties": {
                                 "failoverPolicy": {
                                   "type": "string",
-                                  "allowedValues": [
-                                    "Automatic",
-                                    "Manual"
-                                  ],
+                                  "allowedValues": ["Automatic", "Manual"],
                                   "metadata": {
                                     "description": "Required. Failover policy of the read-write endpoint for the failover group. If failoverPolicy is Automatic then failoverWithDataLossGracePeriodMinutes is required."
                                   }
@@ -12906,10 +12595,7 @@
                             },
                             "secondaryType": {
                               "type": "string",
-                              "allowedValues": [
-                                "Geo",
-                                "Standby"
-                              ],
+                              "allowedValues": ["Geo", "Standby"],
                               "metadata": {
                                 "description": "Required. Databases secondary type on partner server."
                               }
@@ -12980,10 +12666,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "server",
-                        "server_databases"
-                      ]
+                      "dependsOn": ["server", "server_databases"]
                     }
                   },
                   "outputs": {
@@ -13069,9 +12752,7 @@
           }
         }
       },
-      "dependsOn": [
-        "identity"
-      ]
+      "dependsOn": ["identity"]
     },
     "acr": {
       "type": "Microsoft.Resources/deployments",
@@ -13409,10 +13090,7 @@
                         },
                         "zoneRedundancy": {
                           "type": "string",
-                          "allowedValues": [
-                            "Disabled",
-                            "Enabled"
-                          ],
+                          "allowedValues": ["Disabled", "Enabled"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Whether or not zone redundancy is enabled for this container registry."
@@ -13444,10 +13122,7 @@
                         },
                         "status": {
                           "type": "string",
-                          "allowedValues": [
-                            "disabled",
-                            "enabled"
-                          ],
+                          "allowedValues": ["disabled", "enabled"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. The status of the webhook at the time the operation was called."
@@ -13509,11 +13184,7 @@
                         },
                         "kind": {
                           "type": "string",
-                          "allowedValues": [
-                            "CanNotDelete",
-                            "None",
-                            "ReadOnly"
-                          ],
+                          "allowedValues": ["CanNotDelete", "None", "ReadOnly"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Specify the type of lock."
@@ -13695,9 +13366,7 @@
                         },
                         "conditionVersion": {
                           "type": "string",
-                          "allowedValues": [
-                            "2.0"
-                          ],
+                          "allowedValues": ["2.0"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Version of the condition."
@@ -13861,10 +13530,7 @@
                         },
                         "logAnalyticsDestinationType": {
                           "type": "string",
-                          "allowedValues": [
-                            "AzureDiagnostics",
-                            "Dedicated"
-                          ],
+                          "allowedValues": ["AzureDiagnostics", "Dedicated"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. A string indicating whether the export to Log Analytics should use the default destination type, i.e. AzureDiagnostics, or use a destination type."
@@ -13925,11 +13591,7 @@
                         },
                         "kind": {
                           "type": "string",
-                          "allowedValues": [
-                            "CanNotDelete",
-                            "None",
-                            "ReadOnly"
-                          ],
+                          "allowedValues": ["CanNotDelete", "None", "ReadOnly"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Specify the type of lock."
@@ -14193,9 +13855,7 @@
                         },
                         "conditionVersion": {
                           "type": "string",
-                          "allowedValues": [
-                            "2.0"
-                          ],
+                          "allowedValues": ["2.0"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Version of the condition."
@@ -14253,11 +13913,7 @@
                     "acrSku": {
                       "type": "string",
                       "defaultValue": "Premium",
-                      "allowedValues": [
-                        "Basic",
-                        "Premium",
-                        "Standard"
-                      ],
+                      "allowedValues": ["Basic", "Premium", "Standard"],
                       "metadata": {
                         "description": "Optional. Tier of your Azure container registry."
                       }
@@ -14265,10 +13921,7 @@
                     "exportPolicyStatus": {
                       "type": "string",
                       "defaultValue": "disabled",
-                      "allowedValues": [
-                        "disabled",
-                        "enabled"
-                      ],
+                      "allowedValues": ["disabled", "enabled"],
                       "metadata": {
                         "description": "Optional. The value that indicates whether the export policy is enabled or not."
                       }
@@ -14276,10 +13929,7 @@
                     "quarantinePolicyStatus": {
                       "type": "string",
                       "defaultValue": "disabled",
-                      "allowedValues": [
-                        "disabled",
-                        "enabled"
-                      ],
+                      "allowedValues": ["disabled", "enabled"],
                       "metadata": {
                         "description": "Optional. The value that indicates whether the quarantine policy is enabled or not. Note, requires the 'acrSku' to be 'Premium'."
                       }
@@ -14287,10 +13937,7 @@
                     "trustPolicyStatus": {
                       "type": "string",
                       "defaultValue": "disabled",
-                      "allowedValues": [
-                        "disabled",
-                        "enabled"
-                      ],
+                      "allowedValues": ["disabled", "enabled"],
                       "metadata": {
                         "description": "Optional. The value that indicates whether the trust policy is enabled or not. Note, requires the 'acrSku' to be 'Premium'."
                       }
@@ -14298,10 +13945,7 @@
                     "retentionPolicyStatus": {
                       "type": "string",
                       "defaultValue": "enabled",
-                      "allowedValues": [
-                        "disabled",
-                        "enabled"
-                      ],
+                      "allowedValues": ["disabled", "enabled"],
                       "metadata": {
                         "description": "Optional. The value that indicates whether the retention policy is enabled or not."
                       }
@@ -14316,10 +13960,7 @@
                     "azureADAuthenticationAsArmPolicyStatus": {
                       "type": "string",
                       "defaultValue": "enabled",
-                      "allowedValues": [
-                        "disabled",
-                        "enabled"
-                      ],
+                      "allowedValues": ["disabled", "enabled"],
                       "metadata": {
                         "description": "Optional. The value that indicates whether the policy for using ARM audience token for a container registry is enabled or not. Default is enabled."
                       }
@@ -14327,10 +13968,7 @@
                     "softDeletePolicyStatus": {
                       "type": "string",
                       "defaultValue": "disabled",
-                      "allowedValues": [
-                        "disabled",
-                        "enabled"
-                      ],
+                      "allowedValues": ["disabled", "enabled"],
                       "metadata": {
                         "description": "Optional. Soft Delete policy status. Default is disabled."
                       }
@@ -14352,10 +13990,7 @@
                     "publicNetworkAccess": {
                       "type": "string",
                       "nullable": true,
-                      "allowedValues": [
-                        "Enabled",
-                        "Disabled"
-                      ],
+                      "allowedValues": ["Enabled", "Disabled"],
                       "metadata": {
                         "description": "Optional. Whether or not public network access is allowed for this resource. For security reasons it should be disabled. If not specified, it will be disabled by default if private endpoints are set and networkRuleSetIpRules are not set.  Note, requires the 'acrSku' to be 'Premium'."
                       }
@@ -14363,10 +13998,7 @@
                     "networkRuleBypassOptions": {
                       "type": "string",
                       "defaultValue": "AzureServices",
-                      "allowedValues": [
-                        "AzureServices",
-                        "None"
-                      ],
+                      "allowedValues": ["AzureServices", "None"],
                       "metadata": {
                         "description": "Optional. Whether to allow trusted Azure services to access a network restricted registry."
                       }
@@ -14374,10 +14006,7 @@
                     "networkRuleSetDefaultAction": {
                       "type": "string",
                       "defaultValue": "Deny",
-                      "allowedValues": [
-                        "Allow",
-                        "Deny"
-                      ],
+                      "allowedValues": ["Allow", "Deny"],
                       "metadata": {
                         "description": "Optional. The default action of allow or deny when no other rules match."
                       }
@@ -14402,10 +14031,7 @@
                     "zoneRedundancy": {
                       "type": "string",
                       "defaultValue": "Enabled",
-                      "allowedValues": [
-                        "Disabled",
-                        "Enabled"
-                      ],
+                      "allowedValues": ["Disabled", "Enabled"],
                       "metadata": {
                         "description": "Optional. Whether or not zone redundancy is enabled for this container registry."
                       }
@@ -14637,9 +14263,7 @@
                         "level": "[coalesce(tryGet(parameters('lock'), 'kind'), '')]",
                         "notes": "[coalesce(tryGet(parameters('lock'), 'notes'), if(equals(tryGet(parameters('lock'), 'kind'), 'CanNotDelete'), 'Cannot delete resource or child resources.', 'Cannot delete or modify the resource or child resources.'))]"
                       },
-                      "dependsOn": [
-                        "registry"
-                      ]
+                      "dependsOn": ["registry"]
                     },
                     "registry_diagnosticSettings": {
                       "copy": {
@@ -14678,9 +14302,7 @@
                         "marketplacePartnerId": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'marketplacePartnerResourceId')]",
                         "logAnalyticsDestinationType": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'logAnalyticsDestinationType')]"
                       },
-                      "dependsOn": [
-                        "registry"
-                      ]
+                      "dependsOn": ["registry"]
                     },
                     "registry_roleAssignments": {
                       "copy": {
@@ -14700,9 +14322,7 @@
                         "conditionVersion": "[if(not(empty(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'condition'))), coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'conditionVersion'), '2.0'), null())]",
                         "delegatedManagedIdentityResourceId": "[tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'delegatedManagedIdentityResourceId')]"
                       },
-                      "dependsOn": [
-                        "registry"
-                      ]
+                      "dependsOn": ["registry"]
                     },
                     "registry_scopeMaps": {
                       "copy": {
@@ -14817,9 +14437,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "registry"
-                      ]
+                      "dependsOn": ["registry"]
                     },
                     "registry_replications": {
                       "copy": {
@@ -14904,10 +14522,7 @@
                             "zoneRedundancy": {
                               "type": "string",
                               "defaultValue": "Disabled",
-                              "allowedValues": [
-                                "Disabled",
-                                "Enabled"
-                              ],
+                              "allowedValues": ["Disabled", "Enabled"],
                               "metadata": {
                                 "description": "Optional. Whether or not zone redundancy is enabled for this container registry."
                               }
@@ -14964,9 +14579,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "registry"
-                      ]
+                      "dependsOn": ["registry"]
                     },
                     "registry_credentialSets": {
                       "copy": {
@@ -15148,9 +14761,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "registry"
-                      ]
+                      "dependsOn": ["registry"]
                     },
                     "registry_cacheRules": {
                       "copy": {
@@ -15273,10 +14884,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "registry",
-                        "registry_credentialSets"
-                      ]
+                      "dependsOn": ["registry", "registry_credentialSets"]
                     },
                     "registry_webhooks": {
                       "copy": {
@@ -15358,10 +14966,7 @@
                             "status": {
                               "type": "string",
                               "defaultValue": "enabled",
-                              "allowedValues": [
-                                "disabled",
-                                "enabled"
-                              ],
+                              "allowedValues": ["disabled", "enabled"],
                               "metadata": {
                                 "description": "Optional. The status of the webhook at the time the operation was called."
                               }
@@ -15486,9 +15091,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "registry"
-                      ]
+                      "dependsOn": ["registry"]
                     },
                     "registry_privateEndpoints": {
                       "copy": {
@@ -15796,9 +15399,7 @@
                                 },
                                 "conditionVersion": {
                                   "type": "string",
-                                  "allowedValues": [
-                                    "2.0"
-                                  ],
+                                  "allowedValues": ["2.0"],
                                   "nullable": true,
                                   "metadata": {
                                     "description": "Optional. Version of the condition."
@@ -16014,9 +15615,7 @@
                                 "level": "[coalesce(tryGet(parameters('lock'), 'kind'), '')]",
                                 "notes": "[if(equals(tryGet(parameters('lock'), 'kind'), 'CanNotDelete'), 'Cannot delete resource or child resources.', 'Cannot delete or modify the resource or child resources.')]"
                               },
-                              "dependsOn": [
-                                "privateEndpoint"
-                              ]
+                              "dependsOn": ["privateEndpoint"]
                             },
                             "privateEndpoint_roleAssignments": {
                               "copy": {
@@ -16036,9 +15635,7 @@
                                 "conditionVersion": "[if(not(empty(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'condition'))), coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'conditionVersion'), '2.0'), null())]",
                                 "delegatedManagedIdentityResourceId": "[tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'delegatedManagedIdentityResourceId')]"
                               },
-                              "dependsOn": [
-                                "privateEndpoint"
-                              ]
+                              "dependsOn": ["privateEndpoint"]
                             },
                             "privateEndpoint_privateDnsZoneGroup": {
                               "condition": "[not(empty(parameters('privateDnsZoneGroup')))]",
@@ -16178,9 +15775,7 @@
                                   }
                                 }
                               },
-                              "dependsOn": [
-                                "privateEndpoint"
-                              ]
+                              "dependsOn": ["privateEndpoint"]
                             }
                           },
                           "outputs": {
@@ -16243,10 +15838,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "registry",
-                        "registry_replications"
-                      ]
+                      "dependsOn": ["registry", "registry_replications"]
                     }
                   },
                   "outputs": {
@@ -16349,9 +15941,7 @@
           }
         }
       },
-      "dependsOn": [
-        "identity"
-      ]
+      "dependsOn": ["identity"]
     },
     "appinsights": {
       "type": "Microsoft.Resources/deployments",
@@ -16509,10 +16099,7 @@
                         },
                         "logAnalyticsDestinationType": {
                           "type": "string",
-                          "allowedValues": [
-                            "AzureDiagnostics",
-                            "Dedicated"
-                          ],
+                          "allowedValues": ["AzureDiagnostics", "Dedicated"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. A string indicating whether the export to Log Analytics should use the default destination type, i.e. AzureDiagnostics, or use a destination type."
@@ -17040,12 +16627,7 @@
                         },
                         "dataTypeHint": {
                           "type": "string",
-                          "allowedValues": [
-                            "armPath",
-                            "guid",
-                            "ip",
-                            "uri"
-                          ],
+                          "allowedValues": ["armPath", "guid", "ip", "uri"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. The column data type logical hint."
@@ -17118,11 +16700,7 @@
                         },
                         "kind": {
                           "type": "string",
-                          "allowedValues": [
-                            "CanNotDelete",
-                            "None",
-                            "ReadOnly"
-                          ],
+                          "allowedValues": ["CanNotDelete", "None", "ReadOnly"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Specify the type of lock."
@@ -17248,9 +16826,7 @@
                         },
                         "conditionVersion": {
                           "type": "string",
-                          "allowedValues": [
-                            "2.0"
-                          ],
+                          "allowedValues": ["2.0"],
                           "nullable": true,
                           "metadata": {
                             "description": "Optional. Version of the condition."
@@ -17534,10 +17110,7 @@
                     "publicNetworkAccessForIngestion": {
                       "type": "string",
                       "defaultValue": "Enabled",
-                      "allowedValues": [
-                        "Enabled",
-                        "Disabled"
-                      ],
+                      "allowedValues": ["Enabled", "Disabled"],
                       "metadata": {
                         "description": "Optional. The network access type for accessing Log Analytics ingestion."
                       }
@@ -17545,10 +17118,7 @@
                     "publicNetworkAccessForQuery": {
                       "type": "string",
                       "defaultValue": "Enabled",
-                      "allowedValues": [
-                        "Enabled",
-                        "Disabled"
-                      ],
+                      "allowedValues": ["Enabled", "Disabled"],
                       "metadata": {
                         "description": "Optional. The network access type for accessing Log Analytics query."
                       }
@@ -17738,9 +17308,7 @@
                         "marketplacePartnerId": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'marketplacePartnerResourceId')]",
                         "logAnalyticsDestinationType": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'logAnalyticsDestinationType')]"
                       },
-                      "dependsOn": [
-                        "logAnalyticsWorkspace"
-                      ]
+                      "dependsOn": ["logAnalyticsWorkspace"]
                     },
                     "logAnalyticsWorkspace_sentinelOnboarding": {
                       "condition": "[and(not(empty(filter(coalesce(parameters('gallerySolutions'), createArray()), lambda('item', startsWith(lambdaVariables('item').name, 'SecurityInsights'))))), parameters('onboardWorkspaceToSentinel'))]",
@@ -17749,9 +17317,7 @@
                       "scope": "[format('Microsoft.OperationalInsights/workspaces/{0}', parameters('name'))]",
                       "name": "default",
                       "properties": {},
-                      "dependsOn": [
-                        "logAnalyticsWorkspace"
-                      ]
+                      "dependsOn": ["logAnalyticsWorkspace"]
                     },
                     "logAnalyticsWorkspace_lock": {
                       "condition": "[and(not(empty(coalesce(parameters('lock'), createObject()))), not(equals(tryGet(parameters('lock'), 'kind'), 'None')))]",
@@ -17763,9 +17329,7 @@
                         "level": "[coalesce(tryGet(parameters('lock'), 'kind'), '')]",
                         "notes": "[if(equals(tryGet(parameters('lock'), 'kind'), 'CanNotDelete'), 'Cannot delete resource or child resources.', 'Cannot delete or modify the resource or child resources.')]"
                       },
-                      "dependsOn": [
-                        "logAnalyticsWorkspace"
-                      ]
+                      "dependsOn": ["logAnalyticsWorkspace"]
                     },
                     "logAnalyticsWorkspace_roleAssignments": {
                       "copy": {
@@ -17785,9 +17349,7 @@
                         "conditionVersion": "[if(not(empty(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'condition'))), coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'conditionVersion'), '2.0'), null())]",
                         "delegatedManagedIdentityResourceId": "[tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'delegatedManagedIdentityResourceId')]"
                       },
-                      "dependsOn": [
-                        "logAnalyticsWorkspace"
-                      ]
+                      "dependsOn": ["logAnalyticsWorkspace"]
                     },
                     "logAnalyticsWorkspace_storageInsightConfigs": {
                       "copy": {
@@ -17933,9 +17495,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "logAnalyticsWorkspace"
-                      ]
+                      "dependsOn": ["logAnalyticsWorkspace"]
                     },
                     "logAnalyticsWorkspace_linkedServices": {
                       "copy": {
@@ -18058,9 +17618,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "logAnalyticsWorkspace"
-                      ]
+                      "dependsOn": ["logAnalyticsWorkspace"]
                     },
                     "logAnalyticsWorkspace_linkedStorageAccounts": {
                       "copy": {
@@ -18170,9 +17728,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "logAnalyticsWorkspace"
-                      ]
+                      "dependsOn": ["logAnalyticsWorkspace"]
                     },
                     "logAnalyticsWorkspace_savedSearches": {
                       "copy": {
@@ -18514,9 +18070,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "logAnalyticsWorkspace"
-                      ]
+                      "dependsOn": ["logAnalyticsWorkspace"]
                     },
                     "logAnalyticsWorkspace_dataSources": {
                       "copy": {
@@ -18762,9 +18316,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "logAnalyticsWorkspace"
-                      ]
+                      "dependsOn": ["logAnalyticsWorkspace"]
                     },
                     "logAnalyticsWorkspace_tables": {
                       "copy": {
@@ -19043,9 +18595,7 @@
                                 },
                                 "conditionVersion": {
                                   "type": "string",
-                                  "allowedValues": [
-                                    "2.0"
-                                  ],
+                                  "allowedValues": ["2.0"],
                                   "nullable": true,
                                   "metadata": {
                                     "description": "Optional. Version of the condition."
@@ -19083,10 +18633,7 @@
                             "plan": {
                               "type": "string",
                               "defaultValue": "Analytics",
-                              "allowedValues": [
-                                "Basic",
-                                "Analytics"
-                              ],
+                              "allowedValues": ["Basic", "Analytics"],
                               "metadata": {
                                 "description": "Optional. Instruct the system how to handle and charge the logs ingested to this table."
                               }
@@ -19199,9 +18746,7 @@
                                 "conditionVersion": "[if(not(empty(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'condition'))), coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'conditionVersion'), '2.0'), null())]",
                                 "delegatedManagedIdentityResourceId": "[tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'delegatedManagedIdentityResourceId')]"
                               },
-                              "dependsOn": [
-                                "table"
-                              ]
+                              "dependsOn": ["table"]
                             }
                           },
                           "outputs": {
@@ -19229,9 +18774,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "logAnalyticsWorkspace"
-                      ]
+                      "dependsOn": ["logAnalyticsWorkspace"]
                     },
                     "logAnalyticsWorkspace_solutions": {
                       "copy": {
@@ -19417,9 +18960,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "logAnalyticsWorkspace"
-                      ]
+                      "dependsOn": ["logAnalyticsWorkspace"]
                     }
                   },
                   "outputs": {
@@ -19582,9 +19123,7 @@
                           },
                           "conditionVersion": {
                             "type": "string",
-                            "allowedValues": [
-                              "2.0"
-                            ],
+                            "allowedValues": ["2.0"],
                             "nullable": true,
                             "metadata": {
                               "description": "Optional. Version of the condition."
@@ -19673,10 +19212,7 @@
                           },
                           "logAnalyticsDestinationType": {
                             "type": "string",
-                            "allowedValues": [
-                              "AzureDiagnostics",
-                              "Dedicated"
-                            ],
+                            "allowedValues": ["AzureDiagnostics", "Dedicated"],
                             "nullable": true,
                             "metadata": {
                               "description": "Optional. A string indicating whether the export to Log Analytics should use the default destination type, i.e. AzureDiagnostics, or use a destination type."
@@ -19732,10 +19268,7 @@
                     "applicationType": {
                       "type": "string",
                       "defaultValue": "web",
-                      "allowedValues": [
-                        "web",
-                        "other"
-                      ],
+                      "allowedValues": ["web", "other"],
                       "metadata": {
                         "description": "Optional. Application type."
                       }
@@ -19777,10 +19310,7 @@
                     "publicNetworkAccessForIngestion": {
                       "type": "string",
                       "defaultValue": "Enabled",
-                      "allowedValues": [
-                        "Enabled",
-                        "Disabled"
-                      ],
+                      "allowedValues": ["Enabled", "Disabled"],
                       "metadata": {
                         "description": "Optional. The network access type for accessing Application Insights ingestion. - Enabled or Disabled."
                       }
@@ -19788,10 +19318,7 @@
                     "publicNetworkAccessForQuery": {
                       "type": "string",
                       "defaultValue": "Enabled",
-                      "allowedValues": [
-                        "Enabled",
-                        "Disabled"
-                      ],
+                      "allowedValues": ["Enabled", "Disabled"],
                       "metadata": {
                         "description": "Optional. The network access type for accessing Application Insights query. - Enabled or Disabled."
                       }
@@ -19800,15 +19327,7 @@
                       "type": "int",
                       "defaultValue": 365,
                       "allowedValues": [
-                        30,
-                        60,
-                        90,
-                        120,
-                        180,
-                        270,
-                        365,
-                        550,
-                        730
+                        30, 60, 90, 120, 180, 270, 365, 550, 730
                       ],
                       "metadata": {
                         "description": "Optional. Retention period in days."
@@ -19942,9 +19461,7 @@
                         "conditionVersion": "[if(not(empty(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'condition'))), coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'conditionVersion'), '2.0'), null())]",
                         "delegatedManagedIdentityResourceId": "[tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'delegatedManagedIdentityResourceId')]"
                       },
-                      "dependsOn": [
-                        "appInsights"
-                      ]
+                      "dependsOn": ["appInsights"]
                     },
                     "appInsights_diagnosticSettings": {
                       "copy": {
@@ -19983,9 +19500,7 @@
                         "marketplacePartnerId": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'marketplacePartnerResourceId')]",
                         "logAnalyticsDestinationType": "[tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'logAnalyticsDestinationType')]"
                       },
-                      "dependsOn": [
-                        "appInsights"
-                      ]
+                      "dependsOn": ["appInsights"]
                     },
                     "linkedStorageAccount": {
                       "condition": "[not(empty(parameters('linkedStorageAccountResourceId')))]",
@@ -20067,9 +19582,7 @@
                           }
                         }
                       },
-                      "dependsOn": [
-                        "appInsights"
-                      ]
+                      "dependsOn": ["appInsights"]
                     }
                   },
                   "outputs": {
@@ -20125,9 +19638,7 @@
                   }
                 }
               },
-              "dependsOn": [
-                "workspace"
-              ]
+              "dependsOn": ["workspace"]
             }
           },
           "outputs": {
@@ -20150,9 +19661,7 @@
           }
         }
       },
-      "dependsOn": [
-        "identity"
-      ]
+      "dependsOn": ["identity"]
     },
     "playwright": {
       "type": "Microsoft.Resources/deployments",
@@ -20197,12 +19706,7 @@
             },
             "location": {
               "type": "string",
-              "allowedValues": [
-                "eastus",
-                "westus3",
-                "westeurope",
-                "eastasia"
-              ],
+              "allowedValues": ["eastus", "westus3", "westeurope", "eastasia"],
               "metadata": {
                 "description": "Location for Playwright Workspaces in Azure LoadTest Service. Supported: eastus, westus3, westeurope, eastasia"
               }
@@ -20226,20 +19730,11 @@
                 "cors": {
                   "corsRules": [
                     {
-                      "allowedOrigins": [
-                        "https://trace.playwright.dev"
-                      ],
-                      "allowedMethods": [
-                        "GET",
-                        "OPTIONS"
-                      ],
+                      "allowedOrigins": ["https://trace.playwright.dev"],
+                      "allowedMethods": ["GET", "OPTIONS"],
                       "maxAgeInSeconds": 86400,
-                      "exposedHeaders": [
-                        "*"
-                      ],
-                      "allowedHeaders": [
-                        "*"
-                      ]
+                      "exposedHeaders": ["*"],
+                      "allowedHeaders": ["*"]
                     }
                   ]
                 }
@@ -20341,9 +19836,7 @@
           }
         }
       },
-      "dependsOn": [
-        "storage"
-      ]
+      "dependsOn": ["storage"]
     },
     "containerApp": {
       "type": "Microsoft.Resources/deployments",
@@ -20497,12 +19990,7 @@
           }
         }
       },
-      "dependsOn": [
-        "acr",
-        "appinsights",
-        "identity",
-        "storage"
-      ]
+      "dependsOn": ["acr", "appinsights", "identity", "storage"]
     },
     "containerAppApi": {
       "type": "Microsoft.Resources/deployments",
@@ -20637,9 +20125,7 @@
                     "transport": "http",
                     "clientCertificateMode": "ignore",
                     "corsPolicy": {
-                      "allowedOrigins": [
-                        "*"
-                      ],
+                      "allowedOrigins": ["*"],
                       "allowedMethods": [
                         "GET",
                         "POST",
@@ -20648,9 +20134,7 @@
                         "PATCH",
                         "OPTIONS"
                       ],
-                      "allowedHeaders": [
-                        "*"
-                      ],
+                      "allowedHeaders": ["*"],
                       "allowCredentials": false
                     },
                     "traffic": [
@@ -20767,10 +20251,7 @@
           }
         }
       },
-      "dependsOn": [
-        "containerApp",
-        "database"
-      ]
+      "dependsOn": ["containerApp", "database"]
     },
     "containerAppApiMcp": {
       "type": "Microsoft.Resources/deployments",
@@ -20912,9 +20393,7 @@
                     "transport": "http",
                     "clientCertificateMode": "ignore",
                     "corsPolicy": {
-                      "allowedOrigins": [
-                        "*"
-                      ],
+                      "allowedOrigins": ["*"],
                       "allowedMethods": [
                         "GET",
                         "POST",
@@ -20922,9 +20401,7 @@
                         "DELETE",
                         "OPTIONS"
                       ],
-                      "allowedHeaders": [
-                        "*"
-                      ],
+                      "allowedHeaders": ["*"],
                       "allowCredentials": false
                     },
                     "traffic": [
@@ -21009,11 +20486,7 @@
           }
         }
       },
-      "dependsOn": [
-        "aifoundry",
-        "containerApp",
-        "database"
-      ]
+      "dependsOn": ["aifoundry", "containerApp", "database"]
     },
     "containerAppApiFunctions": {
       "type": "Microsoft.Resources/deployments",
@@ -21191,9 +20664,7 @@
                     "transport": "http",
                     "clientCertificateMode": "ignore",
                     "corsPolicy": {
-                      "allowedOrigins": [
-                        "*"
-                      ],
+                      "allowedOrigins": ["*"],
                       "allowedMethods": [
                         "GET",
                         "POST",
@@ -21201,9 +20672,7 @@
                         "DELETE",
                         "OPTIONS"
                       ],
-                      "allowedHeaders": [
-                        "*"
-                      ],
+                      "allowedHeaders": ["*"],
                       "allowCredentials": false
                     },
                     "traffic": [
@@ -21591,7 +21060,7 @@
         "mode": "Incremental",
         "parameters": {
           "swaName": {
-            "value": "[format('av-swa-{0}', parameters('resourceToken'))]"
+            "value": "[format('av-app-{0}', parameters('resourceToken'))]"
           },
           "location": {
             "value": "eastus2"
@@ -21706,9 +21175,7 @@
                 "API_MCP_URL": "[parameters('apiMcpUrl')]",
                 "APPINSIGHTS_CONNECTIONSTRING": "[parameters('appInsightsConnectionString')]"
               },
-              "dependsOn": [
-                "staticWebApp"
-              ]
+              "dependsOn": ["staticWebApp"]
             }
           },
           "outputs": {

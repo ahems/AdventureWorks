@@ -403,6 +403,35 @@ public class EmailService
     }
 
     /// <summary>
+    /// Send a plain-text email to a person (Person.Person row) identified by BusinessEntityID.
+    /// Looks up the email address and first name from the DB automatically.
+    /// </summary>
+    public async Task<bool> SendPersonEmailByIdAsync(int personId, string subject, string emailContent)
+    {
+        try
+        {
+            using var connection = await CreateConnectionAsync();
+
+            var emailAddress = await connection.QueryFirstOrDefaultAsync<string>(
+                "SELECT TOP 1 EmailAddress FROM Person.EmailAddress WHERE BusinessEntityID = @PersonId ORDER BY EmailAddressID",
+                new { PersonId = personId });
+            if (string.IsNullOrEmpty(emailAddress)) return false;
+
+            var firstName = await connection.QueryFirstOrDefaultAsync<string?>(
+                "SELECT FirstName FROM Person.Person WHERE BusinessEntityID = @PersonId",
+                new { PersonId = personId }) ?? "Customer";
+
+            var htmlContent = GenerateHtmlContent(subject, emailContent, firstName);
+            return await SendEmailDirectAsync(emailAddress, subject, htmlContent);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending email to person {PersonId}", personId);
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Send email directly to any email address (for password reset, etc.)
     /// </summary>
     public async Task<bool> SendEmailDirectAsync(string toEmail, string subject, string htmlContent)

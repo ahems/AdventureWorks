@@ -72,4 +72,33 @@ test.describe("Admin Portal – Customers", () => {
       await expect(bulkBtn).toBeVisible({ timeout: 5_000 });
     }
   });
+
+  test("bulk AI email: generate step produces email subjects", async ({
+    page,
+  }) => {
+    test.setTimeout(300_000);
+    const firstCheckbox = page.getByRole("checkbox").first();
+    await firstCheckbox.waitFor({ state: "visible", timeout: 20_000 });
+    await firstCheckbox.click();
+
+    // Open the bulk email dialog via the "AI Email Campaign" button
+    const bulkBtn = page.getByRole("button", {
+      name: /AI Email Campaign/i,
+    });
+    await expect(bulkBtn).toBeVisible({ timeout: 10_000 });
+    await bulkBtn.click();
+
+    // Generate button should appear inside the dialog
+    const generateBtn = page.getByRole("button", {
+      name: /generate.*personalized/i,
+    });
+    await expect(generateBtn).toBeVisible({ timeout: 10_000 });
+    await generateBtn.click();
+
+    // After generation completes the dialog shows "N personalized emails ready"
+    // AI generation can take ~2-3 minutes on a cold Azure Functions instance
+    await expect(page.getByText(/personalized emails ready/i)).toBeVisible({
+      timeout: 240_000,
+    });
+  });
 });

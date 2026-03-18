@@ -345,21 +345,18 @@ const NaturalLanguageBI: React.FC = () => {
     setIsProcessing(true);
     setQuery(queryText);
 
-    // Simulate AI processing
-    setTimeout(() => {
-      const result = processQuery(queryText, dataCtx);
-      setCurrentResult(result);
-      setQueryHistory((prev) => [
-        {
-          id: Date.now().toString(),
-          query: queryText,
-          timestamp: new Date(),
-          result,
-        },
-        ...prev.slice(0, 4),
-      ]);
-      setIsProcessing(false);
-    }, 1200);
+    const result = processQuery(queryText, dataCtx);
+    setCurrentResult(result);
+    setQueryHistory((prev) => [
+      {
+        id: Date.now().toString(),
+        query: queryText,
+        timestamp: new Date(),
+        result,
+      },
+      ...prev.slice(0, 4),
+    ]);
+    setIsProcessing(false);
   };
 
   const handleSubmit = (e: React.FormEvent) => {

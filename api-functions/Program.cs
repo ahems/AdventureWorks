@@ -78,6 +78,14 @@ builder.Services.AddScoped<ProductService>(sp =>
     return new ProductService(connectionString);
 });
 
+builder.Services.AddScoped<SpecialOfferService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new SpecialOfferService(connectionString);
+});
+
 builder.Services.AddScoped<ReviewService>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();

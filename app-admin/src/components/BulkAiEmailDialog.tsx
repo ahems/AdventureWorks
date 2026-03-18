@@ -20,6 +20,7 @@ import { useAdminOrders } from "@/hooks/useAdminOrders";
 import { useAdminShoppingCarts } from "@/hooks/useAdminCatalog";
 import { StaleCart } from "@/types/shoppingCart";
 import { toast } from "sonner";
+import { getFunctionsApiUrl } from "@/lib/utils";
 import {
   Mail,
   Sparkles,
@@ -113,59 +114,39 @@ interface BulkAiEmailDialogProps {
   onComplete: () => void;
 }
 
-// AI content generation using live order/cart data
-const generateMockAIContent = async (
+// AI content generation via Azure Functions endpoint
+const generateAIEmailContent = async (
   template: EmailTemplate,
   customer: Customer,
   orders: Order[],
   staleCarts: StaleCart[],
 ): Promise<{ subject: string; body: string }> => {
-  // Simulate AI generation delay
-  await new Promise((resolve) =>
-    setTimeout(resolve, 800 + Math.random() * 600),
-  );
-
-  const firstName = customer.FirstName;
   const lastOrder = orders.find((o) => o.CustomerID === customer.CustomerID);
   const staleCart = staleCarts.find(
     (c) =>
       c.customerEmail.toLowerCase() === customer.EmailAddress.toLowerCase(),
   );
 
-  const templates: Record<EmailTemplate, { subject: string; body: string }> = {
-    stale_cart: {
-      subject: `${firstName}, your cart misses you! 🛒`,
-      body: staleCart
-        ? `Hi ${firstName},\n\nWe noticed you left ${staleCart.totalItems} item(s) worth $${staleCart.totalValue.toFixed(2)} in your cart. Don't let them get away!\n\nComplete your purchase now and enjoy free shipping on orders over $50.\n\nBest,\nAdventureWorks Team`
-        : `Hi ${firstName},\n\nWe noticed you've been browsing our collection recently. Ready to make that purchase?\n\nShop now and enjoy exclusive member pricing.\n\nBest,\nAdventureWorks Team`,
+  const response = await fetch(
+    `${getFunctionsApiUrl()}/api/email/generate-ai-content`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        firstName: customer.FirstName,
+        templateType: template,
+        cartValue: staleCart?.totalValue,
+        lastOrderId: lastOrder?.SalesOrderID,
+        totalSpent: customer.TotalSpent,
+        totalOrders: customer.TotalOrders,
+      }),
     },
-    recent_order_thanks: {
-      subject: `Thank you for your order, ${firstName}! 🎉`,
-      body: lastOrder
-        ? `Dear ${firstName},\n\nThank you for your recent order #${lastOrder.SalesOrderID}! We're thrilled to have you as a customer.\n\nYour order of $${lastOrder.TotalDue.toFixed(2)} is ${lastOrder.Status === "Delivered" ? "delivered" : "on its way"}.\n\nAs a token of our appreciation, here's 10% off your next purchase: THANKS10\n\nWarm regards,\nAdventureWorks Team`
-        : `Dear ${firstName},\n\nThank you for being a valued AdventureWorks customer!\n\nWe appreciate your business and look forward to serving you again soon.\n\nBest,\nAdventureWorks Team`,
-    },
-    re_engagement: {
-      subject: `We miss you, ${firstName}! Come back for 20% off 💙`,
-      body: `Hi ${firstName},\n\nIt's been a while since we've seen you at AdventureWorks, and we miss you!\n\nAs a valued customer with ${customer.TotalOrders} previous orders, we'd love to welcome you back with an exclusive 20% discount.\n\nUse code: WELCOME20 at checkout.\n\nHope to see you soon!\nAdventureWorks Team`,
-    },
-    vip_appreciation: {
-      subject: `${firstName}, you're a VIP! Exclusive perks inside 👑`,
-      body: `Dear ${firstName},\n\nAs one of our most valued customers with $${customer.TotalSpent.toFixed(2)} in lifetime purchases, we want to say THANK YOU!\n\nYou've unlocked VIP status with these exclusive benefits:\n• Early access to new arrivals\n• Free express shipping on all orders\n• Dedicated customer support line\n• Special VIP-only promotions\n\nYour loyalty means everything to us.\n\nWith gratitude,\nAdventureWorks VIP Team`,
-    },
-    product_recommendation: {
-      subject: `${firstName}, we picked these just for you! ✨`,
-      body: `Hi ${firstName},\n\nBased on your interests and purchase history, our AI has curated a special selection just for you!\n\n🚴 Top Picks This Week:\n• Premium Mountain Bike Series - 15% off\n• All-Weather Cycling Gear - New arrivals\n• Exclusive Accessories Bundle - Limited stock\n\nThese items are flying off our shelves, so don't wait!\n\nHappy shopping,\nAdventureWorks Team`,
-    },
-    feedback_request: {
-      subject: `${firstName}, we'd love your feedback! ⭐`,
-      body: lastOrder
-        ? `Hi ${firstName},\n\nWe hope you're enjoying your recent purchase from order #${lastOrder.SalesOrderID}!\n\nYour feedback helps us improve and helps other adventurers make great choices. Would you take 2 minutes to share your experience?\n\n[Leave a Review] - Click here\n\nAs a thank you, you'll receive 100 reward points!\n\nBest,\nAdventureWorks Team`
-        : `Hi ${firstName},\n\nWe value your opinion as a long-time customer!\n\nWould you take a moment to share your AdventureWorks experience? Your feedback helps us serve you better.\n\nThank you for being part of our community!\n\nAdventureWorks Team`,
-    },
-  };
+  );
 
-  return templates[template];
+  if (!response.ok) throw new Error(`AI generation failed: ${response.status}`);
+  const data = await response.json();
+  if (data.error) throw new Error(data.error);
+  return { subject: data.subject ?? "", body: data.body ?? "" };
 };
 
 const BulkAiEmailDialog: React.FC<BulkAiEmailDialogProps> = ({
@@ -218,7 +199,7 @@ const BulkAiEmailDialog: React.FC<BulkAiEmailDialogProps> = ({
       );
 
       try {
-        const content = await generateMockAIContent(
+        const content = await generateAIEmailContent(
           selectedTemplate,
           customer,
           allOrders,
@@ -265,7 +246,8 @@ const BulkAiEmailDialog: React.FC<BulkAiEmailDialogProps> = ({
     let failCount = 0;
 
     for (const customer of selectedCustomers) {
-      if (!generatedEmails.has(customer.CustomerID)) continue;
+      const email = generatedEmails.get(customer.CustomerID);
+      if (!email) continue;
 
       setEmailStatuses((prev) =>
         prev.map((s) =>
@@ -275,29 +257,49 @@ const BulkAiEmailDialog: React.FC<BulkAiEmailDialogProps> = ({
         ),
       );
 
-      // Simulate sending delay
-      await new Promise((resolve) =>
-        setTimeout(resolve, 300 + Math.random() * 400),
-      );
-
-      // 5% simulated failure rate
-      const success = Math.random() > 0.05;
-
-      if (success) {
-        successCount++;
-        setEmailStatuses((prev) =>
-          prev.map((s) =>
-            s.customerId === customer.CustomerID
-              ? { ...s, status: "success" }
-              : s,
-          ),
+      try {
+        const response = await fetch(
+          `${getFunctionsApiUrl()}/api/persons/${customer.CustomerID}/send-email`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              subject: email.subject,
+              content: email.body,
+            }),
+          },
         );
-      } else {
+
+        if (response.ok) {
+          successCount++;
+          setEmailStatuses((prev) =>
+            prev.map((s) =>
+              s.customerId === customer.CustomerID
+                ? { ...s, status: "success" }
+                : s,
+            ),
+          );
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          failCount++;
+          setEmailStatuses((prev) =>
+            prev.map((s) =>
+              s.customerId === customer.CustomerID
+                ? {
+                    ...s,
+                    status: "failed",
+                    error: errData.error ?? "Send failed",
+                  }
+                : s,
+            ),
+          );
+        }
+      } catch {
         failCount++;
         setEmailStatuses((prev) =>
           prev.map((s) =>
             s.customerId === customer.CustomerID
-              ? { ...s, status: "failed", error: "Send failed" }
+              ? { ...s, status: "failed", error: "Network error" }
               : s,
           ),
         );
@@ -306,7 +308,9 @@ const BulkAiEmailDialog: React.FC<BulkAiEmailDialogProps> = ({
 
     setIsSending(false);
     toast.success(
-      `Sent ${successCount} emails${failCount > 0 ? `, ${failCount} failed` : ""}`,
+      `Sent ${successCount} emails${
+        failCount > 0 ? `, ${failCount} failed` : ""
+      }`,
     );
   };
 

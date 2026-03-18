@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Mic,
   MicOff,
@@ -14,12 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Customer } from "@/types/customer";
-import { Order } from "@/types/order";
-import { Product } from "@/types/product";
-import { useAdminCustomers } from "@/hooks/useAdminCustomers";
-import { useAdminOrders } from "@/hooks/useAdminOrders";
-import { useAdminAllProducts } from "@/hooks/useAdminProducts";
+import { sendAgentMessage, AgentMessage } from "@/services/agentService";
 
 interface Message {
   id: string;
@@ -27,119 +22,6 @@ interface Message {
   content: string;
   timestamp: Date;
 }
-
-interface VoiceDataContext {
-  customers: Customer[];
-  orders: Order[];
-  products: Product[];
-}
-
-const getAIResponse = (query: string, ctx: VoiceDataContext): string => {
-  const lowerQuery = query.toLowerCase();
-  const customerMap = new Map(ctx.customers.map((c) => [c.CustomerID, c]));
-
-  const customerResponse = () => {
-    const idMatch = query.match(/\d+/);
-    if (idMatch) {
-      const customer = customerMap.get(parseInt(idMatch[0]));
-      if (customer) {
-        return `Found customer ${customer.FirstName} ${customer.LastName} from ${customer.City}, ${customer.StateProvince}. They have placed ${customer.TotalOrders} orders totaling $${customer.TotalSpent.toLocaleString()}. Contact: ${customer.EmailAddress}`;
-      }
-    }
-    // Compute top customers from orders
-    const spendByCustomer = ctx.orders.reduce(
-      (acc, o) => {
-        acc[o.CustomerID] = (acc[o.CustomerID] || 0) + (o.TotalDue || 0);
-        return acc;
-      },
-      {} as Record<number, number>,
-    );
-    const topCustomers = [...ctx.customers]
-      .map((c) => ({
-        ...c,
-        computedSpend: spendByCustomer[c.CustomerID] || c.TotalSpent || 0,
-      }))
-      .filter((c) => c.computedSpend > 0)
-      .sort((a, b) => b.computedSpend - a.computedSpend)
-      .slice(0, 3);
-    if (topCustomers.length === 0)
-      return "No customer spend data is available yet.";
-    return `Here are your top customers by spend: ${topCustomers.map((c, i) => `${i + 1}. ${c.FirstName} ${c.LastName} ($${c.computedSpend.toLocaleString()})`).join(", ")}. Would you like details on any specific customer?`;
-  };
-
-  const orderResponse = () => {
-    const idMatch = query.match(/\d+/);
-    if (idMatch) {
-      const order = ctx.orders.find(
-        (o) => o.SalesOrderID === parseInt(idMatch[0]),
-      );
-      if (order) {
-        const customer = customerMap.get(order.CustomerID);
-        return `Order #${order.SalesOrderID} for ${customer?.FirstName ?? ""} ${customer?.LastName ?? ""} is currently "${order.Status}". Total: $${(order.TotalDue ?? 0).toFixed(2)}. Contains ${order.OrderItems?.length ?? 0} item(s). ${order.ShipDate ? `Shipped on ${new Date(order.ShipDate).toLocaleDateString()}` : "Not yet shipped."}`;
-      }
-    }
-    const pending = ctx.orders.filter(
-      (o) => o.Status === "Pending" || o.Status === "Processing",
-    );
-    return `You have ${pending.length} orders pending or in processing. Total pending revenue: $${pending.reduce((sum, o) => sum + (o.TotalDue || 0), 0).toLocaleString()}. Would you like me to list them?`;
-  };
-
-  const productResponse = () => {
-    const searchTerm = lowerQuery;
-    const matchedProduct = ctx.products.find(
-      (p) =>
-        p.Name.toLowerCase().includes(searchTerm) ||
-        p.ProductNumber.toLowerCase().includes(searchTerm),
-    );
-    if (matchedProduct) {
-      return `${matchedProduct.Name} (${matchedProduct.ProductNumber}) is priced at $${matchedProduct.ListPrice.toFixed(2)}. ${matchedProduct.salePercent ? `Currently on sale: ${matchedProduct.salePercent}% off!` : ""} ${matchedProduct.Description ?? ""}`;
-    }
-    const topProducts = ctx.products.slice(0, 3);
-    return `I couldn't find a specific product match. Here are some popular items: ${topProducts.map((p) => `${p.Name} at $${p.ListPrice.toFixed(2)}`).join(", ")}. What would you like to know more about?`;
-  };
-
-  const salesResponse = () => {
-    const totalRevenue = ctx.orders.reduce(
-      (sum, o) => sum + (o.TotalDue || 0),
-      0,
-    );
-    const deliveredOrders = ctx.orders.filter((o) => o.Status === "Delivered");
-    const orderCount = ctx.orders.length;
-    return `Total sales across ${orderCount} orders: $${totalRevenue.toLocaleString()}. ${deliveredOrders.length} orders have been delivered. Average order value: $${orderCount > 0 ? (totalRevenue / orderCount).toFixed(2) : "0.00"}.`;
-  };
-
-  if (lowerQuery.includes("customer") || lowerQuery.includes("who")) {
-    return customerResponse();
-  }
-  if (
-    lowerQuery.includes("order") ||
-    lowerQuery.includes("status") ||
-    lowerQuery.includes("ship")
-  ) {
-    return orderResponse();
-  }
-  if (
-    lowerQuery.includes("product") ||
-    lowerQuery.includes("bike") ||
-    lowerQuery.includes("price") ||
-    lowerQuery.includes("road") ||
-    lowerQuery.includes("mountain")
-  ) {
-    return productResponse();
-  }
-  if (
-    lowerQuery.includes("sales") ||
-    lowerQuery.includes("revenue") ||
-    lowerQuery.includes("total")
-  ) {
-    return salesResponse();
-  }
-  if (lowerQuery.includes("help") || lowerQuery.includes("what can you")) {
-    return "I can help you with: 1) Customer lookups - ask about specific customers or top customers. 2) Order status - check order details or pending orders. 3) Product information - get pricing and availability. 4) Sales summaries - overall performance metrics. What would you like to know?";
-  }
-
-  return "I can help you look up customers, check order status, find product information, or review sales data. Try asking something like 'Show me customer 1003' or 'What's the status of order 70001?'";
-};
 
 interface VoiceSalesAssistantProps {
   isOpen: boolean;
@@ -159,14 +41,21 @@ const VoiceSalesAssistant: React.FC<VoiceSalesAssistantProps> = ({
   const [useVoiceMode, setUseVoiceMode] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { data: customers = [] } = useAdminCustomers();
-  const { data: orders = [] } = useAdminOrders();
-  const { data: products = [] } = useAdminAllProducts();
+  const [speechSupported, setSpeechSupported] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
 
-  const dataCtx = useMemo<VoiceDataContext>(
-    () => ({ customers, orders, products }),
-    [customers, orders, products],
-  );
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SpeechRecognitionAPI =
+      (window as any).SpeechRecognition ??
+      (window as any).webkitSpeechRecognition;
+    if (SpeechRecognitionAPI) {
+      setSpeechSupported(true);
+    } else {
+      setUseVoiceMode(false);
+    }
+  }, []);
 
   // Load conversation history from localStorage
   useEffect(() => {
@@ -203,29 +92,33 @@ const VoiceSalesAssistant: React.FC<VoiceSalesAssistantProps> = ({
     }
   }, [messages]);
 
-  const simulateListening = () => {
-    setIsListening(true);
-
-    // Simulate listening for 2 seconds
-    setTimeout(() => {
+  const startListening = () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SpeechRecognitionAPI =
+      (window as any).SpeechRecognition ??
+      (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionAPI) return;
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const transcript = event.results[0][0].transcript;
       setIsListening(false);
-
-      // Fake transcribed queries
-      const fakeQueries = [
-        "What's the status of order 70003?",
-        "Show me customer 1003",
-        "Tell me about the Road-150 bike",
-        "How are sales looking?",
-        "What orders are pending?",
-      ];
-      const randomQuery =
-        fakeQueries[Math.floor(Math.random() * fakeQueries.length)];
-
-      processQuery(randomQuery);
-    }, 2000);
+      processQuery(transcript);
+    };
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+    recognitionRef.current = recognition;
+    setIsListening(true);
+    recognition.start();
   };
 
-  const processQuery = (query: string) => {
+  const stopListening = () => {
+    recognitionRef.current?.stop();
+    setIsListening(false);
+  };
+
+  const processQuery = async (query: string) => {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
@@ -233,28 +126,41 @@ const VoiceSalesAssistant: React.FC<VoiceSalesAssistantProps> = ({
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMessage]);
-
     setIsProcessing(true);
-
-    // Simulate AI thinking
-    setTimeout(() => {
-      setIsProcessing(false);
-      const response = getAIResponse(query, dataCtx);
-
+    try {
+      const history: AgentMessage[] = messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+      const agentReply = await sendAgentMessage(query, history);
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: response,
+        content: agentReply.content,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, assistantMessage]);
-
-      // Simulate speaking the response
-      if (useVoiceMode) {
-        setIsSpeaking(true);
-        setTimeout(() => setIsSpeaking(false), 3000);
+      if (useVoiceMode && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        const utt = new SpeechSynthesisUtterance(agentReply.content);
+        utt.onstart = () => setIsSpeaking(true);
+        utt.onend = () => setIsSpeaking(false);
+        utt.onerror = () => setIsSpeaking(false);
+        window.speechSynthesis.speak(utt);
       }
-    }, 1500);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          role: "assistant" as const,
+          content: "Sorry, I couldn't get a response. Please try again.",
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleSendText = (e: React.FormEvent) => {
@@ -425,16 +331,18 @@ const VoiceSalesAssistant: React.FC<VoiceSalesAssistantProps> = ({
             {/* Input Area */}
             <div className="p-3 border-t-2 border-dashed border-doodle-text/20">
               <div className="flex items-center gap-2 mb-2">
-                <button
-                  onClick={() => setUseVoiceMode(!useVoiceMode)}
-                  className={`font-doodle text-xs px-2 py-1 rounded border-2 border-doodle-text transition-colors ${
-                    useVoiceMode
-                      ? "bg-doodle-accent text-white"
-                      : "bg-transparent text-doodle-text"
-                  }`}
-                >
-                  {useVoiceMode ? "🎤 Voice" : "⌨️ Text"}
-                </button>
+                {speechSupported && (
+                  <button
+                    onClick={() => setUseVoiceMode(!useVoiceMode)}
+                    className={`font-doodle text-xs px-2 py-1 rounded border-2 border-doodle-text transition-colors ${
+                      useVoiceMode
+                        ? "bg-doodle-accent text-white"
+                        : "bg-transparent text-doodle-text"
+                    }`}
+                  >
+                    {useVoiceMode ? "🎤 Voice" : "⌨️ Text"}
+                  </button>
+                )}
                 {messages.length > 0 && (
                   <button
                     onClick={clearHistory}
@@ -447,8 +355,8 @@ const VoiceSalesAssistant: React.FC<VoiceSalesAssistantProps> = ({
 
               {useVoiceMode ? (
                 <button
-                  onClick={simulateListening}
-                  disabled={isListening || isProcessing}
+                  onClick={isListening ? stopListening : startListening}
+                  disabled={isProcessing}
                   className={`w-full py-3 font-doodle font-bold rounded-lg border-3 transition-all flex items-center justify-center gap-2 ${
                     isListening
                       ? "bg-doodle-accent text-white border-doodle-text animate-pulse"
@@ -463,7 +371,7 @@ const VoiceSalesAssistant: React.FC<VoiceSalesAssistantProps> = ({
                   ) : (
                     <>
                       <Mic className="w-5 h-5" />
-                      Hold to Speak
+                      Tap to Speak
                     </>
                   )}
                 </button>

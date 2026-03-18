@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Plus,
   Search,
@@ -20,11 +20,16 @@ import {
   getOfferStatus,
   OFFER_TYPES,
   OFFER_CATEGORIES,
+  DEFAULT_CULTURE_ID,
 } from "@/types/promotion";
-import { SpecialOfferProduct } from "@/types/specialOfferProduct";
+import { translatePromotion } from "@/services/utilityService";
 import {
   useAdminSpecialOffers,
   useAdminSpecialOfferProducts,
+  useCreateSpecialOffer,
+  useUpdateSpecialOffer,
+  useDeleteSpecialOffer,
+  useAssignSpecialOfferProducts,
 } from "@/hooks/useAdminPromotions";
 import { useAdminAllProducts } from "@/hooks/useAdminProducts";
 import { toast } from "@/hooks/use-toast";
@@ -63,21 +68,14 @@ const PromotionsPage: React.FC = () => {
   const { data: apiPromotions = [] } = useAdminSpecialOffers();
   const { data: apiOfferProducts = [] } = useAdminSpecialOfferProducts();
   const { data: products = [] } = useAdminAllProducts();
-  const [promotions, setPromotions] = useState<SpecialOffer[]>([]);
-  const [offerProducts, setOfferProducts] = useState<SpecialOfferProduct[]>([]);
+  const createOffer = useCreateSpecialOffer();
+  const updateOffer = useUpdateSpecialOffer();
+  const deleteOffer = useDeleteSpecialOffer();
+  const assignProducts = useAssignSpecialOfferProducts();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-
-  // Populate from API
-  useEffect(() => {
-    if (apiPromotions.length > 0) setPromotions(apiPromotions);
-  }, [apiPromotions]);
-  useEffect(() => {
-    if (apiOfferProducts.length > 0) setOfferProducts(apiOfferProducts);
-  }, [apiOfferProducts]);
-
+  const [categoryFilter, setCategoryFilter] = useState<string>("Customer");
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -88,6 +86,7 @@ const PromotionsPage: React.FC = () => {
 
   // Form state
   const [formData, setFormData] = useState({
+    CultureID: DEFAULT_CULTURE_ID,
     Description: "",
     DiscountPct: 0,
     Type: "Promotional Discount",
@@ -99,31 +98,43 @@ const PromotionsPage: React.FC = () => {
   });
 
   const filteredPromotions = useMemo(() => {
-    return promotions.filter((promo) => {
-      // Search filter
-      const searchLower = searchQuery.toLowerCase();
-      const matchesSearch =
-        promo.Description.toLowerCase().includes(searchLower) ||
-        promo.Type.toLowerCase().includes(searchLower) ||
-        promo.Category.toLowerCase().includes(searchLower);
+    return (
+      apiPromotions
+        .filter((promo) => {
+          // Only show US English promotions — other cultures are managed automatically
+          if (promo.CultureID !== DEFAULT_CULTURE_ID) return false;
 
-      // Status filter
-      const status = getOfferStatus(promo);
-      const matchesStatus = statusFilter === "all" || status === statusFilter;
+          // Search filter
+          const searchLower = searchQuery.toLowerCase();
+          const matchesSearch =
+            promo.Description.toLowerCase().includes(searchLower) ||
+            promo.Type.toLowerCase().includes(searchLower) ||
+            promo.Category.toLowerCase().includes(searchLower);
 
-      // Type filter
-      const matchesType = typeFilter === "all" || promo.Type === typeFilter;
+          // Status filter
+          const status = getOfferStatus(promo);
+          const matchesStatus =
+            statusFilter === "all" || status === statusFilter;
 
-      // Category filter
-      const matchesCategory =
-        categoryFilter === "all" || promo.Category === categoryFilter;
+          // Type filter
+          const matchesType = typeFilter === "all" || promo.Type === typeFilter;
 
-      return matchesSearch && matchesStatus && matchesType && matchesCategory;
-    });
-  }, [promotions, searchQuery, statusFilter, typeFilter, categoryFilter]);
+          // Category filter
+          const matchesCategory =
+            categoryFilter === "all" || promo.Category === categoryFilter;
+
+          return (
+            matchesSearch && matchesStatus && matchesType && matchesCategory
+          );
+        })
+        // Most recently created first
+        .sort((a, b) => b.SpecialOfferID - a.SpecialOfferID)
+    );
+  }, [apiPromotions, searchQuery, statusFilter, typeFilter, categoryFilter]);
 
   const resetForm = () => {
     setFormData({
+      CultureID: DEFAULT_CULTURE_ID,
       Description: "",
       DiscountPct: 0,
       Type: "Promotional Discount",
@@ -143,6 +154,7 @@ const PromotionsPage: React.FC = () => {
   const openEditDialog = (promo: SpecialOffer) => {
     setSelectedPromotion(promo);
     setFormData({
+      CultureID: promo.CultureID,
       Description: promo.Description,
       DiscountPct: promo.DiscountPct * 100,
       Type: promo.Type,
@@ -161,77 +173,143 @@ const PromotionsPage: React.FC = () => {
   };
 
   const handleCreate = () => {
-    const newId = Math.max(...promotions.map((p) => p.SpecialOfferID)) + 1;
-    const newPromotion: SpecialOffer = {
-      SpecialOfferID: newId,
-      Description: formData.Description,
-      DiscountPct: formData.DiscountPct / 100,
-      Type: formData.Type,
-      Category: formData.Category,
-      StartDate: `${formData.StartDate}T00:00:00`,
-      EndDate: `${formData.EndDate}T00:00:00`,
-      MinQty: formData.MinQty,
-      MaxQty: formData.MaxQty,
+    // Use only English US promotions as the authoritative set for the next ID
+    const englishPromotions = apiPromotions.filter(
+      (p) => p.CultureID === DEFAULT_CULTURE_ID,
+    );
+    const nextId =
+      englishPromotions.length > 0
+        ? Math.max(...englishPromotions.map((p) => p.SpecialOfferID)) + 1
+        : 2; // ID 1 is reserved for "No Discount"
+    const translationPayload = {
+      specialOfferID: nextId,
+      description: formData.Description,
+      discountPct: formData.DiscountPct / 100,
+      type: formData.Type,
+      category: formData.Category,
+      startDate: `${formData.StartDate}T00:00:00`,
+      endDate: `${formData.EndDate}T00:00:00`,
+      minQty: formData.MinQty,
+      maxQty: formData.MaxQty,
     };
-
-    setPromotions([...promotions, newPromotion]);
-    setIsCreateDialogOpen(false);
-    toast({
-      title: "Promotion Created",
-      description: `"${formData.Description}" has been created successfully.`,
-    });
-    resetForm();
+    createOffer.mutate(
+      {
+        SpecialOfferID: nextId,
+        CultureID: DEFAULT_CULTURE_ID,
+        Description: formData.Description,
+        DiscountPct: formData.DiscountPct / 100,
+        Type: formData.Type,
+        Category: formData.Category,
+        StartDate: `${formData.StartDate}T00:00:00`,
+        EndDate: `${formData.EndDate}T00:00:00`,
+        MinQty: formData.MinQty,
+        MaxQty: formData.MaxQty,
+      },
+      {
+        onSuccess: () => {
+          setIsCreateDialogOpen(false);
+          toast({
+            title: "Promotion Created",
+            description: `"${formData.Description}" has been created successfully.`,
+          });
+          resetForm();
+          // Fire-and-forget translation to all other cultures
+          translatePromotion(translationPayload).catch(() => {
+            toast({
+              title: "Translation Warning",
+              description:
+                "Promotion created, but automatic translation to other languages failed. Please retry or contact support.",
+              variant: "destructive",
+            });
+          });
+        },
+      },
+    );
   };
 
   const handleUpdate = () => {
     if (!selectedPromotion) return;
-
-    const updatedPromotions = promotions.map((p) =>
-      p.SpecialOfferID === selectedPromotion.SpecialOfferID
-        ? {
-            ...p,
-            Description: formData.Description,
-            DiscountPct: formData.DiscountPct / 100,
-            Type: formData.Type,
-            Category: formData.Category,
-            StartDate: `${formData.StartDate}T00:00:00`,
-            EndDate: `${formData.EndDate}T00:00:00`,
-            MinQty: formData.MinQty,
-            MaxQty: formData.MaxQty,
-          }
-        : p,
+    const translationPayload = {
+      specialOfferID: selectedPromotion.SpecialOfferID,
+      description: formData.Description,
+      discountPct: formData.DiscountPct / 100,
+      type: formData.Type,
+      category: formData.Category,
+      startDate: `${formData.StartDate}T00:00:00`,
+      endDate: `${formData.EndDate}T00:00:00`,
+      minQty: formData.MinQty,
+      maxQty: formData.MaxQty,
+    };
+    updateOffer.mutate(
+      {
+        id: selectedPromotion.SpecialOfferID,
+        CultureID: DEFAULT_CULTURE_ID,
+        Description: formData.Description,
+        DiscountPct: formData.DiscountPct / 100,
+        Type: formData.Type,
+        Category: formData.Category,
+        StartDate: `${formData.StartDate}T00:00:00`,
+        EndDate: `${formData.EndDate}T00:00:00`,
+        MinQty: formData.MinQty,
+        MaxQty: formData.MaxQty,
+      },
+      {
+        onSuccess: () => {
+          setIsEditDialogOpen(false);
+          toast({
+            title: "Promotion Updated",
+            description: `"${formData.Description}" has been updated successfully.`,
+          });
+          setSelectedPromotion(null);
+          // Fire-and-forget translation to all other cultures
+          translatePromotion(translationPayload).catch(() => {
+            toast({
+              title: "Translation Warning",
+              description:
+                "Promotion updated, but automatic translation to other languages failed. Please retry or contact support.",
+              variant: "destructive",
+            });
+          });
+        },
+      },
     );
-
-    setPromotions(updatedPromotions);
-    setIsEditDialogOpen(false);
-    toast({
-      title: "Promotion Updated",
-      description: `"${formData.Description}" has been updated successfully.`,
-    });
-    setSelectedPromotion(null);
   };
 
   const handleDelete = () => {
     if (!selectedPromotion) return;
-
-    setPromotions(
-      promotions.filter(
-        (p) => p.SpecialOfferID !== selectedPromotion.SpecialOfferID,
-      ),
+    const productIds = getAssignedProductIds(selectedPromotion.SpecialOfferID);
+    // Collect all culture variants for this SpecialOfferID so they are all deleted
+    const allCultureIds = apiPromotions
+      .filter((p) => p.SpecialOfferID === selectedPromotion.SpecialOfferID)
+      .map((p) => p.CultureID);
+    deleteOffer.mutate(
+      {
+        id: selectedPromotion.SpecialOfferID,
+        cultureIds: allCultureIds,
+        productIds,
+      },
+      {
+        onSuccess: () => {
+          setIsDeleteDialogOpen(false);
+          toast({
+            title: "Promotion Deleted",
+            description: `"${selectedPromotion.Description}" has been deleted.`,
+            variant: "destructive",
+          });
+          setSelectedPromotion(null);
+        },
+        onError: () => {
+          setIsDeleteDialogOpen(false);
+          toast({
+            title: "Delete Failed",
+            description:
+              "This promotion cannot be deleted because it is referenced by existing sales orders.",
+            variant: "destructive",
+          });
+          setSelectedPromotion(null);
+        },
+      },
     );
-    // Also remove product assignments
-    setOfferProducts(
-      offerProducts.filter(
-        (op) => op.SpecialOfferID !== selectedPromotion.SpecialOfferID,
-      ),
-    );
-    setIsDeleteDialogOpen(false);
-    toast({
-      title: "Promotion Deleted",
-      description: `"${selectedPromotion.Description}" has been deleted.`,
-      variant: "destructive",
-    });
-    setSelectedPromotion(null);
   };
 
   const openProductDialog = (promo: SpecialOffer) => {
@@ -241,35 +319,34 @@ const PromotionsPage: React.FC = () => {
 
   const handleProductAssignment = (productIds: number[]) => {
     if (!selectedPromotion) return;
-
-    // Remove existing assignments for this promotion
-    const filteredProducts = offerProducts.filter(
-      (op) => op.SpecialOfferID !== selectedPromotion.SpecialOfferID,
+    const currentProductIds = getAssignedProductIds(
+      selectedPromotion.SpecialOfferID,
     );
-
-    // Add new assignments
-    const newAssignments: SpecialOfferProduct[] = productIds.map(
-      (productId) => ({
-        SpecialOfferID: selectedPromotion.SpecialOfferID,
-        ProductID: productId,
-      }),
+    assignProducts.mutate(
+      {
+        offerId: selectedPromotion.SpecialOfferID,
+        newProductIds: productIds,
+        currentProductIds,
+      },
+      {
+        onSuccess: () => {
+          toast({
+            title: "Products Updated",
+            description: `${productIds.length} products assigned to "${selectedPromotion.Description}".`,
+          });
+          setSelectedPromotion(null);
+        },
+      },
     );
-
-    setOfferProducts([...filteredProducts, ...newAssignments]);
-
-    toast({
-      title: "Products Updated",
-      description: `${productIds.length} products assigned to "${selectedPromotion.Description}".`,
-    });
-    setSelectedPromotion(null);
   };
 
   const getAssignedProductCount = (offerId: number): number => {
-    return offerProducts.filter((op) => op.SpecialOfferID === offerId).length;
+    return apiOfferProducts.filter((op) => op.SpecialOfferID === offerId)
+      .length;
   };
 
   const getAssignedProductIds = (offerId: number): number[] => {
-    return offerProducts
+    return apiOfferProducts
       .filter((op) => op.SpecialOfferID === offerId)
       .map((op) => op.ProductID);
   };
@@ -287,14 +364,17 @@ const PromotionsPage: React.FC = () => {
     typeFilter !== "all" ||
     categoryFilter !== "all";
 
-  // Stats
-  const activeCount = promotions.filter(
+  // Stats computed from English (US) promotions only
+  const englishPromotions = apiPromotions.filter(
+    (p) => p.CultureID === DEFAULT_CULTURE_ID,
+  );
+  const activeCount = englishPromotions.filter(
     (p) => getOfferStatus(p) === "active",
   ).length;
-  const upcomingCount = promotions.filter(
+  const upcomingCount = englishPromotions.filter(
     (p) => getOfferStatus(p) === "upcoming",
   ).length;
-  const expiredCount = promotions.filter(
+  const expiredCount = englishPromotions.filter(
     (p) => getOfferStatus(p) === "expired",
   ).length;
 
@@ -467,7 +547,7 @@ const PromotionsPage: React.FC = () => {
 
         {/* Results count */}
         <p className="font-doodle text-sm text-doodle-text/60 mb-4">
-          Showing {filteredPromotions.length} of {promotions.length} promotions
+          Showing {filteredPromotions.length} promotions
         </p>
 
         {/* Promotions Grid */}
@@ -591,7 +671,8 @@ const PromotionsPage: React.FC = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => openEditDialog(promo)}
-                      className="flex-1 font-doodle text-doodle-text hover:bg-doodle-text/10"
+                      disabled={promo.SpecialOfferID === 1}
+                      className="flex-1 font-doodle text-doodle-text hover:bg-doodle-text/10 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Edit2 className="w-4 h-4 mr-1" />
                       Edit
@@ -600,7 +681,8 @@ const PromotionsPage: React.FC = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => openDeleteDialog(promo)}
-                      className="flex-1 font-doodle text-doodle-accent hover:bg-doodle-accent/10"
+                      disabled={promo.SpecialOfferID === 1}
+                      className="flex-1 font-doodle text-doodle-accent hover:bg-doodle-accent/10 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Trash2 className="w-4 h-4 mr-1" />
                       Delete
@@ -638,6 +720,9 @@ const PromotionsPage: React.FC = () => {
                 className="doodle-input mt-1"
                 placeholder="e.g., Summer Sale 2025"
               />
+              <p className="font-doodle text-xs text-doodle-text/50 mt-1">
+                English (US) — will be auto-translated to all other languages
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -772,11 +857,12 @@ const PromotionsPage: React.FC = () => {
               disabled={
                 !formData.Description ||
                 !formData.StartDate ||
-                !formData.EndDate
+                !formData.EndDate ||
+                createOffer.isPending
               }
               className="doodle-button doodle-button-primary"
             >
-              Create Promotion
+              {createOffer.isPending ? "Creating..." : "Create Promotion"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -939,11 +1025,12 @@ const PromotionsPage: React.FC = () => {
               disabled={
                 !formData.Description ||
                 !formData.StartDate ||
-                !formData.EndDate
+                !formData.EndDate ||
+                updateOffer.isPending
               }
               className="doodle-button doodle-button-accent"
             >
-              Save Changes
+              {updateOffer.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -970,9 +1057,10 @@ const PromotionsPage: React.FC = () => {
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
+              disabled={deleteOffer.isPending}
               className="doodle-button doodle-button-primary"
             >
-              Delete
+              {deleteOffer.isPending ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

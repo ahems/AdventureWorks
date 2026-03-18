@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { graphqlClient } from "@/lib/graphql-client";
+import { getRestApiUrl } from "@/lib/utils";
 import { gql } from "graphql-request";
 
 // ProductReview from AdventureWorks DB:
@@ -61,6 +62,22 @@ export interface PagedReviews {
   hasNextPage: boolean;
   endCursor: string;
 }
+
+export const useReviewTotalCount = () =>
+  useQuery<number | null>({
+    queryKey: ["admin", "reviews", "totalCount"],
+    queryFn: async () => {
+      // OData $count=true (DAB REST list endpoint); returns { "@odata.count": N, "value": [] }
+      const res = await fetch(
+        `${getRestApiUrl()}/ProductReview?$count=true&$top=0`,
+      );
+      if (!res.ok) return null;
+      const json = await res.json();
+      const count = json["@odata.count"];
+      return typeof count === "number" ? count : null;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
 export const useAdminReviews = (after?: string | null) =>
   useQuery<PagedReviews>({

@@ -274,7 +274,7 @@ module containerAppSeedJob 'modules/aca-seed-job.bicep' = {
 module staticWebAppFrontend 'modules/swa-app.bicep' = {
   name: 'Deploy-Static-Web-App-Frontend'
   params: {
-    swaName: 'av-swa-${resourceToken}'
+    swaName: 'av-app-${resourceToken}'
     location: 'eastus2'
     identityName: identityName
     apiUrl: containerAppApi.outputs.apiUrl
@@ -287,7 +287,7 @@ module staticWebAppFrontend 'modules/swa-app.bicep' = {
 module staticWebAppAdmin 'modules/swa-app-admin.bicep' = {
   name: 'Deploy-Static-Web-App-Admin'
   params: {
-    swaAdminName: 'av-swa-admin-${resourceToken}'
+    swaAdminName: 'av-app-admin-${resourceToken}'
     location: 'eastus2'
     identityName: identityName
     apiUrl: containerAppApi.outputs.apiUrl

@@ -185,7 +185,7 @@ await waitForTelemetryIngestion(120000); // 2 minutes
 ### Direct Query Test
 
 ```
-🔍 Querying Application Insights: av-swa-ewphuc52etkbc in rg-adventureworks
+🔍 Querying Application Insights: av-app-<something> in rg-<your rg>
 📊 Query: pageViews | where timestamp >= datetime('...')
 ⏱️  Timespan: PT30M
 

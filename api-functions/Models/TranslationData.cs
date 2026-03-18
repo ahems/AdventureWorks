@@ -70,3 +70,31 @@ public class TranslationResultInput
     public string TargetLanguageCode { get; set; } = string.Empty;
     public string SourceFilename { get; set; } = string.Empty;
 }
+
+// Promotion translation models
+
+public class TextTranslation
+{
+    public string CultureID { get; set; } = string.Empty;
+    public string TranslatedText { get; set; } = string.Empty;
+}
+
+public class PromotionTranslationRequest
+{
+    public int SpecialOfferID { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public double DiscountPct { get; set; }
+    public string Type { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public string StartDate { get; set; } = string.Empty;
+    public string EndDate { get; set; } = string.Empty;
+    public int MinQty { get; set; }
+    public int? MaxQty { get; set; }
+}
+
+public class PromotionTranslationResult
+{
+    public bool Success { get; set; }
+    public int CulturesProcessed { get; set; }
+    public string Message { get; set; } = string.Empty;
+}

@@ -17,10 +17,14 @@ export function getFunctionsApiUrl(): string {
   );
 }
 
-export function getRestApiUrl(): string {
-  const graphqlUrl =
+export function getGraphQLApiUrl(): string {
+  return (
     (window as AppWindow).APP_CONFIG?.API_URL ||
     import.meta.env.VITE_API_URL ||
-    "http://localhost:5000/graphql";
-  return graphqlUrl.replace(/\/graphql\/?$/, "/api");
+    "http://localhost:5000/graphql"
+  );
+}
+
+export function getRestApiUrl(): string {
+  return getGraphQLApiUrl().replace(/\/graphql\/?$/, "/api");
 }

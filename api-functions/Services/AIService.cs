@@ -17,6 +17,11 @@ public class TranslationWrapper
     public List<TranslatedDescription>? Translations { get; set; }
 }
 
+public class TextTranslationWrapper
+{
+    public List<TextTranslation>? Translations { get; set; }
+}
+
 public class AIService
 {
     private readonly string _endpoint;
@@ -253,6 +258,103 @@ Important constraints:
         }
 
         return translations;
+    }
+
+    /// <summary>
+    /// Translates a short text (e.g. a promotion description) into multiple target cultures in a single AI call.
+    /// English-variant cultures (en-au, en-ca, en-gb, en-ie, en-nz) should be handled by the caller
+    /// (copy verbatim) — pass only non-English cultures here.
+    /// </summary>
+    public async Task<List<TextTranslation>> TranslateTextAsync(
+        string text,
+        string context,
+        List<CultureInfo> targetCultures)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("TranslateText");
+        operation.Telemetry.Properties["TargetCultureCount"] = targetCultures.Count.ToString();
+
+        try
+        {
+            var credential = new DefaultAzureCredential();
+            var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+            var chatClient = client.GetChatClient(_deploymentName);
+
+            var systemPrompt = @"You are a professional translator for an outdoor adventure equipment retailer called AdventureWorks.
+Translate a short marketing text into multiple languages while preserving tone, style, and meaning.
+
+Guidelines:
+1. Preserve the marketing and promotional tone of the original text.
+2. Keep brand and product names in English (e.g. 'AdventureWorks').
+3. Use culturally appropriate expressions in each target language.
+4. Keep the translation concise — similar length to the original.
+
+Return ONLY a valid JSON object with this exact structure:
+{
+  ""translations"": [
+    {
+      ""CultureID"": ""fr"",
+      ""TranslatedText"": ""translated text here""
+    }
+  ]
+}";
+
+            var culturesJson = JsonSerializer.Serialize(
+                targetCultures.Select(c => new { CultureID = c.CultureID.Trim(), CultureName = c.Name }),
+                new JsonSerializerOptions { WriteIndented = true });
+
+            var userPrompt = $@"Context: {context}
+
+Original English text:
+{text}
+
+Target languages:
+{culturesJson}
+
+Translate the text into each target language. Return ONLY a valid JSON object with a 'translations' array.";
+
+            var messages = new List<ChatMessage>
+            {
+                new SystemChatMessage(systemPrompt),
+                new UserChatMessage(userPrompt)
+            };
+
+            var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+            {
+                Temperature = 0.3f,
+                MaxOutputTokenCount = 8000,
+                ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
+            });
+
+            var content = response.Value.Content[0].Text;
+
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                _logger.LogError("Empty response from AI for TranslateText");
+                return new List<TextTranslation>();
+            }
+
+            var wrapper = JsonSerializer.Deserialize<TextTranslationWrapper>(content,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            var results = wrapper?.Translations ?? new List<TextTranslation>();
+
+            operation.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("TextTranslated", new Dictionary<string, string>
+            {
+                ["CultureCount"] = results.Count.ToString()
+            });
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string>
+            {
+                ["Operation"] = "TranslateText"
+            });
+            throw;
+        }
     }
 
     private async Task<List<TranslatedDescription>> TranslateProductAsync(
@@ -1069,6 +1171,275 @@ CRITICAL INSTRUCTIONS:
             _logger.LogError(ex, "Translation failed for {Language}: {Message}", languageName, ex.Message);
             throw new InvalidOperationException($"Translation failed for {languageName}: {ex.Message}");
         }
+    }
+
+    // ─── Review Batch Analysis ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Analyses a list of reviews using the "chat" AI model, returning per-review
+    /// sentiment classification, content flags, and a suggested response.
+    /// Batches of 10 are sent in parallel; any batch that fails is returned with
+    /// an <see cref="ReviewAnalysisResult.Error"/> field so callers receive partial
+    /// results rather than a hard failure.
+    /// </summary>
+    public async Task<List<ReviewAnalysisResult>> AnalyzeReviewsAsync(List<ReviewInput> reviews)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("AnalyzeReviews");
+        operation.Telemetry.Properties["ReviewCount"] = reviews.Count.ToString();
+
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var chatClient = client.GetChatClient(_deploymentName);
+
+        var results = new List<ReviewAnalysisResult>();
+        const int batchSize = 10;
+
+        for (int i = 0; i < reviews.Count; i += batchSize)
+        {
+            var batch = reviews.Skip(i).Take(batchSize).ToList();
+            try
+            {
+                var batchResults = await AnalyzeReviewBatchAsync(chatClient, batch);
+                results.AddRange(batchResults);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Review analysis failed for batch starting at index {Index}", i);
+                results.AddRange(batch.Select(r => new ReviewAnalysisResult
+                {
+                    ProductReviewId = r.ProductReviewId,
+                    Sentiment = "neutral",
+                    Flags = new List<string>(),
+                    SuggestedResponse = null,
+                    Error = "Analysis unavailable"
+                }));
+            }
+        }
+
+        operation.Telemetry.Success = true;
+        return results;
+    }
+
+    private async Task<List<ReviewAnalysisResult>> AnalyzeReviewBatchAsync(
+        ChatClient chatClient, List<ReviewInput> reviews)
+    {
+        const string systemPrompt = @"You are a customer review analysis assistant for AdventureWorks, an outdoor and sporting goods retailer.
+For each review provided, return a JSON array with one object per review containing:
+- productReviewId: the review ID as an integer (copy from input)
+- sentiment: ""positive"", ""neutral"", or ""negative""
+- flags: array of applicable strings from: [""Short Review"", ""Potential Spam"", ""Refund Request"", ""Excessive Punctuation"", ""Offensive Language""]
+- suggestedResponse: a concise, professional, brand-appropriate response (2-3 sentences) the company could post
+
+Return ONLY a valid JSON array. No markdown fences, no explanation.";
+
+        var userPrompt = "Reviews to analyse:\n\n" + JsonSerializer.Serialize(reviews.Select(r => new
+        {
+            productReviewId = r.ProductReviewId,
+            rating = r.Rating,
+            reviewerName = r.ReviewerName ?? "Anonymous",
+            productName = r.ProductName ?? "Unknown Product",
+            comments = r.Comments ?? ""
+        }), new JsonSerializerOptions { WriteIndented = false });
+
+        var messages = new List<ChatMessage>
+        {
+            new SystemChatMessage(systemPrompt),
+            new UserChatMessage(userPrompt)
+        };
+
+        var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+        {
+            Temperature = 0.3f,
+            MaxOutputTokenCount = 2000
+        });
+
+        var content = response.Value.Content[0].Text ?? "[]";
+        // Strip markdown code fences if the model wrapped the output
+        content = StripMarkdownFences(content);
+
+        var batchResults = JsonSerializer.Deserialize<List<ReviewAnalysisResult>>(content,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        return batchResults ?? reviews.Select(r => new ReviewAnalysisResult
+        {
+            ProductReviewId = r.ProductReviewId,
+            Sentiment = "neutral",
+            Flags = new List<string>(),
+            Error = "Parse error"
+        }).ToList();
+    }
+
+    // ─── AI Email Content Generation ─────────────────────────────────────────
+
+    /// <summary>
+    /// Generates a personalised email subject and body using the "chat" AI model.
+    /// Returns an <see cref="EmailContent"/> with an <see cref="EmailContent.Error"/>
+    /// field if the model call fails, so callers can fall back gracefully.
+    /// </summary>
+    public async Task<EmailContent> GenerateEmailContentAsync(EmailContentRequest request)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("GenerateEmailContent");
+        operation.Telemetry.Properties["TemplateType"] = request.TemplateType;
+
+        try
+        {
+            var credential = new DefaultAzureCredential();
+            var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+            var chatClient = client.GetChatClient(_deploymentName);
+
+            const string systemPrompt = @"You are an email marketing specialist for AdventureWorks, an outdoor and sporting goods retailer.
+Generate a personalised email subject and body based on the template type and customer context provided.
+The tone should be warm, friendly, and on-brand. Keep the body concise (3-5 short paragraphs).
+Return ONLY a valid JSON object with exactly two fields: { ""subject"": ""..."", ""body"": ""..."" }
+No markdown fences, no explanation.";
+
+            var contextDetails = new System.Text.StringBuilder();
+            contextDetails.AppendLine($"Customer first name: {request.FirstName}");
+            contextDetails.AppendLine($"Template type: {request.TemplateType.Replace('_', ' ')}");
+            if (request.TotalOrders.HasValue) contextDetails.AppendLine($"Total orders: {request.TotalOrders}");
+            if (request.TotalSpent.HasValue) contextDetails.AppendLine($"Total spent: ${request.TotalSpent:F2}");
+            if (request.CartValue.HasValue) contextDetails.AppendLine($"Abandoned cart value: ${request.CartValue:F2}");
+            if (request.LastOrderId.HasValue) contextDetails.AppendLine($"Last order ID: {request.LastOrderId}");
+            if (request.ProductNames?.Count > 0)
+                contextDetails.AppendLine($"Relevant products: {string.Join(", ", request.ProductNames)}");
+
+            var messages = new List<ChatMessage>
+            {
+                new SystemChatMessage(systemPrompt),
+                new UserChatMessage(contextDetails.ToString())
+            };
+
+            var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+            {
+                Temperature = 0.7f,
+                MaxOutputTokenCount = 500
+            });
+
+            var content = response.Value.Content[0].Text ?? "{}";
+            content = StripMarkdownFences(content);
+
+            var result = JsonSerializer.Deserialize<EmailContent>(content,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            operation.Telemetry.Success = true;
+            return result ?? new EmailContent { Error = "Empty response from model" };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Email content generation failed for template {TemplateType}", request.TemplateType);
+            operation.Telemetry.Success = false;
+            return new EmailContent { Error = "Content generation unavailable" };
+        }
+    }
+
+    // ─── Cart Recovery Analysis ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Analyses a list of abandoned shopping carts using the "chat" AI model and
+    /// returns a recovery strategy per cart (score, urgency, email copy, discount).
+    /// Any batch that fails is returned with <see cref="CartRecoveryResult.Error"/>
+    /// so callers receive partial results rather than a hard failure.
+    /// </summary>
+    public async Task<List<CartRecoveryResult>> AnalyzeCartRecoveryAsync(List<CartRecoveryInput> carts)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("AnalyzeCartRecovery");
+        operation.Telemetry.Properties["CartCount"] = carts.Count.ToString();
+
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var chatClient = client.GetChatClient(_deploymentName);
+
+        var results = new List<CartRecoveryResult>();
+        const int batchSize = 10;
+
+        for (int i = 0; i < carts.Count; i += batchSize)
+        {
+            var batch = carts.Skip(i).Take(batchSize).ToList();
+            try
+            {
+                var batchResults = await AnalyzeCartRecoveryBatchAsync(chatClient, batch);
+                results.AddRange(batchResults);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Cart recovery analysis failed for batch starting at index {Index}", i);
+                results.AddRange(batch.Select(c => new CartRecoveryResult
+                {
+                    CartId = c.CartId,
+                    RecoveryScore = 0,
+                    Urgency = "low",
+                    Error = "Analysis unavailable"
+                }));
+            }
+        }
+
+        operation.Telemetry.Success = true;
+        return results;
+    }
+
+    private async Task<List<CartRecoveryResult>> AnalyzeCartRecoveryBatchAsync(
+        ChatClient chatClient, List<CartRecoveryInput> carts)
+    {
+        const string systemPrompt = @"You are a cart recovery specialist for AdventureWorks, an outdoor and sporting goods retailer.
+For each abandoned cart provided, return a JSON array with one object per cart containing:
+- cartId: the cart ID as a string (copy from input)
+- recoveryScore: integer 0-100 (likelihood of recovery considering cart value, staleness, number of items)
+- urgency: ""high"" (score >= 70), ""medium"" (score 40-69), or ""low"" (score < 40)
+- emailSubject: a compelling, personalised email subject line
+- emailBody: a short recovery email body (3-4 sentences, first-name personalised)
+- recommendedDiscount: integer percentage (10 for high, 5 for medium, 0 for low)
+- strategy: one sentence describing the recommended follow-up action
+
+Return ONLY a valid JSON array. No markdown fences, no explanation.";
+
+        var userPrompt = "Abandoned carts to analyse:\n\n" + JsonSerializer.Serialize(carts.Select(c => new
+        {
+            cartId = c.CartId,
+            customerName = c.CustomerName,
+            totalValue = c.TotalValue,
+            daysStale = c.DaysStale,
+            totalItems = c.TotalItems,
+            products = c.ProductNames ?? new List<string>()
+        }), new JsonSerializerOptions { WriteIndented = false });
+
+        var messages = new List<ChatMessage>
+        {
+            new SystemChatMessage(systemPrompt),
+            new UserChatMessage(userPrompt)
+        };
+
+        var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+        {
+            Temperature = 0.4f,
+            MaxOutputTokenCount = 2000
+        });
+
+        var content = response.Value.Content[0].Text ?? "[]";
+        content = StripMarkdownFences(content);
+
+        var batchResults = JsonSerializer.Deserialize<List<CartRecoveryResult>>(content,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        return batchResults ?? carts.Select(c => new CartRecoveryResult
+        {
+            CartId = c.CartId,
+            Error = "Parse error"
+        }).ToList();
+    }
+
+    // ─── Shared Helpers ───────────────────────────────────────────────────────
+
+    private static string StripMarkdownFences(string text)
+    {
+        // Remove ```json ... ``` or ``` ... ``` wrappers if the model added them
+        var trimmed = text.Trim();
+        if (trimmed.StartsWith("```"))
+        {
+            var firstNewline = trimmed.IndexOf('\n');
+            if (firstNewline >= 0) trimmed = trimmed[(firstNewline + 1)..];
+            if (trimmed.EndsWith("```")) trimmed = trimmed[..^3];
+        }
+        return trimmed.Trim();
     }
 
     private RegionalInfo GetRegionalInfo(string languageCode)
