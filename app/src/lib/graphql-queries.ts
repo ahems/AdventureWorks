@@ -14,6 +14,15 @@ export const GET_PRODUCT_REVIEWS = gql`
         Comments
         HelpfulVotes
         UserID
+        IsModerated
+        productReviewReplies {
+          items {
+            ProductReviewReplyID
+            Reply
+            RepliedBy
+            ReplyDate
+          }
+        }
       }
     }
   }
@@ -33,6 +42,15 @@ export const GET_ALL_REVIEWS = gql`
         Comments
         HelpfulVotes
         UserID
+        IsModerated
+        productReviewReplies {
+          items {
+            ProductReviewReplyID
+            Reply
+            RepliedBy
+            ReplyDate
+          }
+        }
       }
     }
   }
@@ -104,7 +122,14 @@ export const GET_SUBCATEGORIES = gql`
 // Query to get subcategories by category ID for a specific culture
 export const GET_SUBCATEGORIES_BY_CATEGORY = gql`
   query GetSubcategoriesByCategory($categoryId: Int!, $cultureId: String!) {
-    productSubcategories(filter: { and: [{ ProductCategoryID: { eq: $categoryId } }, { CultureID: { eq: $cultureId } }] }) {
+    productSubcategories(
+      filter: {
+        and: [
+          { ProductCategoryID: { eq: $categoryId } }
+          { CultureID: { eq: $cultureId } }
+        ]
+      }
+    ) {
       items {
         ProductSubcategoryID
         ProductCategoryID
@@ -392,7 +417,14 @@ export const GET_PRODUCTS_BY_SUBCATEGORY = gql`
 // Query to get category by ID for a specific culture
 export const GET_CATEGORY_BY_ID = gql`
   query GetCategoryById($id: Int!, $cultureId: String!) {
-    productCategories(filter: { and: [{ ProductCategoryID: { eq: $id } }, { CultureID: { eq: $cultureId } }] }) {
+    productCategories(
+      filter: {
+        and: [
+          { ProductCategoryID: { eq: $id } }
+          { CultureID: { eq: $cultureId } }
+        ]
+      }
+    ) {
       items {
         ProductCategoryID
         CultureID
@@ -405,7 +437,14 @@ export const GET_CATEGORY_BY_ID = gql`
 // Query to get subcategory by ID for a specific culture
 export const GET_SUBCATEGORY_BY_ID = gql`
   query GetSubcategoryById($id: Int!, $cultureId: String!) {
-    productSubcategories(filter: { and: [{ ProductSubcategoryID: { eq: $id } }, { CultureID: { eq: $cultureId } }] }) {
+    productSubcategories(
+      filter: {
+        and: [
+          { ProductSubcategoryID: { eq: $id } }
+          { CultureID: { eq: $cultureId } }
+        ]
+      }
+    ) {
       items {
         ProductSubcategoryID
         ProductCategoryID

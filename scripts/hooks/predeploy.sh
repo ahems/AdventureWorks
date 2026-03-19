@@ -8,6 +8,7 @@ API_URL=$(azd env get-value API_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
 API_FUNC_URL=$(azd env get-value API_FUNCTIONS_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
 API_MCP_URL=$(azd env get-value API_MCP_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
 APPINSIGHTS_CONN_STR=$(azd env get-value APPINSIGHTS_CONNECTIONSTRING 2>/dev/null | head -n1 | tr -d '\n\r ')
+APP_URL=$(azd env get-value APP_REDIRECT_URI 2>/dev/null | head -n1 | tr -d '\n\r ')
 
 echo "[PreDeploy] Setting environment variables for SWA build"
 echo "  VITE_API_URL: $API_URL"
@@ -51,6 +52,7 @@ VITE_API_URL=$API_URL
 VITE_API_FUNCTIONS_URL=$API_FUNC_URL
 VITE_API_MCP_URL=$API_MCP_URL
 VITE_APPINSIGHTS_CONNECTIONSTRING=$APPINSIGHTS_CONN_STR
+VITE_APP_URL=$APP_URL
 EOF
 
 echo "[PreDeploy] Created app-admin/.env.production with Azure URLs"

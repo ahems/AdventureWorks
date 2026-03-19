@@ -2,6 +2,12 @@ import { test, expect } from "@playwright/test";
 import { signupThroughUi } from "../utils/testUser";
 import { testEnv } from "../utils/env";
 import { getRandomProductIds } from "../utils/productHelper";
+import {
+  createTestReview,
+  createTestReply,
+  approveTestReview,
+  deleteTestReview,
+} from "../utils/reviewHelper";
 
 test.describe("Product Reviews", () => {
   test("authenticated user can add a product review", async ({ page }) => {
@@ -119,7 +125,9 @@ test.describe("Product Reviews", () => {
     console.log("✅ Review is visible in the reviews list");
 
     // Verify the card also contains the comment text
-    await expect(reviewCard.first()).toContainText(reviewComment.substring(0, 80));
+    await expect(reviewCard.first()).toContainText(
+      reviewComment.substring(0, 80),
+    );
     console.log("✅ Review content verified");
 
     // Verify the rating stars appear
@@ -409,6 +417,88 @@ test.describe("Product Reviews", () => {
       console.log("ℹ️  Sort controls not found - may not be implemented yet");
     }
 
+    console.log("🎉 Test completed successfully!");
+  });
+
+  // ─── Staff reply display ──────────────────────────────────────────────────
+
+  test("moderated review with staff reply shows reply block on product page", async ({
+    page,
+  }) => {
+    console.log("🧪 Test: Staff reply is visible on product page");
+
+    // Use ProductID 706 (Mountain-100 Black, 38) — a product that always has reviews
+    const productId = 706;
+    const replyText = `Staff reply test ${Date.now()} — glad you liked it!`;
+
+    // Create a test review, approve it, and add a reply via the REST API
+    console.log("📝 Creating test review via REST API...");
+    const reviewId = await createTestReview(
+      productId,
+      5,
+      `Great product staff-reply-test-${Date.now()}`,
+    );
+    await approveTestReview(reviewId);
+    await createTestReply(reviewId, replyText);
+    console.log(`✅ Created review ${reviewId} with staff reply`);
+
+    // Navigate to the product page
+    await page.goto(`${testEnv.webBaseUrl}/product/${productId}`);
+    await page.waitForLoadState("domcontentloaded");
+    await page.waitForTimeout(3000);
+
+    // Scroll to reviews section
+    const reviewsSection = page.locator("section:has-text('Customer Reviews')");
+    await reviewsSection.scrollIntoViewIfNeeded({ timeout: 10_000 });
+    await page.waitForTimeout(1500);
+
+    // The staff reply block should be visible inside a review card
+    const replyBlock = page.locator('[data-testid="staff-reply"]');
+    await expect(replyBlock.first()).toBeVisible({ timeout: 15_000 });
+    console.log("✅ Staff reply block is visible");
+
+    // The reply text should appear in the block
+    await expect(page.locator(`text=${replyText}`)).toBeVisible({
+      timeout: 10_000,
+    });
+    console.log("✅ Staff reply text matches");
+
+    // Cleanup
+    await deleteTestReview(reviewId);
+    console.log("🎉 Test completed successfully!");
+  });
+
+  test("review without a staff reply does not show reply block", async ({
+    page,
+  }) => {
+    console.log("🧪 Test: Unmoderated review has no reply block");
+
+    // Create a plain unmoderated review (no approve, no reply)
+    const productId = 706;
+    const uniqueComment = `No-reply-test-${Date.now()}`;
+    const reviewId = await createTestReview(productId, 3, uniqueComment);
+    console.log(`✅ Created unmoderated review ${reviewId}`);
+
+    await page.goto(`${testEnv.webBaseUrl}/product/${productId}`);
+    await page.waitForLoadState("domcontentloaded");
+    await page.waitForTimeout(3000);
+
+    const reviewsSection = page.locator("section:has-text('Customer Reviews')");
+    await reviewsSection.scrollIntoViewIfNeeded({ timeout: 10_000 });
+    await page.waitForTimeout(1500);
+
+    // The review card for our test review should not contain a staff-reply block
+    const testCard = page
+      .locator('[data-testid="review-card"]')
+      .filter({ hasText: uniqueComment });
+    await expect(testCard.first()).toBeVisible({ timeout: 15_000 });
+
+    const replyBlock = testCard.first().locator('[data-testid="staff-reply"]');
+    await expect(replyBlock).toBeHidden();
+    console.log("✅ Staff reply block is not shown for unmoderated review");
+
+    // Cleanup
+    await deleteTestReview(reviewId);
     console.log("🎉 Test completed successfully!");
   });
 });

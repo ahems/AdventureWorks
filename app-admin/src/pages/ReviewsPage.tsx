@@ -20,13 +20,20 @@ import {
   CheckSquare,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/context/AuthContext";
-import { useAdminReviews, useReviewTotalCount } from "@/hooks/useAdminReviews";
+import {
+  useAdminReviews,
+  useReviewTotalCount,
+  approveReview,
+  submitReply,
+  deleteReview,
+} from "@/hooks/useAdminReviews";
 import { useAdminAllProducts } from "@/hooks/useAdminProducts";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +59,7 @@ import {
 } from "@/components/ui/select";
 
 import { getFunctionsApiUrl } from "@/lib/utils";
+import { getAppUrl } from "@/lib/utils";
 
 type Sentiment = "positive" | "neutral" | "negative";
 
@@ -65,6 +73,13 @@ interface ReviewWithAI {
   createdAt: string;
   helpful: number;
   markedUsefulBy: string[];
+  isModerated: boolean;
+  existingReply?: {
+    replyId: number;
+    text: string;
+    by: string;
+    date: string;
+  };
   sentiment?: Sentiment;
   aiSuggestedResponse?: string;
   flags?: string[];
@@ -93,7 +108,20 @@ const ReviewsPage: React.FC = () => {
   useEffect(() => {
     const items = apiData?.items;
     if (items && items.length > 0) {
-      setReviews(items as ReviewWithAI[]);
+      setReviews((prev) => {
+        // Preserve AI analysis results already in local state
+        const prevMap = new Map(prev.map((r) => [r.id, r]));
+        return items.map((item) => {
+          const existing = prevMap.get(item.id);
+          return {
+            ...(item as ReviewWithAI),
+            sentiment: existing?.sentiment,
+            aiSuggestedResponse: existing?.aiSuggestedResponse,
+            flags: existing?.flags,
+            aiError: existing?.aiError,
+          };
+        });
+      });
     }
   }, [apiData]);
 
@@ -107,6 +135,7 @@ const ReviewsPage: React.FC = () => {
   const [sentimentFilter, setSentimentFilter] = useState<string>("all");
   const [ratingFilter, setRatingFilter] = useState<string>("all");
   const [flagFilter, setFlagFilter] = useState<string>("all");
+  const [moderationFilter, setModerationFilter] = useState<string>("all");
 
   // Get all unique flags from reviews
   const allFlags = useMemo(() => {
@@ -153,21 +182,35 @@ const ReviewsPage: React.FC = () => {
         }
       }
 
+      // Moderation filter
+      if (moderationFilter === "moderated" && !review.isModerated) return false;
+      if (moderationFilter === "unmoderated" && review.isModerated)
+        return false;
+
       return true;
     });
-  }, [reviews, searchQuery, sentimentFilter, ratingFilter, flagFilter]);
+  }, [
+    reviews,
+    searchQuery,
+    sentimentFilter,
+    ratingFilter,
+    flagFilter,
+    moderationFilter,
+  ]);
 
   const hasActiveFilters =
     searchQuery.trim() !== "" ||
     sentimentFilter !== "all" ||
     ratingFilter !== "all" ||
-    flagFilter !== "all";
+    flagFilter !== "all" ||
+    moderationFilter !== "all";
 
   const clearFilters = () => {
     setSearchQuery("");
     setSentimentFilter("all");
     setRatingFilter("all");
     setFlagFilter("all");
+    setModerationFilter("all");
   };
 
   const runAIAnalysis = async () => {
@@ -247,25 +290,46 @@ const ReviewsPage: React.FC = () => {
     }
   };
 
-  const handleApprove = (id: string) => {
-    toast({
-      title: "Review Approved",
-      description: "The review has been approved.",
-    });
+  const handleApprove = async (id: string) => {
+    try {
+      await approveReview(id);
+      setReviews((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, isModerated: true } : r)),
+      );
+      toast({
+        title: "Review Approved",
+        description: "The review has been approved.",
+      });
+    } catch {
+      toast({
+        title: "Approval Failed",
+        description: "Could not approve the review. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setReviews((prev) => prev.filter((r) => r.id !== id));
-    setSelectedReviews((prev) => {
-      const newSet = new Set(prev);
-      newSet.delete(id);
-      return newSet;
-    });
-    toast({
-      title: "Review Deleted",
-      description: "The review has been removed.",
-      variant: "destructive",
-    });
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteReview(id);
+      setReviews((prev) => prev.filter((r) => r.id !== id));
+      setSelectedReviews((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+      toast({
+        title: "Review Deleted",
+        description: "The review has been removed.",
+        variant: "destructive",
+      });
+    } catch {
+      toast({
+        title: "Delete Failed",
+        description: "Could not delete the review. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   // Bulk actions
@@ -289,25 +353,49 @@ const ReviewsPage: React.FC = () => {
     }
   };
 
-  const handleBulkApprove = () => {
+  const handleBulkApprove = async () => {
     if (selectedReviews.size === 0) return;
-    toast({
-      title: "Reviews Approved",
-      description: `${selectedReviews.size} review${selectedReviews.size > 1 ? "s have" : " has"} been approved.`,
-    });
-    setSelectedReviews(new Set());
+    const ids = Array.from(selectedReviews);
+    try {
+      await Promise.all(ids.map((id) => approveReview(id)));
+      setReviews((prev) =>
+        prev.map((r) =>
+          selectedReviews.has(r.id) ? { ...r, isModerated: true } : r,
+        ),
+      );
+      setSelectedReviews(new Set());
+      toast({
+        title: "Reviews Approved",
+        description: `${ids.length} review${ids.length > 1 ? "s have" : " has"} been approved.`,
+      });
+    } catch {
+      toast({
+        title: "Bulk Approval Failed",
+        description: "Some reviews could not be approved. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     if (selectedReviews.size === 0) return;
-    const count = selectedReviews.size;
-    setReviews((prev) => prev.filter((r) => !selectedReviews.has(r.id)));
-    setSelectedReviews(new Set());
-    toast({
-      title: "Reviews Deleted",
-      description: `${count} review${count > 1 ? "s have" : " has"} been removed.`,
-      variant: "destructive",
-    });
+    const ids = Array.from(selectedReviews);
+    try {
+      await Promise.all(ids.map((id) => deleteReview(id)));
+      setReviews((prev) => prev.filter((r) => !selectedReviews.has(r.id)));
+      setSelectedReviews(new Set());
+      toast({
+        title: "Reviews Deleted",
+        description: `${ids.length} review${ids.length > 1 ? "s have" : " has"} been removed.`,
+        variant: "destructive",
+      });
+    } catch {
+      toast({
+        title: "Bulk Delete Failed",
+        description: "Some reviews could not be deleted. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const copyResponse = (response: string) => {
@@ -316,6 +404,39 @@ const ReviewsPage: React.FC = () => {
       title: "Copied!",
       description: "AI response copied to clipboard.",
     });
+  };
+
+  const handlePostReply = async (review: ReviewWithAI, replyText: string) => {
+    try {
+      const saved = await submitReply(review.id, replyText);
+      await approveReview(review.id);
+      setReviews((prev) =>
+        prev.map((r) =>
+          r.id === review.id
+            ? {
+                ...r,
+                isModerated: true,
+                existingReply: {
+                  replyId: saved.ProductReviewReplyID,
+                  text: saved.Reply,
+                  by: saved.RepliedBy,
+                  date: saved.ReplyDate,
+                },
+              }
+            : r,
+        ),
+      );
+      toast({
+        title: "Reply Posted",
+        description: "The reply has been saved and the review approved.",
+      });
+    } catch {
+      toast({
+        title: "Post Reply Failed",
+        description: "Could not save the reply. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const getSentimentIcon = (sentiment?: Sentiment) => {
@@ -662,6 +783,29 @@ const ReviewsPage: React.FC = () => {
                     ))}
                   </SelectContent>
                 </Select>
+
+                <Select
+                  value={moderationFilter}
+                  onValueChange={setModerationFilter}
+                >
+                  <SelectTrigger className="w-[160px] font-doodle text-sm h-9">
+                    <SelectValue placeholder="Moderation" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Moderation</SelectItem>
+                    <SelectItem value="unmoderated">
+                      <span className="flex items-center gap-2">
+                        <Minus className="w-3 h-3 text-yellow-500" /> Pending
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="moderated">
+                      <span className="flex items-center gap-2">
+                        <CheckCircle className="w-3 h-3 text-doodle-green" />{" "}
+                        Approved
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {hasActiveFilters && (
@@ -786,6 +930,21 @@ const ReviewsPage: React.FC = () => {
                             <span className="font-doodle text-sm text-doodle-text/60">
                               by {review.userName}
                             </span>
+                            {/* Moderation status badge */}
+                            {review.isModerated ? (
+                              <Badge className="font-doodle text-xs bg-doodle-green/20 text-doodle-green border-doodle-green/30">
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Approved
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="font-doodle text-xs text-yellow-600 border-yellow-500/50"
+                              >
+                                <Minus className="w-3 h-3 mr-1" />
+                                Pending
+                              </Badge>
+                            )}
                             {review.aiError ? (
                               <Badge
                                 variant="outline"
@@ -816,12 +975,56 @@ const ReviewsPage: React.FC = () => {
                           <p className="font-doodle text-sm text-doodle-text/70 mt-1">
                             {review.comment}
                           </p>
-                          <p className="font-doodle text-xs text-doodle-accent mt-2">
-                            Product: {product?.Name || "Unknown"} •{" "}
-                            {new Date(review.createdAt).toLocaleDateString()}
+                          <p className="font-doodle text-xs text-doodle-accent mt-2 flex items-center gap-2 flex-wrap">
+                            Product:
+                            {product ? (
+                              <>
+                                <Link
+                                  to={`/product/${product.ProductID}`}
+                                  className="hover:underline font-semibold"
+                                >
+                                  {product.Name}
+                                </Link>
+                                {getAppUrl() && (
+                                  <a
+                                    href={`${getAppUrl()}/product/${product.ProductID}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="View in customer app"
+                                    className="text-doodle-blue hover:text-doodle-blue/70"
+                                  >
+                                    <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                )}
+                              </>
+                            ) : (
+                              <span>Unknown</span>
+                            )}
+                            <span>•</span>
+                            <span>
+                              {new Date(review.createdAt).toLocaleDateString()}
+                            </span>
                           </p>
 
-                          {review.aiSuggestedResponse && (
+                          {/* Show persisted staff reply if it exists */}
+                          {review.existingReply ? (
+                            <div className="mt-3 p-3 bg-doodle-green/5 rounded-lg border border-doodle-green/20">
+                              <div className="flex items-center gap-2 mb-2">
+                                <MessageSquare className="w-3 h-3 text-doodle-green" />
+                                <span className="font-doodle text-xs font-bold text-doodle-green">
+                                  Staff Reply — {review.existingReply.by}
+                                </span>
+                                <span className="font-doodle text-xs text-doodle-text/40 ml-auto">
+                                  {new Date(
+                                    review.existingReply.date,
+                                  ).toLocaleDateString()}
+                                </span>
+                              </div>
+                              <p className="font-doodle text-sm text-doodle-text/80">
+                                {review.existingReply.text}
+                              </p>
+                            </div>
+                          ) : review.aiSuggestedResponse ? (
                             <div className="mt-3 p-3 bg-doodle-primary/5 rounded-lg border border-doodle-primary/20">
                               <div className="flex items-center gap-2 mb-2">
                                 <Sparkles className="w-3 h-3 text-doodle-primary" />
@@ -832,19 +1035,34 @@ const ReviewsPage: React.FC = () => {
                               <p className="font-doodle text-sm text-doodle-text/80">
                                 {review.aiSuggestedResponse}
                               </p>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="mt-2 font-doodle text-xs h-7"
-                                onClick={() =>
-                                  copyResponse(review.aiSuggestedResponse!)
-                                }
-                              >
-                                <MessageSquare className="w-3 h-3 mr-1" />
-                                Copy Response
-                              </Button>
+                              <div className="flex gap-2 mt-2">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="font-doodle text-xs h-7"
+                                  onClick={() =>
+                                    copyResponse(review.aiSuggestedResponse!)
+                                  }
+                                >
+                                  <MessageSquare className="w-3 h-3 mr-1" />
+                                  Copy
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className="font-doodle text-xs h-7 gap-1"
+                                  onClick={() =>
+                                    handlePostReply(
+                                      review,
+                                      review.aiSuggestedResponse!,
+                                    )
+                                  }
+                                >
+                                  <CheckCircle className="w-3 h-3" />
+                                  Post as Reply
+                                </Button>
+                              </div>
                             </div>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                       <div className="flex items-start gap-2">

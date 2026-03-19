@@ -4,7 +4,7 @@ import { getRestApiUrl } from "@/lib/utils";
 import { gql } from "graphql-request";
 
 // ProductReview from AdventureWorks DB:
-// ProductReviewID, ProductID, ReviewerName, ReviewDate, EmailAddress, Rating, Comments, HelpfulVotes, UserID
+// ProductReviewID, ProductID, ReviewerName, ReviewDate, EmailAddress, Rating, Comments, HelpfulVotes, UserID, IsModerated
 export interface AdminReview {
   id: string;
   productId: number;
@@ -15,6 +15,13 @@ export interface AdminReview {
   createdAt: string;
   helpful: number;
   markedUsefulBy: string[];
+  isModerated: boolean;
+  existingReply?: {
+    replyId: number;
+    text: string;
+    by: string;
+    date: string;
+  };
 }
 
 const GET_PRODUCT_REVIEWS_ADMIN = gql`
@@ -28,12 +35,28 @@ const GET_PRODUCT_REVIEWS_ADMIN = gql`
         Rating
         Comments
         HelpfulVotes
+        IsModerated
+        productReviewReplies {
+          items {
+            ProductReviewReplyID
+            Reply
+            RepliedBy
+            ReplyDate
+          }
+        }
       }
       hasNextPage
       endCursor
     }
   }
 `;
+
+interface RawReviewReply {
+  ProductReviewReplyID: number;
+  Reply: string;
+  RepliedBy: string;
+  ReplyDate: string;
+}
 
 interface RawProductReview {
   ProductReviewID: number;
@@ -43,19 +66,33 @@ interface RawProductReview {
   Rating: number;
   Comments?: string;
   HelpfulVotes?: number;
+  IsModerated?: boolean;
+  productReviewReplies?: { items: RawReviewReply[] };
 }
 
-const mapReview = (r: RawProductReview): AdminReview => ({
-  id: String(r.ProductReviewID),
-  productId: r.ProductID,
-  userName: r.ReviewerName ?? "Anonymous",
-  rating: r.Rating,
-  title: "",
-  comment: r.Comments ?? "",
-  createdAt: r.ReviewDate ?? "",
-  helpful: r.HelpfulVotes ?? 0,
-  markedUsefulBy: [],
-});
+const mapReview = (r: RawProductReview): AdminReview => {
+  const firstReply = r.productReviewReplies?.items?.[0];
+  return {
+    id: String(r.ProductReviewID),
+    productId: r.ProductID,
+    userName: r.ReviewerName ?? "Anonymous",
+    rating: r.Rating,
+    title: "",
+    comment: r.Comments ?? "",
+    createdAt: r.ReviewDate ?? "",
+    helpful: r.HelpfulVotes ?? 0,
+    markedUsefulBy: [],
+    isModerated: r.IsModerated ?? false,
+    existingReply: firstReply
+      ? {
+          replyId: firstReply.ProductReviewReplyID,
+          text: firstReply.Reply,
+          by: firstReply.RepliedBy,
+          date: firstReply.ReplyDate,
+        }
+      : undefined,
+  };
+};
 
 export interface PagedReviews {
   items: AdminReview[];
@@ -98,3 +135,77 @@ export const useAdminReviews = (after?: string | null) =>
     },
     staleTime: 2 * 60 * 1000,
   });
+
+/** PATCH the review's IsModerated flag to true in the database. */
+export const approveReview = async (id: string): Promise<void> => {
+  const res = await fetch(
+    `${getRestApiUrl()}/ProductReview/ProductReviewID/${id}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ IsModerated: true }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`approveReview failed: ${res.status}`);
+  }
+};
+
+/** POST a staff reply for the given review. Returns the new reply record. */
+export const submitReply = async (
+  reviewId: string,
+  replyText: string,
+  repliedBy = "AdventureWorks Team",
+): Promise<RawReviewReply> => {
+  const res = await fetch(`${getRestApiUrl()}/ProductReviewReply`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ProductReviewID: parseInt(reviewId, 10),
+      Reply: replyText,
+      RepliedBy: repliedBy,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`submitReply failed: ${res.status}`);
+  }
+  const json = await res.json();
+  // DAB REST POST returns { value: [record] }
+  return (json.value?.[0] ?? json) as RawReviewReply;
+};
+
+/**
+ * Delete a review and all its replies from the database.
+ * Replies must be deleted first to satisfy the FK constraint.
+ */
+export const deleteReview = async (id: string): Promise<void> => {
+  const restBase = getRestApiUrl();
+
+  // 1. Fetch existing replies by ProductReviewID
+  const repliesRes = await fetch(
+    `${restBase}/ProductReviewReply?$filter=ProductReviewID eq ${id}`,
+  );
+  if (repliesRes.ok) {
+    const repliesJson = await repliesRes.json();
+    const replies: Array<{ ProductReviewReplyID: number }> =
+      repliesJson.value ?? [];
+    // 2. Delete each reply by PK
+    await Promise.all(
+      replies.map((r) =>
+        fetch(
+          `${restBase}/ProductReviewReply/ProductReviewReplyID/${r.ProductReviewReplyID}`,
+          { method: "DELETE" },
+        ),
+      ),
+    );
+  }
+
+  // 3. Delete the review itself
+  const reviewRes = await fetch(
+    `${restBase}/ProductReview/ProductReviewID/${id}`,
+    { method: "DELETE" },
+  );
+  if (!reviewRes.ok) {
+    throw new Error(`deleteReview failed: ${reviewRes.status}`);
+  }
+};

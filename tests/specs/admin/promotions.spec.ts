@@ -17,9 +17,15 @@ test.describe("Admin Portal – Promotions", () => {
   });
 
   test("promotion cards are rendered from the database", async ({ page }) => {
-    // "No Discount" is the system record always present in AdventureWorks
-    await expect(page.getByText("No Discount").first()).toBeVisible({
+    // Set category filter to "All Categories" so "No Discount" (Category='No Discount') is visible
+    await expect(page.locator(".doodle-card").first()).toBeVisible({
       timeout: 20_000,
+    });
+    const categoryCombobox = page.getByRole("combobox").nth(2);
+    await categoryCombobox.click();
+    await page.getByRole("option", { name: /all categories/i }).click();
+    await expect(page.getByText("No Discount").first()).toBeVisible({
+      timeout: 10_000,
     });
   });
 
@@ -36,8 +42,16 @@ test.describe("Admin Portal – Promotions", () => {
   });
 
   test("search input filters promotions", async ({ page }) => {
+    // Clear the category filter so all promotions are visible for search
+    await expect(page.locator(".doodle-card").first()).toBeVisible({
+      timeout: 20_000,
+    });
+    const categoryCombobox = page.getByRole("combobox").nth(2);
+    await categoryCombobox.click();
+    await page.getByRole("option", { name: /all categories/i }).click();
+
     const searchInput = page.getByPlaceholder(/search/i).first();
-    await expect(searchInput).toBeVisible({ timeout: 15_000 });
+    await expect(searchInput).toBeVisible({ timeout: 10_000 });
     await searchInput.fill("Volume");
     await page.waitForTimeout(400);
     await expect(page.getByText(/volume discount/i).first()).toBeVisible({
@@ -83,13 +97,47 @@ test.describe("Admin Portal – Promotions", () => {
     });
   });
 
+  test("promotion cards with assigned products show admin and app links", async ({
+    page,
+  }) => {
+    // Wait for promotion cards to load
+    await expect(page.locator(".doodle-card").first()).toBeVisible({
+      timeout: 25_000,
+    });
+
+    // Find admin-side product links (no target=_blank) inside the promotion cards
+    const adminProductLinks = page
+      .locator("a[href*='/product/']")
+      .filter({ hasNot: page.locator("[target='_blank']") });
+
+    const chipCount = await adminProductLinks.count();
+    if (chipCount > 0) {
+      // Each chip should also have a customer-app ExternalLink
+      const appLinks = page.locator(
+        "a[title='View in customer app'][href*='/product/']",
+      );
+      await expect(appLinks.first()).toBeVisible({ timeout: 5_000 });
+      expect(await appLinks.first().getAttribute("target")).toBe("_blank");
+    } else {
+      // No promotions have assigned products yet — just verify page loaded OK
+      await expect(page.getByText(/sales promotions/i)).toBeVisible();
+    }
+  });
+
   // ─── ID=1 guard ────────────────────────────────────────────────────────────
 
   test("No Discount (ID=1) Edit and Delete buttons are disabled", async ({
     page,
   }) => {
-    await expect(page.getByText("No Discount").first()).toBeVisible({
+    // Set category filter to "All Categories" so the built-in "No Discount" card is visible
+    await expect(page.locator(".doodle-card").first()).toBeVisible({
       timeout: 20_000,
+    });
+    const categoryCombobox = page.getByRole("combobox").nth(2);
+    await categoryCombobox.click();
+    await page.getByRole("option", { name: /all categories/i }).click();
+    await expect(page.getByText("No Discount").first()).toBeVisible({
+      timeout: 10_000,
     });
 
     // Find the card that contains "No Discount"
@@ -123,18 +171,23 @@ test.describe("Admin Portal – Promotions", () => {
 
     // Fill the form
     await dialog.getByPlaceholder(/summer sale/i).fill(uniqueDesc);
-    await dialog.getByLabel("Discount %").fill("15");
+    // Discount % input: first number input in the dialog
+    await dialog.locator('input[type="number"]').nth(0).fill("15");
     await dialog.locator('input[type="date"]').nth(0).fill("2026-01-01");
     await dialog.locator('input[type="date"]').nth(1).fill("2026-12-31");
 
     // Submit
     await dialog.getByRole("button", { name: /create promotion/i }).click();
     await expect(dialog).not.toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(uniqueDesc)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: uniqueDesc })).toBeVisible({
+      timeout: 15_000,
+    });
 
     // Reload and confirm persistence
     await page.reload();
-    await expect(page.getByText(uniqueDesc)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("heading", { name: uniqueDesc })).toBeVisible({
+      timeout: 20_000,
+    });
 
     // Cleanup: delete the test record
     await page
@@ -146,7 +199,9 @@ test.describe("Admin Portal – Promotions", () => {
       .getByRole("alertdialog")
       .getByRole("button", { name: /delete/i })
       .click();
-    await expect(page.getByText(uniqueDesc)).not.toBeVisible({
+    await expect(
+      page.getByRole("heading", { name: uniqueDesc }),
+    ).not.toBeVisible({
       timeout: 15_000,
     });
   });
@@ -162,16 +217,19 @@ test.describe("Admin Portal – Promotions", () => {
     const createDialog = page.getByRole("dialog");
     await expect(createDialog).toBeVisible({ timeout: 10_000 });
     await createDialog.getByPlaceholder(/summer sale/i).fill(originalDesc);
-    await createDialog.getByLabel("Discount %").fill("5");
+    // Discount % input: first number input in the dialog
+    await createDialog.locator('input[type="number"]').nth(0).fill("5");
     await createDialog.locator('input[type="date"]').nth(0).fill("2026-01-01");
     await createDialog.locator('input[type="date"]').nth(1).fill("2026-12-31");
     await createDialog
       .getByRole("button", { name: /create promotion/i })
       .click();
     await expect(createDialog).not.toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(originalDesc)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(page.getByRole("heading", { name: originalDesc })).toBeVisible(
+      {
+        timeout: 15_000,
+      },
+    );
 
     // Step 2: edit it
     await page
@@ -188,11 +246,15 @@ test.describe("Admin Portal – Promotions", () => {
     await descInput.fill(editedDesc);
     await editDialog.getByRole("button", { name: /save changes/i }).click();
     await expect(editDialog).not.toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(editedDesc)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: editedDesc })).toBeVisible({
+      timeout: 15_000,
+    });
 
     // Step 3: reload and verify persistence
     await page.reload();
-    await expect(page.getByText(editedDesc)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("heading", { name: editedDesc })).toBeVisible({
+      timeout: 20_000,
+    });
 
     // Cleanup
     await page
@@ -204,7 +266,9 @@ test.describe("Admin Portal – Promotions", () => {
       .getByRole("alertdialog")
       .getByRole("button", { name: /delete/i })
       .click();
-    await expect(page.getByText(editedDesc)).not.toBeVisible({
+    await expect(
+      page.getByRole("heading", { name: editedDesc }),
+    ).not.toBeVisible({
       timeout: 15_000,
     });
   });
@@ -219,12 +283,15 @@ test.describe("Admin Portal – Promotions", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible({ timeout: 10_000 });
     await dialog.getByPlaceholder(/summer sale/i).fill(uniqueDesc);
-    await dialog.getByLabel("Discount %").fill("0");
+    // Discount % input: first number input in the dialog
+    await dialog.locator('input[type="number"]').nth(0).fill("0");
     await dialog.locator('input[type="date"]').nth(0).fill("2026-01-01");
     await dialog.locator('input[type="date"]').nth(1).fill("2026-12-31");
     await dialog.getByRole("button", { name: /create promotion/i }).click();
     await expect(dialog).not.toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(uniqueDesc)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: uniqueDesc })).toBeVisible({
+      timeout: 15_000,
+    });
 
     // Delete it
     await page
@@ -235,14 +302,18 @@ test.describe("Admin Portal – Promotions", () => {
     const alertDialog = page.getByRole("alertdialog");
     await expect(alertDialog).toBeVisible({ timeout: 10_000 });
     await alertDialog.getByRole("button", { name: /delete/i }).click();
-    await expect(page.getByText(uniqueDesc)).not.toBeVisible({
+    await expect(
+      page.getByRole("heading", { name: uniqueDesc }),
+    ).not.toBeVisible({
       timeout: 15_000,
     });
 
     // Reload and confirm it is gone
     // Note: deleting a promotion removes ALL culture variants (not just English)
     await page.reload();
-    await expect(page.getByText(uniqueDesc)).not.toBeVisible({
+    await expect(
+      page.getByRole("heading", { name: uniqueDesc }),
+    ).not.toBeVisible({
       timeout: 20_000,
     });
   });
@@ -263,12 +334,15 @@ test.describe("Admin Portal – Promotions", () => {
       const dialog = page.getByRole("dialog");
       await expect(dialog).toBeVisible({ timeout: 10_000 });
       await dialog.getByPlaceholder(/summer sale/i).fill(uniqueDesc);
-      await dialog.getByLabel("Discount %").fill("10");
+      // Discount % input: first number input in the dialog
+      await dialog.locator('input[type="number"]').nth(0).fill("10");
       await dialog.locator('input[type="date"]').nth(0).fill("2026-01-01");
       await dialog.locator('input[type="date"]').nth(1).fill("2026-12-31");
       await dialog.getByRole("button", { name: /create promotion/i }).click();
       await expect(dialog).not.toBeVisible({ timeout: 15_000 });
-      await expect(page.getByText(uniqueDesc)).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole("heading", { name: uniqueDesc })).toBeVisible(
+        { timeout: 15_000 },
+      );
 
       // Determine the SpecialOfferID from the DB via REST API
       const listRes = await request.get(
@@ -301,57 +375,6 @@ test.describe("Admin Portal – Promotions", () => {
           .locator(".doodle-card")
           .filter({ hasText: uniqueDesc });
         if ((await card.count()) > 0) {
-          await card.getByRole("button", { name: /^delete$/i }).click();
-          await page
-            .getByRole("alertdialog")
-            .getByRole("button", { name: /delete/i })
-            .click();
-        }
-      }
-    }
-  });
-    let createdId: number | null = null;
-
-    try {
-      // Create a new promotion
-      await page.getByRole("button", { name: /new promotion/i }).click();
-      const dialog = page.getByRole("dialog");
-      await expect(dialog).toBeVisible({ timeout: 10_000 });
-      await dialog.getByPlaceholder(/summer sale/i).fill(uniqueDesc);
-      await dialog.getByLabel("Discount %").fill("10");
-      await dialog.locator('input[type="date"]').nth(0).fill("2026-01-01");
-      await dialog.locator('input[type="date"]').nth(1).fill("2026-12-31");
-      await dialog.getByRole("button", { name: /create promotion/i }).click();
-      await expect(dialog).not.toBeVisible({ timeout: 15_000 });
-      await expect(page.getByText(uniqueDesc)).toBeVisible({ timeout: 15_000 });
-
-      // Determine the SpecialOfferID from the DB via REST API
-      const listRes = await request.get(
-        `${testEnv.restApiBaseUrl}/SpecialOffer?$filter=Description eq '${encodeURIComponent(uniqueDesc)}' and CultureID eq 'en    '`,
-      );
-      const listData = await listRes.json();
-      const items: Array<{ SpecialOfferID: number }> = listData?.value ?? [];
-      expect(items.length).toBeGreaterThan(0);
-      createdId = items[0].SpecialOfferID;
-
-      // Wait for translation (fire-and-forget; AI may take up to 45s)
-      await page.waitForTimeout(45_000);
-
-      // Verify at least one non-English culture record was created
-      const allRes = await request.get(
-        `${testEnv.restApiBaseUrl}/SpecialOffer?$filter=SpecialOfferID eq ${createdId}`,
-      );
-      const allData = await allRes.json();
-      const allItems: Array<{ CultureID: string }> = allData?.value ?? [];
-      const nonEnglish = allItems.filter((i) => i.CultureID.trim() !== "en");
-      expect(nonEnglish.length).toBeGreaterThan(0);
-    } finally {
-      // Cleanup: delete the test record (removes all culture variants)
-      if (createdId !== null) {
-        const card = page
-          .locator(".doodle-card")
-          .filter({ hasText: uniqueDesc });
-        if (await card.count() > 0) {
           await card.getByRole("button", { name: /^delete$/i }).click();
           await page
             .getByRole("alertdialog")

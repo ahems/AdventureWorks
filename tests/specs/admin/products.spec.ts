@@ -80,6 +80,58 @@ test.describe("Admin Portal – Products (Category & Detail)", () => {
     });
   });
 
+  test("product detail page has 'View in app' link pointing to customer app", async ({
+    page,
+  }) => {
+    await page.goto(`${testEnv.adminWebBaseUrl}/product/775`);
+    await expect(page.getByText(/edit product/i)).toBeVisible({
+      timeout: 20_000,
+    });
+
+    const viewInAppLink = page.getByRole("link", { name: /view in app/i });
+    await expect(viewInAppLink).toBeVisible({ timeout: 5_000 });
+    const href = await viewInAppLink.getAttribute("href");
+    expect(href).toMatch(/\/product\/775/);
+    expect(await viewInAppLink.getAttribute("target")).toBe("_blank");
+  });
+
+  test("category page has 'View in customer app' ExternalLink icon on category header", async ({
+    page,
+  }) => {
+    await page.goto(`${testEnv.adminWebBaseUrl}/category/1`);
+    await expect(page.getByText(/product management/i)).toBeVisible({
+      timeout: 20_000,
+    });
+
+    // ExternalLink icon is inside an <a> with title describing the customer app
+    const catAppLink = page.locator(
+      "a[title*='customer app'][href*='/category/']",
+    );
+    await expect(catAppLink).toBeVisible({ timeout: 5_000 });
+    const href = await catAppLink.getAttribute("href");
+    expect(href).toMatch(/\/category\/1/);
+    expect(await catAppLink.getAttribute("target")).toBe("_blank");
+  });
+
+  test("product cards on category page have 'View in customer app' icon link", async ({
+    page,
+  }) => {
+    await page.goto(`${testEnv.adminWebBaseUrl}/category/1`);
+    // Wait for at least one product card to load
+    await expect(page.locator(".doodle-card").nth(1)).toBeVisible({
+      timeout: 25_000,
+    });
+
+    // There should be at least one ExternalLink icon pointing to a product in the customer app
+    const productAppLinks = page.locator(
+      "a[title='View in customer app'][href*='/product/']",
+    );
+    await expect(productAppLinks.first()).toBeVisible({ timeout: 5_000 });
+    const href = await productAppLinks.first().getAttribute("href");
+    expect(href).toMatch(/\/product\/\d+/);
+    expect(await productAppLinks.first().getAttribute("target")).toBe("_blank");
+  });
+
   test("Components category page loads", async ({ page }) => {
     await page.goto(`${testEnv.adminWebBaseUrl}/category/2`);
     await expect(

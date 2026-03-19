@@ -156,14 +156,19 @@ test.describe("Admin Portal – Stale Carts & Cart Recovery Agent", () => {
     await page.getByRole("button", { name: /show simulator/i }).click();
     await page.getByRole("button", { name: /run simulation/i }).click();
 
-    // Three scenario cards should appear
-    await expect(page.getByText("High Priority Only")).toBeVisible({
+    // Three scenario cards should appear (use heading role to avoid strict-mode
+    // violations from the chart labels and toast that also contain these strings)
+    await expect(
+      page.getByRole("heading", { name: "High Priority Only" }),
+    ).toBeVisible({
       timeout: 10_000,
     });
-    await expect(page.getByText("High + Medium Priority")).toBeVisible({
+    await expect(
+      page.getByRole("heading", { name: "High + Medium Priority" }),
+    ).toBeVisible({
       timeout: 10_000,
     });
-    await expect(page.getByText("All Carts")).toBeVisible({
+    await expect(page.getByRole("heading", { name: "All Carts" })).toBeVisible({
       timeout: 10_000,
     });
   });
@@ -188,5 +193,54 @@ test.describe("Admin Portal – Stale Carts & Cart Recovery Agent", () => {
     await expect(
       page.getByText(/historical orders|industry standard/i),
     ).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("cart detail dialog shows product names with admin and app links", async ({
+    page,
+  }) => {
+    // Wait for the carts table to load
+    await expect(page.getByText(/stale cart management/i)).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.locator("table tbody tr").first()).toBeVisible({
+      timeout: 20_000,
+    });
+
+    // Each row has a MoreHorizontal dropdown; open the first one
+    const firstMoreBtn = page
+      .locator("table tbody tr")
+      .first()
+      .getByRole("button");
+    await firstMoreBtn.click();
+
+    // Click "View Details" from the dropdown menu
+    const viewDetailsItem = page.getByRole("menuitem", {
+      name: /view details/i,
+    });
+    await expect(viewDetailsItem).toBeVisible({ timeout: 5_000 });
+    await viewDetailsItem.click();
+
+    // Dialog should be open
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible({ timeout: 5_000 });
+    await expect(dialog.getByText(/cart items/i)).toBeVisible();
+
+    // If products are loaded, the admin route link should be present
+    const adminProductLinks = dialog.locator("a[href*='/product/']").filter({
+      hasNot: page.locator("[target='_blank']"),
+    });
+    const appProductLinks = dialog.locator(
+      "a[title='View in customer app'][href*='/product/']",
+    );
+
+    if ((await adminProductLinks.count()) > 0) {
+      await expect(adminProductLinks.first()).toBeVisible();
+      await expect(appProductLinks.first()).toBeVisible();
+      expect(await appProductLinks.first().getAttribute("target")).toBe(
+        "_blank",
+      );
+    }
+    // Whether products are shown as links or "Product #N" (fallback), the page must not crash
+    await expect(dialog).toBeVisible();
   });
 });

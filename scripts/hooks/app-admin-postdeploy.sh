@@ -30,6 +30,7 @@ color_cyan "Configuring Admin Static Web App settings..."
 
 swa_service_name=$(get_azd_value "SERVICE_APP_ADMIN_NAME")
 api_mcp_url=$(get_azd_value "API_MCP_URL")
+app_redirect_uri=$(get_azd_value "APP_REDIRECT_URI")
 resource_group_name=$(get_azd_value "AZURE_RESOURCE_GROUP")
 
 if [[ -z "$swa_service_name" ]] || [[ -z "$api_mcp_url" ]] || [[ -z "$resource_group_name" ]]; then
@@ -40,9 +41,9 @@ fi
 if az staticwebapp appsettings set \
   --name "$swa_service_name" \
   --resource-group "$resource_group_name" \
-  --setting-names "API_MCP_URL=$api_mcp_url" \
+  --setting-names "API_MCP_URL=$api_mcp_url" "APP_URL=${app_redirect_uri}" \
   --output none 2>/dev/null; then
-  color_green "✓ Successfully updated Admin SWA API_MCP_URL setting (value: $api_mcp_url)"
+  color_green "✓ Successfully updated Admin SWA settings (API_MCP_URL, APP_URL)"
 else
   color_yellow "Warning: Failed to update Admin Static Web App settings."
   exit 0

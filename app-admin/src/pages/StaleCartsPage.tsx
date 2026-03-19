@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Link as RouterLink } from "react-router-dom";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import CartRecoveryAgent from "@/components/CartRecoveryAgent";
@@ -50,15 +51,24 @@ import {
   Eye,
   CheckCircle,
   RefreshCw,
+  ExternalLink,
 } from "lucide-react";
 import { useAdminShoppingCarts } from "@/hooks/useAdminCatalog";
+import { useAdminAllProducts } from "@/hooks/useAdminProducts";
 import { StaleCart } from "@/types/shoppingCart";
 import { format } from "date-fns";
+import { getAppUrl } from "@/lib/utils";
 
 type StaleFilter = "all" | "7days" | "14days" | "30days" | "60days";
 
 const StaleCartsPage = () => {
   const { data: apiCarts = [] } = useAdminShoppingCarts();
+  const { data: allProducts = [] } = useAdminAllProducts();
+  const productMap = React.useMemo(
+    () => new Map(allProducts.map((p) => [p.ProductID, p])),
+    [allProducts],
+  );
+  const appUrl = getAppUrl();
   const [carts, setCarts] = useState<StaleCart[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [staleFilter, setStaleFilter] = useState<StaleFilter>("all");
@@ -473,8 +483,35 @@ const StaleCartsPage = () => {
                     className="p-3 flex justify-between items-center"
                   >
                     <div>
-                      <div className="font-medium">
-                        Product #{item.ProductID}
+                      <div className="font-medium flex items-center gap-2">
+                        {(() => {
+                          const prod = productMap.get(item.ProductID);
+                          return prod ? (
+                            <>
+                              <RouterLink
+                                to={`/product/${prod.ProductID}`}
+                                className="hover:underline"
+                                title="Edit in admin"
+                                onClick={() => setViewCartDialog(null)}
+                              >
+                                {prod.Name}
+                              </RouterLink>
+                              {appUrl && (
+                                <a
+                                  href={`${appUrl}/product/${prod.ProductID}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="View in customer app"
+                                  className="text-blue-500 hover:text-blue-700"
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              )}
+                            </>
+                          ) : (
+                            <span>Product #{item.ProductID}</span>
+                          );
+                        })()}
                       </div>
                       <div className="text-sm text-muted-foreground">
                         Added:{" "}

@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ArrowUpDown,
   Edit,
+  ExternalLink,
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
@@ -28,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Product } from "@/types/product";
+import { getAppUrl } from "@/lib/utils";
 
 const ITEMS_PER_PAGE_OPTIONS = [6, 12, 24, 48];
 
@@ -216,8 +218,19 @@ const CategoryPage: React.FC = () => {
                 Product Management
               </span>
             </div>
-            <h1 className="font-doodle text-3xl md:text-5xl font-bold text-doodle-text mb-2">
+            <h1 className="font-doodle text-3xl md:text-5xl font-bold text-doodle-text mb-2 flex items-center gap-3">
               {category.Name}
+              {getAppUrl() && category.ProductCategoryID && (
+                <a
+                  href={`${getAppUrl()}/category/${category.ProductCategoryID}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="View category in customer app"
+                  className="text-doodle-blue hover:text-doodle-blue/70"
+                >
+                  <ExternalLink className="w-6 h-6" />
+                </a>
+              )}
             </h1>
             <p className="font-doodle text-doodle-text/70">
               {allProducts.length} product{allProducts.length !== 1 ? "s" : ""}{" "}

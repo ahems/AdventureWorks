@@ -1,5 +1,5 @@
 import React from "react";
-import { Star, ThumbsUp } from "lucide-react";
+import { Star, ThumbsUp, MessageSquare } from "lucide-react";
 import { Review } from "@/types/review";
 import { useAuth } from "@/context/AuthContext";
 import { useTranslation } from "react-i18next";
@@ -60,6 +60,31 @@ const ReviewCard: React.FC<ReviewCardProps> = ({
       <p className="font-doodle text-doodle-text/80 leading-relaxed">
         {review.comment}
       </p>
+
+      {/* Staff reply — only shown when a moderated reply exists */}
+      {review.staffReply && (
+        <div
+          className="mt-2 p-3 rounded-lg border bg-doodle-green/5 border-doodle-green/20"
+          data-testid="staff-reply"
+        >
+          <div className="flex items-center gap-1.5 mb-1">
+            <MessageSquare className="w-3 h-3 text-doodle-green" />
+            <span className="font-doodle text-xs font-bold text-doodle-green">
+              {review.staffReply.repliedBy}
+            </span>
+            <span className="font-doodle text-xs text-doodle-text/40 ml-auto">
+              {new Date(review.staffReply.date).toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+              })}
+            </span>
+          </div>
+          <p className="font-doodle text-sm text-doodle-text/80">
+            {review.staffReply.text}
+          </p>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="flex items-center justify-between pt-2 border-t border-dashed border-doodle-text/20">

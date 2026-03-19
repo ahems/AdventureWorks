@@ -726,7 +726,32 @@
           "role": "anonymous",
           "actions": ["*"]
         }
-      ]
+      ],
+      "relationships": {
+        "productReviewReplies": {
+          "cardinality": "many",
+          "target.entity": "ProductReviewReply",
+          "source.fields": ["ProductReviewID"],
+          "target.fields": ["ProductReviewID"]
+        }
+      }
+    },
+    "ProductReviewReply": {
+      "source": "Production.ProductReviewReply",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["*"]
+        }
+      ],
+      "relationships": {
+        "productReview": {
+          "cardinality": "one",
+          "target.entity": "ProductReview",
+          "source.fields": ["ProductReviewID"],
+          "target.fields": ["ProductReviewID"]
+        }
+      }
     }
   }
 }

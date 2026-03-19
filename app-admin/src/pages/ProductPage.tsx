@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link, Navigate } from "react-router-dom";
-import { ArrowLeft, Star, Save, Tag } from "lucide-react";
+import { ArrowLeft, Star, Save, Tag, ExternalLink } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import ProductImageGallery from "@/components/ProductImageGallery";
@@ -15,6 +15,7 @@ import { useAdminSpecialOffers } from "@/hooks/useAdminPromotions";
 import { useReviews } from "@/hooks/useReviews";
 import { toast } from "@/hooks/use-toast";
 import { getOfferStatus } from "@/types/promotion";
+import { getAppUrl } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -127,9 +128,23 @@ const ProductPage: React.FC = () => {
 
             <div className="space-y-6">
               <div className="doodle-card p-6">
-                <h2 className="font-doodle text-xl font-bold text-doodle-text mb-4">
-                  Edit Product
-                </h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-doodle text-xl font-bold text-doodle-text">
+                    Edit Product
+                  </h2>
+                  {getAppUrl() && (
+                    <a
+                      href={`${getAppUrl()}/product/${product.ProductID}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="View in customer app"
+                      className="inline-flex items-center gap-1 font-doodle text-xs text-doodle-blue hover:underline"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      View in app
+                    </a>
+                  )}
+                </div>
 
                 <div className="space-y-4">
                   <div>

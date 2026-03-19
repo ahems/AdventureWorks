@@ -6,7 +6,11 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 type AppWindow = Window & {
-  APP_CONFIG?: { API_URL?: string; API_FUNCTIONS_URL?: string };
+  APP_CONFIG?: {
+    API_URL?: string;
+    API_FUNCTIONS_URL?: string;
+    APP_URL?: string;
+  };
 };
 
 export function getFunctionsApiUrl(): string {
@@ -27,4 +31,13 @@ export function getGraphQLApiUrl(): string {
 
 export function getRestApiUrl(): string {
   return getGraphQLApiUrl().replace(/\/graphql\/?$/, "/api");
+}
+
+/** Returns the customer-facing app base URL (no trailing slash). Empty string if not configured. */
+export function getAppUrl(): string {
+  return (
+    (window as AppWindow).APP_CONFIG?.APP_URL ||
+    import.meta.env.VITE_APP_URL ||
+    ""
+  ).replace(/\/$/, "");
 }

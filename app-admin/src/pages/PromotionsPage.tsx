@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { Link as RouterLink } from "react-router-dom";
 import {
   Plus,
   Search,
@@ -11,6 +12,7 @@ import {
   Tag,
   Filter,
   Link,
+  ExternalLink,
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
@@ -37,6 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ProductAssignmentDialog from "@/components/ProductAssignmentDialog";
 import { Label } from "@/components/ui/label";
+import { getAppUrl } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -654,6 +657,52 @@ const PromotionsPage: React.FC = () => {
                         {productCount === 1 ? "product" : "products"}
                       </button>
                     </div>
+                    {/* Assigned product chips */}
+                    {productCount > 0 &&
+                      (() => {
+                        const appUrl = getAppUrl();
+                        const assignedIds = getAssignedProductIds(
+                          promo.SpecialOfferID,
+                        );
+                        const assignedProducts = assignedIds
+                          .map((id) => products.find((p) => p.ProductID === id))
+                          .filter(Boolean) as typeof products;
+                        const visible = assignedProducts.slice(0, 5);
+                        return (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {visible.map((p) => (
+                              <span
+                                key={p.ProductID}
+                                className="inline-flex items-center gap-1 font-doodle text-xs bg-doodle-text/10 border border-doodle-text/20 px-2 py-0.5"
+                              >
+                                <RouterLink
+                                  to={`/product/${p.ProductID}`}
+                                  className="hover:underline"
+                                  title="Edit in admin"
+                                >
+                                  {p.Name}
+                                </RouterLink>
+                                {appUrl && (
+                                  <a
+                                    href={`${appUrl}/product/${p.ProductID}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="View in customer app"
+                                    className="text-doodle-blue hover:text-doodle-blue/70"
+                                  >
+                                    <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                )}
+                              </span>
+                            ))}
+                            {assignedProducts.length > 5 && (
+                              <span className="font-doodle text-xs text-doodle-text/50 self-center">
+                                +{assignedProducts.length - 5} more
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                   </div>
 
                   {/* Actions */}

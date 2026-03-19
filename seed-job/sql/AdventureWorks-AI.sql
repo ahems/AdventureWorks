@@ -381,3 +381,88 @@ GO
 PRINT 'Updated view Production.vProductSearch to include ProductName and ProductNameEmbedding';
 
 GO
+
+-- Step 17: Add IsModerated flag to ProductReview
+-- Tracks whether a review has been reviewed and approved by AdventureWorks staff.
+-- Defaults to 0 (unmoderated) for all new and existing reviews.
+
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[Production].[ProductReview]') AND name = 'IsModerated')
+BEGIN
+    ALTER TABLE [Production].[ProductReview]
+    ADD [IsModerated] BIT NOT NULL DEFAULT 0;
+
+    PRINT 'ProductReview.IsModerated column added (default 0 = unmoderated)';
+END
+ELSE
+BEGIN
+    PRINT 'ProductReview.IsModerated column already exists - skipping';
+END;
+
+GO
+
+-- Step 18: Create Production.ProductReviewReply table
+-- Stores optional staff replies to product reviews, linked 1:many to ProductReview.
+-- No CultureID: replies are always written in the language of the original review.
+
+IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE object_id = OBJECT_ID(N'[Production].[ProductReviewReply]'))
+BEGIN
+    CREATE TABLE [Production].[ProductReviewReply] (
+        [ProductReviewReplyID] INT            IDENTITY(1,1) NOT NULL,
+        [ProductReviewID]      INT            NOT NULL,
+        [Reply]                NVARCHAR(3850) NOT NULL,
+        [RepliedBy]            NVARCHAR(100)  NOT NULL CONSTRAINT [DF_ProductReviewReply_RepliedBy] DEFAULT ('AdventureWorks Team'),
+        [ReplyDate]            DATETIME       NOT NULL CONSTRAINT [DF_ProductReviewReply_ReplyDate] DEFAULT (GETDATE()),
+        [ModifiedDate]         DATETIME       NOT NULL CONSTRAINT [DF_ProductReviewReply_ModifiedDate] DEFAULT (GETDATE()),
+        CONSTRAINT [PK_ProductReviewReply_ProductReviewReplyID]
+            PRIMARY KEY CLUSTERED ([ProductReviewReplyID] ASC),
+        CONSTRAINT [FK_ProductReviewReply_ProductReview]
+            FOREIGN KEY ([ProductReviewID]) REFERENCES [Production].[ProductReview]([ProductReviewID])
+    );
+
+    CREATE NONCLUSTERED INDEX [IX_ProductReviewReply_ProductReviewID]
+    ON [Production].[ProductReviewReply]([ProductReviewID]);
+
+    PRINT 'Created table Production.ProductReviewReply with FK and index';
+END
+ELSE
+BEGIN
+    PRINT 'Table Production.ProductReviewReply already exists - skipping';
+END;
+
+GO
+
+-- Step 19: Recreate vReviewSearch to include IsModerated
+-- Always drop and recreate to keep view current with schema changes.
+
+IF EXISTS (SELECT 1 FROM sys.views WHERE object_id = OBJECT_ID(N'[Production].[vReviewSearch]'))
+BEGIN
+    DROP VIEW [Production].[vReviewSearch];
+END;
+
+GO
+
+CREATE VIEW [Production].[vReviewSearch]
+AS
+SELECT
+        pr.[ProductReviewID],
+        pr.[ProductID],
+        pr.[ReviewerName],
+        pr.[ReviewDate],
+        pr.[Rating],
+        pr.[Comments],
+        pr.[CommentsEmbedding],
+        pr.[HelpfulVotes],
+        pr.[UserID],
+        pr.[IsModerated],
+        pr.[ModifiedDate],
+        p.[Name]          AS [ProductName],
+        p.[ProductNumber]
+    FROM [Production].[ProductReview] pr
+        INNER JOIN [Production].[Product] p
+            ON pr.[ProductID] = p.[ProductID];
+
+GO
+
+PRINT 'Recreated view Production.vReviewSearch with IsModerated column';
+
+GO

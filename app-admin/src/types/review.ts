@@ -8,4 +8,11 @@ export interface Review {
   createdAt: string;
   helpful: number;
   markedUsefulBy: string[]; // User IDs who marked this as useful
+  isModerated: boolean;
+  existingReply?: {
+    replyId: number;
+    text: string;
+    by: string;
+    date: string;
+  };
 }
