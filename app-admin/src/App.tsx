@@ -5,11 +5,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
-import { VoiceAssistantProvider, useVoiceAssistant } from "@/components/AdminHeader";
+import {
+  VoiceAssistantProvider,
+  useVoiceAssistant,
+} from "@/components/AdminHeader";
 import VoiceSalesAssistant from "@/components/VoiceSalesAssistant";
 import Index from "./pages/Index";
 import CategoryPage from "./pages/CategoryPage";
 import ProductPage from "./pages/ProductPage";
+import ProductsPage from "./pages/ProductsPage";
+import CategoriesPage from "./pages/CategoriesPage";
 import LoginPage from "./pages/LoginPage";
 import CustomersPage from "./pages/CustomersPage";
 import OrdersPage from "./pages/OrdersPage";
@@ -28,13 +33,13 @@ const queryClient = new QueryClient();
 const GlobalVoiceAssistant = () => {
   const { isAuthenticated } = useAuth();
   const { isVoiceOpen, setIsVoiceOpen } = useVoiceAssistant();
-  
+
   if (!isAuthenticated) return null;
-  
+
   return (
-    <VoiceSalesAssistant 
-      isOpen={isVoiceOpen} 
-      onClose={() => setIsVoiceOpen(false)} 
+    <VoiceSalesAssistant
+      isOpen={isVoiceOpen}
+      onClose={() => setIsVoiceOpen(false)}
     />
   );
 };
@@ -51,10 +56,18 @@ const App = () => (
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/login" element={<LoginPage />} />
-                <Route path="/category/:categoryId" element={<CategoryPage />} />
+                <Route path="/products" element={<ProductsPage />} />
+                <Route path="/categories" element={<CategoriesPage />} />
+                <Route
+                  path="/category/:categoryId"
+                  element={<CategoryPage />}
+                />
                 <Route path="/product/:productId" element={<ProductPage />} />
                 <Route path="/customers" element={<CustomersPage />} />
-                <Route path="/customers/:customerId" element={<CustomersPage />} />
+                <Route
+                  path="/customers/:customerId"
+                  element={<CustomersPage />}
+                />
                 <Route path="/orders" element={<OrdersPage />} />
                 <Route path="/orders/:orderId" element={<OrdersPage />} />
                 <Route path="/reviews" element={<ReviewsPage />} />

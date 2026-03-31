@@ -194,11 +194,60 @@ public class TranslateProductDescriptions
         var telemetryClient = _serviceProvider.GetRequiredService<TelemetryClient>();
         var aiService = new AIService(endpoint, aiServiceLogger, telemetryClient);
 
-        // Translate just this one product
+        // Translate description
         var translations = await aiService.TranslateProductAsync(product, data.Cultures);
 
         _logger.LogInformation("AI translated product {ProductModelID} to {count} languages",
             product.ProductModelID, translations.Count);
+
+        // Also translate product name if ProductID is specified
+        if (product.ProductID > 0 && !string.IsNullOrWhiteSpace(product.ProductName))
+        {
+            try
+            {
+                var connectionString = Environment.GetEnvironmentVariable("SQL_CONNECTION_STRING")
+                    ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not configured");
+                var productService = new ProductService(connectionString);
+
+                var allCultures = await productService.GetAllCulturesAsync();
+                var nonEnglish = allCultures.Where(c => !c.CultureID.TrimEnd().Equals("en", StringComparison.OrdinalIgnoreCase) && !c.CultureID.TrimEnd().StartsWith("en-", StringComparison.OrdinalIgnoreCase)).ToList();
+                var enVariants = allCultures.Where(c => c.CultureID.TrimEnd().StartsWith("en-", StringComparison.OrdinalIgnoreCase)).ToList();
+
+                var nameTranslations = await aiService.TranslateTextAsync(
+                    product.ProductName,
+                    "Product name for an outdoor adventure sports equipment catalog",
+                    nonEnglish);
+
+                var productIds = await productService.GetProductIdsByModelIdAsync(product.ProductModelID);
+                // Use the specified ProductID or fall back to first in model
+                var targetProductId = product.ProductID > 0 ? product.ProductID : (productIds.Count > 0 ? productIds[0] : 0);
+
+                if (targetProductId > 0)
+                {
+                    var namesToSave = new List<TranslatedProductName>();
+
+                    foreach (var t in nameTranslations)
+                    {
+                        if (!string.IsNullOrWhiteSpace(t.TranslatedText))
+                            namesToSave.Add(new TranslatedProductName { ProductID = targetProductId, CultureID = t.CultureID, Name = t.TranslatedText[..Math.Min(t.TranslatedText.Length, 50)] });
+                    }
+                    foreach (var c in enVariants)
+                    {
+                        namesToSave.Add(new TranslatedProductName { ProductID = targetProductId, CultureID = c.CultureID, Name = product.ProductName[..Math.Min(product.ProductName.Length, 50)] });
+                    }
+
+                    if (namesToSave.Count > 0)
+                        await productService.SaveProductNamesAsync(namesToSave);
+
+                    _logger.LogInformation("Saved {count} product name translations for ProductID {ProductID}", namesToSave.Count, targetProductId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Product name translation failed for ProductModelID {ModelID} — continuing", product.ProductModelID);
+            }
+        }
+
         return translations;
     }
 

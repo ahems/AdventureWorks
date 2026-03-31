@@ -173,6 +173,143 @@ export const translatePromotion = async (
   return res.json();
 };
 
+/**
+ * Fire-and-forget: triggers durable translation of a single product's descriptions
+ * (and names via the extended orchestrator) to all non-English cultures.
+ * Mirrors pattern used by embellishProductDescriptions but scoped to one product.
+ */
+export const translateProductContent = (productModelIds: number[]) =>
+  startDurableFunction("TranslateProductDescriptions_HttpStart", {
+    ProductModelIds: productModelIds,
+  });
+
+// ── Category name translation (fire-and-forget) ────────────────────────────
+
+export interface CategoryTranslationPayload {
+  categoryId: number;
+  englishName: string;
+  type: "category" | "subcategory";
+}
+
+export interface CategoryTranslationResult {
+  success: boolean;
+  culturesProcessed: number;
+  message: string;
+}
+
+/**
+ * Fire-and-forget: translates a category/subcategory name to all non-English cultures.
+ */
+export const translateCategoryName = async (
+  payload: CategoryTranslationPayload,
+): Promise<CategoryTranslationResult> => {
+  const url = `${getFunctionsApiUrl()}/api/TranslateCategoryName`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `TranslateCategoryName HTTP ${res.status}${text ? `: ${text}` : ""}`,
+    );
+  }
+  return res.json();
+};
+
+// ── Category / Subcategory CRUD (via Azure Functions for ID generation) ─────
+
+export interface CreateCategoryResult {
+  success: boolean;
+  categoryId: number;
+  message: string;
+}
+
+export interface CreateSubcategoryResult {
+  success: boolean;
+  subcategoryId: number;
+  message: string;
+}
+
+export interface DeleteCategoryResult {
+  success: boolean;
+  message: string;
+}
+
+export const createCategory = async (
+  englishName: string,
+): Promise<CreateCategoryResult> => {
+  const url = `${getFunctionsApiUrl()}/api/CreateCategory`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ englishName }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `CreateCategory HTTP ${res.status}${text ? `: ${text}` : ""}`,
+    );
+  }
+  return res.json();
+};
+
+export const createSubcategory = async (
+  categoryId: number,
+  englishName: string,
+): Promise<CreateSubcategoryResult> => {
+  const url = `${getFunctionsApiUrl()}/api/CreateSubcategory`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ categoryId, englishName }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `CreateSubcategory HTTP ${res.status}${text ? `: ${text}` : ""}`,
+    );
+  }
+  return res.json();
+};
+
+export const deleteCategory = async (
+  categoryId: number,
+): Promise<DeleteCategoryResult> => {
+  const url = `${getFunctionsApiUrl()}/api/DeleteCategory`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ categoryId }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `DeleteCategory HTTP ${res.status}${text ? `: ${text}` : ""}`,
+    );
+  }
+  return res.json();
+};
+
+export const deleteSubcategory = async (
+  subcategoryId: number,
+): Promise<DeleteCategoryResult> => {
+  const url = `${getFunctionsApiUrl()}/api/DeleteSubcategory`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subcategoryId }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `DeleteSubcategory HTTP ${res.status}${text ? `: ${text}` : ""}`,
+    );
+  }
+  return res.json();
+};
+
 // ── Queue-based Functions (fire and forget, no status polling) ──────────────
 
 export const generateProductImages = (productIds?: number[]) =>

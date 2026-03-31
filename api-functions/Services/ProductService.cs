@@ -133,14 +133,17 @@ public class ProductService
                 pm.ProductModelID,
                 pd.ProductDescriptionID AS EnglishDescriptionID,
                 pd.Description AS EnglishDescription,
-                pm.Name AS ProductName
+                pm.Name AS ProductName,
+                MIN(p.ProductID) AS ProductID
             FROM Production.ProductDescription pd
             INNER JOIN Production.ProductModelProductDescriptionCulture pmpdc 
                 ON pd.ProductDescriptionID = pmpdc.ProductDescriptionID
             INNER JOIN Production.ProductModel pm 
                 ON pmpdc.ProductModelID = pm.ProductModelID
+            LEFT JOIN Production.Product p ON p.ProductModelID = pm.ProductModelID
             WHERE pmpdc.CultureID = 'en'
             AND pm.ProductModelID IN @ProductModelIds
+            GROUP BY pm.ProductModelID, pd.ProductDescriptionID, pd.Description, pm.Name
             ORDER BY pm.ProductModelID";
 
         var products = await connection.QueryAsync<TranslationRequest>(sql, new { ProductModelIds = productModelIds });
@@ -577,6 +580,128 @@ public class ProductService
         }
 
         return result.ToString();
+    }
+
+    // ── Product Name Translations ──────────────────────────────────────────
+    // Upserts translated product names into Production.ProductName per culture.
+
+    public async Task SaveProductNamesAsync(List<TranslatedProductName> names)
+    {
+        if (names == null || names.Count == 0) return;
+        using var connection = await GetConnectionAsync();
+
+        foreach (var item in names)
+        {
+            var upsertSql = @"
+                IF EXISTS (SELECT 1 FROM Production.ProductName WHERE ProductID = @ProductID AND CultureID = @CultureID)
+                    UPDATE Production.ProductName
+                    SET Name = @Name, ModifiedDate = GETDATE()
+                    WHERE ProductID = @ProductID AND CultureID = @CultureID
+                ELSE
+                    INSERT INTO Production.ProductName (ProductID, CultureID, Name, ModifiedDate)
+                    VALUES (@ProductID, @CultureID, @Name, GETDATE())";
+
+            await connection.ExecuteAsync(upsertSql, new
+            {
+                item.ProductID,
+                CultureID = item.CultureID.PadRight(6),
+                item.Name
+            });
+        }
+    }
+
+    // ── Category / Subcategory Management ─────────────────────────────────
+
+    public async Task<int> GetNextCategoryIdAsync()
+    {
+        using var connection = await GetConnectionAsync();
+        var maxId = await connection.QueryFirstOrDefaultAsync<int?>("SELECT MAX(ProductCategoryID) FROM Production.ProductCategory") ?? 0;
+        return maxId + 1;
+    }
+
+    public async Task<int> GetNextSubcategoryIdAsync()
+    {
+        using var connection = await GetConnectionAsync();
+        var maxId = await connection.QueryFirstOrDefaultAsync<int?>("SELECT MAX(ProductSubcategoryID) FROM Production.ProductSubcategory") ?? 0;
+        return maxId + 1;
+    }
+
+    public async Task InsertCategoryRowAsync(int categoryId, string cultureId, string name)
+    {
+        using var connection = await GetConnectionAsync();
+        var sql = @"
+            IF NOT EXISTS (SELECT 1 FROM Production.ProductCategory WHERE ProductCategoryID = @CategoryId AND CultureID = @CultureID)
+                INSERT INTO Production.ProductCategory (ProductCategoryID, CultureID, Name, ModifiedDate)
+                VALUES (@CategoryId, @CultureID, @Name, GETDATE())
+            ELSE
+                UPDATE Production.ProductCategory SET Name = @Name, ModifiedDate = GETDATE()
+                WHERE ProductCategoryID = @CategoryId AND CultureID = @CultureID";
+        await connection.ExecuteAsync(sql, new { CategoryId = categoryId, CultureID = cultureId.PadRight(6), Name = name });
+    }
+
+    public async Task InsertSubcategoryRowAsync(int subcategoryId, int categoryId, string cultureId, string name)
+    {
+        using var connection = await GetConnectionAsync();
+        var sql = @"
+            IF NOT EXISTS (SELECT 1 FROM Production.ProductSubcategory WHERE ProductSubcategoryID = @SubcategoryId AND CultureID = @CultureID)
+                INSERT INTO Production.ProductSubcategory (ProductSubcategoryID, ProductCategoryID, CultureID, Name, ModifiedDate)
+                VALUES (@SubcategoryId, @CategoryId, @CultureID, @Name, GETDATE())
+            ELSE
+                UPDATE Production.ProductSubcategory SET Name = @Name, ModifiedDate = GETDATE()
+                WHERE ProductSubcategoryID = @SubcategoryId AND CultureID = @CultureID";
+        await connection.ExecuteAsync(sql, new { SubcategoryId = subcategoryId, CategoryId = categoryId, CultureID = cultureId.PadRight(6), Name = name });
+    }
+
+    public async Task<bool> CategoryHasSubcategoriesAsync(int categoryId)
+    {
+        using var connection = await GetConnectionAsync();
+        var count = await connection.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(DISTINCT ProductSubcategoryID) FROM Production.ProductSubcategory WHERE ProductCategoryID = @CategoryId",
+            new { CategoryId = categoryId });
+        return count > 0;
+    }
+
+    public async Task<bool> SubcategoryHasProductsAsync(int subcategoryId)
+    {
+        using var connection = await GetConnectionAsync();
+        var count = await connection.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM Production.Product WHERE ProductSubcategoryID = @SubcategoryId",
+            new { SubcategoryId = subcategoryId });
+        return count > 0;
+    }
+
+    public async Task DeleteCategoryAsync(int categoryId)
+    {
+        using var connection = await GetConnectionAsync();
+        await connection.ExecuteAsync(
+            "DELETE FROM Production.ProductCategory WHERE ProductCategoryID = @CategoryId",
+            new { CategoryId = categoryId });
+    }
+
+    public async Task DeleteSubcategoryAsync(int subcategoryId)
+    {
+        using var connection = await GetConnectionAsync();
+        await connection.ExecuteAsync(
+            "DELETE FROM Production.ProductSubcategory WHERE ProductSubcategoryID = @SubcategoryId",
+            new { SubcategoryId = subcategoryId });
+    }
+
+    public async Task<List<CultureInfo>> GetAllCulturesAsync()
+    {
+        using var connection = await GetConnectionAsync();
+        var sql = "SELECT CultureID, Name FROM Production.Culture";
+        var cultures = await connection.QueryAsync<CultureInfo>(sql);
+        return cultures.ToList();
+    }
+
+    // Returns ProductID values for all products in a model (to enable name translation per product)
+    public async Task<List<int>> GetProductIdsByModelIdAsync(int productModelId)
+    {
+        using var connection = await GetConnectionAsync();
+        var ids = await connection.QueryAsync<int>(
+            "SELECT ProductID FROM Production.Product WHERE ProductModelID = @ModelId",
+            new { ModelId = productModelId });
+        return ids.ToList();
     }
 
 }

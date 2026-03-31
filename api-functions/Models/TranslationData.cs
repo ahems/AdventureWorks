@@ -8,6 +8,8 @@ public class TranslationRequest
     public int EnglishDescriptionID { get; set; }
     public string EnglishDescription { get; set; } = string.Empty;
     public string ProductName { get; set; } = string.Empty;
+    /// <summary>Optional: Product.ProductID for name translation (0 = skip name translation)</summary>
+    public int ProductID { get; set; }
 }
 
 public class TranslatedDescription
@@ -96,5 +98,62 @@ public class PromotionTranslationResult
 {
     public bool Success { get; set; }
     public int CulturesProcessed { get; set; }
+    public string Message { get; set; } = string.Empty;
+}
+
+// Category / Subcategory translation models
+
+public class CategoryTranslationRequest
+{
+    public int CategoryId { get; set; }
+    public string EnglishName { get; set; } = string.Empty;
+    /// <summary>"category" or "subcategory"</summary>
+    public string Type { get; set; } = "category";
+}
+
+public class CategoryTranslationResult
+{
+    public bool Success { get; set; }
+    public int CulturesProcessed { get; set; }
+    public string Message { get; set; } = string.Empty;
+}
+
+// Product name translation result
+
+public class TranslatedProductName
+{
+    public int ProductID { get; set; }
+    public string CultureID { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+}
+
+// Category management request/response models
+
+public class CreateCategoryRequest
+{
+    public string EnglishName { get; set; } = string.Empty;
+}
+
+public class CreateSubcategoryRequest
+{
+    public int CategoryId { get; set; }
+    public string EnglishName { get; set; } = string.Empty;
+}
+
+public class DeleteEntityRequest
+{
+    public int Id { get; set; }
+}
+
+public class CreateEntityResult
+{
+    public bool Success { get; set; }
+    public int Id { get; set; }
+    public string Message { get; set; } = string.Empty;
+}
+
+public class DeleteEntityResult
+{
+    public bool Success { get; set; }
     public string Message { get; set; } = string.Empty;
 }

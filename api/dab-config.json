@@ -351,7 +351,15 @@
           "role": "anonymous",
           "actions": ["*"]
         }
-      ]
+      ],
+      "relationships": {
+        "productDescription": {
+          "cardinality": "one",
+          "target.entity": "ProductDescription",
+          "source.fields": ["ProductDescriptionID"],
+          "target.fields": ["ProductDescriptionID"]
+        }
+      }
     },
     "ProductSearch": {
       "source": {

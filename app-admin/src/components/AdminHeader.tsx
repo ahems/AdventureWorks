@@ -20,6 +20,7 @@ import {
   Wrench,
   Mic,
   Bot,
+  FolderOpen,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -142,11 +143,18 @@ const AdminHeader: React.FC = () => {
           {isAuthenticated && (
             <nav className="hidden md:flex items-center gap-5">
               <Link
-                to="/category/1"
-                className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors flex items-center gap-1 ${location.pathname.startsWith("/category") || location.pathname.startsWith("/product") ? "squiggle" : ""}`}
+                to="/products"
+                className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors flex items-center gap-1 ${location.pathname.startsWith("/products") || location.pathname.startsWith("/categories") || location.pathname.startsWith("/category") || location.pathname.startsWith("/product") ? "squiggle" : ""}`}
               >
                 <Package className="w-4 h-4" />
                 Products
+              </Link>
+              <Link
+                to="/categories"
+                className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors flex items-center gap-1 ${location.pathname.startsWith("/categories") ? "squiggle" : ""}`}
+              >
+                <FolderOpen className="w-4 h-4" />
+                Categories
               </Link>
               <Link
                 to="/customers"
@@ -299,11 +307,18 @@ const AdminHeader: React.FC = () => {
           <nav className="md:hidden py-4 border-t-2 border-doodle-text border-dashed">
             <div className="flex flex-col gap-3">
               <Link
-                to="/category/1"
+                to="/products"
                 className="font-doodle text-lg text-doodle-text hover:text-doodle-accent py-2"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 * Products
+              </Link>
+              <Link
+                to="/categories"
+                className="font-doodle text-lg text-doodle-text hover:text-doodle-accent py-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                * Categories
               </Link>
               <Link
                 to="/customers"

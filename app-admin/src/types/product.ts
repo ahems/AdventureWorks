@@ -10,10 +10,17 @@ export interface Product {
   ProductNumber: string;
   Color: string | null;
   ListPrice: number;
+  StandardCost: number;
   Size: string | null;
   Weight: number | null;
+  ProductLine: string | null;
+  Class: string | null;
+  Style: string | null;
   ProductSubcategoryID: number | null;
   ProductModelID: number | null;
+  SellStartDate: string | null;
+  SellEndDate: string | null;
+  DiscontinuedDate: string | null;
   Description?: string;
   ImageUrl?: string;
   salePercent?: number; // Optional discount percentage (e.g., 20 for 20% off)
@@ -35,13 +42,16 @@ export const getSalePrice = (product: Product): number | null => {
 export const isVariantAvailable = (
   product: Product,
   selectedSize?: string,
-  selectedColor?: string
+  selectedColor?: string,
 ): boolean => {
-  if (!product.unavailableVariants || product.unavailableVariants.length === 0) {
+  if (
+    !product.unavailableVariants ||
+    product.unavailableVariants.length === 0
+  ) {
     return true;
   }
 
-  return !product.unavailableVariants.some(variant => {
+  return !product.unavailableVariants.some((variant) => {
     const sizeMatch = !variant.size || variant.size === selectedSize;
     const colorMatch = !variant.color || variant.color === selectedColor;
     return sizeMatch && colorMatch;

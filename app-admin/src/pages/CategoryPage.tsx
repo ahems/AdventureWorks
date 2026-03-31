@@ -13,6 +13,7 @@ import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import AdminProductCard from "@/components/AdminProductCard";
 import AdminProductCardSkeleton from "@/components/AdminProductCardSkeleton";
+import CreateProductDialog from "@/components/CreateProductDialog";
 import { useAuth } from "@/context/AuthContext";
 import { useAdminReviews } from "@/hooks/useAdminReviews";
 import {
@@ -20,6 +21,7 @@ import {
   useAdminSubcategoriesByCategory,
   useAdminProductsBySubcategory,
   useAdminProductsBySubcategoryIds,
+  useAdminProductPhotoBatch,
 } from "@/hooks/useAdminProducts";
 import {
   Select,
@@ -30,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Product } from "@/types/product";
 import { getAppUrl } from "@/lib/utils";
+import { Plus } from "lucide-react";
 
 const ITEMS_PER_PAGE_OPTIONS = [6, 12, 24, 48];
 
@@ -154,6 +157,22 @@ const CategoryPage: React.FC = () => {
   const endIndex = startIndex + itemsPerPage;
   const paginatedProducts = allProducts.slice(startIndex, endIndex);
 
+  // Fetch primary thumbnail for each visible product and attach as ImageUrl
+  const paginatedProductIds = React.useMemo(
+    () => paginatedProducts.map((p) => p.ProductID),
+    [paginatedProducts],
+  );
+  const { data: photoMap = new Map<number, string>() } =
+    useAdminProductPhotoBatch(paginatedProductIds);
+  const paginatedProductsWithImages = React.useMemo(
+    () =>
+      paginatedProducts.map((p) => ({
+        ...p,
+        ImageUrl: photoMap.get(p.ProductID) ?? p.ImageUrl,
+      })),
+    [paginatedProducts, photoMap],
+  );
+
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -236,6 +255,17 @@ const CategoryPage: React.FC = () => {
               {allProducts.length} product{allProducts.length !== 1 ? "s" : ""}{" "}
               • Click any product to edit
             </p>
+            <div className="mt-4">
+              <CreateProductDialog
+                defaultCategoryId={
+                  categoryId ? parseInt(categoryId) : undefined
+                }
+                defaultSubcategoryId={
+                  selectedSubcategory ?? subcategories[0]?.ProductSubcategoryID
+                }
+                subcategories={subcategories}
+              />
+            </div>
           </div>
         </section>
 
@@ -356,9 +386,9 @@ const CategoryPage: React.FC = () => {
                     <AdminProductCardSkeleton key={i} />
                   ))}
                 </div>
-              ) : paginatedProducts.length > 0 ? (
+              ) : paginatedProductsWithImages.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {paginatedProducts.map((product) => (
+                  {paginatedProductsWithImages.map((product) => (
                     <AdminProductCard
                       key={product.ProductID}
                       product={product}

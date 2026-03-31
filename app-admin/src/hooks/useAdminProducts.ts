@@ -122,6 +122,9 @@ const GET_PRODUCT_BY_ID_ADMIN = gql`
         StandardCost
         Size
         Weight
+        ProductLine
+        Class
+        Style
         ProductSubcategoryID
         ProductModelID
         SellStartDate
@@ -335,7 +338,7 @@ const CREATE_PRODUCT_PHOTO = gql`
     $thumbFilename: String
     $largePhoto: String
     $largeFilename: String
-    $modifiedDate: String!
+    $modifiedDate: DateTime!
   ) {
     createProductPhoto(
       item: {
@@ -356,7 +359,7 @@ const CREATE_PRODUCT_PRODUCT_PHOTO = gql`
     $productId: Int!
     $photoId: Int!
     $primary: Boolean!
-    $modifiedDate: String!
+    $modifiedDate: DateTime!
   ) {
     createProductProductPhoto(
       item: {
@@ -438,6 +441,540 @@ export const useDeleteProductPhoto = () => {
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({
         queryKey: ["product", "photos", vars.productId],
+      });
+    },
+  });
+};
+
+// ─── Batch Photo Fetch (for product lists) ────────────────────────────────────
+
+const GET_PRODUCT_PHOTOS_BATCH = gql`
+  query GetProductPhotosBatch($productIds: [Int!]!) {
+    productProductPhotos(
+      filter: {
+        and: [{ ProductID: { in: $productIds } }, { Primary: { eq: true } }]
+      }
+    ) {
+      items {
+        ProductID
+        productPhoto {
+          ThumbNailPhoto
+          ThumbnailPhotoFileName
+        }
+      }
+    }
+  }
+`;
+
+export const useAdminProductPhotoBatch = (productIds: number[]) =>
+  useQuery<Map<number, string>>({
+    queryKey: ["admin", "photos", "batch", [...productIds].sort().join(",")],
+    queryFn: async () => {
+      const data = await graphqlClient.request<{
+        productProductPhotos?: {
+          items: Array<{
+            ProductID: number;
+            productPhoto: { ThumbNailPhoto: string | null } | null;
+          }>;
+        };
+      }>(GET_PRODUCT_PHOTOS_BATCH, { productIds });
+      const map = new Map<number, string>();
+      for (const item of data.productProductPhotos?.items ?? []) {
+        if (item.productPhoto?.ThumbNailPhoto) {
+          map.set(
+            item.ProductID,
+            `data:image/jpeg;base64,${item.productPhoto.ThumbNailPhoto}`,
+          );
+        }
+      }
+      return map;
+    },
+    enabled: productIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+// ─── English Product Description ─────────────────────────────────────────────
+
+const GET_PRODUCT_DESCRIPTION_BY_MODEL = gql`
+  query GetProductDescriptionByModel($modelId: Int!) {
+    productModelProductDescriptionCultures(
+      filter: {
+        and: [{ ProductModelID: { eq: $modelId } }, { CultureID: { eq: "en" } }]
+      }
+    ) {
+      items {
+        ProductModelID
+        ProductDescriptionID
+        productDescription {
+          ProductDescriptionID
+          Description
+        }
+      }
+    }
+  }
+`;
+
+export interface EnglishDescriptionResult {
+  productDescriptionId: number | null;
+  description: string;
+}
+
+export const useAdminProductEnglishDescription = (
+  productModelId: number | null,
+) =>
+  useQuery<EnglishDescriptionResult>({
+    queryKey: ["admin", "description", "en", productModelId],
+    queryFn: async () => {
+      const data = await graphqlClient.request<{
+        productModelProductDescriptionCultures?: {
+          items: Array<{
+            ProductModelID: number;
+            ProductDescriptionID: number;
+            productDescription: {
+              ProductDescriptionID: number;
+              Description: string;
+            } | null;
+          }>;
+        };
+      }>(GET_PRODUCT_DESCRIPTION_BY_MODEL, { modelId: productModelId });
+      const item = data.productModelProductDescriptionCultures?.items?.[0];
+      return {
+        productDescriptionId: item?.ProductDescriptionID ?? null,
+        description: item?.productDescription?.Description ?? "",
+      };
+    },
+    enabled: !!productModelId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+// ─── Update Product ───────────────────────────────────────────────────────────
+
+const UPDATE_PRODUCT = gql`
+  mutation UpdateProduct(
+    $id: Int!
+    $name: String!
+    $listPrice: Decimal!
+    $standardCost: Decimal!
+    $color: String
+    $size: String
+    $weight: Decimal
+    $productLine: String
+    $class: String
+    $style: String
+    $productSubcategoryId: Int
+    $modifiedDate: DateTime!
+  ) {
+    updateProduct(
+      ProductID: $id
+      item: {
+        Name: $name
+        ListPrice: $listPrice
+        StandardCost: $standardCost
+        Color: $color
+        Size: $size
+        Weight: $weight
+        ProductLine: $productLine
+        Class: $class
+        Style: $style
+        ProductSubcategoryID: $productSubcategoryId
+        ModifiedDate: $modifiedDate
+      }
+    ) {
+      ProductID
+      Name
+      ListPrice
+      StandardCost
+      Color
+      Size
+      Weight
+      ProductLine
+      Class
+      Style
+    }
+  }
+`;
+
+export const useUpdateProduct = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: {
+      ProductID: number;
+      Name: string;
+      ListPrice: number;
+      StandardCost: number;
+      Color?: string | null;
+      Size?: string | null;
+      Weight?: number | null;
+      ProductLine?: string | null;
+      Class?: string | null;
+      Style?: string | null;
+      ProductSubcategoryID?: number | null;
+    }) => {
+      await graphqlClient.request(UPDATE_PRODUCT, {
+        id: vars.ProductID,
+        name: vars.Name,
+        listPrice: vars.ListPrice,
+        standardCost: vars.StandardCost,
+        color: vars.Color ?? null,
+        size: vars.Size ?? null,
+        weight: vars.Weight ?? null,
+        productLine: vars.ProductLine ?? null,
+        class: vars.Class ?? null,
+        style: vars.Style ?? null,
+        productSubcategoryId: vars.ProductSubcategoryID ?? null,
+        modifiedDate: new Date().toISOString(),
+      });
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "product", vars.ProductID],
+      });
+      queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
+    },
+  });
+};
+
+// ─── Update/Create Product Description ───────────────────────────────────────
+
+const UPDATE_PRODUCT_DESCRIPTION = gql`
+  mutation UpdateProductDescription(
+    $id: Int!
+    $description: String!
+    $modifiedDate: DateTime!
+  ) {
+    updateProductDescription(
+      ProductDescriptionID: $id
+      item: { Description: $description, ModifiedDate: $modifiedDate }
+    ) {
+      ProductDescriptionID
+      Description
+    }
+  }
+`;
+
+const CREATE_PRODUCT_DESCRIPTION_MUTATION = gql`
+  mutation CreateProductDescriptionMut(
+    $description: String!
+    $modifiedDate: DateTime!
+  ) {
+    createProductDescription(
+      item: { Description: $description, ModifiedDate: $modifiedDate }
+    ) {
+      ProductDescriptionID
+    }
+  }
+`;
+
+const CREATE_PRODUCT_MODEL_CULTURE_LINK = gql`
+  mutation CreateProductModelCultureLink(
+    $productModelId: Int!
+    $productDescriptionId: Int!
+    $cultureId: String!
+    $modifiedDate: DateTime!
+  ) {
+    createProductModelProductDescriptionCulture(
+      item: {
+        ProductModelID: $productModelId
+        ProductDescriptionID: $productDescriptionId
+        CultureID: $cultureId
+        ModifiedDate: $modifiedDate
+      }
+    ) {
+      ProductModelID
+      ProductDescriptionID
+      CultureID
+    }
+  }
+`;
+
+export const useUpdateProductDescription = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: {
+      productModelId: number;
+      productDescriptionId: number | null;
+      description: string;
+    }) => {
+      const modifiedDate = new Date().toISOString();
+      if (vars.productDescriptionId) {
+        await graphqlClient.request(UPDATE_PRODUCT_DESCRIPTION, {
+          id: vars.productDescriptionId,
+          description: vars.description,
+          modifiedDate,
+        });
+        return vars.productDescriptionId;
+      } else {
+        const createResult = await graphqlClient.request<{
+          createProductDescription: { ProductDescriptionID: number };
+        }>(CREATE_PRODUCT_DESCRIPTION_MUTATION, {
+          description: vars.description,
+          modifiedDate,
+        });
+        const newId =
+          createResult.createProductDescription.ProductDescriptionID;
+        await graphqlClient.request(CREATE_PRODUCT_MODEL_CULTURE_LINK, {
+          productModelId: vars.productModelId,
+          productDescriptionId: newId,
+          cultureId: "en",
+          modifiedDate,
+        });
+        return newId;
+      }
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "description", "en", vars.productModelId],
+      });
+    },
+  });
+};
+
+// ─── Create Product ───────────────────────────────────────────────────────────
+
+const CREATE_PRODUCT_MUTATION = gql`
+  mutation CreateProductMut(
+    $name: String!
+    $productNumber: String!
+    $listPrice: Decimal!
+    $standardCost: Decimal!
+    $productSubcategoryId: Int!
+    $safetyStockLevel: Short!
+    $reorderPoint: Short!
+    $daysToManufacture: Int!
+    $sellStartDate: DateTime!
+    $modifiedDate: DateTime!
+    $color: String
+    $size: String
+    $weight: Decimal
+    $productLine: String
+    $class: String
+    $style: String
+  ) {
+    createProduct(
+      item: {
+        Name: $name
+        ProductNumber: $productNumber
+        ListPrice: $listPrice
+        StandardCost: $standardCost
+        ProductSubcategoryID: $productSubcategoryId
+        SafetyStockLevel: $safetyStockLevel
+        ReorderPoint: $reorderPoint
+        DaysToManufacture: $daysToManufacture
+        FinishedGoodsFlag: true
+        MakeFlag: false
+        SellStartDate: $sellStartDate
+        ModifiedDate: $modifiedDate
+        Color: $color
+        Size: $size
+        Weight: $weight
+        ProductLine: $productLine
+        Class: $class
+        Style: $style
+      }
+    ) {
+      ProductID
+      Name
+    }
+  }
+`;
+
+const CREATE_PRODUCT_INVENTORY = gql`
+  mutation CreateProductInventory(
+    $productId: Int!
+    $quantity: Short
+    $modifiedDate: DateTime!
+  ) {
+    createProductInventory(
+      item: {
+        ProductID: $productId
+        LocationID: 1
+        Shelf: "N/A"
+        Bin: 0
+        Quantity: $quantity
+        ModifiedDate: $modifiedDate
+      }
+    ) {
+      ProductID
+      LocationID
+      Quantity
+    }
+  }
+`;
+
+export interface CreateProductVars {
+  Name: string;
+  ProductNumber: string;
+  ListPrice: number;
+  StandardCost: number;
+  ProductSubcategoryID: number;
+  SafetyStockLevel?: number;
+  ReorderPoint?: number;
+  DaysToManufacture?: number;
+  SellStartDate?: string;
+  Color?: string | null;
+  Size?: string | null;
+  Weight?: number | null;
+  ProductLine?: string | null;
+  Class?: string | null;
+  Style?: string | null;
+  InitialQuantity?: number;
+}
+
+export const useCreateProduct = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: CreateProductVars) => {
+      const modifiedDate = new Date().toISOString();
+      const result = await graphqlClient.request<{
+        createProduct: { ProductID: number; Name: string };
+      }>(CREATE_PRODUCT_MUTATION, {
+        name: vars.Name,
+        productNumber: vars.ProductNumber,
+        listPrice: vars.ListPrice,
+        standardCost: vars.StandardCost,
+        productSubcategoryId: vars.ProductSubcategoryID,
+        safetyStockLevel: vars.SafetyStockLevel ?? 100,
+        reorderPoint: vars.ReorderPoint ?? 75,
+        daysToManufacture: vars.DaysToManufacture ?? 0,
+        sellStartDate: vars.SellStartDate ?? modifiedDate,
+        modifiedDate,
+        color: vars.Color ?? null,
+        size: vars.Size ?? null,
+        weight: vars.Weight ?? null,
+        productLine: vars.ProductLine ?? null,
+        class: vars.Class ?? null,
+        style: vars.Style ?? null,
+      });
+      const productId = result.createProduct.ProductID;
+      // Create an inventory record at the default location (ID=1)
+      await graphqlClient.request(CREATE_PRODUCT_INVENTORY, {
+        productId,
+        quantity: vars.InitialQuantity ?? 0,
+        modifiedDate,
+      });
+      return result.createProduct;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
+    },
+  });
+};
+
+// ─── Category / Subcategory counts ────────────────────────────────────────────
+// Used by Products landing page and Categories management page
+
+export const useAdminProductCountsBySubcategory = (subcategoryIds: number[]) =>
+  useQuery<Map<number, number>>({
+    queryKey: ["admin", "productcounts", [...subcategoryIds].sort().join(",")],
+    queryFn: async () => {
+      if (subcategoryIds.length === 0) return new Map();
+      const data = await graphqlClient.request<{
+        products?: { items: Array<{ ProductSubcategoryID: number | null }> };
+      }>(
+        gql`
+          query GetProductCountsBySubcat($ids: [Int!]!) {
+            products(
+              first: 1000
+              filter: {
+                and: [
+                  { FinishedGoodsFlag: { eq: true } }
+                  { ProductSubcategoryID: { in: $ids } }
+                ]
+              }
+            ) {
+              items {
+                ProductSubcategoryID
+              }
+            }
+          }
+        `,
+        { ids: subcategoryIds },
+      );
+      const map = new Map<number, number>();
+      for (const p of data.products?.items ?? []) {
+        if (p.ProductSubcategoryID != null) {
+          map.set(
+            p.ProductSubcategoryID,
+            (map.get(p.ProductSubcategoryID) ?? 0) + 1,
+          );
+        }
+      }
+      return map;
+    },
+    enabled: subcategoryIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+// ─── Product Inventory ────────────────────────────────────────────────────────
+
+const GET_PRODUCT_INVENTORY = gql`
+  query GetProductInventory($productId: Int!) {
+    productInventories(filter: { ProductID: { eq: $productId } }) {
+      items {
+        ProductID
+        LocationID
+        Quantity
+      }
+    }
+  }
+`;
+
+const UPDATE_PRODUCT_INVENTORY = gql`
+  mutation UpdateProductInventory(
+    $productId: Int!
+    $locationId: Short!
+    $quantity: Short
+    $modifiedDate: DateTime!
+  ) {
+    updateProductInventory(
+      ProductID: $productId
+      LocationID: $locationId
+      item: { Quantity: $quantity, ModifiedDate: $modifiedDate }
+    ) {
+      ProductID
+      LocationID
+      Quantity
+    }
+  }
+`;
+
+export interface ProductInventoryRecord {
+  ProductID: number;
+  LocationID: number;
+  Quantity: number;
+}
+
+export const useProductInventory = (productId: number) =>
+  useQuery<ProductInventoryRecord[]>({
+    queryKey: ["admin", "inventory", productId],
+    queryFn: async () => {
+      const data = await graphqlClient.request<{
+        productInventories?: { items: ProductInventoryRecord[] };
+      }>(GET_PRODUCT_INVENTORY, { productId });
+      return data.productInventories?.items ?? [];
+    },
+    enabled: !!productId,
+    staleTime: 2 * 60 * 1000,
+  });
+
+export const useUpdateProductInventory = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: {
+      productId: number;
+      locationId: number;
+      quantity: number;
+    }) => {
+      await graphqlClient.request(UPDATE_PRODUCT_INVENTORY, {
+        productId: vars.productId,
+        locationId: vars.locationId,
+        quantity: vars.quantity,
+        modifiedDate: new Date().toISOString(),
+      });
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "inventory", vars.productId],
       });
     },
   });
