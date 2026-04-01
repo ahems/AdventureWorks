@@ -1586,6 +1586,153 @@ Return ONLY a valid JSON array. No markdown fences, no explanation.";
             }
         };
     }
+
+    public async Task<GenerateProductContentResponse> GenerateProductContentAsync(
+        GenerateProductContentRequest request)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("GenerateProductContent");
+        operation.Telemetry.Properties["Category"] = request.Category;
+        operation.Telemetry.Properties["Subcategory"] = request.Subcategory;
+
+        try
+        {
+            var credential = new DefaultAzureCredential();
+            var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+            var chatClient = client.GetChatClient(_deploymentName);
+
+            var productLine = string.IsNullOrWhiteSpace(request.ProductLine) ? "N/A" : request.ProductLine;
+            var productClass = string.IsNullOrWhiteSpace(request.Class) ? "N/A" : request.Class;
+            var style = string.IsNullOrWhiteSpace(request.Style) ? "N/A" : request.Style;
+
+            var prompt = $@"You are a creative product copywriter for the fictional AdventureWorks e‑commerce brand.
+
+Context:
+This is a demo online shop and Admin system based on the AdventureWorks sample dataset. The tone should feel realistic and professional enough to belong on a real retail website, but also playful, witty, and light‑hearted to emphasize that this is a demo and the products are fictional.
+
+Your task:
+Generate a fun, creative Product Name and a compelling Product Description based on the provided product attributes.
+
+Guidelines:
+• The product name should sound like a premium or enthusiast retail product
+• Avoid real-world trademarks or real brand names
+• Keep it whimsical, witty, and imaginative without becoming absurd
+• The description should be engaging, readable, and marketing-friendly
+• Focus on the *experience* and *personality* of the product, not raw technical specs
+• Use confident, playful language that fits an outdoor / cycling lifestyle brand
+• Do NOT mention that the product is fictional, demo data, or AI-generated
+• Do NOT include pricing, SKU, or inventory details
+• Write in US English
+• Length:
+  – Product Name: 2–5 words
+  – Description: 2 short paragraphs or 4–6 sentences total
+
+Inputs:
+Category: {request.Category}
+Subcategory: {request.Subcategory}
+Product Line (optional): {productLine}
+Class (optional): {productClass}
+Style (optional): {style}
+
+Output format (STRICT — do not add extra text):
+
+Product Name:
+<generated product name>
+
+Product Description:
+<generated product description>";
+
+            var messages = new List<ChatMessage>
+            {
+                new UserChatMessage(prompt)
+            };
+
+            ChatCompletion response;
+            using (var depOperation = _telemetryClient.StartOperation<DependencyTelemetry>("GenerateProductContent"))
+            {
+                depOperation.Telemetry.Type = "OpenAI";
+                depOperation.Telemetry.Target = "OpenAI";
+                depOperation.Telemetry.Data = "ChatCompletion";
+
+                try
+                {
+                    response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+                    {
+                        Temperature = 0.9f,
+                        MaxOutputTokenCount = 500
+                    });
+                    depOperation.Telemetry.Success = true;
+                }
+                catch
+                {
+                    depOperation.Telemetry.Success = false;
+                    throw;
+                }
+            }
+
+            _telemetryClient.TrackMetric("AI.GenerateProductContent.InputTokens", response.Usage?.InputTokenCount ?? 0);
+            _telemetryClient.TrackMetric("AI.GenerateProductContent.OutputTokens", response.Usage?.OutputTokenCount ?? 0);
+
+            var content = response.Content[0].Text ?? string.Empty;
+
+            // Parse "Product Name:\n<name>\n\nProduct Description:\n<description>"
+            var nameMarker = "Product Name:";
+            var descMarker = "Product Description:";
+
+            var nameIdx = content.IndexOf(nameMarker, StringComparison.OrdinalIgnoreCase);
+            var descIdx = content.IndexOf(descMarker, StringComparison.OrdinalIgnoreCase);
+
+            var productName = string.Empty;
+            var productDescription = string.Empty;
+
+            if (nameIdx >= 0 && descIdx > nameIdx)
+            {
+                productName = content
+                    .Substring(nameIdx + nameMarker.Length, descIdx - nameIdx - nameMarker.Length)
+                    .Trim();
+                productDescription = content
+                    .Substring(descIdx + descMarker.Length)
+                    .Trim();
+            }
+            else if (nameIdx >= 0)
+            {
+                productName = content.Substring(nameIdx + nameMarker.Length).Trim();
+            }
+            else
+            {
+                // Fallback: use entire response as description
+                productDescription = content.Trim();
+            }
+
+            _logger.LogInformation(
+                "GenerateProductContent: Category={Category}, Subcategory={Subcategory}, Name={Name}",
+                request.Category, request.Subcategory, productName);
+
+            _telemetryClient.TrackEvent("GenerateProductContent.Completed", new Dictionary<string, string>
+            {
+                ["Category"] = request.Category,
+                ["Subcategory"] = request.Subcategory,
+                ["ProductName"] = productName
+            });
+
+            operation.Telemetry.Success = true;
+            return new GenerateProductContentResponse
+            {
+                ProductName = productName,
+                ProductDescription = productDescription
+            };
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string>
+            {
+                ["Operation"] = "GenerateProductContent",
+                ["Category"] = request.Category,
+                ["Subcategory"] = request.Subcategory
+            });
+            throw;
+        }
+    }
 }
 
 public class RegionalInfo

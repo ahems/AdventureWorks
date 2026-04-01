@@ -78,6 +78,21 @@ public class ProductPhotoData
     public bool IsPrimary { get; set; }
 }
 
+public class GenerateProductContentRequest
+{
+    public string Category { get; set; } = string.Empty;
+    public string Subcategory { get; set; } = string.Empty;
+    public string? ProductLine { get; set; }
+    public string? Class { get; set; }
+    public string? Style { get; set; }
+}
+
+public class GenerateProductContentResponse
+{
+    public string ProductName { get; set; } = string.Empty;
+    public string ProductDescription { get; set; } = string.Empty;
+}
+
 public class ProductPhotoThumbnailData
 {
     public int ProductPhotoID { get; set; }

@@ -9,6 +9,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Layers,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import {
   useCreateProduct,
@@ -30,6 +32,7 @@ import {
   generateVariations,
   type VariationRow,
 } from "@/lib/variation-generator";
+import { generateProductContent } from "@/services/utilityService";
 
 /** Generate a short GUID-derived SKU safe for the 25-char DB column. */
 const generateSku = (): string => {
@@ -58,6 +61,7 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [weightUnit, setWeightUnit] = useState<"lb" | "kg">("lb");
 
   // ── Variation wizard state ────────────────────────────────────────────────
@@ -147,6 +151,61 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
 
   const createProduct = useCreateProduct();
   const createBatch = useCreateProductBatch();
+
+  const handleGenerateWithAI = async () => {
+    const category = categories.find(
+      (c) => c.ProductCategoryID === selectedCategoryId,
+    )?.Name;
+    const subcategory = filteredSubcategories.find(
+      (s) => s.ProductSubcategoryID.toString() === form.ProductSubcategoryID,
+    )?.Name;
+    if (!category || !subcategory) return;
+
+    const productLineLabel =
+      PRODUCT_LINES.find((pl) => pl.value === form.ProductLine)?.label ||
+      form.ProductLine ||
+      undefined;
+    const classLabel =
+      PRODUCT_CLASSES.find((pc) => pc.value === form.Class)?.label ||
+      form.Class ||
+      undefined;
+    const styleLabel =
+      PRODUCT_STYLES.find((ps) => ps.value === form.Style)?.label ||
+      form.Style ||
+      undefined;
+
+    setIsGenerating(true);
+    try {
+      const result = await generateProductContent({
+        category,
+        subcategory,
+        productLine: productLineLabel ?? null,
+        class_: classLabel ?? null,
+        style: styleLabel ?? null,
+      });
+      setForm((prev) => ({
+        ...prev,
+        Name: result.productName,
+        Description: result.productDescription,
+      }));
+      toast({
+        title: "AI Content Generated",
+        description:
+          "Product name and description have been filled in. Feel free to edit them.",
+      });
+    } catch (err) {
+      toast({
+        title: "Generation Failed",
+        description:
+          err instanceof Error
+            ? err.message
+            : "Could not generate product content.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   const handleOpen = () => {
     setSelectedCategoryId(defaultCategoryId ?? "");
@@ -701,6 +760,36 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
             ))}
           </select>
         </div>
+      </div>
+
+      {/* Generate using AI */}
+      <div className="flex items-start gap-3 p-3 rounded border border-dashed border-doodle-blue bg-blue-50/50 dark:bg-blue-900/10">
+        <Sparkles className="w-5 h-5 text-doodle-blue mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="font-doodle text-sm font-semibold text-doodle-blue">
+            Generate using AI
+          </p>
+          <p className="text-xs text-doodle-text/60 mt-0.5">
+            Category and Subcategory are required. Product Line, Class, and
+            Style improve results.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleGenerateWithAI}
+          disabled={
+            isGenerating || !selectedCategoryId || !form.ProductSubcategoryID
+          }
+          className="doodle-button doodle-button-primary flex items-center gap-1.5 px-3 py-1.5 text-sm shrink-0 disabled:opacity-50"
+          data-testid="generate-ai-btn"
+        >
+          {isGenerating ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Sparkles className="w-4 h-4" />
+          )}
+          {isGenerating ? "Generating…" : "Generate"}
+        </button>
       </div>
 
       {/* Description */}

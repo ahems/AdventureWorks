@@ -318,6 +318,45 @@ export const generateProductImages = (productIds?: number[]) =>
     productIds?.length ? { ProductIds: productIds } : undefined,
   );
 
+// ── AI Product Content Generation ─────────────────────────────────────────
+
+export interface GenerateProductContentRequest {
+  category: string;
+  subcategory: string;
+  productLine?: string | null;
+  class_?: string | null;
+  style?: string | null;
+}
+
+export interface GenerateProductContentResponse {
+  productName: string;
+  productDescription: string;
+}
+
+export const generateProductContent = async (
+  request: GenerateProductContentRequest,
+): Promise<GenerateProductContentResponse> => {
+  const url = `${getFunctionsApiUrl()}/api/products/generate-content`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      category: request.category,
+      subcategory: request.subcategory,
+      productLine: request.productLine ?? null,
+      class: request.class_ ?? null,
+      style: request.style ?? null,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `GenerateProductContent HTTP ${res.status}${text ? `: ${text}` : ""}`,
+    );
+  }
+  return res.json();
+};
+
 // ── Status management for Durable Functions ────────────────────────────────
 
 /**
