@@ -860,6 +860,64 @@ export const useCreateProduct = () => {
   });
 };
 
+// ─── Create Product Batch (for variation wizard) ──────────────────────────────
+
+export interface BatchProgress {
+  completed: number;
+  total: number;
+}
+
+export const useCreateProductBatch = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      items,
+      onProgress,
+    }: {
+      items: CreateProductVars[];
+      onProgress?: (p: BatchProgress) => void;
+    }) => {
+      const results: Array<{ ProductID: number; Name: string }> = [];
+      for (let i = 0; i < items.length; i++) {
+        const vars = items[i];
+        const modifiedDate = new Date().toISOString();
+        const result = await graphqlClient.request<{
+          createProduct: { ProductID: number; Name: string };
+        }>(CREATE_PRODUCT_MUTATION, {
+          name: vars.Name,
+          productNumber: vars.ProductNumber,
+          listPrice: vars.ListPrice,
+          standardCost: vars.StandardCost,
+          productSubcategoryId: vars.ProductSubcategoryID,
+          safetyStockLevel: vars.SafetyStockLevel ?? 100,
+          reorderPoint: vars.ReorderPoint ?? 75,
+          daysToManufacture: vars.DaysToManufacture ?? 0,
+          sellStartDate: vars.SellStartDate ?? modifiedDate,
+          modifiedDate,
+          color: vars.Color ?? null,
+          size: vars.Size ?? null,
+          weight: vars.Weight ?? null,
+          productLine: vars.ProductLine ?? null,
+          class: vars.Class ?? null,
+          style: vars.Style ?? null,
+        });
+        const productId = result.createProduct.ProductID;
+        await graphqlClient.request(CREATE_PRODUCT_INVENTORY, {
+          productId,
+          quantity: vars.InitialQuantity ?? 0,
+          modifiedDate,
+        });
+        results.push(result.createProduct);
+        onProgress?.({ completed: i + 1, total: items.length });
+      }
+      return results;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
+    },
+  });
+};
+
 // ─── Category / Subcategory counts ────────────────────────────────────────────
 // Used by Products landing page and Categories management page
 

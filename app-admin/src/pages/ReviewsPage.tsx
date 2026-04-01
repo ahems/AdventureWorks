@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   Star,
@@ -29,12 +29,17 @@ import Footer from "@/components/Footer";
 import { useAuth } from "@/context/AuthContext";
 import {
   useAdminReviews,
+  useAdminReviewsByProduct,
   useReviewTotalCount,
   approveReview,
   submitReply,
   deleteReview,
 } from "@/hooks/useAdminReviews";
-import { useAdminAllProducts } from "@/hooks/useAdminProducts";
+import {
+  useAdminAllProducts,
+  useAdminCategories,
+  useAdminAllSubcategories,
+} from "@/hooks/useAdminProducts";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,10 +97,24 @@ const ReviewsPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
   const [dabCursor, setDabCursor] = useState<string | null>(null);
   const [cursorStack, setCursorStack] = useState<string[]>([]);
-  const { data: apiData, isLoading: reviewsLoading } =
-    useAdminReviews(dabCursor);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlProductId = searchParams.get("productId");
+  const urlProductIdNum = urlProductId ? parseInt(urlProductId, 10) : null;
+
+  // When a specific product is selected via URL, use a server-side filtered query
+  // so we get ALL reviews for that product (not just the current cursor page).
+  const { data: productApiData, isLoading: productReviewsLoading } =
+    useAdminReviewsByProduct(urlProductIdNum);
+  const { data: apiData, isLoading: generalReviewsLoading } = useAdminReviews(
+    urlProductIdNum ? null : dabCursor,
+  );
+  const isLoading = urlProductIdNum
+    ? productReviewsLoading
+    : generalReviewsLoading;
   const { data: totalReviewCount } = useReviewTotalCount();
   const { data: allProducts = [] } = useAdminAllProducts();
+  const { data: allCategories = [] } = useAdminCategories();
+  const { data: allSubcategories = [] } = useAdminAllSubcategories();
   const productMap = useMemo(
     () => new Map(allProducts.map((p) => [p.ProductID, p])),
     [allProducts],
@@ -104,9 +123,11 @@ const ReviewsPage: React.FC = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
 
-  // Sync from API when cursor changes or data first loads
+  // Sync from API when cursor changes or data first loads.
+  // When a product is selected via URL, use the product-filtered query result.
   useEffect(() => {
-    const items = apiData?.items;
+    const activeData = urlProductIdNum ? productApiData : apiData;
+    const items = activeData?.items;
     if (items && items.length > 0) {
       setReviews((prev) => {
         // Preserve AI analysis results already in local state
@@ -122,8 +143,11 @@ const ReviewsPage: React.FC = () => {
           };
         });
       });
+    } else if (items && items.length === 0 && urlProductIdNum) {
+      // Product query returned empty – clear the list so we don't show stale data
+      setReviews([]);
     }
-  }, [apiData]);
+  }, [apiData, productApiData, urlProductIdNum]);
 
   // Bulk selection states
   const [selectedReviews, setSelectedReviews] = useState<Set<string>>(
@@ -136,6 +160,64 @@ const ReviewsPage: React.FC = () => {
   const [ratingFilter, setRatingFilter] = useState<string>("all");
   const [flagFilter, setFlagFilter] = useState<string>("all");
   const [moderationFilter, setModerationFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [subcategoryFilter, setSubcategoryFilter] = useState<string>("all");
+  const [productFilter, setProductFilter] = useState<string>("all");
+
+  // Initialize filters from URL search params (urlProductId/urlProductIdNum defined above)
+  useEffect(() => {
+    if (urlProductId && allProducts.length > 0 && allSubcategories.length > 0) {
+      const pid = parseInt(urlProductId);
+      const prod = allProducts.find((p) => p.ProductID === pid);
+      if (prod) {
+        setProductFilter(urlProductId);
+        if (prod.ProductSubcategoryID) {
+          setSubcategoryFilter(String(prod.ProductSubcategoryID));
+          const sub = allSubcategories.find(
+            (s) => s.ProductSubcategoryID === prod.ProductSubcategoryID,
+          );
+          if (sub) setCategoryFilter(String(sub.ProductCategoryID));
+        }
+      }
+    }
+  }, [urlProductId, allProducts, allSubcategories]);
+
+  // Computed options for cascading filter dropdowns
+  const subcategoriesForFilter = useMemo(() => {
+    if (categoryFilter === "all") return allSubcategories;
+    return allSubcategories.filter(
+      (s) => String(s.ProductCategoryID) === categoryFilter,
+    );
+  }, [allSubcategories, categoryFilter]);
+
+  const productsForFilter = useMemo(() => {
+    if (subcategoryFilter === "all") return [];
+    return allProducts.filter(
+      (p) => String(p.ProductSubcategoryID) === subcategoryFilter,
+    );
+  }, [allProducts, subcategoryFilter]);
+
+  const handleCategoryFilterChange = (val: string) => {
+    setCategoryFilter(val);
+    setSubcategoryFilter("all");
+    setProductFilter("all");
+    setSearchParams({});
+  };
+
+  const handleSubcategoryFilterChange = (val: string) => {
+    setSubcategoryFilter(val);
+    setProductFilter("all");
+    setSearchParams({});
+  };
+
+  const handleProductFilterChange = (val: string) => {
+    setProductFilter(val);
+    if (val !== "all") {
+      setSearchParams({ productId: val });
+    } else {
+      setSearchParams({});
+    }
+  };
 
   // Get all unique flags from reviews
   const allFlags = useMemo(() => {
@@ -147,6 +229,25 @@ const ReviewsPage: React.FC = () => {
   // Filter reviews
   const filteredReviews = useMemo(() => {
     return reviews.filter((review) => {
+      // Product filter (most specific — checked first for short-circuit)
+      if (productFilter !== "all") {
+        if (review.productId !== parseInt(productFilter)) return false;
+      } else if (subcategoryFilter !== "all") {
+        // Subcategory filter
+        const prod = productMap.get(review.productId);
+        if (!prod || String(prod.ProductSubcategoryID) !== subcategoryFilter)
+          return false;
+      } else if (categoryFilter !== "all") {
+        // Category filter
+        const prod = productMap.get(review.productId);
+        if (!prod || !prod.ProductSubcategoryID) return false;
+        const sub = allSubcategories.find(
+          (s) => s.ProductSubcategoryID === prod.ProductSubcategoryID,
+        );
+        if (!sub || String(sub.ProductCategoryID) !== categoryFilter)
+          return false;
+      }
+
       // Search filter
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
@@ -196,6 +297,11 @@ const ReviewsPage: React.FC = () => {
     ratingFilter,
     flagFilter,
     moderationFilter,
+    categoryFilter,
+    subcategoryFilter,
+    productFilter,
+    productMap,
+    allSubcategories,
   ]);
 
   const hasActiveFilters =
@@ -203,7 +309,10 @@ const ReviewsPage: React.FC = () => {
     sentimentFilter !== "all" ||
     ratingFilter !== "all" ||
     flagFilter !== "all" ||
-    moderationFilter !== "all";
+    moderationFilter !== "all" ||
+    categoryFilter !== "all" ||
+    subcategoryFilter !== "all" ||
+    productFilter !== "all";
 
   const clearFilters = () => {
     setSearchQuery("");
@@ -211,6 +320,10 @@ const ReviewsPage: React.FC = () => {
     setRatingFilter("all");
     setFlagFilter("all");
     setModerationFilter("all");
+    setCategoryFilter("all");
+    setSubcategoryFilter("all");
+    setProductFilter("all");
+    setSearchParams({});
   };
 
   const runAIAnalysis = async () => {
@@ -671,6 +784,106 @@ const ReviewsPage: React.FC = () => {
         {/* Filters Section */}
         <section className="container mx-auto px-4 pb-4">
           <div className="doodle-card p-4 space-y-4">
+            {/* Active product banner */}
+            {productFilter !== "all" && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-doodle-primary/5 border border-doodle-primary/20 rounded-lg">
+                <span className="font-doodle text-sm text-doodle-text flex-1">
+                  Showing reviews for:{" "}
+                  <strong>
+                    {productMap.get(parseInt(productFilter))?.Name ??
+                      `Product #${productFilter}`}
+                  </strong>
+                </span>
+                <button
+                  onClick={clearFilters}
+                  className="text-doodle-text/40 hover:text-doodle-text"
+                  title="Clear product filter"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Browse by Category → Subcategory → Product */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="flex items-center gap-2 shrink-0">
+                <Filter className="w-4 h-4 text-doodle-text/60" />
+                <span className="font-doodle text-sm font-bold text-doodle-text">
+                  Browse:
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-3 flex-1">
+                <Select
+                  value={categoryFilter}
+                  onValueChange={handleCategoryFilterChange}
+                >
+                  <SelectTrigger className="w-[160px] font-doodle text-sm h-9">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {allCategories.map((cat) => (
+                      <SelectItem
+                        key={cat.ProductCategoryID}
+                        value={String(cat.ProductCategoryID)}
+                      >
+                        {cat.Name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={subcategoryFilter}
+                  onValueChange={handleSubcategoryFilterChange}
+                  disabled={subcategoriesForFilter.length === 0}
+                >
+                  <SelectTrigger className="w-[170px] font-doodle text-sm h-9">
+                    <SelectValue placeholder="Subcategory" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">
+                      {categoryFilter === "all"
+                        ? "All Subcategories"
+                        : "All in Category"}
+                    </SelectItem>
+                    {subcategoriesForFilter.map((sub) => (
+                      <SelectItem
+                        key={sub.ProductSubcategoryID}
+                        value={String(sub.ProductSubcategoryID)}
+                      >
+                        {sub.Name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={productFilter}
+                  onValueChange={handleProductFilterChange}
+                  disabled={productsForFilter.length === 0}
+                >
+                  <SelectTrigger className="w-[200px] font-doodle text-sm h-9">
+                    <SelectValue
+                      placeholder={
+                        subcategoryFilter === "all"
+                          ? "Pick subcategory first"
+                          : "All Products"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Products</SelectItem>
+                    {productsForFilter.map((p) => (
+                      <SelectItem key={p.ProductID} value={String(p.ProductID)}>
+                        {p.Name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             {/* Search Bar */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-doodle-text/40" />
@@ -693,10 +906,9 @@ const ReviewsPage: React.FC = () => {
 
             {/* Filter Dropdowns */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-doodle-text/60" />
+              <div className="flex items-center gap-2 shrink-0">
                 <span className="font-doodle text-sm font-bold text-doodle-text">
-                  Filters:
+                  Refine:
                 </span>
               </div>
 
@@ -888,7 +1100,14 @@ const ReviewsPage: React.FC = () => {
           )}
 
           <div className="space-y-4">
-            {filteredReviews.length === 0 ? (
+            {isLoading ? (
+              <div className="doodle-card p-8 text-center">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-doodle-text/40" />
+                <p className="font-doodle text-doodle-text/60">
+                  Loading reviews…
+                </p>
+              </div>
+            ) : filteredReviews.length === 0 ? (
               <div className="doodle-card p-8 text-center">
                 <p className="font-doodle text-doodle-text/60">
                   No reviews match your filters.
@@ -1099,39 +1318,40 @@ const ReviewsPage: React.FC = () => {
           </div>
         </section>
 
-        {/* DAB page navigation — each page is up to 100 reviews */}
-        {(cursorStack.length > 0 || apiData?.hasNextPage) && (
-          <section className="container mx-auto px-4 pb-8">
-            <div className="doodle-card p-4 flex items-center justify-between">
-              <button
-                onClick={() => {
-                  const prev = cursorStack[cursorStack.length - 1] ?? null;
-                  setCursorStack((s) => s.slice(0, -1));
-                  setDabCursor(prev);
-                }}
-                disabled={cursorStack.length === 0}
-                className="inline-flex items-center gap-1 p-2 font-doodle text-sm disabled:opacity-40"
-                aria-label="Previous page"
-              >
-                <ChevronLeft className="w-5 h-5" /> Previous 100
-              </button>
-              <span className="font-doodle text-sm text-doodle-text/60">
-                Batch {cursorStack.length + 1}
-              </span>
-              <button
-                onClick={() => {
-                  setCursorStack((s) => [...s, dabCursor ?? ""]);
-                  setDabCursor(apiData!.endCursor);
-                }}
-                disabled={!apiData?.hasNextPage}
-                className="inline-flex items-center gap-1 p-2 font-doodle text-sm disabled:opacity-40"
-                aria-label="Next page"
-              >
-                Next 100 <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-          </section>
-        )}
+        {/* DAB page navigation — each page is up to 100 reviews (hidden when a single product is selected) */}
+        {!urlProductIdNum &&
+          (cursorStack.length > 0 || apiData?.hasNextPage) && (
+            <section className="container mx-auto px-4 pb-8">
+              <div className="doodle-card p-4 flex items-center justify-between">
+                <button
+                  onClick={() => {
+                    const prev = cursorStack[cursorStack.length - 1] ?? null;
+                    setCursorStack((s) => s.slice(0, -1));
+                    setDabCursor(prev);
+                  }}
+                  disabled={cursorStack.length === 0}
+                  className="inline-flex items-center gap-1 p-2 font-doodle text-sm disabled:opacity-40"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="w-5 h-5" /> Previous 100
+                </button>
+                <span className="font-doodle text-sm text-doodle-text/60">
+                  Batch {cursorStack.length + 1}
+                </span>
+                <button
+                  onClick={() => {
+                    setCursorStack((s) => [...s, dabCursor ?? ""]);
+                    setDabCursor(apiData!.endCursor);
+                  }}
+                  disabled={!apiData?.hasNextPage}
+                  className="inline-flex items-center gap-1 p-2 font-doodle text-sm disabled:opacity-40"
+                  aria-label="Next page"
+                >
+                  Next 100 <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            </section>
+          )}
       </main>
       <Footer />
     </div>

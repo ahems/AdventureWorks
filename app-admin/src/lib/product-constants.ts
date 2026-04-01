@@ -52,3 +52,8 @@ export const PRODUCT_SIZES = [
   "62",
   "70",
 ];
+
+/** Ordered index of sizes for cost escalation (5% bump per step). */
+export const PRODUCT_SIZE_INDEX: Record<string, number> = Object.fromEntries(
+  PRODUCT_SIZES.map((s, i) => [s, i]),
+);

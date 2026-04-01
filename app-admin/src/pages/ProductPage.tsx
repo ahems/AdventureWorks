@@ -740,7 +740,7 @@ const ProductPage: React.FC = () => {
                   </span>
                 </div>
                 <Link
-                  to="/reviews"
+                  to={`/reviews?productId=${product.ProductID}`}
                   className="inline-flex items-center gap-1 font-doodle text-xs text-doodle-blue hover:underline mt-2"
                 >
                   <ExternalLink className="w-3 h-3" />

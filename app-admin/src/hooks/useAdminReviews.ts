@@ -136,6 +136,58 @@ export const useAdminReviews = (after?: string | null) =>
     staleTime: 2 * 60 * 1000,
   });
 
+const GET_PRODUCT_REVIEWS_BY_PRODUCT = gql`
+  query GetProductReviewsByProduct($productId: Int!) {
+    productReviews(
+      filter: { ProductID: { eq: $productId } }
+      orderBy: { ReviewDate: DESC }
+    ) {
+      items {
+        ProductReviewID
+        ProductID
+        ReviewerName
+        ReviewDate
+        Rating
+        Comments
+        HelpfulVotes
+        IsModerated
+        productReviewReplies {
+          items {
+            ProductReviewReplyID
+            Reply
+            RepliedBy
+            ReplyDate
+          }
+        }
+      }
+      hasNextPage
+      endCursor
+    }
+  }
+`;
+
+/** Fetches ALL reviews for a specific product using a server-side filter. */
+export const useAdminReviewsByProduct = (productId: number | null) =>
+  useQuery<PagedReviews>({
+    queryKey: ["admin", "reviews", "byProduct", productId],
+    enabled: productId !== null,
+    queryFn: async () => {
+      const data = await graphqlClient.request<{
+        productReviews?: {
+          items: RawProductReview[];
+          hasNextPage?: boolean;
+          endCursor?: string;
+        };
+      }>(GET_PRODUCT_REVIEWS_BY_PRODUCT, { productId });
+      return {
+        items: (data.productReviews?.items ?? []).map(mapReview),
+        hasNextPage: data.productReviews?.hasNextPage ?? false,
+        endCursor: data.productReviews?.endCursor ?? "",
+      };
+    },
+    staleTime: 2 * 60 * 1000,
+  });
+
 /** PATCH the review's IsModerated flag to true in the database. */
 export const approveReview = async (id: string): Promise<void> => {
   const res = await fetch(

@@ -1,11 +1,21 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, Link } from "react-router-dom";
-import { Plus, Globe, X, ExternalLink } from "lucide-react";
+import {
+  Plus,
+  Globe,
+  X,
+  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
+  Layers,
+} from "lucide-react";
 import {
   useCreateProduct,
+  useCreateProductBatch,
   useAdminCategories,
   useAdminSubcategoriesByCategory,
+  type BatchProgress,
 } from "@/hooks/useAdminProducts";
 import { ProductSubcategory } from "@/types/product";
 import { toast } from "@/hooks/use-toast";
@@ -16,6 +26,10 @@ import {
   PRODUCT_STYLES,
   PRODUCT_SIZES,
 } from "@/lib/product-constants";
+import {
+  generateVariations,
+  type VariationRow,
+} from "@/lib/variation-generator";
 
 /** Generate a short GUID-derived SKU safe for the 25-char DB column. */
 const generateSku = (): string => {
@@ -26,6 +40,10 @@ const generateSku = (): string => {
       .padStart(4, "0");
   return `${hex()}-${hex()}-${hex()}`;
 };
+
+const STYLE_LABEL: Record<string, string> = Object.fromEntries(
+  PRODUCT_STYLES.map((s) => [s.value, s.label]),
+);
 
 interface CreateProductDialogProps {
   defaultCategoryId?: number;
@@ -41,6 +59,16 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [weightUnit, setWeightUnit] = useState<"lb" | "kg">("lb");
+
+  // ── Variation wizard state ────────────────────────────────────────────────
+  const [variationMode, setVariationMode] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1); // 1=base, 2=dimensions, 3=preview
+  const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
+  const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
+  const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(
+    null,
+  );
 
   const { data: categories = [] } = useAdminCategories();
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | "">(
@@ -118,11 +146,18 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
   }, [filteredSubcategories]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const createProduct = useCreateProduct();
+  const createBatch = useCreateProductBatch();
 
   const handleOpen = () => {
     setSelectedCategoryId(defaultCategoryId ?? "");
     setForm(emptyForm());
     setWeightUnit("lb");
+    setVariationMode(false);
+    setWizardStep(1);
+    setSelectedColors([]);
+    setSelectedSizes([]);
+    setSelectedStyles([]);
+    setBatchProgress(null);
     setIsOpen(true);
   };
 
@@ -130,6 +165,58 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
     if (!isSaving) setIsOpen(false);
   };
 
+  // ── Variation preview rows ────────────────────────────────────────────────
+  const variationRows: VariationRow[] = useMemo(() => {
+    if (!variationMode) return [];
+    const cost = parseFloat(form.StandardCost);
+    if (isNaN(cost) || cost <= 0) return [];
+    return generateVariations({
+      baseName: form.Name,
+      baseStandardCost: cost,
+      baseListPrice: parseFloat(form.ListPrice) || cost * 1.2,
+      productSubcategoryID: parseInt(form.ProductSubcategoryID) || 0,
+      description: form.Description,
+      weight: form.Weight
+        ? weightUnit === "lb"
+          ? parseFloat(form.Weight)
+          : parseFloat(form.Weight) * 2.20462
+        : null,
+      productLine: form.ProductLine || null,
+      class_: form.Class || null,
+      baseStyle: form.Style || null,
+      initialQuantity: parseInt(form.InitialQuantity) || 0,
+      colors: selectedColors,
+      sizes: selectedSizes,
+      styles: selectedStyles,
+    });
+  }, [
+    variationMode,
+    form,
+    weightUnit,
+    selectedColors,
+    selectedSizes,
+    selectedStyles,
+  ]);
+
+  // ── Validate Step 1 (base product fields) ────────────────────────────────
+  const isStep1Valid = () => {
+    const cost = parseFloat(form.StandardCost);
+    const price = parseFloat(form.ListPrice);
+    return (
+      form.Name.trim().length > 0 &&
+      form.Description.trim().length > 0 &&
+      !isNaN(cost) &&
+      !isNaN(price) &&
+      cost <= price &&
+      !!form.ProductSubcategoryID
+    );
+  };
+
+  // ── Validate Step 2 (at least one color and one size) ────────────────────
+  const isStep2Valid = () =>
+    selectedColors.length > 0 && selectedSizes.length > 0;
+
+  // ── handle single-product submit (non-variation mode) ─────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cost = parseFloat(form.StandardCost);
@@ -209,6 +296,35 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
     }
   };
 
+  // ── handle batch submit (variation mode step 3) ───────────────────────────
+  const handleBatchSubmit = async () => {
+    if (variationRows.length === 0) return;
+    setIsSaving(true);
+    setBatchProgress({ completed: 0, total: variationRows.length });
+    try {
+      await createBatch.mutateAsync({
+        items: variationRows,
+        onProgress: setBatchProgress,
+      });
+      toast({
+        title: "Variations Created",
+        description: `Created ${variationRows.length} product variation(s) for "${form.Name}".`,
+      });
+      setIsOpen(false);
+      navigate(`/category/${selectedCategoryId}`);
+    } catch {
+      toast({
+        title: "Batch Create Failed",
+        description:
+          "An error occurred while creating product variations. Some may have been created.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+      setBatchProgress(null);
+    }
+  };
+
   const currentSubcategory = filteredSubcategories.find(
     (s) => s.ProductSubcategoryID.toString() === form.ProductSubcategoryID,
   );
@@ -216,6 +332,672 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
   const priceNum = parseFloat(form.ListPrice);
   const costExceedsPrice =
     !isNaN(costNum) && !isNaN(priceNum) && costNum > priceNum;
+
+  // ── Toggle a value in a set ───────────────────────────────────────────────
+  const toggle = (
+    arr: string[],
+    val: string,
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+  ) => {
+    setter(arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val]);
+  };
+
+  // ── Step indicator ────────────────────────────────────────────────────────
+  const StepIndicator = () =>
+    variationMode ? (
+      <div
+        className="flex items-center gap-2 mb-4"
+        data-testid="wizard-step-indicator"
+      >
+        {[1, 2, 3].map((s) => (
+          <React.Fragment key={s}>
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 ${
+                s === wizardStep
+                  ? "border-doodle-blue bg-doodle-blue text-white"
+                  : s < wizardStep
+                    ? "border-green-500 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
+                    : "border-doodle-border text-doodle-text/50"
+              }`}
+            >
+              {s}
+            </div>
+            {s < 3 && (
+              <div
+                className={`flex-1 h-0.5 ${s < wizardStep ? "bg-green-500" : "bg-doodle-border"}`}
+              />
+            )}
+          </React.Fragment>
+        ))}
+        <span className="ml-2 text-xs text-doodle-text/60 font-doodle">
+          {wizardStep === 1
+            ? "Base Product"
+            : wizardStep === 2
+              ? "Select Variations"
+              : "Preview & Create"}
+        </span>
+      </div>
+    ) : null;
+
+  // ── Render: Step 1 — Base Product Form ────────────────────────────────────
+  const renderStep1 = () => (
+    <>
+      {/* Name */}
+      <div>
+        <label className="font-doodle text-sm text-doodle-text flex items-center gap-2 mb-1">
+          Product Name *
+          <span className="inline-flex items-center gap-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+            <Globe className="w-3 h-3" /> US English
+          </span>
+        </label>
+        <input
+          type="text"
+          name="Name"
+          value={form.Name}
+          onChange={handleChange}
+          required
+          maxLength={50}
+          className="doodle-input w-full"
+          placeholder="e.g. Mountain Bike Pro 500"
+        />
+      </div>
+
+      {/* SKU — only for single mode */}
+      {!variationMode && (
+        <div>
+          <label className="font-doodle text-sm text-doodle-text block mb-1">
+            Product Number (SKU) *
+          </label>
+          <input
+            type="text"
+            name="ProductNumber"
+            value={form.ProductNumber}
+            onChange={handleChange}
+            required
+            maxLength={25}
+            className="doodle-input w-full font-mono"
+            placeholder="e.g. MB-5000-BK"
+          />
+        </div>
+      )}
+
+      {/* Standard Cost → List Price */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="font-doodle text-sm text-doodle-text block mb-1">
+            Standard Cost ($) *
+            {variationMode && (
+              <span className="ml-1 text-xs text-doodle-text/50 font-normal">
+                (base — +5% per size step)
+              </span>
+            )}
+          </label>
+          <input
+            type="number"
+            name="StandardCost"
+            value={form.StandardCost}
+            onChange={handleStandardCostChange}
+            required
+            min="0"
+            step="0.01"
+            className="doodle-input w-full"
+            placeholder="0.00"
+          />
+        </div>
+        <div>
+          <label className="font-doodle text-sm text-doodle-text block mb-1">
+            List Price ($) *
+            <span className="ml-1 text-xs text-doodle-text/50 font-normal">
+              (≥ cost, auto-fills +20%)
+            </span>
+          </label>
+          <input
+            type="number"
+            name="ListPrice"
+            value={form.ListPrice}
+            onChange={handleChange}
+            required
+            min={form.StandardCost || "0"}
+            step="0.01"
+            className="doodle-input w-full"
+            placeholder="0.00"
+          />
+        </div>
+      </div>
+      {costExceedsPrice && (
+        <p className="text-xs text-red-600 dark:text-red-400 -mt-2">
+          Standard Cost cannot exceed List Price.
+        </p>
+      )}
+
+      {/* Category + Subcategory */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="font-doodle text-sm text-doodle-text block mb-1">
+            Category *
+          </label>
+          <select
+            value={selectedCategoryId}
+            onChange={handleCategoryChange}
+            required
+            className="doodle-input w-full"
+          >
+            <option value="">Select a category…</option>
+            {categories.map((cat) => (
+              <option key={cat.ProductCategoryID} value={cat.ProductCategoryID}>
+                {cat.Name}
+              </option>
+            ))}
+          </select>
+          {selectedCategoryId !== "" && (
+            <Link
+              to={`/category/${selectedCategoryId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-doodle-blue hover:underline mt-1"
+            >
+              <ExternalLink className="w-3 h-3" /> Edit this category
+            </Link>
+          )}
+        </div>
+
+        <div>
+          <label className="font-doodle text-sm text-doodle-text block mb-1">
+            Subcategory *
+          </label>
+          <select
+            name="ProductSubcategoryID"
+            value={form.ProductSubcategoryID}
+            onChange={handleChange}
+            required
+            disabled={!selectedCategoryId}
+            className="doodle-input w-full disabled:opacity-50"
+          >
+            <option value="">
+              {selectedCategoryId
+                ? "Select a subcategory…"
+                : "Select a category first…"}
+            </option>
+            {filteredSubcategories.map((sub) => (
+              <option
+                key={sub.ProductSubcategoryID}
+                value={sub.ProductSubcategoryID}
+              >
+                {sub.Name}
+              </option>
+            ))}
+          </select>
+          {currentSubcategory && (
+            <Link
+              to="/categories"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-doodle-blue hover:underline mt-1"
+            >
+              <ExternalLink className="w-3 h-3" /> Manage subcategories
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* Color + Size — only in single mode; wizard picks these in step 2 */}
+      {!variationMode && (
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="font-doodle text-sm text-doodle-text block mb-1">
+              Color
+            </label>
+            <select
+              name="Color"
+              value={form.Color}
+              onChange={handleChange}
+              className="doodle-input w-full"
+            >
+              <option value="">— None —</option>
+              {PRODUCT_COLORS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="font-doodle text-sm text-doodle-text block mb-1">
+              Size
+            </label>
+            <select
+              name="Size"
+              value={form.Size}
+              onChange={handleChange}
+              className="doodle-input w-full"
+            >
+              <option value="">— None —</option>
+              {PRODUCT_SIZES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
+      {/* Weight + Initial Stock */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="font-doodle text-sm text-doodle-text block mb-1">
+            Weight
+            <span className="ml-1 text-xs text-doodle-text/50 font-normal">
+              (stored in lb)
+            </span>
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              name="Weight"
+              value={form.Weight}
+              onChange={handleChange}
+              min="0"
+              step="0.01"
+              className="doodle-input flex-1 min-w-0"
+              placeholder={weightUnit === "lb" ? "e.g. 14.3" : "e.g. 6.5"}
+            />
+            <select
+              value={weightUnit}
+              onChange={(e) =>
+                handleWeightUnitChange(e.target.value as "lb" | "kg")
+              }
+              className="doodle-input w-20"
+            >
+              <option value="lb">lb</option>
+              <option value="kg">kg</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="font-doodle text-sm text-doodle-text block mb-1">
+            Initial Stock
+            <span className="ml-1 text-xs text-doodle-text/50 font-normal">
+              (units)
+            </span>
+          </label>
+          <input
+            type="number"
+            name="InitialQuantity"
+            value={form.InitialQuantity}
+            onChange={(e) => {
+              const v = Math.max(0, Math.floor(Number(e.target.value) || 0));
+              setForm((prev) => ({
+                ...prev,
+                InitialQuantity: String(v),
+              }));
+            }}
+            min="0"
+            step="1"
+            className="doodle-input w-full"
+            placeholder="0"
+          />
+        </div>
+      </div>
+
+      {/* Product Line / Class / Style */}
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <label className="font-doodle text-sm text-doodle-text block mb-1">
+            Product Line
+          </label>
+          <select
+            name="ProductLine"
+            value={form.ProductLine}
+            onChange={handleChange}
+            className="doodle-input w-full"
+          >
+            <option value="">— None —</option>
+            {PRODUCT_LINES.map((pl) => (
+              <option key={pl.value} value={pl.value}>
+                {pl.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="font-doodle text-sm text-doodle-text block mb-1">
+            Class
+          </label>
+          <select
+            name="Class"
+            value={form.Class}
+            onChange={handleChange}
+            className="doodle-input w-full"
+          >
+            <option value="">— None —</option>
+            {PRODUCT_CLASSES.map((pc) => (
+              <option key={pc.value} value={pc.value}>
+                {pc.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="font-doodle text-sm text-doodle-text block mb-1">
+            Style
+            {variationMode && (
+              <span className="ml-1 text-xs text-doodle-text/50 font-normal">
+                (default)
+              </span>
+            )}
+          </label>
+          <select
+            name="Style"
+            value={form.Style}
+            onChange={handleChange}
+            className="doodle-input w-full"
+          >
+            <option value="">— None —</option>
+            {PRODUCT_STYLES.map((ps) => (
+              <option key={ps.value} value={ps.value}>
+                {ps.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Description */}
+      <div>
+        <label className="font-doodle text-sm text-doodle-text flex items-center gap-2 mb-1">
+          Description *
+          <span className="inline-flex items-center gap-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+            <Globe className="w-3 h-3" /> US English
+          </span>
+        </label>
+        <textarea
+          name="Description"
+          value={form.Description}
+          onChange={handleChange}
+          required
+          maxLength={400}
+          rows={3}
+          className="doodle-input w-full"
+          placeholder="Describe this product — other languages auto-translated after creation"
+        />
+      </div>
+    </>
+  );
+
+  // ── Render: Step 2 — Select Variation Dimensions ──────────────────────────
+  const renderStep2 = () => (
+    <div className="space-y-5" data-testid="wizard-step-2">
+      {/* Colors */}
+      <div>
+        <label className="font-doodle text-sm font-bold text-doodle-text block mb-2">
+          Colors *{" "}
+          <span className="font-normal text-xs text-doodle-text/50">
+            ({selectedColors.length} selected)
+          </span>
+        </label>
+        <div className="flex flex-wrap gap-2" data-testid="variation-colors">
+          {PRODUCT_COLORS.map((c) => (
+            <label
+              key={c}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded border cursor-pointer text-sm transition-colors ${
+                selectedColors.includes(c)
+                  ? "bg-doodle-blue/10 border-doodle-blue text-doodle-blue font-semibold"
+                  : "border-doodle-border text-doodle-text hover:bg-doodle-bg/50"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={selectedColors.includes(c)}
+                onChange={() => toggle(selectedColors, c, setSelectedColors)}
+                className="sr-only"
+                data-testid={`color-checkbox-${c}`}
+              />
+              {c}
+            </label>
+          ))}
+        </div>
+        {selectedColors.length === 0 && (
+          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+            Select at least one color.
+          </p>
+        )}
+      </div>
+
+      {/* Sizes */}
+      <div>
+        <label className="font-doodle text-sm font-bold text-doodle-text block mb-2">
+          Sizes *{" "}
+          <span className="font-normal text-xs text-doodle-text/50">
+            ({selectedSizes.length} selected)
+          </span>
+        </label>
+        <div className="flex flex-wrap gap-2" data-testid="variation-sizes">
+          {PRODUCT_SIZES.map((s) => (
+            <label
+              key={s}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded border cursor-pointer text-sm transition-colors ${
+                selectedSizes.includes(s)
+                  ? "bg-doodle-blue/10 border-doodle-blue text-doodle-blue font-semibold"
+                  : "border-doodle-border text-doodle-text hover:bg-doodle-bg/50"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={selectedSizes.includes(s)}
+                onChange={() => toggle(selectedSizes, s, setSelectedSizes)}
+                className="sr-only"
+                data-testid={`size-checkbox-${s}`}
+              />
+              {s}
+            </label>
+          ))}
+        </div>
+        {selectedSizes.length === 0 && (
+          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+            Select at least one size.
+          </p>
+        )}
+      </div>
+
+      {/* Styles (optional) */}
+      <div>
+        <label className="font-doodle text-sm font-bold text-doodle-text block mb-2">
+          Styles{" "}
+          <span className="font-normal text-xs text-doodle-text/50">
+            (optional — {selectedStyles.length} selected, otherwise uses base
+            style)
+          </span>
+        </label>
+        <div className="flex flex-wrap gap-2" data-testid="variation-styles">
+          {PRODUCT_STYLES.map((ps) => (
+            <label
+              key={ps.value}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded border cursor-pointer text-sm transition-colors ${
+                selectedStyles.includes(ps.value)
+                  ? "bg-doodle-blue/10 border-doodle-blue text-doodle-blue font-semibold"
+                  : "border-doodle-border text-doodle-text hover:bg-doodle-bg/50"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={selectedStyles.includes(ps.value)}
+                onChange={() =>
+                  toggle(selectedStyles, ps.value, setSelectedStyles)
+                }
+                className="sr-only"
+                data-testid={`style-checkbox-${ps.value}`}
+              />
+              {ps.label}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Summary */}
+      <div className="p-3 bg-doodle-bg/50 rounded border border-doodle-border text-sm">
+        <strong>Total variations:</strong>{" "}
+        <span data-testid="variation-total-count">
+          {selectedColors.length} color(s) × {selectedSizes.length} size(s)
+          {selectedStyles.length > 0
+            ? ` × ${selectedStyles.length} style(s)`
+            : ""}{" "}
+          ={" "}
+          <strong>
+            {selectedColors.length *
+              selectedSizes.length *
+              Math.max(selectedStyles.length, 1)}
+          </strong>
+        </span>
+      </div>
+    </div>
+  );
+
+  // ── Render: Step 3 — Preview & Confirm ────────────────────────────────────
+  const renderStep3 = () => (
+    <div className="space-y-4" data-testid="wizard-step-3">
+      <p className="font-doodle text-sm text-doodle-text">
+        Review the <strong>{variationRows.length}</strong> variation(s) below.
+        Cost escalation: +5% per size step from smallest selected.
+      </p>
+
+      <div className="max-h-[40vh] overflow-auto border border-doodle-border rounded">
+        <table className="w-full text-sm" data-testid="variation-preview-table">
+          <thead className="bg-doodle-bg/60 sticky top-0">
+            <tr className="text-left">
+              <th className="px-2 py-1.5 font-doodle">#</th>
+              <th className="px-2 py-1.5 font-doodle">SKU</th>
+              <th className="px-2 py-1.5 font-doodle">Color</th>
+              <th className="px-2 py-1.5 font-doodle">Size</th>
+              <th className="px-2 py-1.5 font-doodle">Style</th>
+              <th className="px-2 py-1.5 font-doodle text-right">Cost</th>
+              <th className="px-2 py-1.5 font-doodle text-right">Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            {variationRows.map((row, i) => (
+              <tr
+                key={row.ProductNumber}
+                className="border-t border-doodle-border/50 hover:bg-doodle-bg/30"
+              >
+                <td className="px-2 py-1">{i + 1}</td>
+                <td className="px-2 py-1 font-mono text-xs">
+                  {row.ProductNumber}
+                </td>
+                <td className="px-2 py-1">{row.Color ?? "—"}</td>
+                <td className="px-2 py-1">{row.Size ?? "—"}</td>
+                <td className="px-2 py-1">
+                  {row.Style ? (STYLE_LABEL[row.Style] ?? row.Style) : "—"}
+                </td>
+                <td className="px-2 py-1 text-right">
+                  ${row.StandardCost.toFixed(2)}
+                </td>
+                <td className="px-2 py-1 text-right">
+                  ${row.ListPrice.toFixed(2)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {batchProgress && (
+        <div className="space-y-1" data-testid="batch-progress">
+          <div className="w-full bg-doodle-border rounded-full h-2.5">
+            <div
+              className="bg-doodle-blue h-2.5 rounded-full transition-all"
+              style={{
+                width: `${(batchProgress.completed / batchProgress.total) * 100}%`,
+              }}
+            />
+          </div>
+          <p className="text-xs text-doodle-text/60 font-doodle text-center">
+            Creating {batchProgress.completed} / {batchProgress.total}…
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
+  // ── Footer buttons (contextual) ──────────────────────────────────────────
+  const renderActions = () => {
+    // Single-product mode
+    if (!variationMode) {
+      return (
+        <div className="flex gap-3 pt-2">
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={isSaving}
+            className="doodle-button flex-1 py-2"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isSaving}
+            className="doodle-button doodle-button-primary flex-1 py-2 flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            <Plus className="w-4 h-4" />
+            {isSaving ? "Creating…" : "Create Product"}
+          </button>
+        </div>
+      );
+    }
+
+    // Wizard mode
+    return (
+      <div className="flex gap-3 pt-2">
+        {wizardStep > 1 && (
+          <button
+            type="button"
+            onClick={() => setWizardStep((s) => s - 1)}
+            disabled={isSaving}
+            className="doodle-button py-2 px-4 flex items-center gap-1"
+            data-testid="wizard-back-btn"
+          >
+            <ChevronLeft className="w-4 h-4" /> Back
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleClose}
+          disabled={isSaving}
+          className="doodle-button flex-1 py-2"
+        >
+          Cancel
+        </button>
+        {wizardStep < 3 && (
+          <button
+            type="button"
+            onClick={() => setWizardStep((s) => s + 1)}
+            disabled={
+              (wizardStep === 1 && !isStep1Valid()) ||
+              (wizardStep === 2 && !isStep2Valid())
+            }
+            className="doodle-button doodle-button-primary py-2 px-4 flex items-center gap-1 disabled:opacity-60"
+            data-testid="wizard-next-btn"
+          >
+            Next <ChevronRight className="w-4 h-4" />
+          </button>
+        )}
+        {wizardStep === 3 && (
+          <button
+            type="button"
+            onClick={handleBatchSubmit}
+            disabled={isSaving || variationRows.length === 0}
+            className="doodle-button doodle-button-primary flex-1 py-2 flex items-center justify-center gap-2 disabled:opacity-60"
+            data-testid="wizard-create-all-btn"
+          >
+            <Layers className="w-4 h-4" />
+            {isSaving
+              ? "Creating…"
+              : `Create ${variationRows.length} Variation(s)`}
+          </button>
+        )}
+      </div>
+    );
+  };
 
   return (
     <>
@@ -232,371 +1014,55 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
         createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="doodle-card w-full max-w-2xl p-6 max-h-[92vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center justify-between mb-3">
                 <h2 className="font-doodle text-xl font-bold text-doodle-text">
-                  Create New Product
+                  {variationMode
+                    ? "Create Product Variations"
+                    : "Create New Product"}
                 </h2>
                 <button onClick={handleClose} className="doodle-button p-1">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Name */}
-                <div>
-                  <label className="font-doodle text-sm text-doodle-text flex items-center gap-2 mb-1">
-                    Product Name *
-                    <span className="inline-flex items-center gap-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
-                      <Globe className="w-3 h-3" /> US English
-                    </span>
-                  </label>
-                  <input
-                    type="text"
-                    name="Name"
-                    value={form.Name}
-                    onChange={handleChange}
-                    required
-                    maxLength={50}
-                    className="doodle-input w-full"
-                    placeholder="e.g. Mountain Bike Pro 500"
-                  />
-                </div>
+              {/* Variation mode toggle */}
+              <label
+                className="inline-flex items-center gap-2 mb-4 cursor-pointer select-none"
+                data-testid="variation-mode-toggle"
+              >
+                <input
+                  type="checkbox"
+                  checked={variationMode}
+                  onChange={(e) => {
+                    setVariationMode(e.target.checked);
+                    setWizardStep(1);
+                    setSelectedColors([]);
+                    setSelectedSizes([]);
+                    setSelectedStyles([]);
+                  }}
+                  disabled={isSaving}
+                  className="w-4 h-4 rounded border-doodle-border text-doodle-blue focus:ring-doodle-blue"
+                />
+                <span className="font-doodle text-sm text-doodle-text">
+                  Create multiple variations
+                </span>
+              </label>
 
-                {/* SKU */}
-                <div>
-                  <label className="font-doodle text-sm text-doodle-text block mb-1">
-                    Product Number (SKU) *
-                  </label>
-                  <input
-                    type="text"
-                    name="ProductNumber"
-                    value={form.ProductNumber}
-                    onChange={handleChange}
-                    required
-                    maxLength={25}
-                    className="doodle-input w-full font-mono"
-                    placeholder="e.g. MB-5000-BK"
-                  />
-                </div>
+              <StepIndicator />
 
-                {/* Standard Cost → List Price */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="font-doodle text-sm text-doodle-text block mb-1">
-                      Standard Cost ($) *
-                    </label>
-                    <input
-                      type="number"
-                      name="StandardCost"
-                      value={form.StandardCost}
-                      onChange={handleStandardCostChange}
-                      required
-                      min="0"
-                      step="0.01"
-                      className="doodle-input w-full"
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-doodle text-sm text-doodle-text block mb-1">
-                      List Price ($) *
-                      <span className="ml-1 text-xs text-doodle-text/50 font-normal">
-                        (≥ cost, auto-fills +20%)
-                      </span>
-                    </label>
-                    <input
-                      type="number"
-                      name="ListPrice"
-                      value={form.ListPrice}
-                      onChange={handleChange}
-                      required
-                      min={form.StandardCost || "0"}
-                      step="0.01"
-                      className="doodle-input w-full"
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
-                {costExceedsPrice && (
-                  <p className="text-xs text-red-600 dark:text-red-400 -mt-2">
-                    Standard Cost cannot exceed List Price.
-                  </p>
-                )}
-
-                {/* Category + Subcategory */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="font-doodle text-sm text-doodle-text block mb-1">
-                      Category *
-                    </label>
-                    <select
-                      value={selectedCategoryId}
-                      onChange={handleCategoryChange}
-                      required
-                      className="doodle-input w-full"
-                    >
-                      <option value="">Select a category…</option>
-                      {categories.map((cat) => (
-                        <option
-                          key={cat.ProductCategoryID}
-                          value={cat.ProductCategoryID}
-                        >
-                          {cat.Name}
-                        </option>
-                      ))}
-                    </select>
-                    {selectedCategoryId !== "" && (
-                      <Link
-                        to={`/category/${selectedCategoryId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-doodle-blue hover:underline mt-1"
-                      >
-                        <ExternalLink className="w-3 h-3" /> Edit this category
-                      </Link>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="font-doodle text-sm text-doodle-text block mb-1">
-                      Subcategory *
-                    </label>
-                    <select
-                      name="ProductSubcategoryID"
-                      value={form.ProductSubcategoryID}
-                      onChange={handleChange}
-                      required
-                      disabled={!selectedCategoryId}
-                      className="doodle-input w-full disabled:opacity-50"
-                    >
-                      <option value="">
-                        {selectedCategoryId
-                          ? "Select a subcategory…"
-                          : "Select a category first…"}
-                      </option>
-                      {filteredSubcategories.map((sub) => (
-                        <option
-                          key={sub.ProductSubcategoryID}
-                          value={sub.ProductSubcategoryID}
-                        >
-                          {sub.Name}
-                        </option>
-                      ))}
-                    </select>
-                    {currentSubcategory && (
-                      <Link
-                        to="/categories"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-doodle-blue hover:underline mt-1"
-                      >
-                        <ExternalLink className="w-3 h-3" /> Manage
-                        subcategories
-                      </Link>
-                    )}
-                  </div>
-                </div>
-
-                {/* Color + Size */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="font-doodle text-sm text-doodle-text block mb-1">
-                      Color
-                    </label>
-                    <select
-                      name="Color"
-                      value={form.Color}
-                      onChange={handleChange}
-                      className="doodle-input w-full"
-                    >
-                      <option value="">— None —</option>
-                      {PRODUCT_COLORS.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="font-doodle text-sm text-doodle-text block mb-1">
-                      Size
-                    </label>
-                    <select
-                      name="Size"
-                      value={form.Size}
-                      onChange={handleChange}
-                      className="doodle-input w-full"
-                    >
-                      <option value="">— None —</option>
-                      {PRODUCT_SIZES.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Weight + Initial Stock */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="font-doodle text-sm text-doodle-text block mb-1">
-                      Weight
-                      <span className="ml-1 text-xs text-doodle-text/50 font-normal">
-                        (stored in lb)
-                      </span>
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        name="Weight"
-                        value={form.Weight}
-                        onChange={handleChange}
-                        min="0"
-                        step="0.01"
-                        className="doodle-input flex-1 min-w-0"
-                        placeholder={
-                          weightUnit === "lb" ? "e.g. 14.3" : "e.g. 6.5"
-                        }
-                      />
-                      <select
-                        value={weightUnit}
-                        onChange={(e) =>
-                          handleWeightUnitChange(e.target.value as "lb" | "kg")
-                        }
-                        className="doodle-input w-20"
-                      >
-                        <option value="lb">lb</option>
-                        <option value="kg">kg</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="font-doodle text-sm text-doodle-text block mb-1">
-                      Initial Stock
-                      <span className="ml-1 text-xs text-doodle-text/50 font-normal">
-                        (units)
-                      </span>
-                    </label>
-                    <input
-                      type="number"
-                      name="InitialQuantity"
-                      value={form.InitialQuantity}
-                      onChange={(e) => {
-                        const v = Math.max(
-                          0,
-                          Math.floor(Number(e.target.value) || 0),
-                        );
-                        setForm((prev) => ({
-                          ...prev,
-                          InitialQuantity: String(v),
-                        }));
-                      }}
-                      min="0"
-                      step="1"
-                      className="doodle-input w-full"
-                      placeholder="0"
-                    />
-                  </div>
-                </div>
-
-                {/* Product Line / Class / Style */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="font-doodle text-sm text-doodle-text block mb-1">
-                      Product Line
-                    </label>
-                    <select
-                      name="ProductLine"
-                      value={form.ProductLine}
-                      onChange={handleChange}
-                      className="doodle-input w-full"
-                    >
-                      <option value="">— None —</option>
-                      {PRODUCT_LINES.map((pl) => (
-                        <option key={pl.value} value={pl.value}>
-                          {pl.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="font-doodle text-sm text-doodle-text block mb-1">
-                      Class
-                    </label>
-                    <select
-                      name="Class"
-                      value={form.Class}
-                      onChange={handleChange}
-                      className="doodle-input w-full"
-                    >
-                      <option value="">— None —</option>
-                      {PRODUCT_CLASSES.map((pc) => (
-                        <option key={pc.value} value={pc.value}>
-                          {pc.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="font-doodle text-sm text-doodle-text block mb-1">
-                      Style
-                    </label>
-                    <select
-                      name="Style"
-                      value={form.Style}
-                      onChange={handleChange}
-                      className="doodle-input w-full"
-                    >
-                      <option value="">— None —</option>
-                      {PRODUCT_STYLES.map((ps) => (
-                        <option key={ps.value} value={ps.value}>
-                          {ps.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label className="font-doodle text-sm text-doodle-text flex items-center gap-2 mb-1">
-                    Description *
-                    <span className="inline-flex items-center gap-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
-                      <Globe className="w-3 h-3" /> US English
-                    </span>
-                  </label>
-                  <textarea
-                    name="Description"
-                    value={form.Description}
-                    onChange={handleChange}
-                    required
-                    maxLength={400}
-                    rows={3}
-                    className="doodle-input w-full"
-                    placeholder="Describe this product — other languages auto-translated after creation"
-                  />
-                </div>
+              <form
+                onSubmit={
+                  variationMode ? (e) => e.preventDefault() : handleSubmit
+                }
+                className="space-y-4"
+              >
+                {/* Step content */}
+                {wizardStep === 1 && renderStep1()}
+                {variationMode && wizardStep === 2 && renderStep2()}
+                {variationMode && wizardStep === 3 && renderStep3()}
 
                 {/* Actions */}
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={handleClose}
-                    disabled={isSaving}
-                    className="doodle-button flex-1 py-2"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSaving}
-                    className="doodle-button doodle-button-primary flex-1 py-2 flex items-center justify-center gap-2 disabled:opacity-60"
-                  >
-                    <Plus className="w-4 h-4" />
-                    {isSaving ? "Creating…" : "Create Product"}
-                  </button>
-                </div>
+                {renderActions()}
               </form>
             </div>
           </div>,
