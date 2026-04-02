@@ -93,13 +93,13 @@ async function startQueuedFunction(
 // ── Durable Functions (support status polling) ─────────────────────────────
 
 export const generateProductEmbeddings = () =>
-  startDurableFunction("GenerateProductEmbeddings_HttpStart");
+  startQueuedFunction("GenerateProductEmbeddings_HttpStart");
 
 export const generateReviewEmbeddings = () =>
-  startDurableFunction("GenerateProductReviewEmbeddings_HttpStart");
+  startQueuedFunction("GenerateProductReviewEmbeddings_HttpStart");
 
 export const translateProductDescriptions = (productModelIds?: number[]) =>
-  startDurableFunction(
+  startQueuedFunction(
     "TranslateProductDescriptions_HttpStart",
     productModelIds?.length ? { ProductModelIds: productModelIds } : undefined,
   );
@@ -168,12 +168,12 @@ export const translatePromotion = async (
 };
 
 /**
- * Fire-and-forget: triggers durable translation of a single product's descriptions
- * (and names via the extended orchestrator) to all non-English cultures.
- * Mirrors pattern used by embellishProductDescriptions but scoped to one product.
+ * Fire-and-forget: enqueues translation jobs for a single product's descriptions
+ * (and names) to all non-English cultures onto the shared ai-job-queue.
+ * Jobs are processed serially along with all other AI work.
  */
 export const translateProductContent = (productModelIds: number[]) =>
-  startDurableFunction("TranslateProductDescriptions_HttpStart", {
+  startQueuedFunction("TranslateProductDescriptions_HttpStart", {
     ProductModelIds: productModelIds,
   });
 
@@ -354,11 +354,23 @@ export interface GenerateProductContentRequest {
   productLine?: string | null;
   class_?: string | null;
   style?: string | null;
+  /** Full list of available sizes — AI returns which subset makes sense for this product. */
+  availableSizes?: string[];
+  /** Full list of available colors — AI returns which subset makes sense for this product. */
+  availableColors?: string[];
+  /** Full list of available style values — AI returns which subset makes sense for this product. */
+  availableStyles?: string[];
 }
 
 export interface GenerateProductContentResponse {
   productName: string;
   productDescription: string;
+  estimatedWeightLb: number;
+  suggestedStandardCost: number;
+  suggestedListPrice: number;
+  suggestedSizes: string[];
+  suggestedColors: string[];
+  suggestedStyles: string[];
 }
 
 export const generateProductContent = async (
@@ -374,6 +386,9 @@ export const generateProductContent = async (
       productLine: request.productLine ?? null,
       class: request.class_ ?? null,
       style: request.style ?? null,
+      availableSizes: request.availableSizes ?? null,
+      availableColors: request.availableColors ?? null,
+      availableStyles: request.availableStyles ?? null,
     }),
   });
   if (!res.ok) {
@@ -382,8 +397,31 @@ export const generateProductContent = async (
       `GenerateProductContent HTTP ${res.status}${text ? `: ${text}` : ""}`,
     );
   }
-  return res.json();
+  const data = await res.json();
+  // Ensure backward-compatible defaults for new fields
+  return {
+    productName: data.productName ?? "",
+    productDescription: data.productDescription ?? "",
+    estimatedWeightLb: data.estimatedWeightLb ?? 0,
+    suggestedStandardCost: data.suggestedStandardCost ?? 0,
+    suggestedListPrice: data.suggestedListPrice ?? 0,
+    suggestedSizes: data.suggestedSizes ?? [],
+    suggestedColors: data.suggestedColors ?? [],
+    suggestedStyles: data.suggestedStyles ?? [],
+  };
 };
+
+/**
+ * Fire-and-forget: generates AI reviews AND staff replies for a single product.
+ * Designed for the "Generate Products with AI" wizard.
+ */
+export const generateReviewsWithReplies = (productId: number): Promise<void> =>
+  fetch(
+    `${getFunctionsApiUrl()}/api/products/${productId}/generate-reviews-with-replies`,
+    { method: "POST" },
+  )
+    .then(() => undefined)
+    .catch(() => undefined);
 
 // ── Status management for Durable Functions ────────────────────────────────
 

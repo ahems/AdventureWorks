@@ -5,6 +5,10 @@ using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 using api_functions.Services;
 using api_functions.Models;
+using Azure.Storage.Queues;
+using Azure.Identity;
+using System.Net;
+using System.Text.Json;
 
 namespace api_functions.Functions;
 
@@ -13,6 +17,7 @@ public class GenerateProductReviewEmbeddings
     private readonly ILogger<GenerateProductReviewEmbeddings> _logger;
     private readonly ReviewService _reviewService;
     private readonly AIService _aiService;
+    private const string AI_JOB_QUEUE = "ai-job-embeddings-queue";
 
     public GenerateProductReviewEmbeddings(
         ILogger<GenerateProductReviewEmbeddings> logger,
@@ -29,13 +34,45 @@ public class GenerateProductReviewEmbeddings
         [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
         [DurableClient] DurableTaskClient client)
     {
-        var instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(GenerateProductReviewEmbeddings_Orchestrator));
+        _logger.LogInformation("Review-embeddings request: enqueuing onto ai-job-embeddings-queue");
 
-        _logger.LogInformation("Started review embeddings orchestration with ID = '{instanceId}'", instanceId);
+        try
+        {
+            var queueServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
+            if (string.IsNullOrEmpty(queueServiceUri))
+            {
+                var storageAccountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
+                    ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
+                queueServiceUri = $"https://{storageAccountName}.queue.core.windows.net";
+            }
+            var queueServiceClient = new QueueServiceClient(
+                new Uri(queueServiceUri),
+                new DefaultAzureCredential(),
+                new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
 
-        return await client.CreateCheckStatusResponseAsync(req, instanceId);
+            var aiJobQueueClient = queueServiceClient.GetQueueClient(AI_JOB_QUEUE);
+            await aiJobQueueClient.CreateIfNotExistsAsync();
+
+            var message = JsonSerializer.Serialize(new AiJobMessage { JobType = "review-embeddings" });
+            await aiJobQueueClient.SendMessageAsync(message);
+
+            _logger.LogInformation("Enqueued review-embeddings job onto {queue}", AI_JOB_QUEUE);
+
+            var jobId = Guid.NewGuid().ToString();
+            var response = req.CreateResponse(HttpStatusCode.Accepted);
+            await response.WriteAsJsonAsync(new { id = jobId, message = "Review embeddings job queued and will be processed serially." });
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error enqueueing review-embeddings job");
+            var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await errorResponse.WriteStringAsync($"Error: {ex.Message}");
+            return errorResponse;
+        }
     }
+
+    // ── Durable Activity functions kept so in-flight orchestrations can still complete ──
 
     [Function(nameof(GenerateProductReviewEmbeddings_Orchestrator))]
     public async Task<string> GenerateProductReviewEmbeddings_Orchestrator(

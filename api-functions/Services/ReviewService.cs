@@ -122,6 +122,47 @@ public class ReviewService
         });
     }
 
+    /// <summary>
+    /// Inserts a generated review and returns its new ProductReviewID.
+    /// </summary>
+    public async Task<int> SaveGeneratedReviewAndGetIdAsync(GeneratedReview review)
+    {
+        using var connection = await GetConnectionAsync();
+
+        var insertSql = @"
+            INSERT INTO Production.ProductReview 
+            (ProductID, ReviewerName, ReviewDate, EmailAddress, Rating, Comments, ModifiedDate)
+            OUTPUT INSERTED.ProductReviewID
+            VALUES 
+            (@ProductID, @ReviewerName, @ReviewDate, @EmailAddress, @Rating, @Comments, GETDATE())";
+
+        return await connection.ExecuteScalarAsync<int>(insertSql, new
+        {
+            review.ProductID,
+            review.ReviewerName,
+            review.ReviewDate,
+            review.EmailAddress,
+            review.Rating,
+            review.Comments
+        });
+    }
+
+    /// <summary>
+    /// Saves an AI-generated staff reply for a specific review.
+    /// </summary>
+    public async Task SaveReviewReplyAsync(int reviewId, string reply, string repliedBy = "AdventureWorks Team")
+    {
+        using var connection = await GetConnectionAsync();
+
+        var insertSql = @"
+            INSERT INTO Production.ProductReviewReply
+            (ProductReviewID, Reply, RepliedBy, ReplyDate)
+            VALUES
+            (@ReviewId, @Reply, @RepliedBy, GETDATE())";
+
+        await connection.ExecuteAsync(insertSql, new { ReviewId = reviewId, Reply = reply, RepliedBy = repliedBy });
+    }
+
     public async Task<List<SemanticSearchResult>> SearchProductsByReviewEmbeddingAsync(float[] queryEmbedding, int topN = 20)
     {
         using var connection = await GetConnectionAsync();

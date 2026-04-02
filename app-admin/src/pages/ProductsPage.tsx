@@ -4,6 +4,7 @@ import { Package, ChevronRight } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import CreateProductDialog from "@/components/CreateProductDialog";
+import GenerateProductsWizardDialog from "@/components/GenerateProductsWizardDialog";
 import { useAuth } from "@/context/AuthContext";
 import {
   useAdminCategories,
@@ -79,7 +80,10 @@ const ProductsPage: React.FC = () => {
               Browse by category or create a new product
             </p>
           </div>
-          <CreateProductDialog subcategories={allSubcategories} />
+          <div className="flex items-center gap-2 flex-wrap">
+            <GenerateProductsWizardDialog />
+            <CreateProductDialog subcategories={allSubcategories} />
+          </div>
         </div>
 
         {/* Category Grid */}

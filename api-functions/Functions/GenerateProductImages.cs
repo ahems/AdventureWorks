@@ -14,18 +14,16 @@ public class GenerateProductImages
 {
     private readonly ILogger<GenerateProductImages> _logger;
     private readonly ProductService _productService;
-    private readonly AIService _aiService;
-    private const string QUEUE_NAME = "product-image-generation";
+    // AIService is not used directly here; image generation is handled by AIJobProcessorFunction.
+    private const string AI_JOB_QUEUE = "ai-job-image-queue";
     private const string THUMBNAIL_QUEUE_NAME = "product-thumbnail-generation";
 
     public GenerateProductImages(
         ILogger<GenerateProductImages> logger,
-        ProductService productService,
-        AIService aiService)
+        ProductService productService)
     {
         _logger = logger;
         _productService = productService;
-        _aiService = aiService;
     }
 
     [Function(nameof(GenerateProductImages_HttpStart))]
@@ -37,37 +35,19 @@ public class GenerateProductImages
 
         try
         {
-            // Get queue service URI from environment variables
-            var queueServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
-            if (string.IsNullOrEmpty(queueServiceUri))
+            var queueServiceClient = GetQueueServiceClient();
+
+            // Clear the image job queue (and its poison queue) so stale work doesn't block new jobs
+            var aiJobQueueClient = queueServiceClient.GetQueueClient(AI_JOB_QUEUE);
+            await aiJobQueueClient.CreateIfNotExistsAsync();
+            _logger.LogInformation("Clearing existing messages from queue: {queueName}", AI_JOB_QUEUE);
+            await aiJobQueueClient.ClearMessagesAsync();
+
+            var aiJobPoisonClient = queueServiceClient.GetQueueClient($"{AI_JOB_QUEUE}-poison");
+            if (await aiJobPoisonClient.ExistsAsync())
             {
-                var storageAccountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
-                    ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
-                queueServiceUri = $"https://{storageAccountName}.queue.core.windows.net";
-            }
-
-            // Create queue client with managed identity
-            var queueServiceClient = new QueueServiceClient(
-                new Uri(queueServiceUri),
-                new DefaultAzureCredential(),
-                new QueueClientOptions
-                {
-                    MessageEncoding = QueueMessageEncoding.Base64
-                }
-            );
-
-            var queueClient = queueServiceClient.GetQueueClient(QUEUE_NAME);
-            await queueClient.CreateIfNotExistsAsync();
-
-            // Clear existing messages from the queue and poison queue
-            _logger.LogInformation("Clearing existing messages from queue: {queueName}", QUEUE_NAME);
-            await queueClient.ClearMessagesAsync();
-
-            var poisonQueueClient = queueServiceClient.GetQueueClient($"{QUEUE_NAME}-poison");
-            if (await poisonQueueClient.ExistsAsync())
-            {
-                _logger.LogInformation("Clearing poison queue: {queueName}", $"{QUEUE_NAME}-poison");
-                await poisonQueueClient.ClearMessagesAsync();
+                _logger.LogInformation("Clearing poison queue: {queueName}", $"{AI_JOB_QUEUE}-poison");
+                await aiJobPoisonClient.ClearMessagesAsync();
             }
 
             // Also clear thumbnail queues
@@ -92,29 +72,28 @@ public class GenerateProductImages
             {
                 _logger.LogInformation("No products need images");
                 var response = req.CreateResponse(HttpStatusCode.OK);
-                await response.WriteStringAsync("No products need images - all products already have 4 photos");
+                await response.WriteStringAsync("No products need images - all products already have enough photos");
                 return response;
             }
 
-            // Enqueue one message per product
+            // Enqueue one ai-job-image-queue message per product
             int enqueued = 0;
             foreach (var product in products)
             {
-                var message = JsonSerializer.Serialize(new
+                var message = JsonSerializer.Serialize(new AiJobMessage
                 {
-                    ProductID = product.ProductID,
-                    ProductName = product.Name
+                    JobType = "image",
+                    ProductId = product.ProductID
                 });
-
-                await queueClient.SendMessageAsync(message);
+                await aiJobQueueClient.SendMessageAsync(message);
                 enqueued++;
             }
 
-            _logger.LogInformation("Enqueued {count} product image generation jobs", enqueued);
+            _logger.LogInformation("Enqueued {count} image generation jobs onto {queue}", enqueued, AI_JOB_QUEUE);
 
             var successResponse = req.CreateResponse(HttpStatusCode.OK);
             await successResponse.WriteStringAsync(
-                $"Enqueued {enqueued} product image generation jobs. Each product will be processed sequentially."
+                $"Enqueued {enqueued} image generation jobs. They will be processed one at a time."
             );
             return successResponse;
         }
@@ -146,30 +125,16 @@ public class GenerateProductImages
                 return notFound;
             }
 
-            var queueServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
-            if (string.IsNullOrEmpty(queueServiceUri))
+            var queueServiceClient = GetQueueServiceClient();
+            var aiJobQueueClient = queueServiceClient.GetQueueClient(AI_JOB_QUEUE);
+            await aiJobQueueClient.CreateIfNotExistsAsync();
+
+            var message = JsonSerializer.Serialize(new AiJobMessage
             {
-                var storageAccountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
-                    ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
-                queueServiceUri = $"https://{storageAccountName}.queue.core.windows.net";
-            }
-
-            var queueServiceClient = new QueueServiceClient(
-                new Uri(queueServiceUri),
-                new DefaultAzureCredential(),
-                new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 }
-            );
-
-            var queueClient = queueServiceClient.GetQueueClient(QUEUE_NAME);
-            await queueClient.CreateIfNotExistsAsync();
-
-            var message = JsonSerializer.Serialize(new
-            {
-                ProductID = product.ProductID,
-                ProductName = product.Name
+                JobType = "image",
+                ProductId = product.ProductID
             });
-
-            await queueClient.SendMessageAsync(message);
+            await aiJobQueueClient.SendMessageAsync(message);
 
             _logger.LogInformation("Enqueued image generation job for product {id}: {name}", product.ProductID, product.Name);
 
@@ -188,142 +153,21 @@ public class GenerateProductImages
         }
     }
 
-    [Function(nameof(GenerateProductImages_QueueTrigger))]
-    public async Task GenerateProductImages_QueueTrigger(
-        [QueueTrigger(QUEUE_NAME, Connection = "AzureWebJobsStorage")] BinaryData queueMessage,
-        FunctionContext executionContext)
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private static QueueServiceClient GetQueueServiceClient()
     {
-        try
+        var queueServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
+        if (string.IsNullOrEmpty(queueServiceUri))
         {
-            // Parse queue message
-            var messageData = JsonSerializer.Deserialize<JsonElement>(queueMessage.ToString());
-            var productId = messageData.GetProperty("ProductID").GetInt32();
-            var productName = messageData.GetProperty("ProductName").GetString();
-
-            _logger.LogInformation("Processing product {id}: {name}", productId, productName);
-
-            // Fetch current product data to verify it still needs images
-            var product = await _productService.GetProductForImageGenerationAsync(productId);
-
-            if (product == null)
-            {
-                _logger.LogInformation("Product {id} no longer needs images - skipping", productId);
-                return;
-            }
-
-            // ── Smart reuse: if another variant with the same Color+Style already has
-            //    photos, link those instead of burning AI tokens on a duplicate. ──────
-            if (product.ProductModelID.HasValue)
-            {
-                var siblingPhotoIds = await _productService.GetSiblingPhotoIdsAsync(
-                    product.ProductID,
-                    product.ProductModelID.Value,
-                    product.Color,
-                    product.Style);
-
-                if (siblingPhotoIds.Count > 0)
-                {
-                    _logger.LogInformation(
-                        "Product {id} shares Color={color}/Style={style} with an existing variant. Linking {count} sibling photos instead of generating.",
-                        productId, product.Color ?? "null", product.Style ?? "null", siblingPhotoIds.Count);
-                    await _productService.LinkPhotosToProductAsync(productId, siblingPhotoIds);
-                    return;
-                }
-            }
-
-            _logger.LogInformation("Product {id} needs {count} images. Generating...",
-                productId, 4 - product.ExistingPhotoCount);
-
-            // Generate images for this product with retry logic for rate limiting
-            List<ProductPhotoData>? photos = null;
-            int maxRetries = 5;
-            int retryCount = 0;
-
-            while (retryCount < maxRetries)
-            {
-                try
-                {
-                    photos = await _aiService.GenerateProductImagesAsync(new List<ProductImageData> { product });
-                    break; // Success, exit retry loop
-                }
-                catch (Exception ex) when (ex.Message.Contains("429") || ex.Message.Contains("RateLimitReached"))
-                {
-                    retryCount++;
-                    if (retryCount >= maxRetries)
-                    {
-                        _logger.LogError("Rate limit exceeded after {retries} retries for product {id}", maxRetries, productId);
-                        throw; // Let it go to poison queue after max retries
-                    }
-
-                    // Exponential backoff: 60s, 120s, 240s, 480s
-                    int delaySeconds = 60 * (int)Math.Pow(2, retryCount - 1);
-                    _logger.LogWarning(
-                        "Rate limit hit for product {id}. Retry {retry}/{max} after {delay}s delay",
-                        productId, retryCount, maxRetries, delaySeconds
-                    );
-                    await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
-                }
-            }
-
-            if (photos != null && photos.Count > 0)
-            {
-                // Get storage account connection for thumbnail queue using Environment variables
-                var queueServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
-                if (string.IsNullOrEmpty(queueServiceUri))
-                {
-                    var storageAccountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
-                        ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
-                    queueServiceUri = $"https://{storageAccountName}.queue.core.windows.net";
-                }
-
-                var queueServiceClient = new QueueServiceClient(
-                    new Uri(queueServiceUri),
-                    new DefaultAzureCredential(),
-                    new QueueClientOptions
-                    {
-                        MessageEncoding = QueueMessageEncoding.Base64
-                    }
-                );
-
-                var thumbnailQueueClient = queueServiceClient.GetQueueClient(THUMBNAIL_QUEUE_NAME);
-                await thumbnailQueueClient.CreateIfNotExistsAsync();
-
-                // Save images to database and enqueue thumbnail generation
-                foreach (var photo in photos)
-                {
-                    var photoId = await _productService.SaveProductPhotoAsync(photo);
-                    _logger.LogInformation(
-                        "Saved image for ProductID {productId}: {fileName} ({size} bytes), ProductPhotoID: {photoId}",
-                        photo.ProductID,
-                        photo.FileName,
-                        photo.ImageData.Length,
-                        photoId
-                    );
-
-                    // Enqueue thumbnail generation for this photo
-                    var thumbnailMessage = JsonSerializer.Serialize(new
-                    {
-                        ProductPhotoID = photoId,
-                        LargePhotoFileName = photo.FileName
-                    });
-
-                    await thumbnailQueueClient.SendMessageAsync(thumbnailMessage);
-                }
-
-                _logger.LogInformation(
-                    "Successfully processed product {id} - saved {imageCount} images and enqueued {thumbnailCount} thumbnail jobs",
-                    productId, photos.Count, photos.Count);
-            }
-            else
-            {
-                _logger.LogWarning("No images generated for product {id}", productId);
-            }
+            var storageAccountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
+                ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
+            queueServiceUri = $"https://{storageAccountName}.queue.core.windows.net";
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error processing product image generation from queue. Message: {message}, StackTrace: {stackTrace}",
-                ex.Message, ex.StackTrace);
-            throw; // Re-throw to trigger poison queue handling
-        }
+
+        return new QueueServiceClient(
+            new Uri(queueServiceUri),
+            new DefaultAzureCredential(),
+            new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
     }
 }

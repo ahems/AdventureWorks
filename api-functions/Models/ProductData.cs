@@ -78,12 +78,30 @@ public class GenerateProductContentRequest
     public string? ProductLine { get; set; }
     public string? Class { get; set; }
     public string? Style { get; set; }
+    /// <summary>Full list of available sizes to evaluate; AI returns which subset make sense.</summary>
+    public List<string>? AvailableSizes { get; set; }
+    /// <summary>Full list of available colors to evaluate; AI returns which subset make sense.</summary>
+    public List<string>? AvailableColors { get; set; }
+    /// <summary>Full list of available styles (value+label pairs) to evaluate; AI returns which subset make sense.</summary>
+    public List<string>? AvailableStyles { get; set; }
 }
 
 public class GenerateProductContentResponse
 {
     public string ProductName { get; set; } = string.Empty;
     public string ProductDescription { get; set; } = string.Empty;
+    /// <summary>AI-estimated product weight in pounds.</summary>
+    public decimal EstimatedWeightLb { get; set; }
+    /// <summary>AI-estimated manufacturing / bulk purchase cost in USD.</summary>
+    public decimal SuggestedStandardCost { get; set; }
+    /// <summary>AI-estimated retail list price in USD (always >= SuggestedStandardCost).</summary>
+    public decimal SuggestedListPrice { get; set; }
+    /// <summary>Subset of AvailableSizes that make sense for this product type.</summary>
+    public List<string> SuggestedSizes { get; set; } = new();
+    /// <summary>Subset of AvailableColors that make sense for this product type.</summary>
+    public List<string> SuggestedColors { get; set; } = new();
+    /// <summary>Subset of AvailableStyles (values) that make sense for this product type.</summary>
+    public List<string> SuggestedStyles { get; set; } = new();
 }
 
 public class ProductPhotoThumbnailData

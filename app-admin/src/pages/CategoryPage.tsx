@@ -15,6 +15,7 @@ import AdminProductCard from "@/components/AdminProductCard";
 import AdminProductModelGroupCard from "@/components/AdminProductModelGroupCard";
 import AdminProductCardSkeleton from "@/components/AdminProductCardSkeleton";
 import CreateProductDialog from "@/components/CreateProductDialog";
+import GenerateProductsWizardDialog from "@/components/GenerateProductsWizardDialog";
 import { useAuth } from "@/context/AuthContext";
 import { useAdminReviews } from "@/hooks/useAdminReviews";
 import {
@@ -278,7 +279,15 @@ const CategoryPage: React.FC = () => {
                 ` · ${groupedCount} group${groupedCount !== 1 ? "s" : ""}`}{" "}
               • Click any product to edit
             </p>
-            <div className="mt-4">
+            <div className="mt-4 flex items-center gap-2 flex-wrap">
+              <GenerateProductsWizardDialog
+                defaultCategoryId={
+                  categoryId ? parseInt(categoryId) : undefined
+                }
+                defaultSubcategoryId={
+                  selectedSubcategory ?? subcategories[0]?.ProductSubcategoryID
+                }
+              />
               <CreateProductDialog
                 defaultCategoryId={
                   categoryId ? parseInt(categoryId) : undefined

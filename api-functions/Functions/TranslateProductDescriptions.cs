@@ -8,6 +8,9 @@ using Microsoft.ApplicationInsights;
 using System.Text.Json;
 using api_functions.Models;
 using api_functions.Services;
+using Azure.Storage.Queues;
+using Azure.Identity;
+using System.Net;
 
 namespace api_functions.Functions;
 
@@ -16,6 +19,7 @@ public class TranslateProductDescriptions
     private readonly ILogger<TranslateProductDescriptions> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IServiceProvider _serviceProvider;
+    private const string AI_JOB_QUEUE = "ai-job-chat-queue";
 
     public TranslateProductDescriptions(ILogger<TranslateProductDescriptions> logger, ILoggerFactory loggerFactory, IServiceProvider serviceProvider)
     {
@@ -29,10 +33,9 @@ public class TranslateProductDescriptions
         [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
         [DurableClient] DurableTaskClient client)
     {
-        _logger.LogInformation("Starting product translation orchestration");
+        _logger.LogInformation("Translation request: enqueuing translation jobs onto ai-job-chat-queue");
 
-        // Read product model IDs from request body (optional - if empty, uses recently enhanced)
-        // Accepts both a raw JSON array [1,2,3] and an object {"ProductModelIds":[1,2,3]}
+        // Read optional product model IDs from request body
         List<int>? productModelIds = null;
         try
         {
@@ -41,37 +44,104 @@ public class TranslateProductDescriptions
             {
                 var bodyElement = JsonSerializer.Deserialize<JsonElement>(bodyText);
                 if (bodyElement.ValueKind == JsonValueKind.Array)
-                {
                     productModelIds = bodyElement.Deserialize<List<int>>();
-                }
                 else if (bodyElement.ValueKind == JsonValueKind.Object &&
                          bodyElement.TryGetProperty("ProductModelIds", out var prop))
-                {
                     productModelIds = prop.Deserialize<List<int>>();
-                }
-            }
-
-            if (productModelIds != null && productModelIds.Count > 0)
-            {
-                _logger.LogInformation("Received {count} product model IDs to translate", productModelIds.Count);
             }
         }
         catch
         {
-            // If parsing fails or body is empty, productModelIds remains null (will use recently enhanced)
-            _logger.LogInformation("No product model IDs provided, will use recently enhanced products");
+            _logger.LogInformation("No product model IDs provided — will use recently enhanced products");
         }
 
-        var instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(TranslateProductDescriptions_Orchestrator),
-            productModelIds);
+        try
+        {
+            // Resolve which product models to translate
+            var connectionString = Environment.GetEnvironmentVariable("SQL_CONNECTION_STRING")
+                ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not configured");
+            var productService = new ProductService(connectionString);
 
-        _logger.LogInformation("Started orchestration with ID = '{instanceId}'", instanceId);
+            var products = productModelIds?.Count > 0
+                ? await productService.GetProductsByModelIdsAsync(productModelIds)
+                : await productService.GetRecentlyEnhancedProductsAsync();
 
-        var response = req.CreateResponse(System.Net.HttpStatusCode.Accepted);
-        await response.WriteAsJsonAsync(new { id = instanceId, statusQueryGetUri = $"{req.Url.Scheme}://{req.Url.Authority}/runtime/webhooks/durabletask/instances/{instanceId}" });
-        return response;
+            if (products == null || products.Count == 0)
+            {
+                var emptyResponse = req.CreateResponse(HttpStatusCode.OK);
+                await emptyResponse.WriteAsJsonAsync(new QueuedJobResponseDto
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Message = "No products found for translation"
+                });
+                return emptyResponse;
+            }
+
+            // Build queue client
+            var queueServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
+            if (string.IsNullOrEmpty(queueServiceUri))
+            {
+                var storageAccountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
+                    ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
+                queueServiceUri = $"https://{storageAccountName}.queue.core.windows.net";
+            }
+            var queueServiceClient = new QueueServiceClient(
+                new Uri(queueServiceUri),
+                new DefaultAzureCredential(),
+                new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
+
+            var aiJobQueueClient = queueServiceClient.GetQueueClient(AI_JOB_QUEUE);
+            await aiJobQueueClient.CreateIfNotExistsAsync();
+
+            // Enqueue one translation job per product model
+            int enqueued = 0;
+            foreach (var product in products)
+            {
+                var message = JsonSerializer.Serialize(new AiJobMessage
+                {
+                    JobType = "translation",
+                    ProductModelId = product.ProductModelID,
+                    // Pass ProductID so name translation is also performed
+                    ProductId = product.ProductID > 0 ? product.ProductID : null
+                });
+                await aiJobQueueClient.SendMessageAsync(message);
+                enqueued++;
+            }
+
+            _logger.LogInformation("Enqueued {count} translation jobs onto {queue}", enqueued, AI_JOB_QUEUE);
+
+            var jobId = Guid.NewGuid().ToString();
+            var successResponse = req.CreateResponse(HttpStatusCode.Accepted);
+            // Return the same shape the admin UI expects for a queued (non-Durable) job
+            await successResponse.WriteAsJsonAsync(new QueuedJobResponseDto
+            {
+                Id = jobId,
+                Message = $"Enqueued {enqueued} translation jobs. They will be processed serially."
+            });
+            return successResponse;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error enqueueing translation jobs");
+            var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await errorResponse.WriteStringAsync($"Error: {ex.Message}");
+            return errorResponse;
+        }
     }
+
+    // ── DTO returned to admin UI ─────────────────────────────────────────────
+    private class QueuedJobResponseDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string? Message { get; set; }
+        // statusQueryGetUri intentionally omitted → frontend treats as queued/done
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Durable Activity functions are kept below so that any in-flight
+    // orchestrations started before this deployment can still complete.
+    // They are no longer invoked by new requests.
+    // ────────────────────────────────────────────────────────────────────────
 
     [Function(nameof(TranslateProductDescriptions_Orchestrator))]
     public async Task<string> TranslateProductDescriptions_Orchestrator(

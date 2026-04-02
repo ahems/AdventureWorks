@@ -1505,46 +1505,56 @@ Return ONLY a valid JSON array. No markdown fences, no explanation.";
             var productClass = string.IsNullOrWhiteSpace(request.Class) ? "N/A" : request.Class;
             var style = string.IsNullOrWhiteSpace(request.Style) ? "N/A" : request.Style;
 
-            var prompt = $@"You are a creative product copywriter for the fictional AdventureWorks e‑commerce brand.
+            // Build the available-options sections only when data is provided (wizard mode)
+            var sizesSection = (request.AvailableSizes?.Count > 0)
+                ? $"\nAvailable sizes to choose from (pick only those that make sense, may be empty): {string.Join(", ", request.AvailableSizes)}"
+                : string.Empty;
+            var colorsSection = (request.AvailableColors?.Count > 0)
+                ? $"\nAvailable colors to choose from (pick only those that make sense, may be empty): {string.Join(", ", request.AvailableColors)}"
+                : string.Empty;
+            var stylesSection = (request.AvailableStyles?.Count > 0)
+                ? $"\nAvailable styles to choose from (pick only those that make sense, may be empty): {string.Join(", ", request.AvailableStyles)}"
+                : string.Empty;
+
+            var systemPrompt = @"You are a creative product copywriter and pricing analyst for the fictional AdventureWorks e‑commerce brand.
 
 Context:
-This is a demo online shop and Admin system based on the AdventureWorks sample dataset. The tone should feel realistic and professional enough to belong on a real retail website, but also playful, witty, and light‑hearted to emphasize that this is a demo and the products are fictional.
+AdventureWorks is a demo outdoor / cycling goods retailer. The tone should feel realistic and professional — like a real retail website — but also playful and light‑hearted.
 
 Your task:
-Generate a fun, creative Product Name and a compelling Product Description based on the provided product attributes.
+Return a JSON object with all required fields below. Do NOT add extra text outside the JSON.
 
-Guidelines:
-• The product name should sound like a premium or enthusiast retail product
-• Avoid real-world trademarks or real brand names
-• Keep it whimsical, witty, and imaginative without becoming absurd
-• The description should be engaging, readable, and marketing-friendly
-• Focus on the *experience* and *personality* of the product, not raw technical specs
-• Use confident, playful language that fits an outdoor / cycling lifestyle brand
-• Do NOT mention that the product is fictional, demo data, or AI-generated
-• Do NOT include pricing, SKU, or inventory details
-• Write in US English
-• Length:
-  – Product Name: 2–5 words
-  – Description: 2 short paragraphs or 4–6 sentences total
+JSON fields:
+- productName: (string) 2–5 words, premium retail product name — avoid real trademarks
+- productDescription: (string) 2 short engaging marketing paragraphs (4–6 sentences total) in US English — focus on experience, NOT specs or pricing
+- estimatedWeightLb: (number) realistic weight in pounds for the product given its category/subcategory
+- suggestedStandardCost: (number) realistic USD manufacturing or bulk purchase cost
+- suggestedListPrice: (number) realistic USD retail price; must be >= suggestedStandardCost
+- suggestedSizes: (array of strings) subset of the provided available sizes that physically make sense for this product; empty array if sizes don't vary
+- suggestedColors: (array of strings) subset of the provided available colors that make sense for this product; empty array if color doesn't vary
+- suggestedStyles: (array of strings) subset of the provided available styles that make sense for this product; empty array if style doesn't vary
 
-Inputs:
-Category: {request.Category}
+Guidelines for suggestedSizes:
+- Bikes: use only numeric frame sizes (38–70)
+- Apparel (jerseys, shorts, gloves): use only clothing sizes (XS, S, M, L, XL)
+- Helmets, caps: S, M, L only
+- Small accessories (water bottles, lights, locks): return empty array (one size)
+- Tires: use numeric sizes if available; otherwise empty
+
+Return ONLY a valid JSON object.";
+
+            var userPrompt = $@"Category: {request.Category}
 Subcategory: {request.Subcategory}
 Product Line (optional): {productLine}
 Class (optional): {productClass}
-Style (optional): {style}
+Style (optional): {style}{sizesSection}{colorsSection}{stylesSection}
 
-Output format (STRICT — do not add extra text):
-
-Product Name:
-<generated product name>
-
-Product Description:
-<generated product description>";
+Generate the JSON object for this product.";
 
             var messages = new List<ChatMessage>
             {
-                new UserChatMessage(prompt)
+                new SystemChatMessage(systemPrompt),
+                new UserChatMessage(userPrompt)
             };
 
             ChatCompletion response;
@@ -1559,7 +1569,8 @@ Product Description:
                     response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
                     {
                         Temperature = 0.9f,
-                        MaxOutputTokenCount = 500
+                        MaxOutputTokenCount = 800,
+                        ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
                     });
                     depOperation.Telemetry.Success = true;
                 }
@@ -1573,54 +1584,38 @@ Product Description:
             _telemetryClient.TrackMetric("AI.GenerateProductContent.InputTokens", response.Usage?.InputTokenCount ?? 0);
             _telemetryClient.TrackMetric("AI.GenerateProductContent.OutputTokens", response.Usage?.OutputTokenCount ?? 0);
 
-            var content = response.Content[0].Text ?? string.Empty;
+            var raw = response.Content[0].Text ?? "{}";
 
-            // Parse "Product Name:\n<name>\n\nProduct Description:\n<description>"
-            var nameMarker = "Product Name:";
-            var descMarker = "Product Description:";
-
-            var nameIdx = content.IndexOf(nameMarker, StringComparison.OrdinalIgnoreCase);
-            var descIdx = content.IndexOf(descMarker, StringComparison.OrdinalIgnoreCase);
-
-            var productName = string.Empty;
-            var productDescription = string.Empty;
-
-            if (nameIdx >= 0 && descIdx > nameIdx)
+            GenerateProductContentResponse result;
+            try
             {
-                productName = content
-                    .Substring(nameIdx + nameMarker.Length, descIdx - nameIdx - nameMarker.Length)
-                    .Trim();
-                productDescription = content
-                    .Substring(descIdx + descMarker.Length)
-                    .Trim();
+                result = JsonSerializer.Deserialize<GenerateProductContentResponse>(raw,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    ?? new GenerateProductContentResponse();
             }
-            else if (nameIdx >= 0)
+            catch (JsonException ex)
             {
-                productName = content.Substring(nameIdx + nameMarker.Length).Trim();
+                _logger.LogError(ex, "GenerateProductContent: Failed to parse JSON response. Raw={Raw}", raw);
+                result = new GenerateProductContentResponse();
             }
-            else
-            {
-                // Fallback: use entire response as description
-                productDescription = content.Trim();
-            }
+
+            // Ensure list price >= standard cost
+            if (result.SuggestedListPrice < result.SuggestedStandardCost && result.SuggestedStandardCost > 0)
+                result.SuggestedListPrice = Math.Round(result.SuggestedStandardCost * 1.2m, 2);
 
             _logger.LogInformation(
                 "GenerateProductContent: Category={Category}, Subcategory={Subcategory}, Name={Name}",
-                request.Category, request.Subcategory, productName);
+                request.Category, request.Subcategory, result.ProductName);
 
             _telemetryClient.TrackEvent("GenerateProductContent.Completed", new Dictionary<string, string>
             {
                 ["Category"] = request.Category,
                 ["Subcategory"] = request.Subcategory,
-                ["ProductName"] = productName
+                ["ProductName"] = result.ProductName
             });
 
             operation.Telemetry.Success = true;
-            return new GenerateProductContentResponse
-            {
-                ProductName = productName,
-                ProductDescription = productDescription
-            };
+            return result;
         }
         catch (Exception ex)
         {
@@ -1633,6 +1628,73 @@ Product Description:
             });
             throw;
         }
+    }
+
+    /// <summary>
+    /// Generates AdventureWorks staff reply texts for a subset of customer reviews.
+    /// Returns a dictionary keyed by ProductReviewID containing the suggested reply text.
+    /// </summary>
+    public async Task<Dictionary<int, string>> GenerateReviewRepliesAsync(
+        List<(int ReviewId, string ReviewerName, int Rating, string Comments, string ProductName)> reviews)
+    {
+        if (reviews.Count == 0) return new Dictionary<int, string>();
+
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var chatClient = client.GetChatClient(_deploymentName);
+
+        const string systemPrompt = @"You are a friendly customer service representative for AdventureWorks, an outdoor adventure equipment retailer.
+Your job is to write short, warm, brand-appropriate replies to customer product reviews.
+Keep each reply to 2–3 sentences. Be genuine and helpful. Match the tone to the review (enthusiastic for positives, empathetic for negatives).
+Never be defensive. Sign off as 'The AdventureWorks Team'.
+
+Return ONLY a valid JSON array with this structure:
+[{ ""reviewId"": 123, ""reply"": ""Thank you for your kind words! ..."" }]";
+
+        var reviewsJson = JsonSerializer.Serialize(reviews.Select(r => new
+        {
+            reviewId = r.ReviewId,
+            reviewerName = r.ReviewerName,
+            rating = r.Rating,
+            comments = r.Comments,
+            productName = r.ProductName
+        }), new JsonSerializerOptions { WriteIndented = false });
+
+        var userPrompt = $"Generate staff replies for these reviews:\n\n{reviewsJson}\n\nReturn the JSON array only.";
+
+        var messages = new List<ChatMessage>
+        {
+            new SystemChatMessage(systemPrompt),
+            new UserChatMessage(userPrompt)
+        };
+
+        try
+        {
+            var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+            {
+                Temperature = 0.7f,
+                MaxOutputTokenCount = 2000
+            });
+
+            var content = StripMarkdownFences(response.Value.Content[0].Text ?? "[]");
+            var parsed = JsonSerializer.Deserialize<List<ReviewReplyItem>>(content,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            return (parsed ?? new List<ReviewReplyItem>())
+                .Where(r => !string.IsNullOrWhiteSpace(r.Reply))
+                .ToDictionary(r => r.ReviewId, r => r.Reply!);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GenerateReviewReplies failed");
+            return new Dictionary<int, string>();
+        }
+    }
+
+    private class ReviewReplyItem
+    {
+        public int ReviewId { get; set; }
+        public string? Reply { get; set; }
     }
 }
 

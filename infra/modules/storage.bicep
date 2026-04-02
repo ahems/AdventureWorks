@@ -70,21 +70,27 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
           }
         }
         {
-          name: 'product-image-generation'
+          name: 'ai-job-image-queue'
           metadata: {
-            description: 'Queue for generating AI product images'
+            description: 'Serial job queue for DALL-E image generation (one message at a time)'
+          }
+        }
+        {
+          name: 'ai-job-chat-queue'
+          metadata: {
+            description: 'Serial job queue for GPT chat operations: translations and review generation'
+          }
+        }
+        {
+          name: 'ai-job-embeddings-queue'
+          metadata: {
+            description: 'Serial job queue for text-embedding operations: product and review embeddings'
           }
         }
         {
           name: 'product-thumbnail-generation'
           metadata: {
             description: 'Queue for generating product thumbnails from large images'
-          }
-        }
-        {
-          name: 'product-review-generation'
-          metadata: {
-            description: 'Queue for generating AI product reviews'
           }
         }
         {
