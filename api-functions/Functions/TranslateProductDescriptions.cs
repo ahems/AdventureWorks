@@ -5,6 +5,7 @@ using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.ApplicationInsights;
+using System.Text.Json;
 using api_functions.Models;
 using api_functions.Services;
 
@@ -31,10 +32,25 @@ public class TranslateProductDescriptions
         _logger.LogInformation("Starting product translation orchestration");
 
         // Read product model IDs from request body (optional - if empty, uses recently enhanced)
+        // Accepts both a raw JSON array [1,2,3] and an object {"ProductModelIds":[1,2,3]}
         List<int>? productModelIds = null;
         try
         {
-            productModelIds = await req.ReadFromJsonAsync<List<int>>();
+            var bodyText = await req.ReadAsStringAsync();
+            if (!string.IsNullOrWhiteSpace(bodyText))
+            {
+                var bodyElement = JsonSerializer.Deserialize<JsonElement>(bodyText);
+                if (bodyElement.ValueKind == JsonValueKind.Array)
+                {
+                    productModelIds = bodyElement.Deserialize<List<int>>();
+                }
+                else if (bodyElement.ValueKind == JsonValueKind.Object &&
+                         bodyElement.TryGetProperty("ProductModelIds", out var prop))
+                {
+                    productModelIds = prop.Deserialize<List<int>>();
+                }
+            }
+
             if (productModelIds != null && productModelIds.Count > 0)
             {
                 _logger.LogInformation("Received {count} product model IDs to translate", productModelIds.Count);
@@ -94,15 +110,32 @@ public class TranslateProductDescriptions
 
             logger.LogInformation("Found {count} target languages", cultures.Count);
 
-            // Step 3: Translate and save each product individually
+            // Step 3: Translate, save, and collect saved description IDs for each product
             int totalTranslations = 0;
+            var allSavedDescriptions = new List<SavedDescriptionResult>();
+
+            // Also include the English descriptions so they get embeddings too
+            foreach (var product in recentProducts)
+            {
+                if (product.EnglishDescriptionID > 0 && !string.IsNullOrWhiteSpace(product.EnglishDescription))
+                {
+                    allSavedDescriptions.Add(new SavedDescriptionResult
+                    {
+                        ProductDescriptionID = product.EnglishDescriptionID,
+                        Description = product.EnglishDescription,
+                        CultureID = "en",
+                        ProductModelID = product.ProductModelID,
+                    });
+                }
+            }
+
             foreach (var product in recentProducts)
             {
                 logger.LogInformation("Translating product {ProductModelID}", product.ProductModelID);
 
                 var translations = await context.CallActivityAsync<List<TranslatedDescription>>(
                     nameof(TranslateSingleProductActivity),
-                    (object)new TranslationActivityInput
+                    new TranslationActivityInput
                     {
                         Products = new List<TranslationRequest> { product },
                         Cultures = cultures
@@ -116,15 +149,49 @@ public class TranslateProductDescriptions
                     logger.LogInformation("Saving {count} translations for product {ProductModelID}",
                         translations.Count, product.ProductModelID);
 
-                    await context.CallActivityAsync(
+                    var saved = await context.CallActivityAsync<List<SavedDescriptionResult>>(
                         nameof(SaveTranslationsActivity),
                         translations);
 
+                    allSavedDescriptions.AddRange(saved);
                     totalTranslations += translations.Count;
                 }
             }
 
-            return $"Successfully translated {recentProducts.Count} products into {cultures.Count} languages ({totalTranslations} total translations)";
+            // Step 4: Generate and save embeddings for all descriptions (English + translations)
+            // Passed in-memory from the save step — no extra DB round-trip needed.
+            if (allSavedDescriptions.Count > 0)
+            {
+                logger.LogInformation("Generating embeddings for {count} descriptions", allSavedDescriptions.Count);
+
+                var forEmbedding = allSavedDescriptions
+                    .Select(r => new ProductDescriptionData
+                    {
+                        ProductDescriptionID = r.ProductDescriptionID,
+                        Description = r.Description,
+                        CultureID = r.CultureID,
+                        ProductModelID = r.ProductModelID,
+                    })
+                    .ToList();
+
+                int embeddingsProcessed = 0;
+                for (int i = 0; i < forEmbedding.Count; i += 10)
+                {
+                    var batch = forEmbedding.Skip(i).Take(10).ToList();
+
+                    var embeddedBatch = await context.CallActivityAsync<List<ProductDescriptionEmbedding>>(
+                        "GenerateEmbeddingsActivity", batch);
+
+                    await context.CallActivityAsync(
+                        "SaveEmbeddingsActivity", embeddedBatch);
+
+                    embeddingsProcessed += embeddedBatch.Count;
+                }
+
+                logger.LogInformation("Generated and saved {count} embeddings", embeddingsProcessed);
+            }
+
+            return $"Successfully translated {recentProducts.Count} products into {cultures.Count} languages ({totalTranslations} total translations), with embeddings generated";
         }
         catch (Exception ex)
         {
@@ -171,21 +238,17 @@ public class TranslateProductDescriptions
 
     [Function(nameof(TranslateSingleProductActivity))]
     public async Task<List<TranslatedDescription>> TranslateSingleProductActivity(
-        [ActivityTrigger] object input)
+        [ActivityTrigger] TranslationActivityInput input)
     {
-        // Deserialize the input which is an anonymous type with Product and Cultures
-        var json = System.Text.Json.JsonSerializer.Serialize(input);
-        var data = System.Text.Json.JsonSerializer.Deserialize<TranslationActivityInput>(json);
-
-        if (data == null || data.Products == null || data.Products.Count == 0)
+        if (input == null || input.Products == null || input.Products.Count == 0)
         {
             _logger.LogWarning("No product provided for translation");
             return new List<TranslatedDescription>();
         }
 
-        var product = data.Products[0];
+        var product = input.Products[0];
         _logger.LogInformation("Translating product {ProductModelID} ({ProductName}) to {cultureCount} languages",
-            product.ProductModelID, product.ProductName, data.Cultures.Count);
+            product.ProductModelID, product.ProductName, input.Cultures.Count);
 
         var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")
             ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
@@ -195,7 +258,7 @@ public class TranslateProductDescriptions
         var aiService = new AIService(endpoint, aiServiceLogger, telemetryClient);
 
         // Translate description
-        var translations = await aiService.TranslateProductAsync(product, data.Cultures);
+        var translations = await aiService.TranslateProductAsync(product, input.Cultures);
 
         _logger.LogInformation("AI translated product {ProductModelID} to {count} languages",
             product.ProductModelID, translations.Count);
@@ -271,7 +334,7 @@ public class TranslateProductDescriptions
     }
 
     [Function(nameof(SaveTranslationsActivity))]
-    public async Task SaveTranslationsActivity(
+    public async Task<List<SavedDescriptionResult>> SaveTranslationsActivity(
         [ActivityTrigger] List<TranslatedDescription> translations)
     {
         _logger.LogInformation("Saving {count} translations to database", translations.Count);
@@ -280,8 +343,9 @@ public class TranslateProductDescriptions
             ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not configured");
 
         var productService = new ProductService(connectionString);
-        await productService.SaveTranslationsAsync(translations);
+        var results = await productService.SaveTranslationsAsync(translations);
 
-        _logger.LogInformation("Saved {count} translations", translations.Count);
+        _logger.LogInformation("Saved {count} translations", results.Count);
+        return results;
     }
 }

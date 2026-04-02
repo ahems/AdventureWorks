@@ -38,167 +38,6 @@ public class AIService
         _telemetryClient = telemetryClient;
     }
 
-    public async Task<List<EnhancedProductData>> EnhanceProductsAsync(List<ProductData> products)
-    {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("EnhanceProducts");
-        operation.Telemetry.Properties["ProductCount"] = products.Count.ToString();
-
-        try
-        {
-            var credential = new DefaultAzureCredential();
-            var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
-            var chatClient = client.GetChatClient(_deploymentName);
-
-            var enhancedProducts = new List<EnhancedProductData>();
-
-            // Process products in batches of 10 to avoid token limits
-            const int batchSize = 10;
-            var batchCount = (int)Math.Ceiling(products.Count / (double)batchSize);
-
-            for (int i = 0; i < products.Count; i += batchSize)
-            {
-                var batch = products.Skip(i).Take(batchSize).ToList();
-                var batchResults = await ProcessBatchAsync(chatClient, batch);
-                enhancedProducts.AddRange(batchResults);
-            }
-
-            _telemetryClient.TrackEvent("ProductEnhancementCompleted", new Dictionary<string, string>
-            {
-                ["TotalProducts"] = products.Count.ToString(),
-                ["BatchCount"] = batchCount.ToString(),
-                ["EnhancedCount"] = enhancedProducts.Count.ToString()
-            });
-
-            operation.Telemetry.Success = true;
-            return enhancedProducts;
-        }
-        catch (Exception ex)
-        {
-            operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string>
-            {
-                ["Operation"] = "EnhanceProducts",
-                ["ProductCount"] = products.Count.ToString()
-            });
-            throw;
-        }
-    }
-
-    private async Task<List<EnhancedProductData>> ProcessBatchAsync(ChatClient chatClient, List<ProductData> products)
-    {
-        var startTime = DateTimeOffset.UtcNow;
-
-        var systemPrompt = @"You are a creative product description writer for an outdoor adventure equipment retailer called AdventureWorks.
-Your task is to enhance product descriptions and fill in missing product data.
-
-For each product, you must:
-1. Create an enhanced, longer, more detailed product description based on the existing name, description, and category. Add fun, realistic feature descriptions like 'super shiny', 'extra-light', or 'go-faster stripes'. Be creative but realistic - no magical or fantasy features.
-2. Fill in any missing data (Color, Size, Weight) with realistic values based on the product type. Use metric units (cm for size, kg for weight).
-
-Return ONLY a valid JSON array with this exact structure for each product:
-[
-  {
-    ""ProductID"": 123,
-    ""ProductDescriptionID"": 456,
-    ""EnhancedDescription"": ""enhanced description here"",
-    ""Color"": ""Red"",
-    ""Size"": ""42"",
-    ""SizeUnitMeasureCode"": ""CM"",
-    ""Weight"": 2.5,
-    ""WeightUnitMeasureCode"": ""KG""
-  }
-]
-
-Important constraints:
-- Weight must be a number, not a string
-- Size maximum length: 5 characters
-- If a value already exists in the input, keep it. Only fill in missing (null) values.";
-
-        var productJson = JsonSerializer.Serialize(products.Select(p => new
-        {
-            p.ProductID,
-            p.ProductDescriptionID,
-            p.Name,
-            p.Description,
-            p.ProductCategoryName,
-            p.ProductSubcategoryName,
-            p.Color,
-            p.Size,
-            p.SizeUnitMeasureCode,
-            p.Weight,
-            p.WeightUnitMeasureCode,
-            p.Class,
-            p.Style
-        }), new JsonSerializerOptions { WriteIndented = true });
-
-        var userPrompt = $"Here are the products to enhance:\n\n{productJson}\n\nReturn the enhanced data as a JSON array.";
-
-        var messages = new List<ChatMessage>
-        {
-            new SystemChatMessage(systemPrompt),
-            new UserChatMessage(userPrompt)
-        };
-
-        ChatCompletion response;
-        using (var depOperation = _telemetryClient.StartOperation<DependencyTelemetry>("EnhanceProducts"))
-        {
-            depOperation.Telemetry.Type = "OpenAI";
-            depOperation.Telemetry.Target = "OpenAI";
-            depOperation.Telemetry.Data = "ChatCompletion";
-
-            try
-            {
-                response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
-                {
-                    Temperature = 0.7f,
-                    MaxOutputTokenCount = 4000
-                });
-                depOperation.Telemetry.Success = true;
-            }
-            catch
-            {
-                depOperation.Telemetry.Success = false;
-                throw;
-            }
-        }
-
-        var tokenMetrics = new Dictionary<string, double>
-        {
-            ["InputTokens"] = response.Usage?.InputTokenCount ?? 0,
-            ["OutputTokens"] = response.Usage?.OutputTokenCount ?? 0,
-            ["TotalTokens"] = response.Usage?.TotalTokenCount ?? 0
-        };
-
-        foreach (var metric in tokenMetrics)
-        {
-            _telemetryClient.TrackMetric($"AI.ProductEnhancement.{metric.Key}", metric.Value);
-        }
-
-        var content = response.Content[0].Text;
-
-        // Extract JSON from response (may be wrapped in markdown code blocks)
-        var jsonStart = content.IndexOf('[');
-        var jsonEnd = content.LastIndexOf(']') + 1;
-        var json = content.Substring(jsonStart, jsonEnd - jsonStart);
-
-        var enhancedProducts = JsonSerializer.Deserialize<List<EnhancedProductData>>(json);
-
-        // Log the description lengths
-        if (enhancedProducts != null)
-        {
-            foreach (var product in enhancedProducts)
-            {
-                _logger.LogInformation(
-                    "Product {ProductID}: Enhanced description length = {Length} characters",
-                    product.ProductID,
-                    product.EnhancedDescription?.Length ?? 0
-                );
-            }
-        }
-
-        return enhancedProducts ?? new List<EnhancedProductData>();
-    }
-
     public async Task<List<TranslatedDescription>> TranslateProductAsync(
         TranslationRequest request,
         List<CultureInfo> targetCultures)
@@ -948,18 +787,23 @@ Return the reviews as a JSON array.";
 
             var basePrompt = string.Join(". ", promptParts) + ".";
 
+            // Randomly select a model ethnicity for person-based shots for diversity
+            var ethnicities = new[] { "Black", "East Asian", "South Asian", "Hispanic", "Middle Eastern", "White" };
+            var rng = new Random(product.ProductID); // seed by ProductID so it's consistent per product
+            var ethnicity = ethnicities[rng.Next(ethnicities.Length)];
+
             // Build perspective suffixes based on Style
             List<string> perspectives;
             if (isUniversal)
             {
-                // Universal: 5 images — male model, female model, detail, e-commerce, lifestyle with both
+                // Universal: 5 images — male model, female model, detail, flat-lay, lifestyle with both
                 perspectives = new List<string>
                 {
-                    " Male model wearing or using the product in an outdoor action shot, dynamic composition, natural lighting.",
-                    " Female model wearing or using the product in an outdoor action shot, dynamic composition, natural lighting.",
+                    $" {ethnicity} male model wearing or using the product in an outdoor action shot, dynamic composition, natural lighting.",
+                    $" {ethnicity} female model wearing or using the product in an outdoor action shot, dynamic composition, natural lighting.",
                     " Close-up detail shot highlighting product quality and features, studio lighting, white background.",
-                    " Three-quarter view of the product alone on a pure white background, professional e-commerce style.",
-                    " Lifestyle shot in a natural outdoor environment featuring both a male and female model together using the product."
+                    " Overhead flat-lay of the product on a natural textured surface such as weathered wood or slate rock, creative composition, soft natural lighting.",
+                    $" Lifestyle shot in a natural outdoor environment featuring both a {ethnicity} male and female model together using the product."
                 };
             }
             else
@@ -968,10 +812,10 @@ Return the reviews as a JSON array.";
                 var modelGender = styleCode == "W" ? "female" : styleCode == "M" ? "male" : "outdoor enthusiast";
                 perspectives = new List<string>
                 {
-                    $" {modelAdjective} model wearing or using the product in an outdoor action shot, dynamic composition, natural lighting.",
+                    $" {ethnicity} {modelAdjective.ToLower()} model wearing or using the product in an outdoor action shot, dynamic composition, natural lighting.",
                     " Close-up detail shot highlighting product quality and features, studio lighting, white background.",
-                    " Three-quarter view of the product alone on a pure white background, professional e-commerce style.",
-                    $" Lifestyle shot in a natural outdoor environment with a {modelGender} model using the product in context."
+                    " Overhead flat-lay of the product on a natural textured surface such as weathered wood or slate rock, creative composition, soft natural lighting.",
+                    $" Lifestyle shot in a natural outdoor environment with a {ethnicity} {modelGender} model using the product in context."
                 };
             }
 

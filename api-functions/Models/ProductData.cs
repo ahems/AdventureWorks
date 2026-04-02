@@ -26,18 +26,6 @@ public class ProductData
     public DateTime ModifiedDate { get; set; }
 }
 
-public class EnhancedProductData
-{
-    public int ProductID { get; set; }
-    public int? ProductDescriptionID { get; set; }
-    public string EnhancedDescription { get; set; } = string.Empty;
-    public string? Color { get; set; }
-    public string? Size { get; set; }
-    public string? SizeUnitMeasureCode { get; set; }
-    public decimal? Weight { get; set; }
-    public string? WeightUnitMeasureCode { get; set; }
-}
-
 public class ProductDescriptionData
 {
     public int ProductDescriptionID { get; set; }
@@ -65,6 +53,7 @@ public class ProductImageData
 {
     public int ProductID { get; set; }
     public string Name { get; set; } = string.Empty;
+    public int? ProductModelID { get; set; }
     public string? ProductCategoryName { get; set; }
     public string? ProductSubcategoryName { get; set; }
     public string? Description { get; set; }

@@ -211,6 +211,26 @@ public class GenerateProductImages
                 return;
             }
 
+            // ── Smart reuse: if another variant with the same Color+Style already has
+            //    photos, link those instead of burning AI tokens on a duplicate. ──────
+            if (product.ProductModelID.HasValue)
+            {
+                var siblingPhotoIds = await _productService.GetSiblingPhotoIdsAsync(
+                    product.ProductID,
+                    product.ProductModelID.Value,
+                    product.Color,
+                    product.Style);
+
+                if (siblingPhotoIds.Count > 0)
+                {
+                    _logger.LogInformation(
+                        "Product {id} shares Color={color}/Style={style} with an existing variant. Linking {count} sibling photos instead of generating.",
+                        productId, product.Color ?? "null", product.Style ?? "null", siblingPhotoIds.Count);
+                    await _productService.LinkPhotosToProductAsync(productId, siblingPhotoIds);
+                    return;
+                }
+            }
+
             _logger.LogInformation("Product {id} needs {count} images. Generating...",
                 productId, 4 - product.ExistingPhotoCount);
 

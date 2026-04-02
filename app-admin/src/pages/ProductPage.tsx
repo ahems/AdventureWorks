@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, Link, Navigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -9,11 +9,13 @@ import {
   Globe,
   Sparkles,
   Loader2,
+  Trash2,
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import ProductImageGallery from "@/components/ProductImageGallery";
 import AiImageGeneratorDialog from "@/components/AiImageGeneratorDialog";
+import CreateVariationsDialog from "@/components/CreateVariationsDialog";
 import { useAuth } from "@/context/AuthContext";
 import {
   useAdminProductById,
@@ -27,6 +29,9 @@ import {
   useCreateProductModel,
   useProductInventory,
   useUpdateProductInventory,
+  useProductPhotos,
+  useDeleteProductPhoto,
+  useAdminSiblingProducts,
 } from "@/hooks/useAdminProducts";
 import {
   PRODUCT_COLORS,
@@ -95,6 +100,8 @@ const ProductPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingReviews, setIsGeneratingReviews] = useState(false);
+  const [isDeletingAiImages, setIsDeletingAiImages] = useState(false);
+  const [isVariationsOpen, setIsVariationsOpen] = useState(false);
   const [selectedPromotionId, setSelectedPromotionId] =
     useState<string>("none");
 
@@ -114,6 +121,28 @@ const ProductPage: React.FC = () => {
   const updateProduct = useUpdateProduct();
   const updateProductDescription = useUpdateProductDescription();
   const createProductModel = useCreateProductModel();
+  const { data: photoRecords = [] } = useProductPhotos(prodIdNum);
+  const deletePhoto = useDeleteProductPhoto();
+  const { data: siblingProducts = [] } = useAdminSiblingProducts(
+    product?.ProductModelID ?? null,
+    prodIdNum,
+  );
+
+  // Precompute the set of taken Color|Style|Size combinations from sibling products.
+  // Sibling values are trimmed to handle SQL NCHAR padding (e.g. "M " → "M").
+  const takenSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of siblingProducts) {
+      const c = (s.Color ?? "").trim();
+      const st = (s.Style ?? "").trim();
+      const sz = (s.Size ?? "").trim();
+      set.add(`${c}|${st}|${sz}`);
+    }
+    return set;
+  }, [siblingProducts]);
+
+  const isTaken = (c: string, st: string, sz: string) =>
+    takenSet.has(`${c}|${st}|${sz}`);
 
   // Sync form state when product loads
   useEffect(() => {
@@ -124,9 +153,9 @@ const ProductPage: React.FC = () => {
       setColor(product.Color ?? "");
       setSize(product.Size ?? "");
       setWeight(product.Weight?.toString() ?? "");
-      setProductLine(product.ProductLine ?? "");
-      setProductClass(product.Class ?? "");
-      setStyle(product.Style ?? "");
+      setProductLine(product.ProductLine?.trim() ?? "");
+      setProductClass(product.Class?.trim() ?? "");
+      setStyle(product.Style?.trim() ?? "");
       if (product.ProductSubcategoryID) {
         setEditSubcategoryId(product.ProductSubcategoryID);
       }
@@ -267,6 +296,25 @@ const ProductPage: React.FC = () => {
 
   const handleSave = async () => {
     if (!product) return;
+
+    // Guard: prevent duplicate Color+Style+Size combination within the same product model
+    if (siblingProducts.length > 0) {
+      const isDuplicate = siblingProducts.some(
+        (s) =>
+          (s.Color ?? "").trim() === (color || "") &&
+          (s.Style ?? "").trim() === (style || "") &&
+          (s.Size ?? "").trim() === (size || ""),
+      );
+      if (isDuplicate) {
+        toast({
+          title: "Duplicate Variation",
+          description: `Another product in this model already has Color="${color || "–"}", Style="${style || "–"}", Size="${size || "–"}". Choose a different combination.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     setIsSaving(true);
 
     // If description is provided but this product has no ProductModel yet,
@@ -351,6 +399,42 @@ const ProductPage: React.FC = () => {
     }
   };
 
+  const handleDeleteAiImages = async () => {
+    const aiPhotos = photoRecords.filter((r) =>
+      r.productPhoto?.LargePhotoFileName?.toLowerCase().endsWith(".png"),
+    );
+    if (aiPhotos.length === 0) {
+      toast({
+        title: "No AI Images",
+        description: "There are no AI-generated PNG images to delete.",
+      });
+      return;
+    }
+    setIsDeletingAiImages(true);
+    try {
+      await Promise.all(
+        aiPhotos.map((r) =>
+          deletePhoto.mutateAsync({
+            productId: product.ProductID,
+            productPhotoId: r.ProductPhotoID,
+          }),
+        ),
+      );
+      toast({
+        title: "AI Images Deleted",
+        description: `${aiPhotos.length} AI-generated image(s) have been removed.`,
+      });
+    } catch {
+      toast({
+        title: "Delete Failed",
+        description: "An error occurred while deleting AI-generated images.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingAiImages(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <AdminHeader />
@@ -374,9 +458,43 @@ const ProductPage: React.FC = () => {
                   )?.Name ?? null
                 }
                 color={color || null}
-                productLine={productLine || null}
-                style={style || null}
+                productLine={
+                  productLine
+                    ? (PRODUCT_LINES.find((pl) => pl.value === productLine)
+                        ?.label ?? productLine)
+                    : null
+                }
+                style={
+                  style
+                    ? (PRODUCT_STYLES.find((ps) => ps.value === style)?.label ??
+                      style)
+                    : null
+                }
               />
+              {product.ProductSubcategoryID && (
+                <CreateVariationsDialog
+                  product={product}
+                  description={description}
+                  siblingProducts={siblingProducts}
+                  externalOpen={isVariationsOpen}
+                  onExternalOpenChange={setIsVariationsOpen}
+                />
+              )}
+              <button
+                type="button"
+                onClick={handleDeleteAiImages}
+                disabled={isDeletingAiImages}
+                className="doodle-button w-full py-3 flex items-center justify-center gap-2 text-doodle-accent border-doodle-accent/50 hover:bg-doodle-accent/10 disabled:opacity-60"
+              >
+                {isDeletingAiImages ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-5 h-5" />
+                )}
+                {isDeletingAiImages
+                  ? "Deleting…"
+                  : "Delete AI Generated Images"}
+              </button>
             </div>
 
             <div className="space-y-6">
@@ -558,12 +676,19 @@ const ProductPage: React.FC = () => {
                         onChange={(e) => setColor(e.target.value)}
                         className="doodle-input w-full"
                       >
-                        <option value="">— None —</option>
-                        {PRODUCT_COLORS.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
-                          </option>
-                        ))}
+                        <option value="" disabled={isTaken("", style, size)}>
+                          {isTaken("", style, size)
+                            ? "— None — (already exists)"
+                            : "— None —"}
+                        </option>
+                        {PRODUCT_COLORS.map((c) => {
+                          const taken = isTaken(c, style, size);
+                          return (
+                            <option key={c} value={c} disabled={taken}>
+                              {taken ? `${c} (already exists)` : c}
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
                     <div>
@@ -575,12 +700,19 @@ const ProductPage: React.FC = () => {
                         onChange={(e) => setSize(e.target.value)}
                         className="doodle-input w-full"
                       >
-                        <option value="">— None —</option>
-                        {PRODUCT_SIZES.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
+                        <option value="" disabled={isTaken(color, style, "")}>
+                          {isTaken(color, style, "")
+                            ? "— None — (already exists)"
+                            : "— None —"}
+                        </option>
+                        {PRODUCT_SIZES.map((s) => {
+                          const taken = isTaken(color, style, s);
+                          return (
+                            <option key={s} value={s} disabled={taken}>
+                              {taken ? `${s} (already exists)` : s}
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
                   </div>
@@ -688,15 +820,81 @@ const ProductPage: React.FC = () => {
                         onChange={(e) => setStyle(e.target.value)}
                         className="doodle-input w-full"
                       >
-                        <option value="">— None —</option>
-                        {PRODUCT_STYLES.map((ps) => (
-                          <option key={ps.value} value={ps.value}>
-                            {ps.label}
-                          </option>
-                        ))}
+                        <option value="" disabled={isTaken(color, "", size)}>
+                          {isTaken(color, "", size)
+                            ? "— None — (already exists)"
+                            : "— None —"}
+                        </option>
+                        {PRODUCT_STYLES.map((ps) => {
+                          const taken = isTaken(color, ps.value, size);
+                          return (
+                            <option
+                              key={ps.value}
+                              value={ps.value}
+                              disabled={taken}
+                            >
+                              {taken
+                                ? `${ps.label} (already exists)`
+                                : ps.label}
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
                   </div>
+
+                  {/* Existing Variations — siblings sharing this product model */}
+                  {siblingProducts.length > 0 && (
+                    <div className="rounded-lg border border-doodle-text/15 bg-doodle-text/[0.03] p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="font-doodle text-xs font-semibold text-doodle-text/60 uppercase tracking-wide">
+                          {siblingProducts.length} other variation
+                          {siblingProducts.length !== 1 ? "s" : ""} in this
+                          model
+                        </p>
+                        {product.ProductSubcategoryID && (
+                          <button
+                            type="button"
+                            onClick={() => setIsVariationsOpen(true)}
+                            className="inline-flex items-center gap-1 text-xs text-doodle-blue hover:underline font-medium"
+                          >
+                            + Add More Variations
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {siblingProducts.map((sib) => {
+                          const styleLabel =
+                            PRODUCT_STYLES.find(
+                              (ps) => ps.value === (sib.Style ?? "").trim(),
+                            )?.label ??
+                            (sib.Style?.trim() || null);
+                          const parts = [
+                            sib.Color?.trim() || null,
+                            styleLabel,
+                            sib.Size?.trim() || null,
+                          ]
+                            .filter(Boolean)
+                            .join(" / ");
+                          return (
+                            <Link
+                              key={sib.ProductID}
+                              to={`/product/${sib.ProductID}`}
+                              className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-doodle-text/20 bg-white dark:bg-doodle-text/5 text-doodle-text hover:border-doodle-blue hover:text-doodle-blue transition-colors"
+                              title={sib.ProductNumber}
+                            >
+                              {sib.Name}
+                              {parts && (
+                                <span className="text-doodle-text/50">
+                                  — {parts}
+                                </span>
+                              )}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   <div>
                     <label className="font-doodle text-sm text-doodle-text block mb-1">
@@ -826,7 +1024,7 @@ const ProductPage: React.FC = () => {
                       rows={4}
                       maxLength={400}
                       className="doodle-input w-full"
-                      placeholder="Enter English description — other languages are auto-translated on save"
+                      placeholder="Describe this Product or generate using AI (above). Use US English - other languages will be automatically translated from this text."
                     />
                   </div>
 

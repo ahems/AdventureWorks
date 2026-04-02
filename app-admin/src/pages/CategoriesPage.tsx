@@ -34,6 +34,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -54,18 +55,20 @@ const DeleteSubcategoryDialog: React.FC<DeleteSubcategoryDialogProps> = ({
   onDeleted,
 }) => {
   const [info, setInfo] = useState<SubcategoryProductInfo | null>(null);
-  const [loadingInfo, setLoadingInfo] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // Load product counts when dialog opens
+  // Load product counts when dialog opens; reset on each open
   React.useEffect(() => {
     if (!subcategoryId) return;
     setInfo(null);
-    setLoadingInfo(true);
+    setFetchError(false);
     getSubcategoryProductInfo(subcategoryId)
       .then(setInfo)
-      .catch(() => setInfo({ totalProducts: 0, modelGroupCount: 0 }))
-      .finally(() => setLoadingInfo(false));
+      .catch(() => {
+        setFetchError(true);
+        setInfo({ totalProducts: 0, modelGroupCount: 0 });
+      });
   }, [subcategoryId]);
 
   const handleConfirm = async () => {
@@ -74,10 +77,11 @@ const DeleteSubcategoryDialog: React.FC<DeleteSubcategoryDialogProps> = ({
     try {
       const result = await deleteSubcategoryApi(subcategoryId);
       if (!result.success) throw new Error(result.message ?? "Delete failed");
+      const n = info?.totalProducts ?? 0;
       toast({
         title: "Subcategory Deleted",
-        description: info?.totalProducts
-          ? `"${subcategoryName}" and ${info.totalProducts} product${info.totalProducts !== 1 ? "s" : ""} were deleted.`
+        description: n
+          ? `"${subcategoryName}" and ${n} product${n !== 1 ? "s" : ""} were deleted.`
           : `"${subcategoryName}" was deleted.`,
       });
       onDeleted();
@@ -94,6 +98,8 @@ const DeleteSubcategoryDialog: React.FC<DeleteSubcategoryDialogProps> = ({
   };
 
   const isOpen = !!subcategoryId;
+  // info===null means we're still loading (useEffect hasn't resolved yet)
+  const isLoadingInfo = info === null && !!subcategoryId;
   const productCount = info?.totalProducts ?? 0;
   const groupCount = info?.modelGroupCount ?? 0;
 
@@ -105,9 +111,12 @@ const DeleteSubcategoryDialog: React.FC<DeleteSubcategoryDialogProps> = ({
             <Trash2 className="w-5 h-5 text-red-500" />
             Delete Subcategory
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Permanently delete this subcategory and all its products.
+          </DialogDescription>
         </DialogHeader>
 
-        {loadingInfo ? (
+        {isLoadingInfo ? (
           <div className="py-8 flex flex-col items-center gap-3">
             <Loader2 className="w-8 h-8 animate-spin text-doodle-accent" />
             <p className="font-doodle text-doodle-text/60">
@@ -125,7 +134,7 @@ const DeleteSubcategoryDialog: React.FC<DeleteSubcategoryDialogProps> = ({
                 </p>
                 <p className="font-doodle text-red-700 text-sm mt-1">
                   "{subcategoryName}" will be permanently deleted
-                  {productCount > 0 && (
+                  {productCount > 0 ? (
                     <>
                       {" "}
                       along with{" "}
@@ -135,18 +144,53 @@ const DeleteSubcategoryDialog: React.FC<DeleteSubcategoryDialogProps> = ({
                       {groupCount > 0 && (
                         <>
                           {" "}
-                          ({groupCount} product group
-                          {groupCount !== 1 ? "s" : ""} with variants)
+                          ({groupCount} variant group
+                          {groupCount !== 1 ? "s" : ""})
                         </>
                       )}
                     </>
+                  ) : (
+                    " (no products)"
                   )}
                   .
                 </p>
               </div>
             </div>
 
-            {/* What will be deleted */}
+            {/* Product count summary — always visible */}
+            <div
+              className={`border-2 border-dashed rounded p-3 ${productCount > 0 ? "border-red-300 bg-red-50/50" : "border-doodle-text/20 bg-doodle-text/5"}`}
+            >
+              {fetchError ? (
+                <p className="font-doodle text-sm text-center text-doodle-text/60">
+                  Could not load product count — deletion will still cascade.
+                </p>
+              ) : productCount === 0 ? (
+                <p className="font-doodle text-sm text-center text-doodle-text/70">
+                  This subcategory has no products.
+                </p>
+              ) : (
+                <div className="space-y-1 text-center">
+                  <p className="font-doodle text-sm font-bold text-red-700">
+                    {productCount} product{productCount !== 1 ? "s" : ""} will
+                    be deleted
+                  </p>
+                  {groupCount > 0 && (
+                    <p className="font-doodle text-xs text-red-600">
+                      Across {groupCount} variant group
+                      {groupCount !== 1 ? "s" : ""} (
+                      {productCount - groupCount > 0
+                        ? `${productCount - groupCount} standalone + `
+                        : ""}
+                      {groupCount} group{groupCount !== 1 ? "s" : ""} with
+                      multiple variants)
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* What will be deleted (only when there are products) */}
             {productCount > 0 && (
               <div>
                 <p className="font-doodle text-sm font-bold text-doodle-text mb-2">
@@ -177,27 +221,6 @@ const DeleteSubcategoryDialog: React.FC<DeleteSubcategoryDialogProps> = ({
                     </li>
                   )}
                 </ul>
-              </div>
-            )}
-
-            {/* Summary badge */}
-            {productCount > 0 && (
-              <div className="bg-doodle-text/5 border-2 border-dashed border-doodle-text/20 rounded p-3">
-                <p className="font-doodle text-sm text-center text-doodle-text">
-                  <span className="font-bold text-red-600">{productCount}</span>{" "}
-                  product{productCount !== 1 ? "s" : ""}
-                  {groupCount > 0 && (
-                    <>
-                      {" "}
-                      across{" "}
-                      <span className="font-bold text-red-600">
-                        {groupCount}
-                      </span>{" "}
-                      group{groupCount !== 1 ? "s" : ""}
-                    </>
-                  )}{" "}
-                  will be permanently deleted
-                </p>
               </div>
             )}
 

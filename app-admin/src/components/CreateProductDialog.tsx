@@ -33,6 +33,8 @@ import {
   type VariationRow,
 } from "@/lib/variation-generator";
 import { generateProductContent } from "@/services/utilityService";
+import { getFunctionsApiUrl } from "@/lib/utils";
+import { translateProductContent } from "@/services/utilityService";
 
 /** Generate a short GUID-derived SKU safe for the 25-char DB column. */
 const generateSku = (): string => {
@@ -341,8 +343,17 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
       });
       toast({
         title: "Product Created",
-        description: `${form.Name} was created. Add images on the next page.`,
+        description: `${form.Name} was created. AI images are being generated in the background.`,
       });
+      // Silently trigger AI image generation in the background
+      fetch(
+        `${getFunctionsApiUrl()}/api/products/${newProduct.ProductID}/generate-images`,
+        { method: "POST" },
+      ).catch(() => {});
+      // Silently trigger translations (and then embeddings) for all cultures
+      if (newProduct.ProductModelID) {
+        translateProductContent([newProduct.ProductModelID]).catch(() => {});
+      }
       setIsOpen(false);
       navigate(`/product/${newProduct.ProductID}`);
     } catch {
@@ -362,14 +373,31 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
     setIsSaving(true);
     setBatchProgress({ completed: 0, total: variationRows.length });
     try {
-      await createBatch.mutateAsync({
+      const batchResult = await createBatch.mutateAsync({
         items: variationRows,
         onProgress: setBatchProgress,
       });
       toast({
         title: "Variations Created",
-        description: `Created ${variationRows.length} product variation(s) for "${form.Name}".`,
+        description: `Created ${variationRows.length} product variation(s) for "${form.Name}". AI images and translations are being generated in the background.`,
       });
+      // Silently trigger translations (and then embeddings) for the shared model
+      if (batchResult.sharedModelId) {
+        translateProductContent([batchResult.sharedModelId]).catch(() => {});
+      }
+      // Trigger AI image generation for the first product in each unique Color+Style pair.
+      // Same Color+Style across sizes = visually identical → backend will reuse the photos.
+      const seenVisualKeys = new Set<string>();
+      for (const p of batchResult.results) {
+        const visualKey = `${p.Color ?? "none"}:${(p as { Style?: string | null }).Style ?? "none"}`;
+        if (!seenVisualKeys.has(visualKey)) {
+          seenVisualKeys.add(visualKey);
+          fetch(
+            `${getFunctionsApiUrl()}/api/products/${p.ProductID}/generate-images`,
+            { method: "POST" },
+          ).catch(() => {});
+        }
+      }
       setIsOpen(false);
       navigate(`/category/${selectedCategoryId}`);
     } catch {
@@ -809,7 +837,7 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
           maxLength={400}
           rows={3}
           className="doodle-input w-full"
-          placeholder="Describe this product — other languages auto-translated after creation"
+          placeholder="Describe this Product or generate using AI (above). Use US English - other languages will be automatically translated from this text."
         />
       </div>
     </>
@@ -940,74 +968,124 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
           </strong>
         </span>
       </div>
+
+      {/* Image generation info */}
+      <div className="flex items-start gap-2 p-3 rounded border border-doodle-blue/40 bg-blue-50/50 dark:bg-blue-900/10 text-xs text-doodle-text/70">
+        <Sparkles className="w-4 h-4 text-doodle-blue shrink-0 mt-0.5" />
+        <span>
+          <strong className="text-doodle-blue">
+            AI images are shared within each Color + Style group.
+          </strong>{" "}
+          One set of 4 images will be generated per unique Color/Style
+          combination and reused across all sizes — keeping costs low without
+          sacrificing visual quality.
+        </span>
+      </div>
     </div>
   );
 
   // ── Render: Step 3 — Preview & Confirm ────────────────────────────────────
-  const renderStep3 = () => (
-    <div className="space-y-4" data-testid="wizard-step-3">
-      <p className="font-doodle text-sm text-doodle-text">
-        Review the <strong>{variationRows.length}</strong> variation(s) below.
-        Cost escalation: +5% per size step from smallest selected.
-      </p>
+  const renderStep3 = () => {
+    // Compute which rows are the "image representative" for their Color+Style group
+    const seenVisualKeys = new Set<string>();
+    const rowImageRole = variationRows.map((row) => {
+      const key = `${row.Color ?? "none"}:${row.Style ?? "none"}`;
+      if (!seenVisualKeys.has(key)) {
+        seenVisualKeys.add(key);
+        return "generate"; // This row triggers new AI image generation
+      }
+      return "reuse"; // This row will reuse images from the representative above
+    });
 
-      <div className="max-h-[40vh] overflow-auto border border-doodle-border rounded">
-        <table className="w-full text-sm" data-testid="variation-preview-table">
-          <thead className="bg-doodle-bg/60 sticky top-0">
-            <tr className="text-left">
-              <th className="px-2 py-1.5 font-doodle">#</th>
-              <th className="px-2 py-1.5 font-doodle">SKU</th>
-              <th className="px-2 py-1.5 font-doodle">Color</th>
-              <th className="px-2 py-1.5 font-doodle">Size</th>
-              <th className="px-2 py-1.5 font-doodle">Style</th>
-              <th className="px-2 py-1.5 font-doodle text-right">Cost</th>
-              <th className="px-2 py-1.5 font-doodle text-right">Price</th>
-            </tr>
-          </thead>
-          <tbody>
-            {variationRows.map((row, i) => (
-              <tr
-                key={row.ProductNumber}
-                className="border-t border-doodle-border/50 hover:bg-doodle-bg/30"
-              >
-                <td className="px-2 py-1">{i + 1}</td>
-                <td className="px-2 py-1 font-mono text-xs">
-                  {row.ProductNumber}
-                </td>
-                <td className="px-2 py-1">{row.Color ?? "—"}</td>
-                <td className="px-2 py-1">{row.Size ?? "—"}</td>
-                <td className="px-2 py-1">
-                  {row.Style ? (STYLE_LABEL[row.Style] ?? row.Style) : "—"}
-                </td>
-                <td className="px-2 py-1 text-right">
-                  ${row.StandardCost.toFixed(2)}
-                </td>
-                <td className="px-2 py-1 text-right">
-                  ${row.ListPrice.toFixed(2)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    return (
+      <div className="space-y-4" data-testid="wizard-step-3">
+        <p className="font-doodle text-sm text-doodle-text">
+          Review the <strong>{variationRows.length}</strong> variation(s) below.
+          Cost escalation: +5% per size step from smallest selected.
+        </p>
 
-      {batchProgress && (
-        <div className="space-y-1" data-testid="batch-progress">
-          <div className="w-full bg-doodle-border rounded-full h-2.5">
-            <div
-              className="bg-doodle-blue h-2.5 rounded-full transition-all"
-              style={{
-                width: `${(batchProgress.completed / batchProgress.total) * 100}%`,
-              }}
-            />
-          </div>
-          <p className="text-xs text-doodle-text/60 font-doodle text-center">
-            Creating {batchProgress.completed} / {batchProgress.total}…
-          </p>
+        <div className="flex items-start gap-2 p-2.5 rounded border border-doodle-blue/40 bg-blue-50/40 dark:bg-blue-900/10 text-xs text-doodle-text/70">
+          <Sparkles className="w-3.5 h-3.5 text-doodle-blue shrink-0 mt-0.5" />
+          <span>
+            <strong className="text-doodle-blue">
+              {seenVisualKeys.size} image set
+              {seenVisualKeys.size !== 1 ? "s" : ""} will be generated
+            </strong>{" "}
+            (one per Color + Style). Rows marked{" "}
+            <span className="text-doodle-text/50 italic">shared</span> reuse
+            images from the same visual group.
+          </span>
         </div>
-      )}
-    </div>
-  );
+
+        <div className="max-h-[35vh] overflow-auto border border-doodle-border rounded">
+          <table
+            className="w-full text-sm"
+            data-testid="variation-preview-table"
+          >
+            <thead className="bg-doodle-bg/60 sticky top-0">
+              <tr className="text-left">
+                <th className="px-2 py-1.5 font-doodle">#</th>
+                <th className="px-2 py-1.5 font-doodle">Color</th>
+                <th className="px-2 py-1.5 font-doodle">Size</th>
+                <th className="px-2 py-1.5 font-doodle">Style</th>
+                <th className="px-2 py-1.5 font-doodle">Images</th>
+                <th className="px-2 py-1.5 font-doodle text-right">Cost</th>
+                <th className="px-2 py-1.5 font-doodle text-right">Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              {variationRows.map((row, i) => (
+                <tr
+                  key={row.ProductNumber}
+                  className="border-t border-doodle-border/50 hover:bg-doodle-bg/30"
+                >
+                  <td className="px-2 py-1">{i + 1}</td>
+                  <td className="px-2 py-1">{row.Color ?? "—"}</td>
+                  <td className="px-2 py-1">{row.Size ?? "—"}</td>
+                  <td className="px-2 py-1">
+                    {row.Style ? (STYLE_LABEL[row.Style] ?? row.Style) : "—"}
+                  </td>
+                  <td className="px-2 py-1">
+                    {rowImageRole[i] === "generate" ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-doodle-blue">
+                        <Sparkles className="w-3 h-3" /> AI
+                      </span>
+                    ) : (
+                      <span className="text-xs text-doodle-text/40 italic">
+                        shared
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-2 py-1 text-right">
+                    ${row.StandardCost.toFixed(2)}
+                  </td>
+                  <td className="px-2 py-1 text-right">
+                    ${row.ListPrice.toFixed(2)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {batchProgress && (
+          <div className="space-y-1" data-testid="batch-progress">
+            <div className="w-full bg-doodle-border rounded-full h-2.5">
+              <div
+                className="bg-doodle-blue h-2.5 rounded-full transition-all"
+                style={{
+                  width: `${(batchProgress.completed / batchProgress.total) * 100}%`,
+                }}
+              />
+            </div>
+            <p className="text-xs text-doodle-text/60 font-doodle text-center">
+              Creating {batchProgress.completed} / {batchProgress.total}…
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // ── Footer buttons (contextual) ──────────────────────────────────────────
   const renderActions = () => {

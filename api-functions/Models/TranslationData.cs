@@ -33,6 +33,18 @@ public class TranslationActivityInput
     public List<CultureInfo> Cultures { get; set; } = new();
 }
 
+/// <summary>
+/// Returned by SaveTranslationsActivity so the orchestrator can immediately
+/// chain embedding generation without an extra DB round-trip.
+/// </summary>
+public class SavedDescriptionResult
+{
+    public int ProductDescriptionID { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public string CultureID { get; set; } = string.Empty;
+    public int ProductModelID { get; set; }
+}
+
 // Language file translation models
 public class TranslationOrchestrationInput
 {

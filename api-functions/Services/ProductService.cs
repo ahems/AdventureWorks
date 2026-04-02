@@ -71,50 +71,6 @@ public class ProductService
         return products.ToList();
     }
 
-    public async Task UpdateProductAsync(EnhancedProductData enhancedProduct)
-    {
-        using var connection = await GetConnectionAsync();
-
-        // Update Product table with new color, size, weight if they were missing
-        var updateProductSql = @"
-            UPDATE Production.Product
-            SET 
-                Color = COALESCE(@Color, Color),
-                Size = COALESCE(@Size, Size),
-                SizeUnitMeasureCode = COALESCE(@SizeUnitMeasureCode, SizeUnitMeasureCode),
-                Weight = COALESCE(@Weight, Weight),
-                WeightUnitMeasureCode = COALESCE(@WeightUnitMeasureCode, WeightUnitMeasureCode),
-                ModifiedDate = GETDATE()
-            WHERE ProductID = @ProductID";
-
-        await connection.ExecuteAsync(updateProductSql, new
-        {
-            enhancedProduct.ProductID,
-            enhancedProduct.Color,
-            enhancedProduct.Size,
-            enhancedProduct.SizeUnitMeasureCode,
-            enhancedProduct.Weight,
-            enhancedProduct.WeightUnitMeasureCode
-        });
-
-        // Update ProductDescription table with enhanced description
-        if (enhancedProduct.ProductDescriptionID.HasValue)
-        {
-            var updateDescriptionSql = @"
-                UPDATE Production.ProductDescription
-                SET 
-                    Description = @EnhancedDescription,
-                    ModifiedDate = GETDATE()
-                WHERE ProductDescriptionID = @ProductDescriptionID";
-
-            await connection.ExecuteAsync(updateDescriptionSql, new
-            {
-                enhancedProduct.ProductDescriptionID,
-                enhancedProduct.EnhancedDescription
-            });
-        }
-    }
-
     public async Task<List<CultureInfo>> GetSupportedCulturesAsync()
     {
         using var connection = await GetConnectionAsync();
@@ -173,12 +129,21 @@ public class ProductService
         return products.ToList();
     }
 
-    public async Task SaveTranslationsAsync(List<TranslatedDescription> translations)
+    public async Task<List<SavedDescriptionResult>> SaveTranslationsAsync(List<TranslatedDescription> translations)
     {
         using var connection = await GetConnectionAsync();
+        var results = new List<SavedDescriptionResult>();
 
         foreach (var translation in translations)
         {
+            // Guard: if the ProductModel was deleted while translations were in-flight, skip.
+            var modelExists = await connection.QueryFirstOrDefaultAsync<bool>(
+                "SELECT CAST(1 AS BIT) FROM Production.ProductModel WHERE ProductModelID = @ProductModelID",
+                new { translation.ProductModelID });
+
+            if (!modelExists)
+                continue;
+
             // Check if a description already exists for this ProductModel + Culture
             var existingDescriptionSql = @"
                 SELECT pd.ProductDescriptionID
@@ -192,6 +157,7 @@ public class ProductService
                 existingDescriptionSql,
                 new { translation.ProductModelID, translation.CultureID });
 
+            int savedId;
             if (existingDescriptionId.HasValue)
             {
                 // Update existing description
@@ -206,6 +172,7 @@ public class ProductService
                     ProductDescriptionID = existingDescriptionId.Value,
                     translation.TranslatedText
                 });
+                savedId = existingDescriptionId.Value;
             }
             else
             {
@@ -231,8 +198,19 @@ public class ProductService
                     ProductDescriptionID = newDescriptionId,
                     translation.CultureID
                 });
+                savedId = newDescriptionId;
             }
+
+            results.Add(new SavedDescriptionResult
+            {
+                ProductDescriptionID = savedId,
+                Description = translation.TranslatedText,
+                CultureID = translation.CultureID,
+                ProductModelID = translation.ProductModelID,
+            });
         }
+
+        return results;
     }
 
     public async Task<List<ProductDescriptionData>> GetProductDescriptionsForEmbeddingAsync()
@@ -336,6 +314,7 @@ public class ProductService
             SELECT 
                 p.ProductID,
                 p.Name,
+                p.ProductModelID,
                 pc.Name AS ProductCategoryName,
                 ps.Name AS ProductSubcategoryName,
                 pd.Description,
@@ -352,9 +331,59 @@ public class ProductService
             LEFT JOIN Production.ProductDescription pd ON pmx.ProductDescriptionID = pd.ProductDescriptionID
             LEFT JOIN Production.ProductProductPhoto ppp ON p.ProductID = ppp.ProductID
             WHERE p.FinishedGoodsFlag = 1 AND p.ProductID = @ProductID
-            GROUP BY p.ProductID, p.Name, pc.Name, ps.Name, pd.Description, p.Color, p.ProductLine, p.Style";
+            GROUP BY p.ProductID, p.Name, p.ProductModelID, pc.Name, ps.Name, pd.Description, p.Color, p.ProductLine, p.Style";
 
         return await connection.QueryFirstOrDefaultAsync<ProductImageData>(sql, new { ProductID = productId });
+    }
+
+    /// <summary>
+    /// Returns photo IDs from a sibling product in the same model that shares the same
+    /// Color and Style (the visually-significant dimensions). Returns empty if none found.
+    /// </summary>
+    public async Task<List<int>> GetSiblingPhotoIdsAsync(int productId, int productModelId, string? color, string? style)
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = @"
+            SELECT DISTINCT ppp.ProductPhotoID
+            FROM Production.ProductProductPhoto ppp
+            INNER JOIN Production.Product p ON p.ProductID = ppp.ProductID
+            WHERE p.ProductModelID = @ProductModelID
+              AND p.ProductID <> @ProductID
+              AND ((@Color IS NULL AND p.Color IS NULL) OR p.Color = @Color)
+              AND ((@Style IS NULL AND p.Style IS NULL) OR p.Style = @Style)";
+
+        var ids = await connection.QueryAsync<int>(sql, new
+        {
+            ProductModelID = productModelId,
+            ProductID = productId,
+            Color = color,
+            Style = style
+        });
+        return ids.AsList();
+    }
+
+    /// <summary>
+    /// Links existing photos (already in ProductPhoto) to a product that doesn't have them yet.
+    /// Silently skips photos already linked.
+    /// </summary>
+    public async Task LinkPhotosToProductAsync(int productId, IEnumerable<int> photoIds)
+    {
+        using var connection = await GetConnectionAsync();
+
+        // Guard on both product existence and duplicate to survive concurrent deletes.
+        var sql = @"
+            IF EXISTS (SELECT 1 FROM Production.Product WHERE ProductID = @ProductID)
+              AND NOT EXISTS (SELECT 1 FROM Production.ProductProductPhoto WHERE ProductID = @ProductID AND ProductPhotoID = @ProductPhotoID)
+            BEGIN
+                INSERT INTO Production.ProductProductPhoto (ProductID, ProductPhotoID, [Primary], ModifiedDate)
+                VALUES (@ProductID, @ProductPhotoID, 0, GETDATE())
+            END";
+
+        foreach (var photoId in photoIds)
+        {
+            await connection.ExecuteAsync(sql, new { ProductID = productId, ProductPhotoID = photoId });
+        }
     }
 
     public async Task<int> SaveProductPhotoAsync(ProductPhotoData photo)
@@ -375,12 +404,15 @@ public class ProductService
             photo.FileName
         });
 
-        // Link photo to product in ProductProductPhoto table
+        // Link photo to product — guarded so a concurrent delete doesn't cause an FK violation.
         var insertLinkSql = @"
-            INSERT INTO Production.ProductProductPhoto 
-                (ProductID, ProductPhotoID, [Primary], ModifiedDate)
-            VALUES 
-                (@ProductID, @ProductPhotoID, @IsPrimary, GETDATE())";
+            IF EXISTS (SELECT 1 FROM Production.Product WHERE ProductID = @ProductID)
+            BEGIN
+                INSERT INTO Production.ProductProductPhoto 
+                    (ProductID, ProductPhotoID, [Primary], ModifiedDate)
+                VALUES 
+                    (@ProductID, @ProductPhotoID, @IsPrimary, GETDATE())
+            END";
 
         await connection.ExecuteAsync(insertLinkSql, new
         {
@@ -625,14 +657,18 @@ public class ProductService
 
         foreach (var item in names)
         {
+            // Guard on product existence so a concurrent delete cannot cause an FK violation.
             var upsertSql = @"
-                IF EXISTS (SELECT 1 FROM Production.ProductName WHERE ProductID = @ProductID AND CultureID = @CultureID)
-                    UPDATE Production.ProductName
-                    SET Name = @Name, ModifiedDate = GETDATE()
-                    WHERE ProductID = @ProductID AND CultureID = @CultureID
-                ELSE
-                    INSERT INTO Production.ProductName (ProductID, CultureID, Name, ModifiedDate)
-                    VALUES (@ProductID, @CultureID, @Name, GETDATE())";
+                IF EXISTS (SELECT 1 FROM Production.Product WHERE ProductID = @ProductID)
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM Production.ProductName WHERE ProductID = @ProductID AND CultureID = @CultureID)
+                        UPDATE Production.ProductName
+                        SET Name = @Name, ModifiedDate = GETDATE()
+                        WHERE ProductID = @ProductID AND CultureID = @CultureID
+                    ELSE
+                        INSERT INTO Production.ProductName (ProductID, CultureID, Name, ModifiedDate)
+                        VALUES (@ProductID, @CultureID, @Name, GETDATE())
+                END";
 
             await connection.ExecuteAsync(upsertSql, new
             {
@@ -722,20 +758,27 @@ public class ProductService
     public async Task<SubcategoryProductInfo> GetSubcategoryProductInfoAsync(int subcategoryId)
     {
         using var connection = await GetConnectionAsync();
-        var sql = @"
-            SELECT
-                COUNT(*) AS TotalProducts,
-                COUNT(DISTINCT CASE
-                    WHEN ProductModelID IS NOT NULL
-                         AND ProductModelID IN (
-                             SELECT ProductModelID FROM Production.Product
-                             WHERE ProductSubcategoryID = @SubcategoryId
-                             GROUP BY ProductModelID HAVING COUNT(*) > 1)
-                    THEN ProductModelID END) AS ModelGroupCount
-            FROM Production.Product
-            WHERE ProductSubcategoryID = @SubcategoryId";
-        return await connection.QueryFirstOrDefaultAsync<SubcategoryProductInfo>(
-            sql, new { SubcategoryId = subcategoryId }) ?? new SubcategoryProductInfo();
+
+        var totalProducts = await connection.QueryFirstOrDefaultAsync<int>(
+            "SELECT COUNT(*) FROM Production.Product WHERE ProductSubcategoryID = @Id",
+            new { Id = subcategoryId });
+
+        var modelGroupCount = await connection.QueryFirstOrDefaultAsync<int>(@"
+            SELECT COUNT(*) FROM (
+                SELECT ProductModelID
+                FROM Production.Product
+                WHERE ProductSubcategoryID = @Id
+                  AND ProductModelID IS NOT NULL
+                GROUP BY ProductModelID
+                HAVING COUNT(*) > 1
+            ) AS grp",
+            new { Id = subcategoryId });
+
+        return new SubcategoryProductInfo
+        {
+            TotalProducts = totalProducts,
+            ModelGroupCount = modelGroupCount
+        };
     }
 
     /// <summary>

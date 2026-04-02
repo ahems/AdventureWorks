@@ -8,7 +8,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { PRODUCT_LINES, PRODUCT_STYLES } from "@/lib/product-constants";
+
 import { getFunctionsApiUrl } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
@@ -71,14 +71,7 @@ const AiImageGeneratorDialog: React.FC<AiImageGeneratorDialogProps> = ({
   const [open, setOpen] = useState(false);
   const [isQueuing, setIsQueuing] = useState(false);
 
-  const productLineLong = productLine
-    ? (PRODUCT_LINES.find((l) => l.value === productLine)?.label ?? productLine)
-    : null;
-  const styleLong = style
-    ? (PRODUCT_STYLES.find((s) => s.value === style)?.label ?? style)
-    : null;
-
-  const isUniversal = style === "U";
+  const isUniversal = style?.toLowerCase() === "universal";
   const imageCount = isUniversal ? 5 : 4;
 
   const handleQueue = async () => {
@@ -145,9 +138,9 @@ const AiImageGeneratorDialog: React.FC<AiImageGeneratorDialogProps> = ({
           <AttributeRow label="Description" value={description} required />
           <AttributeRow label="Category" value={categoryName} required />
           <AttributeRow label="Subcategory" value={subcategoryName} />
-          <AttributeRow label="Product Line" value={productLineLong} />
+          <AttributeRow label="Product Line" value={productLine} />
           <AttributeRow label="Color" value={color} />
-          <AttributeRow label="Style" value={styleLong} />
+          <AttributeRow label="Style" value={style} />
         </div>
 
         {missingRequired && (

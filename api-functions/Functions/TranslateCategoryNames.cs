@@ -265,10 +265,20 @@ public class CategoryManagementFunctions
             return bad;
         }
 
-        var info = await _productService.GetSubcategoryProductInfoAsync(request.Id);
-        var ok = req.CreateResponse(HttpStatusCode.OK);
-        await ok.WriteAsJsonAsync(info);
-        return ok;
+        try
+        {
+            var info = await _productService.GetSubcategoryProductInfoAsync(request.Id);
+            var ok = req.CreateResponse(HttpStatusCode.OK);
+            await ok.WriteAsJsonAsync(info);
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GetSubcategoryProductCount failed for {Id}", request.Id);
+            var error = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await error.WriteAsJsonAsync(new { success = false, message = ex.Message });
+            return error;
+        }
     }
 
     // ── DeleteCategory ──────────────────────────────────────────────────────

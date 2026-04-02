@@ -92,12 +92,6 @@ async function startQueuedFunction(
 
 // ── Durable Functions (support status polling) ─────────────────────────────
 
-export const embellishProductDescriptions = (productIds?: number[]) =>
-  startDurableFunction(
-    "EmbellishProductsUsingAI_HttpStart",
-    productIds?.length ? { ProductIds: productIds } : undefined,
-  );
-
 export const generateProductEmbeddings = () =>
   startDurableFunction("GenerateProductEmbeddings_HttpStart");
 
@@ -299,7 +293,7 @@ export const deleteSubcategory = async (
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ subcategoryId }),
+    body: JSON.stringify({ id: subcategoryId }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");

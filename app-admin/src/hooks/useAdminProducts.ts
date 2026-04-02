@@ -245,6 +245,58 @@ export const useAdminProductById = (productId: number) =>
     staleTime: 5 * 60 * 1000,
   });
 
+// Lightweight sibling product type for variation conflict detection
+export interface SiblingProduct {
+  ProductID: number;
+  Name: string;
+  ProductNumber: string;
+  Color: string | null;
+  Style: string | null;
+  Size: string | null;
+}
+
+const GET_SIBLINGS_BY_MODEL = gql`
+  query GetSiblingsByModel($modelId: Int!, $productId: Int!) {
+    products(
+      filter: {
+        ProductModelID: { eq: $modelId }
+        ProductID: { neq: $productId }
+        FinishedGoodsFlag: { eq: true }
+      }
+      first: 500
+    ) {
+      items {
+        ProductID
+        Name
+        ProductNumber
+        Color
+        Style
+        Size
+      }
+    }
+  }
+`;
+
+/** Returns all sibling products that share the same ProductModelID (ignoring the current product). */
+export const useAdminSiblingProducts = (
+  productModelId: number | null | undefined,
+  currentProductId: number,
+) =>
+  useQuery<SiblingProduct[]>({
+    queryKey: ["admin", "siblings", productModelId, currentProductId],
+    queryFn: async () => {
+      const data = await graphqlClient.request<{
+        products?: { items: SiblingProduct[] };
+      }>(GET_SIBLINGS_BY_MODEL, {
+        modelId: productModelId,
+        productId: currentProductId,
+      });
+      return data.products?.items ?? [];
+    },
+    enabled: !!productModelId && !!currentProductId,
+    staleTime: 2 * 60 * 1000,
+  });
+
 export const useAdminAllProducts = () =>
   useQuery<Product[]>({
     queryKey: ["admin", "products", "all"],
@@ -830,6 +882,7 @@ const CREATE_PRODUCT_MUTATION = gql`
     ) {
       ProductID
       Name
+      ProductModelID
     }
   }
 `;
@@ -921,7 +974,11 @@ export const useCreateProduct = () => {
       }
 
       const result = await graphqlClient.request<{
-        createProduct: { ProductID: number; Name: string };
+        createProduct: {
+          ProductID: number;
+          Name: string;
+          ProductModelID: number | null;
+        };
       }>(CREATE_PRODUCT_MUTATION, {
         name: vars.Name,
         productNumber: vars.ProductNumber,
@@ -948,7 +1005,10 @@ export const useCreateProduct = () => {
         quantity: vars.InitialQuantity ?? 0,
         modifiedDate,
       });
-      return result.createProduct;
+      return {
+        ...result.createProduct,
+        ProductModelID: result.createProduct.ProductModelID ?? productModelId,
+      };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
@@ -1021,7 +1081,7 @@ export const useCreateProductBatch = () => {
         results.push(result.createProduct);
         onProgress?.({ completed: i + 1, total: items.length });
       }
-      return results;
+      return { results, sharedModelId };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
