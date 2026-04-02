@@ -58,6 +58,21 @@ export const isVariantAvailable = (
   });
 };
 
+// Product Model Group — groups multiple product variants by their shared model
+export interface ProductModelGroup {
+  ProductModelID: number;
+  modelName: string;
+  baseProduct: Product;
+  variants: Product[];
+  colors: string[];
+  sizes: string[];
+  priceRange: { min: number; max: number };
+}
+
+export const isProductModelGroup = (
+  item: ProductModelGroup | Product,
+): item is ProductModelGroup => "variants" in item;
+
 export interface ProductCategory {
   ProductCategoryID: number;
   Name: string;

@@ -157,3 +157,16 @@ public class DeleteEntityResult
     public bool Success { get; set; }
     public string Message { get; set; } = string.Empty;
 }
+
+public class SubcategoryProductInfo
+{
+    public int TotalProducts { get; set; }
+    public int ModelGroupCount { get; set; }
+}
+
+public class DeleteSubcategoryCascadeResult
+{
+    public bool Success { get; set; }
+    public int ProductsDeleted { get; set; }
+    public string Message { get; set; } = string.Empty;
+}

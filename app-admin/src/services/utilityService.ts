@@ -124,7 +124,7 @@ export const generateProductReviews = (
   productIds?: number[],
   reviewsPerProduct?: number,
 ) =>
-  startDurableFunction("GenerateProductReviewsUsingAI_HttpStart", {
+  startQueuedFunction("GenerateProductReviewsUsingAI_HttpStart", {
     ...(productIds?.length ? { ProductIds: productIds } : {}),
     ...(reviewsPerProduct !== undefined
       ? { ReviewsPerProduct: reviewsPerProduct }
@@ -310,6 +310,29 @@ export const deleteSubcategory = async (
   return res.json();
 };
 
+export interface SubcategoryProductInfo {
+  totalProducts: number;
+  modelGroupCount: number;
+}
+
+export const getSubcategoryProductInfo = async (
+  subcategoryId: number,
+): Promise<SubcategoryProductInfo> => {
+  const url = `${getFunctionsApiUrl()}/api/GetSubcategoryProductCount`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: subcategoryId }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `GetSubcategoryProductCount HTTP ${res.status}${text ? `: ${text}` : ""}`,
+    );
+  }
+  return res.json();
+};
+
 // ── Queue-based Functions (fire and forget, no status polling) ──────────────
 
 export const generateProductImages = (productIds?: number[]) =>
@@ -317,6 +340,17 @@ export const generateProductImages = (productIds?: number[]) =>
     "GenerateProductImages_HttpStart",
     productIds?.length ? { ProductIds: productIds } : undefined,
   );
+
+export const generateSingleProductImages = (productId: number) => {
+  const url = `${getFunctionsApiUrl()}/api/products/${productId}/generate-images`;
+  return fetch(url, { method: "POST" }).then((res) => {
+    if (!res.ok) {
+      return res.text().then((text) => {
+        throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ""}`);
+      });
+    }
+  });
+};
 
 // ── AI Product Content Generation ─────────────────────────────────────────
 

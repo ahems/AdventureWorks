@@ -70,12 +70,33 @@ public class GenerateProductReviewsUsingAI
                 await poisonQueueClient.ClearMessagesAsync();
             }
 
-            // Fetch all products that need reviews
+            // Parse optional product filter from request body
+            List<int>? filterProductIds = null;
+            var requestBody = await req.ReadAsStringAsync();
+            if (!string.IsNullOrWhiteSpace(requestBody))
+            {
+                try
+                {
+                    var payload = JsonSerializer.Deserialize<ReviewGenerationRequest>(requestBody);
+                    if (payload?.ProductIds?.Count > 0)
+                    {
+                        filterProductIds = payload.ProductIds;
+                        _logger.LogInformation("Filtering review generation to {count} product(s): {ids}",
+                            filterProductIds.Count, string.Join(", ", filterProductIds));
+                    }
+                }
+                catch (JsonException)
+                {
+                    // Ignore malformed body - proceed with all products
+                }
+            }
+
+            // Fetch products for review generation (optionally filtered by product IDs)
             var connectionString = Environment.GetEnvironmentVariable("SQL_CONNECTION_STRING")
                 ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not configured");
 
             var reviewService = new ReviewService(connectionString);
-            var products = await reviewService.GetProductsForReviewGenerationAsync();
+            var products = await reviewService.GetProductsForReviewGenerationAsync(filterProductIds);
 
             if (products == null || products.Count == 0)
             {
@@ -115,6 +136,11 @@ public class GenerateProductReviewsUsingAI
             await errorResponse.WriteStringAsync($"Error: {ex.Message}");
             return errorResponse;
         }
+    }
+
+    private class ReviewGenerationRequest
+    {
+        public List<int>? ProductIds { get; set; }
     }
 
     [Function(nameof(GenerateProductReviewsUsingAI_QueueTrigger))]

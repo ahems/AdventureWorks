@@ -1,6 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link, Navigate } from "react-router-dom";
-import { ArrowLeft, Star, Save, Tag, ExternalLink, Globe } from "lucide-react";
+import {
+  ArrowLeft,
+  Star,
+  Save,
+  Tag,
+  ExternalLink,
+  Globe,
+  Sparkles,
+  Loader2,
+} from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import ProductImageGallery from "@/components/ProductImageGallery";
@@ -15,6 +24,7 @@ import {
   useAdminProductEnglishDescription,
   useUpdateProduct,
   useUpdateProductDescription,
+  useCreateProductModel,
   useProductInventory,
   useUpdateProductInventory,
 } from "@/hooks/useAdminProducts";
@@ -30,7 +40,11 @@ import { useReviews } from "@/hooks/useReviews";
 import { toast } from "@/hooks/use-toast";
 import { getOfferStatus } from "@/types/promotion";
 import { getAppUrl } from "@/lib/utils";
-import { translateProductContent } from "@/services/utilityService";
+import {
+  translateProductContent,
+  generateProductContent,
+  generateProductReviews,
+} from "@/services/utilityService";
 import {
   Select,
   SelectContent,
@@ -79,6 +93,8 @@ const ProductPage: React.FC = () => {
     number | null
   >(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingReviews, setIsGeneratingReviews] = useState(false);
   const [selectedPromotionId, setSelectedPromotionId] =
     useState<string>("none");
 
@@ -97,6 +113,7 @@ const ProductPage: React.FC = () => {
 
   const updateProduct = useUpdateProduct();
   const updateProductDescription = useUpdateProductDescription();
+  const createProductModel = useCreateProductModel();
 
   // Sync form state when product loads
   useEffect(() => {
@@ -198,10 +215,71 @@ const ProductPage: React.FC = () => {
     setWeightUnit(newUnit);
   };
 
+  const handleGenerateWithAI = async () => {
+    const categoryName = category?.Name;
+    const subcategoryName = allSubcategories.find(
+      (s) => s.ProductSubcategoryID === editSubcategoryId,
+    )?.Name;
+    if (!categoryName || !subcategoryName) return;
+
+    const productLineLabel =
+      PRODUCT_LINES.find((pl) => pl.value === productLine)?.label ||
+      productLine ||
+      undefined;
+    const classLabel =
+      PRODUCT_CLASSES.find((pc) => pc.value === productClass)?.label ||
+      productClass ||
+      undefined;
+    const styleLabel =
+      PRODUCT_STYLES.find((ps) => ps.value === style)?.label ||
+      style ||
+      undefined;
+
+    setIsGenerating(true);
+    try {
+      const result = await generateProductContent({
+        category: categoryName,
+        subcategory: subcategoryName,
+        productLine: productLineLabel ?? null,
+        class_: classLabel ?? null,
+        style: styleLabel ?? null,
+      });
+      setName(result.productName);
+      setDescription(result.productDescription);
+      toast({
+        title: "AI Content Generated",
+        description:
+          "Product name and description have been updated. Review and save when ready.",
+      });
+    } catch (err) {
+      toast({
+        title: "Generation Failed",
+        description:
+          err instanceof Error
+            ? err.message
+            : "Could not generate product content.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!product) return;
     setIsSaving(true);
+
+    // If description is provided but this product has no ProductModel yet,
+    // create one now so the description can be stored and linked.
+    let resolvedProductModelId: number | null = product.ProductModelID ?? null;
+
     try {
+      if (description.trim() && !resolvedProductModelId) {
+        resolvedProductModelId = await createProductModel.mutateAsync({
+          name,
+        });
+      }
+
       // 1. Update product fields
       await updateProduct.mutateAsync({
         ProductID: product.ProductID,
@@ -221,6 +299,7 @@ const ProductPage: React.FC = () => {
         ProductSubcategoryID: editSubcategoryId
           ? (editSubcategoryId as number)
           : undefined,
+        ProductModelID: resolvedProductModelId,
       });
 
       // 1b. Update stock quantity at primary location (LocationID=1)
@@ -234,9 +313,9 @@ const ProductPage: React.FC = () => {
       }
 
       // 2. Update or create English description (only if product has a model)
-      if (product.ProductModelID) {
+      if (resolvedProductModelId) {
         const newDescId = await updateProductDescription.mutateAsync({
-          productModelId: product.ProductModelID,
+          productModelId: resolvedProductModelId,
           productDescriptionId,
           description,
         });
@@ -245,7 +324,7 @@ const ProductPage: React.FC = () => {
         }
 
         // 3. Fire-and-forget translation to all other cultures
-        translateProductContent([product.ProductModelID]).catch(() => {
+        translateProductContent([resolvedProductModelId]).catch(() => {
           toast({
             title: "Translation Warning",
             description:
@@ -257,7 +336,7 @@ const ProductPage: React.FC = () => {
 
       toast({
         title: "Product Saved",
-        description: product.ProductModelID
+        description: resolvedProductModelId
           ? `${name} saved. Translations to all languages are queued.`
           : `${name} saved successfully.`,
       });
@@ -286,7 +365,17 @@ const ProductPage: React.FC = () => {
               />
               <AiImageGeneratorDialog
                 productId={product.ProductID}
-                productName={product.Name}
+                productName={name}
+                description={description}
+                categoryName={category?.Name ?? null}
+                subcategoryName={
+                  allSubcategories.find(
+                    (s) => s.ProductSubcategoryID === editSubcategoryId,
+                  )?.Name ?? null
+                }
+                color={color || null}
+                productLine={productLine || null}
+                style={style || null}
               />
             </div>
 
@@ -694,6 +783,36 @@ const ProductPage: React.FC = () => {
                     </div>
                   )}
 
+                  {/* Generate using AI */}
+                  <div className="flex items-start gap-3 p-3 rounded border border-dashed border-doodle-blue bg-blue-50/50 dark:bg-blue-900/10">
+                    <Sparkles className="w-5 h-5 text-doodle-blue mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-doodle text-sm font-semibold text-doodle-blue">
+                        Generate using AI
+                      </p>
+                      <p className="text-xs text-doodle-text/60 mt-0.5">
+                        Category and Subcategory are required. Product Line,
+                        Class, and Style improve results. Overwrites name and
+                        description.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleGenerateWithAI}
+                      disabled={
+                        isGenerating || !editCategoryId || !editSubcategoryId
+                      }
+                      className="doodle-button doodle-button-primary flex items-center gap-1.5 px-3 py-1.5 text-sm shrink-0 disabled:opacity-50"
+                    >
+                      {isGenerating ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-4 h-4" />
+                      )}
+                      {isGenerating ? "Generating…" : "Generate"}
+                    </button>
+                  </div>
+
                   <div>
                     <label className="font-doodle text-sm text-doodle-text flex items-center gap-2 mb-1">
                       Description *
@@ -739,13 +858,47 @@ const ProductPage: React.FC = () => {
                     {averageRating.toFixed(1)} ({reviewCount} reviews)
                   </span>
                 </div>
-                <Link
-                  to={`/reviews?productId=${product.ProductID}`}
-                  className="inline-flex items-center gap-1 font-doodle text-xs text-doodle-blue hover:underline mt-2"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  Edit reviews for this product
-                </Link>
+                <div className="flex flex-col gap-2 mt-2">
+                  {reviewCount > 0 && (
+                    <Link
+                      to={`/reviews?productId=${product.ProductID}`}
+                      className="inline-flex items-center gap-1 font-doodle text-xs text-doodle-blue hover:underline"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Edit reviews for this product
+                    </Link>
+                  )}
+                  <button
+                    onClick={async () => {
+                      setIsGeneratingReviews(true);
+                      try {
+                        await generateProductReviews([product.ProductID]);
+                        toast({
+                          title: "Reviews queued",
+                          description:
+                            "AI review generation has been started for this product.",
+                        });
+                      } catch {
+                        toast({
+                          title: "Error",
+                          description: "Failed to start review generation.",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setIsGeneratingReviews(false);
+                      }
+                    }}
+                    disabled={isGeneratingReviews}
+                    className="inline-flex items-center gap-1 font-doodle text-xs text-doodle-blue hover:underline disabled:opacity-60 bg-transparent border-0 p-0 cursor-pointer"
+                  >
+                    {isGeneratingReviews ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3 h-3" />
+                    )}
+                    Generate Reviews for this Product Using AI
+                  </button>
+                </div>
               </div>
             </div>
           </div>

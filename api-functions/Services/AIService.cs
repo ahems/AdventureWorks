@@ -737,8 +737,8 @@ Translate the description into each target language. Return ONLY a valid JSON ob
     {
         var random = new Random();
 
-        // Generate between 0 and 10 reviews per product
-        var reviewCount = random.Next(0, 11);
+        // Generate between 1 and 10 reviews per product
+        var reviewCount = random.Next(1, 11);
 
         if (reviewCount == 0)
         {
@@ -879,8 +879,12 @@ Return the reviews as a JSON array.";
 
         foreach (var product in products)
         {
-            // Only generate images if the product doesn't already have 4 or more photos
-            if (product.ExistingPhotoCount >= 4)
+            // Determine target photo count: Universal style gets an extra image (male + female model)
+            var isUniversal = product.Style?.Trim().ToUpperInvariant() == "U";
+            var targetPhotoCount = isUniversal ? 5 : 4;
+
+            // Only generate images if the product doesn't already have enough photos
+            if (product.ExistingPhotoCount >= targetPhotoCount)
             {
                 _logger.LogInformation(
                     "Skipping ProductID {productId} - already has {count} photos",
@@ -890,7 +894,7 @@ Return the reviews as a JSON array.";
                 continue;
             }
 
-            var imagesToGenerate = 4 - product.ExistingPhotoCount;
+            var imagesToGenerate = targetPhotoCount - product.ExistingPhotoCount;
             _logger.LogInformation(
                 "Generating {count} images for ProductID {productId} ({name})",
                 imagesToGenerate,
@@ -898,28 +902,81 @@ Return the reviews as a JSON array.";
                 product.Name
             );
 
-            // Create prompts for different perspectives
-            var prompts = new List<string>();
-            var basePrompt = $"Professional product photography of {product.Name}";
-
-            if (!string.IsNullOrEmpty(product.Description))
+            // Map single-char ProductLine code to full name
+            var productLineLong = product.ProductLine?.Trim().ToUpperInvariant() switch
             {
-                basePrompt += $". {product.Description}";
-            }
-
-            if (!string.IsNullOrEmpty(product.ProductCategoryName))
-            {
-                basePrompt += $" Category: {product.ProductCategoryName}.";
-            }
-
-            var perspectives = new[]
-            {
-                " Product in use by an outdoor enthusiast, action shot, dynamic composition.",
-                " Close-up detail shot showing product features and quality, studio lighting.",
-                " Three-quarter view on white background, professional e-commerce style.",
-                " Lifestyle shot in natural outdoor environment, contextual setting."
+                "R" => "Road",
+                "M" => "Mountain",
+                "T" => "Touring",
+                "S" => "Standard",
+                _ => null
             };
 
+            // Map single-char Style code to gender description
+            var styleCode = product.Style?.Trim().ToUpperInvariant();
+            var genderLabel = styleCode switch
+            {
+                "M" => "men's",
+                "W" => "women's",
+                "U" => "unisex",
+                _ => null
+            };
+
+            // Build rich base prompt from all available product attributes
+            var promptParts = new List<string>
+            {
+                $"Professional product photography of {product.Name}"
+            };
+
+            if (!string.IsNullOrEmpty(product.Description))
+                promptParts.Add(product.Description);
+
+            if (!string.IsNullOrEmpty(product.ProductCategoryName))
+                promptParts.Add($"Category: {product.ProductCategoryName}");
+
+            if (!string.IsNullOrEmpty(product.ProductSubcategoryName))
+                promptParts.Add($"Subcategory: {product.ProductSubcategoryName}");
+
+            if (!string.IsNullOrEmpty(productLineLong))
+                promptParts.Add($"Product line: {productLineLong}");
+
+            if (!string.IsNullOrEmpty(product.Color))
+                promptParts.Add($"The product colour is {product.Color.ToLower()}");
+
+            if (genderLabel != null)
+                promptParts.Add($"This is a {genderLabel} product");
+
+            var basePrompt = string.Join(". ", promptParts) + ".";
+
+            // Build perspective suffixes based on Style
+            List<string> perspectives;
+            if (isUniversal)
+            {
+                // Universal: 5 images — male model, female model, detail, e-commerce, lifestyle with both
+                perspectives = new List<string>
+                {
+                    " Male model wearing or using the product in an outdoor action shot, dynamic composition, natural lighting.",
+                    " Female model wearing or using the product in an outdoor action shot, dynamic composition, natural lighting.",
+                    " Close-up detail shot highlighting product quality and features, studio lighting, white background.",
+                    " Three-quarter view of the product alone on a pure white background, professional e-commerce style.",
+                    " Lifestyle shot in a natural outdoor environment featuring both a male and female model together using the product."
+                };
+            }
+            else
+            {
+                var modelAdjective = styleCode == "W" ? "Female" : styleCode == "M" ? "Male" : "Outdoor enthusiast";
+                var modelGender = styleCode == "W" ? "female" : styleCode == "M" ? "male" : "outdoor enthusiast";
+                perspectives = new List<string>
+                {
+                    $" {modelAdjective} model wearing or using the product in an outdoor action shot, dynamic composition, natural lighting.",
+                    " Close-up detail shot highlighting product quality and features, studio lighting, white background.",
+                    " Three-quarter view of the product alone on a pure white background, professional e-commerce style.",
+                    $" Lifestyle shot in a natural outdoor environment with a {modelGender} model using the product in context."
+                };
+            }
+
+            // Create prompts for each remaining perspective
+            var prompts = new List<string>();
             for (int i = 0; i < imagesToGenerate; i++)
             {
                 prompts.Add(basePrompt + perspectives[i]);

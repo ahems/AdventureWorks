@@ -127,6 +127,67 @@ public class GenerateProductImages
         }
     }
 
+    [Function(nameof(GenerateProductImages_SingleProduct))]
+    public async Task<HttpResponseData> GenerateProductImages_SingleProduct(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "products/{productId}/generate-images")] HttpRequestData req,
+        int productId,
+        FunctionContext executionContext)
+    {
+        _logger.LogInformation("HTTP trigger received request to enqueue image generation for product {id}", productId);
+
+        try
+        {
+            var product = await _productService.GetProductForImageGenerationAsync(productId);
+
+            if (product == null)
+            {
+                var notFound = req.CreateResponse(HttpStatusCode.NotFound);
+                await notFound.WriteStringAsync($"Product {productId} not found or is not a finished good.");
+                return notFound;
+            }
+
+            var queueServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
+            if (string.IsNullOrEmpty(queueServiceUri))
+            {
+                var storageAccountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
+                    ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
+                queueServiceUri = $"https://{storageAccountName}.queue.core.windows.net";
+            }
+
+            var queueServiceClient = new QueueServiceClient(
+                new Uri(queueServiceUri),
+                new DefaultAzureCredential(),
+                new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 }
+            );
+
+            var queueClient = queueServiceClient.GetQueueClient(QUEUE_NAME);
+            await queueClient.CreateIfNotExistsAsync();
+
+            var message = JsonSerializer.Serialize(new
+            {
+                ProductID = product.ProductID,
+                ProductName = product.Name
+            });
+
+            await queueClient.SendMessageAsync(message);
+
+            _logger.LogInformation("Enqueued image generation job for product {id}: {name}", product.ProductID, product.Name);
+
+            var response = req.CreateResponse(HttpStatusCode.Accepted);
+            await response.WriteStringAsync(
+                $"Image generation queued for product {product.ProductID} ({product.Name}). Refresh the photo gallery in a few minutes."
+            );
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error enqueueing single-product image generation for product {id}", productId);
+            var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await errorResponse.WriteStringAsync($"Error: {ex.Message}");
+            return errorResponse;
+        }
+    }
+
     [Function(nameof(GenerateProductImages_QueueTrigger))]
     public async Task GenerateProductImages_QueueTrigger(
         [QueueTrigger(QUEUE_NAME, Connection = "AzureWebJobsStorage")] BinaryData queueMessage,
@@ -142,9 +203,7 @@ public class GenerateProductImages
             _logger.LogInformation("Processing product {id}: {name}", productId, productName);
 
             // Fetch current product data to verify it still needs images
-            var products = await _productService.GetProductsForImageGenerationAsync();
-
-            var product = products.FirstOrDefault(p => p.ProductID == productId);
+            var product = await _productService.GetProductForImageGenerationAsync(productId);
 
             if (product == null)
             {

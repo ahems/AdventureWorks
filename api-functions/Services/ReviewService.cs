@@ -69,11 +69,11 @@ public class ReviewService
         });
     }
 
-    public async Task<List<ProductForReviewGeneration>> GetProductsForReviewGenerationAsync()
+    public async Task<List<ProductForReviewGeneration>> GetProductsForReviewGenerationAsync(List<int>? productIds = null)
     {
         using var connection = await GetConnectionAsync();
 
-        // Get all finished goods products with their English descriptions and review counts
+        // Get finished goods products with their English descriptions and review counts
         var sql = @"
             SELECT 
                 p.ProductID,
@@ -88,10 +88,15 @@ public class ReviewService
             LEFT JOIN Production.ProductDescription pd ON pmx.ProductDescriptionID = pd.ProductDescriptionID
             LEFT JOIN Production.ProductReview pr ON p.ProductID = pr.ProductID
             WHERE p.FinishedGoodsFlag = 1
+            AND (@FilterByIds = 0 OR p.ProductID IN @ProductIds)
             GROUP BY p.ProductID, p.Name, pd.Description, p.SellStartDate
             ORDER BY p.ProductID";
 
-        var products = await connection.QueryAsync<ProductForReviewGeneration>(sql);
+        var products = await connection.QueryAsync<ProductForReviewGeneration>(sql, new
+        {
+            FilterByIds = (productIds?.Count > 0) ? 1 : 0,
+            ProductIds = (productIds?.Count > 0) ? productIds : new List<int> { -1 }
+        });
         return products.ToList();
     }
 

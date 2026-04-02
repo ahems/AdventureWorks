@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Wand2, Loader2, Sparkles } from "lucide-react";
+import { Images, Loader2, Sparkles, AlertCircle, Info } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -8,52 +8,92 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { PRODUCT_LINES, PRODUCT_STYLES } from "@/lib/product-constants";
 import { getFunctionsApiUrl } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
 interface AiImageGeneratorDialogProps {
   productId: number;
   productName: string;
+  description?: string | null;
+  categoryName?: string | null;
+  subcategoryName?: string | null;
+  color?: string | null;
+  productLine?: string | null;
+  style?: string | null;
 }
+
+interface AttributeRowProps {
+  label: string;
+  value?: string | null;
+  required?: boolean;
+}
+
+const AttributeRow: React.FC<AttributeRowProps> = ({
+  label,
+  value,
+  required,
+}) => {
+  const missing = !value;
+  return (
+    <div className="flex items-start justify-between gap-3 py-2 border-b border-doodle-text/10 last:border-0">
+      <span className="font-doodle text-sm text-doodle-text/70 shrink-0 w-32">
+        {label}
+      </span>
+      {missing ? (
+        <span
+          className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+            required
+              ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+              : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+          }`}
+        >
+          <AlertCircle className="w-3 h-3" />
+          {required ? "Missing — required" : "Missing — optional"}
+        </span>
+      ) : (
+        <span className="text-sm text-doodle-text font-medium">{value}</span>
+      )}
+    </div>
+  );
+};
 
 const AiImageGeneratorDialog: React.FC<AiImageGeneratorDialogProps> = ({
   productId,
   productName,
+  description,
+  categoryName,
+  subcategoryName,
+  color,
+  productLine,
+  style,
 }) => {
   const [open, setOpen] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [description, setDescription] = useState("");
-  const [style, setStyle] = useState("photo");
-  const [background, setBackground] = useState("white");
+  const [isQueuing, setIsQueuing] = useState(false);
 
-  const handleGenerate = async () => {
-    setIsGenerating(true);
+  const productLineLong = productLine
+    ? (PRODUCT_LINES.find((l) => l.value === productLine)?.label ?? productLine)
+    : null;
+  const styleLong = style
+    ? (PRODUCT_STYLES.find((s) => s.value === style)?.label ?? style)
+    : null;
+
+  const isUniversal = style === "U";
+  const imageCount = isUniversal ? 5 : 4;
+
+  const handleQueue = async () => {
+    setIsQueuing(true);
     try {
       const res = await fetch(
-        `${getFunctionsApiUrl()}/api/GenerateProductImages_HttpStart`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ProductIds: [productId] }),
-        },
+        `${getFunctionsApiUrl()}/api/products/${productId}/generate-images`,
+        { method: "POST" },
       );
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       toast({
         title: "Image generation queued",
-        description: `AI image generation for "${productName}" has been queued. Check back in a few minutes — refresh the photo gallery to see the result.`,
+        description: `${imageCount} AI images for "${productName}" have been queued. Refresh the photo gallery in a few minutes to see them.`,
       });
       setOpen(false);
-      setDescription("");
     } catch (error) {
       toast({
         title: "Error",
@@ -64,97 +104,89 @@ const AiImageGeneratorDialog: React.FC<AiImageGeneratorDialogProps> = ({
         variant: "destructive",
       });
     } finally {
-      setIsGenerating(false);
+      setIsQueuing(false);
     }
   };
+
+  const missingRequired = !description || !categoryName;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="gap-2">
-          <Wand2 className="w-4 h-4" />
-          Generate AI Image
-        </Button>
+        <button
+          type="button"
+          className="doodle-button doodle-button-primary w-full py-3 flex items-center justify-center gap-2 text-base font-bold"
+        >
+          <Sparkles className="w-5 h-5" />
+          Generate AI Images
+        </button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-doodle-accent" />
-            AI Image Generator
+            Generate AI Images
           </DialogTitle>
           <DialogDescription>
-            Generate a product image for <strong>{productName}</strong> using
-            AI.
+            The following product attributes will be used to generate{" "}
+            <strong>{imageCount} images</strong> for{" "}
+            <strong>{productName}</strong>.{" "}
+            {isUniversal && (
+              <span>
+                Universal style products get an extra image — both a male and
+                female model are shown.
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="description">Custom Description (optional)</Label>
-            <Textarea
-              id="description"
-              placeholder={`Describe how you want the ${productName} to look...`}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Style</Label>
-              <Select value={style} onValueChange={setStyle}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="photo">📷 Photo</SelectItem>
-                  <SelectItem value="illustration">🎨 Illustration</SelectItem>
-                  <SelectItem value="3d-render">🧊 3D Render</SelectItem>
-                  <SelectItem value="sketch">✏️ Sketch</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Background</Label>
-              <Select value={background} onValueChange={setBackground}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="white">⬜ White</SelectItem>
-                  <SelectItem value="gradient">🌈 Gradient</SelectItem>
-                  <SelectItem value="studio">💡 Studio</SelectItem>
-                  <SelectItem value="outdoor">🌿 Outdoor</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <Button
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            className="w-full"
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Queuing...
-              </>
-            ) : (
-              <>
-                <Wand2 className="w-4 h-4 mr-2" />
-                Queue Image Generation
-              </>
-            )}
-          </Button>
-
-          <p className="text-xs text-muted-foreground pt-1">
-            Images are generated asynchronously by Azure AI. Refresh the product
-            photo gallery in a few minutes to see the result.
-          </p>
+        <div className="py-2 space-y-1">
+          <AttributeRow label="Product Name" value={productName} required />
+          <AttributeRow label="Description" value={description} required />
+          <AttributeRow label="Category" value={categoryName} required />
+          <AttributeRow label="Subcategory" value={subcategoryName} />
+          <AttributeRow label="Product Line" value={productLineLong} />
+          <AttributeRow label="Color" value={color} />
+          <AttributeRow label="Style" value={styleLong} />
         </div>
+
+        {missingRequired && (
+          <div className="flex items-start gap-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-sm text-red-700 dark:text-red-400">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>
+              Required attributes are missing. Save the product with a
+              description and category before generating images for best
+              results.
+            </span>
+          </div>
+        )}
+
+        <div className="flex items-start gap-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 text-sm text-blue-700 dark:text-blue-400">
+          <Info className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>
+            Images are generated and thumbnails created asynchronously by Azure
+            AI. Refresh the photo gallery in a few minutes to see the results.
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleQueue}
+          disabled={isQueuing}
+          className="doodle-button doodle-button-primary w-full py-2.5 flex items-center justify-center gap-2 disabled:opacity-60"
+        >
+          {isQueuing ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Queuing…
+            </>
+          ) : (
+            <>
+              <Images className="w-4 h-4" />
+              Queue Image Generation
+            </>
+          )}
+        </button>
       </DialogContent>
     </Dialog>
   );

@@ -8,6 +8,8 @@ import {
   ChevronRight,
   Globe,
   Package,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
@@ -22,11 +24,215 @@ import {
   createSubcategory,
   deleteCategory as deleteCategoryApi,
   deleteSubcategory as deleteSubcategoryApi,
+  getSubcategoryProductInfo,
+  SubcategoryProductInfo,
   translateCategoryName,
   CategoryTranslationPayload,
 } from "@/services/utilityService";
 import { toast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+// ─── Delete Subcategory Dialog ────────────────────────────────────────────────
+
+interface DeleteSubcategoryDialogProps {
+  subcategoryId: number | null;
+  subcategoryName: string;
+  onClose: () => void;
+  onDeleted: () => void;
+}
+
+const DeleteSubcategoryDialog: React.FC<DeleteSubcategoryDialogProps> = ({
+  subcategoryId,
+  subcategoryName,
+  onClose,
+  onDeleted,
+}) => {
+  const [info, setInfo] = useState<SubcategoryProductInfo | null>(null);
+  const [loadingInfo, setLoadingInfo] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // Load product counts when dialog opens
+  React.useEffect(() => {
+    if (!subcategoryId) return;
+    setInfo(null);
+    setLoadingInfo(true);
+    getSubcategoryProductInfo(subcategoryId)
+      .then(setInfo)
+      .catch(() => setInfo({ totalProducts: 0, modelGroupCount: 0 }))
+      .finally(() => setLoadingInfo(false));
+  }, [subcategoryId]);
+
+  const handleConfirm = async () => {
+    if (!subcategoryId) return;
+    setDeleting(true);
+    try {
+      const result = await deleteSubcategoryApi(subcategoryId);
+      if (!result.success) throw new Error(result.message ?? "Delete failed");
+      toast({
+        title: "Subcategory Deleted",
+        description: info?.totalProducts
+          ? `"${subcategoryName}" and ${info.totalProducts} product${info.totalProducts !== 1 ? "s" : ""} were deleted.`
+          : `"${subcategoryName}" was deleted.`,
+      });
+      onDeleted();
+    } catch (err) {
+      toast({
+        title: "Delete Failed",
+        description: String(err),
+        variant: "destructive",
+      });
+      onClose();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const isOpen = !!subcategoryId;
+  const productCount = info?.totalProducts ?? 0;
+  const groupCount = info?.modelGroupCount ?? 0;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={deleting ? undefined : onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-doodle text-xl flex items-center gap-2">
+            <Trash2 className="w-5 h-5 text-red-500" />
+            Delete Subcategory
+          </DialogTitle>
+        </DialogHeader>
+
+        {loadingInfo ? (
+          <div className="py-8 flex flex-col items-center gap-3">
+            <Loader2 className="w-8 h-8 animate-spin text-doodle-accent" />
+            <p className="font-doodle text-doodle-text/60">
+              Checking products…
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4 pt-1">
+            {/* Warning banner */}
+            <div className="bg-red-50 border-2 border-red-200 rounded p-3 flex gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-doodle font-bold text-red-800 text-sm">
+                  This cannot be undone
+                </p>
+                <p className="font-doodle text-red-700 text-sm mt-1">
+                  "{subcategoryName}" will be permanently deleted
+                  {productCount > 0 && (
+                    <>
+                      {" "}
+                      along with{" "}
+                      <strong>
+                        {productCount} product{productCount !== 1 ? "s" : ""}
+                      </strong>
+                      {groupCount > 0 && (
+                        <>
+                          {" "}
+                          ({groupCount} product group
+                          {groupCount !== 1 ? "s" : ""} with variants)
+                        </>
+                      )}
+                    </>
+                  )}
+                  .
+                </p>
+              </div>
+            </div>
+
+            {/* What will be deleted */}
+            {productCount > 0 && (
+              <div>
+                <p className="font-doodle text-sm font-bold text-doodle-text mb-2">
+                  For each product the following will also be removed:
+                </p>
+                <ul className="space-y-1 pl-1">
+                  <li className="font-doodle text-sm text-doodle-text/70">
+                    • All product images
+                  </li>
+                  <li className="font-doodle text-sm text-doodle-text/70">
+                    • Customer reviews &amp; replies
+                  </li>
+                  <li className="font-doodle text-sm text-doodle-text/70">
+                    • Shopping basket items
+                  </li>
+                  <li className="font-doodle text-sm text-doodle-text/70">
+                    • Inventory records
+                  </li>
+                  <li className="font-doodle text-sm text-doodle-text/70">
+                    • Price &amp; cost history
+                  </li>
+                  <li className="font-doodle text-sm text-doodle-text/70">
+                    • Special offer links
+                  </li>
+                  {groupCount > 0 && (
+                    <li className="font-doodle text-sm text-doodle-text/70">
+                      • Product models &amp; translations
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {/* Summary badge */}
+            {productCount > 0 && (
+              <div className="bg-doodle-text/5 border-2 border-dashed border-doodle-text/20 rounded p-3">
+                <p className="font-doodle text-sm text-center text-doodle-text">
+                  <span className="font-bold text-red-600">{productCount}</span>{" "}
+                  product{productCount !== 1 ? "s" : ""}
+                  {groupCount > 0 && (
+                    <>
+                      {" "}
+                      across{" "}
+                      <span className="font-bold text-red-600">
+                        {groupCount}
+                      </span>{" "}
+                      group{groupCount !== 1 ? "s" : ""}
+                    </>
+                  )}{" "}
+                  will be permanently deleted
+                </p>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={onClose}
+                disabled={deleting}
+                className="flex-1 doodle-button"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirm}
+                disabled={deleting}
+                className="flex-1 doodle-button flex items-center justify-center gap-2 bg-red-500 border-red-700 text-white hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {deleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Deleting…
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" /> Delete
+                    {productCount > 0 ? ` (${productCount} products)` : ""}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+};
 
 // ─── Create Category Dialog ────────────────────────────────────────────────────
 
@@ -255,6 +461,10 @@ const CategoriesPage: React.FC = () => {
     new Set(),
   );
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteSubcatTarget, setDeleteSubcatTarget] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
 
   const { data: categories = [], isLoading: categoriesLoading } =
     useAdminCategories();
@@ -320,43 +530,8 @@ const CategoriesPage: React.FC = () => {
     }
   };
 
-  const handleDeleteSubcategory = async (
-    subcategoryId: number,
-    name: string,
-  ) => {
-    if (
-      !window.confirm(
-        `Delete subcategory "${name}"?\n\nThis will permanently delete all culture variants.`,
-      )
-    )
-      return;
-    setDeletingId(subcategoryId);
-    try {
-      const result = await deleteSubcategoryApi(subcategoryId);
-      if (!result.success) throw new Error(result.message ?? "Delete failed");
-      toast({
-        title: "Subcategory Deleted",
-        description: `"${name}" was deleted.`,
-      });
-      invalidate();
-    } catch (err) {
-      const msg = String(err);
-      if (msg.includes("409") || msg.toLowerCase().includes("product")) {
-        toast({
-          title: "Cannot Delete",
-          description: "Move or delete all products in this subcategory first.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Delete Failed",
-          description: msg,
-          variant: "destructive",
-        });
-      }
-    } finally {
-      setDeletingId(null);
-    }
+  const handleDeleteSubcategory = (subcategoryId: number, name: string) => {
+    setDeleteSubcatTarget({ id: subcategoryId, name });
   };
 
   const isLoading = categoriesLoading || subsLoading;
@@ -537,14 +712,9 @@ const CategoriesPage: React.FC = () => {
                                       )
                                     }
                                     disabled={
-                                      deletingId === sub.ProductSubcategoryID ||
-                                      subProductCount > 0
+                                      deletingId === sub.ProductSubcategoryID
                                     }
-                                    title={
-                                      subProductCount > 0
-                                        ? "Move or delete products first"
-                                        : `Delete ${sub.Name}`
-                                    }
+                                    title={`Delete ${sub.Name}`}
                                     className="doodle-button text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 p-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
                                     data-testid={`delete-subcategory-${sub.ProductSubcategoryID}`}
                                   >
@@ -575,6 +745,17 @@ const CategoriesPage: React.FC = () => {
       </main>
 
       <Footer />
+
+      {/* Delete subcategory dialog */}
+      <DeleteSubcategoryDialog
+        subcategoryId={deleteSubcatTarget?.id ?? null}
+        subcategoryName={deleteSubcatTarget?.name ?? ""}
+        onClose={() => setDeleteSubcatTarget(null)}
+        onDeleted={() => {
+          setDeleteSubcatTarget(null);
+          invalidate();
+        }}
+      />
     </div>
   );
 };

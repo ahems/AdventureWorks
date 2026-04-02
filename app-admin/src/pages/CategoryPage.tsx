@@ -12,6 +12,7 @@ import {
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import AdminProductCard from "@/components/AdminProductCard";
+import AdminProductModelGroupCard from "@/components/AdminProductModelGroupCard";
 import AdminProductCardSkeleton from "@/components/AdminProductCardSkeleton";
 import CreateProductDialog from "@/components/CreateProductDialog";
 import { useAuth } from "@/context/AuthContext";
@@ -31,6 +32,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Product } from "@/types/product";
+import {
+  groupProductsByModel,
+  isProductModelGroup,
+} from "@/lib/productGrouping";
 import { getAppUrl } from "@/lib/utils";
 import { Plus } from "lucide-react";
 
@@ -142,6 +147,16 @@ const CategoryPage: React.FC = () => {
     }
   }, [baseProducts, sortBy, ratingMap]);
 
+  // Group sorted products by ProductModelID
+  const groupedItems = React.useMemo(
+    () => groupProductsByModel(allProducts),
+    [allProducts],
+  );
+
+  // Product count label: show raw count and grouped count
+  const rawProductCount = allProducts.length;
+  const groupedCount = groupedItems.length;
+
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
@@ -152,25 +167,31 @@ const CategoryPage: React.FC = () => {
     return <Navigate to="/login" replace />;
   }
 
-  const totalPages = Math.ceil(allProducts.length / itemsPerPage);
+  const totalPages = Math.ceil(groupedCount / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedProducts = allProducts.slice(startIndex, endIndex);
+  const paginatedItems = groupedItems.slice(startIndex, endIndex);
 
-  // Fetch primary thumbnail for each visible product and attach as ImageUrl
-  const paginatedProductIds = React.useMemo(
-    () => paginatedProducts.map((p) => p.ProductID),
-    [paginatedProducts],
+  // Collect IDs of individual (non-grouped) products on this page for photo batch fetch
+  const paginatedSingleProductIds = React.useMemo(
+    () =>
+      paginatedItems
+        .filter((item): item is Product => !isProductModelGroup(item))
+        .map((p) => p.ProductID),
+    [paginatedItems],
   );
   const { data: photoMap = new Map<number, string>() } =
-    useAdminProductPhotoBatch(paginatedProductIds);
-  const paginatedProductsWithImages = React.useMemo(
+    useAdminProductPhotoBatch(paginatedSingleProductIds);
+  const paginatedItemsWithImages = React.useMemo(
     () =>
-      paginatedProducts.map((p) => ({
-        ...p,
-        ImageUrl: photoMap.get(p.ProductID) ?? p.ImageUrl,
-      })),
-    [paginatedProducts, photoMap],
+      paginatedItems.map((item) => {
+        if (isProductModelGroup(item)) return item;
+        return {
+          ...item,
+          ImageUrl: photoMap.get(item.ProductID) ?? item.ImageUrl,
+        };
+      }),
+    [paginatedItems, photoMap],
   );
 
   const handlePageChange = (page: number) => {
@@ -252,7 +273,9 @@ const CategoryPage: React.FC = () => {
               )}
             </h1>
             <p className="font-doodle text-doodle-text/70">
-              {allProducts.length} product{allProducts.length !== 1 ? "s" : ""}{" "}
+              {rawProductCount} product{rawProductCount !== 1 ? "s" : ""}
+              {groupedCount < rawProductCount &&
+                ` · ${groupedCount} group${groupedCount !== 1 ? "s" : ""}`}{" "}
               • Click any product to edit
             </p>
             <div className="mt-4">
@@ -373,9 +396,8 @@ const CategoryPage: React.FC = () => {
                   </div>
 
                   <span className="font-doodle text-doodle-text/70 text-sm">
-                    Showing {startIndex + 1}-
-                    {Math.min(endIndex, allProducts.length)} of{" "}
-                    {allProducts.length}
+                    Showing {startIndex + 1}-{Math.min(endIndex, groupedCount)}{" "}
+                    of {groupedCount}
                   </span>
                 </div>
               )}
@@ -386,14 +408,18 @@ const CategoryPage: React.FC = () => {
                     <AdminProductCardSkeleton key={i} />
                   ))}
                 </div>
-              ) : paginatedProductsWithImages.length > 0 ? (
+              ) : paginatedItemsWithImages.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {paginatedProductsWithImages.map((product) => (
-                    <AdminProductCard
-                      key={product.ProductID}
-                      product={product}
-                    />
-                  ))}
+                  {paginatedItemsWithImages.map((item) =>
+                    isProductModelGroup(item) ? (
+                      <AdminProductModelGroupCard
+                        key={`group-${item.ProductModelID}`}
+                        group={item}
+                      />
+                    ) : (
+                      <AdminProductCard key={item.ProductID} product={item} />
+                    ),
+                  )}
                 </div>
               ) : (
                 <div className="doodle-card p-12 text-center">

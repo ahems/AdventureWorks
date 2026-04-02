@@ -32,6 +32,7 @@ export interface VariationRow {
   Class: string | null;
   Style: string | null;
   InitialQuantity: number;
+  Description?: string;
 }
 
 /** Generate a short GUID-derived SKU safe for the 25-char DB column. */
@@ -98,6 +99,7 @@ export function generateVariations(config: VariationConfig): VariationRow[] {
           Class: class_,
           Style: style,
           InitialQuantity: initialQuantity,
+          Description: config.description || undefined,
         });
       }
     }

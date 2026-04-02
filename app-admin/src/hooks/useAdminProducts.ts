@@ -292,6 +292,7 @@ export interface ProductPhoto {
   ModifiedDate: string;
 }
 
+// Fetch only thumbnails for all photos — avoids OOM from loading multiple large images at once
 const GET_PRODUCT_PHOTOS = gql`
   query GetProductPhotos($productId: Int!) {
     productProductPhotos(filter: { ProductID: { eq: $productId } }) {
@@ -303,10 +304,21 @@ const GET_PRODUCT_PHOTOS = gql`
           ProductPhotoID
           ThumbNailPhoto
           ThumbnailPhotoFileName
-          LargePhoto
           LargePhotoFileName
           ModifiedDate
         }
+      }
+    }
+  }
+`;
+
+// Separate query to lazily fetch just the large photo for the selected image
+const GET_LARGE_PHOTO = gql`
+  query GetLargePhoto($photoId: Int!) {
+    productPhotos(filter: { ProductPhotoID: { eq: $photoId } }) {
+      items {
+        ProductPhotoID
+        LargePhoto
       }
     }
   }
@@ -329,6 +341,21 @@ export const useProductPhotos = (productId: number) =>
       return data.productProductPhotos?.items ?? [];
     },
     enabled: !!productId,
+    staleTime: 0,
+  });
+
+export const useProductLargePhoto = (photoId: number | null) =>
+  useQuery<string | null>({
+    queryKey: ["product", "photo", "large", photoId],
+    queryFn: async () => {
+      const data = await graphqlClient.request<{
+        productPhotos?: {
+          items: Array<{ ProductPhotoID: number; LargePhoto: string | null }>;
+        };
+      }>(GET_LARGE_PHOTO, { photoId });
+      return data.productPhotos?.items?.[0]?.LargePhoto ?? null;
+    },
+    enabled: !!photoId,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -562,6 +589,7 @@ const UPDATE_PRODUCT = gql`
     $class: String
     $style: String
     $productSubcategoryId: Int
+    $productModelId: Int
     $modifiedDate: DateTime!
   ) {
     updateProduct(
@@ -577,6 +605,7 @@ const UPDATE_PRODUCT = gql`
         Class: $class
         Style: $style
         ProductSubcategoryID: $productSubcategoryId
+        ProductModelID: $productModelId
         ModifiedDate: $modifiedDate
       }
     ) {
@@ -609,6 +638,7 @@ export const useUpdateProduct = () => {
       Class?: string | null;
       Style?: string | null;
       ProductSubcategoryID?: number | null;
+      ProductModelID?: number | null;
     }) => {
       await graphqlClient.request(UPDATE_PRODUCT, {
         id: vars.ProductID,
@@ -622,6 +652,7 @@ export const useUpdateProduct = () => {
         class: vars.Class ?? null,
         style: vars.Style ?? null,
         productSubcategoryId: vars.ProductSubcategoryID ?? null,
+        productModelId: vars.ProductModelID ?? null,
         modifiedDate: new Date().toISOString(),
       });
     },
@@ -633,6 +664,29 @@ export const useUpdateProduct = () => {
     },
   });
 };
+
+// ─── Create Product Model ────────────────────────────────────────────────────
+
+const CREATE_PRODUCT_MODEL = gql`
+  mutation CreateProductModel($name: String!, $modifiedDate: DateTime!) {
+    createProductModel(item: { Name: $name, ModifiedDate: $modifiedDate }) {
+      ProductModelID
+    }
+  }
+`;
+
+export const useCreateProductModel = () =>
+  useMutation({
+    mutationFn: async (vars: { name: string }) => {
+      const data = await graphqlClient.request<{
+        createProductModel: { ProductModelID: number };
+      }>(CREATE_PRODUCT_MODEL, {
+        name: vars.name,
+        modifiedDate: new Date().toISOString(),
+      });
+      return data.createProductModel.ProductModelID;
+    },
+  });
 
 // ─── Update/Create Product Description ───────────────────────────────────────
 
@@ -749,6 +803,7 @@ const CREATE_PRODUCT_MUTATION = gql`
     $productLine: String
     $class: String
     $style: String
+    $productModelId: Int
   ) {
     createProduct(
       item: {
@@ -770,6 +825,7 @@ const CREATE_PRODUCT_MUTATION = gql`
         ProductLine: $productLine
         Class: $class
         Style: $style
+        ProductModelID: $productModelId
       }
     ) {
       ProductID
@@ -818,6 +874,34 @@ export interface CreateProductVars {
   Class?: string | null;
   Style?: string | null;
   InitialQuantity?: number;
+  Description?: string; // used to create ProductModel + description on creation
+  ProductModelID?: number | null; // if already known (e.g. batch shares one model)
+}
+
+/** Internal helper: create a ProductModel + English description and return the model ID */
+async function createProductModelWithDescription(
+  name: string,
+  description: string,
+  modifiedDate: string,
+): Promise<number> {
+  const modelResult = await graphqlClient.request<{
+    createProductModel: { ProductModelID: number };
+  }>(CREATE_PRODUCT_MODEL, { name, modifiedDate });
+  const productModelId = modelResult.createProductModel.ProductModelID;
+
+  const descResult = await graphqlClient.request<{
+    createProductDescription: { ProductDescriptionID: number };
+  }>(CREATE_PRODUCT_DESCRIPTION_MUTATION, { description, modifiedDate });
+  const descId = descResult.createProductDescription.ProductDescriptionID;
+
+  await graphqlClient.request(CREATE_PRODUCT_MODEL_CULTURE_LINK, {
+    productModelId,
+    productDescriptionId: descId,
+    cultureId: "en",
+    modifiedDate,
+  });
+
+  return productModelId;
 }
 
 export const useCreateProduct = () => {
@@ -825,6 +909,17 @@ export const useCreateProduct = () => {
   return useMutation({
     mutationFn: async (vars: CreateProductVars) => {
       const modifiedDate = new Date().toISOString();
+
+      // Auto-create a ProductModel so variants/description can be linked later
+      let productModelId = vars.ProductModelID ?? null;
+      if (!productModelId && vars.Description?.trim()) {
+        productModelId = await createProductModelWithDescription(
+          vars.Name,
+          vars.Description,
+          modifiedDate,
+        );
+      }
+
       const result = await graphqlClient.request<{
         createProduct: { ProductID: number; Name: string };
       }>(CREATE_PRODUCT_MUTATION, {
@@ -844,6 +939,7 @@ export const useCreateProduct = () => {
         productLine: vars.ProductLine ?? null,
         class: vars.Class ?? null,
         style: vars.Style ?? null,
+        productModelId,
       });
       const productId = result.createProduct.ProductID;
       // Create an inventory record at the default location (ID=1)
@@ -878,6 +974,20 @@ export const useCreateProductBatch = () => {
       onProgress?: (p: BatchProgress) => void;
     }) => {
       const results: Array<{ ProductID: number; Name: string }> = [];
+
+      // Create one shared ProductModel for the whole batch so all variants
+      // are properly grouped when displayed on the category page.
+      let sharedModelId: number | null = null;
+      const firstDescription = items[0]?.Description?.trim();
+      if (items.length > 0 && firstDescription) {
+        const modifiedDate = new Date().toISOString();
+        sharedModelId = await createProductModelWithDescription(
+          items[0].Name,
+          firstDescription,
+          modifiedDate,
+        );
+      }
+
       for (let i = 0; i < items.length; i++) {
         const vars = items[i];
         const modifiedDate = new Date().toISOString();
@@ -900,6 +1010,7 @@ export const useCreateProductBatch = () => {
           productLine: vars.ProductLine ?? null,
           class: vars.Class ?? null,
           style: vars.Style ?? null,
+          productModelId: sharedModelId,
         });
         const productId = result.createProduct.ProductID;
         await graphqlClient.request(CREATE_PRODUCT_INVENTORY, {
@@ -1034,6 +1145,329 @@ export const useUpdateProductInventory = () => {
       queryClient.invalidateQueries({
         queryKey: ["admin", "inventory", vars.productId],
       });
+    },
+  });
+};
+
+// ─── Delete Product (cascade) ─────────────────────────────────────────────────
+
+const GET_REVIEWS_FOR_DELETE = gql`
+  query GetReviewsForDelete($productId: Int!) {
+    productReviews(filter: { ProductID: { eq: $productId } }) {
+      items {
+        ProductReviewID
+      }
+    }
+  }
+`;
+
+const GET_REPLIES_FOR_DELETE = gql`
+  query GetRepliesForDelete($reviewId: Int!) {
+    productReviewReplies(filter: { ProductReviewID: { eq: $reviewId } }) {
+      items {
+        ProductReviewReplyID
+      }
+    }
+  }
+`;
+
+const GET_PHOTO_LINKS_FOR_DELETE = gql`
+  query GetPhotoLinksForDelete($productId: Int!) {
+    productProductPhotos(filter: { ProductID: { eq: $productId } }) {
+      items {
+        ProductPhotoID
+      }
+    }
+  }
+`;
+
+const GET_INVENTORY_FOR_DELETE = gql`
+  query GetInventoryForDelete($productId: Int!) {
+    productInventories(filter: { ProductID: { eq: $productId } }) {
+      items {
+        LocationID
+      }
+    }
+  }
+`;
+
+const GET_SPECIAL_OFFERS_FOR_DELETE = gql`
+  query GetSpecialOffersForDelete($productId: Int!) {
+    specialOfferProducts(filter: { ProductID: { eq: $productId } }) {
+      items {
+        SpecialOfferID
+      }
+    }
+  }
+`;
+
+const GET_COST_HISTORY_FOR_DELETE = gql`
+  query GetCostHistoryForDelete($productId: Int!) {
+    productCostHistories(filter: { ProductID: { eq: $productId } }) {
+      items {
+        StartDate
+      }
+    }
+  }
+`;
+
+const GET_PRICE_HISTORY_FOR_DELETE = gql`
+  query GetPriceHistoryForDelete($productId: Int!) {
+    productListPriceHistories(filter: { ProductID: { eq: $productId } }) {
+      items {
+        StartDate
+      }
+    }
+  }
+`;
+
+const GET_MODEL_CULTURES_FOR_DELETE = gql`
+  query GetModelCulturesForDelete($modelId: Int!) {
+    productModelProductDescriptionCultures(
+      filter: { ProductModelID: { eq: $modelId } }
+    ) {
+      items {
+        ProductDescriptionID
+        CultureID
+      }
+    }
+  }
+`;
+
+const DELETE_REVIEW_REPLY_MUT = gql`
+  mutation DeleteReviewReplyMut($id: Int!) {
+    deleteProductReviewReply(ProductReviewReplyID: $id) {
+      ProductReviewReplyID
+    }
+  }
+`;
+
+const DELETE_REVIEW_MUT = gql`
+  mutation DeleteReviewMut($id: Int!) {
+    deleteProductReview(ProductReviewID: $id) {
+      ProductReviewID
+    }
+  }
+`;
+
+const DELETE_INVENTORY_MUT = gql`
+  mutation DeleteInventoryMut($productId: Int!, $locationId: Short!) {
+    deleteProductInventory(ProductID: $productId, LocationID: $locationId) {
+      ProductID
+    }
+  }
+`;
+
+const DELETE_SPECIAL_OFFER_PRODUCT_MUT = gql`
+  mutation DeleteSpecialOfferProductMut(
+    $specialOfferId: Int!
+    $productId: Int!
+  ) {
+    deleteSpecialOfferProduct(
+      SpecialOfferID: $specialOfferId
+      ProductID: $productId
+    ) {
+      SpecialOfferID
+    }
+  }
+`;
+
+const DELETE_COST_HISTORY_MUT = gql`
+  mutation DeleteCostHistoryMut($productId: Int!, $startDate: DateTime!) {
+    deleteProductCostHistory(ProductID: $productId, StartDate: $startDate) {
+      ProductID
+    }
+  }
+`;
+
+const DELETE_PRICE_HISTORY_MUT = gql`
+  mutation DeletePriceHistoryMut($productId: Int!, $startDate: DateTime!) {
+    deleteProductListPriceHistory(
+      ProductID: $productId
+      StartDate: $startDate
+    ) {
+      ProductID
+    }
+  }
+`;
+
+const DELETE_PRODUCT_MUT = gql`
+  mutation DeleteProductMut($productId: Int!) {
+    deleteProduct(ProductID: $productId) {
+      ProductID
+    }
+  }
+`;
+
+const DELETE_MODEL_CULTURE_LINK_MUT = gql`
+  mutation DeleteModelCultureLinkMut(
+    $modelId: Int!
+    $descId: Int!
+    $cultureId: String!
+  ) {
+    deleteProductModelProductDescriptionCulture(
+      ProductModelID: $modelId
+      ProductDescriptionID: $descId
+      CultureID: $cultureId
+    ) {
+      ProductModelID
+    }
+  }
+`;
+
+const DELETE_PRODUCT_DESCRIPTION_MUT = gql`
+  mutation DeleteProductDescriptionMut($id: Int!) {
+    deleteProductDescription(ProductDescriptionID: $id) {
+      ProductDescriptionID
+    }
+  }
+`;
+
+const DELETE_PRODUCT_MODEL_MUT = gql`
+  mutation DeleteProductModelMut($id: Int!) {
+    deleteProductModel(ProductModelID: $id) {
+      ProductModelID
+    }
+  }
+`;
+
+/**
+ * Cascade-delete a single product: reviews, replies, photo links, inventory,
+ * special offers, cost/price history, then the product row itself.
+ */
+async function deleteProductCascade(productId: number): Promise<void> {
+  // 1. Reviews + replies
+  const reviewsRes = await graphqlClient.request<{
+    productReviews?: { items: { ProductReviewID: number }[] };
+  }>(GET_REVIEWS_FOR_DELETE, { productId });
+  for (const review of reviewsRes.productReviews?.items ?? []) {
+    const repliesRes = await graphqlClient.request<{
+      productReviewReplies?: { items: { ProductReviewReplyID: number }[] };
+    }>(GET_REPLIES_FOR_DELETE, { reviewId: review.ProductReviewID });
+    for (const reply of repliesRes.productReviewReplies?.items ?? []) {
+      await graphqlClient.request(DELETE_REVIEW_REPLY_MUT, {
+        id: reply.ProductReviewReplyID,
+      });
+    }
+    await graphqlClient.request(DELETE_REVIEW_MUT, {
+      id: review.ProductReviewID,
+    });
+  }
+
+  // 2. Photo links (join table only — actual photo rows may be shared)
+  const photosRes = await graphqlClient.request<{
+    productProductPhotos?: { items: { ProductPhotoID: number }[] };
+  }>(GET_PHOTO_LINKS_FOR_DELETE, { productId });
+  for (const photo of photosRes.productProductPhotos?.items ?? []) {
+    await graphqlClient.request(DELETE_PRODUCT_PRODUCT_PHOTO, {
+      productId,
+      photoId: photo.ProductPhotoID,
+    });
+  }
+
+  // 3. Inventory
+  const inventoryRes = await graphqlClient.request<{
+    productInventories?: { items: { LocationID: number }[] };
+  }>(GET_INVENTORY_FOR_DELETE, { productId });
+  for (const inv of inventoryRes.productInventories?.items ?? []) {
+    await graphqlClient.request(DELETE_INVENTORY_MUT, {
+      productId,
+      locationId: inv.LocationID,
+    });
+  }
+
+  // 4. Special offer products
+  const sofpRes = await graphqlClient.request<{
+    specialOfferProducts?: { items: { SpecialOfferID: number }[] };
+  }>(GET_SPECIAL_OFFERS_FOR_DELETE, { productId });
+  for (const sofp of sofpRes.specialOfferProducts?.items ?? []) {
+    await graphqlClient.request(DELETE_SPECIAL_OFFER_PRODUCT_MUT, {
+      specialOfferId: sofp.SpecialOfferID,
+      productId,
+    });
+  }
+
+  // 5. Cost history
+  const costRes = await graphqlClient.request<{
+    productCostHistories?: { items: { StartDate: string }[] };
+  }>(GET_COST_HISTORY_FOR_DELETE, { productId });
+  for (const cost of costRes.productCostHistories?.items ?? []) {
+    await graphqlClient.request(DELETE_COST_HISTORY_MUT, {
+      productId,
+      startDate: cost.StartDate,
+    });
+  }
+
+  // 6. Price history
+  const priceRes = await graphqlClient.request<{
+    productListPriceHistories?: { items: { StartDate: string }[] };
+  }>(GET_PRICE_HISTORY_FOR_DELETE, { productId });
+  for (const price of priceRes.productListPriceHistories?.items ?? []) {
+    await graphqlClient.request(DELETE_PRICE_HISTORY_MUT, {
+      productId,
+      startDate: price.StartDate,
+    });
+  }
+
+  // 7. Product row
+  await graphqlClient.request(DELETE_PRODUCT_MUT, { productId });
+}
+
+/**
+ * Cascade-delete a full product group: all variant products, then the shared
+ * ProductModel and its descriptions.
+ */
+async function deleteProductGroupCascade(
+  productModelId: number,
+  productIds: number[],
+): Promise<void> {
+  for (const productId of productIds) {
+    await deleteProductCascade(productId);
+  }
+  // Model descriptions + culture links
+  const culturesRes = await graphqlClient.request<{
+    productModelProductDescriptionCultures?: {
+      items: { ProductDescriptionID: number; CultureID: string }[];
+    };
+  }>(GET_MODEL_CULTURES_FOR_DELETE, { modelId: productModelId });
+  for (const cult of culturesRes.productModelProductDescriptionCultures
+    ?.items ?? []) {
+    await graphqlClient.request(DELETE_MODEL_CULTURE_LINK_MUT, {
+      modelId: productModelId,
+      descId: cult.ProductDescriptionID,
+      cultureId: cult.CultureID,
+    });
+    await graphqlClient.request(DELETE_PRODUCT_DESCRIPTION_MUT, {
+      id: cult.ProductDescriptionID,
+    });
+  }
+  await graphqlClient.request(DELETE_PRODUCT_MODEL_MUT, {
+    id: productModelId,
+  });
+}
+
+export const useDeleteProduct = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (productId: number) => deleteProductCascade(productId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
+    },
+  });
+};
+
+export const useDeleteProductGroup = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      productModelId,
+      productIds,
+    }: {
+      productModelId: number;
+      productIds: number[];
+    }) => deleteProductGroupCascade(productModelId, productIds),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
     },
   });
 };

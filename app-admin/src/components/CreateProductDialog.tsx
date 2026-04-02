@@ -337,6 +337,7 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
         Class: form.Class || null,
         Style: form.Style || null,
         InitialQuantity: parseInt(form.InitialQuantity) || 0,
+        Description: form.Description.trim() || undefined,
       });
       toast({
         title: "Product Created",

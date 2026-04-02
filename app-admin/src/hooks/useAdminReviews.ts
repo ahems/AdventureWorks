@@ -104,14 +104,35 @@ export const useReviewTotalCount = () =>
   useQuery<number | null>({
     queryKey: ["admin", "reviews", "totalCount"],
     queryFn: async () => {
-      // OData $count=true (DAB REST list endpoint); returns { "@odata.count": N, "value": [] }
-      const res = await fetch(
-        `${getRestApiUrl()}/ProductReview?$count=true&$top=0`,
-      );
-      if (!res.ok) return null;
-      const json = await res.json();
-      const count = json["@odata.count"];
-      return typeof count === "number" ? count : null;
+      // DAB does not support OData $count. Accumulate all pages via GraphQL cursor pagination.
+      let total = 0;
+      let cursor: string | null = null;
+      do {
+        const data = await graphqlClient.request<{
+          productReviews?: {
+            items: { ProductReviewID: number }[];
+            hasNextPage?: boolean;
+            endCursor?: string;
+          };
+        }>(
+          gql`
+            query CountReviews($after: String) {
+              productReviews(first: 100, after: $after) {
+                items {
+                  ProductReviewID
+                }
+                hasNextPage
+                endCursor
+              }
+            }
+          `,
+          { after: cursor },
+        );
+        const page = data.productReviews;
+        total += page?.items?.length ?? 0;
+        cursor = page?.hasNextPage ? (page.endCursor ?? null) : null;
+      } while (cursor);
+      return total;
     },
     staleTime: 5 * 60 * 1000,
   });

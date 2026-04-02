@@ -1,21 +1,18 @@
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
   ZoomIn,
-  Upload,
   Trash2,
-  Plus,
   Image as ImageIcon,
   Loader2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   useProductPhotos,
-  useAddProductPhoto,
+  useProductLargePhoto,
   useDeleteProductPhoto,
 } from "@/hooks/useAdminProducts";
-import { generateThumbnail } from "@/lib/imageUtils";
 
 interface ProductImageGalleryProps {
   productId: number;
@@ -23,10 +20,14 @@ interface ProductImageGalleryProps {
   color?: string | null;
 }
 
-/** Ensure base64 images are usable as img src regardless of how they were stored */
+/** Detect image type from base64 content and return a valid data URL */
 const toImgSrc = (value: string | null | undefined): string => {
   if (!value) return "";
   if (value.startsWith("data:")) return value;
+  // Detect format from base64 prefix
+  if (value.startsWith("iVBOR")) return `data:image/png;base64,${value}`;
+  if (value.startsWith("R0lG")) return `data:image/gif;base64,${value}`;
+  if (value.startsWith("UklG")) return `data:image/webp;base64,${value}`;
   return `data:image/jpeg;base64,${value}`;
 };
 
@@ -37,12 +38,16 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
 }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isZoomed, setIsZoomed] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: photoRecords = [], isLoading } = useProductPhotos(productId);
-  const addPhoto = useAddProductPhoto();
   const deletePhoto = useDeleteProductPhoto();
+
+  const selectedRecord = photoRecords[selectedIndex];
+  const selectedPhotoId = selectedRecord?.productPhoto?.ProductPhotoID ?? null;
+
+  // Lazy-load the large photo only for the currently selected image
+  const { data: largePhotoData, isLoading: largeLoading } =
+    useProductLargePhoto(selectedPhotoId);
 
   const handlePrevious = () => {
     setSelectedIndex((prev) =>
@@ -54,68 +59,6 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
     setSelectedIndex((prev) =>
       prev === photoRecords.length - 1 ? 0 : prev + 1,
     );
-  };
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = "";
-
-    if (!file.type.startsWith("image/")) {
-      toast({
-        title: "Invalid file",
-        description: "Please select an image file.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "File too large",
-        description: "Please select an image under 5MB.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsUploading(true);
-    try {
-      const largeBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (ev) => resolve(ev.target?.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      const { thumbBase64, thumbFilename } = await generateThumbnail(
-        largeBase64,
-        file.name,
-      );
-
-      await addPhoto.mutateAsync({
-        productId,
-        thumbNail: thumbBase64,
-        thumbFilename,
-        largePhoto: largeBase64,
-        largeFilename: file.name,
-        primary: photoRecords.length === 0,
-      });
-
-      setSelectedIndex(photoRecords.length); // new image will be appended
-      toast({
-        title: "Image added",
-        description: "Product photo saved successfully.",
-      });
-    } catch (err) {
-      toast({
-        title: "Upload failed",
-        description: err instanceof Error ? err.message : "Unknown error",
-        variant: "destructive",
-      });
-    } finally {
-      setIsUploading(false);
-    }
   };
 
   const handleDeleteImage = (index: number) => {
@@ -145,9 +88,11 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
     );
   };
 
-  const selectedRecord = photoRecords[selectedIndex];
-  const selectedThumbSrc = toImgSrc(selectedRecord?.productPhoto?.LargePhoto);
-  const isBusy = isUploading || addPhoto.isPending || deletePhoto.isPending;
+  // Show large photo when loaded, fall back to thumbnail while loading
+  const mainSrc =
+    toImgSrc(largePhotoData) ||
+    toImgSrc(selectedRecord?.productPhoto?.ThumbNailPhoto);
+  const isDeleting = deletePhoto.isPending;
 
   if (isLoading) {
     return (
@@ -160,15 +105,6 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleFileSelect}
-      />
-
       {/* Main Image */}
       <div className="doodle-card p-4 md:p-6 relative group">
         <div
@@ -177,14 +113,26 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
           }`}
           onClick={() => setIsZoomed(!isZoomed)}
         >
-          {selectedThumbSrc ? (
-            <img
-              src={selectedThumbSrc}
-              alt={
-                selectedRecord?.productPhoto?.LargePhotoFileName || productName
-              }
-              className="w-full h-full object-contain"
-            />
+          {mainSrc ? (
+            <div className="relative w-full h-full">
+              <img
+                src={mainSrc}
+                alt={
+                  selectedRecord?.productPhoto?.LargePhotoFileName ||
+                  productName
+                }
+                className="w-full h-full object-contain"
+              />
+              {largeLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-doodle-bg/40">
+                  <Loader2 className="w-8 h-8 animate-spin text-doodle-text/40" />
+                </div>
+              )}
+            </div>
+          ) : largeLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="w-12 h-12 animate-spin text-doodle-text/30" />
+            </div>
           ) : (
             <div className="text-center p-8">
               <ImageIcon className="w-24 h-24 mx-auto mb-4 text-doodle-text/30" />
@@ -230,7 +178,7 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
         )}
 
         {/* Zoom Indicator */}
-        {selectedThumbSrc && (
+        {mainSrc && (
           <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
             <span className="font-doodle text-xs text-doodle-text/50 flex items-center gap-1">
               <ZoomIn className="w-3 h-3" />
@@ -247,55 +195,25 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
             </span>
           </div>
         )}
-      </div>
 
-      {/* Image Actions */}
-      <div className="doodle-card p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-          <h3 className="font-doodle font-bold text-doodle-text">
-            Manage Images
-          </h3>
+        {/* Delete overlay — shown on hover when a photo is selected */}
+        {selectedRecord && (
           <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isBusy}
-            className="doodle-button doodle-button-primary text-sm py-2 px-3 flex items-center gap-2 disabled:opacity-50"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteImage(selectedIndex);
+            }}
+            disabled={isDeleting}
+            className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity doodle-button p-2 text-doodle-accent hover:bg-doodle-accent hover:text-white disabled:opacity-50"
+            title="Delete this image"
+            aria-label="Delete image"
           >
-            {isBusy ? (
+            {isDeleting ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Plus className="w-4 h-4" />
+              <Trash2 className="w-4 h-4" />
             )}
-            {isUploading ? "Uploading…" : "Add Image"}
           </button>
-        </div>
-
-        {/* Current image controls */}
-        {selectedRecord && (
-          <div className="flex flex-wrap items-center gap-3 p-3 bg-doodle-text/5 border-2 border-dashed border-doodle-text/20">
-            <span className="font-doodle text-sm text-doodle-text/70 flex-1 truncate">
-              {selectedRecord.productPhoto?.LargePhotoFileName ||
-                `Photo ${selectedRecord.ProductPhotoID}`}
-              {selectedRecord.Primary && (
-                <span className="ml-2 text-xs text-doodle-green">
-                  (Primary)
-                </span>
-              )}
-            </span>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isBusy}
-              className="doodle-button text-sm py-2 px-3 flex items-center gap-2 disabled:opacity-50"
-            >
-              <Upload className="w-4 h-4" /> Add More
-            </button>
-            <button
-              onClick={() => handleDeleteImage(selectedIndex)}
-              disabled={isBusy}
-              className="doodle-button text-sm py-2 px-3 flex items-center gap-2 text-doodle-accent hover:bg-doodle-accent hover:text-white disabled:opacity-50"
-            >
-              <Trash2 className="w-4 h-4" /> Delete
-            </button>
-          </div>
         )}
       </div>
 
@@ -326,20 +244,6 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
             </button>
           );
         })}
-
-        {/* Add image button in thumbnails */}
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isBusy}
-          className="flex-shrink-0 w-16 h-16 md:w-20 md:h-20 border-2 border-dashed border-doodle-text/30 hover:border-doodle-accent flex items-center justify-center transition-all bg-doodle-bg disabled:opacity-50"
-          aria-label="Add new image"
-        >
-          {isBusy ? (
-            <Loader2 className="w-6 h-6 animate-spin text-doodle-text/50" />
-          ) : (
-            <Plus className="w-6 h-6 text-doodle-text/50" />
-          )}
-        </button>
       </div>
     </div>
   );

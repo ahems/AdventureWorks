@@ -44,7 +44,7 @@ const AppBreadcrumb: React.FC = () => {
 
     // Category page
     if (path.startsWith("/category/")) {
-      segments.push({ label: "Products", href: "/category/1" });
+      segments.push({ label: "Products", href: "/products" });
       if (category) {
         segments.push({ label: category.Name });
       }
@@ -52,7 +52,7 @@ const AppBreadcrumb: React.FC = () => {
 
     // Product page
     if (path.startsWith("/product/")) {
-      segments.push({ label: "Products", href: "/category/1" });
+      segments.push({ label: "Products", href: "/products" });
       if (product) {
         segments.push({ label: product.Name });
       }

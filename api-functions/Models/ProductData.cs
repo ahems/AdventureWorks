@@ -66,7 +66,11 @@ public class ProductImageData
     public int ProductID { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? ProductCategoryName { get; set; }
+    public string? ProductSubcategoryName { get; set; }
     public string? Description { get; set; }
+    public string? Color { get; set; }
+    public string? ProductLine { get; set; }
+    public string? Style { get; set; }
     public int ExistingPhotoCount { get; set; }
 }
 

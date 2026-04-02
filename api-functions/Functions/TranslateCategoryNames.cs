@@ -241,6 +241,36 @@ public class CategoryManagementFunctions
         }
     }
 
+    // ── GetSubcategoryProductCount ──────────────────────────────────────────
+
+    [Function("GetSubcategoryProductCount")]
+    public async Task<HttpResponseData> GetSubcategoryProductCount(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req)
+    {
+        DeleteEntityRequest? request;
+        try
+        {
+            request = await req.ReadFromJsonAsync<DeleteEntityRequest>();
+            if (request == null || request.Id <= 0)
+            {
+                var bad = req.CreateResponse(HttpStatusCode.BadRequest);
+                await bad.WriteAsJsonAsync(new { success = false, message = "id is required." });
+                return bad;
+            }
+        }
+        catch (Exception ex)
+        {
+            var bad = req.CreateResponse(HttpStatusCode.BadRequest);
+            await bad.WriteAsJsonAsync(new { success = false, message = ex.Message });
+            return bad;
+        }
+
+        var info = await _productService.GetSubcategoryProductInfoAsync(request.Id);
+        var ok = req.CreateResponse(HttpStatusCode.OK);
+        await ok.WriteAsJsonAsync(info);
+        return ok;
+    }
+
     // ── DeleteCategory ──────────────────────────────────────────────────────
 
     [Function("DeleteCategory")]
@@ -325,23 +355,17 @@ public class CategoryManagementFunctions
 
         try
         {
-            var hasProducts = await _productService.SubcategoryHasProductsAsync(request.Id);
-            if (hasProducts)
-            {
-                var conflict = req.CreateResponse(HttpStatusCode.Conflict);
-                await conflict.WriteAsJsonAsync(new DeleteEntityResult
-                {
-                    Success = false,
-                    Message = $"Subcategory {request.Id} cannot be deleted: it still has products assigned to it."
-                });
-                return conflict;
-            }
-
-            await _productService.DeleteSubcategoryAsync(request.Id);
-            _logger.LogInformation("Deleted subcategory {Id}", request.Id);
+            var result = await _productService.DeleteSubcategoryCascadeAsync(request.Id);
+            _logger.LogInformation("Deleted subcategory {Id} along with {Count} products", request.Id, result.ProductsDeleted);
 
             var ok = req.CreateResponse(HttpStatusCode.OK);
-            await ok.WriteAsJsonAsync(new DeleteEntityResult { Success = true, Message = $"Subcategory {request.Id} deleted." });
+            await ok.WriteAsJsonAsync(new DeleteEntityResult
+            {
+                Success = true,
+                Message = result.ProductsDeleted > 0
+                    ? $"Subcategory {request.Id} and {result.ProductsDeleted} product(s) deleted."
+                    : $"Subcategory {request.Id} deleted."
+            });
             return ok;
         }
         catch (Exception ex)

@@ -298,14 +298,18 @@ public class ProductService
     {
         using var connection = await GetConnectionAsync();
 
-        // Get products with less than 4 photos (idempotent)
+        // Get products with less than 4 photos (5 for Universal style) — idempotent
         // Using English descriptions for image generation
         var sql = @"
             SELECT 
                 p.ProductID,
                 p.Name,
                 pc.Name AS ProductCategoryName,
+                ps.Name AS ProductSubcategoryName,
                 pd.Description,
+                p.Color,
+                p.ProductLine,
+                p.Style,
                 COUNT(DISTINCT ppp.ProductPhotoID) AS ExistingPhotoCount
             FROM Production.Product p
             LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID
@@ -316,12 +320,41 @@ public class ProductService
             LEFT JOIN Production.ProductDescription pd ON pmx.ProductDescriptionID = pd.ProductDescriptionID
             LEFT JOIN Production.ProductProductPhoto ppp ON p.ProductID = ppp.ProductID
             WHERE p.FinishedGoodsFlag = 1
-            GROUP BY p.ProductID, p.Name, pc.Name, pd.Description
-            HAVING COUNT(DISTINCT ppp.ProductPhotoID) < 4
+            GROUP BY p.ProductID, p.Name, pc.Name, ps.Name, pd.Description, p.Color, p.ProductLine, p.Style
+            HAVING COUNT(DISTINCT ppp.ProductPhotoID) < CASE WHEN p.Style = 'U' THEN 5 ELSE 4 END
             ORDER BY p.ProductID";
 
         var products = await connection.QueryAsync<ProductImageData>(sql);
         return products.ToList();
+    }
+
+    public async Task<ProductImageData?> GetProductForImageGenerationAsync(int productId)
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = @"
+            SELECT 
+                p.ProductID,
+                p.Name,
+                pc.Name AS ProductCategoryName,
+                ps.Name AS ProductSubcategoryName,
+                pd.Description,
+                p.Color,
+                p.ProductLine,
+                p.Style,
+                COUNT(DISTINCT ppp.ProductPhotoID) AS ExistingPhotoCount
+            FROM Production.Product p
+            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID
+            LEFT JOIN Production.ProductModel pm ON p.ProductModelID = pm.ProductModelID
+            LEFT JOIN Production.ProductModelProductDescriptionCulture pmx 
+                ON pm.ProductModelID = pmx.ProductModelID AND pmx.CultureID = 'en'
+            LEFT JOIN Production.ProductDescription pd ON pmx.ProductDescriptionID = pd.ProductDescriptionID
+            LEFT JOIN Production.ProductProductPhoto ppp ON p.ProductID = ppp.ProductID
+            WHERE p.FinishedGoodsFlag = 1 AND p.ProductID = @ProductID
+            GROUP BY p.ProductID, p.Name, pc.Name, ps.Name, pd.Description, p.Color, p.ProductLine, p.Style";
+
+        return await connection.QueryFirstOrDefaultAsync<ProductImageData>(sql, new { ProductID = productId });
     }
 
     public async Task<int> SaveProductPhotoAsync(ProductPhotoData photo)
@@ -684,6 +717,190 @@ public class ProductService
         await connection.ExecuteAsync(
             "DELETE FROM Production.ProductSubcategory WHERE ProductSubcategoryID = @SubcategoryId",
             new { SubcategoryId = subcategoryId });
+    }
+
+    public async Task<SubcategoryProductInfo> GetSubcategoryProductInfoAsync(int subcategoryId)
+    {
+        using var connection = await GetConnectionAsync();
+        var sql = @"
+            SELECT
+                COUNT(*) AS TotalProducts,
+                COUNT(DISTINCT CASE
+                    WHEN ProductModelID IS NOT NULL
+                         AND ProductModelID IN (
+                             SELECT ProductModelID FROM Production.Product
+                             WHERE ProductSubcategoryID = @SubcategoryId
+                             GROUP BY ProductModelID HAVING COUNT(*) > 1)
+                    THEN ProductModelID END) AS ModelGroupCount
+            FROM Production.Product
+            WHERE ProductSubcategoryID = @SubcategoryId";
+        return await connection.QueryFirstOrDefaultAsync<SubcategoryProductInfo>(
+            sql, new { SubcategoryId = subcategoryId }) ?? new SubcategoryProductInfo();
+    }
+
+    /// <summary>
+    /// Cascade-deletes all products in a subcategory (and all their related data),
+    /// then deletes the subcategory rows themselves.  Runs inside a single transaction.
+    /// </summary>
+    public async Task<DeleteSubcategoryCascadeResult> DeleteSubcategoryCascadeAsync(int subcategoryId)
+    {
+        var sqlConn = new Microsoft.Data.SqlClient.SqlConnection(_connectionString);
+        await sqlConn.OpenAsync();
+        await using var _ = sqlConn;
+
+        using var transaction = sqlConn.BeginTransaction();
+        try
+        {
+            // 1. Collect product IDs to delete
+            var productIds = (await sqlConn.QueryAsync<int>(
+                "SELECT ProductID FROM Production.Product WHERE ProductSubcategoryID = @Id",
+                new { Id = subcategoryId }, transaction)).ToList();
+
+            int productsDeleted = 0;
+
+            if (productIds.Count > 0)
+            {
+                // 2. Shopping cart items
+                await sqlConn.ExecuteAsync(
+                    "DELETE FROM Sales.ShoppingCartItem WHERE ProductID IN @Ids",
+                    new { Ids = productIds }, transaction);
+
+                // 3. Review replies → reviews
+                await sqlConn.ExecuteAsync(@"
+                    DELETE FROM Production.ProductReviewReply
+                    WHERE ProductReviewID IN (
+                        SELECT ProductReviewID FROM Production.ProductReview WHERE ProductID IN @Ids)",
+                    new { Ids = productIds }, transaction);
+                await sqlConn.ExecuteAsync(
+                    "DELETE FROM Production.ProductReview WHERE ProductID IN @Ids",
+                    new { Ids = productIds }, transaction);
+
+                // 4. Photo links (join table only — shared photo rows stay)
+                await sqlConn.ExecuteAsync(
+                    "DELETE FROM Production.ProductProductPhoto WHERE ProductID IN @Ids",
+                    new { Ids = productIds }, transaction);
+
+                // 5. Inventory
+                await sqlConn.ExecuteAsync(
+                    "DELETE FROM Production.ProductInventory WHERE ProductID IN @Ids",
+                    new { Ids = productIds }, transaction);
+
+                // 6. Special offer products
+                await sqlConn.ExecuteAsync(
+                    "DELETE FROM Sales.SpecialOfferProduct WHERE ProductID IN @Ids",
+                    new { Ids = productIds }, transaction);
+
+                // 7. Price / cost history
+                await sqlConn.ExecuteAsync(
+                    "DELETE FROM Production.ProductCostHistory WHERE ProductID IN @Ids",
+                    new { Ids = productIds }, transaction);
+                await sqlConn.ExecuteAsync(
+                    "DELETE FROM Production.ProductListPriceHistory WHERE ProductID IN @Ids",
+                    new { Ids = productIds }, transaction);
+
+                // 8. Work order routing → work orders
+                await sqlConn.ExecuteAsync(@"
+                    DELETE FROM Production.WorkOrderRouting
+                    WHERE WorkOrderID IN (
+                        SELECT WorkOrderID FROM Production.WorkOrder WHERE ProductID IN @Ids)",
+                    new { Ids = productIds }, transaction);
+                await sqlConn.ExecuteAsync(
+                    "DELETE FROM Production.WorkOrder WHERE ProductID IN @Ids",
+                    new { Ids = productIds }, transaction);
+
+                // 9. Transaction history
+                await sqlConn.ExecuteAsync(
+                    "DELETE FROM Production.TransactionHistory WHERE ProductID IN @Ids",
+                    new { Ids = productIds }, transaction);
+
+                // 10. Product vendor
+                await sqlConn.ExecuteAsync(
+                    "DELETE FROM Purchasing.ProductVendor WHERE ProductID IN @Ids",
+                    new { Ids = productIds }, transaction);
+
+                // 11. Purchase order details
+                await sqlConn.ExecuteAsync(
+                    "DELETE FROM Purchasing.PurchaseOrderDetail WHERE ProductID IN @Ids",
+                    new { Ids = productIds }, transaction);
+
+                // 12. Product name translations
+                await sqlConn.ExecuteAsync(
+                    "DELETE FROM Production.ProductName WHERE ProductID IN @Ids",
+                    new { Ids = productIds }, transaction);
+
+                // 13. Capture model IDs before deleting products
+                var modelIds = (await sqlConn.QueryAsync<int?>(@"
+                    SELECT DISTINCT ProductModelID FROM Production.Product
+                    WHERE ProductSubcategoryID = @Id AND ProductModelID IS NOT NULL",
+                    new { Id = subcategoryId }, transaction))
+                    .Where(id => id.HasValue).Select(id => id!.Value).ToList();
+
+                // 14. Delete products
+                productsDeleted = await sqlConn.ExecuteAsync(
+                    "DELETE FROM Production.Product WHERE ProductSubcategoryID = @Id",
+                    new { Id = subcategoryId }, transaction);
+
+                // 15. Clean up orphaned ProductModels
+                if (modelIds.Count > 0)
+                {
+                    var orphanedModels = new List<int>();
+                    foreach (var modelId in modelIds)
+                    {
+                        var remaining = await sqlConn.QueryFirstOrDefaultAsync<int>(
+                            "SELECT COUNT(*) FROM Production.Product WHERE ProductModelID = @ModelId",
+                            new { ModelId = modelId }, transaction);
+                        if (remaining == 0) orphanedModels.Add(modelId);
+                    }
+
+                    if (orphanedModels.Count > 0)
+                    {
+                        var descIds = (await sqlConn.QueryAsync<int>(@"
+                            SELECT DISTINCT ProductDescriptionID
+                            FROM Production.ProductModelProductDescriptionCulture
+                            WHERE ProductModelID IN @ModelIds",
+                            new { ModelIds = orphanedModels }, transaction)).ToList();
+
+                        await sqlConn.ExecuteAsync(@"
+                            DELETE FROM Production.ProductModelProductDescriptionCulture
+                            WHERE ProductModelID IN @ModelIds",
+                            new { ModelIds = orphanedModels }, transaction);
+
+                        if (descIds.Count > 0)
+                        {
+                            // Only delete descriptions no longer linked to any model
+                            await sqlConn.ExecuteAsync(@"
+                                DELETE FROM Production.ProductDescription
+                                WHERE ProductDescriptionID IN @DescIds
+                                  AND NOT EXISTS (
+                                      SELECT 1 FROM Production.ProductModelProductDescriptionCulture
+                                      WHERE ProductDescriptionID = Production.ProductDescription.ProductDescriptionID)",
+                                new { DescIds = descIds }, transaction);
+                        }
+
+                        await sqlConn.ExecuteAsync(
+                            "DELETE FROM Production.ProductModelIllustration WHERE ProductModelID IN @ModelIds",
+                            new { ModelIds = orphanedModels }, transaction);
+
+                        await sqlConn.ExecuteAsync(
+                            "DELETE FROM Production.ProductModel WHERE ProductModelID IN @ModelIds",
+                            new { ModelIds = orphanedModels }, transaction);
+                    }
+                }
+            }
+
+            // 16. Delete subcategory rows (all culture variants)
+            await sqlConn.ExecuteAsync(
+                "DELETE FROM Production.ProductSubcategory WHERE ProductSubcategoryID = @Id",
+                new { Id = subcategoryId }, transaction);
+
+            transaction.Commit();
+            return new DeleteSubcategoryCascadeResult { Success = true, ProductsDeleted = productsDeleted };
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
     }
 
     public async Task<List<CultureInfo>> GetAllCulturesAsync()
