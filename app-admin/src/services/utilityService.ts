@@ -453,6 +453,61 @@ export const generateSubcategoryWithAI = (
     .then(() => undefined)
     .catch(() => undefined);
 
+// ── AI Promotion Generation ────────────────────────────────────────────────
+
+export interface GeneratePromotionRequest {
+  promotionType: string;
+  offerCategory: string;
+  categoryId?: number;
+  categoryName?: string;
+  subcategoryId?: number;
+  subcategoryName?: string;
+}
+
+export interface SuggestedProduct {
+  productId: number;
+  productName: string;
+  currentPrice: number;
+  inventoryLevel: number;
+  recentSalesCount: number;
+  reason: string;
+}
+
+export interface PromotionSuggestion {
+  description: string;
+  discountPct: number;
+  type: string;
+  category: string;
+  startDate: string;
+  endDate: string;
+  minQty: number;
+  suggestedProducts: SuggestedProduct[];
+  aiReasoning: string;
+}
+
+/**
+ * Call the AI promotion agent to generate a promotion suggestion.
+ * The agent uses live inventory and sales data via the MCP server.
+ * Returns a structured suggestion including products, discount %, and framing.
+ */
+export const generatePromotionWithAI = async (
+  request: GeneratePromotionRequest,
+): Promise<PromotionSuggestion> => {
+  const url = `${getFunctionsApiUrl()}/api/GeneratePromotion`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `GeneratePromotion HTTP ${res.status}${text ? `: ${text}` : ""}`,
+    );
+  }
+  return res.json();
+};
+
 // ── Status management for Durable Functions ────────────────────────────────
 
 /**

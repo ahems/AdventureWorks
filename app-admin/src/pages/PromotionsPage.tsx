@@ -38,6 +38,7 @@ import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ProductAssignmentDialog from "@/components/ProductAssignmentDialog";
+import GeneratePromotionWizardDialog from "@/components/GeneratePromotionWizardDialog";
 import { Label } from "@/components/ui/label";
 import { getAppUrl } from "@/lib/utils";
 import {
@@ -412,13 +413,15 @@ const PromotionsPage: React.FC = () => {
               Manage discounts and special offers
             </p>
           </div>
-          <Button
-            onClick={openCreateDialog}
-            className="doodle-button doodle-button-primary flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            New Promotion
-          </Button>
+          <div className="flex items-center gap-2">
+            <GeneratePromotionWizardDialog existingOffers={apiPromotions} />
+            <Button
+              onClick={openCreateDialog}
+              className="doodle-button doodle-button-primary flex items-center gap-2"
+            >
+              <Plus className="w-5 h-5" />+ Create Promotion
+            </Button>
+          </div>
         </div>
 
         {/* Stats */}

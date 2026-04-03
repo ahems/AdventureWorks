@@ -122,6 +122,108 @@ public class ProductService
         return result.ToString();
     }
 
+    public async Task<string> GetProductsWithPromotionDataAsync(
+        string promotionType,
+        int? categoryId = null,
+        int? subcategoryId = null,
+        int topN = 20)
+    {
+        using var connection = await GetConnectionAsync();
+
+        // Ordering strategy based on promotion type
+        // Clearance / Excess Inventory: high stock, low recent sales
+        // Volume Discount: high recent sales (popular items)
+        // Others: ordered by name, optionally filtered by category/subcategory
+        var isExcessInventory = promotionType.Equals("Clearance", StringComparison.OrdinalIgnoreCase)
+            || promotionType.Equals("Excess Inventory", StringComparison.OrdinalIgnoreCase);
+        var isVolumeDiscount = promotionType.Equals("Volume Discount", StringComparison.OrdinalIgnoreCase);
+
+        var categoryFilter = subcategoryId.HasValue
+            ? "AND p.ProductSubcategoryID = @SubcategoryId"
+            : categoryId.HasValue
+                ? "AND ps.ProductCategoryID = @CategoryId"
+                : "";
+
+        var orderBy = isExcessInventory
+            ? "ORDER BY TotalInventory DESC, RecentSalesCount ASC"
+            : isVolumeDiscount
+                ? "ORDER BY RecentSalesCount DESC, TotalInventory ASC"
+                : "ORDER BY p.Name ASC";
+
+        var sql = $@"
+            SELECT TOP (@TopN)
+                p.ProductID,
+                p.Name AS ProductName,
+                p.ListPrice,
+                pc.Name AS CategoryName,
+                ps.Name AS SubcategoryName,
+                ISNULL(inv.TotalInventory, 0) AS TotalInventory,
+                ISNULL(sales.RecentSalesCount, 0) AS RecentSalesCount,
+                ISNULL(sales.RecentRevenue, 0) AS RecentRevenue,
+                ISNULL(discounts.ActiveDiscounts, 0) AS ActiveDiscounts
+            FROM Production.Product p
+            LEFT JOIN Production.ProductSubcategory ps ON p.ProductSubcategoryID = ps.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON ps.ProductCategoryID = pc.ProductCategoryID
+            LEFT JOIN (
+                SELECT pi.ProductID, SUM(pi.Quantity) AS TotalInventory
+                FROM Production.ProductInventory pi
+                INNER JOIN Production.Location l ON pi.LocationID = l.LocationID
+                WHERE l.Name LIKE 'Finished Goods%'
+                GROUP BY pi.ProductID
+            ) inv ON p.ProductID = inv.ProductID
+            LEFT JOIN (
+                SELECT sod.ProductID,
+                       COUNT(DISTINCT sod.SalesOrderID) AS RecentSalesCount,
+                       SUM(sod.LineTotal) AS RecentRevenue
+                FROM Sales.SalesOrderDetail sod
+                INNER JOIN Sales.SalesOrderHeader soh ON sod.SalesOrderID = soh.SalesOrderID
+                WHERE soh.OrderDate >= DATEADD(DAY, -90, GETDATE())
+                GROUP BY sod.ProductID
+            ) sales ON p.ProductID = sales.ProductID
+            LEFT JOIN (
+                SELECT sop.ProductID, COUNT(*) AS ActiveDiscounts
+                FROM Sales.SpecialOfferProduct sop
+                INNER JOIN Sales.SpecialOffer so ON sop.SpecialOfferID = so.SpecialOfferID
+                WHERE so.EndDate >= GETDATE() AND so.DiscountPct > 0
+                GROUP BY sop.ProductID
+            ) discounts ON p.ProductID = discounts.ProductID
+            WHERE p.FinishedGoodsFlag = 1
+              AND p.ListPrice > 0
+              {categoryFilter}
+            {orderBy}";
+
+        var products = await connection.QueryAsync(sql, new
+        {
+            TopN = topN,
+            CategoryId = categoryId,
+            SubcategoryId = subcategoryId
+        });
+
+        var productList = products.ToList();
+
+        if (!productList.Any())
+        {
+            return "No products found matching the specified criteria.";
+        }
+
+        var result = new System.Text.StringBuilder();
+        result.AppendLine($"Products suitable for '{promotionType}' promotion ({productList.Count} results):");
+        result.AppendLine();
+
+        foreach (var p in productList)
+        {
+            result.AppendLine($"ProductID: {p.ProductID} | {p.ProductName}");
+            result.AppendLine($"  Category: {p.CategoryName ?? "N/A"} > {p.SubcategoryName ?? "N/A"}");
+            result.AppendLine($"  List Price: ${p.ListPrice:N2}");
+            result.AppendLine($"  Inventory (Finished Goods): {p.TotalInventory} units");
+            result.AppendLine($"  Sales last 90 days: {p.RecentSalesCount} orders | Revenue: ${p.RecentRevenue:N2}");
+            result.AppendLine($"  Active discounts: {p.ActiveDiscounts}");
+            result.AppendLine();
+        }
+
+        return result.ToString();
+    }
+
     private static readonly HashSet<string> SupportedCultures = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "ar", "en", "es", "fr", "he", "th", "zh-cht",

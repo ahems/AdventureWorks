@@ -417,4 +417,44 @@ public class AdventureWorksMcpTools
             throw;
         }
     }
+
+    [McpServerTool]
+    [Description("Get products with inventory and sales data to support promotion creation. Returns products ranked by their suitability for the given promotion type. For 'Clearance': high stock + low recent sales. For 'Volume Discount': popular items with high sales. Optionally filter by productCategoryId or productSubcategoryId.")]
+    public async Task<string> GetProductsForPromotion(
+        string promotionType,
+        int? productCategoryId = null,
+        int? productSubcategoryId = null,
+        int topN = 20)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetProductsForPromotion");
+        operation.Telemetry.Properties["promotionType"] = promotionType;
+        operation.Telemetry.Properties["categoryId"] = productCategoryId?.ToString() ?? "all";
+        operation.Telemetry.Properties["subcategoryId"] = productSubcategoryId?.ToString() ?? "all";
+        operation.Telemetry.Properties["topN"] = topN.ToString();
+
+        try
+        {
+            var result = await _productService.GetProductsWithPromotionDataAsync(
+                promotionType, productCategoryId, productSubcategoryId, topN);
+
+            operation.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
+            {
+                { "tool", "GetProductsForPromotion" },
+                { "promotionType", promotionType },
+                { "resultLength", result.Length.ToString() }
+            });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string>
+            {
+                { "tool", "GetProductsForPromotion" },
+                { "promotionType", promotionType }
+            });
+            throw;
+        }
+    }
 }

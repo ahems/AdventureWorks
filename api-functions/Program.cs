@@ -140,6 +140,21 @@ builder.Services.AddScoped<AIAgentService>(sp =>
         telemetryClient);
 });
 
+// Register Promotion Agent Service for single-shot AI promotion generation via MCP tools
+builder.Services.AddScoped<PromotionAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<PromotionAgentService>>();
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new PromotionAgentService(
+        logger,
+        configuration,
+        httpClientFactory,
+        telemetryClient);
+});
+
 // Register AIService with Azure OpenAI endpoint
 builder.Services.AddScoped<AIService>(sp =>
 {
