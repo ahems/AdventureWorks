@@ -111,11 +111,18 @@ const ProductAssignmentDialog: React.FC<ProductAssignmentDialogProps> = ({
   };
 
   const toggleAll = () => {
-    if (selectedIds.size === filteredProducts.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredProducts.map((p) => p.ProductID)));
-    }
+    const allFilteredSelected = filteredProducts.every((p) =>
+      selectedIds.has(p.ProductID),
+    );
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allFilteredSelected) {
+        filteredProducts.forEach((p) => next.delete(p.ProductID));
+      } else {
+        filteredProducts.forEach((p) => next.add(p.ProductID));
+      }
+      return next;
+    });
   };
 
   const toggleCategory = (categoryId: number) => {
@@ -205,7 +212,8 @@ const ProductAssignmentDialog: React.FC<ProductAssignmentDialogProps> = ({
 
   const selectedCount = selectedIds.size;
   const allSelected =
-    filteredProducts.length > 0 && selectedIds.size === filteredProducts.length;
+    filteredProducts.length > 0 &&
+    filteredProducts.every((p) => selectedIds.has(p.ProductID));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
