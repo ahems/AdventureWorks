@@ -419,7 +419,8 @@ const PromotionsPage: React.FC = () => {
               onClick={openCreateDialog}
               className="doodle-button doodle-button-primary flex items-center gap-2"
             >
-              <Plus className="w-5 h-5" />+ Create Promotion
+              <Plus className="w-5 h-5" />
+              Create Promotion
             </Button>
           </div>
         </div>
