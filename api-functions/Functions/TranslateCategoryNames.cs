@@ -386,4 +386,150 @@ public class CategoryManagementFunctions
             return error;
         }
     }
+
+    // ── GenerateCategoryWithAI ──────────────────────────────────────────────
+    // Fire-and-forget: asks AI to suggest a new category or subcategory, creates it, and triggers translations.
+
+    [Function("GenerateCategoryWithAI")]
+    public async Task<HttpResponseData> GenerateCategoryWithAI(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req)
+    {
+        _logger.LogInformation("GenerateCategoryWithAI triggered");
+
+        GenerateCategoryWithAIRequest? request;
+        try
+        {
+            request = await req.ReadFromJsonAsync<GenerateCategoryWithAIRequest>();
+            if (request == null)
+            {
+                var bad = req.CreateResponse(HttpStatusCode.BadRequest);
+                await bad.WriteAsJsonAsync(new GenerateCategoryWithAIResult { Created = false, Message = "Invalid request body." });
+                return bad;
+            }
+            if (request.Type == "subcategory" && request.CategoryId <= 0)
+            {
+                var bad = req.CreateResponse(HttpStatusCode.BadRequest);
+                await bad.WriteAsJsonAsync(new GenerateCategoryWithAIResult { Created = false, Message = "categoryId is required for subcategory generation." });
+                return bad;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to deserialize GenerateCategoryWithAIRequest");
+            var bad = req.CreateResponse(HttpStatusCode.BadRequest);
+            await bad.WriteAsJsonAsync(new GenerateCategoryWithAIResult { Created = false, Message = ex.Message });
+            return bad;
+        }
+
+        try
+        {
+            var (allCategories, allSubcategories) = await _productService.GetCategoryHierarchyAsync();
+
+            bool suggested;
+            string suggestedName;
+
+            if (request.Type == "subcategory")
+            {
+                var categoryName = !string.IsNullOrWhiteSpace(request.CategoryName)
+                    ? request.CategoryName
+                    : allCategories.FirstOrDefault(c => c.ProductCategoryID == request.CategoryId)?.Name ?? string.Empty;
+
+                (suggested, suggestedName) = await _aiService.SuggestNewSubcategoryAsync(
+                    request.CategoryId, categoryName, allCategories, allSubcategories);
+            }
+            else
+            {
+                (suggested, suggestedName) = await _aiService.SuggestNewCategoryAsync(allCategories, allSubcategories);
+            }
+
+            if (!suggested || string.IsNullOrWhiteSpace(suggestedName))
+            {
+                _logger.LogInformation("GenerateCategoryWithAI: AI found no new {Type} to suggest", request.Type);
+                var noSuggest = req.CreateResponse(HttpStatusCode.OK);
+                await noSuggest.WriteAsJsonAsync(new GenerateCategoryWithAIResult
+                {
+                    Created = false,
+                    Message = $"AI could not suggest a new {request.Type} at this time."
+                });
+                return noSuggest;
+            }
+
+            var trimmedName = suggestedName[..Math.Min(suggestedName.Length, 50)];
+            int newId;
+
+            if (request.Type == "subcategory")
+            {
+                newId = await _productService.GetNextSubcategoryIdAsync();
+                await _productService.InsertSubcategoryRowAsync(newId, request.CategoryId, "en", trimmedName);
+                _logger.LogInformation("GenerateCategoryWithAI: created subcategory {Id} '{Name}' in category {CatId}",
+                    newId, trimmedName, request.CategoryId);
+            }
+            else
+            {
+                newId = await _productService.GetNextCategoryIdAsync();
+                await _productService.InsertCategoryRowAsync(newId, "en", trimmedName);
+                _logger.LogInformation("GenerateCategoryWithAI: created category {Id} '{Name}'", newId, trimmedName);
+            }
+
+            // Translate to all non-English cultures
+            var allCultures = await _productService.GetAllCulturesAsync();
+            var nonEnglish = allCultures
+                .Where(c => !c.CultureID.TrimEnd().Equals("en", StringComparison.OrdinalIgnoreCase)
+                         && !c.CultureID.TrimEnd().StartsWith("en-", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var enVariants = allCultures
+                .Where(c => c.CultureID.TrimEnd().StartsWith("en-", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var aiTranslations = await _aiService.TranslateTextAsync(
+                trimmedName,
+                $"Product {request.Type} name for an outdoor adventure sports equipment retailer",
+                nonEnglish);
+
+            foreach (var culture in nonEnglish)
+            {
+                var match = aiTranslations.FirstOrDefault(
+                    t => string.Equals(t.CultureID?.Trim(), culture.CultureID.Trim(), StringComparison.OrdinalIgnoreCase));
+                var translated = !string.IsNullOrWhiteSpace(match?.TranslatedText) ? match!.TranslatedText : trimmedName;
+                var truncated = translated[..Math.Min(translated.Length, 50)];
+
+                if (request.Type == "subcategory")
+                    await _productService.InsertSubcategoryRowAsync(newId, request.CategoryId, culture.CultureID, truncated);
+                else
+                    await _productService.InsertCategoryRowAsync(newId, culture.CultureID, truncated);
+            }
+
+            foreach (var culture in enVariants)
+            {
+                if (request.Type == "subcategory")
+                    await _productService.InsertSubcategoryRowAsync(newId, request.CategoryId, culture.CultureID, trimmedName);
+                else
+                    await _productService.InsertCategoryRowAsync(newId, culture.CultureID, trimmedName);
+            }
+
+            _telemetryClient.TrackEvent("CategoryGeneratedWithAI", new Dictionary<string, string>
+            {
+                ["Type"] = request.Type,
+                ["NewId"] = newId.ToString(),
+                ["Name"] = trimmedName
+            });
+
+            var ok = req.CreateResponse(HttpStatusCode.OK);
+            await ok.WriteAsJsonAsync(new GenerateCategoryWithAIResult
+            {
+                Created = true,
+                Id = newId,
+                Name = trimmedName,
+                Message = $"AI generated {request.Type} '{trimmedName}' (ID {newId}) with translations."
+            });
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GenerateCategoryWithAI failed");
+            var error = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await error.WriteAsJsonAsync(new GenerateCategoryWithAIResult { Created = false, Message = ex.Message });
+            return error;
+        }
+    }
 }

@@ -43,6 +43,7 @@ $ErrorActionPreference = 'Stop'
 
 # Capture start time for duration tracking
 $scriptStartTime = Get-Date
+$script:seedSuccess = $false  # Set to $true only on successful completion
 Write-Log "=========================================="
 Write-Log "DATABASE SEEDING SCRIPT STARTED"
 Write-Log "Seed script version: $ScriptVersion"
@@ -417,8 +418,11 @@ try {
     # script; ProductCategory, ProductSubcategory, SpecialOffer, and
     # ProductModelProductDescriptionCulture all reference Culture, so they must
     # be dropped first (here and/or in the SQL script's early drop block).
+    # ProductReviewReply (AI table) has a FK on ProductReview so must be dropped
+    # before AdventureWorks.sql tries to drop ProductReview.
     # ---------------------------------------------------------------------
     $aiTablesPreCleanup = @(
+        "IF OBJECT_ID(N'[Production].[ProductReviewReply]', 'U') IS NOT NULL DROP TABLE [Production].[ProductReviewReply]",
         "IF OBJECT_ID(N'[Production].[ProductName]', 'U') IS NOT NULL DROP TABLE [Production].[ProductName]",
         "IF OBJECT_ID(N'[Production].[ProductCategory]', 'U') IS NOT NULL DROP TABLE [Production].[ProductCategory]",
         "IF OBJECT_ID(N'[Production].[ProductSubcategory]', 'U') IS NOT NULL DROP TABLE [Production].[ProductSubcategory]",
@@ -2219,6 +2223,7 @@ WHEN NOT MATCHED THEN
         Write-Log "  WARNING: Failed to seed demo admin user: $($_.Exception.Message)"
     }
 
+    $script:seedSuccess = $true
     $conn.Close()
 }
 catch {
@@ -2227,7 +2232,11 @@ catch {
     $scriptEndTime = Get-Date
     $scriptDuration = $scriptEndTime - $scriptStartTime
     Write-Log "`n=========================================="
-    Write-Log "DATABASE SEEDING SCRIPT COMPLETED SUCCESSFULLY"
+    if ($script:seedSuccess) {
+        Write-Log "DATABASE SEEDING SCRIPT COMPLETED SUCCESSFULLY"
+    } else {
+        Write-Log "DATABASE SEEDING SCRIPT FAILED"
+    }
     Write-Log "Finished at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
     Write-Log "Total duration: $([math]::Floor($scriptDuration.TotalMinutes))m $($scriptDuration.Seconds)s"
     Write-Log "=========================================="

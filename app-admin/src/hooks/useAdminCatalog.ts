@@ -173,12 +173,14 @@ export const useAdminShoppingCarts = () =>
 
 // ─── Product Localization (cultures × product models) ─────────────────────────
 
-const GET_LOCALIZATION_COUNTS = gql`
-  query GetLocalizationCounts {
-    productModelProductDescriptionCultures(first: 1000) {
+const GET_LOCALIZATION_COUNTS_PAGE = gql`
+  query GetLocalizationCountsPage($after: String) {
+    productModelProductDescriptionCultures(first: 100, after: $after) {
       items {
         CultureID
       }
+      hasNextPage
+      endCursor
     }
   }
 `;
@@ -188,16 +190,28 @@ export const useAdminLocalizationCounts = () =>
   useQuery<Record<string, number>>({
     queryKey: ["admin", "localizationCounts"],
     queryFn: async () => {
-      const data = await graphqlClient.request<{
-        productModelProductDescriptionCultures?: {
-          items: { CultureID: string }[];
-        };
-      }>(GET_LOCALIZATION_COUNTS);
       const counts: Record<string, number> = {};
-      for (const item of data.productModelProductDescriptionCultures?.items ??
-        []) {
-        counts[item.CultureID] = (counts[item.CultureID] ?? 0) + 1;
+      let after: string | null = null;
+      let hasNextPage = true;
+
+      while (hasNextPage) {
+        const data = await graphqlClient.request<{
+          productModelProductDescriptionCultures?: {
+            items: { CultureID: string }[];
+            hasNextPage: boolean;
+            endCursor: string | null;
+          };
+        }>(GET_LOCALIZATION_COUNTS_PAGE, { after });
+
+        const page = data.productModelProductDescriptionCultures;
+        for (const item of page?.items ?? []) {
+          const id = item.CultureID.trim();
+          counts[id] = (counts[id] ?? 0) + 1;
+        }
+        hasNextPage = page?.hasNextPage ?? false;
+        after = page?.endCursor ?? null;
       }
+
       return counts;
     },
     staleTime: 10 * 60 * 1000,

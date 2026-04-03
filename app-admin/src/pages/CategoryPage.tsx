@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, Link, Navigate } from "react-router-dom";
+import { useParams, Link, Navigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   Filter,
@@ -61,9 +61,12 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 
 const CategoryPage: React.FC = () => {
   const { categoryId } = useParams<{ categoryId: string }>();
+  const [searchParams] = useSearchParams();
   const { isAuthenticated } = useAuth();
   const [selectedSubcategory, setSelectedSubcategory] = useState<number | null>(
-    null,
+    searchParams.get("subcategory")
+      ? parseInt(searchParams.get("subcategory")!)
+      : null,
   );
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(12);

@@ -1,5 +1,40 @@
 namespace api_functions.Models;
 
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+/// <summary>
+/// Converts a JSON array that may contain numbers or strings into List&lt;string&gt;.
+/// Handles AI responses where numeric sizes are serialised as JSON numbers instead of strings.
+/// </summary>
+internal sealed class StringOrNumberListConverter : JsonConverter<List<string>>
+{
+    public override List<string> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var result = new List<string>();
+        if (reader.TokenType != JsonTokenType.StartArray)
+            return result;
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            result.Add(reader.TokenType switch
+            {
+                JsonTokenType.String => reader.GetString() ?? string.Empty,
+                JsonTokenType.Number => reader.TryGetInt64(out var l) ? l.ToString() : reader.GetDouble().ToString(),
+                _ => string.Empty
+            });
+        }
+        return result;
+    }
+
+    public override void Write(Utf8JsonWriter writer, List<string> value, JsonSerializerOptions options)
+    {
+        writer.WriteStartArray();
+        foreach (var s in value) writer.WriteStringValue(s);
+        writer.WriteEndArray();
+    }
+}
+
 public class ProductData
 {
     public int ProductID { get; set; }
@@ -97,10 +132,13 @@ public class GenerateProductContentResponse
     /// <summary>AI-estimated retail list price in USD (always >= SuggestedStandardCost).</summary>
     public decimal SuggestedListPrice { get; set; }
     /// <summary>Subset of AvailableSizes that make sense for this product type.</summary>
+    [JsonConverter(typeof(StringOrNumberListConverter))]
     public List<string> SuggestedSizes { get; set; } = new();
     /// <summary>Subset of AvailableColors that make sense for this product type.</summary>
+    [JsonConverter(typeof(StringOrNumberListConverter))]
     public List<string> SuggestedColors { get; set; } = new();
     /// <summary>Subset of AvailableStyles (values) that make sense for this product type.</summary>
+    [JsonConverter(typeof(StringOrNumberListConverter))]
     public List<string> SuggestedStyles { get; set; } = new();
 }
 

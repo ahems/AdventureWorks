@@ -182,3 +182,36 @@ public class DeleteSubcategoryCascadeResult
     public int ProductsDeleted { get; set; }
     public string Message { get; set; } = string.Empty;
 }
+
+// ── Generate Category / Subcategory With AI ──────────────────────────────────
+
+public class GenerateCategoryWithAIRequest
+{
+    /// <summary>"category" or "subcategory"</summary>
+    public string Type { get; set; } = "category";
+    /// <summary>Required when Type == "subcategory": the parent category ID.</summary>
+    public int CategoryId { get; set; }
+    /// <summary>Required when Type == "subcategory": the parent category name (English).</summary>
+    public string CategoryName { get; set; } = string.Empty;
+}
+
+public class GenerateCategoryWithAIResult
+{
+    public bool Created { get; set; }
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+}
+
+public class CategoryHierarchyItem
+{
+    public int ProductCategoryID { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
+
+public class SubcategoryHierarchyItem
+{
+    public int ProductSubcategoryID { get; set; }
+    public int ProductCategoryID { get; set; }
+    public string Name { get; set; } = string.Empty;
+}

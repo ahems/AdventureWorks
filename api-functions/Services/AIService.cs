@@ -1530,7 +1530,7 @@ JSON fields:
 - estimatedWeightLb: (number) realistic weight in pounds for the product given its category/subcategory
 - suggestedStandardCost: (number) realistic USD manufacturing or bulk purchase cost
 - suggestedListPrice: (number) realistic USD retail price; must be >= suggestedStandardCost
-- suggestedSizes: (array of strings) subset of the provided available sizes that physically make sense for this product; empty array if sizes don't vary
+- suggestedSizes: (array of strings -- always quoted, even for numeric sizes like ""48"") subset of the provided available sizes that physically make sense for this product; empty array if sizes don't vary
 - suggestedColors: (array of strings) subset of the provided available colors that make sense for this product; empty array if color doesn't vary
 - suggestedStyles: (array of strings) subset of the provided available styles that make sense for this product; empty array if style doesn't vary
 
@@ -1695,6 +1695,164 @@ Return ONLY a valid JSON array with this structure:
     {
         public int ReviewId { get; set; }
         public string? Reply { get; set; }
+    }
+
+    // ─── Generate Category / Subcategory With AI ──────────────────────────────
+
+    private static string BuildCategoryHierarchyJson(
+        List<CategoryHierarchyItem> categories,
+        List<SubcategoryHierarchyItem> subcategories)
+    {
+        var hierarchy = categories.Select(c => new
+        {
+            category = c.Name,
+            subcategories = subcategories
+                .Where(s => s.ProductCategoryID == c.ProductCategoryID)
+                .Select(s => s.Name)
+                .ToList()
+        });
+        return JsonSerializer.Serialize(hierarchy, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    /// <summary>
+    /// Asks AI to suggest a new top-level product category for AdventureWorks
+    /// that is not already in the existing hierarchy.
+    /// Returns (true, name) if a suggestion was made, (false, null) otherwise.
+    /// </summary>
+    public async Task<(bool Suggested, string Name)> SuggestNewCategoryAsync(
+        List<CategoryHierarchyItem> existingCategories,
+        List<SubcategoryHierarchyItem> existingSubcategories)
+    {
+        var hierarchyJson = BuildCategoryHierarchyJson(existingCategories, existingSubcategories);
+
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var chatClient = client.GetChatClient(_deploymentName);
+
+        const string systemPrompt = @"You are a product catalog consultant for AdventureWorks, an outdoor and adventure sports equipment e-commerce site.
+AdventureWorks sells outdoor, cycling, and adventure sports equipment — primarily bikes, bike components, clothing, and accessories.
+
+Your task: suggest ONE new top-level product category that would make commercial sense for AdventureWorks but is NOT already in the provided category list.
+Think about adjacent markets that complement outdoor / cycling products (e.g. water sports, camping, fitness, nutrition, footwear).
+
+Rules:
+- The category name must be 1–4 words, title-cased
+- It must not duplicate or closely overlap any existing category
+- If you genuinely cannot think of a suitable category that isn't already covered, set suggested to false
+
+Return ONLY a valid JSON object:
+{
+  ""suggested"": true,
+  ""name"": ""New Category Name""
+}
+or
+{
+  ""suggested"": false,
+  ""name"": null
+}";
+
+        var userPrompt = $"Current AdventureWorks category hierarchy:\n{hierarchyJson}\n\nSuggest a new top-level category.";
+
+        var messages = new List<ChatMessage>
+        {
+            new SystemChatMessage(systemPrompt),
+            new UserChatMessage(userPrompt)
+        };
+
+        var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+        {
+            Temperature = 0.8f,
+            MaxOutputTokenCount = 100,
+            ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
+        });
+
+        var raw = response.Value.Content[0].Text ?? "{}";
+        using var doc = JsonDocument.Parse(raw);
+        var root = doc.RootElement;
+
+        var suggested = root.TryGetProperty("suggested", out var sugProp) && sugProp.GetBoolean();
+        var name = root.TryGetProperty("name", out var nameProp) && nameProp.ValueKind == JsonValueKind.String
+            ? nameProp.GetString() ?? string.Empty
+            : string.Empty;
+
+        return (suggested && !string.IsNullOrWhiteSpace(name), name);
+    }
+
+    /// <summary>
+    /// Asks AI to suggest a new subcategory for the given parent category in AdventureWorks
+    /// that is not already in the existing hierarchy.
+    /// Returns (true, name) if a suggestion was made, (false, null) otherwise.
+    /// </summary>
+    public async Task<(bool Suggested, string Name)> SuggestNewSubcategoryAsync(
+        int categoryId,
+        string categoryName,
+        List<CategoryHierarchyItem> allCategories,
+        List<SubcategoryHierarchyItem> allSubcategories)
+    {
+        var hierarchyJson = BuildCategoryHierarchyJson(allCategories, allSubcategories);
+
+        var existingSubsForCategory = allSubcategories
+            .Where(s => s.ProductCategoryID == categoryId)
+            .Select(s => s.Name)
+            .ToList();
+
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var chatClient = client.GetChatClient(_deploymentName);
+
+        const string systemPrompt = @"You are a product catalog consultant for AdventureWorks, an outdoor and adventure sports equipment e-commerce site.
+AdventureWorks sells outdoor, cycling, and adventure sports equipment.
+
+Your task: suggest ONE new subcategory for a specific parent category that would make commercial sense but is NOT already in the provided subcategory list for that parent category.
+
+Rules:
+- The subcategory name must be 1–4 words, title-cased
+- It must not duplicate or closely overlap any existing subcategory for this category
+- It should be a logical product subdivision of the parent category
+- If you genuinely cannot think of a suitable subcategory that isn't already covered, set suggested to false
+
+Return ONLY a valid JSON object:
+{
+  ""suggested"": true,
+  ""name"": ""New Subcategory Name""
+}
+or
+{
+  ""suggested"": false,
+  ""name"": null
+}";
+
+        var userPrompt = $@"Full AdventureWorks category hierarchy for context:
+{hierarchyJson}
+
+Target parent category: ""{categoryName}""
+Existing subcategories for ""{categoryName}"": {JsonSerializer.Serialize(existingSubsForCategory)}
+
+Suggest a new subcategory for the ""{categoryName}"" category.";
+
+        var messages = new List<ChatMessage>
+        {
+            new SystemChatMessage(systemPrompt),
+            new UserChatMessage(userPrompt)
+        };
+
+        var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+        {
+            Temperature = 0.8f,
+            MaxOutputTokenCount = 100,
+            ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
+        });
+
+        var raw = response.Value.Content[0].Text ?? "{}";
+        using var doc = JsonDocument.Parse(raw);
+        var root = doc.RootElement;
+
+        var suggested = root.TryGetProperty("suggested", out var sugProp) && sugProp.GetBoolean();
+        var name = root.TryGetProperty("name", out var nameProp) && nameProp.ValueKind == JsonValueKind.String
+            ? nameProp.GetString() ?? string.Empty
+            : string.Empty;
+
+        return (suggested && !string.IsNullOrWhiteSpace(name), name);
     }
 }
 

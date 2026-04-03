@@ -423,6 +423,36 @@ export const generateReviewsWithReplies = (productId: number): Promise<void> =>
     .then(() => undefined)
     .catch(() => undefined);
 
+/**
+ * Fire-and-forget: asks AI to suggest and create a new top-level category.
+ * The backend queries the DB, calls AI, creates the category, and translates it.
+ */
+export const generateCategoryWithAI = (): Promise<void> =>
+  fetch(`${getFunctionsApiUrl()}/api/GenerateCategoryWithAI`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "category" }),
+  })
+    .then(() => undefined)
+    .catch(() => undefined);
+
+/**
+ * Fire-and-forget: asks AI to suggest and create a new subcategory under the given parent.
+ * @param categoryId — the parent category's ID
+ * @param categoryName — the parent category's English name (for AI context)
+ */
+export const generateSubcategoryWithAI = (
+  categoryId: number,
+  categoryName: string,
+): Promise<void> =>
+  fetch(`${getFunctionsApiUrl()}/api/GenerateCategoryWithAI`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "subcategory", categoryId, categoryName }),
+  })
+    .then(() => undefined)
+    .catch(() => undefined);
+
 // ── Status management for Durable Functions ────────────────────────────────
 
 /**

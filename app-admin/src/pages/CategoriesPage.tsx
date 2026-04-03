@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   FolderOpen,
   Plus,
+  Sparkles,
   Trash2,
   ChevronDown,
   ChevronRight,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
+import GenerateProductsWizardDialog from "@/components/GenerateProductsWizardDialog";
 import { useAuth } from "@/context/AuthContext";
 import {
   useAdminCategories,
@@ -28,6 +30,8 @@ import {
   SubcategoryProductInfo,
   translateCategoryName,
   CategoryTranslationPayload,
+  generateCategoryWithAI,
+  generateSubcategoryWithAI,
 } from "@/services/utilityService";
 import { toast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -304,6 +308,17 @@ const CreateCategoryDialog: React.FC<CreateCategoryDialogProps> = ({
     }
   };
 
+  const handleGenerateWithAI = () => {
+    setIsOpen(false);
+    setName("");
+    generateCategoryWithAI();
+    toast({
+      title: "AI Category Generation Started",
+      description:
+        "AI is generating a new category in the background. Refresh the page in a moment to see it.",
+    });
+  };
+
   return (
     <>
       <button
@@ -343,6 +358,15 @@ const CreateCategoryDialog: React.FC<CreateCategoryDialogProps> = ({
                 />
               </div>
               <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={handleGenerateWithAI}
+                  disabled={isSaving}
+                  className="doodle-button flex-1 py-2 flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Generate with AI
+                </button>
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
@@ -719,7 +743,7 @@ const CategoriesPage: React.FC = () => {
                                 <td className="px-4 py-2 text-center hidden sm:table-cell" />
                                 <td className="px-4 py-2 text-center font-doodle text-sm text-doodle-text/60 hidden sm:table-cell">
                                   <Link
-                                    to={`/category/${cat.ProductCategoryID}`}
+                                    to={`/category/${cat.ProductCategoryID}?subcategory=${sub.ProductSubcategoryID}`}
                                     className="hover:text-doodle-accent transition-colors flex items-center gap-1 justify-center"
                                   >
                                     <Package className="w-3 h-3" />
@@ -727,22 +751,33 @@ const CategoriesPage: React.FC = () => {
                                   </Link>
                                 </td>
                                 <td className="px-4 py-2 text-right">
-                                  <button
-                                    onClick={() =>
-                                      handleDeleteSubcategory(
-                                        sub.ProductSubcategoryID,
-                                        sub.Name,
-                                      )
-                                    }
-                                    disabled={
-                                      deletingId === sub.ProductSubcategoryID
-                                    }
-                                    title={`Delete ${sub.Name}`}
-                                    className="doodle-button text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 p-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
-                                    data-testid={`delete-subcategory-${sub.ProductSubcategoryID}`}
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
+                                  <div className="flex items-center justify-end gap-2">
+                                    <GenerateProductsWizardDialog
+                                      defaultCategoryId={cat.ProductCategoryID}
+                                      defaultSubcategoryId={
+                                        sub.ProductSubcategoryID
+                                      }
+                                      lockSelection={true}
+                                      defaultCategoryName={cat.Name}
+                                      defaultSubcategoryName={sub.Name}
+                                    />
+                                    <button
+                                      onClick={() =>
+                                        handleDeleteSubcategory(
+                                          sub.ProductSubcategoryID,
+                                          sub.Name,
+                                        )
+                                      }
+                                      disabled={
+                                        deletingId === sub.ProductSubcategoryID
+                                      }
+                                      title={`Delete ${sub.Name}`}
+                                      className="doodle-button text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 p-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
+                                      data-testid={`delete-subcategory-${sub.ProductSubcategoryID}`}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -750,10 +785,30 @@ const CategoriesPage: React.FC = () => {
                           {/* Add subcategory row */}
                           <tr className="border-b border-doodle-text/10 bg-doodle-text/[0.02]">
                             <td className="px-4 py-2 pl-10" colSpan={4}>
-                              <CreateSubcategoryDialog
-                                categoryId={cat.ProductCategoryID}
-                                onCreated={invalidate}
-                              />
+                              <div className="flex items-center gap-2">
+                                <CreateSubcategoryDialog
+                                  categoryId={cat.ProductCategoryID}
+                                  onCreated={invalidate}
+                                />
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    generateSubcategoryWithAI(
+                                      cat.ProductCategoryID,
+                                      cat.Name,
+                                    );
+                                    toast({
+                                      title:
+                                        "AI Subcategory Generation Started",
+                                      description: `AI is generating a new subcategory for "${cat.Name}". Refresh in a moment to see it.`,
+                                    });
+                                  }}
+                                  className="doodle-button doodle-button-primary flex items-center gap-1.5 px-3 py-1.5 text-sm shrink-0"
+                                >
+                                  <Sparkles className="w-4 h-4" />
+                                  Generate a Subcategory with AI
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         </>

@@ -56,11 +56,23 @@ interface LogEntry {
 interface GenerateProductsWizardDialogProps {
   defaultCategoryId?: number;
   defaultSubcategoryId?: number;
+  /** When true, hides the category/subcategory selectors and shows a count dropdown only. */
+  lockSelection?: boolean;
+  /** Display name for the locked category (avoids waiting for data load). */
+  defaultCategoryName?: string;
+  /** Display name for the locked subcategory (avoids waiting for data load). */
+  defaultSubcategoryName?: string;
 }
 
 const GenerateProductsWizardDialog: React.FC<
   GenerateProductsWizardDialogProps
-> = ({ defaultCategoryId, defaultSubcategoryId }) => {
+> = ({
+  defaultCategoryId,
+  defaultSubcategoryId,
+  lockSelection = false,
+  defaultCategoryName,
+  defaultSubcategoryName,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState<"configure" | "running" | "done">(
     "configure",
@@ -159,8 +171,8 @@ const GenerateProductsWizardDialog: React.FC<
           "dim",
         );
 
-        // ── 2. Call AI generate-content (extended) ───────────────────────────
-        const content = await generateProductContent({
+        // ── 2. Call AI generate-content (extended, with one retry) ──────────
+        const aiParams = {
           category,
           subcategory,
           productLine: pickedLine?.label ?? null,
@@ -169,10 +181,19 @@ const GenerateProductsWizardDialog: React.FC<
           availableSizes: PRODUCT_SIZES,
           availableColors: PRODUCT_COLORS,
           availableStyles: PRODUCT_STYLES.map((s) => s.label),
-        });
+        };
+        let content = await generateProductContent(aiParams);
 
         if (!content.productName) {
-          addLog("AI did not return a product name — skipping.", "error");
+          addLog("AI did not return a product name — retrying once…", "dim");
+          content = await generateProductContent(aiParams);
+        }
+
+        if (!content.productName) {
+          addLog(
+            "AI did not return a product name after retry — skipping.",
+            "error",
+          );
           continue;
         }
 
@@ -340,14 +361,25 @@ const GenerateProductsWizardDialog: React.FC<
     });
   };
 
+  // Resolved names for display in locked mode
+  const lockedCategoryName =
+    defaultCategoryName ??
+    categories.find((c) => c.ProductCategoryID === defaultCategoryId)?.Name ??
+    "";
+  const lockedSubcategoryName =
+    defaultSubcategoryName ??
+    subcategories.find((s) => s.ProductSubcategoryID === defaultSubcategoryId)
+      ?.Name ??
+    "";
+
   if (!isOpen) {
     return (
       <button
         onClick={handleOpen}
-        className="doodle-button-secondary flex items-center gap-2 text-sm"
+        className="doodle-button doodle-button-primary flex items-center gap-1.5 px-3 py-1.5 text-sm shrink-0"
       >
         <Sparkles className="w-4 h-4" />
-        Generate with AI
+        {lockSelection ? "Generate Products with AI" : "Generate with AI"}
       </button>
     );
   }
@@ -391,59 +423,79 @@ const GenerateProductsWizardDialog: React.FC<
           {step === "configure" && (
             <div className="space-y-4">
               <p className="font-doodle text-sm text-doodle-text/70">
-                Tell the wizard which category and how many products to create.
-                It will use AI to design each product — complete with pricing,
-                imagery, translations, and reviews — all automatically.
+                {lockSelection
+                  ? "Choose how many products to generate. The wizard will use AI to design each one — complete with pricing, imagery, translations, and reviews — all automatically."
+                  : "Tell the wizard which category and how many products to create. It will use AI to design each product — complete with pricing, imagery, translations, and reviews — all automatically."}
               </p>
 
-              {/* Category */}
-              <div>
-                <label className="font-doodle text-sm text-doodle-text block mb-1">
-                  Category <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={selectedCategoryId}
-                  onChange={handleCategoryChange}
-                  className="doodle-input w-full"
-                >
-                  <option value="">Select a category…</option>
-                  {categories.map((cat) => (
-                    <option
-                      key={cat.ProductCategoryID}
-                      value={cat.ProductCategoryID}
+              {lockSelection ? (
+                /* Locked mode: show category/subcategory as read-only */
+                <div className="bg-doodle-text/5 border border-doodle-border p-3 font-doodle text-sm space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-doodle-text/60">Category</span>
+                    <span className="font-semibold text-doodle-text">
+                      {lockedCategoryName}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-doodle-text/60">Subcategory</span>
+                    <span className="font-semibold text-doodle-text">
+                      {lockedSubcategoryName}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Category */}
+                  <div>
+                    <label className="font-doodle text-sm text-doodle-text block mb-1">
+                      Category <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={selectedCategoryId}
+                      onChange={handleCategoryChange}
+                      className="doodle-input w-full"
                     >
-                      {cat.Name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                      <option value="">Select a category…</option>
+                      {categories.map((cat) => (
+                        <option
+                          key={cat.ProductCategoryID}
+                          value={cat.ProductCategoryID}
+                        >
+                          {cat.Name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              {/* Subcategory */}
-              <div>
-                <label className="font-doodle text-sm text-doodle-text block mb-1">
-                  Subcategory <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={selectedSubcategoryId}
-                  onChange={(e) =>
-                    setSelectedSubcategoryId(
-                      e.target.value === "" ? "" : parseInt(e.target.value),
-                    )
-                  }
-                  disabled={selectedCategoryId === ""}
-                  className="doodle-input w-full disabled:opacity-50"
-                >
-                  <option value="">Select a subcategory…</option>
-                  {subcategories.map((sub) => (
-                    <option
-                      key={sub.ProductSubcategoryID}
-                      value={sub.ProductSubcategoryID}
+                  {/* Subcategory */}
+                  <div>
+                    <label className="font-doodle text-sm text-doodle-text block mb-1">
+                      Subcategory <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={selectedSubcategoryId}
+                      onChange={(e) =>
+                        setSelectedSubcategoryId(
+                          e.target.value === "" ? "" : parseInt(e.target.value),
+                        )
+                      }
+                      disabled={selectedCategoryId === ""}
+                      className="doodle-input w-full disabled:opacity-50"
                     >
-                      {sub.Name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                      <option value="">Select a subcategory…</option>
+                      {subcategories.map((sub) => (
+                        <option
+                          key={sub.ProductSubcategoryID}
+                          value={sub.ProductSubcategoryID}
+                        >
+                          {sub.Name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
 
               {/* Product count */}
               <div>
@@ -451,18 +503,35 @@ const GenerateProductsWizardDialog: React.FC<
                   Number of products to generate{" "}
                   <span className="text-doodle-text/50">(1 – 10)</span>
                 </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={productCount}
-                  onChange={(e) =>
-                    setProductCount(
-                      Math.max(1, Math.min(10, parseInt(e.target.value) || 1)),
-                    )
-                  }
-                  className="doodle-input w-24"
-                />
+                {lockSelection ? (
+                  <select
+                    value={productCount}
+                    onChange={(e) => setProductCount(parseInt(e.target.value))}
+                    className="doodle-input w-full"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                      <option key={n} value={n}>
+                        {n} product{n !== 1 ? "s" : ""}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={productCount}
+                    onChange={(e) =>
+                      setProductCount(
+                        Math.max(
+                          1,
+                          Math.min(10, parseInt(e.target.value) || 1),
+                        ),
+                      )
+                    }
+                    className="doodle-input w-24"
+                  />
+                )}
               </div>
 
               {/* What happens info */}

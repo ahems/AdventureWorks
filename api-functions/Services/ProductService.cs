@@ -681,6 +681,22 @@ public class ProductService
 
     // ── Category / Subcategory Management ─────────────────────────────────
 
+    /// <summary>
+    /// Returns the English-language category and subcategory names for building AI prompts.
+    /// </summary>
+    public async Task<(List<CategoryHierarchyItem> categories, List<SubcategoryHierarchyItem> subcategories)> GetCategoryHierarchyAsync()
+    {
+        using var connection = await GetConnectionAsync();
+
+        var categories = (await connection.QueryAsync<CategoryHierarchyItem>(
+            "SELECT DISTINCT ProductCategoryID, RTRIM(Name) AS Name FROM Production.ProductCategory WHERE RTRIM(CultureID) = 'en' ORDER BY Name")).ToList();
+
+        var subcategories = (await connection.QueryAsync<SubcategoryHierarchyItem>(
+            "SELECT DISTINCT ProductSubcategoryID, ProductCategoryID, RTRIM(Name) AS Name FROM Production.ProductSubcategory WHERE RTRIM(CultureID) = 'en' ORDER BY Name")).ToList();
+
+        return (categories, subcategories);
+    }
+
     public async Task<int> GetNextCategoryIdAsync()
     {
         using var connection = await GetConnectionAsync();

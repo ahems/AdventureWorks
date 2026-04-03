@@ -66,7 +66,7 @@ const CulturesPage = () => {
   }, [apiCultures]);
 
   const getLocalizationCount = (cultureId: string) => {
-    return localizationCounts[cultureId] ?? 0;
+    return localizationCounts[cultureId.trim()] ?? 0;
   };
 
   const filteredCultures = cultures.filter(
