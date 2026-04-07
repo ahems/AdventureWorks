@@ -230,6 +230,160 @@ public class ProductService
         "en-gb", "en-ca", "en-au", "ja", "ko", "de"
     };
 
+    /// <summary>
+    /// Get a compact view of all product categories, subcategories, and in-stock products
+    /// suitable for powering the AI order generation wizard.
+    /// </summary>
+    public async Task<string> GetCategoriesWithProductsAsync(int maxProductsPerSubcategory = 10)
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = @"
+            SELECT
+                pc.ProductCategoryID,
+                pc.Name AS CategoryName,
+                ps.ProductSubcategoryID,
+                ps.Name AS SubcategoryName,
+                p.ProductID,
+                p.Name AS ProductName,
+                p.ListPrice,
+                p.Color,
+                p.Size,
+                ISNULL((
+                    SELECT SUM(pi2.Quantity)
+                    FROM Production.ProductInventory pi2
+                    INNER JOIN Production.Location l2 ON pi2.LocationID = l2.LocationID
+                    WHERE pi2.ProductID = p.ProductID
+                      AND l2.Name LIKE 'Finished Goods%'
+                ), 0) AS StockQty,
+                ROW_NUMBER() OVER (PARTITION BY ps.ProductSubcategoryID ORDER BY p.ListPrice DESC) AS rn
+            FROM Production.ProductCategory pc
+            INNER JOIN Production.ProductSubcategory ps ON ps.ProductCategoryID = pc.ProductCategoryID
+            INNER JOIN Production.Product p ON p.ProductSubcategoryID = ps.ProductSubcategoryID
+            WHERE p.FinishedGoodsFlag = 1 AND p.ListPrice > 0";
+
+        var rows = await connection.QueryAsync(sql, new { MaxProducts = maxProductsPerSubcategory });
+
+        // Group into hierarchy
+        var categories = new Dictionary<int, (string Name, Dictionary<int, (string Name, List<string> Products)> Subs)>();
+
+        foreach (var row in rows)
+        {
+            if ((int)row.rn > maxProductsPerSubcategory) continue;
+
+            int catId = (int)row.ProductCategoryID;
+            int subId = (int)row.ProductSubcategoryID;
+            int stock = (int)row.StockQty;
+
+            if (stock == 0) continue; // skip out-of-stock
+
+            if (!categories.ContainsKey(catId))
+                categories[catId] = ((string)row.CategoryName, new Dictionary<int, (string, List<string>)>());
+
+            var (_, subs) = categories[catId];
+            if (!subs.ContainsKey(subId))
+                subs[subId] = ((string)row.SubcategoryName, new List<string>());
+
+            var (_, products) = subs[subId];
+            var color = string.IsNullOrEmpty((string?)row.Color) ? "" : $" ({row.Color})";
+            var size = string.IsNullOrEmpty((string?)row.Size) ? "" : $" [{row.Size}]";
+            products.Add($"  ProductID={row.ProductID}: {row.ProductName}{color}{size} — ${row.ListPrice:N2} — Stock:{stock}");
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("AdventureWorks Product Catalogue (in-stock finished goods only):");
+        sb.AppendLine();
+
+        foreach (var (catId, (catName, subs)) in categories.OrderBy(c => c.Value.Name))
+        {
+            sb.AppendLine($"CATEGORY: {catName} (ID={catId})");
+            foreach (var (subId, (subName, products)) in subs.OrderBy(s => s.Value.Name))
+            {
+                sb.AppendLine($"  Subcategory: {subName} (ID={subId})");
+                foreach (var p in products)
+                    sb.AppendLine(p);
+            }
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Get currently active special offer promotions with associated products.
+    /// </summary>
+    public async Task<string> GetActivePromotionsAsync()
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = @"
+            SELECT
+                so.SpecialOfferID,
+                so.Description,
+                so.DiscountPct,
+                so.Type,
+                so.Category,
+                so.StartDate,
+                so.EndDate,
+                so.MinQty,
+                so.MaxQty,
+                p.ProductID,
+                p.Name AS ProductName,
+                p.ListPrice
+            FROM Sales.SpecialOffer so
+            INNER JOIN Sales.SpecialOfferProduct sop ON so.SpecialOfferID = sop.SpecialOfferID
+            INNER JOIN Production.Product p ON sop.ProductID = p.ProductID
+            WHERE so.EndDate >= GETDATE()
+              AND so.StartDate <= GETDATE()
+              AND so.DiscountPct > 0
+              AND so.CultureID = 'en    '
+              AND p.FinishedGoodsFlag = 1
+            ORDER BY so.DiscountPct DESC, so.SpecialOfferID, p.ProductID";
+
+        var rows = await connection.QueryAsync(sql);
+
+        var offers = new Dictionary<int, (string Desc, decimal Pct, string Type, DateTime End, int MinQty, List<string> Products)>();
+
+        foreach (var row in rows)
+        {
+            int offerId = (int)row.SpecialOfferID;
+            if (!offers.ContainsKey(offerId))
+            {
+                offers[offerId] = (
+                    (string)row.Description,
+                    (decimal)row.DiscountPct,
+                    (string)row.Type,
+                    (DateTime)row.EndDate,
+                    (int)row.MinQty,
+                    new List<string>()
+                );
+            }
+            var (_, _, _, _, _, products) = offers[offerId];
+            products.Add($"    ProductID={row.ProductID}: {row.ProductName} — ${row.ListPrice:N2}");
+        }
+
+        if (!offers.Any())
+            return "No active promotions currently available.";
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"Active Promotions (as of {DateTime.UtcNow:yyyy-MM-dd}):");
+        sb.AppendLine();
+
+        foreach (var (offerId, (desc, pct, type, end, minQty, products)) in offers)
+        {
+            sb.AppendLine($"Promotion ID={offerId}: {desc}");
+            sb.AppendLine($"  Type: {type} | Discount: {pct:P0} | Expires: {end:yyyy-MM-dd} | Min Qty: {minQty}");
+            sb.AppendLine($"  Eligible products ({products.Count}):");
+            foreach (var p in products.Take(10))
+                sb.AppendLine(p);
+            if (products.Count > 10)
+                sb.AppendLine($"    ... and {products.Count - 10} more");
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
     public async Task<List<ProductSearchResult>> SearchProductsByDescriptionEmbeddingAsync(float[] queryEmbedding, int topN = 10, string cultureId = "en")
     {
         // Validate culture ID

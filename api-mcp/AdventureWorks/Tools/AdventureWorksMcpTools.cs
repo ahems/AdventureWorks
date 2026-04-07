@@ -457,4 +457,82 @@ public class AdventureWorksMcpTools
             throw;
         }
     }
+
+    [McpServerTool]
+    [Description("Get the full AdventureWorks product catalogue organized by category and subcategory, showing in-stock products with prices and stock levels. Use this first when planning an order to understand what is available to buy.")]
+    public async Task<string> GetCategoriesWithProducts(int maxProductsPerSubcategory = 10)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetCategoriesWithProducts");
+        operation.Telemetry.Properties["maxProductsPerSubcategory"] = maxProductsPerSubcategory.ToString();
+
+        try
+        {
+            var result = await _productService.GetCategoriesWithProductsAsync(maxProductsPerSubcategory);
+            operation.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
+            {
+                { "tool", "GetCategoriesWithProducts" },
+                { "resultLength", result.Length.ToString() }
+            });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetCategoriesWithProducts" } });
+            throw;
+        }
+    }
+
+    [McpServerTool]
+    [Description("Get all currently active promotions with eligible products and discount details. Use this when planning orders so you can apply available discounts to make the order more realistic.")]
+    public async Task<string> GetActivePromotions()
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetActivePromotions");
+
+        try
+        {
+            var result = await _productService.GetActivePromotionsAsync();
+            operation.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
+            {
+                { "tool", "GetActivePromotions" },
+                { "resultLength", result.Length.ToString() }
+            });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetActivePromotions" } });
+            throw;
+        }
+    }
+
+    [McpServerTool]
+    [Description("Search existing AdventureWorks customers by name (partial match). Returns CustomerID, name, email, location, and order history summary. Use this to find a real customer to associate with a generated order.")]
+    public async Task<string> SearchCustomers(string? nameFilter = null, int limit = 20)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_SearchCustomers");
+        operation.Telemetry.Properties["nameFilter"] = nameFilter ?? "(none)";
+        operation.Telemetry.Properties["limit"] = limit.ToString();
+
+        try
+        {
+            var result = await _orderService.SearchCustomersAsync(nameFilter, limit);
+            operation.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
+            {
+                { "tool", "SearchCustomers" },
+                { "resultLength", result.Length.ToString() }
+            });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "SearchCustomers" } });
+            throw;
+        }
+    }
 }

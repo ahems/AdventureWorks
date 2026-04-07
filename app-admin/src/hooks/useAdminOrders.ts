@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { graphqlClient } from "@/lib/graphql-client";
 import { gql } from "graphql-request";
 import { Order, OrderItem } from "@/types/order";
+import { getFunctionsApiUrl } from "@/lib/utils";
 
 // SalesOrderHeader.Status codes:
 // 1=In Process, 2=Approved, 3=Backordered, 4=Rejected, 5=Shipped, 6=Cancelled
@@ -134,6 +135,51 @@ export const useCancelOrder = () => {
   });
 };
 
+const GET_ORDER_BY_ID = gql`
+  query GetOrderById($id: Int!) {
+    salesOrderHeaders(filter: { SalesOrderID: { eq: $id } }) {
+      items {
+        SalesOrderID
+        CustomerID
+        OrderDate
+        DueDate
+        ShipDate
+        Status
+        SubTotal
+        TaxAmt
+        Freight
+        TotalDue
+        salesOrderDetails {
+          items {
+            SalesOrderDetailID
+            ProductID
+            OrderQty
+            UnitPrice
+            LineTotal
+            product {
+              Name
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const useOrderById = (orderId: number | null) =>
+  useQuery<Order | null>({
+    queryKey: ["admin", "order", orderId],
+    enabled: orderId !== null,
+    queryFn: async () => {
+      const data = await graphqlClient.request<{
+        salesOrderHeaders?: { items: RawOrderHeader[] };
+      }>(GET_ORDER_BY_ID, { id: orderId });
+      const item = data.salesOrderHeaders?.items?.[0];
+      return item ? mapOrder(item) : null;
+    },
+    staleTime: 2 * 60 * 1000,
+  });
+
 export const useAdminOrders = (after?: string | null) =>
   useQuery<PagedOrders>({
     queryKey: ["admin", "orders", after ?? null],
@@ -152,4 +198,18 @@ export const useAdminOrders = (after?: string | null) =>
       };
     },
     staleTime: 2 * 60 * 1000,
+  });
+
+export const useReceiptStatus = (salesOrderId: number | null) =>
+  useQuery<{ exists: boolean }>({
+    queryKey: ["receipt-status", salesOrderId],
+    enabled: salesOrderId !== null,
+    queryFn: async () => {
+      const res = await fetch(
+        `${getFunctionsApiUrl()}/api/orders/${salesOrderId}/receipt-status`,
+      );
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      return res.json();
+    },
+    staleTime: 30 * 1000,
   });

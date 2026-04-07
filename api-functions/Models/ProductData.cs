@@ -84,6 +84,20 @@ public class ProductDescriptionEmbedding
     public int? ProductModelID { get; set; }
 }
 
+public class ProductNameEmbeddingData
+{
+    public int ProductID { get; set; }
+    public string CultureID { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+}
+
+public class ProductNameEmbedding
+{
+    public int ProductID { get; set; }
+    public string CultureID { get; set; } = string.Empty;
+    public float[] Embedding { get; set; } = Array.Empty<float>();
+}
+
 public class ProductImageData
 {
     public int ProductID { get; set; }

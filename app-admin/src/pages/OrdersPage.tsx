@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -12,6 +12,10 @@ import {
   Loader2,
   Eye,
   Mail,
+  Download,
+  CalendarDays,
+  X as XIcon,
+  Filter,
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
@@ -22,18 +26,111 @@ import {
   ORDER_STATUS_CONFIG,
   Order,
 } from "@/types/order";
-import { useAdminOrders, useCancelOrder } from "@/hooks/useAdminOrders";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  useAdminOrders,
+  useCancelOrder,
+  useOrderById,
+  useReceiptStatus,
+} from "@/hooks/useAdminOrders";
+import {
+  useAdminCategories,
+  useAdminAllSubcategories,
+  useAdminProductsBySubcategory,
+  useAdminAllProducts,
+} from "@/hooks/useAdminProducts";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { getFunctionsApiUrl } from "@/lib/utils";
 import ReceiptPreviewModal from "@/components/ReceiptPreviewModal";
 import EmailReceiptDialog from "@/components/EmailReceiptDialog";
+import GenerateOrdersWizardDialog from "@/components/GenerateOrdersWizardDialog";
+
+const ALL_STATUSES = Object.keys(ORDER_STATUS_CONFIG) as OrderStatus[];
+const DEFAULT_STATUS_FILTERS: OrderStatus[] = [...ALL_STATUSES];
+
+interface ReceiptActionsProps {
+  order: Order;
+  onPreview: (e: React.MouseEvent, order: Order) => void;
+  onEmail: (e: React.MouseEvent, order: Order) => void;
+  onGenerate: (e: React.MouseEvent, order: Order) => void;
+  isGenerating: boolean;
+}
+
+const ReceiptActions: React.FC<ReceiptActionsProps> = ({
+  order,
+  onPreview,
+  onEmail,
+  onGenerate,
+  isGenerating,
+}) => {
+  const { data: receiptStatus, isLoading: receiptStatusLoading } =
+    useReceiptStatus(order.SalesOrderID);
+
+  const downloadUrl = `${getFunctionsApiUrl()}/api/orders/${order.SalesOrderID}/receipt`;
+
+  return (
+    <div className="mt-4 pt-4 border-t-2 border-dashed border-doodle-text/20">
+      <h4 className="font-doodle font-bold text-doodle-text mb-3 flex items-center gap-2">
+        <FileText className="w-4 h-4" />
+        Receipt Actions
+      </h4>
+      <div className="flex flex-wrap gap-3">
+        <button
+          onClick={(e) => onPreview(e, order)}
+          className="doodle-button flex items-center gap-2 py-2 px-4 hover:bg-doodle-accent/10"
+        >
+          <Eye className="w-4 h-4" />
+          Preview Receipt
+        </button>
+        <button
+          onClick={(e) => onEmail(e, order)}
+          className="doodle-button flex items-center gap-2 py-2 px-4 hover:bg-doodle-accent/10"
+        >
+          <Mail className="w-4 h-4" />
+          Email Receipt
+        </button>
+        {receiptStatusLoading ? (
+          <button
+            disabled
+            className="doodle-button flex items-center gap-2 py-2 px-4 opacity-60"
+          >
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Checking…
+          </button>
+        ) : receiptStatus?.exists ? (
+          <a
+            href={downloadUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="doodle-button doodle-button-primary flex items-center gap-2 py-2 px-4"
+          >
+            <Download className="w-4 h-4" />
+            Download Receipt
+          </a>
+        ) : (
+          <button
+            onClick={(e) => onGenerate(e, order)}
+            disabled={isGenerating}
+            className="doodle-button flex items-center gap-2 py-2 px-4 hover:bg-doodle-accent/10"
+          >
+            {isGenerating ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <FileText className="w-4 h-4" />
+            )}
+            {isGenerating ? "Generating…" : "Generate Receipt"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const OrdersPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
@@ -41,7 +138,9 @@ const OrdersPage: React.FC = () => {
   const [cursorStack, setCursorStack] = useState<string[]>([]);
   const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilters, setStatusFilters] = useState<OrderStatus[]>(
+    DEFAULT_STATUS_FILTERS,
+  );
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
@@ -51,29 +150,95 @@ const OrdersPage: React.FC = () => {
   const [processingOrderId, setProcessingOrderId] = useState<number | null>(
     null,
   );
+  const [generatingReceiptId, setGeneratingReceiptId] = useState<number | null>(
+    null,
+  );
+  const [missingReceiptsCooldown, setMissingReceiptsCooldown] = useState(false);
+
+  // Date filter state
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  // Category / subcategory / product filter state
+  const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
+  const [subcategoryFilter, setSubcategoryFilter] = useState<number | null>(
+    null,
+  );
+  const [productFilter, setProductFilter] = useState<number | null>(null);
+
   const itemsPerPage = 10;
 
-  const { data: apiData, isLoading: ordersLoading } = useAdminOrders(dabCursor);
+  // Data hooks for cascading filters
+  const { data: categories = [] } = useAdminCategories();
+  const { data: allSubcategories = [] } = useAdminAllSubcategories();
+  const { data: allProducts = [] } = useAdminAllProducts();
+  const { data: subcategoryProducts = [] } =
+    useAdminProductsBySubcategory(subcategoryFilter);
+
+  // Derived: subcategories for selected category
+  const subcategoriesForCategory = useMemo(
+    () =>
+      categoryFilter
+        ? allSubcategories.filter((s) => s.ProductCategoryID === categoryFilter)
+        : [],
+    [allSubcategories, categoryFilter],
+  );
+
+  // Build product→subcategory & product→category lookups
+  const productSubcategoryMap = useMemo(
+    () =>
+      new Map(
+        allProducts.map((p) => [p.ProductID, p.ProductSubcategoryID ?? null]),
+      ),
+    [allProducts],
+  );
+  const subcategoryCategoryMap = useMemo(
+    () =>
+      new Map(
+        allSubcategories.map((s) => [
+          s.ProductSubcategoryID,
+          s.ProductCategoryID,
+        ]),
+      ),
+    [allSubcategories],
+  );
+
+  // Set of productIds that belong to the selected subcategory
+  const subcategoryProductIds = useMemo(
+    () => new Set(subcategoryProducts.map((p) => p.ProductID)),
+    [subcategoryProducts],
+  );
+
+  // Reset sub-filters when parent changes
+  useEffect(() => {
+    setSubcategoryFilter(null);
+    setProductFilter(null);
+  }, [categoryFilter]);
+  useEffect(() => {
+    setProductFilter(null);
+  }, [subcategoryFilter]);
+
+  const directOrderIdParam = searchParams.get("orderId");
+  const directOrderId = directOrderIdParam
+    ? parseInt(directOrderIdParam, 10)
+    : null;
+  const isDirectLink = directOrderId !== null && !isNaN(directOrderId);
+
+  const { data: apiData, isLoading: ordersLoading } = useAdminOrders(
+    isDirectLink ? null : dabCursor,
+  );
+  const { data: directOrder, isLoading: directOrderLoading } = useOrderById(
+    isDirectLink ? directOrderId : null,
+  );
   const apiOrders = React.useMemo(() => apiData?.items ?? [], [apiData]);
   const cancelOrder = useCancelOrder();
 
-  // Auto-expand order if orderId is in URL params
+  // Auto-expand the order when coming via direct link
   useEffect(() => {
-    const orderIdParam = searchParams.get("orderId");
-    if (orderIdParam) {
-      const orderId = parseInt(orderIdParam, 10);
-      if (!isNaN(orderId)) {
-        setExpandedOrderId(orderId);
-        const orderIndex = (apiData?.items ?? []).findIndex(
-          (o) => o.SalesOrderID === orderId,
-        );
-        if (orderIndex !== -1) {
-          const page = Math.floor(orderIndex / itemsPerPage) + 1;
-          setCurrentPage(page);
-        }
-      }
+    if (isDirectLink && directOrderId) {
+      setExpandedOrderId(directOrderId);
     }
-  }, [searchParams, apiData]);
+  }, [isDirectLink, directOrderId]);
 
   const beginProcessingOrder = async (e: React.MouseEvent, order: Order) => {
     e.stopPropagation();
@@ -127,13 +292,52 @@ const OrdersPage: React.FC = () => {
     return <Navigate to="/login" replace />;
   }
 
-  const filteredOrders = apiOrders.filter((o) => {
-    const matchesSearch =
-      o.SalesOrderID.toString().includes(searchQuery) ||
-      o.CustomerID.toString().includes(searchQuery);
-    const matchesStatus = statusFilter === "all" || o.Status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  // When coming from a direct order link, show only that order; otherwise use normal filter
+  const filteredOrders = isDirectLink
+    ? directOrder
+      ? [directOrder]
+      : []
+    : apiOrders.filter((o) => {
+        const matchesSearch =
+          o.SalesOrderID.toString().includes(searchQuery) ||
+          o.CustomerID.toString().includes(searchQuery);
+        const matchesStatus = statusFilters.includes(o.Status);
+
+        const orderDate = o.OrderDate ? new Date(o.OrderDate) : null;
+        const matchesDateFrom =
+          !dateFrom || (orderDate !== null && orderDate >= new Date(dateFrom));
+        const matchesDateTo =
+          !dateTo ||
+          (orderDate !== null && orderDate <= new Date(dateTo + "T23:59:59"));
+
+        const matchesCategory =
+          !categoryFilter ||
+          o.OrderItems.some((item) => {
+            const subId = productSubcategoryMap.get(item.ProductID);
+            if (subId == null) return false;
+            return subcategoryCategoryMap.get(subId) === categoryFilter;
+          });
+
+        const matchesSubcategory =
+          !subcategoryFilter ||
+          o.OrderItems.some((item) =>
+            subcategoryProductIds.has(item.ProductID),
+          );
+
+        const matchesProduct =
+          !productFilter ||
+          o.OrderItems.some((item) => item.ProductID === productFilter);
+
+        return (
+          matchesSearch &&
+          matchesStatus &&
+          matchesDateFrom &&
+          matchesDateTo &&
+          matchesCategory &&
+          matchesSubcategory &&
+          matchesProduct
+        );
+      });
 
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -163,62 +367,363 @@ const OrdersPage: React.FC = () => {
     setEmailDialogOpen(true);
   };
 
+  const handleGenerateMissingReceipts = async () => {
+    setMissingReceiptsCooldown(true);
+    try {
+      const res = await fetch(
+        `${getFunctionsApiUrl()}/api/orders/generate-missing-receipts`,
+        { method: "POST" },
+      );
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const data = await res.json();
+      toast({
+        title: "Generating missing receipts",
+        description: `Up to ${data.estimatedTotal} receipts queued for generation in the background.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Failed to start receipt generation",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      // 30-second cooldown prevents flooding the queue before the first batch processes
+      setTimeout(() => setMissingReceiptsCooldown(false), 30_000);
+    }
+  };
+
+  const handleGenerateReceipt = async (e: React.MouseEvent, order: Order) => {
+    e.stopPropagation();
+    setGeneratingReceiptId(order.SalesOrderID);
+    try {
+      const res = await fetch(
+        `${getFunctionsApiUrl()}/api/GenerateOrderReceipts_HttpStart`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ salesOrderId: order.SalesOrderID }),
+        },
+      );
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      toast({
+        title: `Receipt queued — SO${order.SalesOrderID}`,
+        description:
+          "Receipt is being generated and will be available shortly.",
+      });
+    } catch (err) {
+      toast({
+        title: "Failed to generate receipt",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingReceiptId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <AdminHeader />
       <main className="flex-1 pt-4">
         <section className="container mx-auto px-4 pb-8">
           <div className="doodle-card p-6">
-            <h1 className="font-doodle text-3xl font-bold text-doodle-text mb-4">
-              Order Management
-            </h1>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-text/50" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  placeholder="Search by order # or customer..."
-                  className="w-full pl-10 pr-4 py-2 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
-                />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div>
+                <h1 className="font-doodle text-3xl font-bold text-doodle-text">
+                  Order Management
+                </h1>
+                {isDirectLink && (
+                  <Link
+                    to="/orders"
+                    className="inline-flex items-center gap-1 font-doodle text-sm text-doodle-accent hover:underline mt-1"
+                  >
+                    <ArrowLeft className="w-4 h-4" /> Back to all orders
+                  </Link>
+                )}
+                {!isDirectLink && (
+                  <p className="font-doodle text-sm text-doodle-text/60 mt-1">
+                    {filteredOrders.length === apiOrders.length
+                      ? `${apiOrders.length} order${apiOrders.length !== 1 ? "s" : ""} in this batch`
+                      : `${filteredOrders.length} of ${apiOrders.length} order${apiOrders.length !== 1 ? "s" : ""} (filtered)`}
+                  </p>
+                )}
               </div>
-              <Select
-                value={statusFilter}
-                onValueChange={(v) => {
-                  setStatusFilter(v);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger className="w-40 font-doodle">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="font-doodle">
-                    All Status
-                  </SelectItem>
-                  {Object.entries(ORDER_STATUS_CONFIG).map(
-                    ([status, config]) => (
-                      <SelectItem
-                        key={status}
-                        value={status}
-                        className="font-doodle"
-                      >
-                        {config.icon} {config.label}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
+              {!isDirectLink && (
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <GenerateOrdersWizardDialog />
+                  <button
+                    onClick={handleGenerateMissingReceipts}
+                    disabled={missingReceiptsCooldown}
+                    className="doodle-button flex items-center gap-2 py-2 px-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {missingReceiptsCooldown ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <FileText className="w-4 h-4" />
+                    )}
+                    Generate Missing Receipts
+                  </button>
+                </div>
+              )}
             </div>
+            {!isDirectLink && (
+              <div className="flex flex-col gap-3">
+                {/* Search + Status row */}
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-text/50" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      placeholder="Search by order # or customer..."
+                      className="w-full pl-10 pr-4 py-2 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
+                    />
+                  </div>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button className="w-48 font-doodle border-2 border-doodle-text bg-white px-3 py-2 flex items-center justify-between gap-2 hover:bg-doodle-text/5 text-sm">
+                        <span className="truncate">
+                          {statusFilters.length === ALL_STATUSES.length
+                            ? "All Statuses"
+                            : statusFilters.length === 0
+                              ? "No Status"
+                              : statusFilters.length === 1
+                                ? `${ORDER_STATUS_CONFIG[statusFilters[0]].icon} ${ORDER_STATUS_CONFIG[statusFilters[0]].label}`
+                                : `${statusFilters.length} statuses`}
+                        </span>
+                        <ChevronDown className="w-4 h-4 flex-shrink-0 text-doodle-text/50" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align="end"
+                      className="w-52 p-2 font-doodle"
+                    >
+                      <div className="space-y-1">
+                        <button
+                          className="w-full text-left text-xs px-2 py-1 text-doodle-text/60 hover:text-doodle-accent underline"
+                          onClick={() =>
+                            setStatusFilters(
+                              statusFilters.length === ALL_STATUSES.length
+                                ? []
+                                : [...ALL_STATUSES],
+                            )
+                          }
+                        >
+                          {statusFilters.length === ALL_STATUSES.length
+                            ? "Deselect all"
+                            : "Select all"}
+                        </button>
+                        {ALL_STATUSES.map((status) => {
+                          const config = ORDER_STATUS_CONFIG[status];
+                          const checked = statusFilters.includes(status);
+                          return (
+                            <label
+                              key={status}
+                              className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-doodle-text/5 rounded select-none"
+                            >
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(v) => {
+                                  setStatusFilters((prev) =>
+                                    v
+                                      ? [...prev, status]
+                                      : prev.filter((s) => s !== status),
+                                  );
+                                  setCurrentPage(1);
+                                }}
+                              />
+                              <span className="text-sm">
+                                {config.icon} {config.label}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Date filter row */}
+                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                  <span className="flex items-center gap-1 font-doodle text-sm text-doodle-text/60 shrink-0">
+                    <CalendarDays className="w-4 h-4" /> Date range:
+                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => {
+                        setDateFrom(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="font-doodle text-sm border-2 border-doodle-text bg-white px-2 py-1 focus:border-doodle-accent focus:outline-none"
+                    />
+                    <span className="font-doodle text-sm text-doodle-text/50">
+                      to
+                    </span>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => {
+                        setDateTo(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="font-doodle text-sm border-2 border-doodle-text bg-white px-2 py-1 focus:border-doodle-accent focus:outline-none"
+                    />
+                    {(dateFrom || dateTo) && (
+                      <button
+                        onClick={() => {
+                          setDateFrom("");
+                          setDateTo("");
+                          setCurrentPage(1);
+                        }}
+                        className="inline-flex items-center gap-1 font-doodle text-xs text-doodle-text/50 hover:text-doodle-accent"
+                        title="Clear date filter"
+                      >
+                        <XIcon className="w-3.5 h-3.5" /> Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Cascading category → subcategory → product filter */}
+                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center flex-wrap">
+                  <span className="flex items-center gap-1 font-doodle text-sm text-doodle-text/60 shrink-0">
+                    <Filter className="w-4 h-4" /> Category:
+                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Category select */}
+                    <select
+                      value={categoryFilter ?? ""}
+                      onChange={(e) => {
+                        setCategoryFilter(
+                          e.target.value ? Number(e.target.value) : null,
+                        );
+                        setCurrentPage(1);
+                      }}
+                      className="font-doodle text-sm border-2 border-doodle-text bg-white px-2 py-1 focus:border-doodle-accent focus:outline-none"
+                    >
+                      <option value="">All Categories</option>
+                      {categories.map((c) => (
+                        <option
+                          key={c.ProductCategoryID}
+                          value={c.ProductCategoryID}
+                        >
+                          {c.Name}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Subcategory select — shown only when category is chosen */}
+                    {categoryFilter !== null &&
+                      subcategoriesForCategory.length > 0 && (
+                        <>
+                          <ChevronRight className="w-4 h-4 text-doodle-text/40 shrink-0" />
+                          <select
+                            value={subcategoryFilter ?? ""}
+                            onChange={(e) => {
+                              setSubcategoryFilter(
+                                e.target.value ? Number(e.target.value) : null,
+                              );
+                              setCurrentPage(1);
+                            }}
+                            className="font-doodle text-sm border-2 border-doodle-text bg-white px-2 py-1 focus:border-doodle-accent focus:outline-none"
+                          >
+                            <option value="">All Subcategories</option>
+                            {subcategoriesForCategory.map((s) => {
+                              const count = apiOrders.filter((o) =>
+                                o.OrderItems.some((item) => {
+                                  const subId = productSubcategoryMap.get(
+                                    item.ProductID,
+                                  );
+                                  return subId === s.ProductSubcategoryID;
+                                }),
+                              ).length;
+                              return (
+                                <option
+                                  key={s.ProductSubcategoryID}
+                                  value={s.ProductSubcategoryID}
+                                >
+                                  {s.Name}
+                                  {count > 0 ? ` (${count})` : ""}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </>
+                      )}
+
+                    {/* Product select — shown only when subcategory is chosen */}
+                    {subcategoryFilter !== null &&
+                      subcategoryProducts.length > 0 && (
+                        <>
+                          <ChevronRight className="w-4 h-4 text-doodle-text/40 shrink-0" />
+                          <select
+                            value={productFilter ?? ""}
+                            onChange={(e) => {
+                              setProductFilter(
+                                e.target.value ? Number(e.target.value) : null,
+                              );
+                              setCurrentPage(1);
+                            }}
+                            className="font-doodle text-sm border-2 border-doodle-text bg-white px-2 py-1 focus:border-doodle-accent focus:outline-none"
+                          >
+                            <option value="">All Products</option>
+                            {subcategoryProducts.map((p) => {
+                              const count = apiOrders.filter((o) =>
+                                o.OrderItems.some(
+                                  (item) => item.ProductID === p.ProductID,
+                                ),
+                              ).length;
+                              return (
+                                <option key={p.ProductID} value={p.ProductID}>
+                                  {p.Name}
+                                  {count > 0 ? ` (${count})` : ""}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </>
+                      )}
+
+                    {/* Clear category filters */}
+                    {categoryFilter !== null && (
+                      <button
+                        onClick={() => {
+                          setCategoryFilter(null);
+                          setCurrentPage(1);
+                        }}
+                        className="inline-flex items-center gap-1 font-doodle text-xs text-doodle-text/50 hover:text-doodle-accent"
+                        title="Clear category filter"
+                      >
+                        <XIcon className="w-3.5 h-3.5" /> Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
         <section className="container mx-auto px-4 pb-12">
           <div className="space-y-4">
+            {(isDirectLink ? directOrderLoading : ordersLoading) && (
+              <div className="doodle-card p-8 flex items-center justify-center">
+                <Loader2 className="w-6 h-6 animate-spin text-doodle-text/50" />
+              </div>
+            )}
+            {isDirectLink &&
+              !directOrderLoading &&
+              filteredOrders.length === 0 && (
+                <div className="doodle-card p-8 text-center font-doodle text-doodle-text/50">
+                  Order #{directOrderId} not found.
+                </div>
+              )}
             {paginatedOrders.map((order) => {
               const statusConfig = ORDER_STATUS_CONFIG[order.Status];
               const nextStatuses = ORDER_STATUS_WORKFLOW[order.Status];
@@ -467,28 +972,15 @@ const OrdersPage: React.FC = () => {
                       </div>
 
                       {/* Receipt Actions */}
-                      <div className="mt-4 pt-4 border-t-2 border-dashed border-doodle-text/20">
-                        <h4 className="font-doodle font-bold text-doodle-text mb-3 flex items-center gap-2">
-                          <FileText className="w-4 h-4" />
-                          Receipt Actions
-                        </h4>
-                        <div className="flex flex-wrap gap-3">
-                          <button
-                            onClick={(e) => handlePreviewReceipt(e, order)}
-                            className="doodle-button flex items-center gap-2 py-2 px-4 hover:bg-doodle-accent/10"
-                          >
-                            <Eye className="w-4 h-4" />
-                            Preview Receipt
-                          </button>
-                          <button
-                            onClick={(e) => handleEmailReceipt(e, order)}
-                            className="doodle-button flex items-center gap-2 py-2 px-4 hover:bg-doodle-accent/10"
-                          >
-                            <Mail className="w-4 h-4" />
-                            Email Receipt
-                          </button>
-                        </div>
-                      </div>
+                      <ReceiptActions
+                        order={order}
+                        onPreview={handlePreviewReceipt}
+                        onEmail={handleEmailReceipt}
+                        onGenerate={handleGenerateReceipt}
+                        isGenerating={
+                          generatingReceiptId === order.SalesOrderID
+                        }
+                      />
                     </div>
                   )}
                 </div>
@@ -496,63 +988,75 @@ const OrdersPage: React.FC = () => {
             })}
           </div>
 
-          {/* DAB page navigation — each page is up to 100 orders */}
-          {(cursorStack.length > 0 || apiData?.hasNextPage) && (
-            <div className="doodle-card p-4 mt-6 flex items-center justify-between">
-              <button
-                onClick={() => {
-                  const prev = cursorStack[cursorStack.length - 1] ?? null;
-                  setCursorStack((s) => s.slice(0, -1));
-                  setDabCursor(prev);
-                  setCurrentPage(1);
-                }}
-                disabled={cursorStack.length === 0}
-                className="inline-flex items-center gap-1 p-2 font-doodle text-sm disabled:opacity-40"
-                aria-label="Previous 100"
-              >
-                <ChevronLeft className="w-5 h-5" /> Previous 100
-              </button>
-              <span className="font-doodle text-sm text-doodle-text/60">
-                Batch {cursorStack.length + 1}
-              </span>
-              <button
-                onClick={() => {
-                  setCursorStack((s) => [...s, dabCursor ?? ""]);
-                  setDabCursor(apiData!.endCursor);
-                  setCurrentPage(1);
-                }}
-                disabled={!apiData?.hasNextPage}
-                className="inline-flex items-center gap-1 p-2 font-doodle text-sm disabled:opacity-40"
-                aria-label="Next 100"
-              >
-                Next 100 <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-          )}
+          {/* Combined pagination: batch nav + page nav in one card */}
+          {!isDirectLink &&
+            (cursorStack.length > 0 ||
+              apiData?.hasNextPage ||
+              totalPages > 1) && (
+              <div className="doodle-card p-4 mt-6 flex flex-col gap-3">
+                {/* Batch nav — previous/next 100 */}
+                {(cursorStack.length > 0 || apiData?.hasNextPage) && (
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => {
+                        const prev =
+                          cursorStack[cursorStack.length - 1] ?? null;
+                        setCursorStack((s) => s.slice(0, -1));
+                        setDabCursor(prev);
+                        setCurrentPage(1);
+                      }}
+                      disabled={cursorStack.length === 0}
+                      className="inline-flex items-center gap-1 p-2 font-doodle text-sm disabled:opacity-40"
+                      aria-label="Previous 100"
+                    >
+                      <ChevronLeft className="w-5 h-5" /> Previous 100
+                    </button>
+                    <span className="font-doodle text-sm text-doodle-text/60">
+                      Batch {cursorStack.length + 1}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setCursorStack((s) => [...s, dabCursor ?? ""]);
+                        setDabCursor(apiData!.endCursor);
+                        setCurrentPage(1);
+                      }}
+                      disabled={!apiData?.hasNextPage}
+                      className="inline-flex items-center gap-1 p-2 font-doodle text-sm disabled:opacity-40"
+                      aria-label="Next 100"
+                    >
+                      Next 100 <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </div>
+                )}
 
-          {totalPages > 1 && (
-            <div className="doodle-card p-4 mt-6 flex items-center justify-center gap-2">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="p-2 disabled:opacity-40"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <span className="font-doodle">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
-                }
-                disabled={currentPage === totalPages}
-                className="p-2 disabled:opacity-40"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-          )}
+                {/* Page nav within current batch */}
+                {totalPages > 1 && (
+                  <div
+                    className={`flex items-center justify-center gap-2 ${cursorStack.length > 0 || apiData?.hasNextPage ? "border-t border-doodle-text/20 pt-3" : ""}`}
+                  >
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="p-2 disabled:opacity-40"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <span className="font-doodle text-sm">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setCurrentPage((p) => Math.min(totalPages, p + 1))
+                      }
+                      disabled={currentPage === totalPages}
+                      className="p-2 disabled:opacity-40"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
         </section>
       </main>
       <Footer />

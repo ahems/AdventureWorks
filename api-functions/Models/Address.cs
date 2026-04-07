@@ -42,3 +42,17 @@ public class UpdateAddressRequest
     public int? StateProvinceID { get; set; }
     public string? PostalCode { get; set; }
 }
+
+/// <summary>
+/// Address result joined with state/country for a given BusinessEntityID
+/// </summary>
+public class PersonAddressResult
+{
+    public int BusinessEntityID { get; set; }
+    public string AddressLine1 { get; set; } = string.Empty;
+    public string? AddressLine2 { get; set; }
+    public string City { get; set; } = string.Empty;
+    public string PostalCode { get; set; } = string.Empty;
+    public string StateProvinceName { get; set; } = string.Empty;
+    public string CountryName { get; set; } = string.Empty;
+}

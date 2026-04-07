@@ -466,3 +466,40 @@ GO
 PRINT 'Recreated view Production.vReviewSearch with IsModerated column';
 
 GO
+
+-- Step 20: Create HumanResources.vEmployee view
+-- DAB (Data API Builder) does not support hierarchyid columns (OrganizationNode, OrganizationLevel).
+-- This view exposes the Employee table for the Manufacturing demo UI by excluding those columns.
+
+IF EXISTS (SELECT 1 FROM sys.views WHERE object_id = OBJECT_ID(N'[HumanResources].[vEmployee]'))
+BEGIN
+    DROP VIEW [HumanResources].[vEmployee];
+    PRINT 'Dropped existing HumanResources.vEmployee view';
+END;
+
+GO
+
+CREATE VIEW [HumanResources].[vEmployee]
+AS
+SELECT
+    [BusinessEntityID],
+    [NationalIDNumber],
+    [LoginID],
+    [JobTitle],
+    [BirthDate],
+    [MaritalStatus],
+    [Gender],
+    [HireDate],
+    [SalariedFlag],
+    [VacationHours],
+    [SickLeaveHours],
+    [CurrentFlag],
+    [rowguid],
+    [ModifiedDate]
+FROM [HumanResources].[Employee];
+
+GO
+
+PRINT 'Created view HumanResources.vEmployee (excludes hierarchyid columns for DAB compatibility)';
+
+GO

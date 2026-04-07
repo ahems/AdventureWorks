@@ -15,6 +15,7 @@ public class AiJobMessage
     /// "review"             – generate reviews for a batch of products
     /// "product-embeddings" – (re)generate embeddings for all product descriptions
     /// "review-embeddings"  – (re)generate embeddings for all product reviews
+    /// "generate-order"     – generate a single AI order for a persona (bulk order generation)
     /// </summary>
     public string JobType { get; set; } = string.Empty;
 
@@ -29,4 +30,10 @@ public class AiJobMessage
 
     /// <summary>Optional override for reviews-per-product count on "review" jobs.</summary>
     public int? ReviewsPerProduct { get; set; }
+
+    /// <summary>Persona type for "generate-order" jobs.</summary>
+    public string? PersonaType { get; set; }
+
+    /// <summary>Optional seed customer ID for "generate-order" jobs with persona "existing-customer".</summary>
+    public int? SeedCustomerId { get; set; }
 }

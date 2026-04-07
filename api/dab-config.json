@@ -18,7 +18,9 @@
       "port": 80,
       "mode": "development",
       "cors": {
-        "origins": ["*"],
+        "origins": [
+          "*"
+        ],
         "allow-credentials": false
       },
       "authentication": {
@@ -45,7 +47,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -54,7 +58,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -63,7 +69,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -72,7 +80,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -81,7 +91,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -90,7 +102,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -99,7 +113,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -108,7 +124,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -117,15 +135,21 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "currency": {
           "cardinality": "one",
           "target.entity": "Currency",
-          "source.fields": ["ToCurrencyCode"],
-          "target.fields": ["CurrencyCode"]
+          "source.fields": [
+            "ToCurrencyCode"
+          ],
+          "target.fields": [
+            "CurrencyCode"
+          ]
         }
       }
     },
@@ -134,7 +158,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -143,7 +169,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -152,7 +180,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -161,16 +191,32 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
-      ]
+      ],
+      "relationships": {
+        "countryRegion": {
+          "cardinality": "one",
+          "target.entity": "CountryRegion",
+          "source.fields": [
+            "CountryRegionCode"
+          ],
+          "target.fields": [
+            "CountryRegionCode"
+          ]
+        }
+      }
     },
     "BusinessEntity": {
       "source": "Person.BusinessEntity",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -179,9 +225,12 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
-      ]
+      ],
+      "relationships": {}
     },
     "Person": {
       "source": "Person.Person",
@@ -192,7 +241,10 @@
             {
               "action": "create",
               "fields": {
-                "exclude": ["rowguid", "ModifiedDate"]
+                "exclude": [
+                  "rowguid",
+                  "ModifiedDate"
+                ]
               }
             },
             {
@@ -201,7 +253,11 @@
             {
               "action": "update",
               "fields": {
-                "exclude": ["BusinessEntityID", "rowguid", "ModifiedDate"]
+                "exclude": [
+                  "BusinessEntityID",
+                  "rowguid",
+                  "ModifiedDate"
+                ]
               }
             },
             {
@@ -214,8 +270,32 @@
         "emailAddresses": {
           "cardinality": "many",
           "target.entity": "EmailAddress",
-          "source.fields": ["BusinessEntityID"],
-          "target.fields": ["BusinessEntityID"]
+          "source.fields": [
+            "BusinessEntityID"
+          ],
+          "target.fields": [
+            "BusinessEntityID"
+          ]
+        },
+        "phoneNumbers": {
+          "cardinality": "many",
+          "target.entity": "PersonPhone",
+          "source.fields": [
+            "BusinessEntityID"
+          ],
+          "target.fields": [
+            "BusinessEntityID"
+          ]
+        },
+        "salesCustomer": {
+          "cardinality": "one",
+          "target.entity": "Customer",
+          "source.fields": [
+            "BusinessEntityID"
+          ],
+          "target.fields": [
+            "PersonID"
+          ]
         }
       }
     },
@@ -224,7 +304,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -233,10 +315,20 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["create", "read", "update", "delete"],
+          "actions": [
+            "create",
+            "read",
+            "update",
+            "delete"
+          ],
           "fields": {
-            "include": ["*"],
-            "exclude": ["rowguid", "ModifiedDate"]
+            "include": [
+              "*"
+            ],
+            "exclude": [
+              "rowguid",
+              "ModifiedDate"
+            ]
           }
         }
       ]
@@ -246,7 +338,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -255,7 +349,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -264,7 +360,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -273,7 +371,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -282,20 +382,44 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["create", "read", "update", "delete"],
+          "actions": [
+            "create",
+            "read",
+            "update",
+            "delete"
+          ],
           "fields": {
-            "include": ["*"],
-            "exclude": ["rowguid", "ModifiedDate"]
+            "include": [
+              "*"
+            ],
+            "exclude": [
+              "rowguid",
+              "ModifiedDate"
+            ]
           }
         }
-      ]
+      ],
+      "relationships": {
+        "salesOrderHeaders": {
+          "cardinality": "many",
+          "target.entity": "SalesOrderHeader",
+          "source.fields": [
+            "CustomerID"
+          ],
+          "target.fields": [
+            "CustomerID"
+          ]
+        }
+      }
     },
     "Illustration": {
       "source": "Production.Illustration",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -304,7 +428,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -313,7 +439,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -322,7 +450,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -331,7 +461,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -340,7 +472,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -349,15 +483,21 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "productDescription": {
           "cardinality": "one",
           "target.entity": "ProductDescription",
-          "source.fields": ["ProductDescriptionID"],
-          "target.fields": ["ProductDescriptionID"]
+          "source.fields": [
+            "ProductDescriptionID"
+          ],
+          "target.fields": [
+            "ProductDescriptionID"
+          ]
         }
       }
     },
@@ -365,12 +505,17 @@
       "source": {
         "object": "Production.vProductSearch",
         "type": "view",
-        "key-fields": ["ProductID", "ProductDescriptionID"]
+        "key-fields": [
+          "ProductID",
+          "ProductDescriptionID"
+        ]
       },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["read"]
+          "actions": [
+            "read"
+          ]
         }
       ]
     },
@@ -379,7 +524,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -388,21 +535,31 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "productProductPhotos": {
           "cardinality": "many",
           "target.entity": "ProductProductPhoto",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         },
         "productNames": {
           "cardinality": "many",
           "target.entity": "ProductName",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         }
       }
     },
@@ -411,7 +568,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["read"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -420,7 +579,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -429,7 +590,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -438,7 +601,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -447,7 +612,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -456,7 +623,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -465,27 +634,41 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "salesOrderDetails": {
           "cardinality": "many",
           "target.entity": "SalesOrderDetail",
-          "source.fields": ["SalesOrderID"],
-          "target.fields": ["SalesOrderID"]
+          "source.fields": [
+            "SalesOrderID"
+          ],
+          "target.fields": [
+            "SalesOrderID"
+          ]
         },
         "shipMethod": {
           "cardinality": "one",
           "target.entity": "ShipMethod",
-          "source.fields": ["ShipMethodID"],
-          "target.fields": ["ShipMethodID"]
+          "source.fields": [
+            "ShipMethodID"
+          ],
+          "target.fields": [
+            "ShipMethodID"
+          ]
         },
         "currencyRate": {
           "cardinality": "one",
           "target.entity": "CurrencyRate",
-          "source.fields": ["CurrencyRateID"],
-          "target.fields": ["CurrencyRateID"]
+          "source.fields": [
+            "CurrencyRateID"
+          ],
+          "target.fields": [
+            "CurrencyRateID"
+          ]
         }
       }
     },
@@ -494,21 +677,31 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "salesOrderHeader": {
           "cardinality": "one",
           "target.entity": "SalesOrderHeader",
-          "source.fields": ["SalesOrderID"],
-          "target.fields": ["SalesOrderID"]
+          "source.fields": [
+            "SalesOrderID"
+          ],
+          "target.fields": [
+            "SalesOrderID"
+          ]
         },
         "product": {
           "cardinality": "one",
           "target.entity": "Product",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         }
       }
     },
@@ -517,7 +710,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -526,7 +721,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -535,7 +732,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -544,7 +743,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -553,7 +754,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -562,7 +765,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -571,7 +776,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -580,7 +787,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -589,7 +798,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -598,7 +809,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -607,7 +820,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -616,7 +831,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -625,7 +842,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -634,7 +853,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -643,7 +864,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -652,15 +875,21 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "productPhoto": {
           "cardinality": "one",
           "target.entity": "ProductPhoto",
-          "source.fields": ["ProductPhotoID"],
-          "target.fields": ["ProductPhotoID"]
+          "source.fields": [
+            "ProductPhotoID"
+          ],
+          "target.fields": [
+            "ProductPhotoID"
+          ]
         }
       }
     },
@@ -669,7 +898,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -678,7 +909,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -687,7 +920,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -696,7 +931,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -705,7 +942,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -714,7 +953,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -723,7 +964,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -732,15 +975,21 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "productReviewReplies": {
           "cardinality": "many",
           "target.entity": "ProductReviewReply",
-          "source.fields": ["ProductReviewID"],
-          "target.fields": ["ProductReviewID"]
+          "source.fields": [
+            "ProductReviewID"
+          ],
+          "target.fields": [
+            "ProductReviewID"
+          ]
         }
       }
     },
@@ -749,17 +998,73 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "productReview": {
           "cardinality": "one",
           "target.entity": "ProductReview",
-          "source.fields": ["ProductReviewID"],
-          "target.fields": ["ProductReviewID"]
+          "source.fields": [
+            "ProductReviewID"
+          ],
+          "target.fields": [
+            "ProductReviewID"
+          ]
         }
       }
+    },
+    "BillOfMaterials": {
+      "source": "Production.BillOfMaterials",
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            "*"
+          ]
+        }
+      ],
+      "relationships": {
+        "component": {
+          "cardinality": "one",
+          "target.entity": "Product",
+          "source.fields": [
+            "ComponentID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
+        },
+        "unitMeasure": {
+          "cardinality": "one",
+          "target.entity": "UnitMeasure",
+          "source.fields": [
+            "UnitMeasureCode"
+          ],
+          "target.fields": [
+            "UnitMeasureCode"
+          ]
+        }
+      }
+    },
+    "Employee": {
+      "source": {
+        "object": "HumanResources.vEmployee",
+        "type": "view",
+        "key-fields": [
+          "BusinessEntityID"
+        ]
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": [
+            "read"
+          ]
+        }
+      ]
     }
   }
 }

@@ -26,6 +26,7 @@ import StaleCartsPage from "./pages/StaleCartsPage";
 import SearchPage from "./pages/SearchPage";
 import UtilitiesPage from "./pages/UtilitiesPage";
 import AiFeaturesPage from "./pages/AiFeaturesPage";
+import CustomerStatsPage from "./pages/CustomerStatsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -77,6 +78,7 @@ const App = () => (
                 <Route path="/stale-carts" element={<StaleCartsPage />} />
                 <Route path="/utilities" element={<UtilitiesPage />} />
                 <Route path="/ai-features" element={<AiFeaturesPage />} />
+                <Route path="/customer-stats" element={<CustomerStatsPage />} />
                 <Route path="/search" element={<SearchPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

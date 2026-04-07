@@ -9,7 +9,6 @@ import {
   Phone,
   MapPin,
   Edit2,
-  Save,
   X,
   ChevronDown,
   ChevronUp,
@@ -18,18 +17,27 @@ import {
   ExternalLink,
   Filter,
   BarChart3,
-  Globe,
   Sparkles,
   CheckSquare,
   Square,
+  ArrowUpDown,
+  CreditCard,
+  KeyRound,
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/context/AuthContext";
 import { Customer } from "@/types/customer";
-import { ORDER_STATUS_CONFIG } from "@/types/order";
-import { useAdminCustomers } from "@/hooks/useAdminCustomers";
-import { useAdminOrders } from "@/hooks/useAdminOrders";
+import {
+  useAdminCustomers,
+  useCustomerOrders,
+} from "@/hooks/useAdminCustomers";
+import { useAdminCustomerAddresses } from "@/hooks/useAdminCustomerAddresses";
+import { AdminProfileForm } from "@/components/AdminProfileForm";
+import { AdminAddressForm } from "@/components/AdminAddressForm";
+import { AdminPaymentMethodsPanel } from "@/components/AdminPaymentMethodsPanel";
+import { AdminEmailsPanel } from "@/components/AdminEmailsPanel";
+import { AdminPasswordReset } from "@/components/AdminPasswordReset";
 import { toast } from "sonner";
 import {
   Select,
@@ -38,21 +46,437 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import CustomerStatsDashboard from "@/components/CustomerStatsDashboard";
 import CountryFlag from "@/components/CountryFlag";
-import CustomerCountryMap from "@/components/CustomerCountryMap";
 import { Checkbox } from "@/components/ui/checkbox";
 import BulkAiEmailDialog from "@/components/BulkAiEmailDialog";
+import GenerateCustomerWithAIDialog from "@/components/GenerateCustomerWithAIDialog";
 
+// DB Status codes → display map
+const DB_STATUS_LABELS: Record<
+  number,
+  { label: string; color: string; bg: string; icon: string }
+> = {
+  1: {
+    label: "Processing",
+    color: "text-blue-700",
+    bg: "bg-blue-100",
+    icon: "⚙️",
+  },
+  2: {
+    label: "Approved",
+    color: "text-green-700",
+    bg: "bg-green-100",
+    icon: "✅",
+  },
+  3: {
+    label: "Backordered",
+    color: "text-orange-700",
+    bg: "bg-orange-100",
+    icon: "⏳",
+  },
+  4: { label: "Rejected", color: "text-red-700", bg: "bg-red-100", icon: "❌" },
+  5: {
+    label: "Shipped",
+    color: "text-purple-700",
+    bg: "bg-purple-100",
+    icon: "📦",
+  },
+  6: {
+    label: "Cancelled",
+    color: "text-gray-700",
+    bg: "bg-gray-100",
+    icon: "🚫",
+  },
+};
+
+// ── Edit panel: profile + addresses ──────────────────────────────────────────
+const CustomerEditSection: React.FC<{
+  customer: Customer;
+  onDone: () => void;
+}> = ({ customer, onDone }) => {
+  const [showAddAddress, setShowAddAddress] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
+  const {
+    addresses,
+    isLoading: addressesLoading,
+    addAddress,
+    updateAddress,
+    deleteAddress,
+  } = useAdminCustomerAddresses(customer.CustomerID);
+
+  return (
+    <div className="space-y-8">
+      {/* Profile */}
+      <div>
+        <h4 className="font-doodle font-bold text-doodle-text mb-4 flex items-center gap-2">
+          <User className="w-4 h-4" /> Contact Information
+        </h4>
+        <div className="bg-white border-2 border-doodle-text/10 p-4">
+          <AdminProfileForm
+            businessEntityId={customer.CustomerID}
+            onSaved={() => {
+              toast.success("Profile updated");
+              onDone();
+            }}
+            onCancel={onDone}
+          />
+        </div>
+      </div>
+
+      {/* Addresses */}
+      <div>
+        <h4 className="font-doodle font-bold text-doodle-text mb-4 flex items-center gap-2">
+          <MapPin className="w-4 h-4" /> Addresses
+        </h4>
+
+        {addressesLoading ? (
+          <p className="font-doodle text-sm text-doodle-text/50 animate-pulse">
+            Loading addresses…
+          </p>
+        ) : addresses.length === 0 ? (
+          <p className="font-doodle text-sm text-doodle-text/60 mb-3">
+            No addresses on file.
+          </p>
+        ) : (
+          <div className="space-y-3 mb-4">
+            {addresses.map((addr) =>
+              editingAddressId === addr.id ? (
+                <div
+                  key={addr.id}
+                  className="bg-white border-2 border-doodle-accent/40 p-4"
+                >
+                  <AdminAddressForm
+                    address={addr}
+                    isSaving={isSavingAddress}
+                    onSave={async (updates) => {
+                      setIsSavingAddress(true);
+                      try {
+                        await updateAddress(addr.id, updates);
+                        setEditingAddressId(null);
+                        toast.success("Address updated");
+                      } catch {
+                        toast.error("Failed to update address");
+                      } finally {
+                        setIsSavingAddress(false);
+                      }
+                    }}
+                    onCancel={() => setEditingAddressId(null)}
+                  />
+                </div>
+              ) : (
+                <div
+                  key={addr.id}
+                  className="bg-white border-2 border-doodle-text/10 p-3 flex items-start justify-between gap-4"
+                >
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-doodle text-sm font-bold text-doodle-text">
+                        {addr.addressType}
+                      </span>
+                      {addr.isDefault && (
+                        <span className="px-1.5 py-0.5 text-xs bg-doodle-green/20 text-doodle-green font-doodle border border-doodle-green/40">
+                          Default
+                        </span>
+                      )}
+                    </div>
+                    <p className="font-doodle text-sm text-doodle-text">
+                      {addr.addressLine1}
+                      {addr.addressLine2 ? `, ${addr.addressLine2}` : ""}
+                    </p>
+                    <p className="font-doodle text-sm text-doodle-text/70">
+                      {[addr.city, addr.stateProvinceCode, addr.postalCode]
+                        .filter(Boolean)
+                        .join(", ")}
+                      {addr.countryName ? ` · ${addr.countryName}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setEditingAddressId(addr.id)}
+                      className="p-1.5 text-doodle-text/60 hover:text-doodle-accent transition-colors"
+                      title="Edit address"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!confirm("Delete this address?")) return;
+                        try {
+                          await deleteAddress(addr.id);
+                          toast.success("Address deleted");
+                        } catch {
+                          toast.error("Failed to delete address");
+                        }
+                      }}
+                      className="p-1.5 text-doodle-text/60 hover:text-red-500 transition-colors"
+                      title="Delete address"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ),
+            )}
+          </div>
+        )}
+
+        {showAddAddress ? (
+          <div className="bg-white border-2 border-doodle-accent/40 p-4">
+            <AdminAddressForm
+              isSaving={isSavingAddress}
+              onSave={async (address) => {
+                setIsSavingAddress(true);
+                try {
+                  await addAddress(address);
+                  setShowAddAddress(false);
+                  toast.success("Address added");
+                } catch {
+                  toast.error("Failed to add address");
+                } finally {
+                  setIsSavingAddress(false);
+                }
+              }}
+              onCancel={() => setShowAddAddress(false)}
+            />
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowAddAddress(true)}
+            className="font-doodle text-sm text-doodle-accent border-2 border-dashed border-doodle-accent/40 px-4 py-2 hover:border-doodle-accent hover:bg-doodle-accent/5 transition-colors"
+          >
+            + Add Address
+          </button>
+        )}
+      </div>
+
+      {/* Email Addresses */}
+      <div>
+        <h4 className="font-doodle font-bold text-doodle-text mb-4 flex items-center gap-2">
+          <Mail className="w-4 h-4" /> Email Addresses
+        </h4>
+        <AdminEmailsPanel businessEntityId={customer.CustomerID} />
+      </div>
+
+      {/* Payment Methods */}
+      <div>
+        <h4 className="font-doodle font-bold text-doodle-text mb-4 flex items-center gap-2">
+          <CreditCard className="w-4 h-4" /> Payment Methods
+        </h4>
+        <AdminPaymentMethodsPanel businessEntityId={customer.CustomerID} />
+      </div>
+
+      {/* Password */}
+      <div>
+        <h4 className="font-doodle font-bold text-doodle-text mb-4 flex items-center gap-2">
+          <KeyRound className="w-4 h-4" /> Password
+        </h4>
+        <AdminPasswordReset
+          businessEntityId={customer.CustomerID}
+          customerEmail={customer.EmailAddress}
+        />
+      </div>
+    </div>
+  );
+};
+
+// ── Expanded customer row with per-customer order history ─────────────────────
+const ExpandedCustomerView: React.FC<{
+  customer: Customer;
+  onStartEdit: (c: Customer) => void;
+}> = ({ customer, onStartEdit }) => {
+  const { data: orders = [], isLoading } = useCustomerOrders(
+    customer.SalesCustomerID,
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Contact Info */}
+      <div>
+        <h4 className="font-doodle font-bold text-doodle-text mb-3 flex items-center gap-2">
+          <User className="w-4 h-4" /> Contact Information
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <p className="font-doodle text-sm text-doodle-text/60">Full Name</p>
+            <p className="font-doodle text-doodle-text">
+              {customer.FirstName} {customer.LastName}
+            </p>
+          </div>
+          <div>
+            <p className="font-doodle text-sm text-doodle-text/60">Email</p>
+            <p className="font-doodle text-doodle-text break-all">
+              {customer.EmailAddress || (
+                <span className="italic text-doodle-text/40">—</span>
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="font-doodle text-sm text-doodle-text/60">Phone</p>
+            <p className="font-doodle text-doodle-text">
+              {customer.Phone || (
+                <span className="italic text-doodle-text/40">—</span>
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="font-doodle text-sm text-doodle-text/60">
+              Customer ID
+            </p>
+            <p className="font-doodle text-doodle-text">
+              #{customer.CustomerID}
+              {customer.SalesCustomerID
+                ? ` (Sales #${customer.SalesCustomerID})`
+                : ""}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Address */}
+      <div>
+        <h4 className="font-doodle font-bold text-doodle-text mb-3 flex items-center gap-2">
+          <MapPin className="w-4 h-4" /> Address
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="md:col-span-2">
+            <p className="font-doodle text-sm text-doodle-text/60">Street</p>
+            <p className="font-doodle text-doodle-text">
+              {customer.AddressLine1 || (
+                <span className="italic text-doodle-text/40">—</span>
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="font-doodle text-sm text-doodle-text/60">City</p>
+            <p className="font-doodle text-doodle-text">
+              {customer.City || (
+                <span className="italic text-doodle-text/40">—</span>
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="font-doodle text-sm text-doodle-text/60">
+              State / Province
+            </p>
+            <p className="font-doodle text-doodle-text">
+              {customer.StateProvince || (
+                <span className="italic text-doodle-text/40">—</span>
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="font-doodle text-sm text-doodle-text/60">
+              Postal Code
+            </p>
+            <p className="font-doodle text-doodle-text">
+              {customer.PostalCode || (
+                <span className="italic text-doodle-text/40">—</span>
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="font-doodle text-sm text-doodle-text/60">Country</p>
+            <p className="font-doodle text-doodle-text flex items-center gap-2">
+              <CountryFlag country={customer.Country} />
+              {customer.Country || (
+                <span className="italic text-doodle-text/40">—</span>
+              )}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Order History */}
+      <div>
+        <h4 className="font-doodle font-bold text-doodle-text mb-3 flex items-center gap-2">
+          <ShoppingBag className="w-4 h-4" /> Order History
+        </h4>
+        {customer.SalesCustomerID == null ? (
+          <p className="font-doodle text-doodle-text/60 text-sm">
+            No linked sales account for this person.
+          </p>
+        ) : isLoading ? (
+          <p className="font-doodle text-sm text-doodle-text/50 animate-pulse">
+            Loading orders…
+          </p>
+        ) : orders.length === 0 ? (
+          <p className="font-doodle text-doodle-text/60 text-sm">
+            No orders found for this customer.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {orders.map((order) => {
+              const statusCfg = DB_STATUS_LABELS[order.Status] ?? {
+                label: `Status ${order.Status}`,
+                color: "text-gray-700",
+                bg: "bg-gray-100",
+                icon: "❓",
+              };
+              return (
+                <Link
+                  key={order.SalesOrderID}
+                  to={`/orders?orderId=${order.SalesOrderID}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="block p-3 border-2 border-doodle-text/20 bg-white hover:border-doodle-accent transition-colors"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <span className="font-doodle font-bold text-doodle-text">
+                        #{order.SalesOrderID}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 text-xs font-doodle ${statusCfg.bg} ${statusCfg.color}`}
+                      >
+                        {statusCfg.icon} {statusCfg.label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="font-doodle text-sm text-doodle-text/60">
+                        {new Date(order.OrderDate).toLocaleDateString()}
+                      </span>
+                      <span className="font-doodle font-bold text-doodle-green">
+                        ${order.TotalDue.toFixed(2)}
+                      </span>
+                      <ExternalLink className="w-4 h-4 text-doodle-accent" />
+                    </div>
+                  </div>
+                  {order.OrderItems.length > 0 && (
+                    <p className="font-doodle text-xs text-doodle-text/50 mt-1">
+                      {order.OrderItems.length} item
+                      {order.OrderItems.length !== 1 ? "s" : ""}:{" "}
+                      {order.OrderItems.map((i) => i.ProductName).join(", ")}
+                    </p>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onStartEdit(customer);
+        }}
+        className="doodle-btn flex items-center gap-2"
+      >
+        <Edit2 className="w-4 h-4" /> Edit Customer
+      </button>
+    </div>
+  );
+};
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 const CustomersPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
   const [dabCursor, setDabCursor] = useState<string | null>(null);
   const [cursorStack, setCursorStack] = useState<string[]>([]);
   const { data: apiData, isLoading: customersLoading } =
     useAdminCustomers(dabCursor);
-  const { data: ordersData } = useAdminOrders();
   const apiCustomers = React.useMemo(() => apiData?.items ?? [], [apiData]);
-  const apiOrders = React.useMemo(() => ordersData?.items ?? [], [ordersData]);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [cityFilter, setCityFilter] = useState("all");
   const [stateFilter, setStateFilter] = useState("all");
@@ -66,12 +490,11 @@ const CustomersPage: React.FC = () => {
     null,
   );
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [editForm, setEditForm] = useState<Partial<Customer>>({});
-  const [showStats, setShowStats] = useState(true);
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<Set<number>>(
     new Set(),
   );
   const [bulkEmailDialogOpen, setBulkEmailDialogOpen] = useState(false);
+  const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const itemsPerPage = 10;
 
   // Populate customers from API when loaded; reset local display page on DAB cursor change
@@ -82,7 +505,7 @@ const CustomersPage: React.FC = () => {
     }
   }, [apiData]);
 
-  // Extract unique cities and states for filter options
+  // Extract unique filter values from the loaded batch
   const uniqueCities = useMemo(
     () => [...new Set(customers.map((c) => c.City).filter(Boolean))].sort(),
     [customers],
@@ -102,21 +525,19 @@ const CustomersPage: React.FC = () => {
   const spentRanges = [
     { value: "all", label: "All Amounts" },
     { value: "0-1000", label: "Under $1,000" },
-    { value: "1000-5000", label: "$1,000 - $5,000" },
-    { value: "5000-10000", label: "$5,000 - $10,000" },
+    { value: "1000-5000", label: "$1,000 – $5,000" },
+    { value: "5000-10000", label: "$5,000 – $10,000" },
     { value: "10000+", label: "Over $10,000" },
   ];
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
   const filteredCustomers = customers.filter((c) => {
     const matchesSearch =
+      searchQuery === "" ||
       c.FirstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.LastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.EmailAddress.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.Country.toLowerCase().includes(searchQuery.toLowerCase());
+      c.Country.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.City.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesCity = cityFilter === "all" || c.City === cityFilter;
     const matchesState =
@@ -124,13 +545,17 @@ const CustomersPage: React.FC = () => {
     const matchesCountry =
       countryFilter === "all" || c.Country === countryFilter;
 
+    // "All Amounts" always includes everyone (including customers with no orders).
+    // Sub-ranges only filter customers who HAVE orders; customers with no orders always pass.
     let matchesSpent = true;
-    if (spentFilter === "0-1000") matchesSpent = c.TotalSpent < 1000;
-    else if (spentFilter === "1000-5000")
-      matchesSpent = c.TotalSpent >= 1000 && c.TotalSpent < 5000;
-    else if (spentFilter === "5000-10000")
-      matchesSpent = c.TotalSpent >= 5000 && c.TotalSpent < 10000;
-    else if (spentFilter === "10000+") matchesSpent = c.TotalSpent >= 10000;
+    if (spentFilter !== "all" && c.TotalSpent > 0) {
+      if (spentFilter === "0-1000") matchesSpent = c.TotalSpent < 1000;
+      else if (spentFilter === "1000-5000")
+        matchesSpent = c.TotalSpent >= 1000 && c.TotalSpent < 5000;
+      else if (spentFilter === "5000-10000")
+        matchesSpent = c.TotalSpent >= 5000 && c.TotalSpent < 10000;
+      else if (spentFilter === "10000+") matchesSpent = c.TotalSpent >= 10000;
+    }
 
     return (
       matchesSearch &&
@@ -141,12 +566,22 @@ const CustomersPage: React.FC = () => {
     );
   });
 
+  // Sort by TotalSpent descending (customers who spent most first)
+  const sortedCustomers = useMemo(
+    () => [...filteredCustomers].sort((a, b) => b.TotalSpent - a.TotalSpent),
+    [filteredCustomers],
+  );
+
   const activeFiltersCount = [
     cityFilter,
     stateFilter,
     countryFilter,
     spentFilter,
   ].filter((f) => f !== "all").length;
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
 
   const clearAllFilters = () => {
     setCityFilter("all");
@@ -157,9 +592,9 @@ const CustomersPage: React.FC = () => {
     setCurrentPage(1);
   };
 
-  const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage);
+  const totalPages = Math.ceil(sortedCustomers.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedCustomers = filteredCustomers.slice(
+  const paginatedCustomers = sortedCustomers.slice(
     startIndex,
     startIndex + itemsPerPage,
   );
@@ -176,48 +611,18 @@ const CustomersPage: React.FC = () => {
 
   const handleStartEdit = (customer: Customer) => {
     setEditingCustomerId(customer.CustomerID);
-    setEditForm({
-      FirstName: customer.FirstName,
-      LastName: customer.LastName,
-      EmailAddress: customer.EmailAddress,
-      Phone: customer.Phone,
-      AddressLine1: customer.AddressLine1,
-      City: customer.City,
-      StateProvince: customer.StateProvince,
-      PostalCode: customer.PostalCode,
-      Country: customer.Country,
-    });
   };
 
   const handleCancelEdit = () => {
     setEditingCustomerId(null);
-    setEditForm({});
-  };
-
-  const handleSaveEdit = (customerId: number) => {
-    setCustomers((prev) =>
-      prev.map((c) =>
-        c.CustomerID === customerId ? { ...c, ...editForm } : c,
-      ),
-    );
-    setEditingCustomerId(null);
-    setEditForm({});
-    toast.success("Customer updated successfully");
-  };
-
-  const handleFormChange = (field: keyof Customer, value: string) => {
-    setEditForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const toggleCustomerSelection = (e: React.MouseEvent, customerId: number) => {
     e.stopPropagation();
     setSelectedCustomerIds((prev) => {
       const newSet = new Set(prev);
-      if (newSet.has(customerId)) {
-        newSet.delete(customerId);
-      } else {
-        newSet.add(customerId);
-      }
+      if (newSet.has(customerId)) newSet.delete(customerId);
+      else newSet.add(customerId);
       return newSet;
     });
   };
@@ -247,22 +652,28 @@ const CustomersPage: React.FC = () => {
       <main className="flex-1 pt-4">
         <section className="container mx-auto px-4 pb-8">
           <div className="doodle-card p-6">
+            {/* Header row */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
               <h1 className="font-doodle text-3xl font-bold text-doodle-text">
                 Customer Management
               </h1>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Generate with AI */}
                 <button
-                  onClick={() => setShowStats(!showStats)}
-                  className={`inline-flex items-center gap-2 px-3 py-1.5 font-doodle text-sm border-2 rounded transition-colors ${
-                    showStats
-                      ? "bg-doodle-accent text-white border-doodle-text"
-                      : "text-doodle-text border-doodle-text hover:bg-doodle-accent/10"
-                  }`}
+                  onClick={() => setGenerateDialogOpen(true)}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 font-doodle text-sm bg-doodle-accent text-white border-2 border-doodle-text rounded transition-colors hover:bg-doodle-accent/90"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Generate with AI
+                </button>
+                {/* Stats link */}
+                <Link
+                  to="/customer-stats"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 font-doodle text-sm text-doodle-text border-2 border-doodle-text rounded hover:bg-doodle-accent/10 transition-colors"
                 >
                   <BarChart3 className="w-4 h-4" />
-                  {showStats ? "Hide Stats" : "Show Stats"}
-                </button>
+                  View Statistics
+                </Link>
                 {activeFiltersCount > 0 && (
                   <button
                     onClick={clearAllFilters}
@@ -270,12 +681,13 @@ const CustomersPage: React.FC = () => {
                   >
                     <X className="w-4 h-4" />
                     Clear {activeFiltersCount} filter
-                    {activeFiltersCount > 1 ? "s" : ""}
+                    {activeFiltersCount !== 1 ? "s" : ""}
                   </button>
                 )}
               </div>
             </div>
 
+            {/* Search */}
             <div className="flex flex-col lg:flex-row gap-4">
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-doodle-text/50" />
@@ -286,11 +698,12 @@ const CustomersPage: React.FC = () => {
                     setSearchQuery(e.target.value);
                     setCurrentPage(1);
                   }}
-                  placeholder="Search customers..."
+                  placeholder="Search by name, email, city or country…"
                   className="w-full pl-10 pr-4 py-2 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
                 />
               </div>
 
+              {/* Filters */}
               <div className="flex flex-wrap gap-3 items-center">
                 <div className="flex items-center gap-2">
                   <Filter className="w-4 h-4 text-doodle-text/60" />
@@ -404,18 +817,18 @@ const CustomersPage: React.FC = () => {
               </div>
             </div>
 
-            <p className="font-doodle text-sm text-doodle-text/60 mt-4">
-              Showing {filteredCustomers.length} customer
-              {filteredCustomers.length !== 1 ? "s" : ""}
-            </p>
+            <div className="flex items-center gap-4 mt-4">
+              <p className="font-doodle text-sm text-doodle-text/60">
+                Showing {filteredCustomers.length} customer
+                {filteredCustomers.length !== 1 ? "s" : ""}
+                {customersLoading && " (loading…)"}
+              </p>
+              <span className="font-doodle text-xs text-doodle-text/40 flex items-center gap-1">
+                <ArrowUpDown className="w-3 h-3" /> Sorted by highest spend
+              </span>
+            </div>
           </div>
         </section>
-
-        {showStats && (
-          <CustomerStatsDashboard customers={customers} orders={apiOrders} />
-        )}
-
-        {showStats && <CustomerCountryMap customers={customers} />}
 
         <section className="container mx-auto px-4 pb-12">
           {/* Bulk Actions Bar */}
@@ -447,424 +860,124 @@ const CustomersPage: React.FC = () => {
             )}
           </div>
 
+          {/* Customer list */}
           <div className="space-y-4">
-            {paginatedCustomers.map((customer) => {
-              const isExpanded = expandedCustomerId === customer.CustomerID;
-              const isEditing = editingCustomerId === customer.CustomerID;
-              const isSelected = selectedCustomerIds.has(customer.CustomerID);
+            {customersLoading && customers.length === 0 ? (
+              [...Array(5)].map((_, i) => (
+                <div key={i} className="doodle-card p-4 animate-pulse">
+                  <div className="h-5 bg-doodle-text/10 rounded w-1/3 mb-2" />
+                  <div className="h-4 bg-doodle-text/10 rounded w-1/2" />
+                </div>
+              ))
+            ) : paginatedCustomers.length === 0 ? (
+              <div className="doodle-card p-8 text-center">
+                <p className="font-doodle text-doodle-text/60">
+                  No customers match your filters.
+                </p>
+              </div>
+            ) : (
+              paginatedCustomers.map((customer) => {
+                const isExpanded = expandedCustomerId === customer.CustomerID;
+                const isEditing = editingCustomerId === customer.CustomerID;
+                const isSelected = selectedCustomerIds.has(customer.CustomerID);
 
-              return (
-                <div
-                  key={customer.CustomerID}
-                  className={`doodle-card overflow-hidden transition-all ${isSelected ? "ring-2 ring-doodle-accent" : ""}`}
-                >
+                return (
                   <div
-                    className="p-4 cursor-pointer hover:bg-doodle-accent/5 transition-colors"
-                    onClick={() => handleToggleExpand(customer.CustomerID)}
+                    key={customer.CustomerID}
+                    className={`doodle-card overflow-hidden transition-all ${isSelected ? "ring-2 ring-doodle-accent" : ""}`}
                   >
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="flex items-start gap-3">
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => {}}
-                          onClick={(e) =>
-                            toggleCustomerSelection(e, customer.CustomerID)
-                          }
-                          className="mt-1"
-                        />
-                        <div>
-                          <h3 className="font-doodle text-lg font-bold text-doodle-text flex items-center gap-2">
-                            <User className="w-5 h-5" />
-                            {customer.FirstName} {customer.LastName}
-                          </h3>
-                          <div className="flex flex-wrap gap-4 mt-2 text-sm">
-                            <span className="font-doodle text-doodle-text/70 flex items-center gap-1">
-                              <Mail className="w-4 h-4" />{" "}
-                              {customer.EmailAddress}
-                            </span>
-                            <span className="font-doodle text-doodle-text/70 flex items-center gap-1">
-                              <Phone className="w-4 h-4" /> {customer.Phone}
-                            </span>
-                            <span className="font-doodle text-doodle-text/70 flex items-center gap-1">
-                              <MapPin className="w-4 h-4" /> {customer.City},{" "}
-                              {customer.StateProvince}
-                            </span>
-                            <span className="font-doodle text-doodle-text/70 flex items-center gap-1">
-                              <CountryFlag country={customer.Country} />{" "}
-                              {customer.Country}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <p className="font-doodle text-sm text-doodle-text/60">
-                            {customer.TotalOrders} orders
-                          </p>
-                          <p className="font-doodle font-bold text-doodle-green">
-                            ${customer.TotalSpent.toFixed(2)}
-                          </p>
-                        </div>
-                        {isExpanded ? (
-                          <ChevronUp className="w-5 h-5 text-doodle-text/50" />
-                        ) : (
-                          <ChevronDown className="w-5 h-5 text-doodle-text/50" />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="border-t-2 border-doodle-text/10 p-4 bg-doodle-accent/5">
-                      {isEditing ? (
-                        <div className="space-y-6">
+                    <div
+                      className="p-4 cursor-pointer hover:bg-doodle-accent/5 transition-colors"
+                      onClick={() => handleToggleExpand(customer.CustomerID)}
+                    >
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => {}}
+                            onClick={(e) =>
+                              toggleCustomerSelection(e, customer.CustomerID)
+                            }
+                            className="mt-1"
+                          />
                           <div>
-                            <h4 className="font-doodle font-bold text-doodle-text mb-3 flex items-center gap-2">
-                              <User className="w-4 h-4" /> Contact Information
-                            </h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <label className="font-doodle text-sm text-doodle-text/70 block mb-1">
-                                  First Name
-                                </label>
-                                <input
-                                  type="text"
-                                  value={editForm.FirstName || ""}
-                                  onChange={(e) =>
-                                    handleFormChange(
-                                      "FirstName",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="w-full px-3 py-2 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
-                                />
-                              </div>
-                              <div>
-                                <label className="font-doodle text-sm text-doodle-text/70 block mb-1">
-                                  Last Name
-                                </label>
-                                <input
-                                  type="text"
-                                  value={editForm.LastName || ""}
-                                  onChange={(e) =>
-                                    handleFormChange("LastName", e.target.value)
-                                  }
-                                  className="w-full px-3 py-2 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
-                                />
-                              </div>
-                              <div>
-                                <label className="font-doodle text-sm text-doodle-text/70 block mb-1">
-                                  Email Address
-                                </label>
-                                <input
-                                  type="email"
-                                  value={editForm.EmailAddress || ""}
-                                  onChange={(e) =>
-                                    handleFormChange(
-                                      "EmailAddress",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="w-full px-3 py-2 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
-                                />
-                              </div>
-                              <div>
-                                <label className="font-doodle text-sm text-doodle-text/70 block mb-1">
-                                  Phone
-                                </label>
-                                <input
-                                  type="tel"
-                                  value={editForm.Phone || ""}
-                                  onChange={(e) =>
-                                    handleFormChange("Phone", e.target.value)
-                                  }
-                                  className="w-full px-3 py-2 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          <div>
-                            <h4 className="font-doodle font-bold text-doodle-text mb-3 flex items-center gap-2">
-                              <MapPin className="w-4 h-4" /> Address Information
-                            </h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div className="md:col-span-2">
-                                <label className="font-doodle text-sm text-doodle-text/70 block mb-1">
-                                  Street Address
-                                </label>
-                                <input
-                                  type="text"
-                                  value={editForm.AddressLine1 || ""}
-                                  onChange={(e) =>
-                                    handleFormChange(
-                                      "AddressLine1",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="w-full px-3 py-2 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
-                                />
-                              </div>
-                              <div>
-                                <label className="font-doodle text-sm text-doodle-text/70 block mb-1">
-                                  City
-                                </label>
-                                <input
-                                  type="text"
-                                  value={editForm.City || ""}
-                                  onChange={(e) =>
-                                    handleFormChange("City", e.target.value)
-                                  }
-                                  className="w-full px-3 py-2 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
-                                />
-                              </div>
-                              <div>
-                                <label className="font-doodle text-sm text-doodle-text/70 block mb-1">
-                                  State/Province
-                                </label>
-                                <input
-                                  type="text"
-                                  value={editForm.StateProvince || ""}
-                                  onChange={(e) =>
-                                    handleFormChange(
-                                      "StateProvince",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="w-full px-3 py-2 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
-                                />
-                              </div>
-                              <div>
-                                <label className="font-doodle text-sm text-doodle-text/70 block mb-1">
-                                  Postal Code
-                                </label>
-                                <input
-                                  type="text"
-                                  value={editForm.PostalCode || ""}
-                                  onChange={(e) =>
-                                    handleFormChange(
-                                      "PostalCode",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="w-full px-3 py-2 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
-                                />
-                              </div>
-                              <div>
-                                <label className="font-doodle text-sm text-doodle-text/70 block mb-1">
-                                  Country
-                                </label>
-                                <input
-                                  type="text"
-                                  value={editForm.Country || ""}
-                                  onChange={(e) =>
-                                    handleFormChange("Country", e.target.value)
-                                  }
-                                  className="w-full px-3 py-2 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex gap-2 pt-2">
-                            <button
-                              onClick={() =>
-                                handleSaveEdit(customer.CustomerID)
-                              }
-                              className="doodle-btn flex items-center gap-2"
-                            >
-                              <Save className="w-4 h-4" /> Save Changes
-                            </button>
-                            <button
-                              onClick={handleCancelEdit}
-                              className="px-4 py-2 font-doodle border-2 border-doodle-text hover:bg-doodle-text/10 transition-colors flex items-center gap-2"
-                            >
-                              <X className="w-4 h-4" /> Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-6">
-                          <div>
-                            <h4 className="font-doodle font-bold text-doodle-text mb-3 flex items-center gap-2">
-                              <User className="w-4 h-4" /> Contact Information
-                            </h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <p className="font-doodle text-sm text-doodle-text/60">
-                                  Full Name
-                                </p>
-                                <p className="font-doodle text-doodle-text">
-                                  {customer.FirstName} {customer.LastName}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="font-doodle text-sm text-doodle-text/60">
-                                  Email
-                                </p>
-                                <p className="font-doodle text-doodle-text">
+                            <h3 className="font-doodle text-lg font-bold text-doodle-text flex items-center gap-2">
+                              <User className="w-5 h-5" />
+                              {customer.FirstName} {customer.LastName}
+                            </h3>
+                            <div className="flex flex-wrap gap-4 mt-2 text-sm">
+                              {customer.EmailAddress && (
+                                <span className="font-doodle text-doodle-text/70 flex items-center gap-1">
+                                  <Mail className="w-4 h-4" />{" "}
                                   {customer.EmailAddress}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="font-doodle text-sm text-doodle-text/60">
-                                  Phone
-                                </p>
-                                <p className="font-doodle text-doodle-text">
-                                  {customer.Phone}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="font-doodle text-sm text-doodle-text/60">
-                                  Customer Since
-                                </p>
-                                <p className="font-doodle text-doodle-text">
-                                  {new Date(
-                                    customer.CreatedAt,
-                                  ).toLocaleDateString()}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div>
-                            <h4 className="font-doodle font-bold text-doodle-text mb-3 flex items-center gap-2">
-                              <MapPin className="w-4 h-4" /> Address Information
-                            </h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div className="md:col-span-2">
-                                <p className="font-doodle text-sm text-doodle-text/60">
-                                  Street Address
-                                </p>
-                                <p className="font-doodle text-doodle-text">
-                                  {customer.AddressLine1}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="font-doodle text-sm text-doodle-text/60">
-                                  City
-                                </p>
-                                <p className="font-doodle text-doodle-text">
-                                  {customer.City}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="font-doodle text-sm text-doodle-text/60">
-                                  State/Province
-                                </p>
-                                <p className="font-doodle text-doodle-text">
-                                  {customer.StateProvince}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="font-doodle text-sm text-doodle-text/60">
-                                  Postal Code
-                                </p>
-                                <p className="font-doodle text-doodle-text">
-                                  {customer.PostalCode}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="font-doodle text-sm text-doodle-text/60">
-                                  Country
-                                </p>
-                                <p className="font-doodle text-doodle-text flex items-center gap-2">
+                                </span>
+                              )}
+                              {customer.Phone && (
+                                <span className="font-doodle text-doodle-text/70 flex items-center gap-1">
+                                  <Phone className="w-4 h-4" /> {customer.Phone}
+                                </span>
+                              )}
+                              {(customer.City || customer.StateProvince) && (
+                                <span className="font-doodle text-doodle-text/70 flex items-center gap-1">
+                                  <MapPin className="w-4 h-4" />
+                                  {[customer.City, customer.StateProvince]
+                                    .filter(Boolean)
+                                    .join(", ")}
+                                </span>
+                              )}
+                              {customer.Country && (
+                                <span className="font-doodle text-doodle-text/70 flex items-center gap-1">
                                   <CountryFlag country={customer.Country} />{" "}
                                   {customer.Country}
-                                </p>
-                              </div>
+                                </span>
+                              )}
                             </div>
                           </div>
-
-                          {/* Order History Section */}
-                          <div>
-                            <h4 className="font-doodle font-bold text-doodle-text mb-3 flex items-center gap-2">
-                              <ShoppingBag className="w-4 h-4" /> Order History
-                            </h4>
-                            {(() => {
-                              const customerOrders = mockOrders.filter(
-                                (o) => o.CustomerID === customer.CustomerID,
-                              );
-                              if (customerOrders.length === 0) {
-                                return (
-                                  <p className="font-doodle text-doodle-text/60 text-sm">
-                                    No orders found for this customer.
-                                  </p>
-                                );
-                              }
-                              return (
-                                <div className="space-y-2">
-                                  {customerOrders.map((order) => {
-                                    const statusConfig =
-                                      ORDER_STATUS_CONFIG[order.Status];
-                                    return (
-                                      <Link
-                                        key={order.SalesOrderID}
-                                        to={`/orders?orderId=${order.SalesOrderID}`}
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="block p-3 border-2 border-doodle-text/20 bg-white hover:border-doodle-accent transition-colors"
-                                      >
-                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                          <div className="flex items-center gap-3">
-                                            <span className="font-doodle font-bold text-doodle-text">
-                                              #{order.SalesOrderID}
-                                            </span>
-                                            <span
-                                              className={`px-2 py-0.5 text-xs font-doodle ${statusConfig.bgColor} ${statusConfig.color}`}
-                                            >
-                                              {statusConfig.icon}{" "}
-                                              {statusConfig.label}
-                                            </span>
-                                          </div>
-                                          <div className="flex items-center gap-4">
-                                            <span className="font-doodle text-sm text-doodle-text/60">
-                                              {new Date(
-                                                order.OrderDate,
-                                              ).toLocaleDateString()}
-                                            </span>
-                                            <span className="font-doodle font-bold text-doodle-green">
-                                              ${order.TotalDue.toFixed(2)}
-                                            </span>
-                                            <ExternalLink className="w-4 h-4 text-doodle-accent" />
-                                          </div>
-                                        </div>
-                                        <p className="font-doodle text-xs text-doodle-text/50 mt-1">
-                                          {order.OrderItems.length} item
-                                          {order.OrderItems.length !== 1
-                                            ? "s"
-                                            : ""}
-                                          :{" "}
-                                          {order.OrderItems.map(
-                                            (i) => i.ProductName,
-                                          ).join(", ")}
-                                        </p>
-                                      </Link>
-                                    );
-                                  })}
-                                </div>
-                              );
-                            })()}
-                          </div>
-
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStartEdit(customer);
-                            }}
-                            className="doodle-btn flex items-center gap-2"
-                          >
-                            <Edit2 className="w-4 h-4" /> Edit Customer
-                          </button>
                         </div>
-                      )}
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <p className="font-doodle text-sm text-doodle-text/60">
+                              {customer.TotalOrders > 0
+                                ? `${customer.TotalOrders} orders`
+                                : "No orders"}
+                            </p>
+                            {customer.TotalSpent > 0 && (
+                              <p className="font-doodle font-bold text-doodle-green">
+                                ${customer.TotalSpent.toFixed(2)}
+                              </p>
+                            )}
+                          </div>
+                          {isExpanded ? (
+                            <ChevronUp className="w-5 h-5 text-doodle-text/50" />
+                          ) : (
+                            <ChevronDown className="w-5 h-5 text-doodle-text/50" />
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </div>
-              );
-            })}
+
+                    {isExpanded && (
+                      <div className="border-t-2 border-doodle-text/10 p-4 bg-doodle-accent/5">
+                        {isEditing ? (
+                          <CustomerEditSection
+                            customer={customer}
+                            onDone={handleCancelEdit}
+                          />
+                        ) : (
+                          <ExpandedCustomerView
+                            customer={customer}
+                            onStartEdit={handleStartEdit}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
 
-          {/* DAB page navigation — each page is up to 100 customers */}
+          {/* DAB batch navigation */}
           {(cursorStack.length > 0 || apiData?.hasNextPage) && (
             <div className="doodle-card p-4 mt-6 flex items-center justify-between">
               <button
@@ -875,7 +988,6 @@ const CustomersPage: React.FC = () => {
                 }}
                 disabled={cursorStack.length === 0}
                 className="inline-flex items-center gap-1 p-2 font-doodle text-sm disabled:opacity-40"
-                aria-label="Previous 100"
               >
                 <ChevronLeft className="w-5 h-5" /> Previous 100
               </button>
@@ -889,13 +1001,13 @@ const CustomersPage: React.FC = () => {
                 }}
                 disabled={!apiData?.hasNextPage}
                 className="inline-flex items-center gap-1 p-2 font-doodle text-sm disabled:opacity-40"
-                aria-label="Next 100"
               >
                 Next 100 <ChevronRight className="w-5 h-5" />
               </button>
             </div>
           )}
 
+          {/* Local page navigation within batch */}
           {totalPages > 1 && (
             <div className="doodle-card p-4 mt-6 flex items-center justify-center gap-2">
               <button
@@ -928,6 +1040,16 @@ const CustomersPage: React.FC = () => {
         onOpenChange={setBulkEmailDialogOpen}
         selectedCustomers={selectedCustomers}
         onComplete={handleBulkEmailComplete}
+      />
+
+      <GenerateCustomerWithAIDialog
+        open={generateDialogOpen}
+        onOpenChange={setGenerateDialogOpen}
+        onCustomerGenerated={() => {
+          toast.success(
+            "New AI customer generated! Refresh to see them in the list.",
+          );
+        }}
       />
     </div>
   );

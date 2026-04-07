@@ -1,5 +1,7 @@
 export interface Customer {
   CustomerID: number;
+  /** Sales.Customer.CustomerID — null if no Sales.Customer record for this person */
+  SalesCustomerID: number | null;
   FirstName: string;
   LastName: string;
   EmailAddress: string;

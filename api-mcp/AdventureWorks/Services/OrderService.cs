@@ -329,4 +329,63 @@ public class OrderService
 
         return result.ToString();
     }
+
+    /// <summary>
+    /// Search existing customers by first/last name fragment, returning basic profile info
+    /// and a short order history summary. Used by the AI order generation wizard.
+    /// </summary>
+    public async Task<string> SearchCustomersAsync(string? nameFilter = null, int limit = 20)
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = @"
+            SELECT TOP (@Limit)
+                cust.CustomerID,
+                p.FirstName,
+                p.LastName,
+                p.Suffix,
+                ea.EmailAddress,
+                addr.City,
+                sp.StateProvinceCode,
+                cr.Name AS Country,
+                COUNT(DISTINCT soh.SalesOrderID) AS OrderCount,
+                MAX(soh.OrderDate) AS LastOrderDate,
+                ISNULL(SUM(soh.TotalDue), 0) AS TotalSpend
+            FROM Sales.Customer cust
+            INNER JOIN Person.Person p ON cust.PersonID = p.BusinessEntityID
+            LEFT JOIN Person.EmailAddress ea ON p.BusinessEntityID = ea.BusinessEntityID
+            LEFT JOIN Person.BusinessEntityAddress bea ON p.BusinessEntityID = bea.BusinessEntityID AND bea.AddressTypeID = 2
+            LEFT JOIN Person.Address addr ON bea.AddressID = addr.AddressID
+            LEFT JOIN Person.StateProvince sp ON addr.StateProvinceID = sp.StateProvinceID
+            LEFT JOIN Person.CountryRegion cr ON sp.CountryRegionCode = cr.CountryRegionCode
+            LEFT JOIN Sales.SalesOrderHeader soh ON cust.CustomerID = soh.CustomerID
+            WHERE (@NameFilter IS NULL
+                   OR p.FirstName LIKE '%' + @NameFilter + '%'
+                   OR p.LastName LIKE '%' + @NameFilter + '%')
+            GROUP BY cust.CustomerID, p.FirstName, p.LastName, p.Suffix,
+                     ea.EmailAddress, addr.City, sp.StateProvinceCode, cr.Name
+            ORDER BY LastOrderDate DESC, cust.CustomerID";
+
+        var rows = await connection.QueryAsync(sql, new { Limit = limit, NameFilter = nameFilter });
+
+        if (!rows.Any())
+            return "No customers found matching the search criteria.";
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"Customers (up to {limit} results{(nameFilter != null ? $", filter: '{nameFilter}'" : "")}):");
+        sb.AppendLine();
+
+        foreach (var row in rows)
+        {
+            var location = new List<string?> { (string?)row.City, (string?)row.StateProvinceCode, (string?)row.Country }
+                .Where(s => !string.IsNullOrEmpty(s));
+            sb.AppendLine($"CustomerID={row.CustomerID}: {row.FirstName} {row.LastName}");
+            sb.AppendLine($"  Email: {row.EmailAddress ?? "(none)"}");
+            sb.AppendLine($"  Location: {string.Join(", ", location.Any() ? location : new[] { "Unknown" })}");
+            sb.AppendLine($"  Orders: {row.OrderCount} | Total Spend: ${row.TotalSpend:N2} | Last Order: {(row.LastOrderDate != null ? ((DateTime)row.LastOrderDate).ToString("yyyy-MM-dd") : "never")}");
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
 }

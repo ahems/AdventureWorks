@@ -155,6 +155,36 @@ builder.Services.AddScoped<PromotionAgentService>(sp =>
         telemetryClient);
 });
 
+// Register OrderGenerationService for SQL write operations during AI order generation
+builder.Services.AddScoped<OrderGenerationService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new OrderGenerationService(connectionString, sp.GetRequiredService<ILogger<OrderGenerationService>>());
+});
+
+// Register OrderGenerationAgentService: AI+MCP orchestration for order generation wizard
+builder.Services.AddScoped<OrderGenerationAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<OrderGenerationAgentService>>();
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+    var orderGenService = sp.GetRequiredService<OrderGenerationService>();
+    var receiptService = sp.GetRequiredService<ReceiptService>();
+    var pdfGenerator = sp.GetRequiredService<PdfReceiptGenerator>();
+
+    return new OrderGenerationAgentService(
+        logger,
+        configuration,
+        httpClientFactory,
+        telemetryClient,
+        orderGenService,
+        receiptService,
+        pdfGenerator);
+});
+
 // Register AIService with Azure OpenAI endpoint
 builder.Services.AddScoped<AIService>(sp =>
 {

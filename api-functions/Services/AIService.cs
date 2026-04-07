@@ -421,6 +421,35 @@ Translate the description into each target language. Return ONLY a valid JSON ob
         }
     }
 
+    public async Task<List<ProductNameEmbedding>> GenerateProductNameEmbeddingsAsync(List<ProductNameEmbeddingData> names)
+    {
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var embeddingClient = client.GetEmbeddingClient(_embeddingDeploymentName);
+
+        var embeddings = new List<ProductNameEmbedding>();
+
+        foreach (var item in names)
+        {
+            try
+            {
+                var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(item.Name);
+                embeddings.Add(new ProductNameEmbedding
+                {
+                    ProductID = item.ProductID,
+                    CultureID = item.CultureID,
+                    Embedding = embeddingResponse.Value.ToFloats().ToArray()
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to generate embedding for ProductID={pid} CultureID={cid}", item.ProductID, item.CultureID);
+            }
+        }
+
+        return embeddings;
+    }
+
     /// <summary>
     /// Builds enriched text for embedding generation that includes product variants.
     /// This allows semantic search to match queries like "red bike" or "large helmet".

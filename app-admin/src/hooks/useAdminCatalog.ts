@@ -256,6 +256,10 @@ const GET_LOCALIZATIONS_FOR_CULTURE = gql`
         ProductDescriptionID
         CultureID
         ModifiedDate
+        productDescription {
+          ProductDescriptionID
+          Description
+        }
       }
     }
   }
@@ -266,6 +270,10 @@ export interface LocalizationLink {
   ProductDescriptionID: number;
   CultureID: string;
   ModifiedDate: string;
+  productDescription?: {
+    ProductDescriptionID: number;
+    Description: string;
+  };
 }
 
 export const useAdminLocalizationsForCulture = (cultureId: string | null) =>
@@ -461,6 +469,149 @@ export const useUpdateProductDescription = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["admin", "productDescriptions"],
+      });
+    },
+  });
+};
+
+// ─── Product Name Translations (ProductName) ──────────────────────────────────
+
+const GET_PRODUCT_NAMES_FOR_CULTURE = gql`
+  query GetProductNamesForCulture($cultureId: String!) {
+    productNames(
+      first: 1000
+      filter: { CultureID: { eq: $cultureId } }
+      orderBy: { Name: ASC }
+    ) {
+      items {
+        ProductID
+        CultureID
+        Name
+        ModifiedDate
+      }
+    }
+  }
+`;
+
+const CREATE_PRODUCT_NAME = gql`
+  mutation CreateProductName(
+    $productId: Int!
+    $cultureId: String!
+    $name: String!
+    $modifiedDate: String!
+  ) {
+    createProductName(
+      item: {
+        ProductID: $productId
+        CultureID: $cultureId
+        Name: $name
+        ModifiedDate: $modifiedDate
+      }
+    ) {
+      ProductID
+      CultureID
+      Name
+    }
+  }
+`;
+
+const UPDATE_PRODUCT_NAME = gql`
+  mutation UpdateProductName(
+    $productId: Int!
+    $cultureId: String!
+    $name: String!
+    $modifiedDate: String!
+  ) {
+    updateProductName(
+      ProductID: $productId
+      CultureID: $cultureId
+      item: { Name: $name, ModifiedDate: $modifiedDate }
+    ) {
+      ProductID
+      CultureID
+      Name
+    }
+  }
+`;
+
+const DELETE_PRODUCT_NAME = gql`
+  mutation DeleteProductName($productId: Int!, $cultureId: String!) {
+    deleteProductName(ProductID: $productId, CultureID: $cultureId) {
+      ProductID
+    }
+  }
+`;
+
+export interface ProductNameTranslation {
+  ProductID: number;
+  CultureID: string;
+  Name: string;
+  ModifiedDate: string;
+}
+
+export const useAdminProductNamesForCulture = (cultureId: string | null) =>
+  useQuery<ProductNameTranslation[]>({
+    queryKey: ["admin", "productNames", cultureId],
+    queryFn: async () => {
+      const data = await graphqlClient.request<{
+        productNames?: { items: ProductNameTranslation[] };
+      }>(GET_PRODUCT_NAMES_FOR_CULTURE, { cultureId });
+      return data.productNames?.items ?? [];
+    },
+    enabled: !!cultureId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+export const useCreateProductName = (cultureId: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { productId: number; name: string }) => {
+      await graphqlClient.request(CREATE_PRODUCT_NAME, {
+        productId: vars.productId,
+        cultureId,
+        name: vars.name,
+        modifiedDate: new Date().toISOString(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "productNames", cultureId],
+      });
+    },
+  });
+};
+
+export const useUpdateProductName = (cultureId: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { productId: number; name: string }) => {
+      await graphqlClient.request(UPDATE_PRODUCT_NAME, {
+        productId: vars.productId,
+        cultureId,
+        name: vars.name,
+        modifiedDate: new Date().toISOString(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "productNames", cultureId],
+      });
+    },
+  });
+};
+
+export const useDeleteProductName = (cultureId: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { productId: number }) => {
+      await graphqlClient.request(DELETE_PRODUCT_NAME, {
+        productId: vars.productId,
+        cultureId,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "productNames", cultureId],
       });
     },
   });

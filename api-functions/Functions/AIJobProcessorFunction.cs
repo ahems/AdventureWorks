@@ -37,6 +37,7 @@ public class AIJobProcessorFunction
     private readonly ProductService _productService;
     private readonly ReviewService _reviewService;
     private readonly AIService _aiService;
+    private readonly OrderGenerationAgentService _orderGenAgentService;
 
     public AIJobProcessorFunction(
         ILogger<AIJobProcessorFunction> logger,
@@ -44,7 +45,8 @@ public class AIJobProcessorFunction
         IServiceProvider serviceProvider,
         ProductService productService,
         ReviewService reviewService,
-        AIService aiService)
+        AIService aiService,
+        OrderGenerationAgentService orderGenAgentService)
     {
         _logger = logger;
         _loggerFactory = loggerFactory;
@@ -52,6 +54,7 @@ public class AIJobProcessorFunction
         _productService = productService;
         _reviewService = reviewService;
         _aiService = aiService;
+        _orderGenAgentService = orderGenAgentService;
     }
 
     // ── Queue triggers (one per AI model) ────────────────────────────────────
@@ -99,8 +102,9 @@ public class AIJobProcessorFunction
         _logger.LogInformation("[chat-queue] Processing JobType={jobType}", msg.JobType);
         switch (msg.JobType.ToLowerInvariant())
         {
-            case "translation": await ProcessTranslationJobAsync(msg); break;
-            case "review":      await ProcessReviewJobAsync(msg);      break;
+            case "translation":     await ProcessTranslationJobAsync(msg);   break;
+            case "review":          await ProcessReviewJobAsync(msg);         break;
+            case "generate-order":  await ProcessGenerateOrderJobAsync(msg);  break;
             default: _logger.LogWarning("[chat-queue] Unexpected JobType '{jobType}' — skipping", msg.JobType); break;
         }
     }
@@ -398,6 +402,35 @@ public class AIJobProcessorFunction
             var embeddingsQueueClient = await GetQueueClientAsync(EMBEDDINGS_QUEUE);
             await embeddingsQueueClient.SendMessageAsync(
                 JsonSerializer.Serialize(new AiJobMessage { JobType = "review-embeddings" }));
+        }
+    }
+
+    private async Task ProcessGenerateOrderJobAsync(AiJobMessage msg)
+    {
+        var personaType = msg.PersonaType ?? "newbie-male";
+        _logger.LogInformation("Generate-order job: personaType={PersonaType} seedCustomerId={SeedCustomerId}",
+            personaType, msg.SeedCustomerId?.ToString() ?? "random");
+
+        try
+        {
+            var result = await _orderGenAgentService.GenerateOrderAsync(
+                personaType,
+                customPersona: null,
+                seedCustomerId: msg.SeedCustomerId);
+
+            if (result.Success)
+            {
+                _logger.LogInformation("Generate-order job: created SalesOrderID={OrderId} for {Customer}",
+                    result.SalesOrderId, result.CustomerName);
+            }
+            else
+            {
+                _logger.LogWarning("Generate-order job: failed — {Error}", result.ErrorMessage);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Generate-order job: unhandled exception for personaType={PersonaType}", personaType);
         }
     }
 

@@ -532,3 +532,138 @@ export const terminateOrchestration = async (
   const res = await fetch(terminatePostUri, { method: "POST" });
   return res.ok;
 };
+
+// ── AI Order Generation ────────────────────────────────────────────────────
+
+export interface OrderGenLogEntry {
+  message: string;
+  type: "info" | "success" | "error" | "dim";
+}
+
+export interface OrderGenerationResult {
+  success: boolean;
+  salesOrderId: number;
+  customerName?: string;
+  customerEmail?: string;
+  newCustomerCreated?: boolean;
+  totalDue?: number;
+  receiptPdfBase64?: string;
+  errorMessage?: string;
+  log: OrderGenLogEntry[];
+}
+
+/**
+ * Call the AI Order Generation wizard backend.
+ * The agent uses MCP tools to research the catalogue, promotions, and customers,
+ * then creates a realistic order (and optionally a new customer) in the database.
+ * Returns detailed per-step log and the new SalesOrderID.
+ */
+export const generateOrderWithAI = async (
+  personaType: string,
+  customPersona?: string,
+  seedCustomerId?: number,
+): Promise<OrderGenerationResult> => {
+  const url = `${getFunctionsApiUrl()}/api/GenerateOrderWithAI`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ personaType, customPersona, seedCustomerId }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `GenerateOrderWithAI HTTP ${res.status}${text ? `: ${text}` : ""}`,
+    );
+  }
+  return res.json();
+};
+
+// ── Top Spenders (for existing-customer persona) ───────────────────────────
+
+export interface TopSpenderCustomer {
+  customerID: number;
+  firstName: string;
+  lastName: string;
+  email?: string;
+  totalSpend: number;
+  orderCount: number;
+}
+
+export const getTopSpenders = async (
+  limit = 100,
+): Promise<TopSpenderCustomer[]> => {
+  const url = `${getFunctionsApiUrl()}/api/customers/top-spenders?limit=${limit}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `GetTopSpenders HTTP ${res.status}${text ? `: ${text}` : ""}`,
+    );
+  }
+  return res.json();
+};
+
+// ── Bulk Order Generation ──────────────────────────────────────────────────
+
+export interface GenerateOrdersBulkResult {
+  queued: number;
+  message: string;
+}
+
+export const generateOrdersBulk = async (
+  count: number,
+): Promise<GenerateOrdersBulkResult> => {
+  const url = `${getFunctionsApiUrl()}/api/GenerateOrdersBulk`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ count }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `GenerateOrdersBulk HTTP ${res.status}${text ? `: ${text}` : ""}`,
+    );
+  }
+  return res.json();
+};
+
+// ── AI Customer Generation ─────────────────────────────────────────────────
+
+export interface GenerateCustomerResult {
+  success: boolean;
+  salesCustomerId: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  stateCode: string;
+  postalCode: string;
+  country: string;
+  locale: string;
+  error?: string;
+}
+
+/**
+ * Ask the AI to generate a realistic fake customer profile for the given locale,
+ * then create the customer record in the database.
+ */
+export const generateCustomerWithAI = async (
+  locale: string,
+): Promise<GenerateCustomerResult> => {
+  const url = `${getFunctionsApiUrl()}/api/customers/generate-with-ai`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ locale }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `GenerateCustomerWithAI HTTP ${res.status}${text ? `: ${text}` : ""}`,
+    );
+  }
+  return res.json();
+};

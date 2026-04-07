@@ -272,6 +272,40 @@ public class ProductService
         });
     }
 
+    public async Task<List<ProductNameEmbeddingData>> GetProductNamesForEmbeddingAsync()
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = @"
+            SELECT pn.ProductID, pn.CultureID, pn.Name
+            FROM Production.ProductName pn
+            WHERE pn.ProductNameEmbedding IS NULL
+            ORDER BY pn.ProductID, pn.CultureID";
+
+        var names = await connection.QueryAsync<ProductNameEmbeddingData>(sql);
+        return names.ToList();
+    }
+
+    public async Task SaveProductNameEmbeddingAsync(ProductNameEmbedding embedding)
+    {
+        using var connection = await GetConnectionAsync();
+
+        var embeddingJson = System.Text.Json.JsonSerializer.Serialize(embedding.Embedding);
+
+        var updateSql = @"
+            UPDATE Production.ProductName
+            SET ProductNameEmbedding = CAST(@EmbeddingJson AS VECTOR(1536)),
+                ModifiedDate = GETDATE()
+            WHERE ProductID = @ProductID AND CultureID = @CultureID";
+
+        await connection.ExecuteAsync(updateSql, new
+        {
+            embedding.ProductID,
+            CultureID = embedding.CultureID.PadRight(6),
+            EmbeddingJson = embeddingJson
+        });
+    }
+
     public async Task<List<ProductImageData>> GetProductsForImageGenerationAsync()
     {
         using var connection = await GetConnectionAsync();
