@@ -155,6 +155,20 @@ builder.Services.AddScoped<PromotionAgentService>(sp =>
         telemetryClient);
 });
 
+// Register WorkOrderSimulationService for the manufacturing simulation engine
+builder.Services.AddScoped<WorkOrderSimulationService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
+    var simulationTimeScale = double.TryParse(configuration["SIMULATION_TIME_SCALE_FACTOR"], out var scale) ? scale : 60.0;
+    var defaultScrapRate    = double.TryParse(configuration["SIMULATION_SCRAP_RATE"],        out var rate)  ? rate  : 0.05;
+    var logger = sp.GetRequiredService<ILogger<WorkOrderSimulationService>>();
+    return new WorkOrderSimulationService(connectionString, tableServiceUri, simulationTimeScale, defaultScrapRate, logger);
+});
+
 // Register OrderGenerationService for SQL write operations during AI order generation
 builder.Services.AddScoped<OrderGenerationService>(sp =>
 {

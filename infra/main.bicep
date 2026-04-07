@@ -242,7 +242,7 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
     emailSenderDomain: communication.outputs.senderDomain
     mcpServiceUrl: containerAppApiMcp.outputs.apiMcpUrl
     minReplica: 0
-    maxReplica: 3
+    maxReplica: 5
     revisionSuffix: revisionSuffix
     containerAppEnvId: containerApp.outputs.containerAppEnvId
   }

@@ -21,6 +21,9 @@ param storageAccountName string = ''
 param communicationServiceEndpoint string = ''
 param emailSenderDomain string = ''
 param mcpServiceUrl string = ''
+param simulationTimeScaleFactor string = '60'
+param simulationScrapRate string = '0.05'
+param materialsRetryDelaySeconds string = '30'
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -173,6 +176,18 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
               name: 'MCP_SERVICE_URL'
               value: mcpServiceUrl
             }
+            {
+              name: 'SIMULATION_TIME_SCALE_FACTOR'
+              value: simulationTimeScaleFactor
+            }
+            {
+              name: 'SIMULATION_SCRAP_RATE'
+              value: simulationScrapRate
+            }
+            {
+              name: 'MATERIALS_RETRY_DELAY_SECONDS'
+              value: materialsRetryDelaySeconds
+            }
           ]
         }
       ]
@@ -220,6 +235,18 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
                 accountName: storageAccountName
                 queueName: 'order-email-generation'
                 queueLength: '1'
+              }
+              identity: azidentity.id
+            }
+          }
+          {
+            name: 'production-wo-queue'
+            custom: {
+              type: 'azure-queue'
+              metadata: {
+                accountName: storageAccountName
+                queueName: 'production-wo-queue'
+                queueLength: '5'
               }
               identity: azidentity.id
             }

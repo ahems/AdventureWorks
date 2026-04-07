@@ -99,6 +99,12 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
             description: 'Queue for tracking the status of sales orders'
           }
         }
+        {
+          name: 'production-wo-queue'
+          metadata: {
+            description: 'Event-driven queue that drives the manufacturing simulation: each message represents one WorkOrder routing-operation phase'
+          }
+        }
       ]
     }
     
