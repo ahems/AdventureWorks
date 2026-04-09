@@ -21,6 +21,11 @@ namespace api_functions.Functions;
 /// PUT  /api/manufacturing/scrap-config/{locationId} – Update failure rate/reasons for a station
 /// GET  /api/manufacturing/location-config             – Per-location capacity settings
 /// PUT  /api/manufacturing/location-config/{locationId} – Update capacity/shift/speed for a station
+/// GET  /api/manufacturing/workforce     – Headcount summary by location and shift
+/// GET  /api/manufacturing/workforce/detail – All workers with status, operator assignment, pay rate
+/// GET  /api/manufacturing/scrap-events  – All scrap events with optional ?vendorId= filter
+/// GET  /api/manufacturing/vendor-quality          – Aggregated quality report per supplier vendor
+/// GET  /api/manufacturing/vendor-quality/{vendorId} – Quality report scoped to one vendor
 /// </summary>
 public class ManufacturingControlFunction
 {
@@ -29,13 +34,16 @@ public class ManufacturingControlFunction
 
     private readonly ILogger<ManufacturingControlFunction> _logger;
     private readonly WorkOrderSimulationService _sim;
+    private readonly WorkforceService _workforce;
 
     public ManufacturingControlFunction(
         ILogger<ManufacturingControlFunction> logger,
-        WorkOrderSimulationService sim)
+        WorkOrderSimulationService sim,
+        WorkforceService workforce)
     {
-        _logger = logger;
-        _sim = sim;
+        _logger    = logger;
+        _sim       = sim;
+        _workforce = workforce;
     }
 
     // ── POST /api/manufacturing/begin ─────────────────────────────────────────
@@ -378,7 +386,78 @@ public class ManufacturingControlFunction
         return response;
     }
 
-    // ── Request body types ────────────────────────────────────────────────────
+    // ── GET /api/manufacturing/workforce ─────────────────────────────────────
+
+    [Function(nameof(ManufacturingWorkforce))]
+    public async Task<HttpResponseData> ManufacturingWorkforce(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "manufacturing/workforce")]
+        HttpRequestData req)
+    {
+        await _workforce.InitializeAsync();
+        var snapshot = await _workforce.GetSnapshotAsync();
+        var response = req.CreateResponse(HttpStatusCode.OK);
+        await response.WriteAsJsonAsync(snapshot);
+        return response;
+    }
+
+    [Function(nameof(ManufacturingWorkforceDetail))]
+    public async Task<HttpResponseData> ManufacturingWorkforceDetail(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "manufacturing/workforce/detail")]
+        HttpRequestData req)
+    {
+        await _workforce.InitializeAsync();
+        var workers = await _workforce.GetDetailAsync();
+        var response = req.CreateResponse(HttpStatusCode.OK);
+        await response.WriteAsJsonAsync(workers);
+        return response;
+    }
+
+    // ── Vendor quality / scrap attribution ────────────────────────────────────
+
+    [Function(nameof(ManufacturingGetScrapEvents))]
+    public async Task<HttpResponseData> ManufacturingGetScrapEvents(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "manufacturing/scrap-events")]
+        HttpRequestData req)
+    {
+        var qs = System.Web.HttpUtility.ParseQueryString(req.Url?.Query ?? "");
+        int? vendorId = int.TryParse(qs["vendorId"], out int vid) ? vid : null;
+
+        var events = await _sim.GetAllScrapEventsAsync(vendorId);
+        var response = req.CreateResponse(HttpStatusCode.OK);
+        await response.WriteAsJsonAsync(events);
+        return response;
+    }
+
+    [Function(nameof(ManufacturingGetVendorQuality))]
+    public async Task<HttpResponseData> ManufacturingGetVendorQuality(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "manufacturing/vendor-quality")]
+        HttpRequestData req)
+    {
+        var report = await _sim.GetVendorQualityReportAsync();
+        var response = req.CreateResponse(HttpStatusCode.OK);
+        await response.WriteAsJsonAsync(report);
+        return response;
+    }
+
+    [Function(nameof(ManufacturingGetVendorQualityById))]
+    public async Task<HttpResponseData> ManufacturingGetVendorQualityById(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "manufacturing/vendor-quality/{vendorId:int}")]
+        HttpRequestData req,
+        int vendorId)
+    {
+        var report = await _sim.GetVendorQualityReportAsync(vendorId);
+        if (report.Count == 0)
+        {
+            var notFound = req.CreateResponse(HttpStatusCode.NotFound);
+            await notFound.WriteAsJsonAsync(new { error = $"No attributed scrap events found for VendorID {vendorId}." });
+            return notFound;
+        }
+        var response = req.CreateResponse(HttpStatusCode.OK);
+        await response.WriteAsJsonAsync(report[0]);
+        return response;
+    }
+
+    // ── Request body types ─────────────────────────────────────────────────────
 
     private sealed class BeginRequest
     {

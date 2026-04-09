@@ -21,6 +21,7 @@ import {
   Mic,
   Bot,
   FolderOpen,
+  Store,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -169,6 +170,13 @@ const AdminHeader: React.FC = () => {
               >
                 <ShoppingBag className="w-4 h-4" />
                 Orders
+              </Link>
+              <Link
+                to="/stores"
+                className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors flex items-center gap-1 ${location.pathname.startsWith("/stores") ? "squiggle" : ""}`}
+              >
+                <Store className="w-4 h-4" />
+                Stores
               </Link>
               <Link
                 to="/utilities"
@@ -333,6 +341,13 @@ const AdminHeader: React.FC = () => {
                 onClick={() => setMobileMenuOpen(false)}
               >
                 * Orders
+              </Link>
+              <Link
+                to="/stores"
+                className="font-doodle text-lg text-doodle-text hover:text-doodle-accent py-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                * Stores (B2B)
               </Link>
               <Link
                 to="/utilities"

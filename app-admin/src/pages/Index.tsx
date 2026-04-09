@@ -9,6 +9,7 @@ import {
   AlertCircle,
   Clock,
   Loader2,
+  Store,
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
@@ -209,6 +210,18 @@ const Index: React.FC = () => {
                   </span>
                   <span className="font-doodle text-sm text-doodle-accent">
                     {totalReviews} to review
+                  </span>
+                </Link>
+                <Link
+                  to="/stores"
+                  className="flex items-center justify-between p-3 border-2 border-doodle-accent/40 hover:border-doodle-accent transition-colors bg-doodle-accent/5"
+                >
+                  <span className="font-doodle text-doodle-text flex items-center gap-2">
+                    <Store className="w-4 h-4 text-doodle-accent" />
+                    B2B Store Orders
+                  </span>
+                  <span className="font-doodle text-xs text-doodle-accent font-bold">
+                    Place order →
                   </span>
                 </Link>
               </div>

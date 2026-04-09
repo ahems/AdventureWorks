@@ -375,7 +375,29 @@
             "*"
           ]
         }
-      ]
+      ],
+      "relationships": {
+        "salesCustomer": {
+          "cardinality": "one",
+          "target.entity": "Customer",
+          "source.fields": [
+            "BusinessEntityID"
+          ],
+          "target.fields": [
+            "StoreID"
+          ]
+        },
+        "salesPerson": {
+          "cardinality": "one",
+          "target.entity": "SalesPerson",
+          "source.fields": [
+            "SalesPersonID"
+          ],
+          "target.fields": [
+            "BusinessEntityID"
+          ]
+        }
+      }
     },
     "Customer": {
       "source": "Sales.Customer",
@@ -408,6 +430,16 @@
           ],
           "target.fields": [
             "CustomerID"
+          ]
+        },
+        "store": {
+          "cardinality": "one",
+          "target.entity": "Store",
+          "source.fields": [
+            "StoreID"
+          ],
+          "target.fields": [
+            "BusinessEntityID"
           ]
         }
       }

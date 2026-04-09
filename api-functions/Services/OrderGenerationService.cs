@@ -401,6 +401,201 @@ public class OrderGenerationService
     }
 
     /// <summary>
+    /// Look up store info (CustomerID + first AddressID) by Store.BusinessEntityID.
+    /// Returns null if no Sales.Customer record exists for this store.
+    /// </summary>
+    public async Task<StoreInfo?> GetStoreInfoAsync(int storeBusinessEntityId)
+    {
+        using var connection = await GetConnectionAsync();
+
+        var row = await connection.QueryFirstOrDefaultAsync(@"
+            SELECT
+                s.BusinessEntityID AS StoreID,
+                s.Name AS StoreName,
+                c.CustomerID,
+                c.TerritoryID,
+                bea.AddressID
+            FROM Sales.Store s
+            INNER JOIN Sales.Customer c ON c.StoreID = s.BusinessEntityID
+            LEFT JOIN Person.BusinessEntityAddress bea ON bea.BusinessEntityID = s.BusinessEntityID
+            WHERE s.BusinessEntityID = @StoreId",
+            new { StoreId = storeBusinessEntityId });
+
+        if (row == null) return null;
+
+        return new StoreInfo
+        {
+            StoreID = (int)row.StoreID,
+            StoreName = (string)row.StoreName,
+            CustomerID = (int)row.CustomerID,
+            TerritoryID = (int?)row.TerritoryID,
+            AddressID = row.AddressID == null ? null : (int?)row.AddressID
+        };
+    }
+
+    /// <summary>
+    /// Get or create an address for a store (via BusinessEntityAddress).
+    /// Returns the AddressID to use for BillToAddressID / ShipToAddressID.
+    /// </summary>
+    public async Task<int> GetOrCreateAddressForStoreAsync(int storeBusinessEntityId)
+    {
+        using var connection = await GetConnectionAsync();
+
+        var existingAddressId = await connection.ExecuteScalarAsync<int?>(@"
+            SELECT TOP 1 bea.AddressID
+            FROM Person.BusinessEntityAddress bea
+            WHERE bea.BusinessEntityID = @StoreId
+            ORDER BY bea.AddressTypeID",
+            new { StoreId = storeBusinessEntityId });
+
+        if (existingAddressId.HasValue)
+            return existingAddressId.Value;
+
+        // Create a default address for the store
+        var addressId = await connection.ExecuteScalarAsync<int>(@"
+            INSERT INTO Person.Address (AddressLine1, City, StateProvinceID, PostalCode, rowguid, ModifiedDate)
+            OUTPUT INSERTED.AddressID
+            VALUES ('1 Commerce Way', 'Seattle', 79, '98101', NEWID(), GETDATE())");
+
+        await connection.ExecuteAsync(@"
+            INSERT INTO Person.BusinessEntityAddress (BusinessEntityID, AddressID, AddressTypeID, rowguid, ModifiedDate)
+            VALUES (@StoreId, @AddressId, 3, NEWID(), GETDATE())",
+            new { StoreId = storeBusinessEntityId, AddressId = addressId });
+
+        return addressId;
+    }
+
+    /// <summary>
+    /// Create a B2B store order with line items. Returns the new SalesOrderID.
+    /// </summary>
+    public async Task<int> CreateStoreOrderAsync(CreateStoreOrderRequest req)
+    {
+        using var connection = await GetConnectionAsync();
+        using var tx = connection.BeginTransaction();
+
+        try
+        {
+            // Resolve CustomerID for the store
+            var storeInfo = await GetStoreInfoAsync(req.StoreBusinessEntityId)
+                ?? throw new InvalidOperationException($"No Customer record found for Store {req.StoreBusinessEntityId}");
+
+            var addressId = req.AddressID ?? await GetOrCreateAddressForStoreAsync(req.StoreBusinessEntityId);
+
+            // Use the provided ship method, or default to the cheapest option
+            var shipMethodId = req.ShipMethodId > 0 ? req.ShipMethodId
+                : await connection.ExecuteScalarAsync<int>(
+                    "SELECT TOP 1 ShipMethodID FROM Purchasing.ShipMethod ORDER BY ShipBase",
+                    transaction: tx);
+
+            var orderDate = DateTime.UtcNow;
+            var dueDate = req.DueDate?.ToUniversalTime() ?? orderDate.AddDays(14); // B2B default: 14-day terms
+
+            // Insert SalesOrderHeader — OnlineOrderFlag=0 for manually placed orders
+            var salesOrderId = await connection.ExecuteScalarAsync<int>(@"
+                INSERT INTO Sales.SalesOrderHeader
+                    (RevisionNumber, OrderDate, DueDate, Status, OnlineOrderFlag,
+                     PurchaseOrderNumber, AccountNumber,
+                     CustomerID, ShipToAddressID, BillToAddressID,
+                     ShipMethodID, SubTotal, TaxAmt, Freight, Comment,
+                     rowguid, ModifiedDate)
+                OUTPUT INSERTED.SalesOrderID
+                VALUES
+                    (1, @OrderDate, @DueDate, 1, 0,
+                     @PurchaseOrderNumber, @AccountNumber,
+                     @CustomerId, @AddressId, @AddressId,
+                     @ShipMethodId, 0, 0, 0, @Comment,
+                     NEWID(), GETDATE())",
+                new
+                {
+                    OrderDate = orderDate,
+                    DueDate = dueDate,
+                    PurchaseOrderNumber = req.PurchaseOrderNumber ?? (object)DBNull.Value,
+                    AccountNumber = $"AW-STORE-{req.StoreBusinessEntityId:D6}",
+                    CustomerId = storeInfo.CustomerID,
+                    AddressId = addressId,
+                    ShipMethodId = shipMethodId,
+                    Comment = req.Comment ?? (object)DBNull.Value
+                },
+                transaction: tx);
+
+            // Insert order line items
+            var subTotal = 0m;
+            foreach (var item in req.Items)
+            {
+                var unitPrice = item.UnitPrice > 0 ? item.UnitPrice
+                    : await connection.ExecuteScalarAsync<decimal>(
+                        "SELECT ISNULL(ListPrice, 0) FROM Production.Product WHERE ProductID = @ProductId",
+                        new { item.ProductId }, transaction: tx);
+
+                var discountedPrice = unitPrice * (1 - item.DiscountPct);
+                var lineTotal = Math.Round(discountedPrice * item.Quantity, 2);
+                subTotal += lineTotal;
+
+                var specialOfferId = await connection.ExecuteScalarAsync<int?>(@"
+                    SELECT TOP 1 sop.SpecialOfferID
+                    FROM Sales.SpecialOfferProduct sop
+                    INNER JOIN Sales.SpecialOffer so ON sop.SpecialOfferID = so.SpecialOfferID
+                    WHERE sop.ProductID = @ProductId
+                      AND so.StartDate <= GETDATE()
+                      AND so.EndDate >= GETDATE()
+                      AND so.DiscountPct > 0
+                    ORDER BY so.DiscountPct DESC",
+                    new { item.ProductId }, transaction: tx) ?? 1;
+
+                await connection.ExecuteAsync(@"
+                    INSERT INTO Sales.SalesOrderDetail
+                        (SalesOrderID, OrderQty, ProductID, SpecialOfferID,
+                         UnitPrice, UnitPriceDiscount, rowguid, ModifiedDate)
+                    VALUES
+                        (@SalesOrderId, @Qty, @ProductId, @SpecialOfferId,
+                         @UnitPrice, @Discount, NEWID(), GETDATE())",
+                    new
+                    {
+                        SalesOrderId = salesOrderId,
+                        Qty = item.Quantity,
+                        item.ProductId,
+                        SpecialOfferId = specialOfferId,
+                        UnitPrice = unitPrice,
+                        Discount = item.DiscountPct
+                    },
+                    transaction: tx);
+
+                // Decrement available stock — never go below zero
+                await connection.ExecuteAsync(@"
+                    UPDATE Production.ProductInventory
+                    SET    Quantity     = CASE WHEN Quantity >= @Qty THEN Quantity - @Qty ELSE 0 END,
+                           ModifiedDate = GETDATE()
+                    WHERE  ProductID = @ProductId",
+                    new { item.ProductId, Qty = (int)item.Quantity },
+                    transaction: tx);
+            }
+
+            // Calculate tax (8.75%) and freight based on ship method
+            var taxAmt = subTotal * 0.0875m;
+            var freight = req.Items.Count switch { 0 => 0m, <= 5 => 15m, <= 20 => 25m, _ => 50m };
+
+            await connection.ExecuteAsync(@"
+                UPDATE Sales.SalesOrderHeader
+                SET SubTotal = @SubTotal, TaxAmt = @TaxAmt, Freight = @Freight
+                WHERE SalesOrderID = @SalesOrderId",
+                new { SubTotal = subTotal, TaxAmt = taxAmt, Freight = freight, SalesOrderId = salesOrderId },
+                transaction: tx);
+
+            tx.Commit();
+            _logger.LogInformation(
+                "Created B2B store order SalesOrderID={SalesOrderId} for StoreID={StoreId} (CustomerID={CustomerId}), {ItemCount} items, total=${Total:N2}",
+                salesOrderId, req.StoreBusinessEntityId, storeInfo.CustomerID, req.Items.Count, subTotal + taxAmt + freight);
+
+            return salesOrderId;
+        }
+        catch
+        {
+            tx.Rollback();
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Returns top-spending customers who have placed at least one order, sorted by total spend descending.
     /// </summary>
     public async Task<List<TopSpenderInfo>> GetTopSpendersAsync(int limit = 100)
@@ -550,4 +745,32 @@ public class CustomerProfile
     public int OrderCount { get; set; }
     public decimal TotalSpend { get; set; }
     public List<string> RecentProducts { get; set; } = new();
+}
+
+public class StoreInfo
+{
+    public int StoreID { get; set; }
+    public string StoreName { get; set; } = string.Empty;
+    public int CustomerID { get; set; }
+    public int? TerritoryID { get; set; }
+    public int? AddressID { get; set; }
+}
+
+public class CreateStoreOrderRequest
+{
+    public int StoreBusinessEntityId { get; set; }
+    public List<StoreOrderLineItem> Items { get; set; } = new();
+    public int ShipMethodId { get; set; } = 0; // 0 = cheapest available
+    public string? PurchaseOrderNumber { get; set; }
+    public DateTime? DueDate { get; set; }
+    public string? Comment { get; set; }
+    public int? AddressID { get; set; }
+}
+
+public class StoreOrderLineItem
+{
+    public int ProductId { get; set; }
+    public short Quantity { get; set; } = 1;
+    public decimal UnitPrice { get; set; } = 0; // 0 = use list price
+    public decimal DiscountPct { get; set; } = 0; // 0 = no discount
 }

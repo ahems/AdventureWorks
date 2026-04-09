@@ -19,7 +19,30 @@ public record RoutingOpInfo(int WorkOrderId, int ProductId, int OperationSequenc
 public record LocationConfigData(int LocationId, int CapacityUnits, double DailyOperatingHours, double SpeedFactor, double OvertimeMultiplier, int ShiftStartHour, string? Note);
 public record ScrapConfigData(int LocationId, string LocationName, double FailureRatePct, int[] ScrapReasonIds, string? Note);
 public record ShortageData(int WorkOrderId, int ProductId, string ProductName, int Needed, int Available, int Shortfall, DateTime LastRetryUtc);
-public record ScrapEventData(int WorkOrderId, int ProductId, string ProductName, int LocationId, string LocationName, int ScrapReasonId, string ScrapReasonName, bool IsTotalFailure, DateTime FailedAtUtc);
+public record ScrapEventData(
+    int WorkOrderId, int ProductId, string ProductName,
+    int LocationId, string LocationName,
+    int ScrapReasonId, string ScrapReasonName,
+    bool IsTotalFailure, DateTime FailedAtUtc,
+    // Vendor attribution — populated when the scrap reason is consistent with incoming
+    // material/component quality failure and a most-recent supplier can be identified.
+    int? SupplierVendorId = null,
+    string? SupplierVendorName = null,
+    int? SupplierComponentProductId = null,
+    string? SupplierComponentName = null);
+/// <summary>
+/// Aggregated quality view per vendor — how many scrap events (and total failures)
+/// have been attributed to material supplied by this vendor.
+/// </summary>
+public record VendorQualityData(
+    int VendorId, string VendorName,
+    int TotalScrapEvents, int TotalFailures,
+    int AffectedWorkOrders,
+    DateTime? MostRecentEventUtc,
+    List<VendorQualityComponentData> Components);
+public record VendorQualityComponentData(
+    int ComponentProductId, string ComponentName,
+    int ScrapEvents, int TotalFailures);
 public record ActiveOperationData(int WorkOrderId, int ProductId, string ProductName, int OperationSequence, int LocationId, string LocationName, DateTime ActualStartDate, double ElapsedMinutes);
 public record LocationLoadData(int LocationId, string LocationName, DateTime? EarliestFreeSlotUtc, double AvailabilityHrs, int CapacityUnits);
 public record ManufacturingStatusData(bool IsRunning, long QueueDepth, int PendingWorkOrders, int InProgressWorkOrders, int CompletedToday, int StalledForMaterials, List<ShortageData> Shortages, List<ScrapEventData> RecentScrapEvents, List<LocationLoadData> LocationLoad);
@@ -880,7 +903,9 @@ public class WorkOrderSimulationService
 
     public async Task WriteScrapEventAsync(int workOrderId, int productId, string productName,
         int locationId, string locationName, int scrapReasonId, string scrapReasonName,
-        bool isTotalFailure)
+        bool isTotalFailure,
+        int? supplierVendorId = null, string? supplierVendorName = null,
+        int? supplierComponentProductId = null, string? supplierComponentName = null)
     {
         // Reverse-chronological rowKey ensures most recent events sort first
         var rowKey = $"{long.MaxValue - DateTimeOffset.UtcNow.Ticks:D19}_{workOrderId}";
@@ -896,31 +921,136 @@ public class WorkOrderSimulationService
             ["IsTotalFailure"] = isTotalFailure,
             ["FailedAtUtc"]    = DateTime.UtcNow,
         };
+        if (supplierVendorId.HasValue)
+        {
+            entity["SupplierVendorId"]          = supplierVendorId.Value;
+            entity["SupplierVendorName"]         = supplierVendorName ?? "";
+            entity["SupplierComponentProductId"] = supplierComponentProductId ?? 0;
+            entity["SupplierComponentName"]      = supplierComponentName ?? "";
+        }
         await _tableClient.UpsertEntityAsync(entity);
     }
 
     public async Task<List<ScrapEventData>> GetRecentScrapEventsAsync(int count = 10)
-    {await _tableClient.CreateIfNotExistsAsync();
-        
+    {
+        await _tableClient.CreateIfNotExistsAsync();
         var results = new List<ScrapEventData>();
         await foreach (var entity in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_SCRAP_EVENT}'",
             maxPerPage: count))
         {
-            results.Add(new ScrapEventData(
-                entity.GetInt32("WorkOrderId") ?? 0,
-                entity.GetInt32("ProductId") ?? 0,
-                entity.GetString("ProductName") ?? "",
-                entity.GetInt32("LocationId") ?? 0,
-                entity.GetString("LocationName") ?? "",
-                entity.GetInt32("ScrapReasonId") ?? 0,
-                entity.GetString("ScrapReasonName") ?? "",
-                entity.GetBoolean("IsTotalFailure") ?? false,
-                entity.GetDateTimeOffset("FailedAtUtc")?.UtcDateTime ?? DateTime.UtcNow));
-
+            results.Add(EntityToScrapEvent(entity));
             if (results.Count >= count) break;
         }
         return results;
+    }
+
+    /// <summary>
+    /// Returns all scrap events, optionally filtered to a specific vendor.
+    /// Results are sorted most-recent-first (by Table Storage row key design).
+    /// </summary>
+    public async Task<List<ScrapEventData>> GetAllScrapEventsAsync(int? vendorId = null)
+    {
+        await _tableClient.CreateIfNotExistsAsync();
+        var results = new List<ScrapEventData>();
+        string filter = $"PartitionKey eq '{PART_SCRAP_EVENT}'";
+        if (vendorId.HasValue)
+            filter += $" and SupplierVendorId eq {vendorId.Value}";
+
+        await foreach (var entity in _tableClient.QueryAsync<TableEntity>(filter: filter))
+            results.Add(EntityToScrapEvent(entity));
+
+        return results;
+    }
+
+    private static ScrapEventData EntityToScrapEvent(TableEntity entity)
+    {
+        int? suppVendorId = entity.GetInt32("SupplierVendorId") is int v && v > 0 ? v : null;
+        return new ScrapEventData(
+            entity.GetInt32("WorkOrderId") ?? 0,
+            entity.GetInt32("ProductId") ?? 0,
+            entity.GetString("ProductName") ?? "",
+            entity.GetInt32("LocationId") ?? 0,
+            entity.GetString("LocationName") ?? "",
+            entity.GetInt32("ScrapReasonId") ?? 0,
+            entity.GetString("ScrapReasonName") ?? "",
+            entity.GetBoolean("IsTotalFailure") ?? false,
+            entity.GetDateTimeOffset("FailedAtUtc")?.UtcDateTime ?? DateTime.UtcNow,
+            SupplierVendorId:          suppVendorId,
+            SupplierVendorName:        suppVendorId.HasValue ? entity.GetString("SupplierVendorName") : null,
+            SupplierComponentProductId: suppVendorId.HasValue ? entity.GetInt32("SupplierComponentProductId") : null,
+            SupplierComponentName:     suppVendorId.HasValue ? entity.GetString("SupplierComponentName") : null);
+    }
+
+    /// <summary>
+    /// For a set of purchased component ProductIDs, returns the most-recently-used vendor for
+    /// each (by Purchasing.ProductVendor.LastReceiptDate). Used at scrap-time to attribute a
+    /// material-quality failure back to the supplier who last delivered that component.
+    /// Returns the first match found across all supplied component IDs, favouring the component
+    /// whose receipt date is most recent.
+    /// </summary>
+    public async Task<(int VendorId, string VendorName, int ComponentProductId, string ComponentName)?> 
+        GetMostRecentSupplierAsync(IEnumerable<int> componentProductIds)
+    {
+        var ids = componentProductIds.ToList();
+        if (ids.Count == 0) return null;
+
+        using var conn = await GetConnectionAsync();
+        // Join ProductVendor → Vendor → Product; order by LastReceiptDate desc so we get
+        // the most recently received component-vendor pair first.
+        var row = await conn.QueryFirstOrDefaultAsync(@"
+            SELECT TOP 1
+                pv.BusinessEntityID AS VendorId,
+                v.Name              AS VendorName,
+                pv.ProductID        AS ComponentProductId,
+                p.Name              AS ComponentName
+            FROM Purchasing.ProductVendor pv
+            INNER JOIN Purchasing.Vendor v  ON v.BusinessEntityID = pv.BusinessEntityID
+            INNER JOIN Production.Product p ON p.ProductID = pv.ProductID
+            WHERE pv.ProductID IN @Ids
+              AND v.ActiveFlag = 1
+              AND pv.LastReceiptDate IS NOT NULL
+            ORDER BY pv.LastReceiptDate DESC",
+            new { Ids = ids });
+
+        if (row == null) return null;
+        return ((int)row.VendorId, (string)row.VendorName,
+                (int)row.ComponentProductId, (string)row.ComponentName);
+    }
+
+    /// <summary>
+    /// Aggregates all vendor-attributed scrap events in Table Storage into a per-vendor quality
+    /// summary. Optionally scoped to a single vendor.
+    /// </summary>
+    public async Task<List<VendorQualityData>> GetVendorQualityReportAsync(int? vendorId = null)
+    {
+        var events = await GetAllScrapEventsAsync(vendorId);
+        var attributed = events.Where(e => e.SupplierVendorId.HasValue).ToList();
+
+        return attributed
+            .GroupBy(e => (e.SupplierVendorId!.Value, e.SupplierVendorName ?? ""))
+            .Select(g =>
+            {
+                var byComponent = g
+                    .GroupBy(e => (e.SupplierComponentProductId ?? 0, e.SupplierComponentName ?? ""))
+                    .Select(cg => new VendorQualityComponentData(
+                        cg.Key.Item1, cg.Key.Item2,
+                        ScrapEvents: cg.Count(),
+                        TotalFailures: cg.Count(e => e.IsTotalFailure)))
+                    .OrderByDescending(c => c.ScrapEvents)
+                    .ToList();
+
+                return new VendorQualityData(
+                    VendorId:           g.Key.Item1,
+                    VendorName:         g.Key.Item2,
+                    TotalScrapEvents:   g.Count(),
+                    TotalFailures:      g.Count(e => e.IsTotalFailure),
+                    AffectedWorkOrders: g.Select(e => e.WorkOrderId).Distinct().Count(),
+                    MostRecentEventUtc: g.Max(e => (DateTime?)e.FailedAtUtc),
+                    Components:         byComponent);
+            })
+            .OrderByDescending(v => v.TotalScrapEvents)
+            .ToList();
     }
 
     // ── Scrap reason lookup ──────────────────────────────────────────────────

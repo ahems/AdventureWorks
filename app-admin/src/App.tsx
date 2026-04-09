@@ -28,6 +28,7 @@ import UtilitiesPage from "./pages/UtilitiesPage";
 import AiFeaturesPage from "./pages/AiFeaturesPage";
 import CustomerStatsPage from "./pages/CustomerStatsPage";
 import NotFound from "./pages/NotFound";
+import StoresPage from "./pages/StoresPage";
 
 const queryClient = new QueryClient();
 
@@ -71,6 +72,7 @@ const App = () => (
                 />
                 <Route path="/orders" element={<OrdersPage />} />
                 <Route path="/orders/:orderId" element={<OrdersPage />} />
+                <Route path="/stores" element={<StoresPage />} />
                 <Route path="/reviews" element={<ReviewsPage />} />
                 <Route path="/promotions" element={<PromotionsPage />} />
                 <Route path="/cultures" element={<CulturesPage />} />

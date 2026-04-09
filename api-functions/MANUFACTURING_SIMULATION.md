@@ -217,12 +217,18 @@ Returns a dashboard snapshot: queue depth, work order counts, active shortages, 
   "productName": "HL Mountain Frame - Silver, 38",
   "locationId": 10,
   "locationName": "Frame Forming",
-  "scrapReasonId": 5,
-  "scrapReasonName": "Trim length too long",
+  "scrapReasonId": 3,
+  "scrapReasonName": "Gouge in metal",
   "isTotalFailure": false,
-  "failedAtUtc": "2026-04-07T22:38:12Z"
+  "failedAtUtc": "2026-04-07T22:38:12Z",
+  "supplierVendorId": 1650,
+  "supplierVendorName": "American Bicycles and Wheels",
+  "supplierComponentProductId": 316,
+  "supplierComponentName": "Blade"
 }
 ```
+
+`supplierVendorId` and related fields are populated only when the scrap reason is a material-quality indicator (see [Supplier Attribution](#supplier-attribution) below). They are `null` for process-failure scrap reasons.
 
 ---
 
@@ -343,6 +349,96 @@ Updates capacity settings for a station. Can be used to model adding a machine, 
 | `note`                | `string` | `null`                        | Free text, visible in GET response.                                                                       |
 
 #### Response `200 OK` — returns the updated config object.
+
+---
+
+### `GET /api/manufacturing/scrap-events`
+
+Returns the full scrap event history (all time), optionally filtered to a single supplier.
+
+#### Query parameters
+
+| Parameter  | Type  | Required | Description                                                                     |
+| ---------- | ----- | -------- | ------------------------------------------------------------------------------- |
+| `vendorId` | `int` | No       | Filter to events attributed to a specific `Purchasing.Vendor.BusinessEntityID`. |
+
+#### Response `200 OK`
+
+Returns an array of `ScrapEventData` objects. The array is empty when no events match the filter.
+
+```json
+[
+  {
+    "workOrderId": "run-20240115-abc123:wo-42",
+    "productId": 316,
+    "productName": "LL Crankarm",
+    "locationId": 50,
+    "locationName": "Subassembly",
+    "scrapReasonId": 3,
+    "scrapReasonName": "Gouge in metal",
+    "scrappedQty": 1,
+    "isTotalFailure": false,
+    "failedAtUtc": "2024-01-15T10:23:45Z",
+    "supplierVendorId": 1650,
+    "supplierVendorName": "Advanced Bicycles",
+    "supplierComponentProductId": 1,
+    "supplierComponentName": "Adjustable Race"
+  }
+]
+```
+
+> `supplierVendorId` and related supplier fields are `null` for events caused by process-quality scrap reasons (IDs not in `{1, 3, 7, 10}`).
+
+---
+
+### `GET /api/manufacturing/vendor-quality`
+
+Returns an aggregated quality report grouped by supplier. Only vendors with at least one attributed scrap event appear in the response.
+
+#### Response `200 OK`
+
+```json
+[
+  {
+    "vendorId": 1650,
+    "vendorName": "Advanced Bicycles",
+    "totalScrapEvents": 7,
+    "totalFailures": 2,
+    "affectedWorkOrders": 6,
+    "mostRecentEventUtc": "2024-01-15T10:23:45Z",
+    "components": [
+      {
+        "componentProductId": 1,
+        "componentName": "Adjustable Race",
+        "scrapEvents": 4,
+        "totalFailures": 1
+      },
+      {
+        "componentProductId": 316,
+        "componentName": "LL Crankarm",
+        "scrapEvents": 3,
+        "totalFailures": 1
+      }
+    ]
+  }
+]
+```
+
+---
+
+### `GET /api/manufacturing/vendor-quality/{vendorId}`
+
+Returns quality data for a single vendor. Returns `404` if no attributed scrap events exist for that vendor.
+
+#### Path parameters
+
+| Parameter  | Type  | Description                          |
+| ---------- | ----- | ------------------------------------ |
+| `vendorId` | `int` | `Purchasing.Vendor.BusinessEntityID` |
+
+#### Response `200 OK` — same shape as a single element from the list endpoint above.
+
+#### Response `404 Not Found` — vendor has no attributed scrap events.
 
 ---
 
@@ -471,7 +567,22 @@ If scrapped, a `ScrapReasonID` is chosen at random from the station's configured
 | **Partial failure** (`ScrappedQty + 1 < OrderQty`) | `WorkOrder.ScrappedQty` incremented. Production continues — the remaining good units proceed to the next routing op.                                                                  |
 | **Total failure** (`ScrappedQty + 1 >= OrderQty`)  | `WorkOrder.EndDate` set (no finished goods added to inventory). Chain stops. Parent assemblies that depend on this component will stall on materials — visible in the shortage board. |
 
-A `ScrapEventData` record is always written for both partial and total failures. The status endpoint returns the 10 most recent.
+A `ScrapEventData` record is always written for both partial and total failures. The status endpoint returns the 10 most recent; `GET /api/manufacturing/scrap-events` returns the full history.
+
+### Supplier Attribution
+
+Some `ScrapReason` values indicate the defect originated in a purchased component rather than in the production process itself:
+
+| ScrapReasonID | Name                          | Attribution                     |
+| ------------- | ----------------------------- | ------------------------------- |
+| 1             | Brake assembly not as ordered | Purchased component out-of-spec |
+| 3             | Gouge in metal                | Incoming material damage        |
+| 7             | Handling damage               | Transit/shipping damage         |
+| 10            | Seat assembly not as ordered  | Purchased component out-of-spec |
+
+When one of these reasons fires, the processor queries `Purchasing.ProductVendor` for the **most recently received supplier** of the purchased components consumed by the work order (ordered by `LastReceiptDate DESC`). This vendor is written into the scrap event as `supplierVendorId`, `supplierVendorName`, `supplierComponentProductId`, and `supplierComponentName`.
+
+The `GET /api/manufacturing/vendor-quality` endpoint aggregates these attributed events into a per-vendor quality report, enabling a UI to surface supplier quality rankings and trending.
 
 ### Chaos Mode
 
@@ -481,6 +592,15 @@ To simulate a station "going bad", `PUT` a high failure rate:
 curl -X PUT https://<base>/api/manufacturing/scrap-config/10 \
   -H "Content-Type: application/json" \
   -d '{"failureRatePct": 0.8, "scrapReasonIds": [3, 5, 12], "note": "Chaos mode"}'
+```
+
+To trigger supplier-attributed scrap specifically (to populate the vendor quality board), configure a station with material-quality reason IDs:
+
+```bash
+# Subassembly (50) — high rate of incoming-part failures
+curl -X PUT https://<base>/api/manufacturing/scrap-config/50 \
+  -H "Content-Type: application/json" \
+  -d '{"failureRatePct": 0.4, "scrapReasonIds": [1, 3, 7, 10], "note": "Incoming quality stress test"}'
 ```
 
 To disable scrap entirely for a station:
@@ -597,6 +717,33 @@ await fetch("/api/manufacturing/scrap-config/40", {
 });
 ```
 
+### Scenario: Supplier quality board
+
+```javascript
+// Load all vendors with attributed scrap events, sorted by total failures descending
+const vendors = await fetch("/api/manufacturing/vendor-quality").then((r) =>
+  r.json(),
+);
+// vendors[].vendorName, totalScrapEvents, totalFailures, mostRecentEventUtc
+// vendors[].components[].componentName, scrapEvents, totalFailures
+
+// Drill into a single vendor
+const vendor = await fetch(
+  `/api/manufacturing/vendor-quality/${vendorId}`,
+).then((r) => r.json());
+```
+
+### Scenario: Filter scrap history by supplier
+
+```javascript
+// Show all scrap events attributed to a specific vendor (e.g., vendor 1650)
+const events = await fetch(
+  "/api/manufacturing/scrap-events?vendorId=1650",
+).then((r) => r.json());
+// events[].productName, locationName, scrapReasonName, isTotalFailure, failedAtUtc
+// events[].supplierComponentName, supplierVendorName
+```
+
 ### Scenario: Emergency stop
 
 ```javascript
@@ -630,21 +777,1555 @@ ORDER BY ProductID
 
 ---
 
-## Files
+---
 
-| File                                               | Purpose                                                                                  |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `Models/WorkOrderOperationMessage.cs`              | Queue message `record` — all fields are serialized into/out of the queue                 |
-| `Services/WorkOrderSimulationService.cs`           | All SQL + Table Storage logic — BOM explosion, routing, inventory, scrap, capacity slots |
-| `Functions/ManufacturingControlFunction.cs`        | 8 HTTP control + monitoring endpoints                                                    |
-| `Functions/WorkOrderOperationProcessorFunction.cs` | Queue trigger; two-phase message processing                                              |
+## Supply Chain Procurement Simulation
 
-### Infrastructure files modified
+A companion simulation to the manufacturing engine. Models a full purchasing workflow where operators source raw materials from the **63 active vendors** in the AdventureWorks `Purchasing` schema, each carrying real pricing, lead times, and ship method data from the database. Delivered stock is written directly back into `Production.ProductInventory`, closing the loop with the manufacturing engine — a delivery can unblock a stalled work order.
 
-| File                                    | Change                                        |
-| --------------------------------------- | --------------------------------------------- |
-| `api-functions/api-functions.csproj`    | Added `Azure.Data.Tables 12.9.1`              |
-| `api-functions/Program.cs`              | Registered `WorkOrderSimulationService` in DI |
-| `infra/modules/storage.bicep`           | Added `production-wo-queue`                   |
-| `infra/modules/aca-api-functions.bicep` | Added KEDA scale rule + 3 env var params      |
-| `infra/main.bicep`                      | Raised `maxReplicas` from 3 to 5              |
+Active order and stock state lives in Azure Table Storage (`awSupplyChain`) for low-latency simulation reads. Every purchase order is **also persisted to SQL** in `Purchasing.PurchaseOrderHeader` and `Purchasing.PurchaseOrderDetail` and kept in sync as the order progresses, so the data is queryable via the GraphQL/DAB API and standard AdventureWorks reporting tools.
+
+---
+
+### How It Works
+
+#### Vendors
+
+Vendor data is loaded on demand from `Purchasing.Vendor`, `Purchasing.ProductVendor`, and `Purchasing.ShipMethod`. Only active vendors (`ActiveFlag = 1`) that supply at least one BOM purchased component are included — **63 vendors** in total.
+
+Each vendor's simulation behaviour is derived from its `CreditRating` (1–5, where 1 is best):
+
+| CreditRating | Reliability | Restock delay (sim-hrs) | Character               |
+| ------------ | ----------- | ----------------------- | ----------------------- |
+| 1            | 97%         | 4                       | Preferred, low-risk     |
+| 2            | 90%         | 8                       | Reliable                |
+| 3            | 83%         | 16                      | Average                 |
+| 4            | 73%         | 30                      | Below average           |
+| 5            | 65%         | 48                      | High-risk, slow restock |
+
+Each vendor's preferred `ShipMethod` is determined from their most-used method in historical `Purchasing.PurchaseOrderHeader` records:
+
+| ShipMethodID | Name               | ShipBase | ShipRate (per unit) |
+| ------------ | ------------------ | -------- | ------------------- |
+| 1            | XRQ - TRUCK GROUND | $3.95    | $0.99               |
+| 2            | ZY - EXPRESS       | $9.95    | $1.99               |
+| 3            | OVERSEAS - DELUXE  | $29.95   | $2.99               |
+| 4            | OVERNIGHT J-FAST   | $21.95   | $1.29               |
+| 5            | CARGO TRANSPORT 5  | $8.99    | $1.49               |
+
+**Price formula** (per unit, per vendor):
+
+```
+unitCost     = Purchasing.ProductVendor.StandardPrice   (vendor-specific, per-component)
+shippingCost = vendor.ShipBase + (product.WeightKg × vendor.ShipRate × qty)
+totalCost    = (unitCost × qty) + shippingCost
+```
+
+Minimum and maximum order quantities are enforced from `ProductVendor.MinOrderQty` / `MaxOrderQty`. Lead times are sourced from `ProductVendor.AverageLeadTime` (per-component days).
+
+#### Product Catalog
+
+The catalog is derived from `Production.BillOfMaterials` joined to `Purchasing.ProductVendor` — only purchased components (`MakeFlag = 0`) that have at least one active vendor are included. Each vendor maintains independent stock for every component it supplies.
+
+#### Order State Machine
+
+When an order is placed the stock is deducted immediately (to prevent oversell), and a queue message drives the order through the following states automatically:
+
+```
+placed → confirmed → picking → shipped → delivered
+                                 ↓ (reliability roll fails)
+                               delayed → shipped
+```
+
+Delivery times use the same `SIMULATION_TIME_SCALE_FACTOR` as manufacturing:
+
+| Transition          | Sim time                 | Real time at scale=60 |
+| ------------------- | ------------------------ | --------------------- |
+| placed → confirmed  | 5 min                    | 5 sec                 |
+| confirmed → picking | 15 min                   | 15 sec                |
+| picking → shipped   | 30 min                   | 30 sec                |
+| shipped → delivered | `leadDays × 24 × 60` min | `leadDays × 24` min   |
+
+The reliability roll happens at `picking → shipped`. If it fails, the order moves to `delayed` first (adding 1 simulated day to the ETA) before proceeding to `shipped`. The roll uses the vendor's `CreditRating`-derived `reliabilityPct`.
+
+#### SQL Persistence
+
+Every order placed by the simulator creates a row in `Purchasing.PurchaseOrderHeader` (Status=1 Pending) and `Purchasing.PurchaseOrderDetail`. The header is kept in sync as the order progresses through the state machine:
+
+| Simulator status             | `PurchaseOrderHeader.Status` | Notes                               |
+| ---------------------------- | ---------------------------- | ----------------------------------- |
+| `placed` / `confirmed`       | `1` — Pending                | Header created at `placed`          |
+| `picking`                    | `2` — Approved               | Buyer has approved the order        |
+| `shipped`                    | `2` — Approved               | `ShipDate` recorded on the header   |
+| `delayed`                    | `2` — Approved               | No status change; ETA extended      |
+| `delivered`                  | `4` — Complete               | `ReceivedQty` updated in detail row |
+| `cancelled` / `out_of_stock` | `3` — Rejected               |                                     |
+
+The `PurchaseOrderID` from SQL is stored in Table Storage as `SqlPurchaseOrderId` and is returned on every order response. Use it to cross-reference the live simulation order with the historical `Purchasing` schema via the GraphQL API.
+
+Additionally, on delivery, `Purchasing.ProductVendor.LastReceiptCost` / `LastReceiptDate` are updated and a new `Production.ProductCostHistory` record is written.
+
+#### Delivery → Manufacturing Inventory
+
+On **delivered**, the backend writes to SQL:
+
+```sql
+UPDATE Production.ProductInventory
+SET Quantity = Quantity + @Qty, ModifiedDate = GETDATE()
+WHERE ProductID = @ProductId AND LocationID = 7
+```
+
+LocationID 7 is Finished Goods Storage. This increment is picked up by the manufacturing engine's shortage-retry loop — a delivered purchase order can directly unblock a stalled work order.
+
+#### Vendor Restock
+
+After each delivery, a deferred restock message is automatically enqueued. The delay (in real seconds) is:
+
+```
+restockDelaySec = vendor.RestockDelaySimHrs × 3600 / SIMULATION_TIME_SCALE_FACTOR
+```
+
+At `scale=60`: a CreditRating-1 vendor restocks in ~4 real minutes, a CreditRating-5 vendor in ~48 real minutes. The UI can surface this as "next restock in X minutes".
+
+Manual restock is also available via `POST /api/supply/restock/{vendorId}` for demo purposes.
+
+---
+
+### API Reference
+
+Base: `{API_FUNCTIONS_URL}/api/supply`
+
+> **Lazy initialization:** Vendor and stock data is seeded automatically on the first call to any `/supply/*` endpoint. There is no separate initialization step required.
+
+#### `GET /supply/vendors`
+
+Returns all active vendors with live statistics. `vendorId` is the `Purchasing.Vendor.BusinessEntityID` as a string.
+
+```json
+[
+  {
+    "vendor": {
+      "vendorId": "1650",
+      "accountNumber": "AMERICANBE0001",
+      "name": "American Bicycles and Wheels",
+      "description": "Preferred supplier with excellent credit rating and reliable delivery history.",
+      "creditRating": 1,
+      "preferredVendorStatus": true,
+      "defaultLeadTimeDays": 17,
+      "reliabilityPct": 0.97,
+      "shipMethodId": 5,
+      "shipMethodName": "CARGO TRANSPORT 5",
+      "shipBase": 8.99,
+      "shipRate": 1.49,
+      "restockDelaySimHrs": 4,
+      "strengths": [
+        "Preferred vendor",
+        "Excellent credit (Rating 1)",
+        "High reliability"
+      ],
+      "weaknesses": []
+    },
+    "totalComponents": 3,
+    "inStockComponents": 3,
+    "activeOrders": 0,
+    "deliveredToday": 1
+  }
+]
+```
+
+| Field                   | Description                                                          |
+| ----------------------- | -------------------------------------------------------------------- |
+| `vendorId`              | `Purchasing.Vendor.BusinessEntityID` as a string                     |
+| `creditRating`          | 1–5 from `Purchasing.Vendor.CreditRating` (1 = best)                 |
+| `preferredVendorStatus` | `Purchasing.Vendor.PreferredVendorStatus`                            |
+| `defaultLeadTimeDays`   | Average across all `ProductVendor.AverageLeadTime` for this vendor   |
+| `reliabilityPct`        | Derived from `creditRating` (1→0.97, 2→0.90, 3→0.83, 4→0.73, 5→0.65) |
+| `shipMethodName`        | Most-used `Purchasing.ShipMethod` from historical purchase orders    |
+| `totalComponents`       | Number of catalog SKUs this vendor carries                           |
+| `inStockComponents`     | SKUs with `currentStock > 0`                                         |
+| `activeOrders`          | Orders in `placed / confirmed / picking / shipped` state             |
+| `deliveredToday`        | Orders delivered today (UTC)                                         |
+
+---
+
+#### `GET /supply/vendors/{vendorId}`
+
+Returns a single vendor summary plus their component stock list. `vendorId` is the numeric `BusinessEntityID`.
+
+```json
+{
+  "vendor": { ... },
+  "stock": [
+    {
+      "vendorId": "1650",
+      "productId": 316,
+      "productName": "Blade",
+      "standardPrice": 28.17,
+      "averageLeadTime": 14,
+      "minOrderQty": 1,
+      "maxOrderQty": 500,
+      "currentStock": 80,
+      "maxStock": 100,
+      "weightKg": 1.2
+    }
+  ]
+}
+```
+
+`standardPrice` is `Purchasing.ProductVendor.StandardPrice` — the actual negotiated price for this vendor/component pair. `stock` covers only the components this vendor supplies.
+
+---
+
+#### `GET /supply/catalog`
+
+Returns all vendor offers for all purchasable BOM components. Each row is one vendor's offer for one component, with pricing pre-calculated for qty=1.
+
+```json
+[
+  {
+    "vendorId": "1650",
+    "vendorName": "American Bicycles and Wheels",
+    "productId": 316,
+    "productName": "Blade",
+    "qtyRequested": 1,
+    "stockAvailable": 70,
+    "unitCost": 28.17,
+    "shippingCost": 10.48,
+    "totalCost": 38.65,
+    "leadTimeDays": 14,
+    "minOrderQty": 1,
+    "maxOrderQty": 500,
+    "reliabilityPct": 0.97,
+    "estimatedDeliverySimHrs": 336.0,
+    "estimatedDeliveryRealMins": 336.0,
+    "inStock": true,
+    "incomingQty": 10
+  }
+]
+```
+
+Results are sorted by `productId` then `totalCost` ascending — cheapest option first per component.
+
+**`stockAvailable`** is what remains at the vendor **after** deducting all in-flight orders — it is the quantity you can still order right now. **`incomingQty`** is the total units across all open orders (`placed`/`confirmed`/`picking`/`shipped`/`delayed`) that have already left the vendor's shelf and will be delivered to your warehouse. Display both together so the UI can show e.g. `"70 available · 10 incoming"`.
+
+**Use this for:** a comparison grid showing all vendors side-by-side for a given component.
+
+---
+
+#### `GET /supply/catalog/{productId}`
+
+Same as above but filtered to one component. Returns rows for all vendors that supply this product, sorted by `totalCost`.
+
+---
+
+#### `GET /supply/quote?vendorId=&productId=&qty=`
+
+Returns a price quote for a specific vendor/product/quantity combination. Validates against `minOrderQty` / `maxOrderQty`. Shipping scales with qty (weight × `shipRate`).
+
+```
+GET /api/supply/quote?vendorId=1650&productId=316&qty=50
+```
+
+Response shape is the same as a catalog row, with `qtyRequested` set and `totalCost` reflecting the full order value.
+
+---
+
+#### `POST /supply/order`
+
+Places a purchase order. Stock is deducted immediately. Returns `201 Created` with the full order on success, `422` if stock is insufficient or qty violates vendor min/max.
+
+**Request body:**
+
+```json
+{
+  "vendorId": "1650",
+  "productId": 316,
+  "qty": 10
+}
+```
+
+**Response `201 Created`:**
+
+```json
+{
+  "orderId": "0F30C8FD56B7",
+  "vendorId": "1650",
+  "vendorName": "American Bicycles and Wheels",
+  "productId": 316,
+  "productName": "Blade",
+  "qty": 10,
+  "unitCost": 28.17,
+  "shippingCost": 23.89,
+  "totalCost": 305.59,
+  "status": "placed",
+  "placedAtUtc": "2026-04-08T14:55:47Z",
+  "estimatedDeliveryUtc": "2026-04-22T14:55:47Z",
+  "actualDeliveryUtc": null,
+  "cancellationReason": null,
+  "sqlPurchaseOrderId": 4215,
+  "trackingEvents": [
+    {
+      "eventType": "placed",
+      "description": "Order placed with American Bicycles and Wheels for 10× Blade. Estimated delivery: 14:55 UTC (PO #4215)",
+      "timestampUtc": "2026-04-08T14:55:47Z"
+    }
+  ]
+}
+```
+
+**Error `422 Unprocessable Entity`:**
+
+```json
+{ "error": "Insufficient stock. Available: 3, requested: 10." }
+```
+
+```json
+{ "error": "Quantity 500 exceeds vendor maximum order quantity of 150." }
+```
+
+#### Order Status Values
+
+| Status         | Meaning                                                    |
+| -------------- | ---------------------------------------------------------- |
+| `placed`       | Order received, stock reserved                             |
+| `confirmed`    | Vendor has confirmed the order                             |
+| `picking`      | Order being picked from warehouse                          |
+| `delayed`      | Reliability failure — delivery extended by 1 simulated day |
+| `shipped`      | Dispatched — en route                                      |
+| `delivered`    | Arrived; SQL inventory updated                             |
+| `cancelled`    | Cancelled by operator; stock returned to vendor            |
+| `out_of_stock` | Vendor cancelled before confirmation; stock returned       |
+
+---
+
+#### `GET /supply/orders`
+
+Returns all **active** orders (excludes `delivered`, `cancelled`, `out_of_stock`). Poll this every few seconds for a live orders board.
+
+Response is an array of order objects (same shape as POST response).
+
+---
+
+#### `GET /supply/orders/history`
+
+Returns all orders including completed and cancelled. Sorted newest first.
+
+---
+
+#### `GET /supply/order/{orderId}`
+
+Returns a single order by its 12-character ID. Includes the full `trackingEvents` array, which grows as the order progresses.
+
+`orderId` is case-insensitive.
+
+---
+
+#### `DELETE /supply/order/{orderId}`
+
+Cancels an order. Only works when `status` is `placed` or `confirmed`. Stock is returned to the vendor immediately.
+
+**Optional request body:**
+
+```json
+{ "reason": "Wrong product selected" }
+```
+
+**Response `200 OK`:**
+
+```json
+{
+  "message": "Order 0F30C8FD56B7 cancelled.",
+  "reason": "Wrong product selected"
+}
+```
+
+**Error `422`** if the order is already past `confirmed` or does not exist.
+
+---
+
+#### `POST /supply/restock/{vendorId}`
+
+Immediately restocks a vendor's inventory to maximum levels. Optionally scope to one product:
+
+```json
+{ "productId": 316 }
+```
+
+Omit the body (or set `productId: 0`) to restock all components for this vendor.
+
+**Response `200 OK`:**
+
+```json
+{ "message": "Restocked all components for 1650." }
+```
+
+**Use this in the UI** as a "Restock Now" button on the vendor detail view for demo resets.
+
+---
+
+#### `DELETE /supply/reset`
+
+Wipes all orders, tracking events, and stock, then re-seeds stock at randomised initial levels from `ProductVendor` data. Vendor definitions are reloaded from SQL.
+
+```json
+{ "message": "Supply chain simulation reset. Vendor stock re-seeded." }
+```
+
+---
+
+### UI Scenarios
+
+#### Scenario: Vendor comparison — sourcing a component
+
+```javascript
+// Show all vendor offers for a component, sorted cheapest first
+const offers = await fetch(`/api/supply/catalog/${productId}`).then((r) =>
+  r.json(),
+);
+// offers[].vendorName, unitCost, shippingCost, totalCost, stockAvailable,
+// leadTimeDays, reliabilityPct, minOrderQty, maxOrderQty, inStock
+```
+
+#### Scenario: Get a quote before ordering
+
+```javascript
+const quote = await fetch(
+  `/api/supply/quote?vendorId=1650&productId=${productId}&qty=${qty}`,
+).then((r) => r.json());
+// quote.totalCost, quote.inStock, quote.estimatedDeliveryRealMins
+```
+
+#### Scenario: Place an order and track it
+
+```javascript
+// 1. Place order (vendorId is the numeric BusinessEntityID as a string)
+const order = await fetch("/api/supply/order", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ vendorId: "1650", productId: 316, qty: 10 }),
+}).then((r) => r.json());
+
+// order.orderId, order.status, order.estimatedDeliveryUtc, order.trackingEvents
+
+// 2. Poll for status updates
+setInterval(async () => {
+  const updated = await fetch(`/api/supply/order/${order.orderId}`).then((r) =>
+    r.json(),
+  );
+  // updated.status, updated.trackingEvents, updated.actualDeliveryUtc
+}, 5000);
+```
+
+#### Scenario: Live active orders board
+
+```javascript
+// Poll every 3 seconds for orders board
+setInterval(async () => {
+  const active = await fetch("/api/supply/orders").then((r) => r.json());
+  // active[].orderId, vendorName, productName, qty, status, estimatedDeliveryUtc
+  // active[].sqlPurchaseOrderId — use to link to Purchasing.PurchaseOrderHeader via GraphQL
+}, 3000);
+```
+
+#### Scenario: Show stock availability including in-transit units
+
+```javascript
+// Catalog rows include both what you can still order AND what is already coming
+const offers = await fetch(`/api/supply/catalog/${productId}`).then((r) =>
+  r.json(),
+);
+offers.forEach((offer) => {
+  const label =
+    offer.stockAvailable > 0
+      ? `${offer.stockAvailable} available`
+      : "Out of stock";
+  const incoming =
+    offer.incomingQty > 0 ? ` · ${offer.incomingQty} incoming` : "";
+  console.log(`${offer.vendorName}: ${label}${incoming}`);
+  // e.g. "American Bicycles and Wheels: 70 available · 10 incoming"
+});
+```
+
+#### Scenario: Link a simulator order to the GraphQL PO record
+
+```javascript
+// After placing an order, use sqlPurchaseOrderId to fetch the SQL record via DAB
+const order = await fetch("/api/supply/order", { method: "POST", ... }).then(r => r.json());
+if (order.sqlPurchaseOrderId) {
+  const poRecord = await fetch(
+    `/graphql`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: `query {
+          purchaseOrderHeader_by_pk(PurchaseOrderID: ${order.sqlPurchaseOrderId}) {
+            PurchaseOrderID Status VendorID OrderDate ShipDate SubTotal TaxAmt Freight TotalDue
+          }
+        }`
+      })
+    }
+  ).then(r => r.json());
+  // poRecord.data.purchaseOrderHeader_by_pk.Status: 1=Pending 2=Approved 3=Rejected 4=Complete
+}
+```
+
+#### Scenario: Dashboard — vendor health at a glance
+
+```javascript
+const vendors = await fetch("/api/supply/vendors").then((r) => r.json());
+// vendors[].vendor.name, vendor.creditRating, vendor.reliabilityPct,
+// inStockComponents, activeOrders, deliveredToday
+```
+
+#### Scenario: Cancel an in-flight order
+
+```javascript
+const result = await fetch(`/api/supply/order/${orderId}`, {
+  method: "DELETE",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ reason: "Found cheaper alternative" }),
+}).then((r) => r.json());
+// result.message or result.error (if past confirmed)
+```
+
+#### Scenario: Reset simulation for a fresh demo
+
+```javascript
+await fetch("/api/supply/reset", { method: "DELETE" });
+// All orders cleared, stock re-seeded from Purchasing.ProductVendor
+```
+
+---
+
+### Data Shape Reference
+
+#### `VendorSummary` (from `GET /supply/vendors`)
+
+```typescript
+interface VendorSummary {
+  vendor: {
+    vendorId: string; // Purchasing.Vendor.BusinessEntityID as string
+    accountNumber: string; // e.g. "AMERICANBE0001"
+    name: string; // Purchasing.Vendor.Name
+    description: string; // derived from CreditRating
+    creditRating: number; // 1–5 (1 = best)
+    preferredVendorStatus: boolean;
+    defaultLeadTimeDays: number; // avg across ProductVendor.AverageLeadTime
+    reliabilityPct: number; // 0–1 derived from creditRating
+    shipMethodId: number;
+    shipMethodName: string; // e.g. "CARGO TRANSPORT 5"
+    shipBase: number; // Purchasing.ShipMethod.ShipBase
+    shipRate: number; // Purchasing.ShipMethod.ShipRate (per unit × weight)
+    restockDelaySimHrs: number; // derived from creditRating
+    strengths: string[];
+    weaknesses: string[];
+  };
+  totalComponents: number;
+  inStockComponents: number;
+  activeOrders: number;
+  deliveredToday: number;
+}
+```
+
+#### `SupplyQuote` (from `GET /supply/catalog` and `GET /supply/quote`)
+
+```typescript
+interface SupplyQuote {
+  vendorId: string;
+  vendorName: string;
+  productId: number;
+  productName: string;
+  qtyRequested: number;
+  stockAvailable: number; // remaining vendor stock AFTER deducting all in-flight orders
+  unitCost: number; // Purchasing.ProductVendor.StandardPrice
+  shippingCost: number; // shipBase + (weightKg × shipRate × qty)
+  totalCost: number;
+  leadTimeDays: number; // ProductVendor.AverageLeadTime for this item
+  minOrderQty: number; // ProductVendor.MinOrderQty
+  maxOrderQty: number; // ProductVendor.MaxOrderQty
+  reliabilityPct: number;
+  estimatedDeliverySimHrs: number; // simulated hours until delivery
+  estimatedDeliveryRealMins: number; // real wall-clock minutes at current SIMULATION_TIME_SCALE_FACTOR
+  inStock: boolean;
+  incomingQty: number; // units on open orders in transit to our warehouse (placed/confirmed/picking/shipped/delayed)
+}
+```
+
+#### `PurchaseOrder` (from all order endpoints)
+
+```typescript
+interface PurchaseOrder {
+  orderId: string; // 12-char uppercase hex, e.g. "0F30C8FD56B7"
+  vendorId: string;
+  vendorName: string;
+  productId: number;
+  productName: string;
+  qty: number;
+  unitCost: number;
+  shippingCost: number;
+  totalCost: number;
+  status:
+    | "placed"
+    | "confirmed"
+    | "picking"
+    | "delayed"
+    | "shipped"
+    | "delivered"
+    | "cancelled"
+    | "out_of_stock";
+  placedAtUtc: string; // ISO 8601
+  estimatedDeliveryUtc: string; // ISO 8601; may shift if delayed
+  actualDeliveryUtc: string | null;
+  cancellationReason: string | null;
+  sqlPurchaseOrderId: number | null; // Purchasing.PurchaseOrderHeader.PurchaseOrderID — use to cross-reference via GraphQL
+  trackingEvents: TrackingEvent[];
+}
+
+interface TrackingEvent {
+  eventType: string; // matches status values, plus initial "placed"
+  description: string; // human-readable label for the event
+  timestampUtc: string; // ISO 8601
+}
+```
+
+---
+
+## Workforce Simulation
+
+The manufacturing simulation integrates with `HumanResources` tables to populate production locations with real AdventureWorks employees. This adds operator-level detail to work order processing: labor cost calculations, tenure-based quality risk, and shift-aware availability.
+
+---
+
+### How It Works
+
+#### Employee Loading
+
+On first access, the service queries all currently-active employees in Manufacturing-group departments (`GroupName = 'Manufacturing'`) from:
+
+- `HumanResources.Employee` — job title, hire date, vacation/sick leave hours
+- `Person.Person` — full name
+- `HumanResources.EmployeeDepartmentHistory` (current, `EndDate IS NULL`) — department and shift assignment
+- `HumanResources.Department` — department name and group
+- `HumanResources.Shift` — shift name, start time, end time
+- `HumanResources.EmployeePayHistory` (most recent rate) — current hourly rate
+
+Manufacturing departments include **Production** (DeptID 7) and **Production Control** (DeptID 8), covering approximately **185 employees** across three shifts.
+
+#### Location Assignment
+
+Workers are distributed deterministically across the 7 simulation locations using round-robin by employee order:
+
+| LocationID | Name              |
+| ---------- | ----------------- |
+| 10         | Frame Forming     |
+| 20         | Frame Welding     |
+| 30         | Debur and Polish  |
+| 40         | Paint             |
+| 45         | Specialized Paint |
+| 50         | Subassembly       |
+| 60         | Final Assembly    |
+
+Each location typically receives ~26–27 workers.
+
+#### Scrap Rate Multiplier
+
+Worker tenure affects the local scrap/failure probability. The multiplier is applied to a station's base `failureRatePct` when that worker is the assigned operator:
+
+```
+scrapRateMultiplier = max(0.5, 1.0 - tenureYears / 20.0)
+```
+
+| Tenure    | Multiplier | Effect on base 5% scrap rate |
+| --------- | ---------- | ---------------------------- |
+| 0 years   | ×1.0       | 5.0% (no reduction)          |
+| 10 years  | ×0.5       | 2.5% (50% reduction, cap)    |
+| 20+ years | ×0.5       | 2.5% (capped)                |
+
+#### Shift-Aware Availability
+
+Workers are only considered `available` during their assigned shift window. Workers outside their shift window show as `off-shift` and cannot be assigned to operations. Workers with zero vacation hours accrued show as `unavailable`.
+
+| Status        | Meaning                                                                                 |
+| ------------- | --------------------------------------------------------------------------------------- |
+| `available`   | On shift, not assigned to a work order                                                  |
+| `working`     | Currently assigned to an active routing operation                                       |
+| `off-shift`   | Outside their shift window (Day: 07:00–15:00, Evening: 15:00–23:00, Night: 23:00–07:00) |
+| `unavailable` | VacationHours ≤ 0 (over-rostered)                                                       |
+
+---
+
+### API Reference
+
+Base: `{API_FUNCTIONS_URL}/api/manufacturing`
+
+#### `GET /manufacturing/workforce`
+
+Returns a headcount summary across all manufacturing locations.
+
+**Response `200 OK`:**
+
+```json
+{
+  "totalActiveWorkers": 185,
+  "currentlyWorking": 12,
+  "availableNow": 48,
+  "offShift": 124,
+  "unavailable": 1,
+  "byLocation": [
+    {
+      "locationId": 10,
+      "locationName": "Frame Forming",
+      "headcount": 27,
+      "available": 7,
+      "working": 2,
+      "offShift": 18
+    }
+  ]
+}
+```
+
+---
+
+#### `GET /manufacturing/workforce/detail`
+
+Returns all workers with individual status, current assignment, pay rate, and tenure. Results are sorted by location, then shift, then tenure descending (most experienced first).
+
+**Response `200 OK` (array):**
+
+```json
+[
+  {
+    "employeeId": 5,
+    "name": "Thierry D'Hers",
+    "jobTitle": "Production Supervisor - WC60",
+    "locationId": 60,
+    "locationName": "Final Assembly",
+    "shiftId": 1,
+    "shiftName": "Day",
+    "status": "available",
+    "currentWorkOrderId": null,
+    "currentOperation": null,
+    "hourlyRate": 25.0,
+    "tenureYears": 17.3,
+    "scrapRateMultiplier": 0.5
+  }
+]
+```
+
+| Field                 | Source                                                           |
+| --------------------- | ---------------------------------------------------------------- |
+| `employeeId`          | `HumanResources.Employee.BusinessEntityID`                       |
+| `jobTitle`            | `HumanResources.Employee.JobTitle`                               |
+| `hourlyRate`          | `HumanResources.EmployeePayHistory.Rate` (most recent)           |
+| `tenureYears`         | Calculated from `HireDate` to today                              |
+| `scrapRateMultiplier` | `max(0.5, 1.0 - tenureYears/20.0)`                               |
+| `status`              | Derived at query time — respects shift window and vacation hours |
+
+---
+
+### Data Shape Reference
+
+#### `WorkforceSnapshot` (from `GET /manufacturing/workforce`)
+
+```typescript
+interface WorkforceSnapshot {
+  totalActiveWorkers: number;
+  currentlyWorking: number;
+  availableNow: number;
+  offShift: number;
+  unavailable: number;
+  byLocation: LocationWorkforce[];
+}
+
+interface LocationWorkforce {
+  locationId: number;
+  locationName: string;
+  headcount: number;
+  available: number;
+  working: number;
+  offShift: number;
+}
+```
+
+#### `WorkerStatus` (from `GET /manufacturing/workforce/detail`)
+
+```typescript
+interface WorkerStatus {
+  employeeId: number;
+  name: string;
+  jobTitle: string;
+  locationId: number;
+  locationName: string;
+  shiftId: number;
+  shiftName: string;
+  status: "available" | "working" | "off-shift" | "unavailable";
+  currentWorkOrderId: number | null;
+  currentOperation: string | null;
+  hourlyRate: number;
+  tenureYears: number;
+  scrapRateMultiplier: number;
+}
+```
+
+#### `VendorQualityData` (from `GET /manufacturing/vendor-quality` and `GET /manufacturing/vendor-quality/{vendorId}`)
+
+```typescript
+interface VendorQualityData {
+  vendorId: number; // Purchasing.Vendor.BusinessEntityID
+  vendorName: string;
+  totalScrapEvents: number;
+  totalFailures: number; // events where isTotalFailure = true
+  affectedWorkOrders: number; // distinct work order count
+  mostRecentEventUtc: string; // ISO 8601
+  components: VendorQualityComponentData[];
+}
+
+interface VendorQualityComponentData {
+  componentProductId: number;
+  componentName: string;
+  scrapEvents: number;
+  totalFailures: number;
+}
+```
+
+#### `ScrapEventData` (from `GET /manufacturing/scrap-events` and `GET /manufacturing/status`)
+
+```typescript
+interface ScrapEventData {
+  workOrderId: number | string;
+  productId: number;
+  productName: string;
+  locationId: number;
+  locationName: string;
+  scrapReasonId: number;
+  scrapReasonName: string;
+  scrappedQty: number;
+  isTotalFailure: boolean;
+  failedAtUtc: string; // ISO 8601
+  supplierVendorId: number | null; // null for process-quality scrap reasons
+  supplierVendorName: string | null;
+  supplierComponentProductId: number | null;
+  supplierComponentName: string | null;
+}
+```
+
+---
+
+## Manufacturing Planning & Intelligence APIs
+
+A set of read-only analytical endpoints that turn the live AdventureWorks data into actionable planning insights. These APIs are designed to power a planning dashboard in the admin UI, answering questions like:
+
+- **How many more Mountain Bikes could we make right now?** (component feasibility)
+- **Which products are gathering dust in the warehouse?** (overstock / sale candidates)
+- **Which products are cheapest to make but priced too low?** (margin / price increase analysis)
+- **Which components will we run out of first as sales continue?** (shortage forecast)
+- **What should we buy, from whom, and how much will it cost?** (reorder recommendations)
+
+All endpoints are under `/api/plan/`. They are read-only — no writes to the database.
+
+Base URL: `{API_FUNCTIONS_URL}/api/plan`
+
+---
+
+### API Overview
+
+| Method | Route                                   | Purpose                                                          |
+| ------ | --------------------------------------- | ---------------------------------------------------------------- |
+| `GET`  | `plan/feasibility/{productId}?qty={n}`  | How many units can be built right now?                           |
+| `GET`  | `plan/feasibility?qty={n}`              | Feasibility snapshot for all finished goods                      |
+| `GET`  | `plan/cost/{productId}`                 | Full BOM + routing cost breakdown and margin                     |
+| `GET`  | `plan/cost/{productId}/current`         | **Accurate current manufacturing cost using ProductCostHistory** |
+| `GET`  | `plan/catalog`                          | All finished goods with cost, margin, stock, sales signals       |
+| `GET`  | `plan/overstock?minWeeks={n}`           | High-stock products → sale candidates                            |
+| `GET`  | `plan/thin-margin?maxMarginPct={n}`     | Low-margin products → price increase candidates                  |
+| `GET`  | `plan/shortage-forecast?days={n}`       | Which components run out first?                                  |
+| `GET`  | `plan/reorder-recommendations?days={n}` | What to buy, from whom, at what cost                             |
+
+---
+
+### `GET /plan/feasibility/{productId}?qty={n}`
+
+For a given manufactured finished good, calculates the **maximum number of units producible** from current component inventory. Also shows the bottleneck component and — if `withProcurement=true` (default) — factors in in-flight supply orders.
+
+**Query parameters:**
+
+| Parameter         | Default | Description                                                    |
+| ----------------- | ------- | -------------------------------------------------------------- |
+| `qty`             | `1`     | Target production quantity to check                            |
+| `withProcurement` | `true`  | Include pending supply orders in the "with procurement" figure |
+
+**Response:**
+
+```json
+{
+  "productId": 749,
+  "name": "Mountain-100 Black, 38",
+  "requestedQty": 5,
+  "maxProducibleNow": 7,
+  "maxProducibleWithProcurement": 12,
+  "procurementCostToMeetRequest": 0.0,
+  "bottleneckComponentName": "Bearing Ball",
+  "components": [
+    {
+      "productId": 2,
+      "name": "Bearing Ball",
+      "requiredPerUnit": 100.0,
+      "requiredForQty": 500,
+      "currentStock": 709,
+      "canSupportUnits": 7,
+      "shortfallForQty": 0,
+      "isBottleneck": true
+    }
+  ]
+}
+```
+
+| Field                          | Description                                                                        |
+| ------------------------------ | ---------------------------------------------------------------------------------- |
+| `maxProducibleNow`             | Units achievable from current `Production.ProductInventory` only                   |
+| `maxProducibleWithProcurement` | Units achievable including stock in placed/confirmed/picking/shipped supply orders |
+| `procurementCostToMeetRequest` | Estimated cheapest-vendor cost to cover any shortfall to meet `requestedQty`       |
+| `bottleneckComponentName`      | The component limiting production — lowest `canSupportUnits`                       |
+| `components[].canSupportUnits` | `floor(currentStock / requiredPerUnit)`                                            |
+| `components[].isBottleneck`    | `true` for the single constraining component                                       |
+
+Returns `404` for non-existent products or products where `MakeFlag=0` or `FinishedGoodsFlag=0`.
+
+---
+
+### `GET /plan/feasibility?qty={n}`
+
+Returns the feasibility summary for **every** manufactured finished good in a single call. Designed for a product grid view. Each row includes `maxProducibleNow` and a `canMeetRequest` flag against the requested qty.
+
+```json
+[
+  {
+    "productId": 749,
+    "name": "Mountain-100 Black, 38",
+    "productNumber": "BK-M82B-38",
+    "listPrice": 3399.99,
+    "currentStockQty": 4,
+    "maxProducibleNow": 7,
+    "canMeetRequest": true,
+    "inventorySignal": "healthy",
+    "pricingSignal": "healthy",
+    "salesLast30Days": 3,
+    "weeksOfSupply": 2.5
+  }
+]
+```
+
+---
+
+### `GET /plan/cost/{productId}`
+
+Full cost breakdown for a single product: every BOM component with its `requiredPerUnit × standardCost`, plus average routing labour from historical work orders.
+
+```json
+{
+  "productId": 749,
+  "productName": "Mountain-100 Black, 38",
+  "listPrice": 3399.99,
+  "materialCost": 2048.83,
+  "routingCost": 49.0,
+  "estimatedCogs": 2097.83,
+  "grossMarginPct": 0.3832,
+  "pricingSignal": "healthy",
+  "bomLines": [
+    {
+      "productId": 316,
+      "name": "Blade",
+      "requiredPerUnit": 1.0,
+      "standardCost": 63.5,
+      "costContribution": 63.5,
+      "isPurchased": true
+    },
+    {
+      "productId": 517,
+      "name": "HL Mountain Frame - Black, 38",
+      "requiredPerUnit": 1.0,
+      "standardCost": 1059.31,
+      "costContribution": 1059.31,
+      "isPurchased": false
+    }
+  ]
+}
+```
+
+| `pricingSignal` | Meaning                          |
+| --------------- | -------------------------------- |
+| `healthy`       | Gross margin ≥ 15%               |
+| `thin-margin`   | Gross margin 0–15%               |
+| `loss-making`   | Estimated COGS > list price      |
+| `no-price`      | `ListPrice = 0` (not yet priced) |
+
+> **Note on gross margin:** `materialCost` uses `Production.Product.StandardCost` for each BOM component. `routingCost` is the average total actual cost from the last 10 completed work orders for this product (falls back to 0 if none exist).
+
+---
+
+### `GET /plan/cost/{productId}/current`
+
+**Returns the accurate current manufacturing cost** using real-time component costs from the supply chain simulation. This endpoint provides the most accurate costing by using:
+
+1. **`Production.ProductCostHistory`** - Latest cost entries recorded when components are purchased from vendors
+2. **`Purchasing.ProductVendor.LastReceiptCost`** - Fallback to most recent vendor receipt cost
+3. **`Production.Product.StandardCost`** - Final fallback for components without cost history
+
+This endpoint is ideal for **real-time costing dashboards** and shows exactly which cost source was used for each component.
+
+**Example Response:**
+
+```json
+{
+  "productId": 749,
+  "productName": "Mountain-100 Black, 38",
+  "listPrice": 3399.99,
+  "currentMaterialCost": 2153.47,
+  "estimatedRoutingCost": 49.0,
+  "totalManufacturingCost": 2202.47,
+  "grossMarginPct": 0.3521,
+  "pricingSignal": "healthy",
+  "costAsOf": "2026-04-09T18:30:00Z",
+  "bomBreakdown": [
+    {
+      "productId": 316,
+      "name": "Blade",
+      "requiredPerUnit": 1.0,
+      "currentCost": 67.85,
+      "costDate": "2026-04-09T14:22:00Z",
+      "costContribution": 67.85,
+      "isPurchased": true,
+      "costSource": "ProductCostHistory"
+    },
+    {
+      "productId": 2,
+      "name": "Bearing Ball",
+      "requiredPerUnit": 100.0,
+      "currentCost": 0.21,
+      "costDate": "2026-04-08T09:15:00Z",
+      "costContribution": 21.0,
+      "isPurchased": true,
+      "costSource": "ProductVendor.LastReceiptCost"
+    },
+    {
+      "productId": 517,
+      "name": "HL Mountain Frame - Black, 38",
+      "requiredPerUnit": 1.0,
+      "currentCost": 1059.31,
+      "costDate": null,
+      "costContribution": 1059.31,
+      "isPurchased": false,
+      "costSource": "Product.StandardCost"
+    }
+  ]
+}
+```
+
+**Response Fields:**
+
+| Field                       | Description                                                                                                     |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `currentMaterialCost`       | Sum of all BOM component costs using latest available cost data                                                 |
+| `estimatedRoutingCost`      | Average routing cost from last 10 completed work orders                                                         |
+| `totalManufacturingCost`    | `currentMaterialCost + estimatedRoutingCost`                                                                    |
+| `costAsOf`                  | Timestamp when the cost calculation was performed                                                               |
+| `bomBreakdown[].costDate`   | When this cost was recorded (null for Product.StandardCost fallback)                                            |
+| `bomBreakdown[].costSource` | Which table provided the cost: `ProductCostHistory`, `ProductVendor.LastReceiptCost`, or `Product.StandardCost` |
+
+**Key Differences from `/plan/cost/{productId}`:**
+
+- `/plan/cost/{productId}` uses static `Product.StandardCost` for all components
+- `/plan/cost/{productId}/current` uses **live cost history** from vendor purchases recorded by the supply chain simulation
+- This endpoint reflects **actual market prices** as components are purchased from vendors
+- Cost attribution shows exactly where each price came from for full transparency
+
+**Use Cases:**
+
+- Real-time manufacturing cost monitoring dashboards
+- Detecting when component price changes affect product profitability
+- Validating that supply chain purchases are being recorded correctly
+- Comparing planned vs. actual manufacturing costs
+
+Returns `404` for non-existent products or products where `MakeFlag=0` or `FinishedGoodsFlag=0`.
+
+---
+
+### `GET /plan/catalog`
+
+Returns all manufactured finished goods with their full planning snapshot. Supports optional filtering.
+
+**Query parameters:**
+
+| Parameter         | Values                                                    | Description                  |
+| ----------------- | --------------------------------------------------------- | ---------------------------- |
+| `inventorySignal` | `overstock` \| `healthy` \| `low-stock` \| `out-of-stock` | Filter by stock level signal |
+| `pricingSignal`   | `healthy` \| `thin-margin` \| `loss-making` \| `no-price` | Filter by margin signal      |
+
+```json
+[
+  {
+    "productId": 749,
+    "name": "Mountain-100 Black, 38",
+    "productNumber": "BK-M82B-38",
+    "listPrice": 3399.99,
+    "estimatedCogs": 868.63,
+    "grossMarginPct": 0.3932,
+    "pricingSignal": "healthy",
+    "currentStockQty": 4,
+    "salesLast30Days": 3.0,
+    "weeksOfSupply": 2.5,
+    "inventorySignal": "healthy",
+    "maxProducibleNow": 7
+  }
+]
+```
+
+| `inventorySignal` | Meaning               |
+| ----------------- | --------------------- |
+| `out-of-stock`    | `currentStockQty = 0` |
+| `low-stock`       | Weeks of supply < 2   |
+| `healthy`         | 2–12 weeks of supply  |
+| `overstock`       | Weeks of supply > 12  |
+
+`weeksOfSupply = -1` means zero sales in the last 30 days (cannot calculate a finite figure).
+
+---
+
+### `GET /plan/overstock?minWeeks={n}`
+
+Returns finished goods with finished goods inventory above the weeks-of-supply threshold. These are **candidates for promotion or discount in the eShop**.
+
+**Default threshold:** 12 weeks.
+
+```json
+{
+  "thresholdWeeksOfSupply": 12,
+  "count": 69,
+  "signal": "These products have high inventory relative to sales velocity. Consider discounting in the eShop.",
+  "items": [ ... ]
+}
+```
+
+Each item has the same shape as a catalog row (see above). Sort by `weeksOfSupply` descending to find the most overstocked items first.
+
+---
+
+### `GET /plan/thin-margin?maxMarginPct={n}`
+
+Returns finished goods where estimated gross margin is below the threshold. These are **candidates for a list price increase in the eShop**.
+
+**Default threshold:** 20% (`maxMarginPct=0.20`).
+
+```json
+{
+  "thresholdMarginPct": 0.20,
+  "count": 12,
+  "signal": "These products have thin or negative margins. Consider increasing the eShop list price.",
+  "items": [ ... ]
+}
+```
+
+Items are sorted by `grossMarginPct` ascending (worst margin first).
+
+---
+
+### `GET /plan/shortage-forecast?days={n}`
+
+Forecasts which **purchased components** (raw materials) will run out first, given current 30-day sales velocity applied to BOM requirements.
+
+**Default window:** 90 days.
+
+```json
+{
+  "forecastDays": 90,
+  "critical": 2,
+  "warning": 5,
+  "watch": 11,
+  "items": [
+    {
+      "componentProductId": 316,
+      "componentName": "Blade",
+      "currentStock": 423,
+      "dailyConsumptionRate": 8.23,
+      "daysUntilStockout": 51.4,
+      "weeksUntilStockout": 7.3,
+      "urgencyLevel": "warning",
+      "affectedProducts": [
+        {
+          "productId": 749,
+          "name": "Mountain-100 Black, 38",
+          "requiredPerUnit": 1.0,
+          "dailySalesRate": 0.1
+        }
+      ]
+    }
+  ]
+}
+```
+
+| `urgencyLevel` | Days until stockout                                       |
+| -------------- | --------------------------------------------------------- |
+| `critical`     | < 7 days                                                  |
+| `warning`      | 7–30 days                                                 |
+| `watch`        | 30–60 days                                                |
+| `ok`           | ≥ 60 days (only returned when inside forecastDays window) |
+
+`dailyConsumptionRate` is the aggregate across all finished goods that use this component:
+
+```
+sum over all finished goods( productDailySalesRate × componentRequiredPerUnit )
+```
+
+`affectedProducts` lists the finished goods that consume this component, sorted by highest daily impact first.
+
+> **Note on AdventureWorks data:** The included AdventureWorks dataset has historical sales data that may not reflect high-velocity recent sales. If `items` is empty, there are no components forecast to run out within the window (all components have adequate stock vs the current 30-day rolling sales rate). To test this feature with the simulation, run the manufacturing simulation to deplete component inventory, then re-query.
+
+---
+
+### `GET /plan/reorder-recommendations?days={n}`
+
+For every component with a forecast stockout within `days` days, generates a reorder recommendation that cross-references the supply chain vendor catalog — showing the **best vendor** to buy from and all alternatives with full pricing.
+
+**Default window:** 60 days.
+
+```json
+{
+  "forecastDays": 60,
+  "totalRecommendations": 8,
+  "estimatedTotalProcurementCost": 4821.50,
+  "items": [
+    {
+      "componentProductId": 316,
+      "componentName": "Blade",
+      "currentStock": 423,
+      "daysUntilStockout": 51.4,
+      "urgencyLevel": "watch",
+      "suggestedOrderQty": 247,
+      "bestVendor": {
+        "vendorId": "oceanship",
+        "vendorName": "OceanShip International",
+        "stockAvailable": 800,
+        "canFulfillOrder": true,
+        "unitCost": 45.72,
+        "totalCost": 11293.84,
+        "estimatedDeliveryRealMins": 96.0,
+        "reliabilityPct": 0.75,
+        "leadTimeDays": 4
+      },
+      "allVendors": [
+        {
+          "vendorId": "oceanship",
+          "vendorName": "OceanShip International",
+          ...
+        },
+        {
+          "vendorId": "budgetbolt",
+          "vendorName": "BudgetBolt Co",
+          ...
+        }
+      ]
+    }
+  ]
+}
+```
+
+| Field               | Description                                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `suggestedOrderQty` | 30-day supply: `ceil(dailyConsumptionRate × 30)`                                                              |
+| `bestVendor`        | Cheapest vendor that can fulfil the full `suggestedOrderQty`; falls back to cheapest if none can fully fulfil |
+| `allVendors`        | All 5 vendors sorted by `totalCost` ascending                                                                 |
+| `canFulfillOrder`   | `stockAvailable >= suggestedOrderQty`                                                                         |
+| `totalCost`         | `unitCost × suggestedOrderQty + shippingCost` (shippingCost is per-order flat rate + weight)                  |
+
+> Use `bestVendor.estimatedDeliveryRealMins` to show "arrives in X minutes" in the UI (at current `SIMULATION_TIME_SCALE_FACTOR`). Multiply by the vendor's `reliabilityPct` to surface risk.
+
+---
+
+### TypeScript Interfaces
+
+```typescript
+// GET /plan/feasibility/{productId}
+interface FeasibilityResult {
+  productId: number;
+  name: string;
+  requestedQty: number;
+  maxProducibleNow: number; // -1 = no purchased components (unlimited)
+  maxProducibleWithProcurement: number;
+  procurementCostToMeetRequest: number;
+  bottleneckComponentName: string | null;
+  components: FeasibilityComponent[];
+}
+
+interface FeasibilityComponent {
+  productId: number;
+  name: string;
+  requiredPerUnit: number;
+  requiredForQty: number;
+  currentStock: number;
+  canSupportUnits: number;
+  shortfallForQty: number;
+  isBottleneck: boolean;
+}
+
+// GET /plan/catalog, /plan/overstock, /plan/thin-margin, /plan/feasibility (all)
+interface FinishedGoodSnapshot {
+  productId: number;
+  name: string;
+  productNumber: string | null;
+  listPrice: number;
+  estimatedCogs: number;
+  grossMarginPct: number; // 0–1; negative = loss-making
+  pricingSignal: "healthy" | "thin-margin" | "loss-making" | "no-price";
+  currentStockQty: number;
+  salesLast30Days: number;
+  weeksOfSupply: number; // -1 = no recent sales
+  inventorySignal: "healthy" | "overstock" | "low-stock" | "out-of-stock";
+  maxProducibleNow: number; // -1 = not inventory-constrained
+}
+
+// GET /plan/cost/{productId}
+interface CostAnalysis {
+  productId: number;
+  productName: string;
+  listPrice: number;
+  materialCost: number;
+  routingCost: number;
+  estimatedCogs: number;
+  grossMarginPct: number;
+  pricingSignal: string;
+  bomLines: BomCostLine[];
+}
+
+interface BomCostLine {
+  productId: number;
+  name: string;
+  requiredPerUnit: number;
+  standardCost: number;
+  costContribution: number; // requiredPerUnit × standardCost
+  isPurchased: boolean; // false = sub-assembled in-house
+}
+
+// GET /plan/cost/{productId}/current
+interface CurrentManufacturingCost {
+  productId: number;
+  productName: string;
+  listPrice: number;
+  currentMaterialCost: number; // sum using ProductCostHistory
+  estimatedRoutingCost: number;
+  totalManufacturingCost: number; // currentMaterialCost + estimatedRoutingCost
+  grossMarginPct: number;
+  pricingSignal: "healthy" | "thin-margin" | "loss-making" | "no-price";
+  costAsOf: string; // ISO 8601 timestamp
+  bomBreakdown: CurrentCostBomLine[];
+}
+
+interface CurrentCostBomLine {
+  productId: number;
+  name: string;
+  requiredPerUnit: number;
+  currentCost: number; // from ProductCostHistory, ProductVendor, or Product.StandardCost
+  costDate: string | null; // ISO 8601 timestamp or null for StandardCost fallback
+  costContribution: number; // requiredPerUnit × currentCost
+  isPurchased: boolean;
+  costSource:
+    | "ProductCostHistory"
+    | "ProductVendor.LastReceiptCost"
+    | "Product.StandardCost";
+}
+
+// GET /plan/shortage-forecast
+interface ShortageforecastResponse {
+  forecastDays: number;
+  critical: number;
+  warning: number;
+  watch: number;
+  items: ComponentShortage[];
+}
+
+interface ComponentShortage {
+  componentProductId: number;
+  componentName: string;
+  currentStock: number;
+  dailyConsumptionRate: number;
+  daysUntilStockout: number;
+  weeksUntilStockout: number;
+  urgencyLevel: "critical" | "warning" | "watch" | "ok";
+  affectedProducts: AffectedFinishedGood[];
+}
+
+interface AffectedFinishedGood {
+  productId: number;
+  name: string;
+  requiredPerUnit: number;
+  dailySalesRate: number;
+}
+
+// GET /plan/reorder-recommendations
+interface ReorderRecommendationsResponse {
+  forecastDays: number;
+  totalRecommendations: number;
+  estimatedTotalProcurementCost: number;
+  items: ReorderRecommendation[];
+}
+
+interface ReorderRecommendation {
+  componentProductId: number;
+  componentName: string;
+  currentStock: number;
+  daysUntilStockout: number;
+  urgencyLevel: string;
+  suggestedOrderQty: number;
+  bestVendor: ReorderVendorOption | null;
+  allVendors: ReorderVendorOption[];
+}
+
+interface ReorderVendorOption {
+  vendorId: string;
+  vendorName: string;
+  stockAvailable: number;
+  canFulfillOrder: boolean;
+  unitCost: number;
+  totalCost: number;
+  estimatedDeliveryRealMins: number;
+  reliabilityPct: number;
+  leadTimeDays: number;
+}
+```
+
+---
+
+### UI Scenarios
+
+#### Scenario: "How many more bikes can we make?" — production planning grid
+
+```javascript
+// All products with feasibility in one call, check against target qty
+const feasibility = await fetch("/api/plan/feasibility?qty=10").then((r) =>
+  r.json(),
+);
+// feasibility[].name, maxProducibleNow, canMeetRequest, inventorySignal, weeksOfSupply
+// Highlight canMeetRequest=false in red; show bottleneck via /plan/feasibility/{id}?qty=10
+```
+
+#### Scenario: Drill into a specific product's production constraint
+
+```javascript
+const result = await fetch(`/api/plan/feasibility/${productId}?qty=20`).then(
+  (r) => r.json(),
+);
+// result.bottleneckComponentName — show prominently
+// result.components sorted by canSupportUnits ascending — show as stacked bar
+// result.procurementCostToMeetRequest — "order missing stock for $X"
+```
+
+#### Scenario: Sale candidates dashboard
+
+```javascript
+const overstock = await fetch("/api/plan/overstock?minWeeks=8").then((r) =>
+  r.json(),
+);
+// overstock.items sorted by weeksOfSupply descending
+// For each: name, currentStockQty, salesLast30Days, weeksOfSupply → "X weeks of stock, only Y sold last month"
+// Action button: "Put on Sale" → use eShop discount API
+```
+
+#### Scenario: Price increase recommendations
+
+```javascript
+const thinMargin = await fetch("/api/plan/thin-margin?maxMarginPct=0.25").then(
+  (r) => r.json(),
+);
+// thinMargin.items sorted by grossMarginPct ascending (worst first)
+// For each: name, listPrice, estimatedCogs, grossMarginPct → "costs $X to make, selling for $Y (Z% margin)"
+// Drill into: GET /plan/cost/{productId} for the full BOM breakdown
+```
+
+#### Scenario: Component shortage alert bar
+
+```javascript
+// Poll every 5 minutes for urgency indicators
+const forecast = await fetch("/api/plan/shortage-forecast?days=30").then((r) =>
+  r.json(),
+);
+// forecast.critical — show red badge if > 0
+// forecast.warning — show amber badge
+// forecast.items[0] — "CRITICAL: Blade runs out in 6 days"
+```
+
+#### Scenario: One-click reorder workflow
+
+```javascript
+// Get recommendations
+const recs = await fetch("/api/plan/reorder-recommendations?days=60").then(
+  (r) => r.json(),
+);
+// recs.estimatedTotalProcurementCost — "Restock 8 components for $4,821"
+
+// For each recommendation, place a supply order:
+for (const rec of recs.items) {
+  if (rec.bestVendor?.canFulfillOrder) {
+    await fetch("/api/supply/order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        vendorId: rec.bestVendor.vendorId,
+        productId: rec.componentProductId,
+        qty: rec.suggestedOrderQty,
+      }),
+    });
+  }
+}
+```
+
+#### Scenario: Full cost breakdown drill-down
+
+```javascript
+const cost = await fetch(`/api/plan/cost/${productId}`).then((r) => r.json());
+// cost.materialCost, routingCost, estimatedCogs, grossMarginPct, pricingSignal
+// cost.bomLines — waterfall chart: each component's costContribution
+// cost.bomLines.filter(b => b.isPurchased) — "purchased material costs"
+// cost.bomLines.filter(b => !b.isPurchased) — "in-house sub-assembly costs"
+```
+
+#### Scenario: Real-time accurate manufacturing cost monitoring
+
+```javascript
+// Get current manufacturing cost using live vendor purchase prices
+const currentCost = await fetch(`/api/plan/cost/${productId}/current`).then(
+  (r) => r.json(),
+);
+// currentCost.totalManufacturingCost — accurate cost using ProductCostHistory
+// currentCost.costAsOf — timestamp of calculation
+// currentCost.bomBreakdown — detailed breakdown with cost source attribution
+
+// Show cost change alert if price increased significantly
+const historicalCost = 2097.83; // from /plan/cost/{productId}
+const currentTotal = currentCost.totalManufacturingCost;
+const percentChange = ((currentTotal - historicalCost) / historicalCost) * 100;
+
+if (percentChange > 5) {
+  console.log(
+    `⚠️ Manufacturing cost increased ${percentChange.toFixed(1)}% from vendor price changes`,
+  );
+
+  // Identify which components drove the increase
+  const priceIncreases = currentCost.bomBreakdown
+    .filter((b) => b.costSource === "ProductCostHistory")
+    .map((b) => ({
+      component: b.name,
+      currentCost: b.currentCost,
+      costDate: b.costDate,
+      contribution: b.costContribution,
+    }));
+
+  console.table(priceIncreases);
+}
+
+// Monitor profit margin with real-time costs
+if (currentCost.pricingSignal === "thin-margin") {
+  alert(
+    `Product margin dropped to ${(currentCost.grossMarginPct * 100).toFixed(1)}% - consider price increase`,
+  );
+}
+```

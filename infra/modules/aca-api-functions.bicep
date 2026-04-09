@@ -251,6 +251,18 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
               identity: azidentity.id
             }
           }
+          {
+            name: 'supply-chain-orders-queue'
+            custom: {
+              type: 'azure-queue'
+              metadata: {
+                accountName: storageAccountName
+                queueName: 'supply-chain-orders-queue'
+                queueLength: '5'
+              }
+              identity: azidentity.id
+            }
+          }
         ]
       }
     }

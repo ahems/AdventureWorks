@@ -169,6 +169,41 @@ builder.Services.AddScoped<WorkOrderSimulationService>(sp =>
     return new WorkOrderSimulationService(connectionString, tableServiceUri, simulationTimeScale, defaultScrapRate, logger);
 });
 
+// Register SupplyChainService for the procurement simulation
+builder.Services.AddScoped<SupplyChainService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
+    var simulationTimeScale = double.TryParse(configuration["SIMULATION_TIME_SCALE_FACTOR"], out var scSupply) ? scSupply : 60.0;
+    var logger = sp.GetRequiredService<ILogger<SupplyChainService>>();
+    return new SupplyChainService(connectionString, tableServiceUri, simulationTimeScale, logger);
+});
+
+// Register ManufacturingPlanningService for planning intelligence endpoints
+builder.Services.AddScoped<ManufacturingPlanningService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var logger = sp.GetRequiredService<ILogger<ManufacturingPlanningService>>();
+    return new ManufacturingPlanningService(connectionString, logger);
+});
+
+// Register WorkforceService — sources HumanResources data for manufacturing operator assignment
+builder.Services.AddScoped<WorkforceService>(sp =>
+{
+    var configuration  = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
+    var logger = sp.GetRequiredService<ILogger<WorkforceService>>();
+    return new WorkforceService(connectionString, tableServiceUri, logger);
+});
+
 // Register OrderGenerationService for SQL write operations during AI order generation
 builder.Services.AddScoped<OrderGenerationService>(sp =>
 {

@@ -40,6 +40,15 @@ public class WorkOrderOperationProcessorFunction
 
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
 
+    // ScrapReasonIDs that indicate incoming purchased-component quality failure rather than
+    // a process defect. When these fire, the simulator attributes the event to the most recent
+    // supplier of the consumed components.
+    //   1 = Brake assembly not as ordered
+    //   3 = Gouge in metal
+    //   7 = Handling damage
+    //  10 = Seat assembly not as ordered
+    private static readonly HashSet<int> MaterialQualityScrapReasonIds = new() { 1, 3, 7, 10 };
+
     private readonly ILogger<WorkOrderOperationProcessorFunction> _logger;
     private readonly WorkOrderSimulationService _sim;
     private readonly IConfiguration _config;
@@ -264,16 +273,43 @@ public class WorkOrderOperationProcessorFunction
             var wo = await GetWorkOrderSummaryAsync(msg.WorkOrderId);
             bool isTotalFailure = wo.HasValue && (wo.Value.ScrappedQty + 1) >= wo.Value.OrderQty;
 
+            // ── Vendor attribution ────────────────────────────────────────────
+            // Scrap reasons 1 (brake not as ordered), 3 (gouge in metal), 7 (handling damage),
+            // and 10 (seat not as ordered) are consistent with incoming purchased-component
+            // quality failures rather than process failures. When one of these fires, look up
+            // the most-recently-received supplier for this work order's purchased components.
+            int? suppVendorId = null; string? suppVendorName = null;
+            int? suppCompId   = null; string? suppCompName   = null;
+
+            if (MaterialQualityScrapReasonIds.Contains(reasonId))
+            {
+                var components = await _sim.GetPurchasedComponentsAsync(
+                    msg.ProductId, wo?.OrderQty ?? 1);
+                if (components.Count > 0)
+                {
+                    var supplier = await _sim.GetMostRecentSupplierAsync(
+                        components.Select(c => c.ProductId));
+                    if (supplier.HasValue)
+                    {
+                        (suppVendorId, suppVendorName, suppCompId, suppCompName) =
+                            (supplier.Value.VendorId, supplier.Value.VendorName,
+                             supplier.Value.ComponentProductId, supplier.Value.ComponentName);
+                    }
+                }
+            }
+
             await _sim.UpdateWorkOrderScrapAsync(msg.WorkOrderId, 1, reasonId);
             await _sim.WriteScrapEventAsync(
                 msg.WorkOrderId, msg.ProductId,
                 await GetProductNameAsync(msg.ProductId),
                 msg.LocationId, scrapConfig.LocationName,
-                reasonId, reasonName, isTotalFailure);
+                reasonId, reasonName, isTotalFailure,
+                suppVendorId, suppVendorName, suppCompId, suppCompName);
 
             _logger.LogWarning(
-                "[Scrap] WO={WorkOrderId} Location={LocationId} Reason={Reason} TotalFailure={Total}",
-                msg.WorkOrderId, msg.LocationId, reasonName, isTotalFailure);
+                "[Scrap] WO={WorkOrderId} Location={LocationId} Reason={Reason} TotalFailure={Total}{VendorNote}",
+                msg.WorkOrderId, msg.LocationId, reasonName, isTotalFailure,
+                suppVendorId.HasValue ? $" AttributedVendor={suppVendorId}({suppVendorName})" : "");
 
             if (isTotalFailure)
             {

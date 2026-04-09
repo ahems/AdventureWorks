@@ -105,6 +105,12 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
             description: 'Event-driven queue that drives the manufacturing simulation: each message represents one WorkOrder routing-operation phase'
           }
         }
+        {
+          name: 'supply-chain-orders-queue'
+          metadata: {
+            description: 'Event-driven queue driving purchase order state transitions (placed→confirmed→picking→shipped→delivered) and vendor restock events'
+          }
+        }
       ]
     }
     
