@@ -2223,6 +2223,92 @@ WHEN NOT MATCHED THEN
         Write-Log "  WARNING: Failed to seed demo admin user: $($_.Exception.Message)"
     }
 
+    # -------------------------------------------------------------------------
+    # Bring all AdventureWorks dates forward so the most recent activity
+    # appears to have happened yesterday in real time.
+    #
+    # Step A: Deploy / refresh both stored procedures from date-shift-procedures.sql.
+    # Step B: Run dbo.uspFindDateHighWatermark to discover the seed-era high
+    #         watermark.  The procedure returns two result sets; the second
+    #         contains a single row with HighWatermarkDate.
+    # Step C: Pass that value to dbo.uspShiftDatesForward which applies a
+    #         uniform offset to every qualifying date column.  The procedure is
+    #         idempotent — it skips silently if the data has already been shifted.
+    # -------------------------------------------------------------------------
+    $elapsed = (Get-Date) - $scriptStartTime
+    Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Deploying date-shift stored procedures..."
+
+    $dateShiftSqlPath = Join-Path $PSScriptRoot 'sql' 'date-shift-procedures.sql'
+    if (Test-Path $dateShiftSqlPath) {
+        $dateShiftSql = Get-Content -Path $dateShiftSqlPath -Raw
+        $dateShiftBatches = $dateShiftSql -split '(?mi)^\s*GO\s*$'
+
+        $dsSuccessCount = 0
+        foreach ($batch in $dateShiftBatches) {
+            $cleanBatch = $batch -replace '(?mi)^\s*GO\s*$', ''
+            $trimmedBatch = $cleanBatch.Trim()
+            if ($trimmedBatch.Length -eq 0) { continue }
+            try {
+                $cmd.CommandText = $trimmedBatch
+                $null = $cmd.ExecuteNonQuery()
+                $dsSuccessCount++
+            }
+            catch {
+                Write-Log "  WARNING: Failed to deploy date-shift batch: $($_.Exception.Message)"
+            }
+        }
+        Write-Log "  ✓ Date-shift procedures deployed ($dsSuccessCount batch(es))"
+
+        # --- Step B: discover the seed-era high watermark ---
+        $elapsed = (Get-Date) - $scriptStartTime
+        Write-Log "[+$([math]::Floor($elapsed.TotalMinutes))m] Running dbo.uspFindDateHighWatermark..."
+
+        $highWatermark = $null
+        try {
+            $cmd.CommandText = 'EXEC dbo.uspFindDateHighWatermark'
+            $reader = $cmd.ExecuteReader()
+
+            # Skip result set 1 (per-column audit rows) — advance to result set 2
+            $null = $reader.NextResult()
+
+            if ($reader.Read()) {
+                $hwValue = $reader['HighWatermarkDate']
+                if ($hwValue -ne [System.DBNull]::Value) {
+                    $highWatermark = $hwValue
+                }
+            }
+            $reader.Close()
+
+            if ($null -ne $highWatermark) {
+                Write-Log "  ✓ High watermark: $highWatermark"
+            } else {
+                Write-Log "  WARNING: uspFindDateHighWatermark returned no watermark — skipping date shift."
+            }
+        }
+        catch {
+            Write-Log "  WARNING: uspFindDateHighWatermark failed: $($_.Exception.Message) — skipping date shift."
+        }
+
+        # --- Step C: shift all dates forward ---
+        if ($null -ne $highWatermark) {
+            $elapsed = (Get-Date) - $scriptStartTime
+            Write-Log "[+$([math]::Floor($elapsed.TotalMinutes))m] Running dbo.uspShiftDatesForward..."
+            try {
+                $hwStr = ([datetime]$highWatermark).ToString('yyyy-MM-dd HH:mm:ss')
+                $cmd.CommandText = "EXEC dbo.uspShiftDatesForward @OriginalHighWatermark = '$hwStr'"
+                $null = $cmd.ExecuteNonQuery()
+                $elapsed = (Get-Date) - $scriptStartTime
+                Write-Log "  ✓ Date shift complete [+$([math]::Floor($elapsed.TotalMinutes))m]"
+            }
+            catch {
+                Write-Log "  WARNING: uspShiftDatesForward failed: $($_.Exception.Message)"
+            }
+        }
+    }
+    else {
+        Write-Log "  date-shift-procedures.sql not found at $dateShiftSqlPath — skipping date shift."
+    }
+
     $script:seedSuccess = $true
     $conn.Close()
 }

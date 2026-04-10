@@ -179,7 +179,8 @@ builder.Services.AddScoped<SupplyChainService>(sp =>
         ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
     var simulationTimeScale = double.TryParse(configuration["SIMULATION_TIME_SCALE_FACTOR"], out var scSupply) ? scSupply : 60.0;
     var logger = sp.GetRequiredService<ILogger<SupplyChainService>>();
-    return new SupplyChainService(connectionString, tableServiceUri, simulationTimeScale, logger);
+    var telemetry = sp.GetRequiredService<TelemetryClient>();
+    return new SupplyChainService(connectionString, tableServiceUri, simulationTimeScale, logger, telemetry);
 });
 
 // Register ManufacturingPlanningService for planning intelligence endpoints

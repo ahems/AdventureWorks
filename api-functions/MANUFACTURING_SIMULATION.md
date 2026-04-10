@@ -783,12 +783,7 @@ ORDER BY ProductID
 
 A companion simulation to the manufacturing engine. Models a full purchasing workflow where operators source raw materials from the **63 active vendors** in the AdventureWorks `Purchasing` schema, each carrying real pricing, lead times, and ship method data from the database. Delivered stock is written directly back into `Production.ProductInventory`, closing the loop with the manufacturing engine — a delivery can unblock a stalled work order.
 
-Purchase order state is stored directly in SQL using `Purchasing.PurchaseOrderHeader` and `Purchasing.PurchaseOrderDetail` as the primary records, extended by two simulation-specific tables:
-
-| Table                         | Purpose                                                                                                                                           |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Purchasing.SimOrderState`    | Per-PO supplementary data — estimated delivery, actual delivery, and cancellation reason. Order status is stored in `PurchaseOrderHeader.Status`. |
-| `Purchasing.SimOrderTracking` | Ordered audit log of every state transition                                                                                                       |
+Purchase order state is stored directly in SQL using `Purchasing.PurchaseOrderHeader` and `Purchasing.PurchaseOrderDetail` as the sole persistent records. No simulation-specific SQL tables are required — `PurchaseOrderHeader.Status` is the single source of truth for order state.
 
 Vendor stock levels (`awSupplyChain` Table Storage, `stock` partition) remain in Table Storage for fast optimistic-concurrency deduction on order placement. All order reads, state transitions, and status queries go directly to SQL.
 
@@ -857,17 +852,14 @@ The reliability roll happens at the delivery step (`approved → complete`/`reje
 
 On the **first call** to any `/supply/*` endpoint the simulator runs `InitializeAsync` which:
 
-1. **Creates extension tables** — `Purchasing.SimOrderState` and `Purchasing.SimOrderTracking` (idempotent DDL).
+1. **Processes AdventureWorks Status=2 (Approved) POs** — The original dataset contains purchase orders already in Approved state. These are resolved synchronously with a reliability roll (idempotent — POs already at Status=3/4 are skipped). They do _not_ re-appear in the active-orders list.
 
-2. **Processes AdventureWorks Status=2 (Approved) POs** — The original dataset contains 12 purchase orders that are already in Approved state with no simulation record. These are resolved synchronously with a reliability roll so the SQL schema is consistent before the first request returns. They do _not_ re-appear in the active-orders list.
-
-3. **Seeds vendor stock in Table Storage** — For every active vendor × BOM purchased-component pair, an initial `CurrentStock` level is written. The seeding formula:
-   - Uses the **average `StockedQty`** from `Purchasing.PurchaseOrderDetail` completed POs for that vendor + product pair (±20 % random spread), falling back to a credit-rating fill ratio for pairs with no purchase history.
+2. **Seeds vendor stock in Table Storage** — For every active vendor × BOM purchased-component pair, an initial `CurrentStock` level is written. The seeding formula:
+   - Uses the **average `StockedQty`** from `Purchasing.PurchaseOrderDetail` completed (Status=4) POs for that vendor + product pair (±20 % random spread), falling back to a credit-rating fill ratio for pairs with no purchase history.
    - **Deducts the total `OrderQty`** of any Status=1 (Pending) BOM POs for that pair from the seeded stock. This ensures `stockAvailable` accurately reflects what is still orderable — quantities already committed by seed orders are not double-counted.
 
-4. **Injects Status=1 (Pending) BOM POs into the approval queue** — The AdventureWorks dataset contains ~236 purchase orders in Pending state. On initialization those that have no `SimOrderState` entry yet are injected into the `supply-chain-orders-queue` and proceed through the normal `pending → approved → complete/rejected` flow:
+3. **Injects Status=1 (Pending) BOM POs into the approval queue** — The AdventureWorks dataset contains ~236 purchase orders in Pending state. These are injected into the `supply-chain-orders-queue` and proceed through the normal `pending → approved → complete/rejected` flow:
    - Messages are staggered **1 second apart** (base delay 5 s, then 5+1 s, 5+2 s, …) to avoid a thundering-herd on SQL writes.
-   - Each PO gets a `SimOrderState` row written **before** the queue message is sent — this is the idempotency guard that prevents re-injection on subsequent `InitializeAsync` calls (e.g. after a container restart).
    - The same BOM filter applies as for new simulator orders: `p.MakeFlag = 0` + `Production.BillOfMaterials` join + `v.ActiveFlag = 1`.
 
 > **Lazy initialization:** Vendor and stock data is seeded automatically on the first call to any `/supply/*` endpoint. There is no separate initialization step required. Call `DELETE /api/supply/reset` to clear all simulation state and trigger a fresh initialization.
@@ -1079,16 +1071,7 @@ Places a purchase order. Stock is deducted immediately. Returns `201 Created` wi
   "totalCost": 305.59,
   "status": "pending",
   "placedAtUtc": "2026-04-08T14:55:47Z",
-  "estimatedDeliveryUtc": "2026-04-22T14:55:47Z",
-  "actualDeliveryUtc": null,
-  "cancellationReason": null,
-  "trackingEvents": [
-    {
-      "eventType": "pending",
-      "description": "Order placed with American Bicycles and Wheels for 10× Blade. Estimated delivery: 14:55 UTC (PO #4215)",
-      "timestampUtc": "2026-04-08T14:55:47Z"
-    }
-  ]
+  "estimatedDeliveryUtc": "2026-04-22T14:55:47Z"
 }
 ```
 
@@ -1220,14 +1203,14 @@ const order = await fetch("/api/supply/order", {
   body: JSON.stringify({ vendorId: "1650", productId: 316, qty: 10 }),
 }).then((r) => r.json());
 
-// order.orderId, order.status, order.estimatedDeliveryUtc, order.trackingEvents
+// order.orderId, order.status, order.estimatedDeliveryUtc
 
 // 2. Poll for status updates
 setInterval(async () => {
   const updated = await fetch(`/api/supply/order/${order.orderId}`).then((r) =>
     r.json(),
   );
-  // updated.status, updated.trackingEvents, updated.actualDeliveryUtc
+  // updated.status ("pending" | "approved" | "complete" | "rejected")
 }, 5000);
 ```
 
@@ -1380,17 +1363,12 @@ interface PurchaseOrder {
   totalCost: number;
   status: "pending" | "approved" | "complete" | "rejected";
   placedAtUtc: string; // ISO 8601
-  estimatedDeliveryUtc: string; // ISO 8601
-  actualDeliveryUtc: string | null;
-  cancellationReason: string | null;
-  trackingEvents: TrackingEvent[];
+  estimatedDeliveryUtc: string; // ISO 8601; sourced from PurchaseOrderDetail.DueDate
 }
+```
 
-interface TrackingEvent {
-  eventType: string; // matches status values; first event is always "pending"
-  description: string; // human-readable label for the event
-  timestampUtc: string; // ISO 8601
-}
+> **Transition audit trail:** State transitions are emitted as Application Insights custom events (`SupplyChainOrder`) with properties `PurchaseOrderId`, `EventType`, and `Description`. Use the App Insights Logs blade or `az monitor app-insights query` to retrieve them.
+
 ```
 
 ---
@@ -1437,8 +1415,10 @@ Each location typically receives ~26–27 workers.
 Worker tenure affects the local scrap/failure probability. The multiplier is applied to a station's base `failureRatePct` when that worker is the assigned operator:
 
 ```
+
 scrapRateMultiplier = max(0.5, 1.0 - tenureYears / 20.0)
-```
+
+````
 
 | Tenure    | Multiplier | Effect on base 5% scrap rate |
 | --------- | ---------- | ---------------------------- |
@@ -1487,7 +1467,7 @@ Returns a headcount summary across all manufacturing locations.
     }
   ]
 }
-```
+````
 
 ---
 
