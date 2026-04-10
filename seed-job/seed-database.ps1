@@ -420,8 +420,15 @@ try {
     # be dropped first (here and/or in the SQL script's early drop block).
     # ProductReviewReply (AI table) has a FK on ProductReview so must be dropped
     # before AdventureWorks.sql tries to drop ProductReview.
+    # SimOrderTracking and SimOrderState (supply chain sim tables) have FKs on
+    # PurchaseOrderHeader and must be dropped before AdventureWorks.sql tries to
+    # drop PurchaseOrderHeader. These tables were previously created by
+    # EnsureSqlTablesAsync() in SupplyChainService, which has since been removed.
     # ---------------------------------------------------------------------
     $aiTablesPreCleanup = @(
+        # Supply chain simulation tables (FK to PurchaseOrderHeader) - drop first
+        "IF OBJECT_ID(N'[Purchasing].[SimOrderTracking]', 'U') IS NOT NULL DROP TABLE [Purchasing].[SimOrderTracking]",
+        "IF OBJECT_ID(N'[Purchasing].[SimOrderState]', 'U') IS NOT NULL DROP TABLE [Purchasing].[SimOrderState]",
         "IF OBJECT_ID(N'[Production].[ProductReviewReply]', 'U') IS NOT NULL DROP TABLE [Production].[ProductReviewReply]",
         "IF OBJECT_ID(N'[Production].[ProductName]', 'U') IS NOT NULL DROP TABLE [Production].[ProductName]",
         "IF OBJECT_ID(N'[Production].[ProductCategory]', 'U') IS NOT NULL DROP TABLE [Production].[ProductCategory]",
@@ -2240,8 +2247,14 @@ WHEN NOT MATCHED THEN
 
     $dateShiftSqlPath = Join-Path $PSScriptRoot 'sql' 'date-shift-procedures.sql'
     if (Test-Path $dateShiftSqlPath) {
-        $dateShiftSql = Get-Content -Path $dateShiftSqlPath -Raw
+        $dateShiftSql = Get-Content -Path $dateShiftSqlPath -Raw -Encoding UTF8
         $dateShiftBatches = $dateShiftSql -split '(?mi)^\s*GO\s*$'
+
+        # Clear any leftover parameters from previous operations.
+        # If cmd.Parameters is non-empty, Microsoft.Data.SqlClient wraps the SQL
+        # in sp_executesql — which forbids CREATE PROCEDURE inside it.
+        $cmd.Parameters.Clear()
+        $cmd.Transaction = $null
 
         $dsSuccessCount = 0
         foreach ($batch in $dateShiftBatches) {

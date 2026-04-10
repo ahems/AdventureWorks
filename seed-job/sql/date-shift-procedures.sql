@@ -50,7 +50,10 @@
 --   Result set 2 : a single row with HighWatermarkDate, CutOffDate, RunAt.
 --   PRINT output : human-readable summary with the value to pass into proc 2.
 -- =============================================================================
-CREATE OR ALTER PROCEDURE [dbo].[uspFindDateHighWatermark]
+IF OBJECT_ID(N'[dbo].[uspFindDateHighWatermark]', 'P') IS NOT NULL
+    DROP PROCEDURE [dbo].[uspFindDateHighWatermark];
+GO
+CREATE PROCEDURE [dbo].[uspFindDateHighWatermark]
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -263,7 +266,10 @@ GO
 -- USAGE
 --   EXEC dbo.uspShiftDatesForward @OriginalHighWatermark = '2014-05-29 00:00:00';
 -- =============================================================================
-CREATE OR ALTER PROCEDURE [dbo].[uspShiftDatesForward]
+IF OBJECT_ID(N'[dbo].[uspShiftDatesForward]', 'P') IS NOT NULL
+    DROP PROCEDURE [dbo].[uspShiftDatesForward];
+GO
+CREATE PROCEDURE [dbo].[uspShiftDatesForward]
     @OriginalHighWatermark DATETIME
 AS
 BEGIN
