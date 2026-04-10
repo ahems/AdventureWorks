@@ -137,10 +137,10 @@ public class SupplyChainControlFunction
             return await UnprocessableAsync(req, msg);
         }
 
-        // Enqueue the placed→confirmed transition message
+        // Enqueue the pending→approved transition (fires after PendingToApprovedSimMin delay)
         var queueClient = await GetQueueClientAsync();
         await EnqueueTransitionAsync(queueClient, order.OrderId,
-            targetStatus: "confirmed",
+            targetStatus: "approved",
             delaySec: 5);          // 5 sim-min = 5 real sec at scale 60
 
         return await CreatedAsync(req, order);
@@ -191,7 +191,7 @@ public class SupplyChainControlFunction
 
         bool ok = await _svc.CancelOrderAsync(orderId.ToUpperInvariant(), reason);
         if (!ok)
-            return await UnprocessableAsync(req, $"Order '{orderId}' not found or cannot be cancelled (status must be 'placed' or 'confirmed').");
+            return await UnprocessableAsync(req, $"Order '{orderId}' not found or cannot be cancelled (must be in 'pending' status).");
 
         return await OkAsync(req, new { message = $"Order {orderId} cancelled.", reason });
     }

@@ -12,23 +12,19 @@ namespace api_functions.Functions;
 /// Queue-triggered processor for supply chain order state transitions and vendor restock events.
 /// Listens on supply-chain-orders-queue; driven by messages produced by SupplyChainControlFunction
 /// and by itself (self-scheduling for future state transitions).
+///
+/// Simplified two-step state machine driven by PurchaseOrderHeader.Status:
+///   pending(1)  →  approved(2)   : 5 sim-min after placement
+///   approved(2) →  complete(4)   : vendor lead time; reliability roll decides pass/fail
+///   approved(2) →  rejected(3)   : reliability check failed (no requeue)
 /// </summary>
 public class PurchaseOrderProcessorFunction
 {
     private readonly SupplyChainService _svc;
     private readonly ILogger<PurchaseOrderProcessorFunction> _logger;
 
-    // Real-second delays between order states at the default SIMULATION_TIME_SCALE_FACTOR=60.
-    // placed→confirmed : 5 sim-min  =  5 real sec
-    // confirmed→picking: 15 sim-min = 15 real sec
-    // picking→shipped  : 30 sim-min = 30 real sec (plus possible delay)
-    // shipped→delivered: vendor.LeadTimeDays × 24 × 60 sim-min / scale → real sec
-    private readonly Dictionary<string, (string NextStatus, int DelaySimMin)> _stateFlow = new()
-    {
-        ["confirmed"] = ("picking",   15),
-        ["picking"]   = ("shipped",   30),
-        ["shipped"]   = ("delivered", -1),  // -1 = read from vendor lead time
-    };
+    // Delay from pending → approved (sim minutes).
+    private const int PendingToApprovedSimMin = 5;
 
     public PurchaseOrderProcessorFunction(
         SupplyChainService service,
@@ -101,105 +97,92 @@ public class PurchaseOrderProcessorFunction
             return;
         }
 
-        bool ok = await _svc.TransitionOrderAsync(msg.OrderId, msg.TargetStatus);
+        // For the "complete" target, perform the reliability roll here so the queue processor —
+        // not the service — decides pass/fail. This keeps TransitionOrderAsync deterministic.
+        string resolvedTarget = msg.TargetStatus;
+        if (msg.TargetStatus == "complete")
+        {
+            var order = await _svc.GetOrderAsync(msg.OrderId);
+            if (order == null || order.Status != "approved")
+            {
+                _logger.LogWarning("Order {OrderId}: expected status 'approved' for delivery roll, got '{Status}'. Skipping.",
+                    msg.OrderId, order?.Status ?? "not found");
+                return;
+            }
+
+            var vendor      = await _svc.GetVendorAsync(order.VendorId);
+            double relPct   = vendor?.ReliabilityPct ?? 0.85;
+            bool passed     = Random.Shared.NextDouble() <= relPct;
+            resolvedTarget  = passed ? "complete" : "rejected";
+
+            if (!passed)
+                _logger.LogInformation("Order {OrderId} reliability check failed ({Rel:P0}) — rejecting.",
+                    msg.OrderId, relPct);
+        }
+
+        bool ok = await _svc.TransitionOrderAsync(msg.OrderId, resolvedTarget);
         if (!ok)
         {
-            _logger.LogWarning("TransitionOrder({OrderId}, {Status}) failed — order may be cancelled or already advanced.",
-                msg.OrderId, msg.TargetStatus);
+            _logger.LogWarning("TransitionOrder({OrderId}, {Status}) failed — order may be cancelled or already completed.",
+                msg.OrderId, resolvedTarget);
             return;
         }
 
-        _logger.LogInformation("Order {OrderId} → {Status}", msg.OrderId, msg.TargetStatus);
+        _logger.LogInformation("Order {OrderId} → {Status}", msg.OrderId, resolvedTarget);
 
-        // Schedule the next state in the chain
-        await ScheduleNextTransitionAsync(msg.OrderId, msg.TargetStatus);
-    }
+        // Schedule next step (only if we reached "approved" — complete/rejected are terminal)
+        if (resolvedTarget == "approved")
+            await ScheduleDeliveryAsync(msg.OrderId);
 
-    private async Task ScheduleNextTransitionAsync(string orderId, string justReached)
-    {
-        if (!_stateFlow.TryGetValue(justReached, out var next)) return;
-
-        var order = await _svc.GetOrderAsync(orderId);
-        if (order == null || order.Status is "cancelled" or "delivered" or "out_of_stock") return;
-
-        // Reliability roll on picking→shipped: may redirect to "delayed" first
-        if (justReached == "picking")
+        // Schedule deferred vendor restock after successful delivery
+        if (resolvedTarget == "complete")
         {
-            var vendor = await _svc.GetVendorAsync(order.VendorId);
-            double reliability = vendor?.ReliabilityPct ?? 0.9;
-            double simScale    = GetSimTimeScale();
-
-            if (Random.Shared.NextDouble() > reliability)
+            var order = await _svc.GetOrderAsync(msg.OrderId);
+            if (order != null)
             {
-                // Transition to "delayed" with 30s delay then reschedule shipped from there
-                int delaySec = (int)(next.DelaySimMin * 60.0 / simScale);
-                await EnqueueMessageAsync(new PurchaseOrderMessage
-                {
-                    MessageType    = "order-transition",
-                    OrderId        = orderId,
-                    TargetStatus   = "delayed",
-                    ScheduledAtUtc = DateTime.UtcNow.AddSeconds(delaySec),
-                }, visibilityDelaySec: delaySec);
+                var vendorInfo   = await _svc.GetVendorAsync(order.VendorId);
+                int restockHrs   = vendorInfo?.RestockDelaySimHrs ?? 12;
+                double simScale  = GetSimTimeScale();
+                int restockSec   = (int)(restockHrs * 3600.0 / simScale);
 
-                // After delay, then ship (extra 24 sim-hrs for the delay)
-                int extraSec = (int)(24 * 3600.0 / simScale);
                 await EnqueueMessageAsync(new PurchaseOrderMessage
                 {
-                    MessageType    = "order-transition",
-                    OrderId        = orderId,
-                    TargetStatus   = "shipped",
-                    ScheduledAtUtc = DateTime.UtcNow.AddSeconds(delaySec + extraSec),
-                }, visibilityDelaySec: delaySec + extraSec);
-                return;
+                    MessageType    = "vendor-restock",
+                    VendorId       = order.VendorId,
+                    ProductId      = order.ProductId,
+                    ScheduledAtUtc = DateTime.UtcNow.AddSeconds(restockSec),
+                }, visibilityDelaySec: restockSec);
+
+                _logger.LogDebug("Scheduled restock for vendor {VendorId} ProductID={ProductId} in {Sec}s",
+                    order.VendorId, order.ProductId, restockSec);
             }
         }
+    }
 
-        int nextDelaySec;
-        if (next.DelaySimMin < 0)
-        {
-            // "shipped→delivered": delay = vendor.DefaultLeadTimeDays × 24 × 60 sim-min / simScale
-            var vendor     = await _svc.GetVendorAsync(order.VendorId);
-            int lead       = vendor?.DefaultLeadTimeDays ?? 2;
-            double simScale = GetSimTimeScale();
-            nextDelaySec   = (int)(lead * 24 * 60 * 60.0 / simScale);
-        }
-        else
-        {
-            double simScale = GetSimTimeScale();
-            nextDelaySec    = (int)(next.DelaySimMin * 60.0 / simScale);
-        }
+    /// <summary>
+    /// Enqueues a "transition to complete" message for the given order after the vendor's
+    /// simulated lead time has elapsed.
+    /// </summary>
+    private async Task ScheduleDeliveryAsync(string orderId)
+    {
+        var order = await _svc.GetOrderAsync(orderId);
+        if (order == null || order.Status is "rejected" or "complete") return;
+
+        var vendor      = await _svc.GetVendorAsync(order.VendorId);
+        int leadDays    = vendor?.DefaultLeadTimeDays ?? 2;
+        double simScale = GetSimTimeScale();
+        int deliverySec = (int)(leadDays * 24 * 60 * 60.0 / simScale);
 
         await EnqueueMessageAsync(new PurchaseOrderMessage
         {
             MessageType    = "order-transition",
             OrderId        = orderId,
-            TargetStatus   = next.NextStatus,
-            ScheduledAtUtc = DateTime.UtcNow.AddSeconds(nextDelaySec),
-        }, visibilityDelaySec: nextDelaySec);
+            TargetStatus   = "complete",   // processor will roll reliability before applying
+            ScheduledAtUtc = DateTime.UtcNow.AddSeconds(deliverySec),
+        }, visibilityDelaySec: deliverySec);
 
-        _logger.LogDebug("Scheduled {OrderId} → {Next} in {Sec}s", orderId, next.NextStatus, nextDelaySec);
-
-        // Schedule deferred vendor restock after delivered
-        if (next.NextStatus == "delivered")
-        {
-            var vendorInfo  = await _svc.GetVendorAsync(order.VendorId);
-            int restockSimHrs = vendorInfo?.RestockDelaySimHrs ?? 12;
-            double simScale2 = GetSimTimeScale();
-            int restockSec   = (int)(restockSimHrs * 3600.0 / simScale2);
-            // Add 5s buffer after expected delivery
-            int restockVisibility = nextDelaySec + 5 + restockSec;
-
-            await EnqueueMessageAsync(new PurchaseOrderMessage
-            {
-                MessageType = "vendor-restock",
-                VendorId    = order.VendorId,
-                ProductId   = order.ProductId,
-                ScheduledAtUtc = DateTime.UtcNow.AddSeconds(restockVisibility),
-            }, visibilityDelaySec: restockVisibility);
-
-            _logger.LogDebug("Scheduled restock for vendor {VendorId} ProductID={ProductId} in {Sec}s",
-                order.VendorId, order.ProductId, restockVisibility);
-        }
+        _logger.LogDebug("Scheduled delivery for Order {OrderId} in {Sec}s ({LeadDays} sim-days)",
+            orderId, deliverySec, leadDays);
     }
 
     // ── Vendor restock ────────────────────────────────────────────────────────

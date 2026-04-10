@@ -1,6 +1,8 @@
 using System.Text.Json;
+using api_functions.Models;
 using Azure.Data.Tables;
 using Azure.Identity;
+using Azure.Storage.Queues;
 using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
@@ -71,13 +73,12 @@ public record PurchaseOrder(
     double UnitCost,
     double ShippingCost,
     double TotalCost,
-    string Status,
+    string Status,             // "pending" | "approved" | "rejected" | "complete"
     DateTime PlacedAtUtc,
     DateTime EstimatedDeliveryUtc,
     DateTime? ActualDeliveryUtc,
     string? CancellationReason,
-    List<TrackingEvent> TrackingEvents,
-    int? SqlPurchaseOrderId = null);
+    List<TrackingEvent> TrackingEvents);
 
 public record TrackingEvent(
     string EventType,
@@ -96,10 +97,7 @@ public record VendorSummary(
 public class SupplyChainService
 {
     private const string TABLE_NAME       = "awSupplyChain";
-    private const string PART_VENDOR      = "vendor";
     private const string PART_STOCK       = "stock";
-    private const string PART_ORDER       = "order";
-    private const string PART_TRACKING    = "tracking";
 
     internal const string QUEUE_NAME = "supply-chain-orders-queue";
 
@@ -254,91 +252,390 @@ public class SupplyChainService
     // ── Initialisation ────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Idempotent: creates the table and seeds vendor + stock rows sourced from
-    /// Purchasing.Vendor and Purchasing.ProductVendor if they don't already exist.
+    /// Idempotent: creates the SQL extension tables and seeds vendor stock in Table Storage
+    /// from Purchasing.ProductVendor if not already present.
     /// Called lazily from the first GET /api/supply/* request.
     /// </summary>
     public async Task InitializeAsync()
     {
+        // Ensure SQL simulation tables exist
+        await EnsureSqlTablesAsync();
+
+        // Process any existing Approved (Status=2) POs from the AdventureWorks data that
+        // have not yet been assigned a SimOrderState row. This runs every call but is
+        // idempotent — it only touches POs that have no SimOrderState entry.
+        await ProcessHistoricalApprovedOrdersAsync();
+
+        // Table Storage used only for vendor stock levels
         await _tableClient.CreateIfNotExistsAsync();
 
-        // Fast path: if vendor rows already exist, skip all seeding work.
-        // This makes InitializeAsync() essentially free on every subsequent call —
-        // one cheap Table Storage point-read vs 63 unconditional upserts.
+        // Fast path: if stock rows already exist, skip all seeding work.
+        // We still need to run ProcessHistoricalPendingOrdersAsync even when already seeded
+        // because it is idempotent (guarded by SimOrderState) and handles the queue injection.
         bool alreadySeeded = false;
         await foreach (var _ in _tableClient.QueryAsync<TableEntity>(
-            filter: $"PartitionKey eq '{PART_VENDOR}'",
+            filter: $"PartitionKey eq '{PART_STOCK}'",
             maxPerPage: 1,
             select: new[] { "RowKey" }))
         {
             alreadySeeded = true;
             break;
         }
-        if (alreadySeeded) return;
 
-        var vendors = await GetVendorsAsync();
+        // Fetch pending BOM orders before seeding so stock accounts for already-committed qty.
+        // Returns (VendorId, ProductId) → total OrderQty across all Status=1 BOM POs.
+        var pendingQtys = await GetPendingBomOrderQtysAsync();
 
-        // Seed vendor rows — upsert so metadata stays current with the DB
-        foreach (var v in vendors)
+        if (!alreadySeeded)
         {
-            var entity = new TableEntity(PART_VENDOR, v.VendorId)
+            var vendors         = await GetVendorsAsync();
+            var vendorDict      = vendors.ToDictionary(v => v.VendorId);
+            var vendorProducts  = await GetVendorProductsFromSqlAsync();
+            var historicalStock = await GetHistoricalStockLevelsAsync();
+
+            int seededFromHistory = 0, seededFromFormula = 0;
+
+            foreach (var vp in vendorProducts)
             {
-                ["AccountNumber"]      = v.AccountNumber,
-                ["Name"]               = v.Name,
-                ["Description"]        = v.Description,
-                ["CreditRating"]       = v.CreditRating,
-                ["PreferredVendor"]    = v.PreferredVendorStatus,
-                ["DefaultLeadDays"]    = v.DefaultLeadTimeDays,
-                ["ReliabilityPct"]     = v.ReliabilityPct,
-                ["ShipMethodId"]       = v.ShipMethodId,
-                ["ShipMethodName"]     = v.ShipMethodName,
-                ["ShipBase"]           = v.ShipBase,
-                ["ShipRate"]           = v.ShipRate,
-                ["RestockDelaySimHrs"] = v.RestockDelaySimHrs,
-                ["Strengths"]          = JsonSerializer.Serialize(v.Strengths),
-                ["Weaknesses"]         = JsonSerializer.Serialize(v.Weaknesses),
-            };
-            await _tableClient.UpsertEntityAsync(entity);
-        }
+                if (!vendorDict.TryGetValue(vp.VendorId, out var vendor)) continue;
 
-        // Seed per-vendor stock from Purchasing.ProductVendor (only BOM purchased components)
-        var vendorProducts = await GetVendorProductsFromSqlAsync();
-        var vendorDict     = vendors.ToDictionary(v => v.VendorId);
+                var rowKey   = StockRowKey(vp.VendorId, vp.ProductId);
+                int maxStock = Math.Max(vp.MaxOrderQty, 10);
 
-        foreach (var vp in vendorProducts)
-        {
-            if (!vendorDict.TryGetValue(vp.VendorId, out var vendor)) continue;
+                int initStock;
+                if (historicalStock.TryGetValue((vp.VendorId, vp.ProductId), out int histQty))
+                {
+                    // Seed from the average stocked qty on completed POs for this vendor+product,
+                    // randomised ±20 % to give a realistic spread across runs.
+                    initStock = (int)Math.Round(histQty * (0.8 + 0.4 * Random.Shared.NextDouble()));
+                    initStock = Math.Clamp(initStock, 0, maxStock);
+                    seededFromHistory++;
+                }
+                else
+                {
+                    // No purchase history for this pair — fall back to credit-rating fill ratio
+                    double fillRatio = vendor.CreditRating >= 1 && vendor.CreditRating <= 5
+                        ? FillRatioByRating[vendor.CreditRating] : 0.70;
+                    initStock = (int)Math.Round(maxStock * fillRatio
+                        * (0.7 + 0.6 * Random.Shared.NextDouble()));
+                    initStock = Math.Clamp(initStock, 0, maxStock);
+                    seededFromFormula++;
+                }
 
-            var rowKey = StockRowKey(vp.VendorId, vp.ProductId);
-            var existing = await _tableClient.GetEntityIfExistsAsync<TableEntity>(PART_STOCK, rowKey);
-            if (!existing.HasValue)
-            {
-                int maxStock  = Math.Max(vp.MaxOrderQty, 10);
-                double fillRatio = vendor.CreditRating >= 1 && vendor.CreditRating <= 5
-                    ? FillRatioByRating[vendor.CreditRating] : 0.70;
-                int initStock = (int)Math.Round(maxStock * fillRatio
-                    * (0.7 + 0.6 * Random.Shared.NextDouble()));
-                initStock = Math.Clamp(initStock, 0, maxStock);
+                // Deduct qty already committed in Status=1 (Pending) BOM purchase orders so
+                // that stockAvailable accurately reflects what is still orderable at this vendor.
+                if (pendingQtys.TryGetValue((vp.VendorId, vp.ProductId), out int pendingQty))
+                    initStock = Math.Max(0, initStock - pendingQty);
 
                 var entity = new TableEntity(PART_STOCK, rowKey)
                 {
-                    ["VendorId"]       = vp.VendorId,
-                    ["ProductId"]      = vp.ProductId,
-                    ["ProductName"]    = vp.ProductName,
-                    ["StandardPrice"]  = vp.StandardPrice,
-                    ["AverageLeadTime"]= vp.AverageLeadTime,
-                    ["MinOrderQty"]    = vp.MinOrderQty,
-                    ["MaxOrderQty"]    = vp.MaxOrderQty,
-                    ["WeightKg"]       = vp.WeightKg > 0 ? vp.WeightKg : 0.5,
-                    ["CurrentStock"]   = initStock,
-                    ["MaxStock"]       = maxStock,
+                    ["VendorId"]        = vp.VendorId,
+                    ["ProductId"]       = vp.ProductId,
+                    ["ProductName"]     = vp.ProductName,
+                    ["StandardPrice"]   = vp.StandardPrice,
+                    ["AverageLeadTime"] = vp.AverageLeadTime,
+                    ["MinOrderQty"]     = vp.MinOrderQty,
+                    ["MaxOrderQty"]     = vp.MaxOrderQty,
+                    ["WeightKg"]        = vp.WeightKg > 0 ? vp.WeightKg : 0.5,
+                    ["CurrentStock"]    = initStock,
+                    ["MaxStock"]        = maxStock,
                 };
                 await _tableClient.UpsertEntityAsync(entity);
             }
+
+            _logger.LogInformation(
+                "Supply chain initialized: {VendorCount} vendors, {ProductCount} vendor-product pairs " +
+                "({FromHistory} seeded from PO history, {FromFormula} from fill-ratio fallback)",
+                vendors.Count, vendorProducts.Count, seededFromHistory, seededFromFormula);
         }
 
-        _logger.LogInformation("Supply chain initialized: {VendorCount} vendors, {ProductCount} vendor-product pairs",
-            vendors.Count, vendorProducts.Count);
+        // Inject historical Pending (Status=1) BOM orders into the queue so they go through
+        // the normal approval → delivery state machine. Idempotent: guarded by SimOrderState.
+        await ProcessHistoricalPendingOrdersAsync(pendingQtys);
+    }
+
+    /// <summary>
+    /// Creates the two simulation-specific SQL tables if they do not already exist.
+    /// <list type="bullet">
+    ///   <item><c>Purchasing.SimOrderState</c> — per-PO simulation status and delivery times
+    ///         (extends PurchaseOrderHeader with fields the AdventureWorks schema does not have).</item>
+    ///   <item><c>Purchasing.SimOrderTracking</c> — ordered audit log of every state transition.</item>
+    /// </list>
+    /// </summary>
+    private async Task EnsureSqlTablesAsync()
+    {
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        await conn.ExecuteAsync(@"
+            IF OBJECT_ID('Purchasing.SimOrderState', 'U') IS NULL
+            CREATE TABLE Purchasing.SimOrderState (
+                PurchaseOrderID      INT           NOT NULL
+                    CONSTRAINT PK_SimOrderState PRIMARY KEY
+                    REFERENCES Purchasing.PurchaseOrderHeader(PurchaseOrderID),
+                EstimatedDeliveryUtc DATETIME2     NOT NULL,
+                ActualDeliveryUtc    DATETIME2     NULL,
+                CancellationReason   NVARCHAR(500) NULL,
+                ModifiedDate         DATETIME2     NOT NULL DEFAULT GETUTCDATE()
+            )
+            ELSE BEGIN
+                -- Drop SimStatus if it still exists from an earlier schema version
+                IF COL_LENGTH('Purchasing.SimOrderState', 'SimStatus') IS NOT NULL
+                    ALTER TABLE Purchasing.SimOrderState DROP COLUMN SimStatus;
+            END;
+
+            IF OBJECT_ID('Purchasing.SimOrderTracking', 'U') IS NULL
+            CREATE TABLE Purchasing.SimOrderTracking (
+                TrackingId       INT            NOT NULL IDENTITY
+                    CONSTRAINT PK_SimOrderTracking PRIMARY KEY,
+                PurchaseOrderID  INT            NOT NULL
+                    REFERENCES Purchasing.PurchaseOrderHeader(PurchaseOrderID),
+                EventType        NVARCHAR(50)   NOT NULL,
+                Description      NVARCHAR(1000) NULL,
+                CreatedAtUtc     DATETIME2      NOT NULL DEFAULT GETUTCDATE()
+            );
+        ");
+    }
+
+    /// <summary>
+    /// Finds all <c>Purchasing.PurchaseOrderHeader</c> rows with Status=2 (Approved) that have
+    /// no <c>SimOrderState</c> entry — these are "in-flight" orders from the AdventureWorks seed
+    /// data that the simulator has not yet processed. For each:
+    /// <list type="bullet">
+    ///   <item>Creates a <c>SimOrderState</c> row (ETA = PO DueDate).</item>
+    ///   <item>Rolls against the vendor's reliability percentage.</item>
+    ///   <item>Pass → Status=4 (Complete), inventory added to <c>Production.ProductInventory</c>.</item>
+    ///   <item>Fail → Status=3 (Rejected).</item>
+    /// </list>
+    /// Scoped to active vendors supplying BOM purchased components so only procurement
+    /// relevant to manufacturing is affected.
+    /// </summary>
+    /// <summary>
+    /// Returns the total <c>OrderQty</c> committed in Status=1 (Pending) purchase orders
+    /// scoped to BOM purchased components with active vendors.
+    /// Used during stock seeding to deduct already-committed quantities.
+    /// </summary>
+    private async Task<Dictionary<(string VendorId, int ProductId), int>> GetPendingBomOrderQtysAsync()
+    {
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        var rows = await conn.QueryAsync(@"
+            SELECT CAST(poh.VendorID AS VARCHAR(20)) AS VendorId,
+                   pod.ProductID,
+                   SUM(CAST(pod.OrderQty AS INT)) AS TotalQty
+            FROM Purchasing.PurchaseOrderHeader poh
+            INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
+            INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
+            INNER JOIN Production.Product p ON pod.ProductID = p.ProductID
+            INNER JOIN Production.BillOfMaterials bom
+                ON bom.ComponentID = p.ProductID AND bom.EndDate IS NULL
+            WHERE poh.Status = 1
+              AND v.ActiveFlag = 1
+              AND p.MakeFlag = 0
+            GROUP BY poh.VendorID, pod.ProductID");
+
+        return rows.ToDictionary(
+            r => ((string)r.VendorId, (int)r.ProductID),
+            r => (int)r.TotalQty);
+    }
+
+    /// <summary>
+    /// Injects historical Status=1 (Pending) BOM purchase orders into the supply-chain queue
+    /// so they proceed through the normal pending → approved → complete/rejected state machine.
+    /// Messages are staggered 1 second apart to avoid a thundering-herd on SQL.
+    /// Idempotent: each PO is skipped if a <c>SimOrderState</c> row already exists for it.
+    /// </summary>
+    private async Task ProcessHistoricalPendingOrdersAsync(
+        Dictionary<(string VendorId, int ProductId), int> pendingQtys)
+    {
+        if (pendingQtys.Count == 0) return;
+
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        // Find Status=1 BOM POs with active vendors that have no SimOrderState yet.
+        var pendingPos = await conn.QueryAsync(@"
+            SELECT poh.PurchaseOrderID,
+                   CAST(poh.VendorID AS VARCHAR(20)) AS VendorId,
+                   pod.ProductID,
+                   CAST(pod.OrderQty AS INT) AS Qty,
+                   pod.DueDate
+            FROM Purchasing.PurchaseOrderHeader poh
+            INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
+            INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
+            INNER JOIN Production.Product p ON pod.ProductID = p.ProductID
+            INNER JOIN Production.BillOfMaterials bom
+                ON bom.ComponentID = p.ProductID AND bom.EndDate IS NULL
+            WHERE poh.Status = 1
+              AND v.ActiveFlag = 1
+              AND p.MakeFlag = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM Purchasing.SimOrderState s
+                  WHERE s.PurchaseOrderID = poh.PurchaseOrderID)");
+
+        var poList = pendingPos.AsList();
+        if (poList.Count == 0) return;
+
+        // Build queue client
+        string? queueUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
+        QueueClient queueClient;
+        if (!string.IsNullOrEmpty(queueUri))
+        {
+            var qSvc = new QueueServiceClient(new Uri(queueUri), new DefaultAzureCredential());
+            queueClient = qSvc.GetQueueClient(QUEUE_NAME);
+        }
+        else
+        {
+            string connStr = Environment.GetEnvironmentVariable("AzureWebJobsStorage") ?? "UseDevelopmentStorage=true";
+            queueClient = new QueueClient(connStr, QUEUE_NAME,
+                new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
+        }
+        await queueClient.CreateIfNotExistsAsync();
+
+        int enqueued = 0;
+        for (int i = 0; i < poList.Count; i++)
+        {
+            var r    = poList[i];
+            int poId = (int)r.PurchaseOrderID;
+            DateTime eta = ((DateTime)r.DueDate).ToUniversalTime();
+
+            // Create SimOrderState row first — this is the idempotency guard.
+            // If this write succeeds the PO is owned by the simulator; queue message follows.
+            await conn.ExecuteAsync(
+                @"INSERT INTO Purchasing.SimOrderState (PurchaseOrderID, EstimatedDeliveryUtc, ModifiedDate)
+                  VALUES (@Id, @Eta, GETUTCDATE())",
+                new { Id = poId, Eta = eta });
+
+            await WriteSqlTrackingAsync(conn, poId, "pending",
+                "Order found in AdventureWorks seed data with Status=Pending. Injected into approval queue.");
+
+            // Stagger 1 second per order (5 sec base + index offset) so SQL approval writes
+            // don't all land simultaneously.
+            int approvalDelaySec = PendingToApprovedSimSec + i;
+
+            var msg = new PurchaseOrderMessage
+            {
+                MessageType    = "order-transition",
+                OrderId        = poId.ToString(),
+                TargetStatus   = "approved",
+                ScheduledAtUtc = DateTime.UtcNow.AddSeconds(approvalDelaySec),
+            };
+            string json    = System.Text.Json.JsonSerializer.Serialize(msg);
+            string encoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
+            await queueClient.SendMessageAsync(encoded,
+                visibilityTimeout: TimeSpan.FromSeconds(approvalDelaySec));
+
+            enqueued++;
+        }
+
+        _logger.LogInformation(
+            "Injected {Count} historical Pending BOM POs into the supply-chain approval queue " +
+            "(staggered 1s apart, first fires in {BaseDelay}s).",
+            enqueued, PendingToApprovedSimSec);
+    }
+
+    // Mirrors the constant in PurchaseOrderProcessorFunction / SupplyChainControlFunction.
+    private const int PendingToApprovedSimSec = 5;
+
+    private async Task ProcessHistoricalApprovedOrdersAsync()
+    {
+        var vendors = await GetVendorsAsync();
+        var vendorReliability = vendors.ToDictionary(
+            v => v.VendorId,
+            v => v.ReliabilityPct);
+
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        // Find approved POs for BOM purchased components with active vendors and no SimOrderState yet
+        var pending = await conn.QueryAsync(@"
+            SELECT poh.PurchaseOrderID,
+                   CAST(poh.VendorID AS VARCHAR(20))   AS VendorId,
+                   pod.ProductID,
+                   CAST(pod.OrderQty   AS INT)   AS Qty,
+                   CAST(pod.UnitPrice  AS FLOAT) AS UnitCost,
+                   pod.DueDate
+            FROM Purchasing.PurchaseOrderHeader poh
+            INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
+            INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
+            INNER JOIN Production.Product p ON pod.ProductID = p.ProductID
+            INNER JOIN Production.BillOfMaterials bom
+                ON bom.ComponentID = p.ProductID AND bom.EndDate IS NULL
+            WHERE poh.Status = 2
+              AND v.ActiveFlag = 1
+              AND p.MakeFlag = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM Purchasing.SimOrderState s
+                  WHERE s.PurchaseOrderID = poh.PurchaseOrderID)");
+
+        int passed = 0, rejected = 0;
+        foreach (var r in pending)
+        {
+            int    poId     = (int)r.PurchaseOrderID;
+            string vendorId = (string)r.VendorId;
+            int    productId= (int)r.ProductID;
+            int    qty      = (int)r.Qty;
+            double unitCost = (double)r.UnitCost;
+            DateTime eta    = ((DateTime)r.DueDate).ToUniversalTime();
+
+            // Create SimOrderState so this PO is visible in the API
+            await conn.ExecuteAsync(
+                @"INSERT INTO Purchasing.SimOrderState (PurchaseOrderID, EstimatedDeliveryUtc, ModifiedDate)
+                  VALUES (@Id, @Eta, GETUTCDATE())",
+                new { Id = poId, Eta = eta });
+
+            await WriteSqlTrackingAsync(conn, poId, "pending",
+                $"Order found in AdventureWorks seed data with Status=Approved. Processing reliability roll.");
+
+            double reliability = vendorReliability.TryGetValue(vendorId, out double rel) ? rel : 0.85;
+
+            if (Random.Shared.NextDouble() <= reliability)
+            {
+                // Reliability passed → deliver
+                await conn.ExecuteAsync(@"
+                    UPDATE Purchasing.PurchaseOrderHeader
+                    SET Status = 4, RevisionNumber = RevisionNumber + 1, ModifiedDate = GETDATE()
+                    WHERE PurchaseOrderID = @Id",
+                    new { Id = poId });
+                await conn.ExecuteAsync(@"
+                    UPDATE Purchasing.PurchaseOrderDetail
+                    SET ReceivedQty = @Qty, ModifiedDate = GETDATE()
+                    WHERE PurchaseOrderID = @Id",
+                    new { Id = poId, Qty = (decimal)qty });
+                await conn.ExecuteAsync(@"
+                    UPDATE Purchasing.SimOrderState
+                    SET ActualDeliveryUtc = GETUTCDATE(), ModifiedDate = GETUTCDATE()
+                    WHERE PurchaseOrderID = @Id",
+                    new { Id = poId });
+                await AddToSqlInventoryAsync(productId, qty, vendorId, unitCost);
+                await WriteSqlTrackingAsync(conn, poId, "complete",
+                    $"Reliability check passed. {qty} units of ProductID {productId} delivered and added to inventory.");
+                passed++;
+            }
+            else
+            {
+                // Reliability failed → reject
+                await conn.ExecuteAsync(@"
+                    UPDATE Purchasing.PurchaseOrderHeader
+                    SET Status = 3, RevisionNumber = RevisionNumber + 1, ModifiedDate = GETDATE()
+                    WHERE PurchaseOrderID = @Id",
+                    new { Id = poId });
+                await conn.ExecuteAsync(@"
+                    UPDATE Purchasing.SimOrderState
+                    SET CancellationReason = 'Rejected: reliability check failed during historical processing.',
+                        ModifiedDate = GETUTCDATE()
+                    WHERE PurchaseOrderID = @Id",
+                    new { Id = poId });
+                await WriteSqlTrackingAsync(conn, poId, "rejected",
+                    $"Reliability check failed (vendor reliability: {reliability:P0}). Order rejected.");
+                rejected++;
+            }
+        }
+
+        if (passed + rejected > 0)
+            _logger.LogInformation(
+                "Processed {Total} historical Approved POs: {Passed} delivered, {Rejected} rejected.",
+                passed + rejected, passed, rejected);
     }
 
     // ── Vendor read ────────────────────────────────────────────────────────────
@@ -353,8 +650,26 @@ public class SupplyChainService
     {
         await _tableClient.CreateIfNotExistsAsync();
         var vendors = await GetVendorsAsync();
-        var result  = new List<VendorSummary>();
 
+        // Count active and delivered-today orders per vendor from SQL
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        var orderStats = (await conn.QueryAsync(@"
+            SELECT CAST(poh.VendorID AS VARCHAR(20)) AS VendorId,
+                   SUM(CASE WHEN poh.Status = 2 THEN 1 ELSE 0 END) AS ActiveOrders,
+                   SUM(CASE WHEN poh.Status = 4
+                             AND CAST(sos.ActualDeliveryUtc AS DATE) = CAST(GETUTCDATE() AS DATE)
+                            THEN 1 ELSE 0 END) AS DeliveredToday
+            FROM Purchasing.SimOrderState sos
+            INNER JOIN Purchasing.PurchaseOrderHeader poh
+                ON sos.PurchaseOrderID = poh.PurchaseOrderID
+            GROUP BY poh.VendorID"))
+            .ToDictionary(
+                r => (string)r.VendorId,
+                r => ((int)r.ActiveOrders, (int)r.DeliveredToday));
+
+        var result = new List<VendorSummary>();
         foreach (var v in vendors)
         {
             int totalComponents = 0, inStock = 0;
@@ -364,17 +679,7 @@ public class SupplyChainService
                 totalComponents++;
                 if ((e.GetInt32("CurrentStock") ?? 0) > 0) inStock++;
             }
-
-            int activeOrders = 0, deliveredToday = 0;
-            await foreach (var e in _tableClient.QueryAsync<TableEntity>(
-                filter: $"PartitionKey eq '{PART_ORDER}' and VendorId eq '{v.VendorId}'"))
-            {
-                var status = e.GetString("Status") ?? "";
-                if (status is "placed" or "confirmed" or "picking" or "shipped") activeOrders++;
-                if (status == "delivered" &&
-                    e.GetDateTimeOffset("ActualDeliveryUtc")?.Date == DateTime.UtcNow.Date) deliveredToday++;
-            }
-
+            var (activeOrders, deliveredToday) = orderStats.TryGetValue(v.VendorId, out var s) ? s : (0, 0);
             result.Add(new VendorSummary(v, totalComponents, inStock, activeOrders, deliveredToday));
         }
         return result;
@@ -384,41 +689,37 @@ public class SupplyChainService
 
     /// <summary>
     /// Builds a (vendorId, productId) → incomingQty lookup from all open purchase orders
-    /// (placed/confirmed/picking/shipped/delayed). These quantities have already been deducted
-    /// from vendor CurrentStock; once delivered they will arrive at our warehouse.
-    /// Optionally scoped to a single vendorId or productId to reduce Table scan cost.
+    /// (Status=2 Approved — in transit). Sourced from SQL.
     /// </summary>
     private async Task<Dictionary<(string VendorId, int ProductId), int>> GetIncomingQtyMapAsync(
         string? scopeVendorId = null, int? scopeProductId = null)
     {
         var map = new Dictionary<(string, int), int>();
 
-        // Active statuses: everything that has left the vendor's shelf but not yet arrived
-        var activeStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            { "placed", "confirmed", "picking", "shipped", "delayed" };
-
-        // Build a filter scoped to the order partition; optionally narrow by vendor / product
-        // so we do not scan the entire order partition when querying a single quote.
-        string filter = $"PartitionKey eq '{PART_ORDER}'";
+        string whereExtra = "";
         if (!string.IsNullOrEmpty(scopeVendorId))
-            filter += $" and VendorId eq '{scopeVendorId}'";
+            whereExtra += $" AND poh.VendorID = {int.Parse(scopeVendorId)}";
         if (scopeProductId.HasValue)
-            filter += $" and ProductId eq {scopeProductId.Value}";
+            whereExtra += $" AND pod.ProductID = {scopeProductId.Value}";
 
-        await foreach (var e in _tableClient.QueryAsync<TableEntity>(
-            filter: filter,
-            select: new[] { "VendorId", "ProductId", "Qty", "Status" }))
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        var rows = await conn.QueryAsync($@"
+            SELECT CAST(poh.VendorID AS VARCHAR(20)) AS VendorId,
+                   pod.ProductID,
+                   CAST(pod.OrderQty AS INT) AS Qty
+            FROM Purchasing.SimOrderState sos
+            INNER JOIN Purchasing.PurchaseOrderHeader poh
+                ON sos.PurchaseOrderID = poh.PurchaseOrderID
+            INNER JOIN Purchasing.PurchaseOrderDetail pod
+                ON poh.PurchaseOrderID = pod.PurchaseOrderID
+            WHERE poh.Status = 2{whereExtra}");
+
+        foreach (var r in rows)
         {
-            var status = e.GetString("Status") ?? "";
-            if (!activeStatuses.Contains(status)) continue;
-
-            var vid = e.GetString("VendorId") ?? "";
-            int pid = e.GetInt32("ProductId") ?? 0;
-            int qty = e.GetInt32("Qty") ?? 0;
-            if (vid == "" || pid == 0 || qty == 0) continue;
-
-            var key = (vid, pid);
-            map[key] = map.TryGetValue(key, out int current) ? current + qty : qty;
+            var key = ((string)r.VendorId, (int)r.ProductID);
+            map[key] = map.TryGetValue(key, out int cur) ? cur + (int)r.Qty : (int)r.Qty;
         }
         return map;
     }
@@ -517,8 +818,10 @@ public class SupplyChainService
     // ── Order placement ────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Places a purchase order. Deducts stock immediately (prevents oversell).
+    /// Places a purchase order. Deducts stock from Table Storage immediately (prevents oversell).
+    /// Creates Purchasing.PurchaseOrderHeader/Detail + SimOrderState in SQL as the primary state.
     /// Returns null if vendorId/productId invalid or insufficient stock.
+    /// The returned <see cref="PurchaseOrder.OrderId"/> is the SQL PurchaseOrderID as a string.
     /// </summary>
     public async Task<PurchaseOrder?> PlaceOrderAsync(string vendorId, int productId, int qty)
     {
@@ -526,14 +829,12 @@ public class SupplyChainService
         var vendor  = vendors.FirstOrDefault(v => v.VendorId == vendorId);
         if (vendor == null || qty <= 0) return null;
 
-        // Read + deduct stock atomically via ETag
+        // Read + deduct stock atomically via ETag (Table Storage still owns vendor stock)
         var stockResp = await _tableClient.GetEntityIfExistsAsync<TableEntity>(
             PART_STOCK, StockRowKey(vendorId, productId));
         if (!stockResp.HasValue) return null;
 
-        var stock = stockResp.Value!;
-
-        // Validate against ProductVendor constraints
+        var stock  = stockResp.Value!;
         int minQty = stock.GetInt32("MinOrderQty") ?? 1;
         int maxQty = stock.GetInt32("MaxOrderQty") ?? int.MaxValue;
         if (qty < minQty || qty > maxQty) return null;
@@ -548,11 +849,11 @@ public class SupplyChainService
         }
         catch (Azure.RequestFailedException ex) when (ex.Status == 412 || ex.Status == 409)
         {
-            // Concurrent order – just re-read and try once more
+            // Concurrent order — re-read and retry once
             stockResp = await _tableClient.GetEntityIfExistsAsync<TableEntity>(
                 PART_STOCK, StockRowKey(vendorId, productId));
             if (!stockResp.HasValue) return null;
-            stock = stockResp.Value!;
+            stock   = stockResp.Value!;
             current = stock.GetInt32("CurrentStock") ?? 0;
             if (current < qty) return null;
             stock["CurrentStock"] = current - qty;
@@ -570,167 +871,142 @@ public class SupplyChainService
         DateTime placed      = DateTime.UtcNow;
         DateTime eta         = placed.AddSeconds(simHrs * 3600.0 / _simTimeScale);
 
-        string orderId = Guid.NewGuid().ToString("N")[..12].ToUpperInvariant();
+        if (!int.TryParse(vendorId, out int vendorBusinessId)) return null;
 
-        // Persist to Purchasing.PurchaseOrderHeader + PurchaseOrderDetail in SQL before upserting
-        // to Table Storage so the cross-reference ID is captured in the same entity write.
-        int? sqlPurchaseOrderId = null;
-        if (int.TryParse(vendorId, out int vendorBusinessId))
-        {
-            sqlPurchaseOrderId = await InsertSqlPurchaseOrderAsync(
-                vendorBusinessId, vendor.ShipMethodId, placed, eta,
-                productId, qty, unitCost, shipping);
-        }
+        // SQL is the primary state — create PurchaseOrderHeader, Detail, and SimOrderState
+        int purchaseOrderId = await InsertSqlPurchaseOrderAsync(
+            vendorBusinessId, vendor.ShipMethodId, placed, eta,
+            productId, qty, unitCost, shipping);
 
-        var orderEntity = new TableEntity(PART_ORDER, orderId)
-        {
-            ["VendorId"]             = vendorId,
-            ["VendorName"]           = vendor.Name,
-            ["ProductId"]            = productId,
-            ["ProductName"]          = name,
-            ["Qty"]                  = qty,
-            ["UnitCost"]             = unitCost,
-            ["ShippingCost"]         = shipping,
-            ["TotalCost"]            = total,
-            ["Status"]               = "placed",
-            ["PlacedAtUtc"]          = placed,
-            ["EstimatedDeliveryUtc"] = eta,
-        };
-        if (sqlPurchaseOrderId.HasValue)
-            orderEntity["SqlPurchaseOrderId"] = sqlPurchaseOrderId.Value;
+        _logger.LogInformation(
+            "PO {OrderId} placed: {Qty}x ProductID={ProductId} from {Vendor}, ETA={Eta:u}",
+            purchaseOrderId, qty, productId, vendor.Name, eta);
 
-        await _tableClient.UpsertEntityAsync(orderEntity);
-        await WriteTrackingAsync(orderId, "placed", $"Order placed with {vendor.Name} for {qty}× {name}. Estimated delivery: {eta:HH:mm UTC} (PO #{sqlPurchaseOrderId?.ToString() ?? "pending"})");
-
-        _logger.LogInformation("PO {OrderId} placed: {Qty}x ProductID={ProductId} from {Vendor}, ETA={Eta:u}",
-            orderId, qty, productId, vendor.Name, eta);
-
-        return await GetOrderAsync(orderId);
+        return await GetOrderAsync(purchaseOrderId.ToString());
     }
 
     // ── Order state transitions ────────────────────────────────────────────────
 
+    /// <summary>
+    /// Advances a purchase order through the simulation state machine using
+    /// <c>PurchaseOrderHeader.Status</c> as the single source of truth.
+    /// <paramref name="orderId"/> is the SQL <c>PurchaseOrderID</c> as a string.
+    /// <para>Valid transitions:
+    /// <c>pending(1) → approved(2)</c>,
+    /// <c>approved(2) → complete(4)</c>,
+    /// <c>approved(2) → rejected(3)</c>,
+    /// <c>pending(1) → rejected(3)</c> (cancellation path).
+    /// </para>
+    /// </summary>
     public async Task<bool> TransitionOrderAsync(string orderId, string targetStatus)
     {
-        var resp = await _tableClient.GetEntityIfExistsAsync<TableEntity>(PART_ORDER, orderId);
-        if (!resp.HasValue) return false;
+        if (!int.TryParse(orderId, out int purchaseOrderId)) return false;
 
-        var entity  = resp.Value!;
-        string current = entity.GetString("Status") ?? "";
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
 
-        // Guard: only advance (or deliver/fail)
-        string[] validTransitions = current switch
+        var row = await conn.QuerySingleOrDefaultAsync(@"
+            SELECT poh.Status                          AS PoStatus,
+                   sos.EstimatedDeliveryUtc,
+                   CAST(poh.VendorID AS VARCHAR(20))   AS VendorId,
+                   pod.ProductID,
+                   CAST(pod.OrderQty AS INT)            AS Qty,
+                   CAST(pod.UnitPrice AS FLOAT)         AS UnitCost
+            FROM Purchasing.SimOrderState sos
+            INNER JOIN Purchasing.PurchaseOrderHeader poh ON sos.PurchaseOrderID = poh.PurchaseOrderID
+            INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
+            WHERE sos.PurchaseOrderID = @Id",
+            new { Id = purchaseOrderId });
+
+        if (row == null) return false;
+
+        int currentPoStatus = (int)row.PoStatus;
+
+        // Validate transition against current PurchaseOrderHeader.Status
+        bool valid = (currentPoStatus, targetStatus) switch
         {
-            "placed"    => new[] { "confirmed", "out_of_stock", "cancelled" },
-            "confirmed" => new[] { "picking" },
-            "picking"   => new[] { "shipped", "delayed" },
-            "delayed"   => new[] { "shipped" },
-            "shipped"   => new[] { "delivered" },
-            _           => Array.Empty<string>(),
+            (1, "approved")  => true,
+            (2, "complete")  => true,
+            (2, "rejected")  => true,
+            (1, "rejected")  => true,  // cancellation from pending
+            _                => false,
         };
+        if (!valid) return false;
 
-        if (!validTransitions.Contains(targetStatus)) return false;
+        int    productId = (int)row.ProductID;
+        string vendorId  = (string)row.VendorId;
+        int    qty       = (int)row.Qty;
+        double unitCost  = (double)row.UnitCost;
 
-        entity["Status"] = targetStatus;
-
-        // Read the SQL cross-reference before modifying anything
-        int? sqlPurchaseOrderId = entity.GetInt32("SqlPurchaseOrderId");
-
-        if (targetStatus == "delivered")
+        byte newPoStatus = targetStatus switch
         {
-            entity["ActualDeliveryUtc"] = DateTime.UtcNow;
+            "approved" => 2,
+            "complete" => 4,
+            "rejected" => 3,
+            _          => throw new InvalidOperationException($"Unexpected target: {targetStatus}"),
+        };
+        await UpdateSqlPurchaseOrderAsync(conn, purchaseOrderId, newPoStatus);
 
-            // Add inventory to SQL — this unblocks stalled manufacturing work orders
-            int productId = entity.GetInt32("ProductId") ?? 0;
-            int qty       = entity.GetInt32("Qty") ?? 0;
-            string vendorId = entity.GetString("VendorId") ?? "";
-            double unitCost = entity.GetDouble("UnitCost") ?? 0.0;
-            if (productId > 0 && qty > 0)
-            {
-                await AddToSqlInventoryAsync(productId, qty, vendorId, unitCost);
-                await WriteTrackingAsync(orderId, "delivered",
-                    $"Delivery confirmed. {qty} units of ProductID {productId} added to Production.ProductInventory. Cost recorded in ProductCostHistory.");
-            }
-
-            // Mark SQL PurchaseOrderHeader as Complete (4) and update ReceivedQty in detail
-            if (sqlPurchaseOrderId.HasValue)
-                await UpdateSqlPurchaseOrderAsync(sqlPurchaseOrderId.Value, status: 4, receivedQty: qty > 0 ? qty : null);
+        if (targetStatus == "complete")
+        {
+            await conn.ExecuteAsync(
+                "UPDATE Purchasing.SimOrderState SET ActualDeliveryUtc = GETUTCDATE(), ModifiedDate = GETUTCDATE() WHERE PurchaseOrderID = @Id",
+                new { Id = purchaseOrderId });
+            await UpdateSqlPurchaseOrderAsync(conn, purchaseOrderId, status: 4, receivedQty: qty);
+            await AddToSqlInventoryAsync(productId, qty, vendorId, unitCost);
+            await WriteSqlTrackingAsync(conn, purchaseOrderId, "complete",
+                $"Delivery confirmed. {qty} units of ProductID {productId} added to Production.ProductInventory.");
         }
-        else if (targetStatus == "out_of_stock")
+        else if (targetStatus == "rejected")
         {
-            // Refund stock: vendor had it allocated but cancelled before pickup
-            await RefundStockAsync(entity);
-            await WriteTrackingAsync(orderId, "out_of_stock",
-                "Item became unavailable before confirmation. Stock refunded to vendor.");
-
-            // Mark SQL PurchaseOrderHeader as Rejected (3)
-            if (sqlPurchaseOrderId.HasValue)
-                await UpdateSqlPurchaseOrderAsync(sqlPurchaseOrderId.Value, status: 3);
+            await RefundStockAsync(vendorId, productId, qty);
+            await conn.ExecuteAsync(
+                @"UPDATE Purchasing.SimOrderState
+                  SET CancellationReason = ISNULL(CancellationReason, 'Rejected by simulator.'),
+                      ModifiedDate = GETUTCDATE()
+                  WHERE PurchaseOrderID = @Id AND CancellationReason IS NULL",
+                new { Id = purchaseOrderId });
+            await WriteSqlTrackingAsync(conn, purchaseOrderId, "rejected",
+                "Order rejected. Vendor stock refunded.");
         }
-        else if (targetStatus == "delayed")
+        else // approved
         {
-            // Reliability failure — add a delay, re-queue shipped transition
-            double extraSimHrs = 24.0; // 1 extra simulated day
-            var eta = entity.GetDateTimeOffset("EstimatedDeliveryUtc")?.UtcDateTime ?? DateTime.UtcNow;
-            entity["EstimatedDeliveryUtc"] = eta.AddSeconds(extraSimHrs * 3600.0 / _simTimeScale);
-            await WriteTrackingAsync(orderId, "delayed",
-                "Shipment delayed in transit. Estimated delivery extended by 1 day.");
-            // SQL remains Approved (2) during a delay — no status change needed
-        }
-        else
-        {
-            string desc = targetStatus switch
-            {
-                "confirmed" => "Order confirmed by vendor. Processing for dispatch.",
-                "picking"   => "Order picked from warehouse and prepared for shipping.",
-                "shipped"   => "Shipment dispatched. Tracking number generated.",
-                _           => $"Status updated to {targetStatus}.",
-            };
-            await WriteTrackingAsync(orderId, targetStatus, desc);
-
-            // Sync SQL PurchaseOrderHeader status
-            if (sqlPurchaseOrderId.HasValue)
-            {
-                switch (targetStatus)
-                {
-                    case "picking":
-                        // Picking = Approved in AdventureWorks (procurement confirmed by buyer)
-                        await UpdateSqlPurchaseOrderAsync(sqlPurchaseOrderId.Value, status: 2);
-                        break;
-                    case "shipped":
-                        // Shipped = Approved with ShipDate recorded
-                        await UpdateSqlPurchaseOrderAsync(sqlPurchaseOrderId.Value, status: 2, shipDate: DateTime.UtcNow);
-                        break;
-                    // "confirmed" stays as Pending (1) in SQL — no change needed
-                }
-            }
+            await WriteSqlTrackingAsync(conn, purchaseOrderId, "approved",
+                "Order approved by vendor. In transit.");
         }
 
-        await _tableClient.UpdateEntityAsync(entity, entity.ETag);
         return true;
     }
 
     public async Task<bool> CancelOrderAsync(string orderId, string reason)
     {
-        var resp = await _tableClient.GetEntityIfExistsAsync<TableEntity>(PART_ORDER, orderId);
-        if (!resp.HasValue) return false;
+        if (!int.TryParse(orderId, out int purchaseOrderId)) return false;
 
-        var entity = resp.Value!;
-        string status = entity.GetString("Status") ?? "";
-        if (status is not ("placed" or "confirmed")) return false;
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
 
-        // Refund stock
-        await RefundStockAsync(entity);
+        var row = await conn.QuerySingleOrDefaultAsync(@"
+            SELECT poh.Status AS PoStatus,
+                   CAST(poh.VendorID AS VARCHAR(20)) AS VendorId,
+                   pod.ProductID,
+                   CAST(pod.OrderQty AS INT) AS Qty
+            FROM Purchasing.SimOrderState sos
+            INNER JOIN Purchasing.PurchaseOrderHeader poh ON sos.PurchaseOrderID = poh.PurchaseOrderID
+            INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
+            WHERE sos.PurchaseOrderID = @Id",
+            new { Id = purchaseOrderId });
 
-        entity["Status"]             = "cancelled";
-        entity["CancellationReason"] = reason;
-        await _tableClient.UpdateEntityAsync(entity, entity.ETag);
-        await WriteTrackingAsync(orderId, "cancelled", $"Order cancelled: {reason}. Stock returned to vendor.");
+        if (row == null) return false;
+        // Can only cancel while Pending (1) — once Approved it is already in transit
+        if ((int)row.PoStatus != 1) return false;
 
-        // Mark SQL PurchaseOrderHeader as Rejected (3)
-        int? sqlPurchaseOrderId = entity.GetInt32("SqlPurchaseOrderId");
-        if (sqlPurchaseOrderId.HasValue)
-            await UpdateSqlPurchaseOrderAsync(sqlPurchaseOrderId.Value, status: 3);
+        await RefundStockAsync((string)row.VendorId, (int)row.ProductID, (int)row.Qty);
+        await UpdateSqlPurchaseOrderAsync(conn, purchaseOrderId, status: 3);
+        await conn.ExecuteAsync(
+            "UPDATE Purchasing.SimOrderState SET CancellationReason = @Reason, ModifiedDate = GETUTCDATE() WHERE PurchaseOrderID = @Id",
+            new { Reason = reason, Id = purchaseOrderId });
+        await WriteSqlTrackingAsync(conn, purchaseOrderId, "rejected",
+            $"Order cancelled: {reason}. Stock returned to vendor.");
 
         return true;
     }
@@ -760,137 +1036,194 @@ public class SupplyChainService
 
     // ── Order queries ──────────────────────────────────────────────────────────
 
+    private const string OrderSelectSql = @"
+        SELECT poh.PurchaseOrderID,
+               CAST(poh.VendorID AS VARCHAR(20)) AS VendorId,
+               v.Name  AS VendorName,
+               pod.ProductID,
+               p.Name  AS ProductName,
+               CAST(pod.OrderQty   AS INT)   AS Qty,
+               CAST(pod.UnitPrice  AS FLOAT) AS UnitCost,
+               CAST(poh.Freight    AS FLOAT) AS ShippingCost,
+               CAST(poh.TotalDue   AS FLOAT) AS TotalCost,
+               CASE poh.Status
+                   WHEN 1 THEN 'pending'
+                   WHEN 2 THEN 'approved'
+                   WHEN 3 THEN 'rejected'
+                   WHEN 4 THEN 'complete'
+                   ELSE 'unknown'
+               END AS Status,
+               poh.OrderDate               AS PlacedAtUtc,
+               sos.EstimatedDeliveryUtc,
+               sos.ActualDeliveryUtc,
+               sos.CancellationReason
+        FROM Purchasing.SimOrderState sos
+        INNER JOIN Purchasing.PurchaseOrderHeader poh ON sos.PurchaseOrderID = poh.PurchaseOrderID
+        INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
+        INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
+        INNER JOIN Production.Product p ON pod.ProductID = p.ProductID";
+
     public async Task<List<PurchaseOrder>> GetOrdersAsync(bool includeCompleted = false)
     {
-        await _tableClient.CreateIfNotExistsAsync();
-        var orders = new List<PurchaseOrder>();
-        await foreach (var e in _tableClient.QueryAsync<TableEntity>(
-            filter: $"PartitionKey eq '{PART_ORDER}'"))
-        {
-            var status = e.GetString("Status") ?? "";
-            if (!includeCompleted && status is "delivered" or "cancelled" or "out_of_stock") continue;
-            var order = await EntityToOrderAsync(e);
-            if (order != null) orders.Add(order);
-        }
-        return orders.OrderByDescending(o => o.PlacedAtUtc).ToList();
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        string sql = OrderSelectSql;
+        if (!includeCompleted)
+            sql += " WHERE poh.Status IN (1, 2)";  // pending or approved (in transit)
+        sql += " ORDER BY poh.OrderDate DESC";
+
+        var rows   = await conn.QueryAsync(sql);
+        var result = new List<PurchaseOrder>();
+        foreach (var r in rows)
+            result.Add(await RowToOrderAsync(conn, r));
+        return result;
     }
 
     public async Task<List<PurchaseOrder>> GetOrderHistoryAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
-        var orders = new List<PurchaseOrder>();
-        await foreach (var e in _tableClient.QueryAsync<TableEntity>(
-            filter: $"PartitionKey eq '{PART_ORDER}'"))
-        {
-            var order = await EntityToOrderAsync(e);
-            if (order != null) orders.Add(order);
-        }
-        return orders.OrderByDescending(o => o.PlacedAtUtc).ToList();
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        var rows   = await conn.QueryAsync(OrderSelectSql + " ORDER BY poh.OrderDate DESC");
+        var result = new List<PurchaseOrder>();
+        foreach (var r in rows)
+            result.Add(await RowToOrderAsync(conn, r));
+        return result;
     }
 
     public async Task<PurchaseOrder?> GetOrderAsync(string orderId)
     {
-        var resp = await _tableClient.GetEntityIfExistsAsync<TableEntity>(PART_ORDER, orderId);
-        if (!resp.HasValue) return null;
-        return await EntityToOrderAsync(resp.Value!);
+        if (!int.TryParse(orderId, out int purchaseOrderId)) return null;
+
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        var row = await conn.QuerySingleOrDefaultAsync(
+            OrderSelectSql + " WHERE sos.PurchaseOrderID = @Id",
+            new { Id = purchaseOrderId });
+
+        if (row == null) return null;
+        return await RowToOrderAsync(conn, row);
     }
 
     // ── Reset ─────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Wipes all order, tracking, and stock rows then re-seeds stock from Purchasing.ProductVendor.
-    /// Vendor definition rows are also refreshed from the database.
+    /// Wipes simulation state (SimOrderTracking, SimOrderState) and re-seeds vendor stock.
+    /// First reverts PurchaseOrderHeader.Status back to Approved (2) for any POs that the
+    /// simulator changed to Complete (4) or Rejected (3), so the next call to
+    /// <see cref="ProcessHistoricalApprovedOrdersAsync"/> can replay them.
     /// </summary>
     public async Task ResetAsync()
     {
-        // Invalidate vendor cache so next access re-loads from SQL
         _vendorCache = null;
 
-        foreach (string partition in new[] { PART_ORDER, PART_TRACKING, PART_STOCK, PART_VENDOR })
-        {
-            var toDelete = new List<(string pk, string rk)>();
-            await foreach (var e in _tableClient.QueryAsync<TableEntity>(
-                filter: $"PartitionKey eq '{partition}'",
-                select: new[] { "PartitionKey", "RowKey" }))
-                toDelete.Add((e.PartitionKey, e.RowKey));
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
 
-            foreach (var (pk, rk) in toDelete)
-                await _tableClient.DeleteEntityAsync(pk, rk);
-        }
+        // Revert sim-touched POs back to Approved (2) so they can be re-processed on next init
+        await conn.ExecuteAsync(@"
+            UPDATE poh
+            SET poh.Status = 2,
+                poh.ShipDate = NULL,
+                poh.RevisionNumber = poh.RevisionNumber + 1,
+                poh.ModifiedDate = GETDATE()
+            FROM Purchasing.PurchaseOrderHeader poh
+            INNER JOIN Purchasing.SimOrderState sos ON poh.PurchaseOrderID = sos.PurchaseOrderID
+            WHERE poh.Status IN (3, 4)");
 
-        // Re-seed everything from SQL
+        // Also reset ReceivedQty on detail rows of reverted POs
+        await conn.ExecuteAsync(@"
+            UPDATE pod
+            SET pod.ReceivedQty = 0, pod.ModifiedDate = GETDATE()
+            FROM Purchasing.PurchaseOrderDetail pod
+            INNER JOIN Purchasing.PurchaseOrderHeader poh ON pod.PurchaseOrderID = poh.PurchaseOrderID
+            INNER JOIN Purchasing.SimOrderState sos ON poh.PurchaseOrderID = sos.PurchaseOrderID");
+
+        await conn.ExecuteAsync("DELETE FROM Purchasing.SimOrderTracking");
+        await conn.ExecuteAsync("DELETE FROM Purchasing.SimOrderState");
+        _logger.LogInformation("Reset: reverted sim-touched POs to Approved, cleared SimOrderState and SimOrderTracking.");
+
+        // Re-seed vendor stock in Table Storage
+        var toDelete = new List<(string pk, string rk)>();
+        await foreach (var e in _tableClient.QueryAsync<TableEntity>(
+            filter: $"PartitionKey eq '{PART_STOCK}'",
+            select: new[] { "PartitionKey", "RowKey" }))
+            toDelete.Add((e.PartitionKey, e.RowKey));
+        foreach (var (pk, rk) in toDelete)
+            await _tableClient.DeleteEntityAsync(pk, rk);
+
         await InitializeAsync();
-        _logger.LogInformation("Supply chain simulation reset — re-seeded from Purchasing tables.");
+        _logger.LogInformation("Supply chain simulation reset — vendor stock re-seeded from Purchasing tables.");
     }
 
     // ── Internal helpers ───────────────────────────────────────────────────────
 
     private static string StockRowKey(string vendorId, int productId) => $"{vendorId}_{productId}";
 
-    private async Task WriteTrackingAsync(string orderId, string eventType, string description)
+    /// <summary>
+    /// Appends a tracking event to <c>Purchasing.SimOrderTracking</c>.
+    /// Accepts an open connection to avoid opening a second one within an existing transaction.
+    /// </summary>
+    private static async Task WriteSqlTrackingAsync(
+        SqlConnection conn, int purchaseOrderId, string eventType, string description)
     {
-        // Reverse-chrono row key for natural sort
-        var rowKey  = $"{long.MaxValue - DateTimeOffset.UtcNow.Ticks:D19}_{eventType}";
-        var entity = new TableEntity(PART_TRACKING, $"{orderId}_{rowKey}")
-        {
-            ["OrderId"]     = orderId,
-            ["EventType"]   = eventType,
-            ["Description"] = description,
-            ["TimestampUtc"]= DateTime.UtcNow,
-        };
-        await _tableClient.UpsertEntityAsync(entity);
+        await conn.ExecuteAsync(
+            @"INSERT INTO Purchasing.SimOrderTracking (PurchaseOrderID, EventType, Description, CreatedAtUtc)
+              VALUES (@Id, @EventType, @Description, GETUTCDATE())",
+            new { Id = purchaseOrderId, EventType = eventType, Description = description });
     }
 
-    private async Task<List<TrackingEvent>> GetTrackingEventsAsync(string orderId)
+    private static async Task<List<TrackingEvent>> GetSqlTrackingEventsAsync(
+        SqlConnection conn, int purchaseOrderId)
     {
-        var events = new List<TrackingEvent>();
-        await foreach (var e in _tableClient.QueryAsync<TableEntity>(
-            filter: $"PartitionKey eq '{PART_TRACKING}' and OrderId eq '{orderId}'"))
-        {
-            events.Add(new TrackingEvent(
-                e.GetString("EventType") ?? "",
-                e.GetString("Description") ?? "",
-                e.GetDateTimeOffset("TimestampUtc")?.UtcDateTime ?? DateTime.UtcNow));
-        }
-        // Already reverse-chrono by design of row key
-        return events;
+        var rows = await conn.QueryAsync(
+            @"SELECT EventType, Description, CreatedAtUtc
+              FROM Purchasing.SimOrderTracking
+              WHERE PurchaseOrderID = @Id
+              ORDER BY CreatedAtUtc DESC",
+            new { Id = purchaseOrderId });
+
+        return rows.Select(r => new TrackingEvent(
+            (string)r.EventType,
+            (string)(r.Description ?? ""),
+            ((DateTime)r.CreatedAtUtc).ToUniversalTime())).ToList();
     }
 
-    private async Task<PurchaseOrder?> EntityToOrderAsync(TableEntity e)
+    /// <summary>Projects a Dapper dynamic row (from <see cref="OrderSelectSql"/>) to a <see cref="PurchaseOrder"/>.</summary>
+    private static async Task<PurchaseOrder> RowToOrderAsync(SqlConnection conn, dynamic r)
     {
-        string orderId = e.RowKey;
-        var tracking   = await GetTrackingEventsAsync(orderId);
+        int poId     = (int)r.PurchaseOrderID;
+        var tracking = await GetSqlTrackingEventsAsync(conn, poId);
+
         return new PurchaseOrder(
-            orderId,
-            VendorId:            e.GetString("VendorId") ?? "",
-            VendorName:          e.GetString("VendorName") ?? "",
-            ProductId:           e.GetInt32("ProductId") ?? 0,
-            ProductName:         e.GetString("ProductName") ?? "",
-            Qty:                 e.GetInt32("Qty") ?? 0,
-            UnitCost:            e.GetDouble("UnitCost") ?? 0,
-            ShippingCost:        e.GetDouble("ShippingCost") ?? 0,
-            TotalCost:           e.GetDouble("TotalCost") ?? 0,
-            Status:              e.GetString("Status") ?? "",
-            PlacedAtUtc:         e.GetDateTimeOffset("PlacedAtUtc")?.UtcDateTime ?? DateTime.UtcNow,
-            EstimatedDeliveryUtc: e.GetDateTimeOffset("EstimatedDeliveryUtc")?.UtcDateTime ?? DateTime.UtcNow,
-            ActualDeliveryUtc:   e.GetDateTimeOffset("ActualDeliveryUtc")?.UtcDateTime,
-            CancellationReason:  e.GetString("CancellationReason"),
-            TrackingEvents:      tracking,
-            SqlPurchaseOrderId:  e.GetInt32("SqlPurchaseOrderId"));
+            OrderId:              poId.ToString(),
+            VendorId:             (string)r.VendorId,
+            VendorName:           (string)r.VendorName,
+            ProductId:            (int)r.ProductID,
+            ProductName:          (string)r.ProductName,
+            Qty:                  (int)r.Qty,
+            UnitCost:             (double)r.UnitCost,
+            ShippingCost:         (double)r.ShippingCost,
+            TotalCost:            (double)r.TotalCost,
+            Status:               (string)r.Status,
+            PlacedAtUtc:          ((DateTime)r.PlacedAtUtc).ToUniversalTime(),
+            EstimatedDeliveryUtc: ((DateTime)r.EstimatedDeliveryUtc).ToUniversalTime(),
+            ActualDeliveryUtc:    r.ActualDeliveryUtc == null ? null : ((DateTime)r.ActualDeliveryUtc).ToUniversalTime(),
+            CancellationReason:   r.CancellationReason == null ? null : (string)r.CancellationReason,
+            TrackingEvents:       tracking);
     }
 
-    private async Task RefundStockAsync(TableEntity orderEntity)
+    private async Task RefundStockAsync(string vendorId, int productId, int qty)
     {
-        string vendorId = orderEntity.GetString("VendorId") ?? "";
-        int productId   = orderEntity.GetInt32("ProductId") ?? 0;
-        int qty         = orderEntity.GetInt32("Qty") ?? 0;
         if (vendorId == "" || productId == 0 || qty == 0) return;
 
         var stockResp = await _tableClient.GetEntityIfExistsAsync<TableEntity>(
             PART_STOCK, StockRowKey(vendorId, productId));
         if (!stockResp.HasValue) return;
 
-        var stock = stockResp.Value!;
+        var stock    = stockResp.Value!;
         int current  = stock.GetInt32("CurrentStock") ?? 0;
         int maxStock = stock.GetInt32("MaxStock") ?? 999;
         stock["CurrentStock"] = Math.Min(current + qty, maxStock);
@@ -977,6 +1310,58 @@ public class SupplyChainService
     }
 
     /// <summary>
+    /// Returns a (vendorId, productId) → averageStockedQty map derived from completed
+    /// purchase orders. "Average stocked qty" is the mean of
+    /// <c>PurchaseOrderDetail.StockedQty</c> (= ReceivedQty − RejectedQty) across all
+    /// completed lines for each vendor+product pair.
+    /// <para>
+    /// Preference order: simulation-delivered POs tracked in <c>SimOrderState</c> are used
+    /// first (they represent the most realistic volume for this environment). When no
+    /// simulation history exists yet (first-ever run), the query falls back to the full set
+    /// of completed AdventureWorks POs so the initial seed is still data-driven.
+    /// </para>
+    /// </summary>
+    private async Task<Dictionary<(string VendorId, int ProductId), int>> GetHistoricalStockLevelsAsync()
+    {
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        // StockedQty is a computed column: ReceivedQty - RejectedQty.
+        // We use the AVG across completed PO lines as a "typical batch" size per vendor+product.
+        var rows = await conn.QueryAsync(@"
+            WITH SimDelivered AS (
+                -- POs placed by the simulator that have been fully delivered
+                SELECT pod.PurchaseOrderID
+                FROM Purchasing.SimOrderState sos
+                INNER JOIN Purchasing.PurchaseOrderDetail pod
+                    ON sos.PurchaseOrderID = pod.PurchaseOrderID
+                WHERE sos.SimStatus = 'delivered'
+            ),
+            Source AS (
+                -- Prefer simulator history; fall back to AdventureWorks seed data when empty
+                SELECT PurchaseOrderID FROM SimDelivered
+                UNION ALL
+                SELECT poh.PurchaseOrderID
+                FROM Purchasing.PurchaseOrderHeader poh
+                WHERE poh.Status = 4   -- Complete
+                  AND NOT EXISTS (SELECT 1 FROM SimDelivered)
+            )
+            SELECT CAST(poh.VendorID AS VARCHAR(20)) AS VendorId,
+                   pod.ProductID,
+                   CAST(AVG(CAST(pod.StockedQty AS FLOAT)) AS INT) AS AvgStockedQty
+            FROM Source src
+            INNER JOIN Purchasing.PurchaseOrderDetail pod ON src.PurchaseOrderID = pod.PurchaseOrderID
+            INNER JOIN Purchasing.PurchaseOrderHeader poh ON pod.PurchaseOrderID = poh.PurchaseOrderID
+            WHERE pod.StockedQty > 0
+            GROUP BY poh.VendorID, pod.ProductID
+            HAVING AVG(CAST(pod.StockedQty AS FLOAT)) > 0");
+
+        return rows.ToDictionary(
+            r => ((string)r.VendorId, (int)r.ProductID),
+            r => (int)r.AvgStockedQty);
+    }
+
+    /// <summary>
     /// Loads all vendor-product pairs from Purchasing.ProductVendor for BOM purchased components.
     /// Used to seed Table Storage stock entities.
     /// </summary>
@@ -1020,8 +1405,8 @@ public class SupplyChainService
     // ── SQL Purchase Order persistence helpers ─────────────────────────────────
 
     /// <summary>
-    /// Finds an active employee in the Purchasing (Inventory Management) department to use
-    /// as the EmployeeID on new PurchaseOrderHeader rows. Result is cached for the service lifetime.
+    /// Finds an active employee in the Inventory Management department to use as the EmployeeID
+    /// on new PurchaseOrderHeader rows. Result is cached for the service lifetime.
     /// </summary>
     private async Task<int> GetDefaultPurchasingEmployeeIdAsync()
     {
@@ -1042,125 +1427,103 @@ public class SupplyChainService
                 AND e.CurrentFlag = 1
               ORDER BY e.BusinessEntityID");
 
-        _defaultEmployeeId = empId ?? 258; // fall back to a known valid purchasing agent
-        _logger.LogDebug("Using EmployeeID={EmpId} as default purchasing agent for PurchaseOrderHeader rows.", _defaultEmployeeId.Value);
+        _defaultEmployeeId = empId ?? 258;
         return _defaultEmployeeId.Value;
     }
 
     /// <summary>
-    /// Inserts a <c>Purchasing.PurchaseOrderHeader</c> (Status=1 Pending) and a corresponding
-    /// <c>Purchasing.PurchaseOrderDetail</c> row in SQL when the simulator places an order.
-    /// Returns the new <c>PurchaseOrderID</c>, or <c>null</c> if the write fails so the
-    /// simulation can continue without SQL persistence.
+    /// Creates a <c>Purchasing.PurchaseOrderHeader</c> (Status=1 Pending),
+    /// <c>Purchasing.PurchaseOrderDetail</c>, and the companion <c>Purchasing.SimOrderState</c>
+    /// row in a single connection. Writes the first tracking event.
+    /// Returns the new <c>PurchaseOrderID</c>.
     /// </summary>
-    private async Task<int?> InsertSqlPurchaseOrderAsync(
-        int vendorId, int shipMethodId, DateTime orderDate, DateTime dueDate,
+    private async Task<int> InsertSqlPurchaseOrderAsync(
+        int vendorId, int shipMethodId, DateTime orderDate, DateTime estimatedDelivery,
         int productId, int qty, double unitCost, double shipping)
     {
-        try
-        {
-            int    employeeId = await GetDefaultPurchasingEmployeeIdAsync();
-            decimal subTotal  = Math.Round((decimal)(unitCost * qty), 4);
-            decimal taxAmt    = Math.Round(subTotal * 0.08m, 4);   // AW standard 8 % tax
-            decimal freight   = Math.Round((decimal)shipping, 4);
+        int    employeeId = await GetDefaultPurchasingEmployeeIdAsync();
+        decimal subTotal  = Math.Round((decimal)(unitCost * qty), 4);
+        decimal taxAmt    = Math.Round(subTotal * 0.08m, 4);
+        decimal freight   = Math.Round((decimal)shipping, 4);
 
-            await using var conn = new SqlConnection(_connectionString);
-            await conn.OpenAsync();
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
 
-            // Insert header — TotalDue is a persisted computed column (SubTotal + TaxAmt + Freight)
-            int purchaseOrderId = await conn.ExecuteScalarAsync<int>(
-                @"INSERT INTO Purchasing.PurchaseOrderHeader
-                    (RevisionNumber, Status, EmployeeID, VendorID, ShipMethodID,
-                     OrderDate, ShipDate, SubTotal, TaxAmt, Freight, ModifiedDate)
-                  VALUES
-                    (1, 1, @EmployeeId, @VendorId, @ShipMethodId,
-                     @OrderDate, NULL, @SubTotal, @TaxAmt, @Freight, GETDATE());
-                  SELECT CAST(SCOPE_IDENTITY() AS INT);",
-                new { EmployeeId = employeeId, VendorId = vendorId, ShipMethodId = shipMethodId,
-                      OrderDate = orderDate, SubTotal = subTotal, TaxAmt = taxAmt, Freight = freight });
+        int purchaseOrderId = await conn.ExecuteScalarAsync<int>(
+            @"INSERT INTO Purchasing.PurchaseOrderHeader
+                (RevisionNumber, Status, EmployeeID, VendorID, ShipMethodID,
+                 OrderDate, ShipDate, SubTotal, TaxAmt, Freight, ModifiedDate)
+              VALUES
+                (1, 1, @EmployeeId, @VendorId, @ShipMethodId,
+                 @OrderDate, NULL, @SubTotal, @TaxAmt, @Freight, GETDATE());
+              SELECT CAST(SCOPE_IDENTITY() AS INT);",
+            new { EmployeeId = employeeId, VendorId = vendorId, ShipMethodId = shipMethodId,
+                  OrderDate = orderDate, SubTotal = subTotal, TaxAmt = taxAmt, Freight = freight });
 
-            // Insert detail line (ReceivedQty / RejectedQty start at 0; StockedQty is computed)
-            await conn.ExecuteAsync(
-                @"INSERT INTO Purchasing.PurchaseOrderDetail
-                    (PurchaseOrderID, DueDate, OrderQty, ProductID, UnitPrice,
-                     ReceivedQty, RejectedQty, ModifiedDate)
-                  VALUES
-                    (@PurchaseOrderId, @DueDate, @OrderQty, @ProductId, @UnitPrice,
-                     0, 0, GETDATE())",
-                new { PurchaseOrderId = purchaseOrderId, DueDate = dueDate,
-                      OrderQty = (short)Math.Min(qty, short.MaxValue),
-                      ProductId = productId, UnitPrice = (decimal)unitCost });
+        await conn.ExecuteAsync(
+            @"INSERT INTO Purchasing.PurchaseOrderDetail
+                (PurchaseOrderID, DueDate, OrderQty, ProductID, UnitPrice,
+                 ReceivedQty, RejectedQty, ModifiedDate)
+              VALUES
+                (@PurchaseOrderId, @DueDate, @OrderQty, @ProductId, @UnitPrice, 0, 0, GETDATE())",
+            new { PurchaseOrderId = purchaseOrderId, DueDate = estimatedDelivery,
+                  OrderQty = (short)Math.Min(qty, short.MaxValue),
+                  ProductId = productId, UnitPrice = (decimal)unitCost });
 
-            _logger.LogInformation(
-                "Created Purchasing.PurchaseOrderHeader ID={PurchaseOrderId} for VendorID={VendorId}, ProductID={ProductId}, Qty={Qty}",
-                purchaseOrderId, vendorId, productId, qty);
+        // SimOrderState holds ETA and delivery metadata (status lives in PurchaseOrderHeader)
+        await conn.ExecuteAsync(
+            @"INSERT INTO Purchasing.SimOrderState
+                (PurchaseOrderID, EstimatedDeliveryUtc, ModifiedDate)
+              VALUES
+                (@Id, @Eta, GETUTCDATE())",
+            new { Id = purchaseOrderId, Eta = estimatedDelivery });
 
-            return purchaseOrderId;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Failed to create SQL PurchaseOrderHeader for VendorID={VendorId}, ProductID={ProductId} — simulation order will proceed without SQL persistence.",
-                vendorId, productId);
-            return null;
-        }
+        // First tracking event
+        await WriteSqlTrackingAsync(conn, purchaseOrderId, "pending",
+            $"Order placed for {qty}× ProductID {productId}. " +
+            $"Estimated delivery: {estimatedDelivery:yyyy-MM-dd HH:mm} UTC (PO #{purchaseOrderId}).");
+
+        _logger.LogInformation(
+            "Created PurchaseOrderHeader ID={Id} for VendorID={VendorId}, ProductID={ProductId}, Qty={Qty}",
+            purchaseOrderId, vendorId, productId, qty);
+
+        return purchaseOrderId;
     }
 
     /// <summary>
     /// Updates <c>Purchasing.PurchaseOrderHeader</c> status and optionally <c>ShipDate</c>
-    /// (set when the simulator reaches the "shipped" state) and <c>ReceivedQty</c> in the
-    /// detail row (set to <c>OrderQty</c> when delivered).<br/>
-    /// SQL status codes: 1=Pending, 2=Approved, 3=Rejected, 4=Complete.
+    /// and <c>ReceivedQty</c> on the detail row. Accepts an already-open connection.
     /// </summary>
     private async Task UpdateSqlPurchaseOrderAsync(
-        int sqlPurchaseOrderId, byte status,
+        SqlConnection conn, int purchaseOrderId, byte status,
         DateTime? shipDate = null, int? receivedQty = null)
     {
-        try
+        if (shipDate.HasValue)
         {
-            await using var conn = new SqlConnection(_connectionString);
-            await conn.OpenAsync();
-
-            if (shipDate.HasValue)
-            {
-                await conn.ExecuteAsync(
-                    @"UPDATE Purchasing.PurchaseOrderHeader
-                      SET Status = @Status, ShipDate = @ShipDate,
-                          RevisionNumber = RevisionNumber + 1, ModifiedDate = GETDATE()
-                      WHERE PurchaseOrderID = @Id",
-                    new { Status = status, ShipDate = shipDate.Value, Id = sqlPurchaseOrderId });
-            }
-            else
-            {
-                await conn.ExecuteAsync(
-                    @"UPDATE Purchasing.PurchaseOrderHeader
-                      SET Status = @Status,
-                          RevisionNumber = RevisionNumber + 1, ModifiedDate = GETDATE()
-                      WHERE PurchaseOrderID = @Id",
-                    new { Status = status, Id = sqlPurchaseOrderId });
-            }
-
-            if (receivedQty.HasValue)
-            {
-                // ReceivedQty updated; StockedQty is a computed column and updates automatically
-                await conn.ExecuteAsync(
-                    @"UPDATE Purchasing.PurchaseOrderDetail
-                      SET ReceivedQty = @ReceivedQty, ModifiedDate = GETDATE()
-                      WHERE PurchaseOrderID = @Id",
-                    new { ReceivedQty = (decimal)receivedQty.Value, Id = sqlPurchaseOrderId });
-            }
-
-            _logger.LogDebug(
-                "Updated Purchasing.PurchaseOrderHeader ID={Id} → Status={Status}{ShipNote}{RecvNote}",
-                sqlPurchaseOrderId, status,
-                shipDate.HasValue ? $", ShipDate={shipDate:u}" : "",
-                receivedQty.HasValue ? $", ReceivedQty={receivedQty}" : "");
+            await conn.ExecuteAsync(
+                @"UPDATE Purchasing.PurchaseOrderHeader
+                  SET Status = @Status, ShipDate = @ShipDate,
+                      RevisionNumber = RevisionNumber + 1, ModifiedDate = GETDATE()
+                  WHERE PurchaseOrderID = @Id",
+                new { Status = status, ShipDate = shipDate.Value, Id = purchaseOrderId });
         }
-        catch (Exception ex)
+        else
         {
-            _logger.LogWarning(ex,
-                "Failed to update Purchasing.PurchaseOrderHeader ID={Id} to Status={Status}.",
-                sqlPurchaseOrderId, status);
+            await conn.ExecuteAsync(
+                @"UPDATE Purchasing.PurchaseOrderHeader
+                  SET Status = @Status,
+                      RevisionNumber = RevisionNumber + 1, ModifiedDate = GETDATE()
+                  WHERE PurchaseOrderID = @Id",
+                new { Status = status, Id = purchaseOrderId });
+        }
+
+        if (receivedQty.HasValue)
+        {
+            await conn.ExecuteAsync(
+                @"UPDATE Purchasing.PurchaseOrderDetail
+                  SET ReceivedQty = @ReceivedQty, ModifiedDate = GETDATE()
+                  WHERE PurchaseOrderID = @Id",
+                new { ReceivedQty = (decimal)receivedQty.Value, Id = purchaseOrderId });
         }
     }
 

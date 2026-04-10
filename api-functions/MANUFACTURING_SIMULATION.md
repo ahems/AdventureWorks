@@ -783,7 +783,14 @@ ORDER BY ProductID
 
 A companion simulation to the manufacturing engine. Models a full purchasing workflow where operators source raw materials from the **63 active vendors** in the AdventureWorks `Purchasing` schema, each carrying real pricing, lead times, and ship method data from the database. Delivered stock is written directly back into `Production.ProductInventory`, closing the loop with the manufacturing engine — a delivery can unblock a stalled work order.
 
-Active order and stock state lives in Azure Table Storage (`awSupplyChain`) for low-latency simulation reads. Every purchase order is **also persisted to SQL** in `Purchasing.PurchaseOrderHeader` and `Purchasing.PurchaseOrderDetail` and kept in sync as the order progresses, so the data is queryable via the GraphQL/DAB API and standard AdventureWorks reporting tools.
+Purchase order state is stored directly in SQL using `Purchasing.PurchaseOrderHeader` and `Purchasing.PurchaseOrderDetail` as the primary records, extended by two simulation-specific tables:
+
+| Table                         | Purpose                                                                                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Purchasing.SimOrderState`    | Per-PO supplementary data — estimated delivery, actual delivery, and cancellation reason. Order status is stored in `PurchaseOrderHeader.Status`. |
+| `Purchasing.SimOrderTracking` | Ordered audit log of every state transition                                                                                                       |
+
+Vendor stock levels (`awSupplyChain` Table Storage, `stock` partition) remain in Table Storage for fast optimistic-concurrency deduction on order placement. All order reads, state transitions, and status queries go directly to SQL.
 
 ---
 
@@ -829,45 +836,60 @@ The catalog is derived from `Production.BillOfMaterials` joined to `Purchasing.P
 
 #### Order State Machine
 
-When an order is placed the stock is deducted immediately (to prevent oversell), and a queue message drives the order through the following states automatically:
+When an order is placed the stock is deducted immediately (to prevent oversell), and a queue message drives the order through the following two-step state machine automatically:
 
 ```
-placed → confirmed → picking → shipped → delivered
-                                 ↓ (reliability roll fails)
-                               delayed → shipped
+pending(1) → approved(2) → complete(4)
+                         ↓ (reliability roll fails)
+                       rejected(3)
 ```
 
 Delivery times use the same `SIMULATION_TIME_SCALE_FACTOR` as manufacturing:
 
-| Transition          | Sim time                 | Real time at scale=60 |
-| ------------------- | ------------------------ | --------------------- |
-| placed → confirmed  | 5 min                    | 5 sec                 |
-| confirmed → picking | 15 min                   | 15 sec                |
-| picking → shipped   | 30 min                   | 30 sec                |
-| shipped → delivered | `leadDays × 24 × 60` min | `leadDays × 24` min   |
+| Transition                     | Sim time                 | Real time at scale=60 |
+| ------------------------------ | ------------------------ | --------------------- |
+| pending → approved             | 5 min                    | 5 sec                 |
+| approved → complete / rejected | `leadDays × 24 × 60` min | `leadDays × 24` min   |
 
-The reliability roll happens at `picking → shipped`. If it fails, the order moves to `delayed` first (adding 1 simulated day to the ETA) before proceeding to `shipped`. The roll uses the vendor's `CreditRating`-derived `reliabilityPct`.
+The reliability roll happens at the delivery step (`approved → complete`/`rejected`). A random value is compared against the vendor's `CreditRating`-derived `reliabilityPct`; failure transitions the order directly to `rejected` (Status=3) rather than `complete`.
+
+#### Initialization and Seed Data
+
+On the **first call** to any `/supply/*` endpoint the simulator runs `InitializeAsync` which:
+
+1. **Creates extension tables** — `Purchasing.SimOrderState` and `Purchasing.SimOrderTracking` (idempotent DDL).
+
+2. **Processes AdventureWorks Status=2 (Approved) POs** — The original dataset contains 12 purchase orders that are already in Approved state with no simulation record. These are resolved synchronously with a reliability roll so the SQL schema is consistent before the first request returns. They do _not_ re-appear in the active-orders list.
+
+3. **Seeds vendor stock in Table Storage** — For every active vendor × BOM purchased-component pair, an initial `CurrentStock` level is written. The seeding formula:
+   - Uses the **average `StockedQty`** from `Purchasing.PurchaseOrderDetail` completed POs for that vendor + product pair (±20 % random spread), falling back to a credit-rating fill ratio for pairs with no purchase history.
+   - **Deducts the total `OrderQty`** of any Status=1 (Pending) BOM POs for that pair from the seeded stock. This ensures `stockAvailable` accurately reflects what is still orderable — quantities already committed by seed orders are not double-counted.
+
+4. **Injects Status=1 (Pending) BOM POs into the approval queue** — The AdventureWorks dataset contains ~236 purchase orders in Pending state. On initialization those that have no `SimOrderState` entry yet are injected into the `supply-chain-orders-queue` and proceed through the normal `pending → approved → complete/rejected` flow:
+   - Messages are staggered **1 second apart** (base delay 5 s, then 5+1 s, 5+2 s, …) to avoid a thundering-herd on SQL writes.
+   - Each PO gets a `SimOrderState` row written **before** the queue message is sent — this is the idempotency guard that prevents re-injection on subsequent `InitializeAsync` calls (e.g. after a container restart).
+   - The same BOM filter applies as for new simulator orders: `p.MakeFlag = 0` + `Production.BillOfMaterials` join + `v.ActiveFlag = 1`.
+
+> **Lazy initialization:** Vendor and stock data is seeded automatically on the first call to any `/supply/*` endpoint. There is no separate initialization step required. Call `DELETE /api/supply/reset` to clear all simulation state and trigger a fresh initialization.
 
 #### SQL Persistence
 
-Every order placed by the simulator creates a row in `Purchasing.PurchaseOrderHeader` (Status=1 Pending) and `Purchasing.PurchaseOrderDetail`. The header is kept in sync as the order progresses through the state machine:
+Every order placed by the simulator creates a row in `Purchasing.PurchaseOrderHeader` (Status=1 Pending) and `Purchasing.PurchaseOrderDetail`. `PurchaseOrderHeader.Status` is the **sole** status field — there is no separate simulation-specific status column:
 
-| Simulator status             | `PurchaseOrderHeader.Status` | Notes                               |
-| ---------------------------- | ---------------------------- | ----------------------------------- |
-| `placed` / `confirmed`       | `1` — Pending                | Header created at `placed`          |
-| `picking`                    | `2` — Approved               | Buyer has approved the order        |
-| `shipped`                    | `2` — Approved               | `ShipDate` recorded on the header   |
-| `delayed`                    | `2` — Approved               | No status change; ETA extended      |
-| `delivered`                  | `4` — Complete               | `ReceivedQty` updated in detail row |
-| `cancelled` / `out_of_stock` | `3` — Rejected               |                                     |
+| API status | `PurchaseOrderHeader.Status` | Notes                                          |
+| ---------- | ---------------------------- | ---------------------------------------------- |
+| `pending`  | `1` — Pending                | Header created when order is placed            |
+| `approved` | `2` — Approved               | Vendor order confirmed; delivery clock running |
+| `complete` | `4` — Complete               | `ReceivedQty` updated in detail row            |
+| `rejected` | `3` — Rejected               | Reliability check failed or operator cancelled |
 
-The `PurchaseOrderID` from SQL is stored in Table Storage as `SqlPurchaseOrderId` and is returned on every order response. Use it to cross-reference the live simulation order with the historical `Purchasing` schema via the GraphQL API.
+The `orderId` in every API response **is** the SQL `PurchaseOrderID` (integer rendered as a string). Use it directly to cross-reference with the `Purchasing` schema via the GraphQL API.
 
-Additionally, on delivery, `Purchasing.ProductVendor.LastReceiptCost` / `LastReceiptDate` are updated and a new `Production.ProductCostHistory` record is written.
+On completion, `Purchasing.ProductVendor.LastReceiptCost` / `LastReceiptDate` are updated and a new `Production.ProductCostHistory` record is written.
 
 #### Delivery → Manufacturing Inventory
 
-On **delivered**, the backend writes to SQL:
+On **complete**, the backend writes to SQL:
 
 ```sql
 UPDATE Production.ProductInventory
@@ -894,8 +916,6 @@ Manual restock is also available via `POST /api/supply/restock/{vendorId}` for d
 ### API Reference
 
 Base: `{API_FUNCTIONS_URL}/api/supply`
-
-> **Lazy initialization:** Vendor and stock data is seeded automatically on the first call to any `/supply/*` endpoint. There is no separate initialization step required.
 
 #### `GET /supply/vendors`
 
@@ -943,7 +963,7 @@ Returns all active vendors with live statistics. `vendorId` is the `Purchasing.V
 | `shipMethodName`        | Most-used `Purchasing.ShipMethod` from historical purchase orders    |
 | `totalComponents`       | Number of catalog SKUs this vendor carries                           |
 | `inStockComponents`     | SKUs with `currentStock > 0`                                         |
-| `activeOrders`          | Orders in `placed / confirmed / picking / shipped` state             |
+| `activeOrders`          | Orders in `pending` or `approved` state                              |
 | `deliveredToday`        | Orders delivered today (UTC)                                         |
 
 ---
@@ -1006,7 +1026,7 @@ Returns all vendor offers for all purchasable BOM components. Each row is one ve
 
 Results are sorted by `productId` then `totalCost` ascending — cheapest option first per component.
 
-**`stockAvailable`** is what remains at the vendor **after** deducting all in-flight orders — it is the quantity you can still order right now. **`incomingQty`** is the total units across all open orders (`placed`/`confirmed`/`picking`/`shipped`/`delayed`) that have already left the vendor's shelf and will be delivered to your warehouse. Display both together so the UI can show e.g. `"70 available · 10 incoming"`.
+**`stockAvailable`** is what remains at the vendor **after** deducting all in-flight orders — it is the quantity you can still order right now. **`incomingQty`** is the total units across all open orders (`pending`/`approved`) that have already left the vendor's shelf and will be delivered to your warehouse. Display both together so the UI can show e.g. `"70 available · 10 incoming"`.
 
 **Use this for:** a comparison grid showing all vendors side-by-side for a given component.
 
@@ -1048,7 +1068,7 @@ Places a purchase order. Stock is deducted immediately. Returns `201 Created` wi
 
 ```json
 {
-  "orderId": "0F30C8FD56B7",
+  "orderId": "4215",
   "vendorId": "1650",
   "vendorName": "American Bicycles and Wheels",
   "productId": 316,
@@ -1057,15 +1077,14 @@ Places a purchase order. Stock is deducted immediately. Returns `201 Created` wi
   "unitCost": 28.17,
   "shippingCost": 23.89,
   "totalCost": 305.59,
-  "status": "placed",
+  "status": "pending",
   "placedAtUtc": "2026-04-08T14:55:47Z",
   "estimatedDeliveryUtc": "2026-04-22T14:55:47Z",
   "actualDeliveryUtc": null,
   "cancellationReason": null,
-  "sqlPurchaseOrderId": 4215,
   "trackingEvents": [
     {
-      "eventType": "placed",
+      "eventType": "pending",
       "description": "Order placed with American Bicycles and Wheels for 10× Blade. Estimated delivery: 14:55 UTC (PO #4215)",
       "timestampUtc": "2026-04-08T14:55:47Z"
     }
@@ -1085,22 +1104,18 @@ Places a purchase order. Stock is deducted immediately. Returns `201 Created` wi
 
 #### Order Status Values
 
-| Status         | Meaning                                                    |
-| -------------- | ---------------------------------------------------------- |
-| `placed`       | Order received, stock reserved                             |
-| `confirmed`    | Vendor has confirmed the order                             |
-| `picking`      | Order being picked from warehouse                          |
-| `delayed`      | Reliability failure — delivery extended by 1 simulated day |
-| `shipped`      | Dispatched — en route                                      |
-| `delivered`    | Arrived; SQL inventory updated                             |
-| `cancelled`    | Cancelled by operator; stock returned to vendor            |
-| `out_of_stock` | Vendor cancelled before confirmation; stock returned       |
+| Status     | `PurchaseOrderHeader.Status` | Meaning                                              |
+| ---------- | ---------------------------- | ---------------------------------------------------- |
+| `pending`  | `1`                          | Order received, stock reserved, awaiting approval    |
+| `approved` | `2`                          | Confirmed; delivery clock running (vendor lead time) |
+| `complete` | `4`                          | Delivered; SQL inventory updated                     |
+| `rejected` | `3`                          | Reliability failure or cancelled by operator         |
 
 ---
 
 #### `GET /supply/orders`
 
-Returns all **active** orders (excludes `delivered`, `cancelled`, `out_of_stock`). Poll this every few seconds for a live orders board.
+Returns all **active** orders (`pending` and `approved` only — excludes `complete` and `rejected`). Poll this every few seconds for a live orders board.
 
 Response is an array of order objects (same shape as POST response).
 
@@ -1114,7 +1129,7 @@ Returns all orders including completed and cancelled. Sorted newest first.
 
 #### `GET /supply/order/{orderId}`
 
-Returns a single order by its 12-character ID. Includes the full `trackingEvents` array, which grows as the order progresses.
+Returns a single order by its ID (the SQL `PurchaseOrderID` as a string). Includes the full `trackingEvents` array, which grows as the order progresses.
 
 `orderId` is case-insensitive.
 
@@ -1122,7 +1137,7 @@ Returns a single order by its 12-character ID. Includes the full `trackingEvents
 
 #### `DELETE /supply/order/{orderId}`
 
-Cancels an order. Only works when `status` is `placed` or `confirmed`. Stock is returned to the vendor immediately.
+Cancels an order. Only works when `status` is `pending`. Stock is returned to the vendor immediately.
 
 **Optional request body:**
 
@@ -1134,12 +1149,12 @@ Cancels an order. Only works when `status` is `placed` or `confirmed`. Stock is 
 
 ```json
 {
-  "message": "Order 0F30C8FD56B7 cancelled.",
+  "message": "Order 4215 cancelled.",
   "reason": "Wrong product selected"
 }
 ```
 
-**Error `422`** if the order is already past `confirmed` or does not exist.
+**Error `422`** if the order is not in `pending` status or does not exist.
 
 ---
 
@@ -1223,7 +1238,7 @@ setInterval(async () => {
 setInterval(async () => {
   const active = await fetch("/api/supply/orders").then((r) => r.json());
   // active[].orderId, vendorName, productName, qty, status, estimatedDeliveryUtc
-  // active[].sqlPurchaseOrderId — use to link to Purchasing.PurchaseOrderHeader via GraphQL
+  // active[].orderId — IS the SQL PurchaseOrderID; use directly to link to Purchasing.PurchaseOrderHeader via GraphQL
 }, 3000);
 ```
 
@@ -1249,25 +1264,23 @@ offers.forEach((offer) => {
 #### Scenario: Link a simulator order to the GraphQL PO record
 
 ```javascript
-// After placing an order, use sqlPurchaseOrderId to fetch the SQL record via DAB
+// orderId IS the SQL PurchaseOrderID — use it directly to query via DAB
 const order = await fetch("/api/supply/order", { method: "POST", ... }).then(r => r.json());
-if (order.sqlPurchaseOrderId) {
-  const poRecord = await fetch(
-    `/graphql`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: `query {
-          purchaseOrderHeader_by_pk(PurchaseOrderID: ${order.sqlPurchaseOrderId}) {
-            PurchaseOrderID Status VendorID OrderDate ShipDate SubTotal TaxAmt Freight TotalDue
-          }
-        }`
-      })
-    }
-  ).then(r => r.json());
-  // poRecord.data.purchaseOrderHeader_by_pk.Status: 1=Pending 2=Approved 3=Rejected 4=Complete
-}
+const poRecord = await fetch(
+  `/graphql`,
+  {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      query: `query {
+        purchaseOrderHeader_by_pk(PurchaseOrderID: ${order.orderId}) {
+          PurchaseOrderID Status VendorID OrderDate ShipDate SubTotal TaxAmt Freight TotalDue
+        }
+      }`
+    })
+  }
+).then(r => r.json());
+// poRecord.data.purchaseOrderHeader_by_pk.Status: 1=Pending 2=Approved 3=Rejected 4=Complete
 ```
 
 #### Scenario: Dashboard — vendor health at a glance
@@ -1348,7 +1361,7 @@ interface SupplyQuote {
   estimatedDeliverySimHrs: number; // simulated hours until delivery
   estimatedDeliveryRealMins: number; // real wall-clock minutes at current SIMULATION_TIME_SCALE_FACTOR
   inStock: boolean;
-  incomingQty: number; // units on open orders in transit to our warehouse (placed/confirmed/picking/shipped/delayed)
+  incomingQty: number; // units on open orders in transit to our warehouse (pending/approved)
 }
 ```
 
@@ -1356,7 +1369,7 @@ interface SupplyQuote {
 
 ```typescript
 interface PurchaseOrder {
-  orderId: string; // 12-char uppercase hex, e.g. "0F30C8FD56B7"
+  orderId: string; // SQL PurchaseOrderHeader.PurchaseOrderID as string — use directly for GraphQL lookups
   vendorId: string;
   vendorName: string;
   productId: number;
@@ -1365,25 +1378,16 @@ interface PurchaseOrder {
   unitCost: number;
   shippingCost: number;
   totalCost: number;
-  status:
-    | "placed"
-    | "confirmed"
-    | "picking"
-    | "delayed"
-    | "shipped"
-    | "delivered"
-    | "cancelled"
-    | "out_of_stock";
+  status: "pending" | "approved" | "complete" | "rejected";
   placedAtUtc: string; // ISO 8601
-  estimatedDeliveryUtc: string; // ISO 8601; may shift if delayed
+  estimatedDeliveryUtc: string; // ISO 8601
   actualDeliveryUtc: string | null;
   cancellationReason: string | null;
-  sqlPurchaseOrderId: number | null; // Purchasing.PurchaseOrderHeader.PurchaseOrderID — use to cross-reference via GraphQL
   trackingEvents: TrackingEvent[];
 }
 
 interface TrackingEvent {
-  eventType: string; // matches status values, plus initial "placed"
+  eventType: string; // matches status values; first event is always "pending"
   description: string; // human-readable label for the event
   timestampUtc: string; // ISO 8601
 }
@@ -1681,14 +1685,14 @@ For a given manufactured finished good, calculates the **maximum number of units
 }
 ```
 
-| Field                          | Description                                                                        |
-| ------------------------------ | ---------------------------------------------------------------------------------- |
-| `maxProducibleNow`             | Units achievable from current `Production.ProductInventory` only                   |
-| `maxProducibleWithProcurement` | Units achievable including stock in placed/confirmed/picking/shipped supply orders |
-| `procurementCostToMeetRequest` | Estimated cheapest-vendor cost to cover any shortfall to meet `requestedQty`       |
-| `bottleneckComponentName`      | The component limiting production — lowest `canSupportUnits`                       |
-| `components[].canSupportUnits` | `floor(currentStock / requiredPerUnit)`                                            |
-| `components[].isBottleneck`    | `true` for the single constraining component                                       |
+| Field                          | Description                                                                  |
+| ------------------------------ | ---------------------------------------------------------------------------- |
+| `maxProducibleNow`             | Units achievable from current `Production.ProductInventory` only             |
+| `maxProducibleWithProcurement` | Units achievable including stock in pending/approved supply orders           |
+| `procurementCostToMeetRequest` | Estimated cheapest-vendor cost to cover any shortfall to meet `requestedQty` |
+| `bottleneckComponentName`      | The component limiting production — lowest `canSupportUnits`                 |
+| `components[].canSupportUnits` | `floor(currentStock / requiredPerUnit)`                                      |
+| `components[].isBottleneck`    | `true` for the single constraining component                                 |
 
 Returns `404` for non-existent products or products where `MakeFlag=0` or `FinishedGoodsFlag=0`.
 
