@@ -18,5 +18,8 @@
 !tsconfig*.json
 !vite.config.ts
 
+# Allow entrypoint script
+!docker-entrypoint.sh
+
 # Ignore node_modules even if allowed above
 node_modules/

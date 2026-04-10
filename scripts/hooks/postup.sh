@@ -57,6 +57,7 @@ echo ""
 # Get URLs from azd environment
 static_web_url=$(get_azd_value "SERVICE_APP_URL")
 api_url=$(get_azd_value "API_URL")
+admin_url=$(get_azd_value "APP_ADMIN_REDIRECT_URI")
 
 # Fallback: try to construct static web app URL from service name
 if [[ -z "$static_web_url" ]]; then
@@ -93,6 +94,11 @@ if [[ -n "$static_web_url" ]]; then
   color_yellow "2. Once everything is healthy, explore the site:"
   echo "   🛒 $static_web_url"
   echo ""
+  if [[ -n "$admin_url" ]]; then
+    color_yellow "3. Access the Admin Portal (Container App — scales to zero):"
+    echo "   🔧 $admin_url"
+    echo ""
+  fi
 else
   color_yellow "1. Check your static web app URL in the Azure Portal"
   color_yellow "2. Visit <your-app-url>/health to verify services"

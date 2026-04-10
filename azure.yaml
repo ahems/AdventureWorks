@@ -69,22 +69,11 @@ services:
         interactive: false
   app-admin:
     project: ./app-admin
-    host: staticwebapp
-    language: js
-    dist: dist
-    config:
-      buildCommand: bash scripts/build-with-env.sh
-      outputLocation: dist
-    hooks:
-      predeploy:
-        shell: sh
-        run: npm install && bash scripts/build-with-env.sh
-        cwd: ./app-admin
-        interactive: false
-      postdeploy:
-        shell: sh
-        run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/app-admin-postdeploy.sh"
-        interactive: false
+    host: containerapp
+    language: docker
+    docker:
+      path: Dockerfile
+      remoteBuild: true
 infra:
   provider: bicep
   path: ./infra

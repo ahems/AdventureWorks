@@ -284,21 +284,28 @@ module staticWebAppFrontend 'modules/swa-app.bicep' = {
   }
 }
 
-module staticWebAppAdmin 'modules/swa-app-admin.bicep' = {
-  name: 'Deploy-Static-Web-App-Admin'
+module containerAppAdmin 'modules/aca-app-admin.bicep' = {
+  name: 'Deploy-Container-App-Admin'
   params: {
-    swaAdminName: 'av-app-admin-${resourceToken}'
-    location: 'eastus2'
+    location: location
+    appInsightsName: appInsightsName
+    appAdminName: 'av-app-admin-${resourceToken}'
+    containerRegistryName: acrName
     identityName: identityName
     apiUrl: containerAppApi.outputs.apiUrl
     apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
     apiMcpUrl: containerAppApiMcp.outputs.apiMcpUrl
     appInsightsConnectionString: appinsights.outputs.connectionString
+    appUrl: staticWebAppFrontend.outputs.appRedirectUri
+    minReplica: 0
+    maxReplica: 3
+    revisionSuffix: revisionSuffix
+    containerAppEnvId: containerApp.outputs.containerAppEnvId
   }
 }
 
 output APP_REDIRECT_URI string = staticWebAppFrontend.outputs.appRedirectUri
-output APP_ADMIN_REDIRECT_URI string = staticWebAppAdmin.outputs.appAdminRedirectUri
+output APP_ADMIN_REDIRECT_URI string = containerAppAdmin.outputs.appAdminUrl
 
 // Expose values needed for local debugging / .env population
 // Application Insights connection string (need to reference component resource id after module deployment)
@@ -326,7 +333,7 @@ output STORAGE_ACCOUNT_NAME string = storage.outputs.storageAccountName
 
 // Service names for azd deploy mapping (required by azd CLI)
 output SERVICE_APP_NAME string = staticWebAppFrontend.outputs.staticWebAppName
-output SERVICE_APP_ADMIN_NAME string = staticWebAppAdmin.outputs.staticWebAppName
+output SERVICE_APP_ADMIN_NAME string = containerAppAdmin.outputs.appAdminName
 output SERVICE_API_NAME string = 'av-api-${resourceToken}'
 output SERVICE_API_FUNCTIONS_NAME string = 'av-func-${resourceToken}'
 output SERVICE_API_MCP_NAME string = 'av-mcp-${resourceToken}'
@@ -339,8 +346,6 @@ output API_MCP_URL string = containerAppApiMcp.outputs.apiMcpUrl
 // Static Web App deployment token for azd deploy
 @secure()
 output AZURE_STATIC_WEB_APP_DEPLOYMENT_TOKEN string = staticWebAppFrontend.outputs.deploymentToken
-@secure()
-output AZURE_STATIC_WEB_APP_ADMIN_DEPLOYMENT_TOKEN string = staticWebAppAdmin.outputs.deploymentToken
 
 // Communication Services outputs
 output COMMUNICATION_SERVICE_NAME string = communication.outputs.communicationServiceName

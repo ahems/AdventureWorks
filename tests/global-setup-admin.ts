@@ -22,7 +22,7 @@ async function globalSetupAdmin(_config: FullConfig) {
   console.log("🏥 Admin Portal: running health checks...\n");
 
   const services = [
-    { name: "Admin SWA", url: testEnv.adminWebBaseUrl },
+    { name: "Admin Portal", url: testEnv.adminWebBaseUrl },
     { name: "Functions API", url: `${testEnv.functionsBaseUrl}/api/health` },
     {
       name: "GraphQL API (DAB)",

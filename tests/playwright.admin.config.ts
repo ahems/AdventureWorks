@@ -12,7 +12,7 @@ import { testEnv } from "./utils/env";
  *   npx playwright test --config=tests/playwright.admin.config.ts
  *
  * Prerequisites:
- *   - Admin SWA deployed and accessible at APP_ADMIN_REDIRECT_URI (or http://localhost:5174)
+ *   - Admin Container App deployed and accessible at APP_ADMIN_REDIRECT_URI (or http://localhost:5174)
  *   - Demo admin user seeded: demo.admin@adventureworks.com / Admin1234!
  */
 

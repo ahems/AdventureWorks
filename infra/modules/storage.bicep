@@ -108,7 +108,7 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
         {
           name: 'supply-chain-orders-queue'
           metadata: {
-            description: 'Event-driven queue driving purchase order state transitions (placed→confirmed→picking→shipped→delivered) and vendor restock events'
+            description: 'Event-driven queue driving purchase order state transitions (placed-confirmed-picking-shipped-delivered) and vendor restock events'
           }
         }
       ]
