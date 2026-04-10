@@ -64,6 +64,10 @@ export interface StoreOrderLineItem {
   quantity: number;
   discountPct: number;
   lineTotal: number;
+  /** Original ordered quantity (only set during reorder flow) */
+  originalQty?: number;
+  /** Current stock available (only set during reorder flow) */
+  stockQty?: number;
 }
 
 export interface PlaceStoreOrderPayload {
