@@ -14,13 +14,15 @@
       "path": "/graphql",
       "allow-introspection": true
     },
+    "mcp": {
+      "enabled": true,
+      "path": "/mcp"
+    },
     "host": {
       "port": 80,
       "mode": "development",
       "cors": {
-        "origins": [
-          "*"
-        ],
+        "origins": ["*"],
         "allow-credentials": false
       },
       "authentication": {
@@ -44,196 +46,184 @@
   "entities": {
     "UnitMeasure": {
       "source": "Production.UnitMeasure",
+      "description": "Unit of measure lookup table for product dimensions, weights, and quantities (e.g., EA for each, LB for pounds, IN for inches, OZ for ounces)",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "Culture": {
       "source": "Production.Culture",
+      "description": "Language and culture code lookup table used to support multi-language product descriptions and name translations (e.g., en for English, fr for French, ar for Arabic). 23 cultures are supported.",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "Currency": {
       "source": "Sales.Currency",
+      "description": "International currency code and name lookup table (ISO 4217 codes) used for sales orders and currency rate conversions",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "AddressType": {
       "source": "Person.AddressType",
+      "description": "Lookup table for types of addresses stored in the system (Billing, Home, Main Office, Primary, Shipping, Archive)",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "ContactType": {
       "source": "Person.ContactType",
+      "description": "Lookup table for types of contacts associated with business entities (e.g., Purchasing Manager, Sales Representative, Owner)",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "PhoneNumberType": {
       "source": "Person.PhoneNumberType",
+      "description": "Lookup table for types of phone numbers (Cell, Home, Work)",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "SalesReason": {
       "source": "Sales.SalesReason",
+      "description": "Lookup table of motivating reasons for a sale (e.g., Price, Quality, Review, On Promotion, TV Advertisement, Other)",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "CreditCard": {
       "source": "Sales.CreditCard",
+      "description": "Customer credit card information including card type, masked card number, and expiry date",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "CurrencyRate": {
       "source": "Sales.CurrencyRate",
+      "description": "Historical daily currency exchange rates between pairs of currencies, recording end-of-day and average rates",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ],
       "relationships": {
         "currency": {
           "cardinality": "one",
           "target.entity": "Currency",
-          "source.fields": [
-            "ToCurrencyCode"
-          ],
-          "target.fields": [
-            "CurrencyCode"
-          ]
+          "source.fields": ["ToCurrencyCode"],
+          "target.fields": ["CurrencyCode"]
         }
       }
     },
     "CountryRegion": {
       "source": "Person.CountryRegion",
+      "description": "ISO 3166-1 country and region codes and names used for addresses and sales territories",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "SalesTerritory": {
       "source": "Sales.SalesTerritory",
+      "description": "Sales territory groupings for North America, Europe, and Pacific regions, with annual sales targets and cost/profit tracking",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "ShipMethod": {
       "source": "Purchasing.ShipMethod",
+      "description": "Shipping method options available at Adventure Works Cycles (e.g., CARGO TRANSPORT 5, OVERNIGHT J-FAST, OVERSEAS - DELUXE) with base rate and per-unit shipping rate",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "StateProvince": {
       "source": "Person.StateProvince",
+      "description": "State and province lookup table with ISO abbreviations, cross-referenced to country/region and optional sales territory",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ],
       "relationships": {
         "countryRegion": {
           "cardinality": "one",
           "target.entity": "CountryRegion",
-          "source.fields": [
-            "CountryRegionCode"
-          ],
-          "target.fields": [
-            "CountryRegionCode"
-          ]
+          "source.fields": ["CountryRegionCode"],
+          "target.fields": ["CountryRegionCode"]
         }
       }
     },
     "BusinessEntity": {
       "source": "Person.BusinessEntity",
+      "description": "Root identity record providing unique BusinessEntityID values for all persons, vendors, and stores. All business participants derive from this table.",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "BusinessEntityAddress": {
       "source": "Person.BusinessEntityAddress",
+      "description": "Cross-reference table linking business entities (persons, stores, vendors) to their physical addresses, including the address type (Billing, Shipping, Home, etc.)",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ],
       "relationships": {}
     },
     "Person": {
       "source": "Person.Person",
+      "description": "All human beings involved with Adventure Works Cycles: customers (IN), employees (EM), sales persons (SP), vendor contacts (VC), store contacts (SC), and general contacts (GC). PersonType field distinguishes the role.",
       "permissions": [
         {
           "role": "anonymous",
@@ -241,10 +231,7 @@
             {
               "action": "create",
               "fields": {
-                "exclude": [
-                  "rowguid",
-                  "ModifiedDate"
-                ]
+                "exclude": ["rowguid", "ModifiedDate"]
               }
             },
             {
@@ -253,11 +240,7 @@
             {
               "action": "update",
               "fields": {
-                "exclude": [
-                  "BusinessEntityID",
-                  "rowguid",
-                  "ModifiedDate"
-                ]
+                "exclude": ["BusinessEntityID", "rowguid", "ModifiedDate"]
               }
             },
             {
@@ -270,154 +253,113 @@
         "emailAddresses": {
           "cardinality": "many",
           "target.entity": "EmailAddress",
-          "source.fields": [
-            "BusinessEntityID"
-          ],
-          "target.fields": [
-            "BusinessEntityID"
-          ]
+          "source.fields": ["BusinessEntityID"],
+          "target.fields": ["BusinessEntityID"]
         },
         "phoneNumbers": {
           "cardinality": "many",
           "target.entity": "PersonPhone",
-          "source.fields": [
-            "BusinessEntityID"
-          ],
-          "target.fields": [
-            "BusinessEntityID"
-          ]
+          "source.fields": ["BusinessEntityID"],
+          "target.fields": ["BusinessEntityID"]
         },
         "salesCustomer": {
           "cardinality": "one",
           "target.entity": "Customer",
-          "source.fields": [
-            "BusinessEntityID"
-          ],
-          "target.fields": [
-            "PersonID"
-          ]
+          "source.fields": ["BusinessEntityID"],
+          "target.fields": ["PersonID"]
         }
       }
     },
     "Password": {
       "source": "Person.Password",
+      "description": "Hashed password credentials for customer self-service account authentication. Stores a PBKDF2/SHA1 password hash and random salt per BusinessEntityID. Never contains plaintext passwords.",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "EmailAddress": {
       "source": "Person.EmailAddress",
+      "description": "Email addresses for persons, supporting multiple addresses per person identified by EmailAddressID. Used for customer login, order confirmations, and marketing communications.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
-          ],
+          "actions": ["create", "read", "update", "delete"],
           "fields": {
-            "include": [
-              "*"
-            ],
-            "exclude": [
-              "rowguid",
-              "ModifiedDate"
-            ]
+            "include": ["*"],
+            "exclude": ["rowguid", "ModifiedDate"]
           }
         }
       ]
     },
     "PersonPhone": {
       "source": "Person.PersonPhone",
+      "description": "Phone numbers associated with persons, categorised by phone number type (Cell, Home, Work). A person may have multiple phone numbers of different types.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "PersonCreditCard": {
       "source": "Sales.PersonCreditCard",
+      "description": "Cross-reference table linking persons to their registered credit cards. A person may register multiple credit cards.",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "SalesPerson": {
       "source": "Sales.SalesPerson",
+      "description": "Sales representatives employed by Adventure Works Cycles, with commission rate, annual sales quota, year-to-date sales, and territory assignment",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "Store": {
       "source": "Sales.Store",
+      "description": "Retail and online stores that are customers of Adventure Works Cycles. Each store is linked to a BusinessEntity record and optionally assigned to a SalesPerson. Demographics stored as XML.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ],
       "relationships": {
         "salesCustomer": {
           "cardinality": "one",
           "target.entity": "Customer",
-          "source.fields": [
-            "BusinessEntityID"
-          ],
-          "target.fields": [
-            "StoreID"
-          ]
+          "source.fields": ["BusinessEntityID"],
+          "target.fields": ["StoreID"]
         },
         "salesPerson": {
           "cardinality": "one",
           "target.entity": "SalesPerson",
-          "source.fields": [
-            "SalesPersonID"
-          ],
-          "target.fields": [
-            "BusinessEntityID"
-          ]
+          "source.fields": ["SalesPersonID"],
+          "target.fields": ["BusinessEntityID"]
         }
       }
     },
     "Customer": {
       "source": "Sales.Customer",
+      "description": "Customer accounts for both individual consumers (linked to a Person) and retail stores (linked to a Store). Assigns each customer to a sales territory for reporting.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
-          ],
+          "actions": ["create", "read", "update", "delete"],
           "fields": {
-            "include": [
-              "*"
-            ],
-            "exclude": [
-              "rowguid",
-              "ModifiedDate"
-            ]
+            "include": ["*"],
+            "exclude": ["rowguid", "ModifiedDate"]
           }
         }
       ],
@@ -425,111 +367,95 @@
         "salesOrderHeaders": {
           "cardinality": "many",
           "target.entity": "SalesOrderHeader",
-          "source.fields": [
-            "CustomerID"
-          ],
-          "target.fields": [
-            "CustomerID"
-          ]
+          "source.fields": ["CustomerID"],
+          "target.fields": ["CustomerID"]
         },
         "store": {
           "cardinality": "one",
           "target.entity": "Store",
-          "source.fields": [
-            "StoreID"
-          ],
-          "target.fields": [
-            "BusinessEntityID"
-          ]
+          "source.fields": ["StoreID"],
+          "target.fields": ["BusinessEntityID"]
         }
       }
     },
     "Illustration": {
       "source": "Production.Illustration",
+      "description": "Bicycle and component assembly diagrams stored as XML data, linked to product models for use in service and assembly documentation",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "Location": {
       "source": "Production.Location",
+      "description": "Manufacturing work center locations within the Adventure Works Cycles plant, each with a cost rate per hour and available capacity in hours",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "ProductCategory": {
       "source": "Production.ProductCategory",
+      "description": "Top-level product category classification (Bikes, Components, Clothing, Accessories). All products belong to exactly one category via a subcategory.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "ProductSubcategory": {
       "source": "Production.ProductSubcategory",
+      "description": "Product sub-categories nested under a top-level ProductCategory (e.g., Mountain Bikes, Road Bikes, Touring Bikes under Bikes; Handlebars, Brakes, Wheels under Components)",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "ProductModel": {
       "source": "Production.ProductModel",
+      "description": "Product model definitions that group related product variants. Optionally contains XML manufacturing instructions (CatalogDescription) and catalog descriptions (Instructions).",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "ProductDescription": {
       "source": "Production.ProductDescription",
+      "description": "Product descriptions per language, AI-enhanced to support up to 2000 characters of rich content. Includes DescriptionEmbedding (VECTOR(1536), text-embedding-3-small model) for semantic similarity search across languages.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "ProductModelProductDescriptionCulture": {
       "source": "Production.ProductModelProductDescriptionCulture",
+      "description": "Cross-reference table linking each product model to its localised ProductDescription for a given culture/language (e.g., en, fr, ar). One row per model per language.",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ],
       "relationships": {
         "productDescription": {
           "cardinality": "one",
           "target.entity": "ProductDescription",
-          "source.fields": [
-            "ProductDescriptionID"
-          ],
-          "target.fields": [
-            "ProductDescriptionID"
-          ]
+          "source.fields": ["ProductDescriptionID"],
+          "target.fields": ["ProductDescriptionID"]
         }
       }
     },
@@ -537,547 +463,480 @@
       "source": {
         "object": "Production.vProductSearch",
         "type": "view",
-        "key-fields": [
-          "ProductID",
-          "ProductDescriptionID"
-        ]
+        "key-fields": ["ProductID", "ProductDescriptionID"]
       },
+      "description": "Read-only view for AI-powered semantic product search. Joins Product, ProductModel, ProductModelProductDescriptionCulture, ProductDescription, and ProductName to expose per-language search data including DescriptionEmbedding and ProductNameEmbedding (both VECTOR(1536), text-embedding-3-small) for vector similarity search. Only finished goods are included.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "read"
-          ]
+          "actions": ["read"]
         }
       ]
     },
     "ProductModelIllustration": {
       "source": "Production.ProductModelIllustration",
+      "description": "Cross-reference table linking product models to their assembly or technical illustration diagrams",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "Product": {
       "source": "Production.Product",
+      "description": "Products manufactured or sold by Adventure Works Cycles. Includes pricing (ListPrice, StandardCost), dimensions (Size, Weight), inventory status (FinishedGoodsFlag, MakeFlag), and style attributes. AI-enhanced: Color field extended to 256 characters for descriptive AI-generated colour names.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ],
       "relationships": {
         "productProductPhotos": {
           "cardinality": "many",
           "target.entity": "ProductProductPhoto",
-          "source.fields": [
-            "ProductID"
-          ],
-          "target.fields": [
-            "ProductID"
-          ]
+          "source.fields": ["ProductID"],
+          "target.fields": ["ProductID"]
         },
         "productNames": {
           "cardinality": "many",
           "target.entity": "ProductName",
-          "source.fields": [
-            "ProductID"
-          ],
-          "target.fields": [
-            "ProductID"
-          ]
+          "source.fields": ["ProductID"],
+          "target.fields": ["ProductID"]
         }
       }
     },
     "ProductName": {
       "source": "Production.ProductName",
+      "description": "AI-generated multi-language product name translations keyed by (ProductID, CultureID). Includes ProductNameEmbedding (VECTOR(1536), text-embedding-3-small) for semantic name search. Covers all 23 cultures supported by Adventure Works.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "ProductCostHistory": {
       "source": "Production.ProductCostHistory",
+      "description": "Historical standard manufacturing cost of products over time, tracking all cost changes with StartDate and EndDate effective ranges",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "ProductListPriceHistory": {
       "source": "Production.ProductListPriceHistory",
+      "description": "Historical list (retail) price of products over time, tracking all price changes with StartDate and EndDate effective ranges",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "ProductInventory": {
       "source": "Production.ProductInventory",
+      "description": "Current on-hand quantity of each product held at each manufacturing or warehouse location, including bin and shelf identifiers",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "SpecialOffer": {
       "source": "Sales.SpecialOffer",
+      "description": "Discount offers and promotional campaigns applied to products. Types include No Discount (baseline), Volume Discount, Seasonal Discount, Excess Inventory, and Mountain-100 Clearance. Discount is stored as a decimal fraction (e.g., 0.10 = 10%).",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "SpecialOfferProduct": {
       "source": "Sales.SpecialOfferProduct",
+      "description": "Cross-reference table restricting which products qualify for each special offer. A product must appear here to receive a promotion's discount on a sales order line.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "SalesOrderHeader": {
       "source": "Sales.SalesOrderHeader",
+      "description": "Summary record for each customer sales order, capturing billing and shipping addresses, payment method, ship method, currency, order and ship dates, and financial totals (SubTotal, TaxAmt, Freight, TotalDue). Status codes: 1=In process, 2=Approved, 3=Backordered, 4=Rejected, 5=Shipped, 6=Cancelled.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ],
       "relationships": {
         "salesOrderDetails": {
           "cardinality": "many",
           "target.entity": "SalesOrderDetail",
-          "source.fields": [
-            "SalesOrderID"
-          ],
-          "target.fields": [
-            "SalesOrderID"
-          ]
+          "source.fields": ["SalesOrderID"],
+          "target.fields": ["SalesOrderID"]
         },
         "shipMethod": {
           "cardinality": "one",
           "target.entity": "ShipMethod",
-          "source.fields": [
-            "ShipMethodID"
-          ],
-          "target.fields": [
-            "ShipMethodID"
-          ]
+          "source.fields": ["ShipMethodID"],
+          "target.fields": ["ShipMethodID"]
         },
         "currencyRate": {
           "cardinality": "one",
           "target.entity": "CurrencyRate",
-          "source.fields": [
-            "CurrencyRateID"
-          ],
-          "target.fields": [
-            "CurrencyRateID"
-          ]
+          "source.fields": ["CurrencyRateID"],
+          "target.fields": ["CurrencyRateID"]
         }
       }
     },
     "SalesOrderDetail": {
       "source": "Sales.SalesOrderDetail",
+      "description": "Individual product line items within a sales order, each with ordered quantity, unit price, unit price discount (from SpecialOffer), and calculated line total",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ],
       "relationships": {
         "salesOrderHeader": {
           "cardinality": "one",
           "target.entity": "SalesOrderHeader",
-          "source.fields": [
-            "SalesOrderID"
-          ],
-          "target.fields": [
-            "SalesOrderID"
-          ]
+          "source.fields": ["SalesOrderID"],
+          "target.fields": ["SalesOrderID"]
         },
         "product": {
           "cardinality": "one",
           "target.entity": "Product",
-          "source.fields": [
-            "ProductID"
-          ],
-          "target.fields": [
-            "ProductID"
-          ]
+          "source.fields": ["ProductID"],
+          "target.fields": ["ProductID"]
         }
       }
     },
     "SalesOrderHeaderSalesReason": {
       "source": "Sales.SalesOrderHeaderSalesReason",
+      "description": "Cross-reference table capturing one or more sales reasons (e.g., Price, Quality, On Promotion) attributed to each sales order",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "ShoppingCartItem": {
       "source": "Sales.ShoppingCartItem",
+      "description": "Items added to a customer online shopping cart prior to order submission. Keyed by ShoppingCartID (a string token) and ProductID, with quantity and date added. Abandoned carts can be analysed for cart recovery.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "CountryRegionCurrency": {
       "source": "Sales.CountryRegionCurrency",
+      "description": "Cross-reference lookup mapping ISO country/region codes to their primary ISO currency code",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "SalesTaxRate": {
       "source": "Sales.SalesTaxRate",
+      "description": "Tax rates applied by state or province, used to calculate the TaxAmt on sales orders. TaxType: 1=Tax applicable on goods, 2=Tax applicable on freight, 3=Tax applicable on all sales.",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "ScrapReason": {
       "source": "Production.ScrapReason",
+      "description": "Lookup table of reasons for manufacturing scrap or rejected product during the production process (e.g., Gouge in metal, Wheel misalignment, Paint process failed)",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "Department": {
       "source": "HumanResources.Department",
+      "description": "Human Resources department definitions within Adventure Works Cycles (e.g., Engineering, Production, Marketing, Finance, Information Services)",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "Shift": {
       "source": "HumanResources.Shift",
+      "description": "Work shift definitions for manufacturing and warehouse personnel (Day, Evening, Night) with start and end times",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "EmployeeDepartmentHistory": {
       "source": "HumanResources.EmployeeDepartmentHistory",
+      "description": "Employee department assignment history, tracking all transfers between departments and shifts with StartDate and EndDate",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "EmployeePayHistory": {
       "source": "HumanResources.EmployeePayHistory",
+      "description": "Complete pay rate history for employees, recording all rate changes with effective date. PayFrequency: 1=Monthly, 2=Bi-weekly.",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "BusinessEntityContact": {
       "source": "Person.BusinessEntityContact",
+      "description": "Cross-reference table linking business entities (stores, vendors) to their contact persons, capturing the contact type role (e.g., Purchasing Manager, Technical Supervisor)",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "Vendor": {
       "source": "Purchasing.Vendor",
+      "description": "Companies from which Adventure Works Cycles purchases components and raw materials. Each vendor has a credit rating (1=Superior, 2=Excellent, 3=Above Average, 4=Average, 5=Below Average) and preferred vendor and active status flags.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "ProductVendor": {
       "source": "Purchasing.ProductVendor",
+      "description": "Cross-reference table mapping products to the vendors who supply them, including min/max order quantities, standard price, last receipt cost and date, and lead time in days",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "PurchaseOrderHeader": {
       "source": "Purchasing.PurchaseOrderHeader",
+      "description": "Summary data for purchase orders raised to vendors, including order date, ship date, status, vendor, ship method, and financial totals (SubTotal, TaxAmt, Freight, TotalDue). Status: 1=Pending, 2=Approved, 3=Rejected, 4=Complete.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "PurchaseOrderDetail": {
       "source": "Purchasing.PurchaseOrderDetail",
+      "description": "Individual product line items within a purchase order, recording ordered quantity, unit price, received quantity, rejected quantity, and due date",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "ProductPhoto": {
       "source": "Production.ProductPhoto",
+      "description": "Product photography stored as binary image data. Each row holds a thumbnail (ThumbNailPhoto, nvarchar filename ThumbNailPhotoFileName) and a large-format view (LargePhoto, nvarchar filename LargePhotoFileName) for display in the storefront.",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "ProductProductPhoto": {
       "source": "Production.ProductProductPhoto",
+      "description": "Cross-reference table linking products to their product photos. The Primary flag (bit) marks the default display image for a product in the storefront gallery.",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ],
       "relationships": {
         "productPhoto": {
           "cardinality": "one",
           "target.entity": "ProductPhoto",
-          "source.fields": [
-            "ProductPhotoID"
-          ],
-          "target.fields": [
-            "ProductPhotoID"
-          ]
+          "source.fields": ["ProductPhotoID"],
+          "target.fields": ["ProductPhotoID"]
         }
       }
     },
     "TransactionHistory": {
       "source": "Production.TransactionHistory",
+      "description": "Inventory transaction history for the current year, recording every work order, sales order, and purchase order movement per product. TransactionType: W=Work Order, S=Sales Order, P=Purchase Order.",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "TransactionHistoryArchive": {
       "source": "Production.TransactionHistoryArchive",
+      "description": "Archived product inventory transaction records for previous years. Identical structure to TransactionHistory; older records are periodically moved here to keep the active table small.",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "WorkOrder": {
       "source": "Production.WorkOrder",
+      "description": "Manufacturing work orders tracking the production of products, with planned and actual quantities, scheduled start and end dates, actual start and end dates, and scrap quantity with reason",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "WorkOrderRouting": {
       "source": "Production.WorkOrderRouting",
+      "description": "Manufacturing routing information per work order operation, recording the Location, operation sequence, scheduled and actual start/end times, planned and actual resource hours, and actual costs",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "SalesPersonQuotaHistory": {
       "source": "Sales.SalesPersonQuotaHistory",
+      "description": "Quarterly sales quota history for each sales representative, used for performance benchmarking and commission calculation",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "SalesTerritoryHistory": {
       "source": "Sales.SalesTerritoryHistory",
+      "description": "History of sales territory assignments for each sales person, with StartDate and EndDate tracking geographic responsibility changes over time",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "JobCandidate": {
       "source": "HumanResources.JobCandidate",
+      "description": "Résumés and application records for job candidates submitted to Human Resources, stored as structured XML. EmployeeID is populated after a candidate is hired.",
+      "mcp": { "enabled": false },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ]
     },
     "ProductReview": {
       "source": "Production.ProductReview",
+      "description": "Customer product reviews with 1–5 star ratings and free-text comments. AI-enhanced: CommentsEmbedding (VECTOR(1536), text-embedding-3-small) enables semantic review search. Additional demo fields: HelpfulVotes (upvote counter), UserID (links reviewer to Person.Person for authenticated reviews), IsModerated (bit flag for staff content moderation).",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ],
       "relationships": {
         "productReviewReplies": {
           "cardinality": "many",
           "target.entity": "ProductReviewReply",
-          "source.fields": [
-            "ProductReviewID"
-          ],
-          "target.fields": [
-            "ProductReviewID"
-          ]
+          "source.fields": ["ProductReviewID"],
+          "target.fields": ["ProductReviewID"]
         }
       }
     },
     "ProductReviewReply": {
       "source": "Production.ProductReviewReply",
+      "description": "Staff or automated replies to customer product reviews. Captures the reply text (up to 3850 chars), the author name (RepliedBy, defaults to 'AdventureWorks Team'), and the reply date. One or more replies can be attached to a single review.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ],
       "relationships": {
         "productReview": {
           "cardinality": "one",
           "target.entity": "ProductReview",
-          "source.fields": [
-            "ProductReviewID"
-          ],
-          "target.fields": [
-            "ProductReviewID"
-          ]
+          "source.fields": ["ProductReviewID"],
+          "target.fields": ["ProductReviewID"]
         }
       }
     },
     "BillOfMaterials": {
       "source": "Production.BillOfMaterials",
+      "description": "Bill of materials defining which component products (ComponentID) are required to assemble a parent product (ProductAssemblyID), with required quantity, unit of measure, and effective date range. NULL ProductAssemblyID means a standalone (top-level) component.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "*"
-          ]
+          "actions": ["*"]
         }
       ],
       "relationships": {
         "component": {
           "cardinality": "one",
           "target.entity": "Product",
-          "source.fields": [
-            "ComponentID"
-          ],
-          "target.fields": [
-            "ProductID"
-          ]
+          "source.fields": ["ComponentID"],
+          "target.fields": ["ProductID"]
         },
         "unitMeasure": {
           "cardinality": "one",
           "target.entity": "UnitMeasure",
-          "source.fields": [
-            "UnitMeasureCode"
-          ],
-          "target.fields": [
-            "UnitMeasureCode"
-          ]
+          "source.fields": ["UnitMeasureCode"],
+          "target.fields": ["UnitMeasureCode"]
         }
       }
     },
@@ -1085,16 +944,13 @@
       "source": {
         "object": "HumanResources.vEmployee",
         "type": "view",
-        "key-fields": [
-          "BusinessEntityID"
-        ]
+        "key-fields": ["BusinessEntityID"]
       },
+      "description": "Read-only view of Adventure Works Cycles employees for API access. Based on HumanResources.Employee but excludes the hierarchyid columns (OrganizationNode, OrganizationLevel) which are not supported by Data API Builder. Includes identity, job title, employment dates, leave balances, and current status.",
       "permissions": [
         {
           "role": "anonymous",
-          "actions": [
-            "read"
-          ]
+          "actions": ["read"]
         }
       ]
     }

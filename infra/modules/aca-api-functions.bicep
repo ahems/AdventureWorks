@@ -21,6 +21,7 @@ param storageAccountName string = ''
 param communicationServiceEndpoint string = ''
 param emailSenderDomain string = ''
 param mcpServiceUrl string = ''
+param dabMcpUrl string = ''
 param simulationTimeScaleFactor string = '60'
 param simulationScrapRate string = '0.05'
 param materialsRetryDelaySeconds string = '30'
@@ -175,6 +176,10 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
             {
               name: 'MCP_SERVICE_URL'
               value: mcpServiceUrl
+            }
+            {
+              name: 'DAB_MCP_URL'
+              value: dabMcpUrl
             }
             {
               name: 'SIMULATION_TIME_SCALE_FACTOR'

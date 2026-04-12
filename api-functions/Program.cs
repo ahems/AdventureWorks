@@ -301,6 +301,40 @@ var mcpClient = McpClient.CreateAsync(
 
 var mcpTools = mcpClient.ListToolsAsync().GetAwaiter().GetResult();
 
+// Initialize DAB MCP client and merge tools (DAB natively exposes entities over MCP)
+// Falls back gracefully if DAB MCP is unavailable (e.g., local dev without DAB running)
+var dabMcpUrl = config["DAB_MCP_URL"];
+if (string.IsNullOrEmpty(dabMcpUrl))
+{
+    var apiUrl = config["API_URL"] ?? "";
+    dabMcpUrl = string.IsNullOrEmpty(apiUrl) ? "" : apiUrl.TrimEnd('/') + "/mcp";
+}
+
+IList<McpClientTool> dabMcpTools = [];
+if (!string.IsNullOrEmpty(dabMcpUrl))
+{
+    try
+    {
+        var dabMcpClient = McpClient.CreateAsync(
+            new HttpClientTransport(
+                new()
+                {
+                    Name = "AdventureWorks DAB",
+                    Endpoint = new Uri(dabMcpUrl)
+                }
+            )
+        ).GetAwaiter().GetResult();
+        dabMcpTools = dabMcpClient.ListToolsAsync().GetAwaiter().GetResult();
+    }
+    catch (Exception ex)
+    {
+        // DAB MCP is optional — log and continue with custom MCP tools only
+        Console.Error.WriteLine($"[Program] DAB MCP unavailable at {dabMcpUrl}: {ex.Message}");
+    }
+}
+
+var allMcpTools = mcpTools.Concat(dabMcpTools);
+
 // Create the durable agent with Azure OpenAI and MCP tools
 var endpoint = config["AZURE_OPENAI_ENDPOINT"]
     ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT environment variable is not set");
@@ -312,7 +346,7 @@ var chatClient = new AzureOpenAIClient(new Uri(endpoint), defaultCredential)
 
 var durableAgent = new ChatClientAgent(
     chatClient,
-    tools: mcpTools.Cast<Microsoft.Extensions.AI.AITool>().ToList(),
+    tools: allMcpTools.Cast<Microsoft.Extensions.AI.AITool>().ToList(),
     name: "AdventureWorksAgent",
     instructions: @"You are a helpful customer service assistant for AdventureWorks, an outdoor and sporting goods retailer.
 
@@ -339,6 +373,8 @@ var app = builder.Build();
 // Log MCP tools initialization
 var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
 var programLogger = loggerFactory.CreateLogger("Program");
-programLogger.LogInformation("Loaded {ToolCount} MCP tools for durable agent from {McpServerUrl}", mcpTools.Count, mcpServerUrl);
+programLogger.LogInformation(
+    "MCP tools loaded: {CustomCount} custom (from {McpServerUrl}) + {DabCount} DAB (from {DabMcpUrl}) = {TotalCount} total",
+    mcpTools.Count, mcpServerUrl, dabMcpTools.Count, dabMcpUrl, mcpTools.Count + dabMcpTools.Count);
 
 app.Run();
