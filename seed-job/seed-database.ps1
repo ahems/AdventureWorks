@@ -962,8 +962,9 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         # Enhanced product descriptions with embeddings (DescriptionEmbedding VECTOR field, JSON array).
         # ProductDescription-ai.csv adds NEW rows only (IDs 2011+); the 762 base rows from ProductDescription.csv never get embeddings here.
         @{ Table='Production.ProductDescription'; File='ProductDescription-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('DescriptionEmbedding') }
-        # AI-translated product descriptions (actual text content for 16 new cultures; CSV has only ID, Description, ModifiedDate).
-        # DefaultColumns and Update path omit DescriptionEmbedding so existing embeddings are preserved (not overwritten).
+        # AI-translated product descriptions (actual text content for 16 new cultures PLUS AI-enhanced US English for the 127 original 'en' rows).
+        # CSV has only ID, Description, ModifiedDate. DefaultColumns omits DescriptionEmbedding so existing embeddings are preserved (not overwritten).
+        # UpdateIfExists=$true: rows 2112+ are new inserts; rows 1-762 (original 'en') are UPDATED with AI-enhanced US English text.
         @{ Table='Production.ProductDescription'; File='ProductDescription-ai-translations.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false; DefaultColumns=@('rowguid', 'DescriptionEmbedding'); UpdateIfExists=$true }
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # AI-translated product description culture mappings (16 additional cultures beyond base AdventureWorks 7)
@@ -2088,67 +2089,6 @@ INNER JOIN RankedPhotos rp ON pp.ProductID = rp.ProductID AND pp.ProductPhotoID 
         Write-Warning "  Placeholder photo cleanup failed: $($_.Exception.Message)"
     }
     
-    # Wait for background PNG upload job to complete
-    $elapsed = (Get-Date) - $scriptStartTime
-    Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Waiting for PNG image upload to complete..."
-    
-    # Wait for the job and get results
-    $pngResult = Receive-Job -Job $pngUploadJob -Wait
-    $pngJobState = $pngUploadJob.State
-    $pngJobError = $pngUploadJob.Error
-    Remove-Job -Job $pngUploadJob
-    
-    $elapsed = (Get-Date) - $scriptStartTime
-    Write-Log "`nPNG Upload Summary: [+$([math]::Floor($elapsed.TotalMinutes))m]"
-    
-    # Job failed before returning (e.g. runspace/assembly error)
-    if ($pngJobState -eq 'Failed') {
-        Write-Log "  PNG upload job failed (job state: Failed). Error: $($pngJobError | Out-String)"
-    }
-    # No result object (serialization or job never produced output)
-    elseif ($null -eq $pngResult) {
-        Write-Log "  PNG upload job returned no output (job may have failed or serialization issue). Job state: $pngJobState"
-    }
-    # Result may be a hashtable with string keys from deserialization
-    elseif ($true -eq $pngResult.AlreadyLoaded) {
-        Write-Log "  AI-generated photos already uploaded - Skipping"
-    }
-    elseif ($true -eq $pngResult.NoDirec) {
-        Write-Log "  Images directory not found - Skipping"
-    }
-    elseif ($true -eq $pngResult.NoFiles) {
-        Write-Log "  No PNG files found in images directory"
-    }
-    elseif ($pngResult.Failed -eq -1) {
-        Write-Log "  PNG upload job failed: $($pngResult.Error)"
-        if ($pngResult.StackTrace) {
-            Write-Log "  Stack trace: $($pngResult.StackTrace)"
-        }
-    }
-    elseif ($null -ne $pngResult.TotalFiles -or $null -ne $pngResult.Uploaded) {
-        $largeImageCount = [int]$pngResult.TotalFiles - [int]$pngResult.ThumbnailCount
-        Write-Log "  Found $($pngResult.TotalFiles) PNG files ($($pngResult.ThumbnailCount) thumbnails, $largeImageCount large images)"
-        Write-Log "  Processed $($pngResult.ImagePairCount) image pairs using parallel upload (2 threads)"
-        if ($pngResult.ImagePairCount -eq 0 -and $pngResult.TotalFiles -gt 0) {
-            Write-Log "  No image pairs formed (expected *_thumb.png / *_small.png with matching .png; check images/ naming)"
-        }
-        Write-Log "  - $($pngResult.Uploaded) image pairs uploaded successfully"
-        if ($pngResult.Skipped -gt 0) {
-            Write-Log "  - $($pngResult.Skipped) files skipped (already exist)"
-        }
-        if ($pngResult.Failed -gt 0) {
-            Write-Log "  - $($pngResult.Failed) files failed"
-            if ($pngResult.Errors) {
-                Write-Log "  First few errors: $($pngResult.Errors -join '; ')"
-            }
-        }
-    }
-    else {
-        Write-Log "  PNG upload result was unexpected. Job state: $pngJobState. Result: $($pngResult | ConvertTo-Json -Compress -Depth 3)"
-    }
-    
-    # Note: ProductProductPhoto-ai.csv mappings are loaded earlier in the CSV data loading section
-
     # -------------------------------------------------------------------------
     # Demo Admin User: create a known employee with a verifiable password so the
     # admin UI can be demonstrated without any signup flow.
@@ -2321,6 +2261,69 @@ WHEN NOT MATCHED THEN
     else {
         Write-Log "  date-shift-procedures.sql not found at $dateShiftSqlPath — skipping date shift."
     }
+
+    # -------------------------------------------------------------------------
+    # Wait for background PNG image upload to complete.
+    # Intentionally last: the upload runs concurrently with all other work and
+    # we don't want it to block CSV loading, schema changes, or date shifting.
+    # -------------------------------------------------------------------------
+    $elapsed = (Get-Date) - $scriptStartTime
+    Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Waiting for PNG image upload to complete..."
+
+    $pngResult = Receive-Job -Job $pngUploadJob -Wait
+    $pngJobState = $pngUploadJob.State
+    $pngJobError = $pngUploadJob.Error
+    Remove-Job -Job $pngUploadJob
+
+    $elapsed = (Get-Date) - $scriptStartTime
+    Write-Log "`nPNG Upload Summary: [+$([math]::Floor($elapsed.TotalMinutes))m]"
+
+    # Job failed before returning (e.g. runspace/assembly error)
+    if ($pngJobState -eq 'Failed') {
+        Write-Log "  PNG upload job failed (job state: Failed). Error: $($pngJobError | Out-String)"
+    }
+    # No result object (serialization or job never produced output)
+    elseif ($null -eq $pngResult) {
+        Write-Log "  PNG upload job returned no output (job may have failed or serialization issue). Job state: $pngJobState"
+    }
+    # Result may be a hashtable with string keys from deserialization
+    elseif ($true -eq $pngResult.AlreadyLoaded) {
+        Write-Log "  AI-generated photos already uploaded - Skipping"
+    }
+    elseif ($true -eq $pngResult.NoDirec) {
+        Write-Log "  Images directory not found - Skipping"
+    }
+    elseif ($true -eq $pngResult.NoFiles) {
+        Write-Log "  No PNG files found in images directory"
+    }
+    elseif ($pngResult.Failed -eq -1) {
+        Write-Log "  PNG upload job failed: $($pngResult.Error)"
+        if ($pngResult.StackTrace) {
+            Write-Log "  Stack trace: $($pngResult.StackTrace)"
+        }
+    }
+    elseif ($null -ne $pngResult.TotalFiles -or $null -ne $pngResult.Uploaded) {
+        $largeImageCount = [int]$pngResult.TotalFiles - [int]$pngResult.ThumbnailCount
+        Write-Log "  Found $($pngResult.TotalFiles) PNG files ($($pngResult.ThumbnailCount) thumbnails, $largeImageCount large images)"
+        Write-Log "  Processed $($pngResult.ImagePairCount) image pairs using parallel upload (2 threads)"
+        if ($pngResult.ImagePairCount -eq 0 -and $pngResult.TotalFiles -gt 0) {
+            Write-Log "  No image pairs formed (expected *_thumb.png / *_small.png with matching .png; check images/ naming)"
+        }
+        Write-Log "  - $($pngResult.Uploaded) image pairs uploaded successfully"
+        if ($pngResult.Skipped -gt 0) {
+            Write-Log "  - $($pngResult.Skipped) files skipped (already exist)"
+        }
+        if ($pngResult.Failed -gt 0) {
+            Write-Log "  - $($pngResult.Failed) files failed"
+            if ($pngResult.Errors) {
+                Write-Log "  First few errors: $($pngResult.Errors -join '; ')"
+            }
+        }
+    }
+    else {
+        Write-Log "  PNG upload result was unexpected. Job state: $pngJobState. Result: $($pngResult | ConvertTo-Json -Compress -Depth 3)"
+    }
+    # Note: ProductProductPhoto-ai.csv mappings are loaded earlier in the CSV data loading section
 
     $script:seedSuccess = $true
     $conn.Close()

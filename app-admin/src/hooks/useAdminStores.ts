@@ -142,12 +142,18 @@ export const useStoreProducts = (
   subcategoryId?: number | null,
 ) =>
   useQuery<StoreProductInfo[]>({
-    queryKey: ["store-products", search ?? "", categoryId ?? null, subcategoryId ?? null],
+    queryKey: [
+      "store-products",
+      search ?? "",
+      categoryId ?? null,
+      subcategoryId ?? null,
+    ],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
       if (categoryId != null) params.set("categoryId", String(categoryId));
-      if (subcategoryId != null) params.set("subcategoryId", String(subcategoryId));
+      if (subcategoryId != null)
+        params.set("subcategoryId", String(subcategoryId));
       params.set("limit", "150");
       const res = await fetch(
         `${getFunctionsApiUrl()}/api/store-products?${params.toString()}`,
@@ -167,7 +173,9 @@ export const useOrderLines = (salesOrderId: number | null) =>
     queryKey: ["order-lines", salesOrderId],
     enabled: salesOrderId !== null,
     queryFn: async () => {
-      const res = await fetch(`${getFunctionsApiUrl()}/api/orders/${salesOrderId}/lines`);
+      const res = await fetch(
+        `${getFunctionsApiUrl()}/api/orders/${salesOrderId}/lines`,
+      );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
     },
@@ -185,6 +193,22 @@ export const useProductCatalog = () =>
       return res.json();
     },
     staleTime: 10 * 60 * 1000,
+  });
+
+// ── All store products (no category filter, for promotion browsing) ────────────
+
+export const useAllStoreProducts = (enabled = false) =>
+  useQuery<StoreProductInfo[]>({
+    queryKey: ["store-products", "all"],
+    enabled,
+    queryFn: async () => {
+      const res = await fetch(
+        `${getFunctionsApiUrl()}/api/store-products?limit=500`,
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
   });
 
 // ── Place store order mutation ────────────────────────────────────────────────

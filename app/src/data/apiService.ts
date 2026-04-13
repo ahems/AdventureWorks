@@ -191,7 +191,11 @@ const attachDiscountsToProducts = async (
       GET_CUSTOMER_SPECIAL_OFFERS,
       { cultureId: paddedCultureId },
     );
-    const specialOffers = offersData.specialOffers.items;
+    const now = new Date();
+    const specialOffers = offersData.specialOffers.items.filter((offer) => {
+      if (!offer.StartDate || !offer.EndDate) return true;
+      return new Date(offer.StartDate) <= now && new Date(offer.EndDate) >= now;
+    });
 
     if (specialOffers.length === 0) {
       return products;
@@ -422,10 +426,10 @@ const addIconsToCategories = (
   categories: ProductCategory[],
 ): ProductCategory[] => {
   const iconMap: Record<number, string> = {
-    1: "bike",       // Bikes
-    2: "cog",        // Components
-    3: "shirt",      // Clothing
-    4: "backpack",   // Accessories
+    1: "bike", // Bikes
+    2: "cog", // Components
+    3: "shirt", // Clothing
+    4: "backpack", // Accessories
   };
 
   return categories.map((cat) => ({
@@ -595,7 +599,7 @@ export const getProductsByIds = async (
 ): Promise<Product[]> => {
   try {
     if (productIds.length === 0) return [];
-    
+
     const data = await graphqlClient.request<ProductsResponse>(
       GET_PRODUCTS_BY_IDS,
       { ids: productIds },
@@ -605,7 +609,7 @@ export const getProductsByIds = async (
     // Always attach discounts (in given culture) and inventory
     products = await attachDiscountsToProducts(products, cultureId);
     products = await attachInventoryToProducts(products);
-    
+
     return products;
   } catch (error) {
     trackError("Error fetching products by IDs", error, {
@@ -648,7 +652,10 @@ export const getProductsByCategory = async (
 ): Promise<Product[]> => {
   try {
     // First, get all subcategory IDs for this category in the given culture
-    const subcategories = await getSubcategoriesByCategory(categoryId, cultureId);
+    const subcategories = await getSubcategoriesByCategory(
+      categoryId,
+      cultureId,
+    );
     const subcategoryIds = subcategories.map((s) => s.ProductSubcategoryID);
 
     // If no subcategories, return empty array

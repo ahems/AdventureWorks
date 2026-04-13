@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
@@ -14,6 +14,7 @@ import {
   ExternalLink,
   ChevronLeft,
   AlertTriangle,
+  Tag,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -21,12 +22,22 @@ import {
   usePlaceStoreOrder,
   useStoreProducts,
   useProductCatalog,
+  useAllStoreProducts,
 } from "@/hooks/useAdminStores";
+import {
+  useAdminSpecialOffers,
+  useAdminSpecialOfferProducts,
+} from "@/hooks/useAdminPromotions";
 import {
   StoreListItem,
   StoreOrderLineItem,
   StoreProductInfo,
 } from "@/types/store";
+import {
+  SpecialOffer,
+  getOfferStatus,
+  DEFAULT_CULTURE_ID,
+} from "@/types/promotion";
 
 interface PlaceStoreOrderDialogProps {
   store: StoreListItem;
@@ -60,20 +71,30 @@ function stockColor(stock: number) {
   return "text-green-700 bg-green-50 border-green-300";
 }
 
-// ── Category nav (replaces search bar) ───────────────────────────────────────
+// Sentinel value for "Discounted" virtual category
+const DISCOUNTED_CAT_ID = -1;
+
+// ── Category nav ──────────────────────────────────────────────────────────────
 const CategoryNav: React.FC<{
   selectedCategoryId: number | null;
   selectedSubcategoryId: number | null;
+  selectedDiscountPromoId: number | null;
+  browsablePromos: SpecialOffer[];
+  offerProductCounts: Map<number, number>;
   onSelectCategory: (id: number | null) => void;
   onSelectSubcategory: (id: number | null) => void;
+  onSelectDiscountPromo: (id: number | null) => void;
 }> = ({
   selectedCategoryId,
   selectedSubcategoryId,
+  selectedDiscountPromoId,
+  browsablePromos,
+  offerProductCounts,
   onSelectCategory,
   onSelectSubcategory,
+  onSelectDiscountPromo,
 }) => {
   const { data: catalog = [], isLoading } = useProductCatalog();
-
   const selectedCategory = catalog.find(
     (c) => c.categoryID === selectedCategoryId,
   );
@@ -86,13 +107,35 @@ const CategoryNav: React.FC<{
     );
   }
 
-  // Category cards
-  if (!selectedCategoryId) {
+  // ── Top level: Discounted tile + regular category grid ──
+  if (selectedCategoryId === null) {
     return (
       <div>
         <p className="font-doodle text-sm text-doodle-text/50 mb-3">
           Select a category to browse products:
         </p>
+        {/* Discounted tile */}
+        {browsablePromos.length > 0 && (
+          <button
+            onClick={() => onSelectCategory(DISCOUNTED_CAT_ID)}
+            className="w-full mb-3 flex items-center gap-3 p-3 border-2 border-doodle-green/50 bg-doodle-green/5 hover:border-doodle-green hover:bg-doodle-green/10 transition-colors text-left"
+          >
+            <span className="text-2xl">🏷️</span>
+            <div className="flex-1">
+              <div className="font-doodle font-bold text-doodle-text">
+                Discounted
+              </div>
+              <div className="font-doodle text-xs text-doodle-text/50">
+                {browsablePromos.length} active promotion
+                {browsablePromos.length !== 1 ? "s" : ""}
+              </div>
+            </div>
+            <span className="font-doodle text-xs text-doodle-green font-bold px-2 py-1 bg-doodle-green/20 border border-doodle-green/40">
+              Browse by promo →
+            </span>
+          </button>
+        )}
+        {/* Regular category cards */}
         <div className="grid grid-cols-2 gap-3">
           {catalog.map((cat) => (
             <button
@@ -116,7 +159,106 @@ const CategoryNav: React.FC<{
     );
   }
 
-  // Subcategory pills
+  // ── Discounted mode: promo picker or promo breadcrumb ──
+  if (selectedCategoryId === DISCOUNTED_CAT_ID) {
+    const selectedPromo = browsablePromos.find(
+      (p) => p.SpecialOfferID === selectedDiscountPromoId,
+    );
+
+    return (
+      <div>
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <button
+            onClick={() => {
+              onSelectCategory(null);
+              onSelectDiscountPromo(null);
+            }}
+            className="flex items-center gap-1 font-doodle text-sm text-doodle-accent hover:underline"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" /> Categories
+          </button>
+          <span className="text-doodle-text/30">/</span>
+          {selectedDiscountPromoId !== null ? (
+            <button
+              onClick={() => onSelectDiscountPromo(null)}
+              className="font-doodle text-sm text-doodle-text/60 hover:text-doodle-accent hover:underline"
+            >
+              🏷️ Discounted
+            </button>
+          ) : (
+            <span className="font-doodle text-sm font-bold text-doodle-text">
+              🏷️ Discounted
+            </span>
+          )}
+          {selectedPromo && (
+            <>
+              <span className="text-doodle-text/30">/</span>
+              <span className="font-doodle text-sm font-bold text-doodle-green truncate max-w-[200px]">
+                {selectedPromo.Description}
+              </span>
+            </>
+          )}
+        </div>
+
+        {selectedPromo ? (
+          /* Active promo info banner */
+          <div className="flex items-center gap-2 p-2 bg-doodle-green/10 border border-doodle-green/30">
+            <Tag className="w-3.5 h-3.5 text-doodle-green shrink-0" />
+            <span className="font-doodle text-xs text-doodle-green font-bold">
+              {(selectedPromo.DiscountPct * 100).toFixed(0)}% off
+              {selectedPromo.MinQty > 0
+                ? ` — min qty ${selectedPromo.MinQty}${
+                    selectedPromo.MaxQty ? `–${selectedPromo.MaxQty}` : "+"
+                  }`
+                : ""}{" "}
+              · {selectedPromo.Type}
+            </span>
+          </div>
+        ) : (
+          /* Promo card list */
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {browsablePromos.length === 0 ? (
+              <div className="p-6 text-center font-doodle text-doodle-text/40 text-sm border-2 border-dashed border-doodle-text/20">
+                No active non-volume promotions at this time.
+              </div>
+            ) : (
+              browsablePromos.map((promo) => {
+                const count = offerProductCounts.get(promo.SpecialOfferID) ?? 0;
+                return (
+                  <button
+                    key={promo.SpecialOfferID}
+                    onClick={() => onSelectDiscountPromo(promo.SpecialOfferID)}
+                    className="w-full flex items-center gap-3 p-3 border-2 border-doodle-text/30 hover:border-doodle-green hover:bg-doodle-green/5 transition-colors text-left"
+                  >
+                    <div className="w-10 h-10 shrink-0 bg-doodle-green/20 border-2 border-doodle-green/40 flex items-center justify-center font-doodle font-bold text-doodle-green text-sm">
+                      -{(promo.DiscountPct * 100).toFixed(0)}%
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-doodle font-bold text-doodle-text text-sm">
+                        {promo.Description}
+                      </div>
+                      <div className="font-doodle text-xs text-doodle-text/50">
+                        {promo.Type}
+                        {promo.MinQty > 0
+                          ? ` · Min qty: ${promo.MinQty}${
+                              promo.MaxQty ? `–${promo.MaxQty}` : "+"
+                            }`
+                          : ""}
+                        {count > 0 ? ` · ${count} products` : " · All products"}
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-doodle-text/40 shrink-0" />
+                  </button>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Normal category: subcategory pills ──
   return (
     <div>
       <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -190,6 +332,9 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<
     number | null
   >(null);
+  const [selectedDiscountPromoId, setSelectedDiscountPromoId] = useState<
+    number | null
+  >(null);
   // In reorder mode, exclude 0-stock items from the cart (they show in the warning banner)
   const [lineItems, setLineItems] = useState<StoreOrderLineItem[]>(
     (initialItems ?? []).filter(
@@ -209,11 +354,154 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
   const [createdOrderId, setCreatedOrderId] = useState<number | null>(null);
 
   const { data: shipMethods = [] } = useShipMethods();
+  const { data: allOffers = [] } = useAdminSpecialOffers();
+  const { data: offerProducts = [] } = useAdminSpecialOfferProducts();
+
+  // ── Promotion data ────────────────────────────────────────────────────────
+
+  // All active Reseller promos (English, not "No Discount")
+  const activeStoreOffers = useMemo<SpecialOffer[]>(
+    () =>
+      allOffers.filter(
+        (o) =>
+          o.CultureID === DEFAULT_CULTURE_ID &&
+          o.Category === "Reseller" &&
+          o.SpecialOfferID !== 1 &&
+          getOfferStatus(o) === "active",
+      ),
+    [allOffers],
+  );
+
+  // Non-volume-discount promos — shown in "Discounted" browse mode
+  const browsablePromos = useMemo(
+    () => activeStoreOffers.filter((o) => o.Type !== "Volume Discount"),
+    [activeStoreOffers],
+  );
+
+  // Per-promo product counts (for promo cards)
+  const offerProductCounts = useMemo(() => {
+    const m = new Map<number, number>();
+    offerProducts.forEach((op) => {
+      m.set(op.SpecialOfferID, (m.get(op.SpecialOfferID) ?? 0) + 1);
+    });
+    return m;
+  }, [offerProducts]);
+
+  // Map offerId → Set<productId> (empty set = applies to all products)
+  const offerProductSets = useMemo(() => {
+    const m = new Map<number, Set<number>>();
+    activeStoreOffers.forEach((o) => {
+      const pids = offerProducts
+        .filter((op) => op.SpecialOfferID === o.SpecialOfferID)
+        .map((op) => op.ProductID);
+      m.set(o.SpecialOfferID, new Set(pids));
+    });
+    return m;
+  }, [activeStoreOffers, offerProducts]);
+
+  // Set of product IDs in at least one specific (non-universal) browsable promo
+  const promotedProductIds = useMemo(() => {
+    const s = new Set<number>();
+    browsablePromos.forEach((o) => {
+      const pids = offerProductSets.get(o.SpecialOfferID);
+      if (pids && pids.size > 0) pids.forEach((pid) => s.add(pid));
+    });
+    return s;
+  }, [browsablePromos, offerProductSets]);
+
+  // productId → list of promo description labels (for tooltip/badge)
+  const productPromoLabels = useMemo(() => {
+    const m = new Map<number, string[]>();
+    browsablePromos.forEach((o) => {
+      const pids = offerProductSets.get(o.SpecialOfferID) ?? new Set<number>();
+      if (pids.size === 0) return; // universal promos — skip per-product labelling
+      pids.forEach((pid) => {
+        if (!m.has(pid)) m.set(pid, []);
+        m.get(pid)!.push(o.Description);
+      });
+    });
+    return m;
+  }, [browsablePromos, offerProductSets]);
+
+  // Compute total stacked auto-discount for a product at a given line qty
+  const computeDiscount = useCallback(
+    (productId: number, qty: number): number => {
+      let total = 0;
+      activeStoreOffers.forEach((offer) => {
+        const pids =
+          offerProductSets.get(offer.SpecialOfferID) ?? new Set<number>();
+        const eligible = pids.size === 0 || pids.has(productId);
+        if (!eligible) return;
+        if (
+          qty >= offer.MinQty &&
+          (offer.MaxQty === null || qty <= offer.MaxQty)
+        ) {
+          total += offer.DiscountPct;
+        }
+      });
+      return Math.min(1, total);
+    },
+    [activeStoreOffers, offerProductSets],
+  );
+
+  // Recompute all line item discounts whenever offer data arrives/changes
+  useEffect(() => {
+    if (activeStoreOffers.length === 0) return;
+    setLineItems((prev) =>
+      prev.map((i) => {
+        const disc = computeDiscount(i.productId, i.quantity);
+        if (disc === i.discountPct) return i;
+        return {
+          ...i,
+          discountPct: disc,
+          lineTotal: i.quantity * i.unitPrice * (1 - disc),
+        };
+      }),
+    );
+  }, [computeDiscount]); // fires when offer data initially loads or changes
+
+  // ── Product data ─────────────────────────────────────────────────────────
+
+  const isDiscountedMode = selectedCategoryId === DISCOUNTED_CAT_ID;
+
+  // Normal category products
   const { data: products = [], isLoading: productsLoading } = useStoreProducts(
     undefined,
-    selectedCategoryId,
-    selectedSubcategoryId,
+    isDiscountedMode ? null : selectedCategoryId,
+    isDiscountedMode ? null : selectedSubcategoryId,
   );
+
+  // All products (fetched only when browsing by promo)
+  const { data: allStoreProducts = [], isLoading: allProductsLoading } =
+    useAllStoreProducts(isDiscountedMode && selectedDiscountPromoId !== null);
+
+  // Product IDs for the selected discount promo (null = universal promo = all)
+  const discountPromoProductIds = useMemo(() => {
+    if (!selectedDiscountPromoId) return null;
+    return offerProductSets.get(selectedDiscountPromoId) ?? new Set<number>();
+  }, [selectedDiscountPromoId, offerProductSets]);
+
+  // Resolved product list for the product table
+  const displayProducts = useMemo(() => {
+    if (isDiscountedMode && selectedDiscountPromoId !== null) {
+      const pids = discountPromoProductIds;
+      if (!pids || pids.size === 0) return allStoreProducts; // universal promo
+      return allStoreProducts.filter((p) => pids.has(p.productID));
+    }
+    return products;
+  }, [
+    isDiscountedMode,
+    selectedDiscountPromoId,
+    products,
+    allStoreProducts,
+    discountPromoProductIds,
+  ]);
+
+  const isProductsLoading =
+    isDiscountedMode && selectedDiscountPromoId !== null
+      ? allProductsLoading
+      : productsLoading;
+
   const placeOrder = usePlaceStoreOrder();
 
   // Reorder stock issues — derived from initialItems' stockQty/originalQty
@@ -253,16 +541,19 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
       const existing = prev.find((i) => i.productId === product.productID);
       if (existing) {
         const newQty = Math.min(existing.quantity + 1, product.stockQty);
+        const disc = computeDiscount(product.productID, newQty);
         return prev.map((i) =>
           i.productId === product.productID
             ? {
                 ...i,
                 quantity: newQty,
-                lineTotal: newQty * i.unitPrice * (1 - i.discountPct),
+                discountPct: disc,
+                lineTotal: newQty * i.unitPrice * (1 - disc),
               }
             : i,
         );
       }
+      const disc = computeDiscount(product.productID, 1);
       return [
         ...prev,
         {
@@ -271,8 +562,8 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
           productNumber: product.productNumber,
           unitPrice: product.unitPrice,
           quantity: 1,
-          discountPct: 0,
-          lineTotal: product.unitPrice,
+          discountPct: disc,
+          lineTotal: product.unitPrice * (1 - disc),
         },
       ];
     });
@@ -285,10 +576,12 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
           if (i.productId !== productId) return i;
           const maxStock = stockMap[productId] ?? 9999;
           const newQty = Math.min(Math.max(0, i.quantity + delta), maxStock);
+          const disc = computeDiscount(productId, newQty);
           return {
             ...i,
             quantity: newQty,
-            lineTotal: newQty * i.unitPrice * (1 - i.discountPct),
+            discountPct: disc,
+            lineTotal: newQty * i.unitPrice * (1 - disc),
           };
         })
         .filter((i) => i.quantity > 0),
@@ -300,15 +593,16 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
     const qty = Math.min(parseInt(val) || 0, maxStock);
     setLineItems((prev) =>
       prev
-        .map((i) =>
-          i.productId === productId
-            ? {
-                ...i,
-                quantity: qty,
-                lineTotal: qty * i.unitPrice * (1 - i.discountPct),
-              }
-            : i,
-        )
+        .map((i) => {
+          if (i.productId !== productId) return i;
+          const disc = computeDiscount(productId, qty);
+          return {
+            ...i,
+            quantity: qty,
+            discountPct: disc,
+            lineTotal: qty * i.unitPrice * (1 - disc),
+          };
+        })
         .filter((i) => i.quantity > 0),
     );
   };
@@ -502,22 +796,29 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
                 <CategoryNav
                   selectedCategoryId={selectedCategoryId}
                   selectedSubcategoryId={selectedSubcategoryId}
+                  selectedDiscountPromoId={selectedDiscountPromoId}
+                  browsablePromos={browsablePromos}
+                  offerProductCounts={offerProductCounts}
                   onSelectCategory={(id) => {
                     setSelectedCategoryId(id);
                     setSelectedSubcategoryId(null);
+                    if (id !== DISCOUNTED_CAT_ID)
+                      setSelectedDiscountPromoId(null);
                   }}
                   onSelectSubcategory={setSelectedSubcategoryId}
+                  onSelectDiscountPromo={setSelectedDiscountPromoId}
                 />
 
-                {/* Products table — only when a category is selected */}
-                {selectedCategoryId !== null && (
+                {/* Products table — category mode or promo mode */}
+                {(selectedCategoryId !== null && !isDiscountedMode) ||
+                (isDiscountedMode && selectedDiscountPromoId !== null) ? (
                   <div className="mt-4 border-2 border-doodle-text max-h-72 overflow-y-auto">
-                    {productsLoading ? (
+                    {isProductsLoading ? (
                       <div className="flex items-center justify-center p-6 gap-2 text-doodle-text/60 font-doodle text-sm">
                         <Loader2 className="w-4 h-4 animate-spin" /> Loading
                         products…
                       </div>
-                    ) : products.length === 0 ? (
+                    ) : displayProducts.length === 0 ? (
                       <div className="p-6 text-center font-doodle text-doodle-text/40 text-sm">
                         No products found.
                       </div>
@@ -538,21 +839,50 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
                           </tr>
                         </thead>
                         <tbody>
-                          {products.map((p) => {
+                          {displayProducts.map((p) => {
                             const inCart = lineItems.find(
                               (i) => i.productId === p.productID,
                             );
                             const cartQty = inCart?.quantity ?? 0;
                             const atMax = cartQty >= p.stockQty;
                             const outOfStock = p.stockQty <= 0;
+                            const promoLabels =
+                              productPromoLabels.get(p.productID) ?? [];
+                            const hasPromo =
+                              promotedProductIds.has(p.productID) ||
+                              (isDiscountedMode &&
+                                selectedDiscountPromoId !== null);
                             return (
                               <tr
                                 key={p.productID}
-                                className={`border-b border-doodle-text/20 ${outOfStock ? "opacity-50" : "hover:bg-doodle-accent/5"}`}
+                                className={`border-b border-doodle-text/20 ${
+                                  outOfStock
+                                    ? "opacity-50"
+                                    : hasPromo
+                                      ? "bg-doodle-green/5 hover:bg-doodle-green/10"
+                                      : "hover:bg-doodle-accent/5"
+                                }`}
                               >
                                 <td className="py-2 px-3">
-                                  <div className="font-doodle font-medium text-doodle-text leading-tight">
+                                  <div className="font-doodle font-medium text-doodle-text leading-tight flex items-center gap-1 flex-wrap">
                                     {p.productName}
+                                    {hasPromo && (
+                                      <span
+                                        className="inline-flex items-center gap-0.5 font-doodle text-xs text-doodle-green bg-doodle-green/15 border border-doodle-green/30 px-1 py-0"
+                                        title={
+                                          promoLabels.length > 0
+                                            ? promoLabels.join(", ")
+                                            : "On promotion"
+                                        }
+                                      >
+                                        <Tag className="w-2.5 h-2.5" />
+                                        {isDiscountedMode
+                                          ? `${(browsablePromos.find((o) => o.SpecialOfferID === selectedDiscountPromoId)?.DiscountPct ?? 0) * 100}% off`
+                                          : promoLabels.length > 0
+                                            ? "On promo"
+                                            : ""}
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="font-doodle text-xs text-doodle-text/50">
                                     {p.productNumber}
@@ -601,7 +931,7 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
                       </table>
                     )}
                   </div>
-                )}
+                ) : null}
               </div>
 
               {/* Right: order cart sidebar */}
@@ -637,6 +967,11 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
                             </p>
                             <p className="font-doodle text-xs text-doodle-accent">
                               ${item.lineTotal.toFixed(2)}
+                              {item.discountPct > 0 && (
+                                <span className="ml-1 text-doodle-green font-bold">
+                                  (-{(item.discountPct * 100).toFixed(0)}%)
+                                </span>
+                              )}
                             </p>
                             {isReduced && (
                               <p className="font-doodle text-xs text-amber-700 flex items-center gap-1">
@@ -777,6 +1112,43 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
                   The store's PO number for their records
                 </p>
               </div>
+
+              {/* Auto-applied promotions summary */}
+              {(() => {
+                const discountedItems = lineItems.filter(
+                  (i) => i.discountPct > 0,
+                );
+                if (discountedItems.length === 0) return null;
+                return (
+                  <div className="p-3 bg-doodle-green/10 border border-doodle-green/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Tag className="w-3.5 h-3.5 text-doodle-green" />
+                      <span className="font-doodle text-xs font-bold text-doodle-green">
+                        Promotions auto-applied to {discountedItems.length} item
+                        {discountedItems.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <ul className="space-y-0.5">
+                      {discountedItems.map((i) => (
+                        <li
+                          key={i.productId}
+                          className="font-doodle text-xs text-doodle-text/70 flex justify-between"
+                        >
+                          <span className="truncate">{i.productName}</span>
+                          <span className="text-doodle-green font-bold ml-2 shrink-0">
+                            -{(i.discountPct * 100).toFixed(0)}%
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="font-doodle text-xs text-doodle-text/50 mt-2">
+                      Volume discounts and active Reseller promotions are
+                      stacked automatically. Adjust quantities in Step 1 to
+                      change tiers.
+                    </p>
+                  </div>
+                );
+              })()}
 
               <div>
                 <label className="font-doodle font-bold text-doodle-text text-sm block mb-1">
@@ -939,7 +1311,13 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
                           ${item.unitPrice.toFixed(2)}
                         </td>
                         <td className="py-2 px-3 font-doodle text-right text-doodle-text/70">
-                          {(item.discountPct * 100).toFixed(0)}%
+                          {item.discountPct > 0 ? (
+                            <span className="font-bold text-doodle-green">
+                              {(item.discountPct * 100).toFixed(0)}%
+                            </span>
+                          ) : (
+                            "0%"
+                          )}
                         </td>
                         <td className="py-2 px-3 font-doodle text-right text-doodle-text">
                           {item.quantity}

@@ -74,6 +74,8 @@ export const GET_CUSTOMER_SPECIAL_OFFERS = gql`
         DiscountPct
         Type
         Category
+        StartDate
+        EndDate
       }
     }
   }

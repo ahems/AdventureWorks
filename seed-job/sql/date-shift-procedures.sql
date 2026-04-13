@@ -392,11 +392,30 @@ BEGIN
           -- shifting them would push their dates into the future)
           AND  NOT (c.TABLE_SCHEMA = 'Purchasing'
                     AND c.TABLE_NAME IN ('SimOrderTracking', 'SimOrderState'))
+          -- Exclude SpecialOffer StartDate/EndDate — handled separately after the loop
+          -- so that every offer is anchored to yesterday (StartDate = yesterday,
+          -- EndDate = yesterday + original duration) rather than shifted uniformly.
+          AND  NOT (c.TABLE_SCHEMA = 'Sales' AND c.TABLE_NAME = 'SpecialOffer'
+                    AND c.COLUMN_NAME IN ('StartDate', 'EndDate'))
           -- Exclude computed columns
           AND  COLUMNPROPERTY(
                    OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME),
                    c.COLUMN_NAME, 'IsComputed') = 0
         ORDER BY c.TABLE_SCHEMA, c.TABLE_NAME, c.COLUMN_NAME;
+
+    -- -------------------------------------------------------------------------
+    -- Capture original SpecialOffer durations BEFORE any column is updated.
+    -- StartDate and EndDate are excluded from the generic cursor above, so this
+    -- snapshot is guaranteed to see the original (pre-shift) values.
+    -- -------------------------------------------------------------------------
+    SELECT
+        SpecialOfferID,
+        DATEDIFF(DAY, StartDate, EndDate) AS DurationDays
+    INTO #SpecialOfferDurations
+    FROM [Sales].[SpecialOffer]
+    WHERE StartDate IS NOT NULL
+      AND EndDate   IS NOT NULL
+      AND CAST(StartDate AS DATETIME) <= @ShiftThreshold;
 
     BEGIN TRANSACTION;
     BEGIN TRY
@@ -441,6 +460,28 @@ BEGIN
         CLOSE upd_cursor;
         DEALLOCATE upd_cursor;
 
+        -- -----------------------------------------------------------------
+        -- SpecialOffer: anchor every seed-era offer so that
+        --   StartDate = yesterday  (the offer started "yesterday")
+        --   EndDate   = yesterday + original duration in days
+        -- This makes all offers appear active regardless of their original
+        -- date range.  Offers added by simulation/AI (StartDate > threshold)
+        -- are absent from #SpecialOfferDurations and so are not touched.
+        -- -----------------------------------------------------------------
+        UPDATE so
+        SET
+            so.StartDate = @Yesterday,
+            so.EndDate   = DATEADD(DAY, d.DurationDays, @Yesterday)
+        FROM [Sales].[SpecialOffer] AS so
+        JOIN #SpecialOfferDurations AS d ON so.SpecialOfferID = d.SpecialOfferID;
+
+        SET @RowsAffected = @@ROWCOUNT;
+        SET @TotalUpdated += @RowsAffected;
+        PRINT '  Updated [Sales].[SpecialOffer].[StartDate+EndDate] (anchored to yesterday) — '
+              + CAST(@RowsAffected AS VARCHAR) + ' row(s)';
+
+        DROP TABLE #SpecialOfferDurations;
+
         COMMIT TRANSACTION;
 
         PRINT '======================================================';
@@ -461,6 +502,10 @@ BEGIN
         END;
 
         ROLLBACK TRANSACTION;
+
+        -- Clean up temp table if the SpecialOffer UPDATE had not yet dropped it
+        IF OBJECT_ID('tempdb..#SpecialOfferDurations') IS NOT NULL
+            DROP TABLE #SpecialOfferDurations;
 
         -- Re-enable constraints even on failure so they are not left disabled
         ALTER TABLE [HumanResources].[Employee]             CHECK CONSTRAINT [CK_Employee_BirthDate];
