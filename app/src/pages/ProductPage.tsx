@@ -45,6 +45,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+const PRODUCT_LINE_MAP: Record<string, string> = {
+  R: "Road",
+  M: "Mountain",
+  T: "Touring",
+  S: "Standard",
+};
+
+const CLASS_MAP: Record<string, string> = {
+  H: "High",
+  M: "Medium",
+  L: "Low",
+};
+
+const STYLE_MAP: Record<string, string> = {
+  W: "Womens",
+  M: "Mens",
+  U: "Unisex",
+};
+
 const ProductPage: React.FC = () => {
   const { t } = useTranslation(["product", "common"]);
   const { productId } = useParams<{ productId: string }>();
@@ -530,7 +549,8 @@ const ProductPage: React.FC = () => {
                         {t("product:specifications.productLine")}
                       </span>
                       <span className="text-doodle-text">
-                        {product.ProductLine}
+                        {PRODUCT_LINE_MAP[product.ProductLine] ??
+                          product.ProductLine}
                       </span>
                     </>
                   )}
@@ -539,7 +559,9 @@ const ProductPage: React.FC = () => {
                       <span className="text-doodle-text/60">
                         {t("product:specifications.class")}
                       </span>
-                      <span className="text-doodle-text">{product.Class}</span>
+                      <span className="text-doodle-text">
+                        {CLASS_MAP[product.Class] ?? product.Class}
+                      </span>
                     </>
                   )}
                   {product.Style && (
@@ -547,7 +569,9 @@ const ProductPage: React.FC = () => {
                       <span className="text-doodle-text/60">
                         {t("product:specifications.style")}
                       </span>
-                      <span className="text-doodle-text">{product.Style}</span>
+                      <span className="text-doodle-text">
+                        {STYLE_MAP[product.Style] ?? product.Style}
+                      </span>
                     </>
                   )}
                   {product.SellStartDate && (

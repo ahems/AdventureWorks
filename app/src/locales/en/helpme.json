@@ -1,0 +1,51 @@
+{
+  "title": "Help me Choose",
+  "intro": {
+    "title": "Let's find your perfect gear!",
+    "description": "Answer 5 quick questions and our AI will browse the catalog to find products perfectly matched to you.",
+    "cta": "Let's Start",
+    "hint": "Powered by AI · Takes about 1 minute"
+  },
+  "loading": {
+    "questions": "Generating personalised questions…",
+    "recommendations": "Searching the catalog and crafting your recommendations…"
+  },
+  "progress": {
+    "question": "Question {{current}} of {{total}}"
+  },
+  "nav": {
+    "back": "Back",
+    "next": "Next",
+    "findProducts": "Find my Products"
+  },
+  "results": {
+    "title": "Your Personalised Picks",
+    "viewProduct": "View Product",
+    "noResults": "We couldn't find exact matches right now. Try browsing our categories or use the search bar.",
+    "startAgain": "Start again"
+  },
+  "profile": {
+    "title": "A bit about you",
+    "subtitle": "Helps us find products that truly fit.",
+    "gender": {
+      "label": "Gender (optional)",
+      "male": "Male",
+      "female": "Female",
+      "preferNotToSay": "Prefer not to say"
+    },
+    "height": {
+      "label": "Your height",
+      "placeholder": "Select your height…"
+    },
+    "colors": {
+      "label": "Favourite colours",
+      "hint": "Leave blank for no preference."
+    },
+    "continue": "Continue"
+  },
+  "error": {
+    "loadQuestions": "We had trouble generating your questions. Please try again.",
+    "loadRecommendations": "We had trouble finding recommendations. Please try again.",
+    "tryAgain": "Try Again"
+  }
+}

@@ -155,6 +155,21 @@ builder.Services.AddScoped<PromotionAgentService>(sp =>
         telemetryClient);
 });
 
+// Register HelpMeChoose Service for the AI-powered product-advisor wizard
+builder.Services.AddScoped<HelpMeChooseService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<HelpMeChooseService>>();
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new HelpMeChooseService(
+        logger,
+        configuration,
+        httpClientFactory,
+        telemetryClient);
+});
+
 // Register WorkOrderSimulationService for the manufacturing simulation engine
 builder.Services.AddScoped<WorkOrderSimulationService>(sp =>
 {

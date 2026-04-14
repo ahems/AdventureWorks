@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   AlertTriangle,
   Tag,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -342,7 +343,11 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
     ),
   );
   const [shipMethodId, setShipMethodId] = useState(0);
-  const [purchaseOrderNumber, setPurchaseOrderNumber] = useState("");
+  const [purchaseOrderNumber, setPurchaseOrderNumber] = useState(() => {
+    const year = new Date().getFullYear();
+    const seq = String(Math.floor(Math.random() * 9000) + 1000);
+    return `PO-${year}-${seq}`;
+  });
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 14);
@@ -652,7 +657,7 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
           discountPct: i.discountPct,
         })),
         shipMethodId,
-        purchaseOrderNumber: purchaseOrderNumber.trim() || undefined,
+        purchaseOrderNumber: purchaseOrderNumber.trim() || undefined, // always set since field is required
         dueDate: dueDate || undefined,
         comment: comment.trim() || undefined,
       });
@@ -1098,18 +1103,33 @@ const PlaceStoreOrderDialog: React.FC<PlaceStoreOrderDialogProps> = ({
 
               <div>
                 <label className="font-doodle font-bold text-doodle-text text-sm block mb-1">
-                  Purchase Order Number (optional)
+                  Purchase Order Number
                 </label>
-                <input
-                  type="text"
-                  value={purchaseOrderNumber}
-                  onChange={(e) => setPurchaseOrderNumber(e.target.value)}
-                  placeholder="e.g. PO-2026-0042"
-                  className="doodle-input w-full"
-                  maxLength={25}
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={purchaseOrderNumber}
+                    onChange={(e) => setPurchaseOrderNumber(e.target.value)}
+                    placeholder="e.g. PO-2026-0042"
+                    className="doodle-input flex-1"
+                    maxLength={25}
+                    required
+                  />
+                  <button
+                    type="button"
+                    title="Generate a new PO number"
+                    onClick={() => {
+                      const year = new Date().getFullYear();
+                      const seq = String(Math.floor(Math.random() * 9000) + 1000);
+                      setPurchaseOrderNumber(`PO-${year}-${seq}`);
+                    }}
+                    className="doodle-button px-2 py-1 shrink-0"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
                 <p className="font-doodle text-xs text-doodle-text/50 mt-1">
-                  The store's PO number for their records
+                  Auto-generated — edit or regenerate as needed
                 </p>
               </div>
 

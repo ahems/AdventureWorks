@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight, Sparkles, Wand2 } from "lucide-react";
 import { useProducts } from "@/hooks/useProducts";
 import { Twemoji } from "@/components/Twemoji";
 import { useCurrency } from "@/context/CurrencyContext";
@@ -91,6 +91,13 @@ const HeroSection: React.FC = () => {
             >
               {t("hero.shopBikes")}
               <ArrowRight className="w-5 h-5" />
+            </Link>
+            <Link
+              to="/help-me-choose"
+              className="doodle-button text-lg px-8 py-3 inline-flex items-center justify-center gap-2 border-doodle-accent text-doodle-accent hover:bg-doodle-accent/10"
+            >
+              <Wand2 className="w-5 h-5" />
+              {t("hero.helpMeChoose")}
             </Link>
             <Link
               to="/category/4"

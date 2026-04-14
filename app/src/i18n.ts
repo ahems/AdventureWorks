@@ -151,6 +151,9 @@ import viChat from "./locales/vi/chat.json";
 import thChat from "./locales/th/chat.json";
 import idChat from "./locales/id/chat.json";
 
+// Help Me Choose namespace (English only — other locales fall back to English)
+import enHelpme from "./locales/en/helpme.json";
+
 const resources = {
   en: {
     common: enCommon,
@@ -159,6 +162,7 @@ const resources = {
     account: enAccount,
     footer: enFooter,
     chat: enChat,
+    helpme: enHelpme,
   },
   "en-gb": {
     common: enGbCommon,
@@ -342,7 +346,7 @@ i18n.use(initReactI18next).init({
   resources,
   lng: "en", // default language
   fallbackLng: "en",
-  ns: ["common", "product", "cart", "account", "footer", "chat"], // namespaces
+  ns: ["common", "product", "cart", "account", "footer", "chat", "helpme"], // namespaces
   defaultNS: "common",
   interpolation: {
     escapeValue: false, // React already escapes
