@@ -6,6 +6,7 @@ import {
   Bot,
   Sparkles,
   ArrowRight,
+  ExternalLink,
   MessageSquare,
   BarChart3,
   Mail,
@@ -17,12 +18,14 @@ import {
   Users,
   ShoppingCart,
   CheckCircle,
+  Wrench,
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import { useVoiceAssistant } from "@/components/AdminHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { getApiMcpUrl, getDabMcpUrl, buildInspectorUrl } from "@/lib/utils";
 
 interface FeatureCardProps {
   icon: React.ReactNode;
@@ -33,6 +36,8 @@ interface FeatureCardProps {
   demoLabel?: string;
   linkTo?: string;
   linkLabel?: string;
+  externalLinkTo?: string;
+  externalLinkLabel?: string;
   badge?: string;
 }
 
@@ -45,6 +50,8 @@ const FeatureCard: React.FC<FeatureCardProps> = ({
   demoLabel,
   linkTo,
   linkLabel,
+  externalLinkTo,
+  externalLinkLabel,
   badge,
 }) => (
   <div className="doodle-card p-6 md:p-8 h-full flex flex-col">
@@ -104,6 +111,14 @@ const FeatureCard: React.FC<FeatureCardProps> = ({
           </Button>
         </Link>
       )}
+      {externalLinkTo && (
+        <a href={externalLinkTo} target="_blank" rel="noopener noreferrer">
+          <Button className="doodle-button doodle-button-primary flex items-center gap-2">
+            <ExternalLink className="w-4 h-4" />
+            {externalLinkLabel || "Open"}
+          </Button>
+        </a>
+      )}
     </div>
   </div>
 );
@@ -143,6 +158,9 @@ const AiFeaturesPage: React.FC = () => {
       console.log("Voice assistant demo triggered");
     }
   };
+
+  const inspectorApiMcpUrl = buildInspectorUrl(getApiMcpUrl());
+  const inspectorDabMcpUrl = buildInspectorUrl(getDabMcpUrl());
 
   return (
     <div className="min-h-screen flex flex-col bg-doodle-bg">
@@ -237,6 +255,45 @@ const AiFeaturesPage: React.FC = () => {
               linkTo="/stale-carts"
               linkLabel="View Stale Carts"
               badge="Automation"
+            />
+          </div>
+        </section>
+
+        {/* MCP Inspector Section */}
+        <section className="container mx-auto px-4 pb-12">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* api-mcp Inspector */}
+            <FeatureCard
+              icon={<Wrench className="w-7 h-7 text-doodle-accent" />}
+              title="MCP Inspector — AdventureWorks MCP"
+              description="Interactive browser UI for exploring and testing the custom AdventureWorks MCP server. Call tools like GetCustomerOrders, GetOrderDetails, and FindComplementaryProducts directly from your browser."
+              capabilities={[
+                "Browse all available MCP tools",
+                "Call GetCustomerOrders interactively",
+                "Call GetOrderDetails interactively",
+                "Call FindComplementaryProducts",
+                "Inspect raw JSON request/response",
+              ]}
+              externalLinkTo={inspectorApiMcpUrl || undefined}
+              externalLinkLabel="Open Inspector"
+              badge="MCP Dev Tools"
+            />
+
+            {/* DAB MCP Inspector */}
+            <FeatureCard
+              icon={<Wrench className="w-7 h-7 text-doodle-green" />}
+              title="MCP Inspector — DAB Data API"
+              description="Explore the Data API Builder MCP endpoint which exposes 30+ AdventureWorks entities — Products, Customers, Orders, Inventory and more — as MCP resources over a Streamable HTTP transport."
+              capabilities={[
+                "Browse all 30+ DAB-exposed entities",
+                "Query Products, Customers, Orders",
+                "Filter and paginate results",
+                "Inspect raw MCP protocol messages",
+                "Test custom GraphQL-backed entities",
+              ]}
+              externalLinkTo={inspectorDabMcpUrl || undefined}
+              externalLinkLabel="Open Inspector"
+              badge="MCP Dev Tools"
             />
           </div>
         </section>

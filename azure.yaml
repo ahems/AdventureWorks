@@ -74,6 +74,13 @@ services:
     docker:
       path: Dockerfile
       remoteBuild: true
+  mcp-inspector:
+    project: ./mcp-inspector
+    host: containerapp
+    language: docker
+    docker:
+      path: Dockerfile
+      remoteBuild: true
 infra:
   provider: bicep
   path: ./infra

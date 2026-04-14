@@ -285,6 +285,24 @@ module staticWebAppFrontend 'modules/swa-app.bicep' = {
   }
 }
 
+module containerAppMcpInspector 'modules/aca-mcp-inspector.bicep' = {
+  name: 'Deploy-Container-App-MCP-Inspector'
+  params: {
+    location: location
+    appInsightsName: appInsightsName
+    mcpInspectorName: 'av-mcp-inspector-${resourceToken}'
+    containerRegistryName: acrName
+    identityName: identityName
+    apiMcpUrl: containerAppApiMcp.outputs.apiMcpUrl
+    apiDabMcpUrl: 'https://${containerAppApi.outputs.apiFqdn}/mcp'
+    containerAppEnvId: containerApp.outputs.containerAppEnvId
+    containerAppEnvDefaultDomain: containerApp.outputs.containerAppEnvDefaultDomain
+    minReplica: 0
+    maxReplica: 1
+    revisionSuffix: revisionSuffix
+  }
+}
+
 module containerAppAdmin 'modules/aca-app-admin.bicep' = {
   name: 'Deploy-Container-App-Admin'
   params: {
@@ -298,6 +316,7 @@ module containerAppAdmin 'modules/aca-app-admin.bicep' = {
     apiMcpUrl: containerAppApiMcp.outputs.apiMcpUrl
     appInsightsConnectionString: appinsights.outputs.connectionString
     appUrl: staticWebAppFrontend.outputs.appRedirectUri
+    mcpInspectorUrl: containerAppMcpInspector.outputs.mcpInspectorUrl
     minReplica: 0
     maxReplica: 3
     revisionSuffix: revisionSuffix
@@ -339,10 +358,12 @@ output SERVICE_API_NAME string = 'av-api-${resourceToken}'
 output SERVICE_API_FUNCTIONS_NAME string = 'av-func-${resourceToken}'
 output SERVICE_API_MCP_NAME string = 'av-mcp-${resourceToken}'
 output SERVICE_SEED_JOB_NAME string = containerAppSeedJob.outputs.seedJobName
+output SERVICE_MCP_INSPECTOR_NAME string = containerAppMcpInspector.outputs.mcpInspectorName
 
 output API_FUNCTIONS_URL string = containerAppApiFunctions.outputs.apiFunctionsUrl
 output MCP_SERVICE_URL string = containerAppApiMcp.outputs.apiMcpUrl
 output API_MCP_URL string = containerAppApiMcp.outputs.apiMcpUrl
+output MCP_INSPECTOR_URL string = containerAppMcpInspector.outputs.mcpInspectorUrl
 
 // Static Web App deployment token for azd deploy
 @secure()

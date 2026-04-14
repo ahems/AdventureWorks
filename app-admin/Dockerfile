@@ -1,5 +1,5 @@
-# Build stage
-FROM node:20-alpine AS builder
+# Build stage - use ACR-cached node image to avoid Docker Hub rate limits
+FROM avacriy5viuu3lrqdg.azurecr.io/node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -15,29 +15,16 @@ COPY . .
 # Build the application (config is injected at runtime via entrypoint, not baked in)
 RUN npm run build
 
-# Production stage
-FROM nginx:alpine
+# Production stage - serve with 'serve' (no nginx, stays on ACR-cached node image)
+FROM avacriy5viuu3lrqdg.azurecr.io/node:20-alpine
 
-# Install bash for runtime config injection
-RUN apk add --no-cache bash
+WORKDIR /app
+
+# Install serve globally for SPA static file hosting
+RUN npm install -g serve
 
 # Copy built assets from builder stage
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Copy nginx configuration for SPA routing
-RUN echo 'server { \
-    listen 80; \
-    server_name _; \
-    root /usr/share/nginx/html; \
-    index index.html; \
-    location / { \
-        try_files $uri $uri/ /index.html; \
-    } \
-    location /config.js { \
-        add_header Content-Type application/javascript; \
-        add_header Cache-Control "no-cache, no-store, must-revalidate"; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist ./dist
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /docker-entrypoint.sh

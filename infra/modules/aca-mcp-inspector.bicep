@@ -1,24 +1,21 @@
 param appInsightsName string = 'av-appinsights-${toLower(uniqueString(resourceGroup().id))}'
-param appAdminName string = 'av-app-admin-${uniqueString(resourceGroup().id)}'
+param mcpInspectorName string = 'av-mcp-inspector-${uniqueString(resourceGroup().id)}'
 param location string = resourceGroup().location
 param containerRegistryName string = 'avacr${toLower(uniqueString(resourceGroup().id))}'
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param containerAppEnvId string
+param containerAppEnvDefaultDomain string
 param bootstrapImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 @minValue(0)
 @maxValue(25)
 param minReplica int = 0
 @minValue(0)
 @maxValue(25)
-param maxReplica int = 3
+param maxReplica int = 1
 @secure()
 param revisionSuffix string
-param apiUrl string = ''
-param apiFunctionsUrl string = ''
 param apiMcpUrl string = ''
-param appInsightsConnectionString string = ''
-param appUrl string = ''
-param mcpInspectorUrl string = ''
+param apiDabMcpUrl string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -32,8 +29,12 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
   name: appInsightsName
 }
 
-resource appAdmin 'Microsoft.App/containerApps@2024-03-01' = {
-  name: appAdminName
+// Compute the inspector's own FQDN deterministically so we can set MCP_PROXY_FULL_ADDRESS
+// Azure Container Apps FQDN = <app-name>.<env-default-domain>
+var inspectorFqdn = '${mcpInspectorName}.${containerAppEnvDefaultDomain}'
+
+resource mcpInspector 'Microsoft.App/containerApps@2024-03-01' = {
+  name: mcpInspectorName
   location: location
   identity: {
     type: 'UserAssigned'
@@ -42,7 +43,7 @@ resource appAdmin 'Microsoft.App/containerApps@2024-03-01' = {
     }
   }
   tags: {
-    'azd-service-name': 'app-admin'
+    'azd-service-name': 'mcp-inspector'
   }
   properties: {
     managedEnvironmentId: containerAppEnvId
@@ -53,6 +54,12 @@ resource appAdmin 'Microsoft.App/containerApps@2024-03-01' = {
         allowInsecure: false
         transport: 'http'
         clientCertificateMode: 'ignore'
+        corsPolicy: {
+          allowedOrigins: ['*']
+          allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+          allowedHeaders: ['*']
+          allowCredentials: false
+        }
         traffic: [
           {
             latestRevision: true
@@ -71,7 +78,7 @@ resource appAdmin 'Microsoft.App/containerApps@2024-03-01' = {
       revisionSuffix: revisionSuffix
       containers: [
         {
-          name: appAdminName
+          name: mcpInspectorName
           image: bootstrapImage
           resources: {
             cpu: json('.25')
@@ -79,28 +86,20 @@ resource appAdmin 'Microsoft.App/containerApps@2024-03-01' = {
           }
           env: [
             {
-              name: 'API_URL'
-              value: apiUrl
-            }
-            {
-              name: 'API_FUNCTIONS_URL'
-              value: apiFunctionsUrl
-            }
-            {
               name: 'API_MCP_URL'
               value: apiMcpUrl
             }
             {
-              name: 'APPINSIGHTS_CONNECTIONSTRING'
-              value: appInsightsConnectionString
+              name: 'API_DAB_MCP_URL'
+              value: apiDabMcpUrl
             }
             {
-              name: 'APP_URL'
-              value: appUrl
+              name: 'MCP_PROXY_FULL_ADDRESS'
+              value: 'https://${inspectorFqdn}/proxy'
             }
             {
-              name: 'MCP_INSPECTOR_URL'
-              value: mcpInspectorUrl
+              name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+              value: appInsights.properties.ConnectionString
             }
             {
               name: 'AZURE_CLIENT_ID'
@@ -117,6 +116,6 @@ resource appAdmin 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
-output appAdminUrl string = 'https://${appAdmin.properties.configuration.ingress.fqdn}'
-output appAdminFqdn string = appAdmin.properties.configuration.ingress.fqdn
-output appAdminName string = appAdmin.name
+output mcpInspectorUrl string = 'https://${mcpInspector.properties.configuration.ingress.fqdn}'
+output mcpInspectorFqdn string = mcpInspector.properties.configuration.ingress.fqdn
+output mcpInspectorName string = mcpInspector.name
