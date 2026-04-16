@@ -277,6 +277,19 @@ builder.Services.AddScoped<OrderGenerationAgentService>(sp =>
         foundryClient);
 });
 
+// Register BankService for the virtual bank simulator
+builder.Services.AddScoped<BankService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
+    var logger = sp.GetRequiredService<ILogger<BankService>>();
+    var telemetry = sp.GetRequiredService<TelemetryClient>();
+    return new BankService(connectionString, tableServiceUri, logger, telemetry);
+});
+
 // Register AIService with Azure OpenAI endpoint
 builder.Services.AddScoped<AIService>(sp =>
 {

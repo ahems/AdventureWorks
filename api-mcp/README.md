@@ -25,10 +25,11 @@ This separation lets you evolve tools and data access in a dedicated service whi
   - Main MCP server implementation.
   - Contains:
     - `Program.cs` – configures DI, telemetry, localization, and MCP.
-    - `Services/` – data access and AI helpers (orders, products, reviews, manufacturing, supply chain, OpenAI).
+    - `Services/` – data access and AI helpers (orders, products, reviews, manufacturing, supply chain, bank, OpenAI).
     - `Tools/AdventureWorksMcpTools.cs` – e-commerce tools (orders, products, reviews, inventory).
     - `Tools/ManufacturingMcpTools.cs` – manufacturing simulation tools (production runs, scrap, feasibility, cost analysis).
     - `Tools/SupplyChainMcpTools.cs` – supply chain tools (vendors, catalog, quotes, purchase orders).
+    - `Tools/BankMcpTools.cs` – virtual bank tools (account balances, deposits, withdrawals, transaction history).
     - `Resources/` – localized strings used by services.
 - `AppHost/`
   - Hosting shell that wires the AdventureWorks project into an app host (`builder.AddProject<Projects.AdventureWorks>("adventureworks-mcp")`).
@@ -61,7 +62,8 @@ Key configuration is in `AdventureWorks/Program.cs`:
         .WithHttpTransport(o => o.Stateless = false)
         .WithTools<AdventureWorksMcpTools>()
         .WithTools<ManufacturingMcpTools>()
-        .WithTools<SupplyChainMcpTools>();
+        .WithTools<SupplyChainMcpTools>()
+        .WithTools<BankMcpTools>();
     ```
   - HTTP SSE transport is enabled and stateful.
   - MCP endpoint exposed at `/mcp` via `app.MapMcp("/mcp");`.
@@ -637,3 +639,4 @@ For more information on the MCP Inspector, see the [official documentation](http
 - AI agent configuration and automation: [docs/AGENT_FRAMEWORK_MIGRATION.md](../docs/AGENT_FRAMEWORK_MIGRATION.md), [docs/AI_AGENT_AUTOMATION.md](../docs/AI_AGENT_AUTOMATION.md), [docs/AI_AGENT_DEPLOYMENT_SUMMARY.md](../docs/AI_AGENT_DEPLOYMENT_SUMMARY.md)
 - AI agent telemetry and testing: [docs/AI_AGENT_TELEMETRY_IMPLEMENTATION.md](../docs/AI_AGENT_TELEMETRY_IMPLEMENTATION.md), [docs/AI_AND_MCP_TESTING_GUIDE.md](../docs/AI_AND_MCP_TESTING_GUIDE.md), [docs/AI_CHAT_MCP_TESTING.md](../docs/AI_CHAT_MCP_TESTING.md)
 - Functions that call this MCP server: [api-functions/README.md](../api-functions/README.md)
+- Bank simulator REST API and Table Storage schema: [api-functions/BANK_SIMULATOR.md](../api-functions/BANK_SIMULATOR.md)

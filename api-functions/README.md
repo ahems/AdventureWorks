@@ -366,3 +366,5 @@ For examples of how these Functions are exercised, see the test scripts in the r
 - Translations and localization flows: [docs/features/internationalization/](../docs/features/internationalization/)
 - Review generation and embeddings: [docs/features/reviews/](../docs/features/reviews/) and [docs/data-management/](../docs/data-management/)
 - SEO endpoints and frontend usage: [docs/features/seo/](../docs/features/seo/)
+- Manufacturing simulation: [MANUFACTURING_SIMULATION.md](./MANUFACTURING_SIMULATION.md)
+- Bank simulator: [BANK_SIMULATOR.md](./BANK_SIMULATOR.md)

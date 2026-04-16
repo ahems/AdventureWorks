@@ -60,6 +60,10 @@ builder.Services.AddHttpClient<SupplyChainService>(client =>
 {
 	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
 });
+builder.Services.AddHttpClient<BankService>(client =>
+{
+	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
+});
 
 // Register MCP server with SSE transport and AdventureWorks tools
 builder.Services
@@ -67,7 +71,8 @@ builder.Services
 	   .WithHttpTransport(o => o.Stateless = true) // Stateless mode: no session IDs required, compatible with Azure AI Foundry agents
 	   .WithTools<AdventureWorksMcpTools>()
 	   .WithTools<ManufacturingMcpTools>()
-	   .WithTools<SupplyChainMcpTools>();
+	   .WithTools<SupplyChainMcpTools>()
+	   .WithTools<BankMcpTools>();
 
 builder.AddServiceDefaults();
 
