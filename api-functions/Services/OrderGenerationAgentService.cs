@@ -1,60 +1,47 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Azure.Identity;
-using Azure.AI.OpenAI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
-using ModelContextProtocol.Client;
 
 namespace api_functions.Services;
 
 /// <summary>
-/// Orchestrates an AI agent that reasons over live AdventureWorks data via MCP tools
-/// to design a realistic purchase order for a given customer persona, then writes it
-/// to the database using OrderGenerationService.
+/// Orchestrates an Azure AI Foundry Agent that reasons over live AdventureWorks data
+/// via MCP tool servers to design a realistic purchase order for a given customer
+/// persona, then writes it to the database using OrderGenerationService.
 /// </summary>
 public class OrderGenerationAgentService
 {
     private readonly ILogger<OrderGenerationAgentService> _logger;
     private readonly IConfiguration _configuration;
-    private readonly IHttpClientFactory _httpClientFactory;
     private readonly TelemetryClient _telemetryClient;
     private readonly OrderGenerationService _orderGenService;
     private readonly ReceiptService _receiptService;
     private readonly PdfReceiptGenerator _pdfGenerator;
-    private readonly string _endpoint;
-    private readonly string _modelDeployment;
-    private readonly string _mcpServerUrl;
+    private readonly FoundryAgentClient _foundryClient;
+    private readonly string _agentId;
 
     public OrderGenerationAgentService(
         ILogger<OrderGenerationAgentService> logger,
         IConfiguration configuration,
-        IHttpClientFactory httpClientFactory,
         TelemetryClient telemetryClient,
         OrderGenerationService orderGenService,
         ReceiptService receiptService,
-        PdfReceiptGenerator pdfGenerator)
+        PdfReceiptGenerator pdfGenerator,
+        FoundryAgentClient foundryClient)
     {
         _logger = logger;
         _configuration = configuration;
-        _httpClientFactory = httpClientFactory;
         _telemetryClient = telemetryClient;
         _orderGenService = orderGenService;
         _receiptService = receiptService;
         _pdfGenerator = pdfGenerator;
+        _foundryClient = foundryClient;
 
-        _endpoint = configuration["AZURE_OPENAI_ENDPOINT"]
-            ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
-        _modelDeployment = configuration["chatGptDeploymentName"] ?? "chat";
-
-        var mcpServiceUrl = configuration["MCP_SERVICE_URL"];
-        _mcpServerUrl = !string.IsNullOrEmpty(mcpServiceUrl)
-            ? mcpServiceUrl.TrimEnd('/')
-            : "http://localhost:5000/mcp";
+        _agentId = configuration["AI_AGENT_ORDER_ID"]
+            ?? throw new InvalidOperationException("AI_AGENT_ORDER_ID environment variable is not set");
     }
 
     /// <summary>
@@ -82,23 +69,7 @@ public class OrderGenerationAgentService
 
         try
         {
-            Log("Connecting to MCP server and loading tools...", "info");
-
-            var mcpClient = await McpClient.CreateAsync(
-                new HttpClientTransport(new()
-                {
-                    Name = "AdventureWorks MCP",
-                    Endpoint = new Uri(_mcpServerUrl)
-                })
-            );
-
-            var mcpTools = await mcpClient.ListToolsAsync();
-            Log($"Loaded {mcpTools.Count} MCP tools", "dim");
-
-            var credential = new DefaultAzureCredential();
-            var chatClient = new AzureOpenAIClient(new Uri(_endpoint), credential)
-                .GetChatClient(_modelDeployment)
-                .AsIChatClient();
+            Log("Initialising Azure AI Foundry order-generation agent...", "info");
 
             // ── Resolve seed customer for "existing-customer" persona ─────────
             CustomerProfile? seedProfile = null;
@@ -131,13 +102,6 @@ public class OrderGenerationAgentService
                 : BuildPersonaDescription(personaType, customPersona);
 
             Log($"Planning order for persona: {personaDescription}", "info");
-
-            var agent = new ChatClientAgent(
-                chatClient,
-                instructions: SystemPrompt,
-                name: "AdventureWorks Order Planner",
-                tools: mcpTools.Cast<Microsoft.Extensions.AI.AITool>().ToList()
-            );
 
             var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
 
@@ -246,19 +210,15 @@ Rules:
 
             Log("AI agent reasoning over catalogue, promotions, and customers...", "dim");
 
-            var messages = new List<Microsoft.Extensions.AI.ChatMessage>
-            {
-                new(ChatRole.User, userMessage)
-            };
+            // Invoke the Foundry agent via the Responses API.
+            // The agent calls GetCategoriesWithProducts, GetActivePromotions, SearchCustomers,
+            // CheckInventoryAvailability, and AnalyzeProductReviews MCP tools server-side.
+            var agentResponse = await _foundryClient.InvokeAsync(_agentId, userMessage);
+            var rawResponse = agentResponse.ResponseText;
 
-            var responseBuilder = new System.Text.StringBuilder();
-            await foreach (var update in agent.RunStreamingAsync(messages))
-            {
-                if (!string.IsNullOrEmpty(update.Text))
-                    responseBuilder.Append(update.Text);
-            }
+            if (agentResponse.ToolsUsed.Count > 0)
+                Log($"Agent used tools: {string.Join(", ", agentResponse.ToolsUsed)}", "dim");
 
-            var rawResponse = responseBuilder.ToString();
             _logger.LogInformation("AI order plan raw response length: {Length}", rawResponse.Length);
 
             Log("AI finished reasoning — parsing order plan...", "dim");
@@ -461,17 +421,8 @@ Rules:
             ?? throw new InvalidOperationException("AI returned unparseable JSON for order plan");
     }
 
-    private const string SystemPrompt = @"You are an expert retail order planner for AdventureWorks, an outdoor sports equipment company.
-Your job is to simulate realistic customer orders by researching available products, current promotions, and existing customers using the MCP tools.
-
-Important rules:
-- Always call GetCategoriesWithProducts FIRST to know what is available.
-- Always call GetActivePromotions to factor in current discounts.
-- Always call SearchCustomers to find a real existing customer if one fits the persona.
-- Always call CheckInventoryAvailability for each product you are seriously considering.
-- Prefer products with good review sentiment (call AnalyzeProductReviews when unsure).
-- Never include out-of-stock products in the order.
-- Return ONLY valid JSON — no preamble, no explanation outside the JSON object.";
+    // The system prompt and tool configuration are managed in Azure AI Foundry on the agent definition.
+    // No local system prompt is needed here.
 }
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────

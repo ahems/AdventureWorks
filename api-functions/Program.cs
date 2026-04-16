@@ -10,12 +10,8 @@ using Azure.Core.Serialization;
 using AddressFunctions.Services;
 using api_functions.Services;
 using Microsoft.OpenApi.Models;
-using Microsoft.Agents.AI;
-using Microsoft.Agents.AI.Hosting.AzureFunctions;
-using Microsoft.Extensions.AI;
+using Azure.AI.Projects;
 using Azure.AI.OpenAI;
-using ModelContextProtocol.Client;
-using System.Text.Json;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
@@ -47,7 +43,7 @@ var defaultCredential = new DefaultAzureCredential(new DefaultAzureCredentialOpt
 });
 builder.Services.AddSingleton(defaultCredential);
 
-// Register HttpClient for MCP tool calls
+// Register HttpClient (retained for services that still need it)
 builder.Services.AddHttpClient();
 
 // Aspire SQL Client with automatic tracing and health checks
@@ -124,34 +120,65 @@ builder.Services.AddScoped<PasswordService>(sp =>
 // Register PdfReceiptGenerator for PDF receipt generation
 builder.Services.AddScoped<PdfReceiptGenerator>();
 
-// Register AI Agent Service for conversational AI with MCP tools using Microsoft Agent Framework
-// Service handles MCP client lifecycle and provides durable agent capabilities
+// Register Azure AI Foundry Responses API client — singleton shared across all agent services.
+// Invokes "kind: prompt" agents created in the new Foundry portal experience.
+// Uses previous_response_id for multi-turn continuity and store:true for Foundry memory.
+builder.Services.AddSingleton<FoundryAgentClient>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var credential = sp.GetRequiredService<DefaultAzureCredential>();
+    var logger = sp.GetRequiredService<ILogger<FoundryAgentClient>>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var projectEndpoint = configuration["AI_FOUNDRY_PROJECT_ENDPOINT"]
+        ?? throw new InvalidOperationException("AI_FOUNDRY_PROJECT_ENDPOINT environment variable is not set");
+
+    // MCP tool URLs — used as fallback tool config when the managed identity
+    // lacks "AIServices/agents/read" permission to fetch the agent definition dynamically.
+    var mcpServiceUrl = configuration["MCP_SERVICE_URL"] ?? string.Empty;
+    var apiUrl = configuration["API_URL"] ?? string.Empty;
+
+    // Derive the DAB API origin (strip any path suffix like /graphql/) and append /mcp
+    var dabMcpUrl = string.Empty;
+    if (!string.IsNullOrEmpty(apiUrl))
+    {
+        if (Uri.TryCreate(apiUrl, UriKind.Absolute, out var apiUri))
+            dabMcpUrl = $"{apiUri.Scheme}://{apiUri.Authority}/mcp";
+    }
+
+    // Model deployment name (falls back to "chat" which is the standard deployment)
+    var modelDeployment = configuration["chatGptDeploymentName"] ?? "chat";
+
+    return new FoundryAgentClient(logger, telemetryClient, credential, projectEndpoint, httpClientFactory, mcpServiceUrl, dabMcpUrl, modelDeployment);
+});
+
+// Register AI Agent Service for conversational AI backed by Azure AI Foundry
 builder.Services.AddScoped<AIAgentService>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
     var logger = sp.GetRequiredService<ILogger<AIAgentService>>();
-    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
     var telemetryClient = sp.GetRequiredService<TelemetryClient>();
 
     return new AIAgentService(
         logger,
         configuration,
-        httpClientFactory,
+        foundryClient,
         telemetryClient);
 });
 
-// Register Promotion Agent Service for single-shot AI promotion generation via MCP tools
+// Register Promotion Agent Service for single-shot AI promotion generation via Foundry
 builder.Services.AddScoped<PromotionAgentService>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
     var logger = sp.GetRequiredService<ILogger<PromotionAgentService>>();
-    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
     var telemetryClient = sp.GetRequiredService<TelemetryClient>();
 
     return new PromotionAgentService(
         logger,
         configuration,
-        httpClientFactory,
+        foundryClient,
         telemetryClient);
 });
 
@@ -160,13 +187,13 @@ builder.Services.AddScoped<HelpMeChooseService>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
     var logger = sp.GetRequiredService<ILogger<HelpMeChooseService>>();
-    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
     var telemetryClient = sp.GetRequiredService<TelemetryClient>();
 
     return new HelpMeChooseService(
         logger,
         configuration,
-        httpClientFactory,
+        foundryClient,
         telemetryClient);
 });
 
@@ -229,12 +256,12 @@ builder.Services.AddScoped<OrderGenerationService>(sp =>
     return new OrderGenerationService(connectionString, sp.GetRequiredService<ILogger<OrderGenerationService>>());
 });
 
-// Register OrderGenerationAgentService: AI+MCP orchestration for order generation wizard
+// Register OrderGenerationAgentService: AI+Foundry orchestration for order generation wizard
 builder.Services.AddScoped<OrderGenerationAgentService>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
     var logger = sp.GetRequiredService<ILogger<OrderGenerationAgentService>>();
-    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
     var telemetryClient = sp.GetRequiredService<TelemetryClient>();
     var orderGenService = sp.GetRequiredService<OrderGenerationService>();
     var receiptService = sp.GetRequiredService<ReceiptService>();
@@ -243,11 +270,11 @@ builder.Services.AddScoped<OrderGenerationAgentService>(sp =>
     return new OrderGenerationAgentService(
         logger,
         configuration,
-        httpClientFactory,
         telemetryClient,
         orderGenService,
         receiptService,
-        pdfGenerator);
+        pdfGenerator,
+        foundryClient);
 });
 
 // Register AIService with Azure OpenAI endpoint
@@ -294,102 +321,6 @@ builder.Services.AddScoped<EmailService>(sp =>
         sp.GetRequiredService<ILogger<EmailService>>());
 });
 
-// Create and register Durable Agent with MCP tools
-// Note: This runs synchronously at startup, so MCP initialization happens before agent registration
-var config = builder.Configuration;
-var mcpServerUrl = config["MCP_SERVICE_URL"];
-if (string.IsNullOrEmpty(mcpServerUrl))
-{
-    mcpServerUrl = "http://localhost:5000/mcp";
-}
-
-// Initialize MCP client synchronously (required for durable agent registration)
-var mcpClient = McpClient.CreateAsync(
-    new HttpClientTransport(
-        new()
-        {
-            Name = "AdventureWorks MCP",
-            Endpoint = new Uri(mcpServerUrl.TrimEnd('/'))
-        }
-    )
-).GetAwaiter().GetResult();
-
-var mcpTools = mcpClient.ListToolsAsync().GetAwaiter().GetResult();
-
-// Initialize DAB MCP client and merge tools (DAB natively exposes entities over MCP)
-// Falls back gracefully if DAB MCP is unavailable (e.g., local dev without DAB running)
-var dabMcpUrl = config["DAB_MCP_URL"];
-if (string.IsNullOrEmpty(dabMcpUrl))
-{
-    var apiUrl = config["API_URL"] ?? "";
-    dabMcpUrl = string.IsNullOrEmpty(apiUrl) ? "" : apiUrl.TrimEnd('/') + "/mcp";
-}
-
-IList<McpClientTool> dabMcpTools = [];
-if (!string.IsNullOrEmpty(dabMcpUrl))
-{
-    try
-    {
-        var dabMcpClient = McpClient.CreateAsync(
-            new HttpClientTransport(
-                new()
-                {
-                    Name = "AdventureWorks DAB",
-                    Endpoint = new Uri(dabMcpUrl)
-                }
-            )
-        ).GetAwaiter().GetResult();
-        dabMcpTools = dabMcpClient.ListToolsAsync().GetAwaiter().GetResult();
-    }
-    catch (Exception ex)
-    {
-        // DAB MCP is optional — log and continue with custom MCP tools only
-        Console.Error.WriteLine($"[Program] DAB MCP unavailable at {dabMcpUrl}: {ex.Message}");
-    }
-}
-
-var allMcpTools = mcpTools.Concat(dabMcpTools);
-
-// Create the durable agent with Azure OpenAI and MCP tools
-var endpoint = config["AZURE_OPENAI_ENDPOINT"]
-    ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT environment variable is not set");
-var deploymentName = config["chatGptDeploymentName"] ?? "chat";
-
-var chatClient = new AzureOpenAIClient(new Uri(endpoint), defaultCredential)
-    .GetChatClient(deploymentName)
-    .AsIChatClient();
-
-var durableAgent = new ChatClientAgent(
-    chatClient,
-    tools: allMcpTools.Cast<Microsoft.Extensions.AI.AITool>().ToList(),
-    name: "AdventureWorksAgent",
-    instructions: @"You are a helpful customer service assistant for AdventureWorks, an outdoor and sporting goods retailer.
-
-You have access to tools that allow you to:
-- Retrieve customer order history and order details
-- Search for products and get detailed product information
-- Find complementary products and personalized recommendations
-- Analyze product reviews and customer sentiment
-- Check real-time inventory availability across warehouses
-
-Guidelines:
-- Be friendly, professional, and helpful
-- When you need to use a tool, tell the customer what you're checking
-- Provide clear, concise answers
-- If you need more information (like order number or product ID), ask for it
-- Suggest relevant products and help with purchase decisions
-- Always maintain customer context throughout the conversation");
-
-// Configure as durable agent for Azure Functions
-builder.ConfigureDurableAgents(options => options.AddAIAgent(durableAgent));
-
 var app = builder.Build();
-
-// Log MCP tools initialization
-var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
-var programLogger = loggerFactory.CreateLogger("Program");
-programLogger.LogInformation(
-    "MCP tools loaded: {CustomCount} custom (from {McpServerUrl}) + {DabCount} DAB (from {DabMcpUrl}) = {TotalCount} total",
-    mcpTools.Count, mcpServerUrl, dabMcpTools.Count, dabMcpUrl, mcpTools.Count + dabMcpTools.Count);
 
 app.Run();

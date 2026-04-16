@@ -1,0 +1,5 @@
+
+Deleting all resources and deployed code on Azure (azd down)
+Local application code is not deleted when running 'azd down'.
+
+Discovering resources to delete...

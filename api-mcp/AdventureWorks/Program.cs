@@ -23,6 +23,11 @@ var connectionString = builder.Configuration.GetConnectionString("AdventureWorks
 var openAiEndpoint = builder.Configuration["AZURE_OPENAI_ENDPOINT"]
 	?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT configuration is required");
 
+// Get api-functions base URL for manufacturing and supply chain tools
+var apiFunctionsUrl = builder.Configuration["API_FUNCTIONS_URL"]
+	?? Environment.GetEnvironmentVariable("API_FUNCTIONS_URL")
+	?? throw new InvalidOperationException("API_FUNCTIONS_URL configuration is required for manufacturing and supply chain tools");
+
 // Register AdventureWorks services with localization
 builder.Services.AddScoped<OrderService>(sp =>
 {
@@ -46,11 +51,23 @@ builder.Services.AddScoped<AIService>(sp =>
 	return new AIService(openAiEndpoint, logger, telemetryClient);
 });
 
+// Register HttpClient factories for api-functions proxy services
+builder.Services.AddHttpClient<ManufacturingService>(client =>
+{
+	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
+});
+builder.Services.AddHttpClient<SupplyChainService>(client =>
+{
+	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
+});
+
 // Register MCP server with SSE transport and AdventureWorks tools
 builder.Services
 	   .AddMcpServer()
-	   .WithHttpTransport(o => o.Stateless = false) // Enable stateful SSE transport
-	   .WithTools<AdventureWorksMcpTools>();
+	   .WithHttpTransport(o => o.Stateless = true) // Stateless mode: no session IDs required, compatible with Azure AI Foundry agents
+	   .WithTools<AdventureWorksMcpTools>()
+	   .WithTools<ManufacturingMcpTools>()
+	   .WithTools<SupplyChainMcpTools>();
 
 builder.AddServiceDefaults();
 

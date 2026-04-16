@@ -20,8 +20,7 @@ param chatGptDeploymentName string = ''
 param storageAccountName string = ''
 param communicationServiceEndpoint string = ''
 param emailSenderDomain string = ''
-param mcpServiceUrl string = ''
-param dabMcpUrl string = ''
+param foundryProjectEndpoint string = ''
 param simulationTimeScaleFactor string = '60'
 param simulationScrapRate string = '0.05'
 param materialsRetryDelaySeconds string = '30'
@@ -174,12 +173,8 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
               value: emailSenderDomain
             }
             {
-              name: 'MCP_SERVICE_URL'
-              value: mcpServiceUrl
-            }
-            {
-              name: 'DAB_MCP_URL'
-              value: dabMcpUrl
+              name: 'AI_FOUNDRY_PROJECT_ENDPOINT'
+              value: foundryProjectEndpoint
             }
             {
               name: 'SIMULATION_TIME_SCALE_FACTOR'

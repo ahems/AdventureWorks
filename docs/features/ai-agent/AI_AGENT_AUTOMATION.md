@@ -4,7 +4,7 @@ This document describes the automated AI Agent creation process integrated into 
 
 ## Overview
 
-During `azd provision`, the deployment automatically creates an AI Agent that integrates with the AdventureWorks MCP Server. This eliminates the need for manual agent setup and ensures the agent is always configured correctly with the latest deployment.
+During `azd provision`, the deployment automatically creates four Azure AI Foundry Agents that integrate with the AdventureWorks MCP servers. This eliminates the need for manual agent setup and ensures agents are always configured correctly with the latest deployment.
 
 ## Automated Process
 
@@ -13,21 +13,55 @@ During `azd provision`, the deployment automatically creates an AI Agent that in
 When you run `azd up` or `azd provision`, the system automatically:
 
 1. **Deploys Infrastructure** (via Bicep templates)
-   - Azure AI Foundry (Cognitive Services)
-   - Azure Functions Container App with MCP Server
+   - Azure AI Foundry Hub + Project
+   - Azure OpenAI with GPT model deployments
+   - Azure Container Apps (api-functions, api-mcp, DAB)
    - All supporting Azure resources
 
-2. **Configuration** (manual or via custom automation)
-   - AI Agent configuration is not automated by default
-   - Can be configured manually using `agent-framework-azure-ai` Python package
-   - Agent can use MCP tools from the deployed MCP Server
-   - Configuration requires setting up agent instructions for customer service
-   - Configuration can be saved to `AI_AGENT_CONFIG.json`
+2. **Creates Foundry Agents** (`scripts/utilities/create-foundry-agents.sh`, called from `postprovision.sh`)
+   - **AdventureWorks Chat Agent** (`AI_AGENT_CHAT_ID`) — customer service chat
+   - **Order Generation Agent** (`AI_AGENT_ORDER_ID`) — realistic order simulation
+   - **Promotion Agent** (`AI_AGENT_PROMOTION_ID`) — promotion strategy generation
+   - **Help Me Choose Agent** (`AI_AGENT_HELP_ME_CHOOSE_ID`) — product advisor wizard
+   
+   Each agent is registered with two MCP tool servers:
+   - `api-mcp` service (semantic product/catalog tools)
+   - DAB `/mcp` endpoint (raw entity data tools)
 
-3. **Environment Variables** (available in azd environment)
-   - `AI_AGENT_MODEL`: Deployed model name
-   - `API_FUNCTIONS_URL`: MCP Server endpoint
-   - `AZURE_OPENAI_ENDPOINT`: AI Foundry endpoint
+3. **Injects Agent IDs** (`scripts/hooks/api-functions-postdeploy.sh`)
+   - After `azd deploy`, patches the `api-functions` Container App with the agent IDs as environment variables
+
+4. **Environment Variables** (available in azd environment)
+   - `AI_FOUNDRY_PROJECT_ENDPOINT`: Azure AI Foundry project endpoint
+   - `AI_AGENT_CHAT_ID`: Foundry agent ID for chat
+   - `AI_AGENT_ORDER_ID`: Foundry agent ID for order generation
+   - `AI_AGENT_PROMOTION_ID`: Foundry agent ID for promotions
+   - `AI_AGENT_HELP_ME_CHOOSE_ID`: Foundry agent ID for the wizard
+   - `MCP_SERVICE_URL`: api-mcp service endpoint
+
+## Agent Configuration
+
+### Agent Details
+
+Each agent is created via `az rest --method PUT` to the Foundry data plane API with:
+
+- **Model:** Auto-selected from `chatGptDeploymentName` env var (e.g., `gpt-4.1-mini`)
+- **Authentication:** Azure Managed Identity (passwordless)
+- **Tool Servers:** Two MCP servers registered per agent
+  - `api-mcp` — custom semantic tools (SearchProducts, GetCustomerOrders, etc.)
+  - DAB `/mcp` — GraphQL entity tools (Product, Customer, SalesOrder, etc.)
+
+### re-running Agent Creation
+
+The creation script is idempotent — re-running `postprovision.sh` will recreate agents. To update an agent's instructions or tool configuration, edit `scripts/utilities/create-foundry-agents.sh` and re-run:
+
+```bash
+bash scripts/utilities/create-foundry-agents.sh
+```
+
+## Thread Persistence
+
+Each conversation uses a Foundry-managed thread (`threadId`) that persists across requests. The frontend stores the `threadId` and sends it with each subsequent request; the C# service reuses the existing thread for full context continuity.
 
 ## Agent Configuration
 

@@ -1,140 +1,64 @@
 using System.Text.Json;
+using Azure.AI.OpenAI;
 using Azure.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
-using ModelContextProtocol.Client;
-using Azure.AI.OpenAI;
 using OpenAI.Chat;
 
 namespace api_functions.Services;
 
 /// <summary>
-/// AI Agent Service - Manages AI agent interactions using Microsoft Agent Framework with MCP tools
+/// Conversational AI service backed by Azure AI Foundry "kind: prompt" agents.
+///
+/// Multi-turn continuity is managed by Foundry via <c>previous_response_id</c>:
+/// the caller passes back the <see cref="AgentResponse.ThreadId"/> (which holds the
+/// Foundry response ID) from the previous message, and Foundry automatically resumes
+/// the stored conversation — no client-side thread management needed.
+///
+/// MCP tool execution (product search, order lookup, etc.) runs server-side in
+/// Foundry, so this service only processes the final text response.
 /// </summary>
 public class AIAgentService
 {
     private readonly ILogger<AIAgentService> _logger;
-    private readonly IConfiguration _configuration;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly FoundryAgentClient _foundryClient;
     private readonly TelemetryClient _telemetryClient;
-    private readonly string _endpoint;
+    private readonly string _agentId;
+    private readonly string _openAiEndpoint;
     private readonly string _modelDeployment;
-    private readonly string _mcpServerUrl;
-    private AIAgent? _agent;
-    private McpClient? _mcpClient;
-    private readonly SemaphoreSlim _initLock = new(1, 1);
 
     public AIAgentService(
         ILogger<AIAgentService> logger,
         IConfiguration configuration,
-        IHttpClientFactory httpClientFactory,
+        FoundryAgentClient foundryClient,
         TelemetryClient telemetryClient)
     {
         _logger = logger;
-        _configuration = configuration;
-        _httpClientFactory = httpClientFactory;
+        _foundryClient = foundryClient;
         _telemetryClient = telemetryClient;
 
-        // Get AI Foundry configuration
-        _endpoint = configuration["AZURE_OPENAI_ENDPOINT"]
-            ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
+        _agentId = configuration["AI_AGENT_CHAT_ID"]
+            ?? throw new InvalidOperationException("AI_AGENT_CHAT_ID environment variable is not set");
+        _openAiEndpoint = configuration["AZURE_OPENAI_ENDPOINT"]
+            ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT environment variable is not set");
         _modelDeployment = configuration["chatGptDeploymentName"] ?? "chat";
 
-        // Get MCP server URL (external api-mcp service)
-        // URL should already include /mcp endpoint: https://av-mcp-xxx.azurecontainerapps.io/mcp
-        var mcpServiceUrl = configuration["MCP_SERVICE_URL"];
-        if (!string.IsNullOrEmpty(mcpServiceUrl))
-        {
-            _mcpServerUrl = mcpServiceUrl.TrimEnd('/');
-        }
-        else
-        {
-            // For local development, point to the api-mcp service
-            _mcpServerUrl = "http://localhost:5000/mcp";
-        }
-
-        _logger.LogInformation($"AI Agent configured with endpoint: {_endpoint}, model: {_modelDeployment}, MCP: {_mcpServerUrl}");
-    }
-
-
-    /// <summary>
-    /// Initialize the AI agent with MCP tools (lazy initialization)
-    /// </summary>
-    private async Task<AIAgent> GetOrCreateAgentAsync(int? customerId = null, string? cultureId = null)
-    {
-        if (_agent != null)
-        {
-            return _agent;
-        }
-
-        await _initLock.WaitAsync();
-        try
-        {
-            if (_agent != null)
-            {
-                return _agent;
-            }
-
-            _logger.LogInformation("Initializing AI Agent with Microsoft Agent Framework...");
-
-            // Initialize MCP client for AdventureWorks tools
-            _mcpClient = await McpClient.CreateAsync(
-                new HttpClientTransport(
-                    new()
-                    {
-                        Name = "AdventureWorks MCP",
-                        Endpoint = new Uri(_mcpServerUrl)
-                    }
-                )
-            );
-
-            // Get MCP tools
-            var mcpTools = await _mcpClient.ListToolsAsync().ConfigureAwait(false);
-            _logger.LogInformation($"Loaded {mcpTools.Count} MCP tools from {_mcpServerUrl}");
-
-            // Create Azure OpenAI client using Agent Framework
-            var credential = new DefaultAzureCredential();
-            var client = new Azure.AI.OpenAI.AzureOpenAIClient(
-                new Uri(_endpoint),
-                credential
-            );
-            var chatClient = client.GetChatClient(_modelDeployment).AsIChatClient();
-
-            // Build system instructions with context
-            var systemInstructions = BuildSystemPrompt(customerId, cultureId);
-
-            // Create the AI agent with MCP tools using ChatClientAgent
-            _agent = new ChatClientAgent(
-                chatClient,
-                instructions: systemInstructions,
-                name: "AdventureWorks Customer Service Agent",
-                tools: mcpTools.Cast<Microsoft.Extensions.AI.AITool>().ToList()
-            );
-
-            _logger.LogInformation("AI Agent initialized successfully");
-
-            return _agent;
-        }
-        finally
-        {
-            _initLock.Release();
-        }
+        _logger.LogInformation("AIAgentService configured with Foundry agent ID: {AgentId}", _agentId);
     }
 
     /// <summary>
-    /// Process a chat message with the AI agent and MCP tools using Agent Framework
+    /// Process a chat message using the Foundry Responses API.
+    /// Pass <paramref name="threadId"/> (a previous Foundry response ID) to continue a stored conversation.
     /// </summary>
     public async Task<AgentResponse> ProcessMessageAsync(
         string message,
         List<AgentChatMessage> conversationHistory,
         int? customerId = null,
-        string? cultureId = null)
+        string? cultureId = null,
+        string? threadId = null)
     {
-        // Generate conversation session ID for correlation
         var sessionId = customerId.HasValue ? $"customer-{customerId.Value}" : Guid.NewGuid().ToString();
 
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("AgentChat");
@@ -142,97 +66,61 @@ public class AIAgentService
         operation.Telemetry.Properties["CustomerId"] = customerId?.ToString() ?? "anonymous";
         operation.Telemetry.Properties["CultureId"] = cultureId ?? "default";
         operation.Telemetry.Properties["MessageLength"] = message.Length.ToString();
-        operation.Telemetry.Properties["HistoryLength"] = conversationHistory.Count.ToString();
+        operation.Telemetry.Properties["HasPreviousResponse"] = (!string.IsNullOrEmpty(threadId)).ToString();
 
         var startTime = DateTimeOffset.UtcNow;
 
         try
         {
-            // Get or create the agent
-            var agent = await GetOrCreateAgentAsync(customerId, cultureId);
-            var chatAgent = (ChatClientAgent)agent; // Cast to access ChatClientAgent-specific methods
+            var userMessageText = BuildUserMessage(message, customerId, cultureId);
 
-            // Build all messages to send to agent (history + new user message)
-            var allMessages = new List<Microsoft.Extensions.AI.ChatMessage>();
-
-            // Add conversation history first
-            foreach (var h in conversationHistory)
+            // On first turn, seed the Foundry conversation with any history from the client.
+            IList<FoundryMessage>? historyToSeed = null;
+            if (string.IsNullOrEmpty(threadId) && conversationHistory.Count > 0)
             {
-                var role = h.Role.ToLowerInvariant() switch
+                historyToSeed = conversationHistory.Select(h => new FoundryMessage
                 {
-                    "user" => ChatRole.User,
-                    "assistant" => ChatRole.Assistant,
-                    "system" => ChatRole.System,
-                    _ => ChatRole.User
-                };
-                allMessages.Add(new Microsoft.Extensions.AI.ChatMessage(role, h.Content));
+                    Role = h.Role.ToLowerInvariant() == "assistant" ? "assistant" : "user",
+                    Content = h.Content
+                }).ToList();
             }
 
-            // Add the new user message
-            allMessages.Add(new Microsoft.Extensions.AI.ChatMessage(ChatRole.User, message));
+            // ── Invoke Foundry agent via Responses API ────────────────────────────
+            var agentResponse = await _foundryClient.InvokeAsync(
+                agentId: _agentId,
+                userMessage: userMessageText,
+                conversationHistory: historyToSeed,
+                previousResponseId: string.IsNullOrEmpty(threadId) ? null : threadId);
 
-            _logger.LogInformation("Processing message with {HistoryCount} historical messages for customer {CustomerId}",
-                conversationHistory.Count, customerId);
-
-            // Track which tools were used
-            var toolsUsed = new List<string>();
-            var totalTokens = 0;
-            var responseBuilder = new System.Text.StringBuilder();
-
-            // Run agent in streaming mode with ALL messages (history + new)
-            // The Agent Framework processes all messages and maintains context
-            await foreach (var update in agent.RunStreamingAsync(allMessages))
-            {
-                if (!string.IsNullOrEmpty(update.Text))
-                {
-                    responseBuilder.Append(update.Text);
-                }
-
-                // Note: AgentRunResponseUpdate from Agent Framework may have different properties
-                // Tracking will happen at completion level for now
-            }
-
-            var assistantMessage = responseBuilder.ToString();
-
-            // Generate contextual follow-up questions
-            var suggestions = await GenerateSuggestedQuestionsAsync(
-                agent,
-                conversationHistory,
-                message,
-                assistantMessage,
-                customerId);
+            // ── Suggested follow-up questions ─────────────────────────────────────
+            var suggestions = await GenerateSuggestedQuestionsAsync(message, agentResponse.ResponseText, customerId);
 
             var totalDuration = DateTimeOffset.UtcNow - startTime;
 
-            // Track comprehensive agent metrics
             _telemetryClient.TrackEvent("Agent.ConversationCompleted", new Dictionary<string, string>
             {
                 ["SessionId"] = sessionId,
                 ["CustomerId"] = customerId?.ToString() ?? "anonymous",
-                ["ToolsUsedCount"] = toolsUsed.Count.ToString(),
-                ["ToolsUsed"] = string.Join(",", toolsUsed.Distinct()),
-                ["TotalTokens"] = totalTokens.ToString(),
+                ["ResponseId"] = agentResponse.ResponseId ?? string.Empty,
+                ["ToolsUsedCount"] = agentResponse.ToolsUsed.Count.ToString(),
+                ["ToolsUsed"] = string.Join(",", agentResponse.ToolsUsed.Distinct()),
                 ["DurationMs"] = totalDuration.TotalMilliseconds.ToString("F0"),
-                ["ResponseLength"] = assistantMessage.Length.ToString()
+                ["ResponseLength"] = agentResponse.ResponseText.Length.ToString()
             });
-
-            _telemetryClient.TrackMetric("AI.Agent.TotalTokensPerConversation", totalTokens);
-            _telemetryClient.TrackMetric("AI.Agent.ToolCallsPerConversation", toolsUsed.Count);
-            _telemetryClient.TrackMetric("AI.Agent.ConversationDurationMs", totalDuration.TotalMilliseconds);
 
             operation.Telemetry.Success = true;
 
             return new AgentResponse
             {
-                Response = assistantMessage,
+                Response = agentResponse.ResponseText,
                 SuggestedQuestions = suggestions,
-                ToolsUsed = toolsUsed.Distinct().ToList()
+                ToolsUsed = agentResponse.ToolsUsed.Distinct().ToList(),
+                ThreadId = agentResponse.ResponseId  // Foundry response ID — pass back as threadId for next turn
             };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing agent message");
-
             operation.Telemetry.Success = false;
             _telemetryClient.TrackException(ex, new Dictionary<string, string>
             {
@@ -240,109 +128,81 @@ public class AIAgentService
                 ["SessionId"] = sessionId,
                 ["CustomerId"] = customerId?.ToString() ?? "anonymous"
             });
-
             throw;
         }
     }
 
-    private string BuildSystemPrompt(int? customerId, string? cultureId = null)
+    /// <summary>
+    /// Prepends customer/culture context to the user message so the agent has it inline.
+    /// </summary>
+    private static string BuildUserMessage(string message, int? customerId, string? cultureId)
     {
-        var cultureInfo = !string.IsNullOrEmpty(cultureId)
-            ? $"\n\nIMPORTANT: The customer's preferred language/culture is '{cultureId}'. All responses and product information should be in this language when available. When calling MCP tools, pass the cultureId parameter to retrieve localized content."
-            : "";
-
-        return $@"You are a helpful customer service assistant for AdventureWorks, an outdoor and sporting goods retailer.
-
-{(customerId.HasValue ? $"You are currently helping Customer ID: {customerId.Value}" : "You are helping a customer")}{cultureInfo}
-
-You have access to MCP tools that allow you to:
-- Retrieve customer order history and order details
-- Search for products and get detailed product information
-- Find complementary products and personalized recommendations
-- Analyze product reviews and customer sentiment
-- Check real-time inventory availability across warehouses
-
-Guidelines:
-- Be friendly, professional, and helpful
-- When you need to use a tool, tell the customer what you're checking
-- Provide clear, concise answers
-- If you need more information (like order number or product ID), ask for it
-- Suggest relevant products and help with purchase decisions
-- Always maintain customer context throughout the conversation
-- Use the MCP tools naturally when needed to answer customer questions";
+        if (customerId.HasValue || !string.IsNullOrEmpty(cultureId))
+        {
+            var parts = new List<string>();
+            if (customerId.HasValue) parts.Add($"customer_id={customerId.Value}");
+            if (!string.IsNullOrEmpty(cultureId)) parts.Add($"culture={cultureId}");
+            return $"[{string.Join(", ", parts)}] {message}";
+        }
+        return message;
     }
 
     private async Task<List<string>> GenerateSuggestedQuestionsAsync(
-        AIAgent agent,
-        List<AgentChatMessage> conversationHistory,
         string userMessage,
         string assistantResponse,
         int? customerId)
     {
         try
         {
-            var suggestionPrompt = $@"Based on this customer service conversation, generate 2 relevant follow-up questions the customer might want to ask next.
+            var credential = new DefaultAzureCredential();
+            var chatClient = new AzureOpenAIClient(new Uri(_openAiEndpoint), credential)
+                .GetChatClient(_modelDeployment);
 
-Conversation context:
-User: {userMessage}
-Assistant: {assistantResponse}
+            var prompt = $"""
+                Based on this customer service conversation, generate 2 relevant follow-up questions:
+                User: {userMessage}
+                Assistant: {assistantResponse}
 
-{(customerId.HasValue ? $"Customer ID: {customerId.Value}" : "")}
+                Generate 2 short questions (each under 50 characters) a customer might ask next.
+                Return ONLY a JSON array of strings. Example: ["Track my order", "Find bike helmets"]
+                """;
 
-Generate 2 short, natural follow-up questions (each under 50 characters) that would be helpful for this customer.
-Return ONLY the questions as a JSON array of strings, no other text.
+            var completion = await chatClient.CompleteChatAsync(
+                [
+                    new SystemChatMessage("You are a helpful assistant that generates follow-up questions."),
+                    new UserChatMessage(prompt)
+                ],
+                new ChatCompletionOptions { MaxOutputTokenCount = 100 });
 
-Example format: [""Track my order"", ""Find bike helmets""]";
-
-
-            var response = await agent.RunAsync(suggestionPrompt);
-
-            // Extract text from AgentRunResponse
-            var responseText = response.ToString();
-
-            // Parse JSON array of suggestions
-            var suggestions = JsonSerializer.Deserialize<List<string>>(responseText);
-            return suggestions ?? new List<string>
-            {
-                "Tell me more",
-                "What else can you help with?"
-            };
+            var raw = completion.Value.Content[0].Text?.Trim() ?? "[]";
+            return JsonSerializer.Deserialize<List<string>>(raw)
+                ?? new List<string> { "Tell me more", "What else can you help with?" };
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to generate suggestions, using defaults");
-            return new List<string>
-            {
-                "Show my orders",
-                "Search products"
-            };
-        }
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        if (_mcpClient != null)
-        {
-            await _mcpClient.DisposeAsync();
+            return new List<string> { "Show my orders", "Search products" };
         }
     }
 }
 
-/// <summary>
-/// Chat message for conversation history
-/// </summary>
+/// <summary>Chat message for conversation history.</summary>
 public class AgentChatMessage
 {
     public string Role { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// Agent response with message and suggestions
-/// </summary>
+/// <summary>Agent response returned to the caller.</summary>
 public class AgentResponse
 {
     public string Response { get; set; } = string.Empty;
     public List<string> SuggestedQuestions { get; set; } = new();
     public List<string> ToolsUsed { get; set; } = new();
+    /// <summary>
+    /// Holds the Foundry response ID (format: "resp_…").
+    /// Pass this back as <c>threadId</c> on the next message to continue the conversation
+    /// via Foundry’s native <c>previous_response_id</c> mechanism.
+    /// </summary>
+    public string? ThreadId { get; set; }
 }

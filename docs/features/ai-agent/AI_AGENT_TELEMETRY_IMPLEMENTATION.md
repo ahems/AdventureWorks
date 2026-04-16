@@ -33,12 +33,13 @@ Added comprehensive telemetry tracking for all AI operations:
 
 #### 2. **AIAgentService.cs** - Chat Agent Telemetry
 
-Already had comprehensive telemetry for chat agent interactions:
+Full telemetry for Foundry Persistent Agent interactions:
 
-- Request operation tracking for chat completions
-- Custom events for agent responses
-- Tool call tracking
-- MCP server interaction monitoring
+- Request operation tracking with `ThreadId` property
+- `HasThread` property (true when reusing an existing thread)
+- Custom events for agent responses (`Agent.ConversationCompleted`)
+- `ToolsUsed` collected via `GetRunStepsAsync` → `RunStepFunctionToolCall.Name`
+- `ThreadId` returned in response for multi-turn thread persistence tracking
 - Exception tracking with full context
 
 #### 3. **AIAgentFunctions.cs** - HTTP Endpoint Telemetry

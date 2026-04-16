@@ -78,7 +78,8 @@ public class AIAgentFunctions
                 chatRequest.Message,
                 chatRequest.ConversationHistory ?? new List<AgentChatMessage>(),
                 chatRequest.CustomerId,
-                chatRequest.CultureId
+                chatRequest.CultureId,
+                chatRequest.ThreadId
             );
 
             var requestDuration = DateTimeOffset.UtcNow - requestStartTime;
@@ -147,18 +148,18 @@ public class AIAgentFunctions
         await response.WriteAsJsonAsync(new
         {
             status = "operational",
-            version = "2.0",
-            framework = "Microsoft.Agents.AI",
+            version = "3.0",
+            framework = "Azure.AI.Foundry",
             features = new[]
             {
                 "conversational-ai",
-                "mcp-tool-integration",
-                "durable-agent-threads",
+                "foundry-agent-threads",
+                "dual-mcp-servers",
                 "contextual-suggestions",
                 "order-tracking",
                 "product-search",
                 "recommendations",
-                "streaming-responses",
+                "thread-persistence",
                 "observability-telemetry"
             }
         });
@@ -175,4 +176,5 @@ public class AgentChatRequest
     public List<AgentChatMessage>? ConversationHistory { get; set; }
     public int? CustomerId { get; set; }
     public string? CultureId { get; set; }
+    public string? ThreadId { get; set; }
 }

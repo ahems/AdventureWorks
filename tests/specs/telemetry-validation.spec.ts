@@ -30,10 +30,10 @@ async function queryApplicationInsights(
     // This prevents shell interpretation issues with multi-line queries
     const normalizedQuery = query
       .trim()
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0)
-      .join(' ');
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .join(" ");
 
     console.log(
       `\n🔍 Querying Application Insights: ${appInsightsName} in ${resourceGroup}`,
@@ -49,7 +49,7 @@ async function queryApplicationInsights(
       {
         encoding: "utf8",
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-      }
+      },
     );
 
     const parsed = JSON.parse(result);
@@ -84,7 +84,8 @@ test.describe("Application Insights - End-to-End Telemetry Validation", () => {
     const telemetryRequests: string[] = [];
     page.on("request", (request) => {
       const url = request.url();
-      if (url.includes("applicationinsights.azure.com")) {
+      const { hostname } = new URL(url);
+      if (hostname.endsWith(".applicationinsights.azure.com")) {
         telemetryRequests.push(url);
         console.log(`📊 Telemetry request: ${url.split("/").pop()}`);
       }

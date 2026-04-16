@@ -1,62 +1,106 @@
-# AI Agent Migration to Microsoft Agents Framework
+# AI Agent Migration to Azure AI Foundry Agents
 
 ## Summary
 
-Successfully migrated the chat agent in the `api-functions` project from manual Azure OpenAI integration to the **Microsoft Agents Framework (Microsoft.Agents.AI)** with durable agent capabilities and comprehensive observability.
+Migrated all four AI agent services in the `api-functions` project from **Microsoft.Agents.AI** (with local `McpClient` tool execution) to **Azure AI Foundry Persistent Agents** (`Azure.AI.Agents.Persistent`). Agents are now defined and managed in Azure AI Foundry; MCP tool execution happens server-side inside Foundry — no client-side MCP wiring is needed.
 
 ## Changes Made
 
 ### 1. **NuGet Package Updates** ([api-functions.csproj](api-functions/api-functions.csproj))
 
-Added Microsoft Agents Framework packages:
+Removed Microsoft Agents Framework packages:
 
 ```xml
-<PackageReference Include="Microsoft.Agents.AI" Version="*-*" />
-<PackageReference Include="Microsoft.Agents.AI.AzureAI" Version="*-*" />
-<PackageReference Include="Microsoft.Agents.AI.Hosting.AzureFunctions" Version="*-*" />
-<PackageReference Include="Microsoft.Agents.AI.Workflows" Version="*-*" />
+<!-- REMOVED -->
+<PackageReference Include="Microsoft.Agents.AI" />
+<PackageReference Include="Microsoft.Agents.AI.AzureAI" />
+<PackageReference Include="Microsoft.Agents.AI.Hosting.AzureFunctions" />
+<PackageReference Include="Microsoft.Agents.AI.Workflows" />
+<PackageReference Include="ModelContextProtocol" />
 ```
 
-Updated DurableTask packages for compatibility:
+Added Azure AI Foundry SDK:
 
 ```xml
-<PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.11.0" />
-<PackageReference Include="Microsoft.DurableTask.Client" Version="1.18.0" />
+<PackageReference Include="Azure.AI.Agents.Persistent" Version="1.0.0-beta.2" />
+<!-- Azure.AI.Projects was already present -->
 ```
 
-### 2. **AIAgentService Migration** ([Services/AIAgentService.cs](api-functions/Services/AIAgentService.cs))
+### 2. **Foundry Agent Creation** ([scripts/utilities/create-foundry-agents.sh](scripts/utilities/create-foundry-agents.sh))
+
+New standalone script (called from `postprovision.sh`) that creates all four agents as data-plane resources via `az rest --method PUT`. Each agent definition includes two MCP tool servers:
+
+- **api-mcp** – semantic search / product tools
+- **DAB /mcp** – raw entity data tools
+
+Agent IDs are written back to the azd environment (`AI_AGENT_CHAT_ID`, `AI_AGENT_ORDER_ID`, `AI_AGENT_PROMOTION_ID`, `AI_AGENT_HELP_ME_CHOOSE_ID`).
+
+### 3. **Container App Patching** ([scripts/hooks/api-functions-postdeploy.sh](scripts/hooks/api-functions-postdeploy.sh))
+
+New post-deploy hook that reads the four agent IDs from `azd env` and patches the Container App environment variables so the running Functions app can resolve `AI_AGENT_*_ID`.
+
+### 4. **AIAgentService.cs** ([Services/AIAgentService.cs](api-functions/Services/AIAgentService.cs))
 
 **Key Changes:**
 
-- Replaced manual OpenAI SDK usage with **Microsoft Agents Framework**
-- Integrated **Model Context Protocol (MCP)** using native `McpClient` from `ModelContextProtocol` package
-- Implemented **lazy initialization** pattern for agent and MCP client
-- Added **thread-based conversation management** for durability
-- Streaming responses via `RunStreamingAsync()`
+- Injected `PersistentAgentsClient` (singleton registered in Program.cs)
+- Thread persistence: if `threadId` is supplied the existing Foundry thread is reused; otherwise a new one is created and history bootstrapped
+- Polls `RunStatus` until `Completed`; extracts assistant message via `GetMessagesAsync`
+- Tool usage collected from `GetRunStepsAsync` → `RunStepFunctionToolCall.Name`
+- Returns `AgentResponse { Response, SuggestedQuestions, ToolsUsed, ThreadId }`
 
 **Before:**
 
 ```csharp
-var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
-var chatClient = client.GetChatClient(_modelDeployment);
-var completion = await chatClient.CompleteChatAsync(messages, chatOptions);
-// Manual tool call handling loop...
+var mcpClient = await McpClient.CreateAsync(...);
+var mcpTools  = await mcpClient.ListToolsAsync();
+var chatClient = new AzureOpenAIClient(...).GetChatClient(_modelDeployment).AsIChatClient();
+_agent = new ChatClientAgent(chatClient, instructions: ..., tools: mcpTools);
+await foreach (var update in agent.RunStreamingAsync(messages)) { ... }
 ```
 
 **After:**
 
 ```csharp
-var chatClient = client.GetChatClient(_modelDeployment).AsIChatClient();
-_agent = new ChatClientAgent(
-    chatClient,
-    instructions: systemInstructions,
-    name: "AdventureWorks Customer Service Agent",
-    tools: mcpTools.ToArray()
-);
-await foreach (var update in agent.RunStreamingAsync(message, thread))
+// Thread reuse or creation
+var threadId = existing ?? (await _agentsClient.Threads.CreateThreadAsync()).Value.Id;
+await _agentsClient.Messages.CreateMessageAsync(threadId, MessageRole.User, message);
+var run = await _agentsClient.Runs.CreateRunAsync(threadId, _agentId);
+while (run.Value.Status == RunStatus.Queued || run.Value.Status == RunStatus.InProgress)
 {
-    // Framework handles tool calls automatically
+    await Task.Delay(1000);
+    run = await _agentsClient.Runs.GetRunAsync(threadId, run.Value.Id);
 }
+// Extract response and tool names from steps
+```
+
+### 5. **PromotionAgentService / OrderGenerationAgentService / HelpMeChooseService**
+
+Same pattern applied to all three services:
+- Removed `IHttpClientFactory`, `McpClient`, `ChatClientAgent`, `SemaphoreSlim _initLock`, `AIAgent _agent` fields
+- Injected `PersistentAgentsClient` + `_agentId` from config
+- Fresh thread per call (stateless); poll to completion; extract last assistant message
+
+### 6. **Thread Persistence in the Frontend**
+
+- `app/src/lib/mcpService.ts`: `threadId?` added to `AgentChatRequest` and `AgentChatResponse`
+- `app/src/components/AIChatOverlay.tsx`: `useState<string | undefined>` tracks `threadId`; passed on each request and stored from each response; cleared when the overlay is closed or language changes
+
+## Architecture After Migration
+
+```
+Browser → AIChatOverlay     → POST /api/agent/chat { message, threadId? }
+                            ← { response, suggestedQuestions, toolsUsed, threadId }
+
+api-functions/AIAgentFunctions.cs
+  → AIAgentService.ProcessMessageAsync(message, history, customerId, cultureId, threadId?)
+    → PersistentAgentsClient.Runs.CreateRunAsync(threadId, agentId)
+    → Foundry Runs the agent on-platform:
+        ↳ Calls api-mcp MCP tools
+        ↳ Calls DAB /mcp MCP tools
+    → Poll RunStatus → Completed
+    → GetMessagesAsync → response text
+    → GetRunStepsAsync → tool names used
 ```
 
 **MCP Integration:**

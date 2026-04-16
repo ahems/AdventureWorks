@@ -21,23 +21,18 @@ Tests the AI chat endpoints in the Functions API:
 #### 2.1: Agent Status
 
 - **Endpoint**: `GET /api/agent/status`
-- **Validates**: Service is operational and returns configuration
+- **Validates**: Service is operational, `framework` equals `"Azure.AI.Foundry"`, and features include `"foundry-agent-threads"`, `"dual-mcp-servers"`, `"thread-persistence"`
 
 #### 2.2: Simple Chat
 
 - **Endpoint**: `POST /api/agent/chat`
 - **Test**: Basic greeting message
-- **Validates**: AI responds to simple conversational input
+- **Validates**: AI responds to simple conversational input; response contains `threadId`
 
-#### 2.3: Product Search Intent
+#### 2.3: Multi-turn Thread Continuation
 
-- **Test**: "I'm looking for bikes. What do you have?"
-- **Validates**: AI can handle product search queries
-
-#### 2.4: Order Inquiry
-
-- **Test**: "Can you show me my recent orders?"
-- **Validates**: AI can handle order-related questions
+- **Test**: Second message using the `threadId` returned from 2.2
+- **Validates**: The agent resumes the same Foundry thread (contextual continuation)
 
 ### Part 3: MCP Server Tools (Direct)
 
@@ -274,9 +269,10 @@ Test Script
     ↓
     ├─→ Functions API (/api/agent/chat)
     │       ↓
-    │       └─→ Azure OpenAI (GPT-4)
-    │               ↓
-    │               └─→ MCP Server (SSE)
+    │       └─→ Azure AI Foundry (PersistentAgentsClient)
+    │               ↓ (server-side in Foundry)
+    │               ├─→ api-mcp MCP server
+    │               └─→ DAB /mcp endpoint
     │                       ↓
     │                       └─→ Azure SQL
     │                           (Business Data)

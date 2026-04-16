@@ -1,100 +1,42 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Azure.Identity;
-using Azure.AI.OpenAI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
-using ModelContextProtocol.Client;
 
 namespace api_functions.Services;
 
 /// <summary>
-/// Single-shot AI agent service that generates promotion suggestions by reasoning over
-/// live inventory and sales data retrieved via the MCP server's GetProductsForPromotion tool.
+/// Single-shot Azure AI Foundry Agent service that generates promotion suggestions by
+/// reasoning over live inventory and sales data retrieved via the MCP server's
+/// GetProductsForPromotion tool.
 /// </summary>
 public class PromotionAgentService
 {
     private readonly ILogger<PromotionAgentService> _logger;
-    private readonly IConfiguration _configuration;
-    private readonly IHttpClientFactory _httpClientFactory;
     private readonly TelemetryClient _telemetryClient;
-    private readonly string _endpoint;
-    private readonly string _modelDeployment;
-    private readonly string _mcpServerUrl;
-    private AIAgent? _agent;
-    private readonly SemaphoreSlim _initLock = new(1, 1);
+    private readonly FoundryAgentClient _foundryClient;
+    private readonly string _agentId;
 
     public PromotionAgentService(
         ILogger<PromotionAgentService> logger,
         IConfiguration configuration,
-        IHttpClientFactory httpClientFactory,
+        FoundryAgentClient foundryClient,
         TelemetryClient telemetryClient)
     {
         _logger = logger;
-        _configuration = configuration;
-        _httpClientFactory = httpClientFactory;
+        _foundryClient = foundryClient;
         _telemetryClient = telemetryClient;
 
-        _endpoint = configuration["AZURE_OPENAI_ENDPOINT"]
-            ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
-        _modelDeployment = configuration["chatGptDeploymentName"] ?? "chat";
-
-        var mcpServiceUrl = configuration["MCP_SERVICE_URL"];
-        _mcpServerUrl = !string.IsNullOrEmpty(mcpServiceUrl)
-            ? mcpServiceUrl.TrimEnd('/')
-            : "http://localhost:5000/mcp";
-    }
-
-    private async Task<AIAgent> GetOrCreateAgentAsync()
-    {
-        if (_agent != null) return _agent;
-
-        await _initLock.WaitAsync();
-        try
-        {
-            if (_agent != null) return _agent;
-
-            _logger.LogInformation("Initializing PromotionAgent with MCP tools from {McpUrl}", _mcpServerUrl);
-
-            var mcpClient = await McpClient.CreateAsync(
-                new HttpClientTransport(new()
-                {
-                    Name = "AdventureWorks MCP",
-                    Endpoint = new Uri(_mcpServerUrl)
-                })
-            );
-
-            var mcpTools = await mcpClient.ListToolsAsync();
-            _logger.LogInformation("PromotionAgent loaded {Count} MCP tools", mcpTools.Count);
-
-            var credential = new DefaultAzureCredential();
-            var chatClient = new AzureOpenAIClient(new Uri(_endpoint), credential)
-                .GetChatClient(_modelDeployment)
-                .AsIChatClient();
-
-            _agent = new ChatClientAgent(
-                chatClient,
-                instructions: SystemPrompt,
-                name: "AdventureWorks Promotion Strategist",
-                tools: mcpTools.Cast<Microsoft.Extensions.AI.AITool>().ToList()
-            );
-
-            return _agent;
-        }
-        finally
-        {
-            _initLock.Release();
-        }
+        _agentId = configuration["AI_AGENT_PROMOTION_ID"]
+            ?? throw new InvalidOperationException("AI_AGENT_PROMOTION_ID environment variable is not set");
     }
 
     /// <summary>
     /// Generate a promotion suggestion for the given parameters.
-    /// Uses the MCP GetProductsForPromotion tool to retrieve live data, then reasons about
-    /// appropriate products, discount %, and campaign framing.
+    /// Uses the Foundry agent's MCP GetProductsForPromotion tool to retrieve live data,
+    /// then reasons about appropriate products, discount %, and campaign framing.
     /// </summary>
     public async Task<PromotionSuggestion> GeneratePromotionAsync(
         string promotionType,
@@ -113,8 +55,6 @@ public class PromotionAgentService
 
         try
         {
-            var agent = await GetOrCreateAgentAsync();
-
             var categoryContext = subcategoryName != null
                 ? $"in subcategory '{subcategoryName}'"
                 : categoryName != null
@@ -157,20 +97,13 @@ Return ONLY a valid JSON object matching this schema (no markdown, no explanatio
   ""aiReasoning"": ""2-3 sentence explanation of the promotion strategy""
 }}";
 
-            var messages = new List<Microsoft.Extensions.AI.ChatMessage>
-            {
-                new(ChatRole.User, userMessage)
-            };
+            // Invoke the Foundry agent via the Responses API (stateless single-shot).
+            // The agent calls GetProductsForPromotion via MCP server-side.
+            var agentResponse = await _foundryClient.InvokeAsync(_agentId, userMessage);
+            var rawResponse = agentResponse.ResponseText;
 
-            var responseBuilder = new System.Text.StringBuilder();
-            await foreach (var update in agent.RunStreamingAsync(messages))
-            {
-                if (!string.IsNullOrEmpty(update.Text))
-                    responseBuilder.Append(update.Text);
-            }
-
-            var rawResponse = responseBuilder.ToString();
-            _logger.LogInformation("PromotionAgent raw response length: {Length}", rawResponse.Length);
+            _logger.LogInformation("PromotionAgent raw response length: {Length}, tools used: {Tools}",
+                rawResponse.Length, string.Join(",", agentResponse.ToolsUsed));
 
             var suggestion = ParsePromotionSuggestion(rawResponse);
 
@@ -215,10 +148,7 @@ Return ONLY a valid JSON object matching this schema (no markdown, no explanatio
             ?? throw new InvalidOperationException("AI returned unparseable JSON");
     }
 
-    private const string SystemPrompt = @"You are a retail promotion strategist for AdventureWorks, an outdoor and sporting goods company.
-Your job is to analyse product inventory and sales data and design targeted sales promotions that move inventory and delight customers.
-Always call the GetProductsForPromotion MCP tool first to retrieve live data before making recommendations.
-Return ONLY valid JSON — no preamble, no explanation outside the JSON object.";
+    // The system prompt and tool configuration are managed in Azure AI Foundry on the agent definition.
 }
 
 /// <summary>Structured promotion suggestion returned by the AI agent.</summary>

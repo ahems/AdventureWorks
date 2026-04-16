@@ -212,7 +212,13 @@ run_test "AI Agent: Status Check" '
     RESPONSE=$(curl -s -X GET "$FUNCTIONS_API_URL/api/agent/status")
     validate_json "$RESPONSE" && 
     check_field "$RESPONSE" ".status" &&
-    echo "$RESPONSE" | jq .
+    echo "$RESPONSE" | jq . &&
+    FRAMEWORK=$(echo "$RESPONSE" | jq -r ".framework // empty")
+    if [[ "$FRAMEWORK" == "Azure.AI.Foundry" ]]; then
+        echo -e "${GREEN}✓ Framework: Azure.AI.Foundry${NC}"
+    else
+        echo -e "${YELLOW}⚠ Framework field: $FRAMEWORK (expected Azure.AI.Foundry)${NC}"
+    fi
 '
 
 # Test 10: AI Chat - Simple greeting
@@ -222,10 +228,30 @@ run_test "AI Chat: Simple Greeting" '
         -d "{\"message\": \"Hello! I need help.\", \"customerId\": $CUSTOMER_ID}")
     validate_json "$RESPONSE" &&
     check_field "$RESPONSE" ".response" &&
+    check_field "$RESPONSE" ".threadId" &&
+    THREAD_ID=$(echo "$RESPONSE" | jq -r ".threadId // empty") &&
     echo "$RESPONSE" | jq -r ".response" | head -20 &&
     echo "" &&
+    echo -e "${BLUE}Thread ID: $THREAD_ID${NC}" &&
     echo -e "${BLUE}Suggested Questions:${NC}" &&
     echo "$RESPONSE" | jq -r ".suggestedQuestions[]"
+'
+
+# Test 10b: AI Chat - Multi-turn thread continuation
+run_test "AI Chat: Multi-turn Thread Continuation" '
+    FIRST_RESPONSE=$(curl -s -X POST "$FUNCTIONS_API_URL/api/agent/chat" \
+        -H "Content-Type: application/json" \
+        -d "{\"message\": \"Hello\", \"customerId\": $CUSTOMER_ID}")
+    validate_json "$FIRST_RESPONSE" &&
+    THREAD_ID=$(echo "$FIRST_RESPONSE" | jq -r ".threadId // empty")
+    [[ -n "$THREAD_ID" ]] || { echo "No threadId in first response"; exit 1; }
+    SECOND_RESPONSE=$(curl -s -X POST "$FUNCTIONS_API_URL/api/agent/chat" \
+        -H "Content-Type: application/json" \
+        -d "{\"message\": \"What was my first message?\", \"customerId\": $CUSTOMER_ID, \"threadId\": \"$THREAD_ID\"}")
+    validate_json "$SECOND_RESPONSE" &&
+    check_field "$SECOND_RESPONSE" ".response" &&
+    echo -e "${BLUE}Thread reuse validated — ID: $THREAD_ID${NC}" &&
+    echo "$SECOND_RESPONSE" | jq -r ".response" | head -20
 '
 
 # Test 11: AI Chat - Order inquiry (triggers get_customer_orders tool)

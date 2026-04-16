@@ -384,11 +384,8 @@ public class EmailService
                 emailMessage);
 
             _logger.LogInformation(
-                "Email sent to customer {CustomerId} ({FirstName} {LastName}) at {EmailAddress}. Message ID: {MessageId}",
+                "Email sent to customer {CustomerId}. Message ID: {MessageId}",
                 customerId,
-                customerInfo.Value.FirstName,
-                customerInfo.Value.LastName,
-                emailAddress,
                 emailSendOperation.Id);
 
             return true;
@@ -460,16 +457,14 @@ public class EmailService
                 emailMessage);
 
             _logger.LogInformation(
-                "Direct email sent to {EmailAddress}. Subject: {Subject}, Message ID: {MessageId}",
-                toEmail,
-                subject,
+                "Direct email sent successfully. Message ID: {MessageId}",
                 emailSendOperation.Id);
 
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error sending direct email to {EmailAddress}", toEmail);
+            _logger.LogError(ex, "Error sending direct email");
             return false;
         }
     }

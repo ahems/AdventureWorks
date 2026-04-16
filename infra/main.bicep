@@ -240,8 +240,7 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
     storageAccountName: storage.outputs.storageAccountName
     communicationServiceEndpoint: communication.outputs.communicationServiceEndpoint
     emailSenderDomain: communication.outputs.senderDomain
-    mcpServiceUrl: containerAppApiMcp.outputs.apiMcpUrl
-    dabMcpUrl: 'https://${containerAppApi.outputs.apiFqdn}/mcp'
+    foundryProjectEndpoint: aifoundry.outputs.projectEndpoint
     minReplica: 0
     maxReplica: 5
     revisionSuffix: revisionSuffix
@@ -375,6 +374,7 @@ output COMMUNICATION_SERVICE_ENDPOINT string = communication.outputs.communicati
 output EMAIL_SENDER_DOMAIN string = communication.outputs.senderDomain
 output PROJECT_NAME string = aifoundry.outputs.projectName
 output PROJECT_RESOURCE_ID string = aifoundry.outputs.projectResourceId
+output AI_FOUNDRY_PROJECT_ENDPOINT string = aifoundry.outputs.projectEndpoint
 output CONTAINER_APP_ENVIRONMENT_NAME string = containerApp.outputs.containerAppEnvName
 
 // Playwright Workspaces outputs (Azure LoadTest Service)

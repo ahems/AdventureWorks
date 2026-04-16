@@ -249,9 +249,8 @@ public class GenerateOrderReceipts
 
                 await emailQueueClient.SendMessageAsync(emailMessage);
                 _logger.LogInformation(
-                    "Enqueued email delivery for {orderNumber} to EmailAddressId={emailAddressId}",
-                    salesOrderNumber,
-                    emailAddressId
+                    "Enqueued email delivery for {orderNumber}",
+                    salesOrderNumber
                 );
             }
         }

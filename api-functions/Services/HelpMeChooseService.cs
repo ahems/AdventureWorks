@@ -1,37 +1,31 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Azure.Identity;
 using Azure.AI.OpenAI;
+using Azure.Identity;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
-using ModelContextProtocol.Client;
 using Dapper;
 
 namespace api_functions.Services;
 
 /// <summary>
 /// Service that powers the "Help Me Choose" wizard experience.
-/// Step 1: generates personalised questions using AI.
-/// Step 2: takes user answers, uses MCP tools to browse the live catalog,
-///         and returns ranked product recommendations with explanations.
+/// Step 1: generates personalised questions using AI (direct OpenAI).
+/// Step 2: takes user answers, uses the Foundry agent (which calls MCP tools) to browse
+///         the live catalog and returns ranked product recommendations with explanations.
 /// </summary>
 public class HelpMeChooseService
 {
     private readonly ILogger<HelpMeChooseService> _logger;
-    private readonly IConfiguration _configuration;
-    private readonly IHttpClientFactory _httpClientFactory;
     private readonly TelemetryClient _telemetryClient;
+    private readonly FoundryAgentClient _foundryClient;
+    private readonly string _agentId;
     private readonly string _endpoint;
     private readonly string _modelDeployment;
-    private readonly string _mcpServerUrl;
     private readonly string _sqlConnectionString;
-    private AIAgent? _agent;
-    private readonly SemaphoreSlim _initLock = new(1, 1);
 
     // Cached category tree — fetched once per service lifetime.
     private string? _catalogDescription;
@@ -50,12 +44,11 @@ public class HelpMeChooseService
     public HelpMeChooseService(
         ILogger<HelpMeChooseService> logger,
         IConfiguration configuration,
-        IHttpClientFactory httpClientFactory,
+        FoundryAgentClient foundryClient,
         TelemetryClient telemetryClient)
     {
         _logger = logger;
-        _configuration = configuration;
-        _httpClientFactory = httpClientFactory;
+        _foundryClient = foundryClient;
         _telemetryClient = telemetryClient;
 
         _endpoint = configuration["AZURE_OPENAI_ENDPOINT"]
@@ -65,13 +58,11 @@ public class HelpMeChooseService
         _sqlConnectionString = configuration["SQL_CONNECTION_STRING"]
             ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not configured");
 
-        var mcpServiceUrl = configuration["MCP_SERVICE_URL"];
-        _mcpServerUrl = !string.IsNullOrEmpty(mcpServiceUrl)
-            ? mcpServiceUrl.TrimEnd('/')
-            : "http://localhost:5000/mcp";
+        _agentId = configuration["AI_AGENT_HELP_ME_CHOOSE_ID"]
+            ?? throw new InvalidOperationException("AI_AGENT_HELP_ME_CHOOSE_ID environment variable is not set");
 
-        _logger.LogInformation("HelpMeChooseService configured — endpoint: {Endpoint}, MCP: {Mcp}",
-            _endpoint, _mcpServerUrl);
+        _logger.LogInformation("HelpMeChooseService configured — endpoint: {Endpoint}, agent: {AgentId}",
+            _endpoint, _agentId);
     }
 
     // -----------------------------------------------------------------------
@@ -192,48 +183,6 @@ public class HelpMeChooseService
     // Agent initialisation
     // -----------------------------------------------------------------------
 
-    private async Task<AIAgent> GetOrCreateAgentAsync()
-    {
-        if (_agent != null) return _agent;
-
-        await _initLock.WaitAsync();
-        try
-        {
-            if (_agent != null) return _agent;
-
-            _logger.LogInformation("Initialising HelpMeChoose agent with MCP tools from {Mcp}", _mcpServerUrl);
-
-            var mcpClient = await McpClient.CreateAsync(
-                new HttpClientTransport(new()
-                {
-                    Name = "AdventureWorks MCP",
-                    Endpoint = new Uri(_mcpServerUrl)
-                })
-            );
-
-            var mcpTools = await mcpClient.ListToolsAsync();
-            _logger.LogInformation("HelpMeChoose agent loaded {Count} MCP tools", mcpTools.Count);
-
-            var credential = new DefaultAzureCredential();
-            var chatClient = new AzureOpenAIClient(new Uri(_endpoint), credential)
-                .GetChatClient(_modelDeployment)
-                .AsIChatClient();
-
-            _agent = new ChatClientAgent(
-                chatClient,
-                instructions: RecommendationSystemPrompt,
-                name: "AdventureWorks Product Advisor",
-                tools: mcpTools.Cast<Microsoft.Extensions.AI.AITool>().ToList()
-            );
-
-            return _agent;
-        }
-        finally
-        {
-            _initLock.Release();
-        }
-    }
-
     // -----------------------------------------------------------------------
     // Public API
     // -----------------------------------------------------------------------
@@ -252,8 +201,7 @@ public class HelpMeChooseService
             // Use a lightweight, stateless OpenAI call — no MCP needed for question generation.
             var credential = new DefaultAzureCredential();
             var chatClient = new AzureOpenAIClient(new Uri(_endpoint), credential)
-                .GetChatClient(_modelDeployment)
-                .AsIChatClient();
+                .GetChatClient(_modelDeployment);
 
             var contextHint = string.IsNullOrWhiteSpace(context) ? "any of the products listed below" : context;
             var languageHint = string.IsNullOrWhiteSpace(cultureId) ? "English" : cultureId;
@@ -282,15 +230,12 @@ Return ONLY a valid JSON array (no markdown, no extra text):
   ...
 ]";
 
-            var messages = new List<Microsoft.Extensions.AI.ChatMessage>
-            {
-                new(ChatRole.User, prompt)
-            };
-
             var sb = new System.Text.StringBuilder();
-            await foreach (var update in chatClient.GetStreamingResponseAsync(messages))
+            await foreach (var partial in chatClient.CompleteChatStreamingAsync(
+                [new OpenAI.Chat.UserChatMessage(prompt)]))
             {
-                if (!string.IsNullOrEmpty(update.Text)) sb.Append(update.Text);
+                foreach (var textPart in partial.ContentUpdate)
+                    if (!string.IsNullOrEmpty(textPart.Text)) sb.Append(textPart.Text);
             }
 
             var raw = sb.ToString().Trim();
@@ -354,8 +299,6 @@ Return ONLY a valid JSON array (no markdown, no extra text):
 
         try
         {
-            var agent = await GetOrCreateAgentAsync();
-
             // Build a structured summary of the user's answers for the agent
             var answerSummary = string.Join("\n", answers.Select(a => $"- {a.Question}: {a.Answer}"));
 
@@ -428,23 +371,23 @@ Return ONLY a valid JSON object (no markdown, no extra text):
 
 Culture/language for responses: {cultureId ?? "en-US"}";
 
-            var sb = new System.Text.StringBuilder();
-            await foreach (var update in agent.RunStreamingAsync(
-                new List<Microsoft.Extensions.AI.ChatMessage>
-                {
-                    new(ChatRole.User, userMessage)
-                }))
-            {
-                if (!string.IsNullOrEmpty(update.Text)) sb.Append(update.Text);
-            }
-
-            // Emit full user message (AI input) to App Insights
+            // Emit full user message to App Insights before calling the agent
             _telemetryClient.TrackTrace(
                 $"[HelpMeChoose] Recommendation user message sent to AI:\n{userMessage}",
                 SeverityLevel.Verbose,
                 new Dictionary<string, string> { ["Phase"] = "RecommendationInput", ["CultureId"] = cultureId ?? "default" });
 
-            var raw = sb.ToString().Trim();
+            // Invoke the Foundry "kind: prompt" agent via the Responses API.
+            // The agent calls SearchProducts / FindComplementaryProducts MCP tools
+            // server-side; we just wait for the final response.
+            var agentResponse = await _foundryClient.InvokeAsync(_agentId, userMessage);
+            string raw = agentResponse.ResponseText;
+
+            _telemetryClient.TrackEvent("HelpMeChoose.AgentToolsUsed", new Dictionary<string, string>
+            {
+                ["ToolsUsed"] = string.Join(",", agentResponse.ToolsUsed),
+                ["ResponseId"] = agentResponse.ResponseId ?? "unknown"
+            });
 
             // Emit full raw AI response to App Insights
             _telemetryClient.TrackTrace(
@@ -514,21 +457,7 @@ Culture/language for responses: {cultureId ?? "en-US"}";
         SearchTermsUsed = new()
     };
 
-    // -----------------------------------------------------------------------
-    // System prompt
-    // -----------------------------------------------------------------------
-
-    private const string RecommendationSystemPrompt = @"You are AdventureWorks Product Advisor — an enthusiastic, knowledgeable assistant specialising in bikes, cycling components, clothing and outdoor accessories.
-
-Your mission:
-- Use the SearchProducts and FindComplementaryProducts MCP tools to browse the live catalog.
-- Match products to a customer's stated preferences with precision and personality.
-- Always return ONLY the requested JSON — no markdown fences, no preamble, no explanation outside the JSON.
-- If a MCP tool call fails, still return valid JSON with an empty recommendations array and an apologetic summary.
-- Be honest: only recommend products that actually exist in the catalog search results.
-- Product names, prices and IDs must come directly from tool call results — never invent them.
-- Write the summary field in third person. Never use first-person language such as 'I've found' or 'I recommend'. Use phrasing like 'Based on [Name]'s preferences...' or 'These picks have been selected for...' instead.
-- Never guess or infer gender from a customer's name. Only use gender if it is explicitly stated in the customer profile.";
+    // The system prompt and tool configuration are managed in Azure AI Foundry on the agent definition.
 }
 
 // ---------------------------------------------------------------------------

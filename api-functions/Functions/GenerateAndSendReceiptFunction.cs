@@ -219,9 +219,8 @@ public class GenerateAndSendReceiptFunction
             }
 
             _logger.LogInformation(
-                "Processing email sending for order: {orderNumber}, EmailAddressId={emailAddressId}",
-                salesOrderNumber,
-                emailAddressId
+                "Processing email sending for order: {orderNumber}",
+                salesOrderNumber
             );
 
             // Fetch receipt data to build email content
@@ -272,17 +271,15 @@ Thanks for exploring our demo! Feel free to place more pretend orders. 🛒";
             if (emailSuccess)
             {
                 _logger.LogInformation(
-                    "Successfully sent order confirmation email for {orderNumber} to EmailAddressId={emailAddressId}",
-                    salesOrderNumber,
-                    emailAddressId
+                    "Successfully sent order confirmation email for {orderNumber}",
+                    salesOrderNumber
                 );
             }
             else
             {
                 _logger.LogWarning(
-                    "Failed to send order confirmation email for {orderNumber} to EmailAddressId={emailAddressId}",
-                    salesOrderNumber,
-                    emailAddressId
+                    "Failed to send order confirmation email for {orderNumber}",
+                    salesOrderNumber
                 );
             }
         }

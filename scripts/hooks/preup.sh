@@ -84,8 +84,26 @@ ensure_foundry_account() {
     if [[ "$existing_loc" != "$loc" ]]; then
       color_yellow "Warning: Existing account region '$existing_loc' differs from requested '$loc'; proceeding with existing region."
     fi
+    # Ensure allowProjectManagement is enabled on the existing account — required for the
+    # "New Foundry" portal experience. A fresh account created without this flag will show
+    # the classic portal until the flag is set.
+    local allow_pm
+    allow_pm=$(az cognitiveservices account show -n "$acct" -g "$rg" --subscription "$sub_id" \
+      --query properties.allowProjectManagement -o tsv 2>/dev/null || echo "false")
+    if [[ "$allow_pm" != "true" ]]; then
+      color_dark_gray "Enabling allowProjectManagement on existing account '$acct'..."
+      az cognitiveservices account update \
+        --name "$acct" \
+        --resource-group "$rg" \
+        --subscription "$sub_id" \
+        --allow-project-management \
+        >/dev/null
+    fi
   else
     color_green "Creating Microsoft Foundry account '$acct' in $loc..."
+    # --allow-project-management enables the new Microsoft Foundry portal experience
+    # (the "New Foundry" toggle defaults to on). Without this flag the account is created
+    # in classic mode and the toggle defaults to off.
     az cognitiveservices account create \
       --name "$acct" \
       --resource-group "$rg" \
@@ -94,6 +112,7 @@ ensure_foundry_account() {
       --sku S0 \
       --location "$loc" \
       --custom-domain "$acct" \
+      --allow-project-management \
       --yes \
       >/dev/null
   fi

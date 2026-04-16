@@ -31,12 +31,14 @@ interface AgentChatRequest {
   conversationHistory: ChatMessage[];
   customerId?: number;
   cultureId?: string;
+  threadId?: string;
 }
 
 interface AgentChatResponse {
   response: string;
   suggestedQuestions: string[];
   toolsUsed: string[];
+  threadId?: string;
 }
 
 /**
@@ -47,6 +49,7 @@ export const chatWithAgent = async (
   conversationHistory: ChatMessage[],
   customerId?: number,
   cultureId?: string,
+  threadId?: string,
 ): Promise<AgentChatResponse> => {
   const endpoint = getAgentEndpoint();
 
@@ -55,6 +58,7 @@ export const chatWithAgent = async (
     conversationHistory,
     customerId,
     cultureId,
+    threadId,
   };
 
   try {
@@ -78,6 +82,7 @@ export const chatWithAgent = async (
       suggestedQuestions:
         data.SuggestedQuestions || data.suggestedQuestions || [],
       toolsUsed: data.ToolsUsed || data.toolsUsed || [],
+      threadId: data.ThreadId || data.threadId,
     };
 
     return result;

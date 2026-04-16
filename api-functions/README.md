@@ -17,12 +17,12 @@ High‑level responsibilities:
 ### `AIAgentChat`
 
 - **Trigger / Route**: HTTP `POST /api/agent/chat`
-- **Purpose**: Front‑door chat endpoint for the AI support agent. Accepts a message plus optional conversation history and customer metadata, forwards to the `AIAgentService` (which talks to the external MCP server), and returns the agents reply plus suggested follow‑up questions. Emits rich Application Insights telemetry for observability.
+- **Purpose**: Front‑door chat endpoint for the AI support agent. Accepts a message, optional conversation history, customer metadata, and an optional `threadId` for multi-turn conversation persistence. Forwards to `AIAgentService`, which creates or resumes an Azure AI Foundry Persistent Agent thread, polls to completion, and returns the agent's reply, suggested follow‑up questions, tools used, and the `threadId` for the next request. Emits rich Application Insights telemetry for observability.
 
 ### `AIAgentStatus`
 
 - **Trigger / Route**: HTTP `GET /api/agent/status`
-- **Purpose**: Lightweight health/config endpoint for the AI agent. Returns static metadata such as agent status, framework version, and enabled capabilities (MCP tools, durable threads, etc.). Useful for smoke tests and diagnostics.
+- **Purpose**: Lightweight health/config endpoint for the AI agent. Returns static metadata such as agent status, framework version (`Azure.AI.Foundry`), and enabled capabilities (foundry-agent-threads, dual-mcp-servers, thread-persistence). Useful for smoke tests and diagnostics.
 
 ---
 

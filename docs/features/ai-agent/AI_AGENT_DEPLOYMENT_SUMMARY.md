@@ -2,47 +2,38 @@
 
 ## What Was Implemented
 
-Automated AI Agent creation has been fully integrated into the Azure deployment pipeline. The agent is now created automatically during `azd provision` with zero manual configuration required.
+Automated Azure AI Foundry Agent creation has been fully integrated into the Azure deployment pipeline. All four agents are created automatically during `azd provision` with zero manual configuration required.
 
 ## Files Created/Modified
 
 ### New Files
 
-1. **`test_agent.py`** (workspace root)
-   - Interactive test script for the AI Agent
-   - Supports command-line queries
-   - Loads configuration from `AI_AGENT_CONFIG.json`
-   - Usage: `python3 test_agent.py "your query here"`
+1. **`scripts/utilities/create-foundry-agents.sh`**
+   - Creates all four Foundry agents via `az rest --method PUT` to the Foundry data plane
+   - Reads `AI_FOUNDRY_PROJECT_ENDPOINT`, `MCP_SERVICE_URL`, `API_URL` from azd env
+   - Registers two MCP tool servers per agent (api-mcp + DAB /mcp)
+   - Stores returned agent IDs back to azd environment
 
-2. **`AI_AGENT_AUTOMATION.md`** (workspace root)
-   - Comprehensive documentation of the automation process
-   - Troubleshooting guide
-   - Integration examples
-   - Configuration file format reference
+2. **`scripts/hooks/api-functions-postdeploy.sh`**
+   - Post-deploy hook for `api-functions` service
+   - Reads the four agent IDs from azd env
+   - Patches the Container App with `AI_AGENT_*_ID` environment variables
 
-3. **`AI_AGENT_CONFIG.json`** (auto-generated, gitignored)
-   - Created during deployment
-   - Contains agent configuration (name, model, endpoint, tools)
-   - Used by `test_agent.py` and custom integrations
+### Modified Files
 
-### Infrastructure Files
+1. **`scripts/hooks/postprovision.sh`**
+   - Calls `create-foundry-agents.sh` at the end of provisioning
 
-1. **Bicep templates** (in `infra/`)
-   - Deploy Azure AI Foundry (Cognitive Services)
-   - Deploy Azure Functions Container App with MCP Server
-   - Configure supporting Azure resources
+2. **`azure.yaml`**
+   - Added `postdeploy` hook for `api-functions` service → `api-functions-postdeploy.sh`
 
-2. **`api-functions/MCP_SERVER.md`**
-   - Documents MCP Server deployment
-   - Provides testing instructions
-   - Describes available MCP tools
+3. **`infra/modules/aca-api-functions.bicep`**
+   - Added `AI_FOUNDRY_PROJECT_ENDPOINT` env var
+   - Removed `MCP_SERVICE_URL` and `DAB_MCP_URL` env vars (no longer needed at runtime)
 
-3. **`README.md`**
-   - Lists AI Agent feature in key capabilities
-   - References MCP integration documentation
-
-4. **`.gitignore`**
-   - Includes `AI_AGENT_CONFIG.json` (if manually generated)
+4. **`api-functions/api-functions.csproj`**
+   - Removed `Microsoft.Agents.AI.*` packages and `ModelContextProtocol`
+   - Added `Azure.AI.Agents.Persistent`
 
 ## How It Works
 
@@ -55,9 +46,31 @@ azd provision (Bicep templates)
   ↓
 postprovision.sh hook
   ↓
-┌─────────────────────────────────────────┐
-│ 1. Configure database roles              │
-│ 2. Deploy seed-job for data import       │
+┌────────────────────────────────────────────────┐
+│ 1. Configure database roles                     │
+│ 2. Deploy seed-job for data import              │
+│ 3. Run create-foundry-agents.sh                 │
+│    → Creates 4 Foundry agents with MCP servers │
+│    → Stores AI_AGENT_*_ID in azd env           │
+└────────────────────────────────────────────────┘
+  ↓
+azd deploy (application code)
+  ↓
+api-functions-postdeploy.sh hook
+  ↓
+┌────────────────────────────────────────────────┐
+│ Patches Container App with AI_AGENT_*_ID vars  │
+└────────────────────────────────────────────────┘
+  ↓
+✅ Ready to use!
+```
+
+## Agent Capabilities
+
+All four agents are pre-configured with tool access to:
+
+- **api-mcp tools** (SearchProducts, GetCustomerOrders, FindComplementaryProducts, AnalyzeProductReviews, CheckInventoryAvailability, GetCategoriesWithProducts, GetActivePromotions, GetProductsForPromotion)
+- **DAB /mcp tools** (Product, Customer, SalesOrder, ProductCategory, and all other DAB entities)
 │ 3. Set environment variables             │
 │                                          │
 │ Note: AI Agent configuration is manual   │

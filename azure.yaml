@@ -49,6 +49,11 @@ services:
     docker:
       path: Dockerfile
       remoteBuild: true
+    hooks:
+      postdeploy:
+        shell: sh
+        run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/api-functions-postdeploy.sh"
+        interactive: false
   app:
     project: ./app
     host: staticwebapp

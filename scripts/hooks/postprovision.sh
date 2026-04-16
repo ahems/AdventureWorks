@@ -235,6 +235,14 @@ echo "    az containerapp job execution list --name $SEED_JOB_NAME --resource-gr
 
 echo ""
 echo "=========================================="
+echo "Creating / Updating Azure AI Foundry Agents..."
+echo "=========================================="
+bash "$(git rev-parse --show-toplevel)/scripts/utilities/create-foundry-agents.sh" || {
+    echo "  WARNING: Foundry agent creation failed. Re-run 'bash scripts/utilities/create-foundry-agents.sh' after provisioning."
+}
+
+echo ""
+echo "=========================================="
 echo "Refreshing azd environment with deployment outputs..."
 echo "=========================================="
 # Ensure all Bicep outputs (e.g. PLAYWRIGHT_SERVICE_URL) are in the azd environment

@@ -16,7 +16,8 @@ test.describe("Application Insights Telemetry", () => {
     page.on("request", (request) => {
       const url = request.url();
       // Application Insights sends data to *.in.applicationinsights.azure.com
-      if (url.includes("applicationinsights.azure.com")) {
+      const { hostname } = new URL(url);
+      if (hostname.endsWith(".applicationinsights.azure.com")) {
         telemetryRequests.push(url);
         console.log(`📊 Telemetry request detected: ${url}`);
       }
@@ -127,7 +128,8 @@ test.describe("Application Insights Telemetry", () => {
     const telemetryRequests: string[] = [];
     page.on("request", (request) => {
       const url = request.url();
-      if (url.includes("applicationinsights.azure.com")) {
+      const { hostname } = new URL(url);
+      if (hostname.endsWith(".applicationinsights.azure.com")) {
         telemetryRequests.push(url);
       }
     });
