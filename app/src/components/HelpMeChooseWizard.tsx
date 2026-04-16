@@ -242,6 +242,7 @@ export const HelpMeChooseWizard: React.FC<HelpMeChooseWizardProps> = ({
           isAuthenticated ? undefined : gender || undefined,
           heightLabel || undefined,
           selectedColors.length > 0 ? selectedColors : undefined,
+          isAuthenticated ? user?.businessEntityId : undefined,
         );
         setRecommendations(res.recommendations);
         setSummary(res.summary);

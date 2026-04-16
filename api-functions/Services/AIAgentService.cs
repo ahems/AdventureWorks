@@ -90,7 +90,8 @@ public class AIAgentService
                 agentId: _agentId,
                 userMessage: userMessageText,
                 conversationHistory: historyToSeed,
-                previousResponseId: string.IsNullOrEmpty(threadId) ? null : threadId);
+                previousResponseId: string.IsNullOrEmpty(threadId) ? null : threadId,
+                userId: customerId.HasValue ? customerId.Value.ToString() : null);
 
             // ── Suggested follow-up questions ─────────────────────────────────────
             var suggestions = await GenerateSuggestedQuestionsAsync(message, agentResponse.ResponseText, customerId);

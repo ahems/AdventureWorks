@@ -49,18 +49,50 @@ import { trackError, trackEvent, trackPageView } from "@/lib/appInsights";
 // ---------------------------------------------------------------------------
 
 const HEIGHT_BANDS = [
-  { label_cm: "Under 155 cm",  label_imperial: "Under 5'1\"",   sizeHint: "XS / 38"    },
-  { label_cm: "155 – 165 cm",  label_imperial: "5'1\" – 5'5\"", sizeHint: "S / 38–42"  },
-  { label_cm: "165 – 175 cm",  label_imperial: "5'5\" – 5'9\"", sizeHint: "M / 42–46"  },
-  { label_cm: "175 – 183 cm",  label_imperial: "5'9\" – 6'0\"", sizeHint: "L / 46–50"  },
-  { label_cm: "183 – 193 cm",  label_imperial: "6'0\" – 6'4\"", sizeHint: "XL / 50–54" },
-  { label_cm: "Over 193 cm",   label_imperial: "Over 6'4\"",    sizeHint: "XL / 54+"   },
+  {
+    label_cm: "Under 155 cm",
+    label_imperial: "Under 5'1\"",
+    sizeHint: "XS / 38",
+  },
+  {
+    label_cm: "155 – 165 cm",
+    label_imperial: "5'1\" – 5'5\"",
+    sizeHint: "S / 38–42",
+  },
+  {
+    label_cm: "165 – 175 cm",
+    label_imperial: "5'5\" – 5'9\"",
+    sizeHint: "M / 42–46",
+  },
+  {
+    label_cm: "175 – 183 cm",
+    label_imperial: "5'9\" – 6'0\"",
+    sizeHint: "L / 46–50",
+  },
+  {
+    label_cm: "183 – 193 cm",
+    label_imperial: "6'0\" – 6'4\"",
+    sizeHint: "XL / 50–54",
+  },
+  {
+    label_cm: "Over 193 cm",
+    label_imperial: "Over 6'4\"",
+    sizeHint: "XL / 54+",
+  },
 ] as const;
 
 // Known AdventureWorks product colours — used immediately while (or if) the
 // live API fetch is in-flight or fails, so chips always render.
 const FALLBACK_COLORS = [
-  "Black", "Blue", "Grey", "Multi", "Red", "Silver", "Silver/Black", "White", "Yellow",
+  "Black",
+  "Blue",
+  "Grey",
+  "Multi",
+  "Red",
+  "Silver",
+  "Silver/Black",
+  "White",
+  "Yellow",
 ];
 
 // ---------------------------------------------------------------------------
@@ -148,13 +180,15 @@ const HelpMeChoosePage: React.FC = () => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<WizardAnswer[]>([]);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const [enrichedRecs, setEnrichedRecs] = useState<EnrichedRecommendation[]>([]);
+  const [enrichedRecs, setEnrichedRecs] = useState<EnrichedRecommendation[]>(
+    [],
+  );
   const [summary, setSummary] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
   // Profile state
-  const [gender, setGender]               = useState<string>("");
-  const [heightLabel, setHeightLabel]     = useState<string>("");
+  const [gender, setGender] = useState<string>("");
+  const [heightLabel, setHeightLabel] = useState<string>("");
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   // Seed with fallback colours immediately so chips always render.
   // Live data from the API will overwrite this when it arrives.
@@ -178,7 +212,9 @@ const HelpMeChoosePage: React.FC = () => {
         if (meta.colors.length > 0) setCatalogMeta(meta);
         // If API returns empty for any reason keep the fallback colours
       })
-      .catch(() => { /* keep the fallback colours already in state */ });
+      .catch(() => {
+        /* keep the fallback colours already in state */
+      });
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -236,7 +272,14 @@ const HelpMeChoosePage: React.FC = () => {
       setErrorMsg(t("error.loadQuestions"));
       setStep("error");
     }
-  }, [selectedLanguage, gender, heightLabel, selectedColors, isAuthenticated, t]);
+  }, [
+    selectedLanguage,
+    gender,
+    heightLabel,
+    selectedColors,
+    isAuthenticated,
+    t,
+  ]);
 
   const handleOptionSelect = (option: string) => {
     setSelectedOption(option);
@@ -248,7 +291,11 @@ const HelpMeChoosePage: React.FC = () => {
     const currentQuestion = questions[currentQuestionIndex];
     const newAnswers: WizardAnswer[] = [
       ...answers,
-      { questionId: currentQuestion.id, question: currentQuestion.text, answer: selectedOption },
+      {
+        questionId: currentQuestion.id,
+        question: currentQuestion.text,
+        answer: selectedOption,
+      },
     ];
     setAnswers(newAnswers);
     setSelectedOption(null);
@@ -266,16 +313,19 @@ const HelpMeChoosePage: React.FC = () => {
           gender || undefined,
           heightLabel || undefined,
           selectedColors.length > 0 ? selectedColors : undefined,
+          isAuthenticated ? user?.businessEntityId : undefined,
         );
 
         // Enrich with photos
         const productIds = res.recommendations.map((r) => r.productId);
         const thumbMap = await fetchThumbnailsForProducts(productIds);
 
-        const enriched: EnrichedRecommendation[] = res.recommendations.map((r) => ({
-          ...r,
-          thumbBase64: thumbMap.get(r.productId) ?? null,
-        }));
+        const enriched: EnrichedRecommendation[] = res.recommendations.map(
+          (r) => ({
+            ...r,
+            thumbBase64: thumbMap.get(r.productId) ?? null,
+          }),
+        );
 
         setEnrichedRecs(enriched);
         setSummary(res.summary);
@@ -294,8 +344,18 @@ const HelpMeChoosePage: React.FC = () => {
       }
     }
   }, [
-    selectedOption, questions, currentQuestionIndex, answers, sessionId,
-    selectedLanguage, isAuthenticated, user, gender, heightLabel, selectedColors, t,
+    selectedOption,
+    questions,
+    currentQuestionIndex,
+    answers,
+    sessionId,
+    selectedLanguage,
+    isAuthenticated,
+    user,
+    gender,
+    heightLabel,
+    selectedColors,
+    t,
   ]);
 
   const handleBack = () => {
@@ -332,7 +392,9 @@ const HelpMeChoosePage: React.FC = () => {
         <Wand2 className="w-5 h-5" />
         {t("intro.cta")}
       </Button>
-      <p className="font-doodle text-sm text-doodle-text/50">{t("intro.hint")}</p>
+      <p className="font-doodle text-sm text-doodle-text/50">
+        {t("intro.hint")}
+      </p>
     </div>
   );
 
@@ -340,13 +402,19 @@ const HelpMeChoosePage: React.FC = () => {
     <div className="flex flex-col gap-6 max-w-xl mx-auto">
       <div className="text-center">
         <span className="text-4xl mb-3 block">🎯</span>
-        <h2 className="font-doodle text-2xl font-bold text-doodle-text">{t("profile.title")}</h2>
-        <p className="font-doodle text-doodle-text/60 mt-1">{t("profile.subtitle")}</p>
+        <h2 className="font-doodle text-2xl font-bold text-doodle-text">
+          {t("profile.title")}
+        </h2>
+        <p className="font-doodle text-doodle-text/60 mt-1">
+          {t("profile.subtitle")}
+        </p>
       </div>
 
       {/* Gender — always shown */}
       <div className="space-y-3">
-        <p className="font-doodle text-sm font-semibold text-doodle-text">{t("profile.gender.label")}</p>
+        <p className="font-doodle text-sm font-semibold text-doodle-text">
+          {t("profile.gender.label")}
+        </p>
         <div className="flex gap-3 flex-wrap">
           {(["Male", "Female", "Prefer not to say"] as const).map((opt) => (
             <button
@@ -357,10 +425,12 @@ const HelpMeChoosePage: React.FC = () => {
                 gender === opt
                   ? "border-doodle-accent bg-doodle-accent/10 font-semibold text-doodle-text"
                   : "border-doodle-border/40 bg-doodle-bg text-doodle-text/70 hover:border-doodle-accent/50",
-                )}
-              >
-                {opt === "Male" ? t("profile.gender.male")
-                  : opt === "Female" ? t("profile.gender.female")
+              )}
+            >
+              {opt === "Male"
+                ? t("profile.gender.male")
+                : opt === "Female"
+                  ? t("profile.gender.female")
                   : t("profile.gender.preferNotToSay")}
             </button>
           ))}
@@ -378,10 +448,15 @@ const HelpMeChoosePage: React.FC = () => {
           </SelectTrigger>
           <SelectContent>
             {HEIGHT_BANDS.map((band) => {
-              const display = unitSystem === "metric" ? band.label_cm : band.label_imperial;
+              const display =
+                unitSystem === "metric" ? band.label_cm : band.label_imperial;
               const value = `${display} (frame sizes: ${band.sizeHint})`;
               return (
-                <SelectItem key={band.sizeHint} value={value} className="font-doodle">
+                <SelectItem
+                  key={band.sizeHint}
+                  value={value}
+                  className="font-doodle"
+                >
                   {display}
                 </SelectItem>
               );
@@ -401,7 +476,9 @@ const HelpMeChoosePage: React.FC = () => {
               key={color}
               onClick={() =>
                 setSelectedColors((prev) =>
-                  prev.includes(color) ? prev.filter((c) => c !== color) : [...prev, color],
+                  prev.includes(color)
+                    ? prev.filter((c) => c !== color)
+                    : [...prev, color],
                 )
               }
               className={cn(
@@ -415,15 +492,24 @@ const HelpMeChoosePage: React.FC = () => {
             </button>
           ))}
         </div>
-        <p className="font-doodle text-xs text-doodle-text/50">{t("profile.colors.hint")}</p>
+        <p className="font-doodle text-xs text-doodle-text/50">
+          {t("profile.colors.hint")}
+        </p>
       </div>
 
       <div className="flex justify-between items-center pt-2">
-        <Button variant="ghost" onClick={reset} className="font-doodle gap-1 text-doodle-text/60">
+        <Button
+          variant="ghost"
+          onClick={reset}
+          className="font-doodle gap-1 text-doodle-text/60"
+        >
           <ChevronLeft className="w-4 h-4" />
           {t("nav.back")}
         </Button>
-        <Button onClick={handleProfileContinue} className="doodle-button doodle-button-primary gap-2">
+        <Button
+          onClick={handleProfileContinue}
+          className="doodle-button doodle-button-primary gap-2"
+        >
           {t("profile.continue")}
           <ChevronRight className="w-4 h-4" />
         </Button>
@@ -434,7 +520,9 @@ const HelpMeChoosePage: React.FC = () => {
   const renderLoadingQuestions = () => (
     <div className="flex flex-col items-center gap-6 py-16">
       <Loader2 className="w-12 h-12 text-doodle-accent animate-spin" />
-      <p className="font-doodle text-doodle-text/70 animate-pulse text-lg">{t("loading.questions")}</p>
+      <p className="font-doodle text-doodle-text/70 animate-pulse text-lg">
+        {t("loading.questions")}
+      </p>
     </div>
   );
 
@@ -447,7 +535,12 @@ const HelpMeChoosePage: React.FC = () => {
         {/* Progress */}
         <div className="space-y-2">
           <div className="flex justify-between font-doodle text-sm text-doodle-text/50">
-            <span>{t("progress.question", { current: currentQuestionIndex + 1, total: questions.length })}</span>
+            <span>
+              {t("progress.question", {
+                current: currentQuestionIndex + 1,
+                total: questions.length,
+              })}
+            </span>
             <span>{Math.round(progressPercent)}%</span>
           </div>
           <Progress value={progressPercent} className="h-2" />
@@ -456,7 +549,9 @@ const HelpMeChoosePage: React.FC = () => {
         {/* Question */}
         <div className="text-center py-4">
           <span className="text-5xl mb-4 block">{q.icon}</span>
-          <h2 className="font-doodle text-2xl font-bold text-doodle-text leading-snug">{q.text}</h2>
+          <h2 className="font-doodle text-2xl font-bold text-doodle-text leading-snug">
+            {q.text}
+          </h2>
         </div>
 
         {/* Options — 2×2 grid */}
@@ -494,10 +589,14 @@ const HelpMeChoosePage: React.FC = () => {
             disabled={!selectedOption}
             className="doodle-button doodle-button-primary gap-1"
           >
-            {currentQuestionIndex === questions.length - 1 ? t("nav.findProducts") : t("nav.next")}
-            {currentQuestionIndex < questions.length - 1
-              ? <ChevronRight className="w-4 h-4" />
-              : <Sparkles className="w-4 h-4" />}
+            {currentQuestionIndex === questions.length - 1
+              ? t("nav.findProducts")
+              : t("nav.next")}
+            {currentQuestionIndex < questions.length - 1 ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <Sparkles className="w-4 h-4" />
+            )}
           </Button>
         </div>
       </div>
@@ -519,7 +618,11 @@ const HelpMeChoosePage: React.FC = () => {
   const renderResults = () => (
     <div className="flex flex-col gap-8">
       {/* Breadcrumb */}
-      <Button variant="ghost" onClick={reset} className="font-doodle gap-1 text-doodle-text/60 self-start -ml-2">
+      <Button
+        variant="ghost"
+        onClick={reset}
+        className="font-doodle gap-1 text-doodle-text/60 self-start -ml-2"
+      >
         <ArrowLeft className="w-4 h-4" />
         {t("results.startAgain")}
       </Button>
@@ -528,7 +631,9 @@ const HelpMeChoosePage: React.FC = () => {
       <div className="doodle-card p-6 bg-doodle-accent/5 doodle-border-light">
         <div className="flex items-start gap-3">
           <Sparkles className="w-5 h-5 text-doodle-accent mt-0.5 flex-shrink-0" />
-          <p className="font-doodle text-base text-doodle-text leading-relaxed">{summary}</p>
+          <p className="font-doodle text-base text-doodle-text leading-relaxed">
+            {summary}
+          </p>
         </div>
       </div>
 
@@ -567,7 +672,10 @@ const HelpMeChoosePage: React.FC = () => {
                 </div>
 
                 {rec.category && (
-                  <Badge variant="secondary" className="font-doodle text-xs w-fit">
+                  <Badge
+                    variant="secondary"
+                    className="font-doodle text-xs w-fit"
+                  >
                     {rec.category}
                   </Badge>
                 )}
@@ -575,7 +683,9 @@ const HelpMeChoosePage: React.FC = () => {
                 {/* AI personalised reason */}
                 <div className="flex items-start gap-2 mt-1">
                   <Sparkles className="w-3.5 h-3.5 text-doodle-accent mt-0.5 flex-shrink-0" />
-                  <p className="font-doodle text-sm text-doodle-text/70 leading-relaxed">{rec.reason}</p>
+                  <p className="font-doodle text-sm text-doodle-text/70 leading-relaxed">
+                    {rec.reason}
+                  </p>
                 </div>
 
                 <div className="mt-auto pt-3">
@@ -647,13 +757,13 @@ const HelpMeChoosePage: React.FC = () => {
             isWideLayout ? "max-w-7xl" : "max-w-2xl",
           )}
         >
-          {step === "intro"             && renderIntro()}
-          {step === "profile"           && renderProfile()}
+          {step === "intro" && renderIntro()}
+          {step === "profile" && renderProfile()}
           {step === "loading-questions" && renderLoadingQuestions()}
-          {step === "questions"         && renderQuestion()}
-          {step === "loading-recs"      && renderLoadingRecs()}
-          {step === "results"           && renderResults()}
-          {step === "error"             && renderError()}
+          {step === "questions" && renderQuestion()}
+          {step === "loading-recs" && renderLoadingRecs()}
+          {step === "results" && renderResults()}
+          {step === "error" && renderError()}
         </div>
       </main>
 

@@ -292,7 +292,8 @@ Return ONLY a valid JSON array (no markdown, no extra text):
         string? firstName = null,
         string? gender = null,
         string? heightLabel = null,
-        List<string>? preferredColors = null)
+        List<string>? preferredColors = null,
+        int? customerId = null)
     {
         using var op = _telemetryClient.StartOperation<RequestTelemetry>("HelpMeChoose.GetRecommendations");
         var startTime = DateTimeOffset.UtcNow;
@@ -380,7 +381,8 @@ Culture/language for responses: {cultureId ?? "en-US"}";
             // Invoke the Foundry "kind: prompt" agent via the Responses API.
             // The agent calls SearchProducts / FindComplementaryProducts MCP tools
             // server-side; we just wait for the final response.
-            var agentResponse = await _foundryClient.InvokeAsync(_agentId, userMessage);
+            var agentResponse = await _foundryClient.InvokeAsync(_agentId, userMessage,
+                userId: customerId.HasValue ? customerId.Value.ToString() : null);
             string raw = agentResponse.ResponseText;
 
             _telemetryClient.TrackEvent("HelpMeChoose.AgentToolsUsed", new Dictionary<string, string>
@@ -564,6 +566,9 @@ public class HelpMeRecommendRequest
 
     [JsonPropertyName("preferredColors")]
     public List<string>? PreferredColors { get; set; }
+
+    [JsonPropertyName("customerId")]
+    public int? CustomerId { get; set; }
 }
 
 public class CatalogMeta

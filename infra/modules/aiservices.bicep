@@ -123,13 +123,15 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2022-09-01' existing 
 // Microsoft Foundry resource (AIServices kind enables access to broader model catalog, agents, and Foundry Tools)
 // Uses latest 2025-06-01 API with allowProjectManagement for full Foundry capabilities
 // defaultProject enables the "New Foundry" portal experience by designating the default project
+// SystemAssigned identity is required alongside UserAssigned so Foundry can manage its internal
+// Key Vault workspace identity — needed for ApiKey-type project connections (e.g. AppInsights tracing).
 resource account 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   name: name
   location: location
   tags: tags
   kind: kind
   identity: {
-    type: 'UserAssigned'
+    type: 'SystemAssigned, UserAssigned'
     userAssignedIdentities: {
       '${azidentity.id}': {}
     }
@@ -177,6 +179,26 @@ resource storageAccountConnection 'Microsoft.CognitiveServices/accounts/projects
     metadata: {
       ApiType: 'Azure'
       ResourceId: storageAccount.id
+    }
+  }
+}
+
+// Connects the project to Application Insights for the Foundry portal Tracing experience.
+// Requires the account to have a SystemAssigned identity so Foundry can store the ApiKey in
+// its internally managed Key Vault workspace identity.
+resource appInsightsConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-06-01' = {
+  name: appInsightConnectionName
+  parent: aiProject
+  properties: {
+    category: 'AppInsights'
+    authType: 'ApiKey'
+    isSharedToAll: true
+    target: 'https://eastus2-3.in.applicationinsights.azure.com/'
+    credentials: {
+      key: appInsightConnectionString
+    }
+    metadata: {
+      ResourceId: appInsightsId
     }
   }
 }

@@ -111,6 +111,7 @@ public class FoundryAgentClient
         string userMessage,
         IList<FoundryMessage>? conversationHistory = null,
         string? previousResponseId = null,
+        string? userId = null,
         CancellationToken cancellationToken = default)
     {
         // --- Fetch agent definition (cached) ------------------------------------
@@ -182,6 +183,8 @@ public class FoundryAgentClient
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
+            if (!string.IsNullOrEmpty(userId))
+                request.Headers.TryAddWithoutValidation("x-memory-user-id", userId);
 
             _logger.LogInformation(
                 "Invoking Foundry agent '{AgentId}' model='{Model}' round={Round} (previousResponseId={Prev})",

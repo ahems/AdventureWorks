@@ -108,7 +108,8 @@ public class HelpMeChooseFunctions
                 request.FirstName,
                 request.Gender,
                 request.HeightLabel,
-                request.PreferredColors);
+                request.PreferredColors,
+                request.CustomerId);
 
             var response = req.CreateResponse(HttpStatusCode.OK);
             await response.WriteAsJsonAsync(result);

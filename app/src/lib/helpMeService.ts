@@ -110,6 +110,7 @@ export const getRecommendations = async (
   gender?: string,
   heightLabel?: string,
   preferredColors?: string[],
+  customerId?: number,
 ): Promise<RecommendationsResponse> => {
   const endpoint = getFunctionsEndpoint();
 
@@ -125,6 +126,7 @@ export const getRecommendations = async (
         gender,
         heightLabel,
         preferredColors,
+        customerId,
       }),
     });
 
