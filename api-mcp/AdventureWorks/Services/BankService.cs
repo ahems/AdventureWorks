@@ -212,19 +212,113 @@ public class BankService
         return sb.ToString();
     }
 
-    // ── Reset ─────────────────────────────────────────────────────────────────
+    // ── Financial summary ─────────────────────────────────────────────────────
 
-    public async Task<string> ResetBankAsync()
+    public async Task<string> GetFinancialSummaryAsync()
     {
-        var resp = await _http.PostAsync("api/bank/reset", null);
+        var resp = await _http.GetAsync("api/financials/summary");
         if (!resp.IsSuccessStatusCode)
-            return $"Bank reset failed ({resp.StatusCode}).";
+            return $"Error retrieving financial summary: {resp.StatusCode}";
 
         var json = await resp.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
-        var msg = root.GetStringOrDefault("message") ?? "Bank reset complete.";
-        var total = root.GetDecimalOrDefault("totalUsd");
-        return $"{msg} New USD total balance: ${total:N2}";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("## Financial Summary — All Simulators");
+        sb.AppendLine();
+
+        if (root.TryGetProperty("procurement", out var proc))
+        {
+            sb.AppendLine("### Procurement");
+            sb.AppendLine($"  Net spend: ${proc.GetDecimalOrDefault("netSpend"):N2}  (gross ${proc.GetDecimalOrDefault("totalSpend"):N2}, refunds ${proc.GetDecimalOrDefault("totalRefunds"):N2})");
+            sb.AppendLine($"  Transactions: {proc.GetIntOrDefault("transactionCount")}");
+        }
+
+        if (root.TryGetProperty("manufacturing", out var mfg))
+        {
+            sb.AppendLine("### Manufacturing (WO overhead)");
+            sb.AppendLine($"  Total cost: ${mfg.GetDecimalOrDefault("totalCost"):N2}");
+            sb.AppendLine($"  Transactions: {mfg.GetIntOrDefault("transactionCount")}");
+        }
+
+        if (root.TryGetProperty("payroll", out var pay))
+        {
+            sb.AppendLine("### Payroll");
+            sb.AppendLine($"  Total wages paid: ${pay.GetDecimalOrDefault("totalCost"):N2}");
+            sb.AppendLine($"  Operations charged: {pay.GetIntOrDefault("transactionCount")}");
+        }
+
+        if (root.TryGetProperty("scrap", out var scrap))
+        {
+            sb.AppendLine("### Scrap Write-offs");
+            sb.AppendLine($"  Total write-offs: ${scrap.GetDecimalOrDefault("totalWriteOffs"):N2}");
+            sb.AppendLine($"  Events: {scrap.GetIntOrDefault("transactionCount")}");
+        }
+
+        if (root.TryGetProperty("totals", out var totals))
+        {
+            sb.AppendLine();
+            sb.AppendLine($"**Total operating cost: ${totals.GetDecimalOrDefault("totalOperatingCost"):N2}**");
+            sb.AppendLine($"**Total all spend: ${totals.GetDecimalOrDefault("totalAllSpend"):N2}**");
+        }
+
+        return sb.ToString();
+    }
+
+    public async Task<string> GetProcurementTransactionsAsync(int maxCount = 20)
+    {
+        var resp = await _http.GetAsync($"api/financials/procurement?maxCount={maxCount}");
+        if (!resp.IsSuccessStatusCode)
+            return $"Error retrieving procurement transactions: {resp.StatusCode}";
+
+        var json = await resp.Content.ReadAsStringAsync();
+        return FormatTransactionList(json, "## Procurement Transactions (PO Payments & Refunds)");
+    }
+
+    public async Task<string> GetManufacturingFinancialsAsync(string? type = null, int maxCount = 20)
+    {
+        var url = $"api/financials/manufacturing?maxCount={maxCount}";
+        if (!string.IsNullOrEmpty(type)) url += $"&type={Uri.EscapeDataString(type)}";
+
+        var resp = await _http.GetAsync(url);
+        if (!resp.IsSuccessStatusCode)
+            return $"Error retrieving manufacturing financials: {resp.StatusCode}";
+
+        var json = await resp.Content.ReadAsStringAsync();
+        var header = type switch
+        {
+            "payroll"     => "## Payroll Transactions",
+            "scrap"       => "## Scrap Write-off Transactions",
+            "completions" => "## Manufacturing WO Completion Costs",
+            _             => "## Manufacturing Financial Transactions",
+        };
+        return FormatTransactionList(json, header);
+    }
+
+    private static string FormatTransactionList(string json, string header)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        var sb = new StringBuilder();
+        sb.AppendLine(header);
+        sb.AppendLine();
+
+        if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() == 0)
+        {
+            sb.AppendLine("No transactions found.");
+            return sb.ToString();
+        }
+
+        foreach (var t in root.EnumerateArray())
+        {
+            var amount = t.GetDecimalOrDefault("amount");
+            var sign   = amount >= 0 ? "+" : "";
+            sb.AppendLine($"  {t.GetStringOrDefault("transactedAtUtc"):u}  {t.GetStringOrDefault("currencyCode")} {sign}{amount:N2}  [{t.GetStringOrDefault("transactionType")}]  {t.GetStringOrDefault("description")}");
+            if (t.GetStringOrDefault("referenceId") is { } refId)
+                sb.AppendLine($"    ref: {refId}");
+        }
+        return sb.ToString();
     }
 }

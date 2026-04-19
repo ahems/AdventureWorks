@@ -196,24 +196,67 @@ public class BankMcpTools
         }
     }
 
-    // ── Reset ─────────────────────────────────────────────────────────────────
+    // ── Financial reporting ───────────────────────────────────────────────────
 
     [McpServerTool]
-    [Description("Reset the virtual bank: deletes all existing account balances and transaction history, then re-seeds the USD account from the current Sales.usp_GetTotalProfit value. All other currency accounts restart at zero. Use this to restart the simulation from a clean financial baseline. WARNING: all transaction history will be permanently deleted.")]
-    public async Task<string> ResetBank()
+    [Description("Get a financial summary across all simulators showing procurement spend (PO approvals and refunds), manufacturing WO overhead costs, payroll charges per routing operation, and scrap write-offs. Provides totals and transaction counts for each category.")]
+    public async Task<string> GetFinancialSummary()
     {
-        using var op = _telemetryClient.StartOperation<RequestTelemetry>("MCP_ResetBank");
+        using var op = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetFinancialSummary");
         try
         {
-            var result = await _bank.ResetBankAsync();
+            var result = await _bank.GetFinancialSummaryAsync();
             op.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", "ResetBank" } });
+            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", "GetFinancialSummary" } });
             return result;
         }
         catch (Exception ex)
         {
             op.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "ResetBank" } });
+            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetFinancialSummary" } });
+            throw;
+        }
+    }
+
+    [McpServerTool]
+    [Description("Get recent procurement transactions — PO approval debits and refunds for rejected deliveries. Use this to audit which purchase orders have been paid for and which were refunded. Specify maxCount to control how many to return (default 20, max 500).")]
+    public async Task<string> GetProcurementTransactions(
+        [Description("Maximum number of transactions to return (1–500). Default 20.")] int maxCount = 20)
+    {
+        using var op = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetProcurementTransactions");
+        try
+        {
+            var result = await _bank.GetProcurementTransactionsAsync(maxCount);
+            op.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", "GetProcurementTransactions" } });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            op.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetProcurementTransactions" } });
+            throw;
+        }
+    }
+
+    [McpServerTool]
+    [Description("Get recent manufacturing financial transactions. Use the 'type' filter to narrow to: 'completions' (WO overhead), 'payroll' (per-operation labour charges), 'scrap' (write-offs for scrapped units), or 'all' (default). Specify maxCount to control how many to return.")]
+    public async Task<string> GetManufacturingFinancials(
+        [Description("Filter type: 'all' (default), 'completions', 'payroll', or 'scrap'.")] string? type = null,
+        [Description("Maximum number of transactions to return (1–500). Default 20.")] int maxCount = 20)
+    {
+        using var op = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetManufacturingFinancials");
+        try
+        {
+            var result = await _bank.GetManufacturingFinancialsAsync(type, maxCount);
+            op.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", "GetManufacturingFinancials" }, { "type", type ?? "all" } });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            op.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetManufacturingFinancials" } });
             throw;
         }
     }

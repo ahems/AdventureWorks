@@ -59,4 +59,15 @@ public record WorkOrderOperationMessage
     /// was insufficient. Visible in the status endpoint for bottleneck analysis.
     /// </summary>
     public int MaterialRetryCount { get; set; }
+
+    // ── Workforce assignment (Phase 1 → Phase 2 hand-off) ────────────────────
+
+    /// <summary>EmployeeID of the worker assigned to this operation (null if none available).</summary>
+    public int? AssignedEmployeeId { get; set; }
+
+    /// <summary>Full name of the assigned worker — used in payroll transaction descriptions.</summary>
+    public string? AssignedWorkerName { get; set; }
+
+    /// <summary>Hourly wage of the assigned worker ($/hr). Zero if no worker was assigned.</summary>
+    public double AssignedHourlyRate { get; set; }
 }

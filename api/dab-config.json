@@ -47,6 +47,17 @@
     "UnitMeasure": {
       "source": "Production.UnitMeasure",
       "description": "Unit of measure lookup table for product dimensions, weights, and quantities (e.g., EA for each, LB for pounds, IN for inches, OZ for ounces)",
+      "fields": {
+        "UnitMeasureCode": {
+          "description": "Primary key. Three-character ISO abbreviation identifying the unit of measure (e.g., EA = Each, LB = Pound, IN = Inch, OZ = Ounce, G = Gram, KG = Kilogram, CM = Centimeter, ML = Milliliter)."
+        },
+        "Name": {
+          "description": "Full descriptive name of the unit of measure (e.g., Each, Pound, Inch). Must be unique within the table."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -58,6 +69,17 @@
     "Culture": {
       "source": "Production.Culture",
       "description": "Language and culture code lookup table used to support multi-language product descriptions and name translations (e.g., en for English, fr for French, ar for Arabic). 23 cultures are supported.",
+      "fields": {
+        "CultureID": {
+          "description": "Primary key. Six-character IETF culture/language code (e.g., en = English, fr = French, ar = Arabic, zh-cht = Traditional Chinese, he = Hebrew). Used to key all localised product content."
+        },
+        "Name": {
+          "description": "Human-readable name of the language or culture (e.g., English, French, Arabic). Unique within the table."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -69,6 +91,17 @@
     "Currency": {
       "source": "Sales.Currency",
       "description": "International currency code and name lookup table (ISO 4217 codes) used for sales orders and currency rate conversions",
+      "fields": {
+        "CurrencyCode": {
+          "description": "Primary key. Three-character ISO 4217 currency code (e.g., USD = US Dollar, EUR = Euro, GBP = British Pound, JPY = Japanese Yen, CAD = Canadian Dollar)."
+        },
+        "Name": {
+          "description": "Full name of the currency (e.g., US Dollar, Euro, British Pound). Unique within the table."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -79,6 +112,20 @@
     "AddressType": {
       "source": "Person.AddressType",
       "description": "Lookup table for types of addresses stored in the system (Billing, Home, Main Office, Primary, Shipping, Archive)",
+      "fields": {
+        "AddressTypeID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the address type."
+        },
+        "Name": {
+          "description": "Address type label (e.g., Billing, Home, Main Office, Primary, Shipping, Archive). Unique within the table."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -90,6 +137,17 @@
     "ContactType": {
       "source": "Person.ContactType",
       "description": "Lookup table for types of contacts associated with business entities (e.g., Purchasing Manager, Sales Representative, Owner)",
+      "fields": {
+        "ContactTypeID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the contact type."
+        },
+        "Name": {
+          "description": "Contact role label (e.g., Purchasing Manager, Sales Representative, Owner, Technical Support). Unique within the table."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -101,6 +159,17 @@
     "PhoneNumberType": {
       "source": "Person.PhoneNumberType",
       "description": "Lookup table for types of phone numbers (Cell, Home, Work)",
+      "fields": {
+        "PhoneNumberTypeID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the phone number type."
+        },
+        "Name": {
+          "description": "Phone category label: Cell, Home, or Work. Unique within the table."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -112,6 +181,20 @@
     "SalesReason": {
       "source": "Sales.SalesReason",
       "description": "Lookup table of motivating reasons for a sale (e.g., Price, Quality, Review, On Promotion, TV Advertisement, Other)",
+      "fields": {
+        "SalesReasonID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the sales reason."
+        },
+        "Name": {
+          "description": "Short label describing the sales motivation (e.g., Price, Quality, Review, On Promotion, Magazine Advertisement, TV Advertisement, Other). Unique within the table."
+        },
+        "ReasonType": {
+          "description": "Category grouping for the sales reason (e.g., Other, Promotion, Marketing). Used to aggregate reasons for reporting."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -123,6 +206,26 @@
     "CreditCard": {
       "source": "Sales.CreditCard",
       "description": "Customer credit card information including card type, masked card number, and expiry date",
+      "fields": {
+        "CreditCardID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the credit card record."
+        },
+        "CardType": {
+          "description": "Credit card brand or network (e.g., SuperiorCard, Distinguish, ColonialVoice, Vista). Maps to real-world card types for demo purposes."
+        },
+        "CardNumber": {
+          "description": "Credit card account number. Stored as a string to preserve leading zeros. In production this should be masked or tokenised; only the last four digits should be displayed to end users."
+        },
+        "ExpMonth": {
+          "description": "Two-digit expiration month of the credit card (1–12)."
+        },
+        "ExpYear": {
+          "description": "Four-digit expiration year of the credit card (e.g., 2026)."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -134,6 +237,29 @@
     "CurrencyRate": {
       "source": "Sales.CurrencyRate",
       "description": "Historical daily currency exchange rates between pairs of currencies, recording end-of-day and average rates",
+      "fields": {
+        "CurrencyRateID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the currency rate record."
+        },
+        "CurrencyRateDate": {
+          "description": "Date on which this exchange rate was recorded (one row per currency pair per day)."
+        },
+        "FromCurrencyCode": {
+          "description": "ISO 4217 code for the source currency being converted from (e.g., USD). Foreign key to Currency."
+        },
+        "ToCurrencyCode": {
+          "description": "ISO 4217 code for the destination currency being converted to (e.g., EUR). Foreign key to Currency."
+        },
+        "AverageRate": {
+          "description": "Average exchange rate for the day (FromCurrencyCode to ToCurrencyCode). Used for reporting and variance analysis."
+        },
+        "EndOfDayRate": {
+          "description": "Closing exchange rate at end of business day. Used to convert sales order totals when a non-default currency is selected."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -153,6 +279,17 @@
     "CountryRegion": {
       "source": "Person.CountryRegion",
       "description": "ISO 3166-1 country and region codes and names used for addresses and sales territories",
+      "fields": {
+        "CountryRegionCode": {
+          "description": "Primary key. ISO 3166-1 alpha-2 or alpha-3 country/region code (e.g., US = United States, CA = Canada, GB = United Kingdom, AU = Australia, DE = Germany)."
+        },
+        "Name": {
+          "description": "Official country or region name (e.g., United States, Canada, United Kingdom). Unique within the table."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -164,6 +301,38 @@
     "SalesTerritory": {
       "source": "Sales.SalesTerritory",
       "description": "Sales territory groupings for North America, Europe, and Pacific regions, with annual sales targets and cost/profit tracking",
+      "fields": {
+        "TerritoryID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the sales territory."
+        },
+        "Name": {
+          "description": "Territory name (e.g., Northwest, Northeast, Central, Southwest, Southeast, Canada, France, Germany, Australia, United Kingdom)."
+        },
+        "CountryRegionCode": {
+          "description": "ISO 3166-1 country/region code for the primary country of this territory. Foreign key to CountryRegion."
+        },
+        "Group": {
+          "description": "High-level geographic group: North America, Europe, or Pacific. Used for roll-up reporting."
+        },
+        "SalesYTD": {
+          "description": "Cumulative sales revenue generated within this territory in the current fiscal year, in USD."
+        },
+        "SalesLastYear": {
+          "description": "Total sales revenue generated within this territory in the previous fiscal year, in USD."
+        },
+        "CostYTD": {
+          "description": "Cumulative business costs attributed to this territory in the current fiscal year, in USD."
+        },
+        "CostLastYear": {
+          "description": "Total business costs attributed to this territory in the previous fiscal year, in USD."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -174,6 +343,26 @@
     "ShipMethod": {
       "source": "Purchasing.ShipMethod",
       "description": "Shipping method options available at Adventure Works Cycles (e.g., CARGO TRANSPORT 5, OVERNIGHT J-FAST, OVERSEAS - DELUXE) with base rate and per-unit shipping rate",
+      "fields": {
+        "ShipMethodID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the shipping method."
+        },
+        "Name": {
+          "description": "Shipping carrier and service name (e.g., XRQ - TRUCK GROUND, ZY - EXPRESS, OVERSEAS - DELUXE, OVERNIGHT J-FAST, CARGO TRANSPORT 5). Unique within the table."
+        },
+        "ShipBase": {
+          "description": "Fixed base shipping charge in USD applied to every order using this method, regardless of weight."
+        },
+        "ShipRate": {
+          "description": "Variable shipping charge per pound (or unit of weight) applied in addition to ShipBase."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -184,6 +373,32 @@
     "StateProvince": {
       "source": "Person.StateProvince",
       "description": "State and province lookup table with ISO abbreviations, cross-referenced to country/region and optional sales territory",
+      "fields": {
+        "StateProvinceID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the state or province."
+        },
+        "StateProvinceCode": {
+          "description": "ISO 3166-2 abbreviation for the state or province (e.g., WA = Washington, ON = Ontario, NSW = New South Wales). May equal the CountryRegionCode when no subdivision applies."
+        },
+        "CountryRegionCode": {
+          "description": "ISO 3166-1 code for the country or region this state/province belongs to. Foreign key to CountryRegion."
+        },
+        "IsOnlyStateProvinceFlag": {
+          "description": "0 = A distinct StateProvinceCode exists for this subdivision. 1 = No subdivision code is available; the CountryRegionCode is used in its place."
+        },
+        "Name": {
+          "description": "Full name of the state or province (e.g., Washington, Ontario, New South Wales). Unique within the table."
+        },
+        "TerritoryID": {
+          "description": "Sales territory that covers this state or province. Foreign key to SalesTerritory. Nullable for regions outside Adventure Works sales coverage."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -202,6 +417,17 @@
     "BusinessEntity": {
       "source": "Person.BusinessEntity",
       "description": "Root identity record providing unique BusinessEntityID values for all persons, vendors, and stores. All business participants derive from this table.",
+      "fields": {
+        "BusinessEntityID": {
+          "description": "Primary key. Auto-incrementing integer that serves as the universal identifier shared across Person, Vendor, and Store records."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -213,6 +439,23 @@
     "BusinessEntityAddress": {
       "source": "Person.BusinessEntityAddress",
       "description": "Cross-reference table linking business entities (persons, stores, vendors) to their physical addresses, including the address type (Billing, Shipping, Home, etc.)",
+      "fields": {
+        "BusinessEntityID": {
+          "description": "Part of composite primary key. References the person, store, or vendor this address belongs to. Foreign key to BusinessEntity."
+        },
+        "AddressID": {
+          "description": "Part of composite primary key. References the physical address record. Foreign key to Address (Production.Address)."
+        },
+        "AddressTypeID": {
+          "description": "Classifies the purpose of this address for the entity (e.g., Billing, Home, Main Office, Shipping). Foreign key to AddressType."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -224,6 +467,47 @@
     "Person": {
       "source": "Person.Person",
       "description": "All human beings involved with Adventure Works Cycles: customers (IN), employees (EM), sales persons (SP), vendor contacts (VC), store contacts (SC), and general contacts (GC). PersonType field distinguishes the role.",
+      "fields": {
+        "BusinessEntityID": {
+          "description": "Primary key. Foreign key to BusinessEntity.BusinessEntityID. Shared identifier linking this person to any associated vendor, store, or employee record."
+        },
+        "PersonType": {
+          "description": "Two-character code indicating the primary role: SC = Store Contact, IN = Individual (retail) customer, SP = Sales person, EM = Employee (non-sales), VC = Vendor contact, GC = General contact."
+        },
+        "NameStyle": {
+          "description": "Controls name display order. 0 = Western style (Title FirstName MiddleName LastName Suffix). 1 = Eastern style (LastName FirstName) for cultures where family name comes first."
+        },
+        "Title": {
+          "description": "Optional courtesy title prefix (e.g., Mr., Ms., Mrs., Dr., Rev., Sir). Maximum 8 characters."
+        },
+        "FirstName": {
+          "description": "Given (first) name of the person. Required field, maximum 50 characters."
+        },
+        "MiddleName": {
+          "description": "Middle name or initial of the person. Optional, maximum 50 characters."
+        },
+        "LastName": {
+          "description": "Family (last) name of the person. Required field, maximum 50 characters."
+        },
+        "Suffix": {
+          "description": "Optional generational or professional suffix (e.g., Jr., Sr., III, PhD). Maximum 10 characters."
+        },
+        "EmailPromotion": {
+          "description": "Marketing opt-in level. 0 = No promotional emails. 1 = Opt-in to Adventure Works emails. 2 = Opt-in to emails from Adventure Works and selected partners."
+        },
+        "AdditionalContactInfo": {
+          "description": "Supplementary contact information stored as XML (e.g., instant messaging handles, alternative phone numbers, social media profiles)."
+        },
+        "Demographics": {
+          "description": "Personal demographic data collected from online shoppers stored as XML (e.g., household income, education level, hobbies, commute distance). Used for sales analysis and personalisation."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -273,6 +557,23 @@
     "Password": {
       "source": "Person.Password",
       "description": "Hashed password credentials for customer self-service account authentication. Stores a PBKDF2/SHA1 password hash and random salt per BusinessEntityID. Never contains plaintext passwords.",
+      "fields": {
+        "BusinessEntityID": {
+          "description": "Primary key. Foreign key to Person.BusinessEntityID. One password record per person."
+        },
+        "PasswordHash": {
+          "description": "PBKDF2/SHA1 derived password hash encoded as a Base64 string. Never the plaintext password. Maximum 128 characters."
+        },
+        "PasswordSalt": {
+          "description": "Random cryptographic salt (10 characters) concatenated with the plaintext password before hashing, preventing rainbow-table attacks."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -284,6 +585,20 @@
     "EmailAddress": {
       "source": "Person.EmailAddress",
       "description": "Email addresses for persons, supporting multiple addresses per person identified by EmailAddressID. Used for customer login, order confirmations, and marketing communications.",
+      "fields": {
+        "BusinessEntityID": {
+          "description": "Part of composite primary key. Foreign key to Person.BusinessEntityID. Identifies which person owns this email address."
+        },
+        "EmailAddressID": {
+          "description": "Part of composite primary key. Auto-incrementing integer distinguishing multiple email addresses for the same person."
+        },
+        "EmailAddress": {
+          "description": "The actual email address string (e.g., john.doe@adventure-works.com). Used for login authentication and all outbound communications. Maximum 50 characters."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -298,6 +613,20 @@
     "PersonPhone": {
       "source": "Person.PersonPhone",
       "description": "Phone numbers associated with persons, categorised by phone number type (Cell, Home, Work). A person may have multiple phone numbers of different types.",
+      "fields": {
+        "BusinessEntityID": {
+          "description": "Part of composite primary key. Foreign key to Person.BusinessEntityID. Identifies the person this phone number belongs to."
+        },
+        "PhoneNumber": {
+          "description": "Part of composite primary key. The telephone number string, including country code where applicable (e.g., 1 (11) 500 555-0100). Maximum 25 characters."
+        },
+        "PhoneNumberTypeID": {
+          "description": "Part of composite primary key. Classifies this phone number as Cell, Home, or Work. Foreign key to PhoneNumberType."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -308,6 +637,17 @@
     "PersonCreditCard": {
       "source": "Sales.PersonCreditCard",
       "description": "Cross-reference table linking persons to their registered credit cards. A person may register multiple credit cards.",
+      "fields": {
+        "BusinessEntityID": {
+          "description": "Part of composite primary key. Foreign key to Person.BusinessEntityID. Identifies the cardholder."
+        },
+        "CreditCardID": {
+          "description": "Part of composite primary key. Foreign key to CreditCard.CreditCardID. Identifies the credit card record."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -319,6 +659,35 @@
     "SalesPerson": {
       "source": "Sales.SalesPerson",
       "description": "Sales representatives employed by Adventure Works Cycles, with commission rate, annual sales quota, year-to-date sales, and territory assignment",
+      "fields": {
+        "BusinessEntityID": {
+          "description": "Primary key. Foreign key to HumanResources.Employee (via BusinessEntityID). Links this sales record to the employee and person records."
+        },
+        "TerritoryID": {
+          "description": "Sales territory currently assigned to this sales person. Foreign key to SalesTerritory. Nullable if not yet assigned."
+        },
+        "SalesQuota": {
+          "description": "Projected annual sales revenue target for this sales person, in USD. Nullable if no quota has been set."
+        },
+        "Bonus": {
+          "description": "Bonus amount earned in the current year when sales quota is met, in USD. Defaults to 0.00."
+        },
+        "CommissionPct": {
+          "description": "Commission percentage rate earned per sale (e.g., 0.012 = 1.2%). Used to calculate commission payable from sales order revenue."
+        },
+        "SalesYTD": {
+          "description": "Cumulative sales revenue generated by this sales person in the current fiscal year, in USD."
+        },
+        "SalesLastYear": {
+          "description": "Total sales revenue generated by this sales person in the previous fiscal year, in USD."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -329,6 +698,26 @@
     "Store": {
       "source": "Sales.Store",
       "description": "Retail and online stores that are customers of Adventure Works Cycles. Each store is linked to a BusinessEntity record and optionally assigned to a SalesPerson. Demographics stored as XML.",
+      "fields": {
+        "BusinessEntityID": {
+          "description": "Primary key. Foreign key to BusinessEntity.BusinessEntityID. Shared identifier linking the store to its business entity record."
+        },
+        "Name": {
+          "description": "Trading name of the retail or online store (e.g., Twin Cycles, Area Bike Accessories). Maximum 50 characters."
+        },
+        "SalesPersonID": {
+          "description": "The Adventure Works sales representative assigned as account manager for this store. Foreign key to SalesPerson.BusinessEntityID. Nullable if unassigned."
+        },
+        "Demographics": {
+          "description": "Store demographic data stored as XML (e.g., number of employees, annual revenue, store type, square footage). Used for segmentation and targeted sales strategies."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -353,6 +742,26 @@
     "Customer": {
       "source": "Sales.Customer",
       "description": "Customer accounts for both individual consumers (linked to a Person) and retail stores (linked to a Store). Assigns each customer to a sales territory for reporting.",
+      "fields": {
+        "CustomerID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the customer account."
+        },
+        "PersonID": {
+          "description": "Foreign key to Person.BusinessEntityID. Populated for individual (retail) customers. NULL for store (B2B) customers."
+        },
+        "StoreID": {
+          "description": "Foreign key to Store.BusinessEntityID. Populated for store (B2B) customers. NULL for individual retail customers."
+        },
+        "TerritoryID": {
+          "description": "Sales territory this customer is assigned to. Foreign key to SalesTerritory. Used for regional sales reporting and territory commission tracking."
+        },
+        "AccountNumber": {
+          "description": "Computed, system-assigned account number in the format AW + zero-padded CustomerID (e.g., AW00000001). Used as a business-facing reference."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -381,6 +790,17 @@
     "Illustration": {
       "source": "Production.Illustration",
       "description": "Bicycle and component assembly diagrams stored as XML data, linked to product models for use in service and assembly documentation",
+      "fields": {
+        "IllustrationID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the illustration."
+        },
+        "Diagram": {
+          "description": "Assembly or technical illustration stored as XML. Contains structured diagram data for bicycle components used in service manuals and manufacturing instructions."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -392,6 +812,23 @@
     "Location": {
       "source": "Production.Location",
       "description": "Manufacturing work center locations within the Adventure Works Cycles plant, each with a cost rate per hour and available capacity in hours",
+      "fields": {
+        "LocationID": {
+          "description": "Primary key. Auto-incrementing small integer uniquely identifying the work center location."
+        },
+        "Name": {
+          "description": "Descriptive name of the manufacturing work center (e.g., Tool Crib, Paint, Final Assembly, Subcomponent Storage). Maximum 50 characters."
+        },
+        "CostRate": {
+          "description": "Standard hourly labour and overhead cost for this work center in USD (e.g., 0.00 for storage, 22.50 for machining). Used in work order cost calculations."
+        },
+        "Availability": {
+          "description": "Available production capacity at this work center in hours per week. Used for scheduling and capacity planning."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -403,6 +840,20 @@
     "ProductCategory": {
       "source": "Production.ProductCategory",
       "description": "Top-level product category classification (Bikes, Components, Clothing, Accessories). All products belong to exactly one category via a subcategory.",
+      "fields": {
+        "ProductCategoryID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the product category."
+        },
+        "Name": {
+          "description": "Top-level category name (Bikes, Components, Clothing, Accessories). Unique within the table."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -413,6 +864,23 @@
     "ProductSubcategory": {
       "source": "Production.ProductSubcategory",
       "description": "Product sub-categories nested under a top-level ProductCategory (e.g., Mountain Bikes, Road Bikes, Touring Bikes under Bikes; Handlebars, Brakes, Wheels under Components)",
+      "fields": {
+        "ProductSubcategoryID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the product subcategory."
+        },
+        "ProductCategoryID": {
+          "description": "Foreign key to ProductCategory.ProductCategoryID. Every subcategory belongs to exactly one top-level category."
+        },
+        "Name": {
+          "description": "Subcategory name (e.g., Mountain Bikes, Road Bikes, Helmets, Jerseys, Gloves, Pedals, Wheels). Unique within the table."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -423,6 +891,26 @@
     "ProductModel": {
       "source": "Production.ProductModel",
       "description": "Product model definitions that group related product variants. Optionally contains XML manufacturing instructions (CatalogDescription) and catalog descriptions (Instructions).",
+      "fields": {
+        "ProductModelID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the product model."
+        },
+        "Name": {
+          "description": "Model name shared by all product variants in this group (e.g., Mountain-100, Road-150, Touring-1000). Unique within the table. Maximum 50 characters."
+        },
+        "CatalogDescription": {
+          "description": "Detailed product catalog content stored as XML, including marketing copy, product highlights, and technical specifications used in the online store."
+        },
+        "Instructions": {
+          "description": "Step-by-step manufacturing assembly instructions stored as XML. Referenced by work orders during production."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -433,6 +921,23 @@
     "ProductDescription": {
       "source": "Production.ProductDescription",
       "description": "Product descriptions per language, AI-enhanced to support up to 2000 characters of rich content. Includes DescriptionEmbedding (VECTOR(1536), text-embedding-3-small model) for semantic similarity search across languages.",
+      "fields": {
+        "ProductDescriptionID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the product description record."
+        },
+        "Description": {
+          "description": "Free-text product description in the language indicated by the linked culture. AI-enhanced to support up to 2000 characters of rich marketing and technical content. Used in the storefront and AI-powered search."
+        },
+        "DescriptionEmbedding": {
+          "description": "1536-dimensional vector embedding of the Description text, generated using Azure OpenAI text-embedding-3-small. Enables semantic (meaning-based) similarity search and AI-powered product discovery across languages."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -443,6 +948,20 @@
     "ProductModelProductDescriptionCulture": {
       "source": "Production.ProductModelProductDescriptionCulture",
       "description": "Cross-reference table linking each product model to its localised ProductDescription for a given culture/language (e.g., en, fr, ar). One row per model per language.",
+      "fields": {
+        "ProductModelID": {
+          "description": "Part of composite primary key. Foreign key to ProductModel.ProductModelID. Identifies which product model this description belongs to."
+        },
+        "ProductDescriptionID": {
+          "description": "Part of composite primary key. Foreign key to ProductDescription.ProductDescriptionID. References the localised description text."
+        },
+        "CultureID": {
+          "description": "Part of composite primary key. Foreign key to Culture.CultureID. Specifies the language/culture for which this description is written (e.g., en, fr, ar, zh-cht)."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -466,6 +985,32 @@
         "key-fields": ["ProductID", "ProductDescriptionID"]
       },
       "description": "Read-only view for AI-powered semantic product search. Joins Product, ProductModel, ProductModelProductDescriptionCulture, ProductDescription, and ProductName to expose per-language search data including DescriptionEmbedding and ProductNameEmbedding (both VECTOR(1536), text-embedding-3-small) for vector similarity search. Only finished goods are included.",
+      "fields": {
+        "ProductID": {
+          "description": "Part of composite key. Identifier of the product (finished goods only). Foreign key to Product.ProductID."
+        },
+        "ProductDescriptionID": {
+          "description": "Part of composite key. Identifier of the localised description record for this product and culture combination. Foreign key to ProductDescription.ProductDescriptionID."
+        },
+        "Name": {
+          "description": "Product name as stored in Production.Product for the default locale."
+        },
+        "ProductName": {
+          "description": "Culture-specific product name translation from Production.ProductName for the row's CultureID. Falls back to the base product name if no translation exists."
+        },
+        "ProductDescription": {
+          "description": "Culture-specific product description text from ProductDescription.Description for the row's CultureID."
+        },
+        "CultureID": {
+          "description": "Culture/language code for this row (e.g., en, fr, ar). Joins to Culture.CultureID."
+        },
+        "DescriptionEmbedding": {
+          "description": "1536-dimensional vector embedding of ProductDescription, generated with text-embedding-3-small. Used for semantic similarity search queries against product descriptions."
+        },
+        "ProductNameEmbedding": {
+          "description": "1536-dimensional vector embedding of the culture-specific ProductName, generated with text-embedding-3-small. Used for semantic name-based product discovery."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -476,6 +1021,17 @@
     "ProductModelIllustration": {
       "source": "Production.ProductModelIllustration",
       "description": "Cross-reference table linking product models to their assembly or technical illustration diagrams",
+      "fields": {
+        "ProductModelID": {
+          "description": "Part of composite primary key. Foreign key to ProductModel.ProductModelID. Identifies which product model this illustration is associated with."
+        },
+        "IllustrationID": {
+          "description": "Part of composite primary key. Foreign key to Illustration.IllustrationID. References the XML diagram record."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -487,6 +1043,83 @@
     "Product": {
       "source": "Production.Product",
       "description": "Products manufactured or sold by Adventure Works Cycles. Includes pricing (ListPrice, StandardCost), dimensions (Size, Weight), inventory status (FinishedGoodsFlag, MakeFlag), and style attributes. AI-enhanced: Color field extended to 256 characters for descriptive AI-generated colour names.",
+      "fields": {
+        "ProductID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the product SKU."
+        },
+        "Name": {
+          "description": "Product name displayed in the storefront and used in reports (e.g., Mountain-100 Silver, 38). Must be unique across all products. Maximum 50 characters."
+        },
+        "ProductNumber": {
+          "description": "Manufacturer part number in the format [ProductLine]-[Abbreviation]-[Size/Style] (e.g., BK-M18S-38 for a Mountain bike, size 38, silver). Unique within the table."
+        },
+        "MakeFlag": {
+          "description": "0 = Product is purchased from a vendor. 1 = Product is manufactured in-house. Drives whether a work order or purchase order is created."
+        },
+        "FinishedGoodsFlag": {
+          "description": "0 = Product is a sub-component or raw material, not sold directly. 1 = Product is a finished good available for sale on the storefront."
+        },
+        "Color": {
+          "description": "Product colour. AI-enhanced field extended to 256 characters to hold descriptive AI-generated colour names (e.g., Gloss Midnight Black, Pearl Metallic Silver) rather than simple labels. Nullable for components with no colour attribute."
+        },
+        "SafetyStockLevel": {
+          "description": "Minimum on-hand inventory quantity that must be maintained. Triggers a reorder when stock falls below this level."
+        },
+        "ReorderPoint": {
+          "description": "Inventory level at which a purchase order or work order should be created to replenish stock. Must be greater than or equal to SafetyStockLevel."
+        },
+        "StandardCost": {
+          "description": "Internal standard manufacturing or purchase cost per unit in USD. Used for cost-of-goods-sold calculations and profitability reporting."
+        },
+        "ListPrice": {
+          "description": "Recommended retail selling price per unit in USD displayed on the storefront. A value of 0.00 indicates the product is not currently for sale."
+        },
+        "Size": {
+          "description": "Physical size designation (e.g., S, M, L, XL, 38, 42, 58). Unit of measure is given by SizeUnitMeasureCode. Nullable for products without a size dimension."
+        },
+        "SizeUnitMeasureCode": {
+          "description": "Unit of measure for the Size value (e.g., CM for centimetres, IN for inches). Foreign key to UnitMeasure.UnitMeasureCode. Nullable when Size is null."
+        },
+        "WeightUnitMeasureCode": {
+          "description": "Unit of measure for the Weight value (e.g., LB for pounds, G for grams). Foreign key to UnitMeasure.UnitMeasureCode. Nullable when Weight is null."
+        },
+        "Weight": {
+          "description": "Product weight in the unit specified by WeightUnitMeasureCode. Nullable for products where weight is not tracked."
+        },
+        "DaysToManufacture": {
+          "description": "Number of calendar days required to manufacture one unit of this product. Used for production scheduling and lead-time calculations."
+        },
+        "ProductLine": {
+          "description": "Two-character product line code: R = Road, M = Mountain, T = Touring, S = Standard. Nullable for accessories and components not assigned to a specific line."
+        },
+        "Class": {
+          "description": "Two-character quality/price class: H = High, M = Medium, L = Low. Used to segment products within a product line for pricing and reporting."
+        },
+        "Style": {
+          "description": "Two-character gender/fit style code: W = Womens, M = Mens, U = Universal. Nullable for products where style is not applicable."
+        },
+        "ProductSubcategoryID": {
+          "description": "Foreign key to ProductSubcategory.ProductSubcategoryID. Assigns the product to a subcategory (e.g., Mountain Bikes, Helmets). Nullable for raw materials and sub-components not sold directly."
+        },
+        "ProductModelID": {
+          "description": "Foreign key to ProductModel.ProductModelID. Groups this SKU with related variants sharing the same model design and description. Nullable for generic components."
+        },
+        "SellStartDate": {
+          "description": "Date on which the product became available for sale. Products with a future SellStartDate are not yet listed on the storefront."
+        },
+        "SellEndDate": {
+          "description": "Date on which the product was retired from sale. Nullable for currently active products."
+        },
+        "DiscontinuedDate": {
+          "description": "Date on which manufacturing and procurement of this product was permanently discontinued. Nullable for active products."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -511,6 +1144,23 @@
     "ProductName": {
       "source": "Production.ProductName",
       "description": "AI-generated multi-language product name translations keyed by (ProductID, CultureID). Includes ProductNameEmbedding (VECTOR(1536), text-embedding-3-small) for semantic name search. Covers all 23 cultures supported by Adventure Works.",
+      "fields": {
+        "ProductID": {
+          "description": "Part of composite primary key. Foreign key to Product.ProductID. Identifies the product whose name is being translated."
+        },
+        "CultureID": {
+          "description": "Part of composite primary key. Foreign key to Culture.CultureID. Specifies the language/locale for this name translation (e.g., en, fr, ar, zh-cht, he)."
+        },
+        "Name": {
+          "description": "AI-generated product name translated into the language specified by CultureID. Maximum 50 characters. Used in multilingual storefront displays."
+        },
+        "ProductNameEmbedding": {
+          "description": "1536-dimensional vector embedding of the translated Name, generated using Azure OpenAI text-embedding-3-small. Enables semantic name-based search across languages in the AI-powered product discovery features."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -521,6 +1171,23 @@
     "ProductCostHistory": {
       "source": "Production.ProductCostHistory",
       "description": "Historical standard manufacturing cost of products over time, tracking all cost changes with StartDate and EndDate effective ranges",
+      "fields": {
+        "ProductID": {
+          "description": "Part of composite primary key. Foreign key to Product.ProductID. Identifies the product whose cost history is recorded."
+        },
+        "StartDate": {
+          "description": "Part of composite primary key. Date on which this standard cost became effective. Combined with ProductID to uniquely identify the cost record."
+        },
+        "EndDate": {
+          "description": "Date on which this cost was superseded by a new rate. NULL means this is the current active cost for the product."
+        },
+        "StandardCost": {
+          "description": "Standard manufacturing or purchase cost per unit in USD that was in effect between StartDate and EndDate. Used for historical profitability analysis."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -532,6 +1199,23 @@
     "ProductListPriceHistory": {
       "source": "Production.ProductListPriceHistory",
       "description": "Historical list (retail) price of products over time, tracking all price changes with StartDate and EndDate effective ranges",
+      "fields": {
+        "ProductID": {
+          "description": "Part of composite primary key. Foreign key to Product.ProductID. Identifies the product whose price history is recorded."
+        },
+        "StartDate": {
+          "description": "Part of composite primary key. Date on which this list price became effective."
+        },
+        "EndDate": {
+          "description": "Date on which this price was superseded. NULL means this is the currently active list price."
+        },
+        "ListPrice": {
+          "description": "Retail selling price per unit in USD in effect between StartDate and EndDate. Used for historical revenue analysis and price trend reporting."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -543,6 +1227,29 @@
     "ProductInventory": {
       "source": "Production.ProductInventory",
       "description": "Current on-hand quantity of each product held at each manufacturing or warehouse location, including bin and shelf identifiers",
+      "fields": {
+        "ProductID": {
+          "description": "Part of composite primary key. Foreign key to Product.ProductID. Identifies the product held in inventory."
+        },
+        "LocationID": {
+          "description": "Part of composite primary key. Foreign key to Location.LocationID. Identifies the work center or warehouse location where stock is held."
+        },
+        "Shelf": {
+          "description": "Identifier for the storage shelf within the location (e.g., A, B, C). Maximum 10 characters."
+        },
+        "Bin": {
+          "description": "Numeric identifier for the storage bin on the shelf (0–99). Combined with Shelf provides the precise storage position."
+        },
+        "Quantity": {
+          "description": "Current on-hand unit count for this product at this location. Used to determine IsInStock status and drive reorder triggers."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -553,6 +1260,41 @@
     "SpecialOffer": {
       "source": "Sales.SpecialOffer",
       "description": "Discount offers and promotional campaigns applied to products. Types include No Discount (baseline), Volume Discount, Seasonal Discount, Excess Inventory, and Mountain-100 Clearance. Discount is stored as a decimal fraction (e.g., 0.10 = 10%).",
+      "fields": {
+        "SpecialOfferID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the special offer. SpecialOfferID = 1 is the baseline 'No Discount' record applied to all standard order lines."
+        },
+        "Description": {
+          "description": "Human-readable name describing the promotion (e.g., No Discount, Volume Discount 11 to 14, Mountain-100 Clearance Sale). Maximum 255 characters."
+        },
+        "DiscountPct": {
+          "description": "Discount amount expressed as a decimal fraction (e.g., 0.00 = no discount, 0.10 = 10%, 0.40 = 40%). Applied to the UnitPrice on qualifying sales order lines."
+        },
+        "Type": {
+          "description": "Promotion type category (e.g., No Discount, Volume Discount, Seasonal Discount, Excess Inventory, Discontinued Product). Used for promotional reporting."
+        },
+        "Category": {
+          "description": "Customer segment the offer targets: Customer (retail) or Reseller (B2B store)."
+        },
+        "StartDate": {
+          "description": "Date on which the promotion becomes active and eligible to be applied to new sales orders."
+        },
+        "EndDate": {
+          "description": "Date after which the promotion can no longer be applied to new orders."
+        },
+        "MinQty": {
+          "description": "Minimum order quantity of the qualifying product required to activate this discount. 0 means no minimum."
+        },
+        "MaxQty": {
+          "description": "Maximum order quantity eligible for this discount. NULL means there is no upper limit."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -563,6 +1305,20 @@
     "SpecialOfferProduct": {
       "source": "Sales.SpecialOfferProduct",
       "description": "Cross-reference table restricting which products qualify for each special offer. A product must appear here to receive a promotion's discount on a sales order line.",
+      "fields": {
+        "SpecialOfferID": {
+          "description": "Part of composite primary key. Foreign key to SpecialOffer.SpecialOfferID. Identifies the promotion being linked to a product."
+        },
+        "ProductID": {
+          "description": "Part of composite primary key. Foreign key to Product.ProductID. Identifies the product that qualifies for the promotion."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -573,6 +1329,86 @@
     "SalesOrderHeader": {
       "source": "Sales.SalesOrderHeader",
       "description": "Summary record for each customer sales order, capturing billing and shipping addresses, payment method, ship method, currency, order and ship dates, and financial totals (SubTotal, TaxAmt, Freight, TotalDue). Status codes: 1=In process, 2=Approved, 3=Backordered, 4=Rejected, 5=Shipped, 6=Cancelled.",
+      "fields": {
+        "SalesOrderID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the sales order."
+        },
+        "RevisionNumber": {
+          "description": "Incremental version counter tracking how many times this order has been modified since creation. Starts at 0."
+        },
+        "OrderDate": {
+          "description": "Date and time the sales order was created. Defaults to the current date/time at insertion."
+        },
+        "DueDate": {
+          "description": "Contractual date by which the order must be delivered to the customer."
+        },
+        "ShipDate": {
+          "description": "Date on which the order was actually shipped. NULL until the order is dispatched."
+        },
+        "Status": {
+          "description": "Current order lifecycle status. 1 = In process, 2 = Approved, 3 = Backordered, 4 = Rejected, 5 = Shipped, 6 = Cancelled."
+        },
+        "OnlineOrderFlag": {
+          "description": "0 = Order was placed by a sales representative. 1 = Order was placed online by the customer through the e-commerce storefront."
+        },
+        "SalesOrderNumber": {
+          "description": "Computed unique order reference number in the format SO + zero-padded SalesOrderID (e.g., SO43659). Displayed on order confirmation emails and invoices."
+        },
+        "PurchaseOrderNumber": {
+          "description": "Customer's own purchase order reference number, provided at time of order for B2B reconciliation. Nullable for retail/online orders."
+        },
+        "AccountNumber": {
+          "description": "Financial accounting reference number for the order, computed from the customer's AccountNumber. Used for ERP integration."
+        },
+        "CustomerID": {
+          "description": "Foreign key to Customer.CustomerID. Identifies the customer who placed this order."
+        },
+        "SalesPersonID": {
+          "description": "Foreign key to SalesPerson.BusinessEntityID. Sales representative who created this order. NULL for online orders placed without an assigned rep."
+        },
+        "TerritoryID": {
+          "description": "Sales territory in which this order was placed. Foreign key to SalesTerritory.TerritoryID. Used for territory revenue reporting."
+        },
+        "BillToAddressID": {
+          "description": "Address to which the invoice should be sent. Foreign key to Person.Address.AddressID."
+        },
+        "ShipToAddressID": {
+          "description": "Address to which the order should be shipped. Foreign key to Person.Address.AddressID."
+        },
+        "ShipMethodID": {
+          "description": "Shipping carrier and service selected for this order. Foreign key to ShipMethod.ShipMethodID."
+        },
+        "CreditCardID": {
+          "description": "Credit card used to pay for this order. Foreign key to CreditCard.CreditCardID. Nullable when payment is by purchase order or other method."
+        },
+        "CreditCardApprovalCode": {
+          "description": "Authorisation code returned by the card payment processor at time of purchase. Maximum 15 characters. Nullable for non-card orders."
+        },
+        "CurrencyRateID": {
+          "description": "Exchange rate record used to convert the order total to a foreign currency. Foreign key to CurrencyRate.CurrencyRateID. NULL for USD orders."
+        },
+        "SubTotal": {
+          "description": "Order subtotal before tax and freight. Computed as the sum of SalesOrderDetail.LineTotal for all lines on this order."
+        },
+        "TaxAmt": {
+          "description": "Total tax amount charged on the order, calculated based on the shipping address state/province tax rate."
+        },
+        "Freight": {
+          "description": "Shipping and handling charge for the order, calculated from the selected ShipMethod rates and order weight."
+        },
+        "TotalDue": {
+          "description": "Total amount due from the customer. Computed as SubTotal + TaxAmt + Freight."
+        },
+        "Comment": {
+          "description": "Free-text sales representative notes or customer-facing comments attached to the order. Maximum 128 characters. Nullable."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -603,6 +1439,41 @@
     "SalesOrderDetail": {
       "source": "Sales.SalesOrderDetail",
       "description": "Individual product line items within a sales order, each with ordered quantity, unit price, unit price discount (from SpecialOffer), and calculated line total",
+      "fields": {
+        "SalesOrderID": {
+          "description": "Part of composite primary key. Foreign key to SalesOrderHeader.SalesOrderID. Identifies the order this line belongs to."
+        },
+        "SalesOrderDetailID": {
+          "description": "Part of composite primary key. Auto-incrementing integer uniquely identifying this line item within the order."
+        },
+        "CarrierTrackingNumber": {
+          "description": "Shipment tracking number provided by the shipping carrier (e.g., UPS, FedEx) after the line is dispatched. Nullable until shipped."
+        },
+        "OrderQty": {
+          "description": "Number of units of the product ordered on this line. Must be at least 1."
+        },
+        "ProductID": {
+          "description": "Foreign key to SpecialOfferProduct.ProductID (composite with SpecialOfferID). Identifies the product ordered on this line."
+        },
+        "SpecialOfferID": {
+          "description": "Foreign key to SpecialOfferProduct.SpecialOfferID. Links to the applied promotion. SpecialOfferID = 1 means no discount (standard price)."
+        },
+        "UnitPrice": {
+          "description": "Selling price per unit in USD at the time the order was placed. May differ from the current Product.ListPrice if a promotion was active."
+        },
+        "UnitPriceDiscount": {
+          "description": "Discount fraction applied to UnitPrice for this line (e.g., 0.10 = 10% off). Derived from the linked SpecialOffer.DiscountPct."
+        },
+        "LineTotal": {
+          "description": "Computed line subtotal: UnitPrice * (1 - UnitPriceDiscount) * OrderQty. Represents the amount billed for this line before tax and freight."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -627,6 +1498,17 @@
     "SalesOrderHeaderSalesReason": {
       "source": "Sales.SalesOrderHeaderSalesReason",
       "description": "Cross-reference table capturing one or more sales reasons (e.g., Price, Quality, On Promotion) attributed to each sales order",
+      "fields": {
+        "SalesOrderID": {
+          "description": "Part of composite primary key. Foreign key to SalesOrderHeader.SalesOrderID. Identifies the order to which this reason is attributed."
+        },
+        "SalesReasonID": {
+          "description": "Part of composite primary key. Foreign key to SalesReason.SalesReasonID. Identifies the motivation recorded for this order."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -638,6 +1520,26 @@
     "ShoppingCartItem": {
       "source": "Sales.ShoppingCartItem",
       "description": "Items added to a customer online shopping cart prior to order submission. Keyed by ShoppingCartID (a string token) and ProductID, with quantity and date added. Abandoned carts can be analysed for cart recovery.",
+      "fields": {
+        "ShoppingCartItemID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the cart line item."
+        },
+        "ShoppingCartID": {
+          "description": "Session-scoped identifier token for the shopping cart (e.g., a GUID or session ID string). Multiple items share the same ShoppingCartID to form a cart. Maximum 50 characters."
+        },
+        "Quantity": {
+          "description": "Number of units of the product the customer has added to the cart. Must be at least 1."
+        },
+        "ProductID": {
+          "description": "Foreign key to Product.ProductID. The product added to the cart."
+        },
+        "DateCreated": {
+          "description": "Date and time the item was first added to the cart. Used to identify abandoned carts and measure time-to-purchase."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated (e.g., when quantity was changed), maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -648,6 +1550,17 @@
     "CountryRegionCurrency": {
       "source": "Sales.CountryRegionCurrency",
       "description": "Cross-reference lookup mapping ISO country/region codes to their primary ISO currency code",
+      "fields": {
+        "CountryRegionCode": {
+          "description": "Part of composite primary key. ISO 3166-1 country/region code. Foreign key to CountryRegion.CountryRegionCode."
+        },
+        "CurrencyCode": {
+          "description": "Part of composite primary key. ISO 4217 currency code that is the primary currency for this country or region. Foreign key to Currency.CurrencyCode."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -659,6 +1572,29 @@
     "SalesTaxRate": {
       "source": "Sales.SalesTaxRate",
       "description": "Tax rates applied by state or province, used to calculate the TaxAmt on sales orders. TaxType: 1=Tax applicable on goods, 2=Tax applicable on freight, 3=Tax applicable on all sales.",
+      "fields": {
+        "SalesTaxRateID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the tax rate record."
+        },
+        "StateProvinceID": {
+          "description": "Foreign key to StateProvince.StateProvinceID. Identifies the state or province to which this tax rate applies."
+        },
+        "TaxType": {
+          "description": "Indicates what the tax applies to. 1 = Tax on retail (goods) transactions only. 2 = Tax on freight only. 3 = Tax on all sales transactions (both goods and freight)."
+        },
+        "TaxRate": {
+          "description": "Percentage tax rate expressed as a decimal (e.g., 0.07 = 7%). Multiplied against the applicable order total to calculate TaxAmt."
+        },
+        "Name": {
+          "description": "Descriptive label for this tax rate (e.g., Canadian GST, Washington State Tax). Maximum 50 characters."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -670,6 +1606,17 @@
     "ScrapReason": {
       "source": "Production.ScrapReason",
       "description": "Lookup table of reasons for manufacturing scrap or rejected product during the production process (e.g., Gouge in metal, Wheel misalignment, Paint process failed)",
+      "fields": {
+        "ScrapReasonID": {
+          "description": "Primary key. Auto-incrementing small integer uniquely identifying the scrap reason."
+        },
+        "Name": {
+          "description": "Short description of the manufacturing defect or failure (e.g., Gouge in metal, Wheel misalignment, Paint process failed, Drill pattern incorrect). Unique within the table."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -681,6 +1628,20 @@
     "Department": {
       "source": "HumanResources.Department",
       "description": "Human Resources department definitions within Adventure Works Cycles (e.g., Engineering, Production, Marketing, Finance, Information Services)",
+      "fields": {
+        "DepartmentID": {
+          "description": "Primary key. Auto-incrementing small integer uniquely identifying the department."
+        },
+        "Name": {
+          "description": "Department name (e.g., Engineering, Tool Design, Sales, Marketing, Purchasing, Research and Development, Production, Production Control, Human Resources, Finance, Information Services, Document Control, Quality Assurance, Facilities and Maintenance, Shipping and Receiving, Executive). Unique within the table."
+        },
+        "GroupName": {
+          "description": "Organisational group that this department belongs to (e.g., Research and Development, Sales and Marketing, Inventory Management, Manufacturing, Executive General and Administration). Used for roll-up headcount and cost reporting."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -692,6 +1653,23 @@
     "Shift": {
       "source": "HumanResources.Shift",
       "description": "Work shift definitions for manufacturing and warehouse personnel (Day, Evening, Night) with start and end times",
+      "fields": {
+        "ShiftID": {
+          "description": "Primary key. Auto-incrementing small integer uniquely identifying the shift."
+        },
+        "Name": {
+          "description": "Shift name (Day, Evening, Night). Unique within the table."
+        },
+        "StartTime": {
+          "description": "Scheduled start time for this shift (e.g., 07:00:00 for the day shift)."
+        },
+        "EndTime": {
+          "description": "Scheduled end time for this shift (e.g., 15:00:00 for the day shift, 23:00:00 for the evening shift)."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -703,6 +1681,26 @@
     "EmployeeDepartmentHistory": {
       "source": "HumanResources.EmployeeDepartmentHistory",
       "description": "Employee department assignment history, tracking all transfers between departments and shifts with StartDate and EndDate",
+      "fields": {
+        "BusinessEntityID": {
+          "description": "Part of composite primary key. Foreign key to HumanResources.Employee.BusinessEntityID. Identifies the employee."
+        },
+        "DepartmentID": {
+          "description": "Part of composite primary key. Foreign key to Department.DepartmentID. Identifies the department the employee was assigned to."
+        },
+        "ShiftID": {
+          "description": "Part of composite primary key. Foreign key to Shift.ShiftID. Identifies which work shift the employee was assigned to in this department."
+        },
+        "StartDate": {
+          "description": "Part of composite primary key. Date on which the employee began working in this department on this shift."
+        },
+        "EndDate": {
+          "description": "Date on which the employee left this department or shift. NULL means this is the current active assignment."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -714,6 +1712,23 @@
     "EmployeePayHistory": {
       "source": "HumanResources.EmployeePayHistory",
       "description": "Complete pay rate history for employees, recording all rate changes with effective date. PayFrequency: 1=Monthly, 2=Bi-weekly.",
+      "fields": {
+        "BusinessEntityID": {
+          "description": "Part of composite primary key. Foreign key to HumanResources.Employee.BusinessEntityID. Identifies the employee."
+        },
+        "RateChangeDate": {
+          "description": "Part of composite primary key. Date on which this pay rate took effect. Combined with BusinessEntityID to uniquely identify each pay record."
+        },
+        "Rate": {
+          "description": "Hourly pay rate for the employee in USD, effective from RateChangeDate. Used to calculate payroll and labour cost allocations."
+        },
+        "PayFrequency": {
+          "description": "How often the employee is paid. 1 = Monthly salary. 2 = Bi-weekly salary."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -725,6 +1740,23 @@
     "BusinessEntityContact": {
       "source": "Person.BusinessEntityContact",
       "description": "Cross-reference table linking business entities (stores, vendors) to their contact persons, capturing the contact type role (e.g., Purchasing Manager, Technical Supervisor)",
+      "fields": {
+        "BusinessEntityID": {
+          "description": "Part of composite primary key. Foreign key to BusinessEntity.BusinessEntityID. Identifies the store or vendor that has this contact."
+        },
+        "PersonID": {
+          "description": "Part of composite primary key. Foreign key to Person.BusinessEntityID. Identifies the person who acts as the contact for this entity."
+        },
+        "ContactTypeID": {
+          "description": "Part of composite primary key. Foreign key to ContactType.ContactTypeID. Defines the role this person plays for the business entity (e.g., Purchasing Manager, Technical Supervisor, Sales Agent)."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -736,6 +1768,32 @@
     "Vendor": {
       "source": "Purchasing.Vendor",
       "description": "Companies from which Adventure Works Cycles purchases components and raw materials. Each vendor has a credit rating (1=Superior, 2=Excellent, 3=Above Average, 4=Average, 5=Below Average) and preferred vendor and active status flags.",
+      "fields": {
+        "BusinessEntityID": {
+          "description": "Primary key. Foreign key to BusinessEntity.BusinessEntityID. Shared identifier linking this vendor record to the business entity."
+        },
+        "AccountNumber": {
+          "description": "Unique vendor account identifier used in the purchasing system (e.g., AUSTRALI0001). Maximum 15 characters."
+        },
+        "Name": {
+          "description": "Legal company name of the vendor (e.g., Australia Bike Retailer, Bike World). Maximum 50 characters."
+        },
+        "CreditRating": {
+          "description": "Vendor credit quality rating. 1 = Superior, 2 = Excellent, 3 = Above Average, 4 = Average, 5 = Below Average. Influences purchasing decisions and payment terms."
+        },
+        "PreferredVendorStatus": {
+          "description": "0 = Do not use unless no alternative vendor is available. 1 = Preferred vendor for the products they supply; use over non-preferred alternatives."
+        },
+        "ActiveFlag": {
+          "description": "0 = Vendor relationship is inactive; no new orders should be raised. 1 = Vendor is currently active."
+        },
+        "PurchasingWebServiceURL": {
+          "description": "URL of the vendor's electronic purchasing web service endpoint for automated order submission. Maximum 1024 characters. Nullable if no web service is available."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -746,6 +1804,41 @@
     "ProductVendor": {
       "source": "Purchasing.ProductVendor",
       "description": "Cross-reference table mapping products to the vendors who supply them, including min/max order quantities, standard price, last receipt cost and date, and lead time in days",
+      "fields": {
+        "ProductID": {
+          "description": "Part of composite primary key. Foreign key to Product.ProductID. Identifies the component or raw material being sourced."
+        },
+        "BusinessEntityID": {
+          "description": "Part of composite primary key. Foreign key to Vendor.BusinessEntityID. Identifies the vendor supplying this product."
+        },
+        "AverageLeadTime": {
+          "description": "Average number of calendar days between raising a purchase order and receiving the product from this vendor. Used for reorder point calculations."
+        },
+        "StandardPrice": {
+          "description": "Vendor's standard quoted price per unit in USD. Used as the baseline cost on new purchase orders."
+        },
+        "LastReceiptCost": {
+          "description": "Actual unit cost paid on the most recent receipt from this vendor. Nullable if no receipts have been processed yet."
+        },
+        "LastReceiptDate": {
+          "description": "Date of the most recent stock receipt from this vendor. Nullable if no goods have been received yet."
+        },
+        "MinOrderQty": {
+          "description": "Minimum order quantity the vendor will accept per purchase order line. Orders below this threshold may be rejected or incur surcharges."
+        },
+        "MaxOrderQty": {
+          "description": "Maximum order quantity recommended per purchase order line. Exceeding this may trigger split orders or extended lead times."
+        },
+        "OnOrderQty": {
+          "description": "Current quantity on open purchase orders with this vendor for this product. Nullable if no orders are outstanding."
+        },
+        "UnitMeasureCode": {
+          "description": "Unit of measure for order quantities (e.g., EA, LB, IN). Foreign key to UnitMeasure.UnitMeasureCode."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -756,6 +1849,47 @@
     "PurchaseOrderHeader": {
       "source": "Purchasing.PurchaseOrderHeader",
       "description": "Summary data for purchase orders raised to vendors, including order date, ship date, status, vendor, ship method, and financial totals (SubTotal, TaxAmt, Freight, TotalDue). Status: 1=Pending, 2=Approved, 3=Rejected, 4=Complete.",
+      "fields": {
+        "PurchaseOrderID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the purchase order."
+        },
+        "RevisionNumber": {
+          "description": "Incremental counter tracking the number of changes made to this purchase order since creation."
+        },
+        "Status": {
+          "description": "Current purchase order lifecycle status. 1 = Pending (not yet approved). 2 = Approved. 3 = Rejected. 4 = Complete (all items received)."
+        },
+        "EmployeeID": {
+          "description": "Foreign key to HumanResources.Employee.BusinessEntityID. Identifies the employee (typically a buyer) who created this purchase order."
+        },
+        "VendorID": {
+          "description": "Foreign key to Vendor.BusinessEntityID. Identifies the vendor to whom this purchase order is addressed."
+        },
+        "ShipMethodID": {
+          "description": "Foreign key to ShipMethod.ShipMethodID. Specifies the shipping method the vendor should use to deliver the goods."
+        },
+        "OrderDate": {
+          "description": "Date and time the purchase order was created. Defaults to the current date/time at insertion."
+        },
+        "ShipDate": {
+          "description": "Expected date on which the vendor will ship the order. Nullable until confirmed."
+        },
+        "SubTotal": {
+          "description": "Order subtotal before tax and freight. Computed as the sum of PurchaseOrderDetail.LineTotal for all lines on this order."
+        },
+        "TaxAmt": {
+          "description": "Total tax charged by the vendor on this purchase order, in USD."
+        },
+        "Freight": {
+          "description": "Shipping and freight charge for the purchase order, in USD."
+        },
+        "TotalDue": {
+          "description": "Total amount owed to the vendor. Computed as SubTotal + TaxAmt + Freight."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -766,6 +1900,41 @@
     "PurchaseOrderDetail": {
       "source": "Purchasing.PurchaseOrderDetail",
       "description": "Individual product line items within a purchase order, recording ordered quantity, unit price, received quantity, rejected quantity, and due date",
+      "fields": {
+        "PurchaseOrderID": {
+          "description": "Part of composite primary key. Foreign key to PurchaseOrderHeader.PurchaseOrderID. Identifies the purchase order this line belongs to."
+        },
+        "PurchaseOrderDetailID": {
+          "description": "Part of composite primary key. Auto-incrementing integer uniquely identifying this line item within the purchase order."
+        },
+        "DueDate": {
+          "description": "Date by which the ordered quantity must be received from the vendor to meet production schedules."
+        },
+        "OrderQty": {
+          "description": "Number of units of the product ordered on this line."
+        },
+        "ProductID": {
+          "description": "Foreign key to Product.ProductID. Identifies the component or raw material being ordered."
+        },
+        "UnitPrice": {
+          "description": "Vendor's agreed price per unit in USD for this purchase order line."
+        },
+        "LineTotal": {
+          "description": "Computed line subtotal: OrderQty * UnitPrice. Represents the total cost for this line before tax and freight."
+        },
+        "ReceivedQty": {
+          "description": "Actual quantity received from the vendor. Updated when goods receipt is processed. May differ from OrderQty if a partial shipment was made."
+        },
+        "RejectedQty": {
+          "description": "Quantity rejected during incoming quality inspection and returned to the vendor."
+        },
+        "StockedQty": {
+          "description": "Quantity accepted into stock. Computed as ReceivedQty - RejectedQty."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -776,6 +1945,26 @@
     "ProductPhoto": {
       "source": "Production.ProductPhoto",
       "description": "Product photography stored as binary image data. Each row holds a thumbnail (ThumbNailPhoto, nvarchar filename ThumbNailPhotoFileName) and a large-format view (LargePhoto, nvarchar filename LargePhotoFileName) for display in the storefront.",
+      "fields": {
+        "ProductPhotoID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the product photo record."
+        },
+        "ThumbNailPhoto": {
+          "description": "Small-format product image stored as binary data (varbinary). Rendered in product listing grids and search results. Nullable if only a large image is available."
+        },
+        "ThumbnailPhotoFileName": {
+          "description": "Original file name for the thumbnail image (e.g., racer02_black_t.gif). Used as a fallback display label. Maximum 50 characters."
+        },
+        "LargePhoto": {
+          "description": "Full-size product image stored as binary data (varbinary). Displayed on the product detail page. Nullable if only a thumbnail is available."
+        },
+        "LargePhotoFileName": {
+          "description": "Original file name for the large-format image (e.g., racer02_black_f.gif). Maximum 50 characters."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -787,6 +1976,20 @@
     "ProductProductPhoto": {
       "source": "Production.ProductProductPhoto",
       "description": "Cross-reference table linking products to their product photos. The Primary flag (bit) marks the default display image for a product in the storefront gallery.",
+      "fields": {
+        "ProductID": {
+          "description": "Part of composite primary key. Foreign key to Product.ProductID. Identifies which product this photo is associated with."
+        },
+        "ProductPhotoID": {
+          "description": "Part of composite primary key. Foreign key to ProductPhoto.ProductPhotoID. Identifies the photo record."
+        },
+        "Primary": {
+          "description": "0 = This is a supplemental gallery image for the product. 1 = This is the primary (default) display image shown in listings and the product detail hero image."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -806,6 +2009,35 @@
     "TransactionHistory": {
       "source": "Production.TransactionHistory",
       "description": "Inventory transaction history for the current year, recording every work order, sales order, and purchase order movement per product. TransactionType: W=Work Order, S=Sales Order, P=Purchase Order.",
+      "fields": {
+        "TransactionID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the transaction record."
+        },
+        "ProductID": {
+          "description": "Foreign key to Product.ProductID. The product involved in this inventory transaction."
+        },
+        "ReferenceOrderID": {
+          "description": "Identifier of the source document that triggered this transaction: a WorkOrderID, SalesOrderID, or PurchaseOrderID depending on TransactionType."
+        },
+        "ReferenceOrderLineID": {
+          "description": "Line item number within the source order document (e.g., SalesOrderDetailID or PurchaseOrderDetailID). 0 for work order transactions."
+        },
+        "TransactionDate": {
+          "description": "Date and time the inventory movement was recorded."
+        },
+        "TransactionType": {
+          "description": "Single-character code indicating the type of transaction: W = Work Order (production output/consumption), S = Sales Order (outbound sale), P = Purchase Order (inbound receipt)."
+        },
+        "Quantity": {
+          "description": "Number of units involved in the transaction. Positive for receipts (P, W production), negative for issues (S, W consumption)."
+        },
+        "ActualCost": {
+          "description": "Actual unit cost in USD at the time of the transaction, multiplied by Quantity to give the total value of the movement."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -817,6 +2049,35 @@
     "TransactionHistoryArchive": {
       "source": "Production.TransactionHistoryArchive",
       "description": "Archived product inventory transaction records for previous years. Identical structure to TransactionHistory; older records are periodically moved here to keep the active table small.",
+      "fields": {
+        "TransactionID": {
+          "description": "Primary key. Preserves the original TransactionID from TransactionHistory when the record was archived."
+        },
+        "ProductID": {
+          "description": "Foreign key to Product.ProductID. The product involved in the archived inventory transaction."
+        },
+        "ReferenceOrderID": {
+          "description": "Identifier of the source order document (work order, sales order, or purchase order) that triggered this transaction."
+        },
+        "ReferenceOrderLineID": {
+          "description": "Line number within the source order. 0 for work order transactions."
+        },
+        "TransactionDate": {
+          "description": "Date and time the original inventory movement was recorded."
+        },
+        "TransactionType": {
+          "description": "W = Work Order, S = Sales Order, P = Purchase Order. Matches the original transaction type from TransactionHistory."
+        },
+        "Quantity": {
+          "description": "Number of units involved in the archived transaction."
+        },
+        "ActualCost": {
+          "description": "Actual unit cost in USD at the time of the original transaction."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -828,6 +2089,38 @@
     "WorkOrder": {
       "source": "Production.WorkOrder",
       "description": "Manufacturing work orders tracking the production of products, with planned and actual quantities, scheduled start and end dates, actual start and end dates, and scrap quantity with reason",
+      "fields": {
+        "WorkOrderID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the work order."
+        },
+        "ProductID": {
+          "description": "Foreign key to Product.ProductID. Identifies the finished good or sub-component being produced."
+        },
+        "OrderQty": {
+          "description": "Target quantity of the product to manufacture on this work order."
+        },
+        "StockedQty": {
+          "description": "Quantity of finished units added to inventory. Computed as OrderQty - ScrappedQty."
+        },
+        "ScrappedQty": {
+          "description": "Number of units that failed quality inspection and were scrapped during production."
+        },
+        "StartDate": {
+          "description": "Date and time production actually began on this work order."
+        },
+        "EndDate": {
+          "description": "Date and time production was completed or cancelled. Nullable if the work order is still open."
+        },
+        "DueDate": {
+          "description": "Scheduled completion date by which the finished quantity must be ready for inventory."
+        },
+        "ScrapReasonID": {
+          "description": "Foreign key to ScrapReason.ScrapReasonID. Identifies the reason for any scrapped units. Nullable when ScrappedQty = 0."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -839,6 +2132,44 @@
     "WorkOrderRouting": {
       "source": "Production.WorkOrderRouting",
       "description": "Manufacturing routing information per work order operation, recording the Location, operation sequence, scheduled and actual start/end times, planned and actual resource hours, and actual costs",
+      "fields": {
+        "WorkOrderID": {
+          "description": "Part of composite primary key. Foreign key to WorkOrder.WorkOrderID. Identifies the work order this routing step belongs to."
+        },
+        "ProductID": {
+          "description": "Part of composite primary key. Foreign key to Product.ProductID. Denormalised from the work order for quick access."
+        },
+        "OperationSequence": {
+          "description": "Part of composite primary key. Sequential step number within the work order routing (e.g., 1, 2, 3). Determines the order in which manufacturing operations are performed."
+        },
+        "LocationID": {
+          "description": "Foreign key to Location.LocationID. Work center where this operation step is performed."
+        },
+        "ScheduledStartDate": {
+          "description": "Planned start date and time for this manufacturing operation step, derived from the work order schedule."
+        },
+        "ScheduledEndDate": {
+          "description": "Planned completion date and time for this operation step."
+        },
+        "ActualStartDate": {
+          "description": "Actual date and time the operation step began. Nullable until work commences."
+        },
+        "ActualEndDate": {
+          "description": "Actual date and time the operation step was completed. Nullable until complete."
+        },
+        "ActualResourceHrs": {
+          "description": "Actual machine or labour hours consumed at this work center for this operation step. Used to calculate actual production costs."
+        },
+        "PlannedCost": {
+          "description": "Budgeted cost for this operation step in USD, based on Location.CostRate and estimated resource hours."
+        },
+        "ActualCost": {
+          "description": "Actual cost incurred for this operation step in USD, based on ActualResourceHrs and the location cost rate."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -850,6 +2181,23 @@
     "SalesPersonQuotaHistory": {
       "source": "Sales.SalesPersonQuotaHistory",
       "description": "Quarterly sales quota history for each sales representative, used for performance benchmarking and commission calculation",
+      "fields": {
+        "BusinessEntityID": {
+          "description": "Part of composite primary key. Foreign key to SalesPerson.BusinessEntityID. Identifies the sales representative."
+        },
+        "QuotaDate": {
+          "description": "Part of composite primary key. Start date of the quarter for which this sales quota was set (typically January, April, July, or October)."
+        },
+        "SalesQuota": {
+          "description": "Target sales revenue in USD assigned to the sales person for the quota period starting on QuotaDate."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -861,6 +2209,26 @@
     "SalesTerritoryHistory": {
       "source": "Sales.SalesTerritoryHistory",
       "description": "History of sales territory assignments for each sales person, with StartDate and EndDate tracking geographic responsibility changes over time",
+      "fields": {
+        "BusinessEntityID": {
+          "description": "Part of composite primary key. Foreign key to SalesPerson.BusinessEntityID. Identifies the sales person whose territory assignment is recorded."
+        },
+        "TerritoryID": {
+          "description": "Part of composite primary key. Foreign key to SalesTerritory.TerritoryID. Identifies the territory the sales person was responsible for."
+        },
+        "StartDate": {
+          "description": "Part of composite primary key. Date on which the sales person took responsibility for this territory."
+        },
+        "EndDate": {
+          "description": "Date on which the sales person's responsibility for this territory ended. NULL means this is the current active territory assignment."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -872,6 +2240,20 @@
     "JobCandidate": {
       "source": "HumanResources.JobCandidate",
       "description": "Résumés and application records for job candidates submitted to Human Resources, stored as structured XML. EmployeeID is populated after a candidate is hired.",
+      "fields": {
+        "JobCandidateID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the job candidate application."
+        },
+        "BusinessEntityID": {
+          "description": "Foreign key to HumanResources.Employee.BusinessEntityID. Populated if the candidate was subsequently hired as an employee. Nullable for external applicants not yet hired."
+        },
+        "Resume": {
+          "description": "Candidate's résumé stored as structured XML, following a standard Adventure Works HR schema. Contains education history, employment history, skills, references, and personal statement."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "mcp": { "enabled": false },
       "permissions": [
         {
@@ -883,6 +2265,44 @@
     "ProductReview": {
       "source": "Production.ProductReview",
       "description": "Customer product reviews with 1–5 star ratings and free-text comments. AI-enhanced: CommentsEmbedding (VECTOR(1536), text-embedding-3-small) enables semantic review search. Additional demo fields: HelpfulVotes (upvote counter), UserID (links reviewer to Person.Person for authenticated reviews), IsModerated (bit flag for staff content moderation).",
+      "fields": {
+        "ProductReviewID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the product review."
+        },
+        "ProductID": {
+          "description": "Foreign key to Product.ProductID. Identifies the product being reviewed."
+        },
+        "ReviewerName": {
+          "description": "Display name of the reviewer as entered at submission. Maximum 50 characters. For authenticated reviews this may be derived from the linked Person record."
+        },
+        "ReviewDate": {
+          "description": "Date and time the review was submitted. Defaults to the current date/time at insertion."
+        },
+        "EmailAddress": {
+          "description": "Email address provided by the reviewer at submission. Not displayed publicly. Used for follow-up moderation communications. Maximum 50 characters."
+        },
+        "Rating": {
+          "description": "Numeric star rating given by the reviewer on a scale of 1 (worst) to 5 (best). Used to compute AverageRating on the HelpMeChoose view."
+        },
+        "Comments": {
+          "description": "Free-text review body written by the customer. Maximum 3850 characters. Displayed on the product detail page alongside the star rating."
+        },
+        "CommentsEmbedding": {
+          "description": "1536-dimensional vector embedding of the Comments text, generated using Azure OpenAI text-embedding-3-small. Enables semantic review search, sentiment clustering, and AI-powered review summarisation."
+        },
+        "HelpfulVotes": {
+          "description": "Running count of upvotes from other customers who found this review helpful. Incremented via the HelpfulVote Azure Function endpoint."
+        },
+        "UserID": {
+          "description": "Foreign key to Person.BusinessEntityID. Links this review to an authenticated customer account. Nullable for guest (unauthenticated) reviews."
+        },
+        "IsModerated": {
+          "description": "0 = Review has not yet been reviewed by staff. 1 = Review has been reviewed and approved for public display by a staff moderator."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -901,6 +2321,26 @@
     "ProductReviewReply": {
       "source": "Production.ProductReviewReply",
       "description": "Staff or automated replies to customer product reviews. Captures the reply text (up to 3850 chars), the author name (RepliedBy, defaults to 'AdventureWorks Team'), and the reply date. One or more replies can be attached to a single review.",
+      "fields": {
+        "ProductReviewReplyID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the reply record."
+        },
+        "ProductReviewID": {
+          "description": "Foreign key to ProductReview.ProductReviewID. Identifies the customer review that this reply responds to."
+        },
+        "ReplyText": {
+          "description": "Text body of the staff reply. Maximum 3850 characters. Displayed beneath the customer review on the product detail page."
+        },
+        "RepliedBy": {
+          "description": "Display name of the person or team who authored the reply (e.g., AdventureWorks Team, Customer Success). Defaults to 'AdventureWorks Team'. Maximum 50 characters."
+        },
+        "ReplyDate": {
+          "description": "Date and time the reply was posted. Defaults to the current date/time at insertion."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -919,6 +2359,35 @@
     "BillOfMaterials": {
       "source": "Production.BillOfMaterials",
       "description": "Bill of materials defining which component products (ComponentID) are required to assemble a parent product (ProductAssemblyID), with required quantity, unit of measure, and effective date range. NULL ProductAssemblyID means a standalone (top-level) component.",
+      "fields": {
+        "BillOfMaterialsID": {
+          "description": "Primary key. Auto-incrementing integer uniquely identifying the bill of materials line."
+        },
+        "ProductAssemblyID": {
+          "description": "Foreign key to Product.ProductID. Identifies the parent finished good or sub-assembly that requires this component. NULL indicates that the component is a top-level stand-alone item with no parent assembly."
+        },
+        "ComponentID": {
+          "description": "Foreign key to Product.ProductID. Identifies the component or raw material required by the assembly."
+        },
+        "StartDate": {
+          "description": "Date on which this component requirement became effective for the assembly. Together with EndDate forms the validity window."
+        },
+        "EndDate": {
+          "description": "Date on which this component was removed from the bill of materials. NULL means this requirement is currently active."
+        },
+        "UnitMeasureCode": {
+          "description": "Unit of measure for the PerAssemblyQty value (e.g., EA, LB, IN). Foreign key to UnitMeasure.UnitMeasureCode."
+        },
+        "BOMLevel": {
+          "description": "Depth of this component in the product structure hierarchy. 0 = top-level finished good; higher numbers indicate deeper sub-assemblies."
+        },
+        "PerAssemblyQty": {
+          "description": "Quantity of ComponentID required to produce one unit of ProductAssemblyID. Expressed in the unit given by UnitMeasureCode."
+        },
+        "ModifiedDate": {
+          "description": "Date and time the record was last updated, maintained automatically by the system."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",
@@ -947,6 +2416,153 @@
         "key-fields": ["BusinessEntityID"]
       },
       "description": "Read-only view of Adventure Works Cycles employees for API access. Based on HumanResources.Employee but excludes the hierarchyid columns (OrganizationNode, OrganizationLevel) which are not supported by Data API Builder. Includes identity, job title, employment dates, leave balances, and current status.",
+      "fields": {
+        "BusinessEntityID": {
+          "description": "Primary key. Foreign key to BusinessEntity.BusinessEntityID. Unique identifier shared across all person, vendor, and store records."
+        },
+        "Title": {
+          "description": "Optional courtesy title prefix (e.g., Mr., Ms., Dr.). Maximum 8 characters."
+        },
+        "FirstName": {
+          "description": "Employee's given (first) name. Maximum 50 characters."
+        },
+        "MiddleName": {
+          "description": "Employee's middle name or initial. Optional. Maximum 50 characters."
+        },
+        "LastName": {
+          "description": "Employee's family (last) name. Maximum 50 characters."
+        },
+        "Suffix": {
+          "description": "Optional generational or professional name suffix (e.g., Jr., Sr., III). Maximum 10 characters."
+        },
+        "JobTitle": {
+          "description": "Employee's official job title (e.g., Production Supervisor, Purchasing Manager, Design Engineer). Maximum 50 characters."
+        },
+        "PhoneNumber": {
+          "description": "Employee's primary contact telephone number from PersonPhone. Maximum 25 characters."
+        },
+        "PhoneNumberType": {
+          "description": "Type of the primary phone number (Cell, Home, Work). Sourced from PhoneNumberType.Name."
+        },
+        "EmailAddress": {
+          "description": "Employee's primary email address from Person.EmailAddress. Maximum 50 characters."
+        },
+        "EmailPromotion": {
+          "description": "Marketing opt-in level inherited from Person.EmailPromotion. 0 = No promotional emails, 1 = Adventure Works only, 2 = Third-party opt-in."
+        },
+        "AddressLine1": {
+          "description": "First line of the employee's home address (street number and name). Maximum 60 characters."
+        },
+        "AddressLine2": {
+          "description": "Second address line (suite, apartment, floor). Optional. Maximum 60 characters."
+        },
+        "City": {
+          "description": "City portion of the employee's home address. Maximum 30 characters."
+        },
+        "StateProvinceName": {
+          "description": "Full state or province name from StateProvince.Name (e.g., Washington, Ontario)."
+        },
+        "PostalCode": {
+          "description": "Postal or ZIP code for the employee's home address. Maximum 15 characters."
+        },
+        "CountryRegionName": {
+          "description": "Full country or region name from CountryRegion.Name (e.g., United States, Canada)."
+        },
+        "AdditionalContactInfo": {
+          "description": "Supplementary contact information stored as XML (e.g., emergency contacts, alternative phone numbers)."
+        },
+        "NationalIDNumber": {
+          "description": "Government-issued national identification number (e.g., Social Security Number for US employees). Maximum 15 characters. Sensitive PII — restrict access in production."
+        },
+        "LoginID": {
+          "description": "Network login identifier for this employee (e.g., adventure-works\\ken0). Used for Active Directory / Entra ID authentication. Maximum 256 characters."
+        },
+        "BirthDate": {
+          "description": "Employee's date of birth. Sensitive PII — restrict access in production."
+        },
+        "MaritalStatus": {
+          "description": "Single-character marital status code: M = Married, S = Single."
+        },
+        "Gender": {
+          "description": "Single-character gender code: M = Male, F = Female."
+        },
+        "HireDate": {
+          "description": "Date on which the employee was first hired by Adventure Works Cycles."
+        },
+        "SalariedFlag": {
+          "description": "0 = Hourly worker, subject to overtime rules. 1 = Salaried employee, exempt from overtime."
+        },
+        "VacationHours": {
+          "description": "Number of accrued paid vacation hours the employee is currently entitled to use."
+        },
+        "SickLeaveHours": {
+          "description": "Number of accrued paid sick leave hours the employee is currently entitled to use."
+        },
+        "CurrentFlag": {
+          "description": "0 = Employee is no longer active (terminated or on indefinite leave). 1 = Employee is currently active."
+        },
+        "rowguid": {
+          "description": "ROWGUIDCOL uniquely identifying the record. Used for merge replication."
+        }
+      },
+      "permissions": [
+        {
+          "role": "anonymous",
+          "actions": ["read"]
+        }
+      ]
+    },
+    "HelpMeChoose": {
+      "source": {
+        "object": "Production.vHelpMeChoose",
+        "type": "view",
+        "key-fields": ["CultureID", "ProductID"]
+      },
+      "description": "Comprehensive read-only view for the Help Me Choose AI agent. Flattens finished-goods product attributes (ProductID, ProductName, ProductDescription, Color, Size, ProductLine, Style), culture-specific Category and Subcategory names, IsInStock (derived from ProductInventory), ListPrice, and AverageRating/ReviewCount (aggregated from ProductReview) — one row per ProductID + CultureID combination.",
+      "fields": {
+        "CultureID": {
+          "description": "Part of composite key. Culture/language code for this row (e.g., en, fr, ar). All text fields (ProductName, ProductDescription, Category, Subcategory) are in this language."
+        },
+        "ProductID": {
+          "description": "Part of composite key. Foreign key to Product.ProductID. Identifies the finished good product."
+        },
+        "ProductName": {
+          "description": "Culture-specific translated product name from ProductName.Name for the row's CultureID (e.g., Mountain-100 Silver, 38 in English; the AI-translated equivalent in other languages)."
+        },
+        "ProductDescription": {
+          "description": "Culture-specific product description text from ProductDescription.Description. Up to 2000 characters of AI-enhanced marketing and technical content in the row's language."
+        },
+        "Color": {
+          "description": "AI-generated descriptive colour name for the product (e.g., Gloss Midnight Black, Brushed Aluminium Silver). Inherited from Product.Color, extended to 256 characters. Nullable for colourless components."
+        },
+        "Size": {
+          "description": "Product size designator (e.g., S, M, L, 38, 42, 58). Nullable for products without a size dimension."
+        },
+        "ProductLine": {
+          "description": "Two-character product line: R = Road, M = Mountain, T = Touring, S = Standard. Useful for filtering products by intended use."
+        },
+        "Style": {
+          "description": "Two-character fit style: W = Womens, M = Mens, U = Universal. Nullable for non-apparel products."
+        },
+        "Category": {
+          "description": "Top-level category name localised for CultureID (e.g., Bikes, Components, Clothing, Accessories in English; translated in other cultures)."
+        },
+        "Subcategory": {
+          "description": "Product subcategory name localised for CultureID (e.g., Mountain Bikes, Helmets, Jerseys). Provides a second level of filtering for AI product recommendations."
+        },
+        "IsInStock": {
+          "description": "1 if the product has at least one unit of on-hand inventory across all locations; 0 if out of stock. Derived from ProductInventory.Quantity."
+        },
+        "ListPrice": {
+          "description": "Current retail selling price in USD. 0.00 indicates the product is not currently for sale."
+        },
+        "AverageRating": {
+          "description": "Mean star rating across all submitted reviews for this product (1.0–5.0). Computed from ProductReview.Rating. Nullable if no reviews exist."
+        },
+        "ReviewCount": {
+          "description": "Total number of customer reviews submitted for this product. 0 if no reviews have been written."
+        }
+      },
       "permissions": [
         {
           "role": "anonymous",

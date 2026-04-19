@@ -106,6 +106,7 @@ public class SupplyChainService
     private readonly double _simTimeScale;
     private readonly ILogger<SupplyChainService> _logger;
     private readonly TelemetryClient _telemetry;
+    private readonly BankService? _bank;
 
     // Vendor cache — loaded lazily from Purchasing.Vendor on first access
     private List<VendorInfo>? _vendorCache;
@@ -119,12 +120,14 @@ public class SupplyChainService
         string tableServiceUri,
         double simTimeScale,
         ILogger<SupplyChainService> logger,
-        TelemetryClient telemetry)
+        TelemetryClient telemetry,
+        BankService? bank = null)
     {
         _connectionString = connectionString;
         _simTimeScale     = simTimeScale;
         _logger           = logger;
         _telemetry        = telemetry;
+        _bank             = bank;
 
         var svc = new TableServiceClient(new Uri(tableServiceUri), new DefaultAzureCredential());
         _tableClient = svc.GetTableClient(TABLE_NAME);
@@ -827,11 +830,14 @@ public class SupplyChainService
         var row = await conn.QuerySingleOrDefaultAsync(@"
             SELECT poh.Status                          AS PoStatus,
                    CAST(poh.VendorID AS VARCHAR(20))   AS VendorId,
+                   v.Name                              AS VendorName,
                    pod.ProductID,
                    CAST(pod.OrderQty AS INT)            AS Qty,
-                   CAST(pod.UnitPrice AS FLOAT)         AS UnitCost
+                   CAST(pod.UnitPrice AS FLOAT)         AS UnitCost,
+                   CAST(poh.TotalDue AS FLOAT)          AS TotalDue
             FROM Purchasing.PurchaseOrderHeader poh
             INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
+            INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
             WHERE poh.PurchaseOrderID = @Id",
             new { Id = purchaseOrderId });
 
@@ -850,10 +856,12 @@ public class SupplyChainService
         };
         if (!valid) return false;
 
-        int    productId = (int)row.ProductID;
-        string vendorId  = (string)row.VendorId;
-        int    qty       = (int)row.Qty;
-        double unitCost  = (double)row.UnitCost;
+        int    productId  = (int)row.ProductID;
+        string vendorId   = (string)row.VendorId;
+        string vendorName = (string)row.VendorName;
+        int    qty        = (int)row.Qty;
+        double unitCost   = (double)row.UnitCost;
+        double totalDue   = (double)row.TotalDue;
 
         byte newPoStatus = targetStatus switch
         {
@@ -884,6 +892,25 @@ public class SupplyChainService
                 ["EventType"]       = "rejected",
                 ["Description"]     = "Order rejected. Vendor stock refunded.",
             });
+
+            // Bank: refund the PO debit if it was previously approved (status was 2)
+            if (currentPoStatus == 2 && _bank != null)
+            {
+                try
+                {
+                    await _bank.InitializeAsync();
+                    await _bank.PostTransactionAsync(new BankTransactionRequest(
+                        CurrencyCode:    "USD",
+                        Amount:          (decimal)totalDue,
+                        Description:     $"PO-{purchaseOrderId} refund: {vendorName} delivery failed — vendor stock returned",
+                        ReferenceId:     $"PO-{purchaseOrderId}-refund",
+                        TransactionType: "other"));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[Bank] Failed to record PO refund for PO {PurchaseOrderId} — continuing.", purchaseOrderId);
+                }
+            }
         }
         else // approved
         {
@@ -893,6 +920,25 @@ public class SupplyChainService
                 ["EventType"]       = "approved",
                 ["Description"]     = "Order approved by vendor. In transit.",
             });
+
+            // Bank: debit the full PO cost (TotalDue includes freight) at approval time
+            if (_bank != null)
+            {
+                try
+                {
+                    await _bank.InitializeAsync();
+                    await _bank.PostTransactionAsync(new BankTransactionRequest(
+                        CurrencyCode:    "USD",
+                        Amount:          -(decimal)totalDue,
+                        Description:     $"PO-{purchaseOrderId} approved: {qty}x ProductID {productId} from {vendorName}",
+                        ReferenceId:     $"PO-{purchaseOrderId}",
+                        TransactionType: "purchase"));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[Bank] Failed to record PO debit for PO {PurchaseOrderId} — continuing.", purchaseOrderId);
+                }
+            }
         }
 
         return true;

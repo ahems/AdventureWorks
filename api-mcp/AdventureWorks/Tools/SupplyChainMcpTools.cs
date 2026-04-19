@@ -287,24 +287,4 @@ public class SupplyChainMcpTools
             throw;
         }
     }
-
-    [McpServerTool]
-    [Description("Reset the entire supply chain simulation: clears all purchase orders, cancels in-flight transitions, and re-seeds vendor stock to initial levels. Use this to start a clean simulation scenario.")]
-    public async Task<string> ResetSupplyChainSimulation()
-    {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_ResetSupplyChainSimulation");
-        try
-        {
-            var result = await _supplyChain.ResetSupplyChainAsync();
-            operation.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", "ResetSupplyChainSimulation" } });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "ResetSupplyChainSimulation" } });
-            throw;
-        }
-    }
 }

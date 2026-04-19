@@ -221,15 +221,6 @@ public class SupplyChainControlFunction
         });
     }
 
-    // ── Reset ─────────────────────────────────────────────────────────────────
-
-    [Function("SupplyChainReset")]
-    public async Task<HttpResponseData> Reset(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "supply/reset")] HttpRequestData req)
-    {
-        await _svc.ResetAsync();
-        return await OkAsync(req, new { message = "Supply chain simulation reset. Vendor stock re-seeded." });
-    }
 
     // ── Internal helpers ───────────────────────────────────────────────────────
 

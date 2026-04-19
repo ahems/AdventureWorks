@@ -51,16 +51,22 @@ public class WorkOrderOperationProcessorFunction
 
     private readonly ILogger<WorkOrderOperationProcessorFunction> _logger;
     private readonly WorkOrderSimulationService _sim;
+    private readonly WorkforceService _workforce;
+    private readonly BankService _bank;
     private readonly IConfiguration _config;
 
     public WorkOrderOperationProcessorFunction(
         ILogger<WorkOrderOperationProcessorFunction> logger,
         WorkOrderSimulationService sim,
+        WorkforceService workforce,
+        BankService bank,
         IConfiguration config)
     {
-        _logger = logger;
-        _sim    = sim;
-        _config = config;
+        _logger    = logger;
+        _sim       = sim;
+        _workforce = workforce;
+        _bank      = bank;
+        _config    = config;
     }
 
     [Function(nameof(WorkOrderOperationProcessor))]
@@ -206,7 +212,30 @@ public class WorkOrderOperationProcessorFunction
             // Still enqueue completion if not already done (safe because phase 2 is also idempotent)
         }
 
-        var completionMsg = msg with { IsCompletionPhase = true };
+        // Assign an operator at this location for labour-cost tracking
+        WorkerAssignment? worker = null;
+        if (started) // only on the genuine first start
+        {
+            try
+            {
+                worker = await _workforce.AssignOperatorAsync(
+                    msg.LocationId, msg.WorkOrderId,
+                    $"Op {msg.OperationSequence}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Workforce] Could not assign operator for WO={WorkOrderId} Op={OpSeq} — proceeding without assignment.",
+                    msg.WorkOrderId, msg.OperationSequence);
+            }
+        }
+
+        var completionMsg = msg with
+        {
+            IsCompletionPhase   = true,
+            AssignedEmployeeId  = worker?.EmployeeId ?? msg.AssignedEmployeeId,
+            AssignedWorkerName  = worker?.Name       ?? msg.AssignedWorkerName,
+            AssignedHourlyRate  = worker != null ? worker.HourlyRate : msg.AssignedHourlyRate,
+        };
         var delay = msg.ScheduledCompletionUtc > DateTime.UtcNow
             ? msg.ScheduledCompletionUtc - DateTime.UtcNow
             : TimeSpan.Zero;
@@ -258,6 +287,38 @@ public class WorkOrderOperationProcessorFunction
             return;
         }
 
+        // Release the assigned operator back to the available pool
+        if (msg.AssignedEmployeeId.HasValue)
+        {
+            try { await _workforce.ReleaseOperatorAsync(msg.AssignedEmployeeId.Value); }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Workforce] Could not release operator {EmployeeId} for WO={WorkOrderId} Op={OpSeq} — continuing.",
+                    msg.AssignedEmployeeId.Value, msg.WorkOrderId, msg.OperationSequence);
+            }
+        }
+
+        // Bank: payroll charge for this routing operation
+        if (msg.AssignedEmployeeId.HasValue && msg.AssignedHourlyRate > 0)
+        {
+            try
+            {
+                var laborCost = actualHrs * (decimal)msg.AssignedHourlyRate;
+                await _bank.InitializeAsync();
+                await _bank.PostTransactionAsync(new BankTransactionRequest(
+                    CurrencyCode:    "USD",
+                    Amount:          -laborCost,
+                    Description:     $"Payroll: {msg.AssignedWorkerName ?? "Operator"} \u2014 WO-{msg.WorkOrderId} Op-{msg.OperationSequence} @ Location {msg.LocationId}",
+                    ReferenceId:     $"WO-{msg.WorkOrderId}-OP-{msg.OperationSequence}",
+                    TransactionType: "payroll"));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Bank] Failed to record payroll for WO={WorkOrderId} Op={OpSeq} — continuing.",
+                    msg.WorkOrderId, msg.OperationSequence);
+            }
+        }
+
         // ── Scrap logic ───────────────────────────────────────────────────────
         var scrapConfig = await _sim.GetScrapConfigAsync(msg.LocationId);
         bool isScrapped = Random.Shared.NextDouble() < scrapConfig.FailureRatePct
@@ -305,6 +366,27 @@ public class WorkOrderOperationProcessorFunction
                 msg.LocationId, scrapConfig.LocationName,
                 reasonId, reasonName, isTotalFailure,
                 suppVendorId, suppVendorName, suppCompId, suppCompName);
+
+            // Bank: scrap write-off — charge the standard cost of the scrapped unit
+            try
+            {
+                var standardCost = await _sim.GetProductStandardCostAsync(msg.ProductId);
+                if (standardCost > 0m)
+                {
+                    var productName = await GetProductNameAsync(msg.ProductId);
+                    await _bank.InitializeAsync();
+                    await _bank.PostTransactionAsync(new BankTransactionRequest(
+                        CurrencyCode:    "USD",
+                        Amount:          -standardCost,
+                        Description:     $"Scrap write-off: {productName} \u2014 {reasonName}{(suppVendorId.HasValue ? $" (Supplier: {suppVendorName})" : "")}",
+                        ReferenceId:     $"SCRAP-WO-{msg.WorkOrderId}",
+                        TransactionType: "other"));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Bank] Failed to record scrap write-off for WO={WorkOrderId} — continuing.", msg.WorkOrderId);
+            }
 
             _logger.LogWarning(
                 "[Scrap] WO={WorkOrderId} Location={LocationId} Reason={Reason} TotalFailure={Total}{VendorNote}",

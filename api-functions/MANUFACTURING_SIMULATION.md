@@ -442,6 +442,67 @@ Returns quality data for a single vendor. Returns `404` if no attributed scrap e
 
 ---
 
+## Bank Integration & Financial Tracking
+
+The manufacturing simulator is integrated with the Bank Simulator so every routing operation, completed work order, and scrap event automatically generates a bank transaction. This gives the AI agent a live cost ledger without any manual bookkeeping.
+
+### Worker assignment (Phase 1)
+
+When the queue processor starts a routing operation it calls `WorkforceService.AssignOperatorAsync()` to claim an available worker at the operation's location. The assigned employee ID, name, and hourly rate are embedded in the Phase-2 queue message (`WorkOrderOperationMessage`) so the completion handler can calculate the exact labour cost without a second database round-trip.
+
+### Payroll debit (Phase 2, on completion)
+
+When a routing operation completes the worker is released and a payroll withdrawal is posted:
+
+```
+amount  = ActualResourceHrs × AssignedHourlyRate
+ref     = WO-{workOrderId}-OP-{operationSequence}
+type    = "payroll"
+```
+
+### Work-order completion charge (last routing op)
+
+When the final routing operation for a work order completes and finished goods are added to inventory, an additional charge covers the total overhead:
+
+```
+amount  = SUM(WorkOrderRouting.ActualCost) for the work order
+ref     = WO-{workOrderId}
+type    = "purchase"
+```
+
+### Scrap write-off (Phase 2, on scrap event)
+
+Immediately after a scrap event is recorded, the standard cost of the scrapped units is written off:
+
+```
+amount  = ProductCostHistory.StandardCost × ScrappedQty
+ref     = SCRAP-WO-{workOrderId}
+type    = "other"
+```
+
+### Viewing financial data
+
+Use the financial reporting endpoints or MCP tools to see manufacturing costs grouped by type:
+
+```bash
+# Overall breakdown across all simulators
+GET /api/financials/summary
+
+# Manufacturing-only transactions (completions, payroll, scrap)
+GET /api/financials/manufacturing?type=payroll
+GET /api/financials/manufacturing?type=scrap
+GET /api/financials/manufacturing?type=completions
+```
+
+Or via MCP:
+
+- `GetFinancialSummary` — totals across all three simulators
+- `GetManufacturingFinancials(type="payroll")` — labour costs per routing operation
+
+See [BANK_SIMULATOR.md](./BANK_SIMULATOR.md) for the full financial reporting API reference and coordinated reset instructions.
+
+---
+
 ## Configuration (Environment Variables)
 
 | Variable                        | Default | Effect                                                                                                                       |

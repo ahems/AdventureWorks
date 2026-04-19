@@ -274,7 +274,7 @@ public class SupplyChainService
         return $"Order '{orderId}' cancelled. Reason: {reason}";
     }
 
-    // ── Restock & Reset ───────────────────────────────────────────────────────
+    // ── Restock ────────────────────────────────────────────────────────────────
 
     public async Task<string> RestockVendorAsync(string vendorId, int? productId = null)
     {
@@ -286,17 +286,5 @@ public class SupplyChainService
         var json = await resp.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
         return doc.RootElement.GetStringOrDefault("message") ?? $"Vendor '{vendorId}' restocked.";
-    }
-
-    public async Task<string> ResetSupplyChainAsync()
-    {
-        var req = new HttpRequestMessage(HttpMethod.Delete, "api/supply/reset");
-        var resp = await _http.SendAsync(req);
-        if (!resp.IsSuccessStatusCode)
-            return $"Error resetting supply chain: {resp.StatusCode}";
-
-        var json = await resp.Content.ReadAsStringAsync();
-        using var doc = JsonDocument.Parse(json);
-        return doc.RootElement.GetStringOrDefault("message") ?? "Supply chain simulation reset.";
     }
 }

@@ -64,6 +64,10 @@ builder.Services.AddHttpClient<BankService>(client =>
 {
 	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
 });
+builder.Services.AddHttpClient<SimulatorService>(client =>
+{
+	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
+});
 
 // Register MCP server with SSE transport and AdventureWorks tools
 builder.Services
@@ -72,7 +76,8 @@ builder.Services
 	   .WithTools<AdventureWorksMcpTools>()
 	   .WithTools<ManufacturingMcpTools>()
 	   .WithTools<SupplyChainMcpTools>()
-	   .WithTools<BankMcpTools>();
+	   .WithTools<BankMcpTools>()
+	   .WithTools<SimulatorMcpTools>();
 
 builder.AddServiceDefaults();
 

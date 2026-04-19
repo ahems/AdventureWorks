@@ -353,9 +353,10 @@ upsert_agent() {
     local agent_name="$1"
     local display_name="$2"
     local instructions="$3"
-    local memory_store_name="${4:-}"     # optional: attach a memory_search_preview tool
-    local description="${5:-}"           # optional: longer description (falls back to display_name)
-    local starter_prompts_json="${6:-}"  # optional: JSON array of {text:"..."} starter prompts
+    local memory_store_name="${4:-}"       # optional: attach a memory_search_preview tool
+    local description="${5:-}"             # optional: longer description (falls back to display_name)
+    local starter_prompts_json="${6:-}"    # optional: JSON array of {text:"..."} starter prompts
+    local structured_inputs_json="${7:-}"  # optional: JSON object of structured_inputs definitions
 
     local token
     token=$(get_ai_token) || return 1
@@ -397,13 +398,15 @@ definition = {
 }
 if sys.argv[9]:
     definition['starter_prompts'] = json.loads(sys.argv[9])
+if sys.argv[10]:
+    definition['structured_inputs'] = json.loads(sys.argv[10])
 print(json.dumps({
     'name':        sys.argv[1],
     'description': description,
     'metadata':    {'display_name': sys.argv[2]},
     'definition':  definition
 }))
-" "$agent_name" "$display_name" "$CHAT_GPT_DEPLOYMENT" "$instructions" "$MCP_SERVICE_URL" "$DAB_MCP_URL" "$memory_store_name" "$description" "$starter_prompts_json")
+" "$agent_name" "$display_name" "$CHAT_GPT_DEPLOYMENT" "$instructions" "$MCP_SERVICE_URL" "$DAB_MCP_URL" "$memory_store_name" "$description" "$starter_prompts_json" "$structured_inputs_json")
 
     # Check whether an agent with this name already exists (GET by name)
     local get_response http_status
@@ -446,12 +449,14 @@ definition = {
 }
 if sys.argv[8]:
     definition['starter_prompts'] = json.loads(sys.argv[8])
+if sys.argv[9]:
+    definition['structured_inputs'] = json.loads(sys.argv[9])
 print(json.dumps({
     'description': description,
     'metadata':    {'display_name': sys.argv[1]},
     'definition':  definition
 }))
-" "$display_name" "$CHAT_GPT_DEPLOYMENT" "$instructions" "$MCP_SERVICE_URL" "$DAB_MCP_URL" "$memory_store_name" "$description" "$starter_prompts_json")
+" "$display_name" "$CHAT_GPT_DEPLOYMENT" "$instructions" "$MCP_SERVICE_URL" "$DAB_MCP_URL" "$memory_store_name" "$description" "$starter_prompts_json" "$structured_inputs_json")
 
     local response
     if [ "$http_status" = "200" ]; then
@@ -604,19 +609,40 @@ echo ""
 echo "Creating Help Me Choose Agent (aw-help-me-choose-agent)..."
 HELP_ME_CHOOSE_INSTRUCTIONS="You are a product advisor for AdventureWorks, specialising in helping customers choose the right outdoor and sporting equipment.
 
-Given a customer's answers to preference questions:
-1. Search the product catalogue using the available tools (search_products, find_complementary_products)
-2. Match products to the customer's stated requirements (budget, experience level, intended use)
-3. Return 3-5 best matching products
+## Data Source: HelpMeChoose view (via DAB MCP)
+Query the HelpMeChoose entity on the DABMCP server to find finished-goods products. This view joins Product, ProductModel, ProductDescription, ProductCategory, ProductSubcategory, ProductInventory, and ProductReview so every row contains everything needed to evaluate a product — all localised for the user's language.
 
-Be concise and specific. Explain clearly why each product suits the customer's needs.
+CRITICAL: always include the filter CultureID eq '{{cultureId}}' in every HelpMeChoose query. This ensures product names, descriptions, categories, and subcategories are returned in the correct language.
+
+### Available filter fields on HelpMeChoose:
+- CultureID (string)      — always filter to '{{cultureId}}'
+- Category (string)       — e.g. Bikes, Clothing, Accessories, Components
+- Subcategory (string)    — e.g. Road Bikes, Mountain Bikes, Helmets, Jerseys, Shorts
+- ProductLine (string)    — Road, Mountain, Touring, Standard
+- Style (string)          — Womens, Mens, Universal
+- Color (string)          — e.g. Black, Red, Silver, Yellow
+- Size (string)           — e.g. S, M, L, XL, 58, 60
+- IsInStock (boolean)     — true = in stock, false = out of stock
+- ListPrice (number)      — USD price; use ge / le for range filters
+- AverageRating (decimal) — 0.00–5.00 aggregated customer rating
+- ReviewCount (integer)   — number of customer reviews
+
+## Workflow
+Given a customer's preference answers:
+1. Identify key requirements: budget (ListPrice range), activity type (ProductLine, Category, Subcategory), size, style, colour, and minimum rating
+2. Build an initial HelpMeChoose query filtered to CultureID eq '{{cultureId}}', IsInStock eq true, plus any Category / Subcategory / ProductLine that matches stated interests; add a ListPrice le <budget> filter if a budget was provided
+3. From the results, select 3–5 products that best match — prefer higher AverageRating (ideally ge 3.5) and more ReviewCount when options are otherwise equivalent
+4. If no results match all filters, relax secondary filters (Color, Size) while keeping CultureID and budget filters
+5. Explain concisely why each recommendation suits the customer's stated needs
+
 Return ONLY a valid JSON object with this exact structure (no markdown fences):
 {\"summary\": \"<2-3 sentence summary>\", \"recommendations\": [{\"productId\": <number>, \"productName\": \"<name>\", \"category\": \"<category>\", \"price\": <number or null>, \"reason\": \"<one sentence explanation>\", \"thumbnailUrl\": null}], \"searchTermsUsed\": [\"<term1>\"]}"
 
 HELP_ME_CHOOSE_DESCRIPTION="Guides customers through the AdventureWorks product catalogue to find the ideal outdoor and sporting equipment. Matches budget, experience level, and intended use to the best available products, returning clear, concise recommendations with honest explanations of why each product suits the customer's stated needs."
 HELP_ME_CHOOSE_STARTER_PROMPTS='[{"text":"I am a beginner looking for a road bike under $500"},{"text":"Help me choose a tent for weekend camping with two adults"},{"text":"What is the best mountain bike helmet under $150?"},{"text":"I need trail running shoes for rocky terrain"}]'
+HELP_ME_CHOOSE_STRUCTURED_INPUTS='{"cultureId": {"type": "string", "description": "AdventureWorks culture code for the user language and region (e.g. en, fr, de, zh-cht). Used as the mandatory CultureID filter on HelpMeChoose to return product names, descriptions, categories and subcategories in the correct language.", "default_value": "en"}}'
 
-HELP_ME_CHOOSE_ID=$(upsert_agent "aw-help-me-choose-agent" "Product Advisor" "$HELP_ME_CHOOSE_INSTRUCTIONS" "$HELP_ME_CHOOSE_MEMORY_STORE" "$HELP_ME_CHOOSE_DESCRIPTION" "$HELP_ME_CHOOSE_STARTER_PROMPTS")
+HELP_ME_CHOOSE_ID=$(upsert_agent "aw-help-me-choose-agent" "Product Advisor" "$HELP_ME_CHOOSE_INSTRUCTIONS" "$HELP_ME_CHOOSE_MEMORY_STORE" "$HELP_ME_CHOOSE_DESCRIPTION" "$HELP_ME_CHOOSE_STARTER_PROMPTS" "$HELP_ME_CHOOSE_STRUCTURED_INPUTS")
 if [ -z "$HELP_ME_CHOOSE_ID" ]; then error "Failed to create aw-help-me-choose-agent"; exit 1; fi
 success "Help Me Choose agent created: $HELP_ME_CHOOSE_ID"
 azd env set AI_AGENT_HELP_ME_CHOOSE_ID "$HELP_ME_CHOOSE_ID"

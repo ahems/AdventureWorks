@@ -34,18 +34,36 @@ Client / MCP Agent
             Sales.usp_GetTotalProfit  (Azure SQL — seed value on first run)
 ```
 
+### Simulator integration
+
+The bank is now integrated with the Supply Chain and Manufacturing simulators so that real business events automatically flow through the virtual accounts:
+
+| Event                       | Bank transaction                                   | Reference prefix   |
+| --------------------------- | -------------------------------------------------- | ------------------ |
+| PO approved                 | USD debit for `TotalDue` (unit cost + freight)     | `PO-{id}`          |
+| PO rejected (from approved) | USD credit refund                                  | `PO-{id}-refund`   |
+| Work order completed        | USD debit for total `ActualCost` from routing      | `WO-{id}`          |
+| Routing operation completed | USD payroll debit (operator hours × hourly rate)   | `WO-{id}-OP-{seq}` |
+| Scrap event                 | USD write-off at `ProductCostHistory.StandardCost` | `SCRAP-WO-{id}`    |
+
+All bank calls are non-blocking — if Table Storage is temporarily unavailable, the simulator operation continues and a warning is logged.
+
 ### MCP exposure
 
 ```
 MCP Server (api-mcp)
-  └── BankMcpTools
-        ├── GetBankStatus         → GET /api/bank/status
-        ├── GetBankAccount        → GET /api/bank/accounts/{code}
-        ├── GetBankTransactions   → GET /api/bank/transactions[/{code}]
-        ├── BankDeposit           → POST /api/bank/deposit
-        ├── BankWithdraw          → POST /api/bank/withdraw
-        ├── GetSupportedCurrencies→ GET /api/bank/currencies
-        └── ResetBank             → POST /api/bank/reset
+  ├── BankMcpTools
+  │     ├── GetBankStatus             → GET /api/bank/status
+  │     ├── GetBankAccount            → GET /api/bank/accounts/{code}
+  │     ├── GetBankTransactions       → GET /api/bank/transactions[/{code}]
+  │     ├── BankDeposit               → POST /api/bank/deposit
+  │     ├── BankWithdraw              → POST /api/bank/withdraw
+  │     ├── GetSupportedCurrencies    → GET /api/bank/currencies
+  │     ├── GetFinancialSummary       → GET /api/financials/summary
+  │     ├── GetProcurementTransactions→ GET /api/financials/procurement
+  │     └── GetManufacturingFinancials→ GET /api/financials/manufacturing
+  └── SimulatorMcpTools
+        └── ResetAllSimulators        → POST /api/simulators/reset
 ```
 
 ---
@@ -171,23 +189,116 @@ Lists all currencies from `Sales.Currency` (the full set supported by the websit
 
 ---
 
-### `POST /api/bank/reset`
+## Financial Reporting API
 
-**Destructive**: deletes all account balances and transaction history, then re-seeds from `Sales.usp_GetTotalProfit`.
+Three endpoints expose bank transaction history segmented by simulator domain. All are read-only and require no body.
+
+### `GET /api/financials/summary`
+
+Aggregated financial summary across all simulators.
+
+**Response**
+
+```json
+{
+  "procurement": {
+    "totalSpend": 142500.0,
+    "totalRefunds": 3200.0,
+    "netSpend": 139300.0,
+    "transactionCount": 48
+  },
+  "manufacturing": {
+    "totalCost": 28940.5,
+    "transactionCount": 15
+  },
+  "payroll": {
+    "totalCost": 9870.25,
+    "transactionCount": 92
+  },
+  "scrap": {
+    "totalWriteOffs": 1240.0,
+    "transactionCount": 7
+  },
+  "totals": {
+    "totalOperatingCost": 40050.75,
+    "totalAllSpend": 182550.75
+  },
+  "generatedAtUtc": "2026-04-19T10:00:00Z"
+}
+```
+
+---
+
+### `GET /api/financials/procurement[?maxCount=50]`
+
+Returns recent procurement transactions (PO approval debits and refunds). `maxCount` 1–500, default 50.
+
+---
+
+### `GET /api/financials/manufacturing[?maxCount=50&type=all]`
+
+Returns recent manufacturing financial transactions.
+
+| `type` value    | Content returned                        |
+| --------------- | --------------------------------------- |
+| `all` (default) | All manufacturing-related transactions  |
+| `completions`   | WO completion overhead charges (`WO-*`) |
+| `payroll`       | Per-operation labour charges            |
+| `scrap`         | Scrap write-offs (`SCRAP-WO-*`)         |
+
+---
+
+## Coordinated Reset
+
+### `POST /api/simulators/reset`
+
+Resets **all three simulators together** in the correct order:
+
+1. Clears the manufacturing work-order queue.
+2. Resets the supply chain — reverts POs and re-seeds vendor stock.
+3. Resets the bank — wipes all transactions and re-seeds the USD balance.
+
+**Destructive** — all bank history, vendor stock, and in-flight work orders are permanently deleted.
+
+Use this instead of individual resets to avoid orphaned bank transactions (e.g. a PO that was approved and debited, but whose supply-chain records are then wiped by an isolated supply-chain reset).
+
+**Response**
+
+```json
+{
+  "message": "Simulator reset complete.",
+  "steps": [
+    "Manufacturing queue cleared.",
+    "Supply chain reset. Vendor stock re-seeded.",
+    "Bank reset and re-seeded. New USD total: $1,234,567.89"
+  ],
+  "resetAtUtc": "2026-04-19T10:00:00Z"
+}
+```
 
 ---
 
 ## MCP tools reference
 
-| Tool                     | Description                                                                                           |
-| ------------------------ | ----------------------------------------------------------------------------------------------------- |
-| `GetBankStatus`          | All currency balances + USD total. Use to check the current financial position.                       |
-| `GetBankAccount`         | Balance for a single currency (e.g. `"EUR"`).                                                         |
-| `GetBankTransactions`    | Recent transactions, optionally filtered by currency code. Default 20, max 200.                       |
-| `BankDeposit`            | Record incoming money. Use `transactionType: "sale"` for customer revenue.                            |
-| `BankWithdraw`           | Record outgoing money. Vendor payments → `transactionType: "purchase"`, always `currencyCode: "USD"`. |
-| `GetSupportedCurrencies` | List all valid currency codes from the website database.                                              |
-| `ResetBank`              | Re-seed the bank from historical profit. **Deletes all history.**                                     |
+### Bank tools (`BankMcpTools`)
+
+| Tool                         | Description                                                                                           |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `GetBankStatus`              | All currency balances + USD total. Use to check the current financial position.                       |
+| `GetBankAccount`             | Balance for a single currency (e.g. `"EUR"`).                                                         |
+| `GetBankTransactions`        | Recent transactions, optionally filtered by currency code. Default 20, max 200.                       |
+| `BankDeposit`                | Record incoming money. Use `transactionType: "sale"` for customer revenue.                            |
+| `BankWithdraw`               | Record outgoing money. Vendor payments → `transactionType: "purchase"`, always `currencyCode: "USD"`. |
+| `GetSupportedCurrencies`     | List all valid currency codes from the website database.                                              |
+| `GetFinancialSummary`        | Aggregated spend across procurement, manufacturing, payroll, and scrap.                               |
+| `GetProcurementTransactions` | Recent PO payment and refund transactions.                                                            |
+| `GetManufacturingFinancials` | Recent manufacturing financial transactions, filterable by type (`completions`, `payroll`, `scrap`).  |
+
+### Simulator control tools (`SimulatorMcpTools`)
+
+| Tool                 | Description                                                                        |
+| -------------------- | ---------------------------------------------------------------------------------- |
+| `ResetAllSimulators` | Reset manufacturing queue + supply chain + bank together. **Deletes all history.** |
 
 ---
 
@@ -198,6 +309,11 @@ Lists all currencies from `Sales.Currency` (the full set supported by the websit
 | Currency for sales            | Use the currency the customer paid in (e.g. EUR, GBP, CAD)         |
 | Currency for vendor payments  | Always USD                                                         |
 | Currency for payroll          | Always USD                                                         |
+| Currency for scrap write-offs | Always USD                                                         |
+| PO debit timing               | At approval (`status → 2`); refund issued if subsequently rejected |
+| WO completion charge          | Sum of all `WorkOrderRouting.ActualCost` rows                      |
+| Payroll charge                | Per routing operation: `ActualResourceHrs × AssignedHourlyRate`    |
+| Scrap write-off amount        | `ProductCostHistory.StandardCost × ScrappedQty`                    |
 | Negative balances             | Allowed — no limit, no interest                                    |
 | Overdraft charges             | None                                                               |
 | Interest on positive balances | None                                                               |

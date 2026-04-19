@@ -346,6 +346,30 @@ Demo pipeline that simulates order lifecycle (In Process → Approved/Rejected �
 
 ---
 
+## Simulator Control & Financial Reporting Functions
+
+### `ResetAllSimulators`
+
+- **Trigger / Route**: HTTP `POST /api/simulators/reset`
+- **Purpose**: Coordinated reset of all three simulators in the correct order — clears the manufacturing work-order queue, resets the supply chain (reverts POs and re-seeds vendor stock), then resets the bank (wipes transaction history and re-seeds the USD balance). Returns a step-by-step result with the new USD seed amount. Use this instead of individual resets to avoid orphaned bank transactions.
+
+### `GetFinancialSummary`
+
+- **Trigger / Route**: HTTP `GET /api/financials/summary`
+- **Purpose**: Returns an aggregated financial summary across all simulators, bucketing bank transactions by reference prefix into procurement spend, manufacturing overhead, payroll, and scrap write-offs. Includes computed totals (`totalOperatingCost`, `totalAllSpend`).
+
+### `GetProcurementTransactions`
+
+- **Trigger / Route**: HTTP `GET /api/financials/procurement[?maxCount=50]`
+- **Purpose**: Returns recent procurement transactions — PO approval debits (`PO-*`) and rejection refunds (`PO-*-refund`) — ordered by time descending. `maxCount` 1–500, default 50.
+
+### `GetManufacturingTransactions`
+
+- **Trigger / Route**: HTTP `GET /api/financials/manufacturing[?type=all&maxCount=50]`
+- **Purpose**: Returns recent manufacturing financial transactions filtered by type. `type` can be `all` (default), `completions` (WO completion overhead), `payroll` (per-operation labour), or `scrap` (scrap write-offs). `maxCount` 1–500, default 50.
+
+---
+
 ## How This Project Fits Into The Overall Architecture
 
 - **Frontend (`app/`)** calls these Functions for operations that need server‑side processing, long‑running workloads, or integration with external services (OpenAI, email, blob storage).

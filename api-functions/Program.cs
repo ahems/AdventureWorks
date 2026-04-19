@@ -208,7 +208,8 @@ builder.Services.AddScoped<WorkOrderSimulationService>(sp =>
     var simulationTimeScale = double.TryParse(configuration["SIMULATION_TIME_SCALE_FACTOR"], out var scale) ? scale : 60.0;
     var defaultScrapRate    = double.TryParse(configuration["SIMULATION_SCRAP_RATE"],        out var rate)  ? rate  : 0.05;
     var logger = sp.GetRequiredService<ILogger<WorkOrderSimulationService>>();
-    return new WorkOrderSimulationService(connectionString, tableServiceUri, simulationTimeScale, defaultScrapRate, logger);
+    var bank   = sp.GetRequiredService<BankService>();
+    return new WorkOrderSimulationService(connectionString, tableServiceUri, simulationTimeScale, defaultScrapRate, logger, bank);
 });
 
 // Register SupplyChainService for the procurement simulation
@@ -220,9 +221,10 @@ builder.Services.AddScoped<SupplyChainService>(sp =>
     var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
         ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
     var simulationTimeScale = double.TryParse(configuration["SIMULATION_TIME_SCALE_FACTOR"], out var scSupply) ? scSupply : 60.0;
-    var logger = sp.GetRequiredService<ILogger<SupplyChainService>>();
+    var logger    = sp.GetRequiredService<ILogger<SupplyChainService>>();
     var telemetry = sp.GetRequiredService<TelemetryClient>();
-    return new SupplyChainService(connectionString, tableServiceUri, simulationTimeScale, logger, telemetry);
+    var bank      = sp.GetRequiredService<BankService>();
+    return new SupplyChainService(connectionString, tableServiceUri, simulationTimeScale, logger, telemetry, bank);
 });
 
 // Register ManufacturingPlanningService for planning intelligence endpoints

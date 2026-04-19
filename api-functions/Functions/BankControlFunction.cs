@@ -209,30 +209,6 @@ public class BankControlFunction
         return await OkAsync(req, result);
     }
 
-    // ── Initialize / Reset ────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Forces a full reset of the virtual bank: deletes all existing accounts and
-    /// transactions, then re-seeds from Sales.usp_GetTotalProfit.
-    /// WARNING: all transaction history is lost.
-    /// </summary>
-    [Function("BankReset")]
-    public async Task<HttpResponseData> Reset(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "bank/reset")] HttpRequestData req)
-    {
-        _logger.LogWarning("[Bank] Reset endpoint called from {IP}", req.Headers.TryGetValues("X-Forwarded-For", out var fwd) ? string.Join(", ", fwd) : "unknown");
-        await _bank.ResetAsync();
-        var accounts = await _bank.GetAllAccountsAsync();
-        var total    = await _bank.GetTotalUsdAsync(accounts);
-        return await OkAsync(req, new
-        {
-            message      = "Bank reset and re-seeded successfully.",
-            accounts     = accounts,
-            totalUsd     = total,
-            resetAtUtc   = DateTimeOffset.UtcNow,
-        });
-    }
-
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static async Task<HttpResponseData> OkAsync(HttpRequestData req, object data)

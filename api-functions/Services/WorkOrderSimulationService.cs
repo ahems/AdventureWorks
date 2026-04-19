@@ -97,18 +97,21 @@ public class WorkOrderSimulationService
     private readonly double _simulationTimeScale;
     private readonly double _defaultScrapRate;
     private readonly ILogger<WorkOrderSimulationService> _logger;
+    private readonly BankService? _bank;
 
     public WorkOrderSimulationService(
         string connectionString,
         string tableServiceUri,
         double simulationTimeScale,
         double defaultScrapRate,
-        ILogger<WorkOrderSimulationService> logger)
+        ILogger<WorkOrderSimulationService> logger,
+        BankService? bank = null)
     {
         _connectionString = connectionString;
         _simulationTimeScale = simulationTimeScale;
         _defaultScrapRate = defaultScrapRate;
         _logger = logger;
+        _bank = bank;
 
         var tableServiceClient = new TableServiceClient(
             new Uri(tableServiceUri),
@@ -378,6 +381,46 @@ public class WorkOrderSimulationService
 
         _logger.LogInformation("WorkOrder {WorkOrderId} (Product {ProductId}) completed. Stocked={Stocked}, Scrapped={Scrapped}",
             workOrderId, productId, stocked, scrapped);
+
+        // ── Bank: charge actual manufacturing cost for this work order ──────────
+        if (_bank != null && stocked > 0)
+        {
+            try
+            {
+                var productName = await conn.ExecuteScalarAsync<string>(
+                    "SELECT Name FROM Production.Product WHERE ProductID = @ProductId",
+                    new { ProductId = productId }) ?? productId.ToString();
+
+                var totalActualCost = await conn.ExecuteScalarAsync<decimal>(
+                    "SELECT ISNULL(SUM(ActualCost), 0) FROM Production.WorkOrderRouting WHERE WorkOrderID = @Id AND ActualEndDate IS NOT NULL",
+                    new { Id = workOrderId });
+
+                if (totalActualCost > 0m)
+                {
+                    await _bank.InitializeAsync();
+                    await _bank.PostTransactionAsync(new BankTransactionRequest(
+                        CurrencyCode:    "USD",
+                        Amount:          -totalActualCost,
+                        Description:     $"Manufacturing WO-{workOrderId}: {productName} ({stocked} units produced)",
+                        ReferenceId:     $"WO-{workOrderId}",
+                        TransactionType: "purchase"));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Bank] Failed to record manufacturing cost for WO {WorkOrderId} — continuing.", workOrderId);
+            }
+        }
+    }
+
+    /// <summary>Returns the most recent standard cost for a product from ProductCostHistory.</summary>
+    public async Task<decimal> GetProductStandardCostAsync(int productId)
+    {
+        using var conn = await GetConnectionAsync();
+        var cost = await conn.ExecuteScalarAsync<decimal?>(
+            "SELECT TOP 1 StandardCost FROM Production.ProductCostHistory WHERE ProductID = @ProductId ORDER BY StartDate DESC",
+            new { ProductId = productId });
+        return cost ?? 0m;
     }
 
     // ── Inventory consumption ────────────────────────────────────────────────

@@ -39,6 +39,22 @@ public record BankTransactionRequest(
     string? ReferenceId = null,
     string TransactionType = "other");
 
+public record FinancialSummary(
+    decimal TotalProcurementSpend,
+    decimal TotalProcurementRefunds,
+    decimal TotalManufacturingCost,
+    decimal TotalPayroll,
+    decimal TotalScrapWriteOffs,
+    int     ProcurementCount,
+    int     ManufacturingCount,
+    int     PayrollCount,
+    int     ScrapCount,
+    DateTimeOffset GeneratedAtUtc)
+{
+    public decimal TotalOperatingCost => TotalManufacturingCost + TotalPayroll + TotalScrapWriteOffs;
+    public decimal NetProcurement     => TotalProcurementSpend - TotalProcurementRefunds;
+}
+
 // ── Table entity types ───────────────────────────────────────────────────────
 
 internal class BankAccountEntity : ITableEntity
@@ -458,8 +474,51 @@ public class BankService
         return rows.ToList();
     }
 
-    // ── Reset / Re-seed ──────────────────────────────────────────────────────
+    // ── Financial reporting helpers ───────────────────────────────────────────
 
+    /// <summary>
+    /// Returns all transactions (up to maxCount) optionally filtered by reference prefix.
+    /// Used by the financial reporting endpoints to bucket spending by simulator.
+    /// </summary>
+    public async Task<IReadOnlyList<BankTransaction>> GetTransactionsByPrefixAsync(
+        string? referencePrefix, int maxCount = 500)
+    {
+        var all = await GetTransactionsAsync(currencyCode: null, maxCount: maxCount);
+        if (string.IsNullOrEmpty(referencePrefix))
+            return all;
+
+        return all
+            .Where(t => t.ReferenceId?.StartsWith(referencePrefix, StringComparison.OrdinalIgnoreCase) == true)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Aggregates bank transactions into a simulator-level financial summary.
+    /// </summary>
+    public async Task<FinancialSummary> GetFinancialSummaryAsync(int maxTransactions = 1000)
+    {
+        var all = await GetTransactionsAsync(currencyCode: null, maxCount: maxTransactions);
+
+        var procurementTxns    = all.Where(t => t.ReferenceId?.StartsWith("PO-",     StringComparison.OrdinalIgnoreCase) == true && !t.ReferenceId.EndsWith("-refund", StringComparison.OrdinalIgnoreCase)).ToList();
+        var procurementRefunds = all.Where(t => t.ReferenceId?.EndsWith("-refund",   StringComparison.OrdinalIgnoreCase) == true).ToList();
+        var manufacturingTxns  = all.Where(t => t.ReferenceId?.StartsWith("WO-",     StringComparison.OrdinalIgnoreCase) == true && t.TransactionType == "purchase").ToList();
+        var payrollTxns        = all.Where(t => t.TransactionType == "payroll").ToList();
+        var scrapTxns          = all.Where(t => t.ReferenceId?.StartsWith("SCRAP-",  StringComparison.OrdinalIgnoreCase) == true).ToList();
+
+        return new FinancialSummary(
+            TotalProcurementSpend:  Math.Abs(procurementTxns.Sum(t => t.Amount)),
+            TotalProcurementRefunds: procurementRefunds.Sum(t => t.Amount),
+            TotalManufacturingCost: Math.Abs(manufacturingTxns.Sum(t => t.Amount)),
+            TotalPayroll:           Math.Abs(payrollTxns.Sum(t => t.Amount)),
+            TotalScrapWriteOffs:    Math.Abs(scrapTxns.Sum(t => t.Amount)),
+            ProcurementCount:       procurementTxns.Count,
+            ManufacturingCount:     manufacturingTxns.Count,
+            PayrollCount:           payrollTxns.Count,
+            ScrapCount:             scrapTxns.Count,
+            GeneratedAtUtc:         DateTimeOffset.UtcNow);
+    }
+
+    // ── Reset / Re-seed ──────────────────────────────────────────────────────
     /// <summary>Drops and re-seeds the bank. Use with care — all history is lost.</summary>
     public async Task ResetAsync()
     {

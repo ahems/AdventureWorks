@@ -29,7 +29,8 @@ This separation lets you evolve tools and data access in a dedicated service whi
     - `Tools/AdventureWorksMcpTools.cs` – e-commerce tools (orders, products, reviews, inventory).
     - `Tools/ManufacturingMcpTools.cs` – manufacturing simulation tools (production runs, scrap, feasibility, cost analysis).
     - `Tools/SupplyChainMcpTools.cs` – supply chain tools (vendors, catalog, quotes, purchase orders).
-    - `Tools/BankMcpTools.cs` – virtual bank tools (account balances, deposits, withdrawals, transaction history).
+    - `Tools/BankMcpTools.cs` – virtual bank tools (account balances, deposits, withdrawals, transaction history, financial reporting).
+    - `Tools/SimulatorMcpTools.cs` – cross-simulator control (coordinated reset of all simulators).
     - `Resources/` – localized strings used by services.
 - `AppHost/`
   - Hosting shell that wires the AdventureWorks project into an app host (`builder.AddProject<Projects.AdventureWorks>("adventureworks-mcp")`).
@@ -63,7 +64,8 @@ Key configuration is in `AdventureWorks/Program.cs`:
         .WithTools<AdventureWorksMcpTools>()
         .WithTools<ManufacturingMcpTools>()
         .WithTools<SupplyChainMcpTools>()
-        .WithTools<BankMcpTools>();
+        .WithTools<BankMcpTools>()
+        .WithTools<SimulatorMcpTools>();
     ```
   - HTTP SSE transport is enabled and stateful.
   - MCP endpoint exposed at `/mcp` via `app.MapMcp("/mcp");`.
@@ -348,10 +350,67 @@ All tools are defined in `AdventureWorks/Tools/SupplyChainMcpTools.cs`. They exp
 - **Signature:** `Task<string> RestockVendorInventory(string vendorId, int? productId = null)`
 - **Purpose:** Triggers an immediate restock of a vendor's simulated inventory. Useful when testing or when vendor stock has been depleted through orders. Optionally restrict to a single product.
 
-#### Tool: `ResetSupplyChainSimulation`
+---
 
-- **Signature:** `Task<string> ResetSupplyChainSimulation()`
-- **Purpose:** Resets the entire supply-chain simulation: clears all purchase orders, cancels in-flight transitions, and re-seeds vendor stock to initial levels. Use this to start a clean simulation scenario.
+## Bank MCP Tools
+
+All tools are defined in `AdventureWorks/Tools/BankMcpTools.cs`. They expose the virtual bank — allowing an agent to check balances, record manual transactions, and analyse the financial impact of simulator activity.
+
+#### Tool: `GetBankStatus`
+
+- **Signature:** `Task<string> GetBankStatus()`
+- **Purpose:** Returns all currency account balances plus a live USD-equivalent total. Use to check the current financial position.
+
+#### Tool: `GetBankAccount`
+
+- **Signature:** `Task<string> GetBankAccount(string currencyCode)`
+- **Purpose:** Returns the balance for a single currency (e.g. `"EUR"`).
+
+#### Tool: `GetBankTransactions`
+
+- **Signature:** `Task<string> GetBankTransactions(string? currencyCode = null, int maxCount = 20)`
+- **Purpose:** Recent transactions, optionally filtered by currency code. Default 20, max 200.
+
+#### Tool: `BankDeposit`
+
+- **Signature:** `Task<string> BankDeposit(string currencyCode, decimal amount, string description, string? referenceId = null, string transactionType = "deposit")`
+- **Purpose:** Records incoming money. Use `transactionType: "sale"` for customer revenue.
+
+#### Tool: `BankWithdraw`
+
+- **Signature:** `Task<string> BankWithdraw(string currencyCode, decimal amount, string description, string? referenceId = null, string transactionType = "withdrawal")`
+- **Purpose:** Records outgoing money. Vendor payments use `transactionType: "purchase"`, always with `currencyCode: "USD"`.
+
+#### Tool: `GetSupportedCurrencies`
+
+- **Signature:** `Task<string> GetSupportedCurrencies()`
+- **Purpose:** Lists all valid currency codes from `Sales.Currency` in the database.
+
+#### Tool: `GetFinancialSummary`
+
+- **Signature:** `Task<string> GetFinancialSummary()`
+- **Purpose:** Returns an aggregated financial summary across all simulators: procurement spend, manufacturing overhead, payroll costs, and scrap write-offs, with computed totals.
+
+#### Tool: `GetProcurementTransactions`
+
+- **Signature:** `Task<string> GetProcurementTransactions(int maxCount = 20)`
+- **Purpose:** Returns recent procurement transactions — PO approval debits and rejection refunds — ordered by time descending.
+
+#### Tool: `GetManufacturingFinancials`
+
+- **Signature:** `Task<string> GetManufacturingFinancials(string? type = null, int maxCount = 20)`
+- **Purpose:** Returns recent manufacturing financial transactions. `type` can be `completions` (WO completion overhead), `payroll` (per-operation labour), `scrap` (write-offs), or omitted for all.
+
+---
+
+## Simulator Control MCP Tools
+
+All tools are defined in `AdventureWorks/Tools/SimulatorMcpTools.cs`. They provide coordinated control over all simulators together.
+
+#### Tool: `ResetAllSimulators`
+
+- **Signature:** `Task<string> ResetAllSimulators()`
+- **Purpose:** Resets all three simulators in the correct order — clears the manufacturing work-order queue, resets the supply chain (reverts POs and re-seeds vendor stock), then resets the bank (wipes transaction history and re-seeds the USD balance). Returns a step-by-step result. Use instead of resetting simulators individually to avoid orphaned bank transactions.
 
 ---
 
@@ -596,6 +655,10 @@ npx @modelcontextprotocol/inspector --cli "$MCP_SERVICE_URL" --transport http \
    - `GetSupplyChainVendors` → `get_supply_chain_vendors`
    - `PlaceSupplyOrder` → `place_supply_order`
    - `GetActiveSupplyOrders` → `get_active_supply_orders`
+   - `GetFinancialSummary` → `get_financial_summary`
+   - `GetProcurementTransactions` → `get_procurement_transactions`
+   - `GetManufacturingFinancials` → `get_manufacturing_financials`
+   - `ResetAllSimulators` → `reset_all_simulators`
 
 3. **Test localization** by passing `cultureId` arguments:
    - `en-US` (English - default)
