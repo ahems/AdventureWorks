@@ -154,6 +154,16 @@
       "problemMatcher": []
     },
     {
+      "label": "deploy api-functions",
+      "type": "shell",
+      "command": "azd",
+      "args": ["deploy", "api-functions"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "reseed-demo-admin",
       "type": "shell",
       "command": "bash",

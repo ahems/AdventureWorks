@@ -381,8 +381,11 @@ Culture/language for responses: {cultureId ?? "en-US"}";
             // Invoke the Foundry "kind: prompt" agent via the Responses API.
             // The agent calls SearchProducts / FindComplementaryProducts MCP tools
             // server-side; we just wait for the final response.
+            // tool_choice: "required" ensures product IDs in the response come from the live
+            // catalog \u2014 hallucinated IDs would break add-to-cart downstream.
             var agentResponse = await _foundryClient.InvokeAsync(_agentId, userMessage,
-                userId: customerId.HasValue ? customerId.Value.ToString() : null);
+                userId: customerId.HasValue ? customerId.Value.ToString() : null,
+                toolChoice: "required");
             string raw = agentResponse.ResponseText;
 
             _telemetryClient.TrackEvent("HelpMeChoose.AgentToolsUsed", new Dictionary<string, string>

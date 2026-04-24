@@ -542,10 +542,11 @@ public class OrderGenerationService
                     ORDER BY so.DiscountPct DESC",
                     new { item.ProductId }, transaction: tx) ?? 1;
 
-                await connection.ExecuteAsync(@"
+                var salesOrderDetailId = await connection.ExecuteScalarAsync<int>(@"
                     INSERT INTO Sales.SalesOrderDetail
                         (SalesOrderID, OrderQty, ProductID, SpecialOfferID,
                          UnitPrice, UnitPriceDiscount, rowguid, ModifiedDate)
+                    OUTPUT INSERTED.SalesOrderDetailID
                     VALUES
                         (@SalesOrderId, @Qty, @ProductId, @SpecialOfferId,
                          @UnitPrice, @Discount, NEWID(), GETDATE())",
@@ -567,6 +568,14 @@ public class OrderGenerationService
                            ModifiedDate = GETDATE()
                     WHERE  ProductID = @ProductId",
                     new { item.ProductId, Qty = (int)item.Quantity },
+                    transaction: tx);
+
+                // Record sale in TransactionHistory ('S' = Sales Order, negative qty = outgoing)
+                await connection.ExecuteAsync(@"
+                    INSERT INTO Production.TransactionHistory
+                        (ProductID, ReferenceOrderID, ReferenceOrderLineID, TransactionDate, TransactionType, Quantity, ActualCost, ModifiedDate)
+                    VALUES (@ProductId, @SalesOrderId, @LineId, GETDATE(), 'S', @Qty, @UnitPrice, GETDATE())",
+                    new { item.ProductId, SalesOrderId = salesOrderId, LineId = salesOrderDetailId, Qty = -(int)item.Quantity, UnitPrice = unitPrice },
                     transaction: tx);
             }
 

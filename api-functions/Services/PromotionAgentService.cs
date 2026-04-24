@@ -11,6 +11,14 @@ namespace api_functions.Services;
 /// Single-shot Azure AI Foundry Agent service that generates promotion suggestions by
 /// reasoning over live inventory and sales data retrieved via the MCP server's
 /// GetProductsForPromotion tool.
+///
+/// Foundry features used:
+///   - structured_inputs → promotion type, category, and date context resolved via Handlebars
+///                         templates in the agent instructions; keeps the user message short
+///   - x-memory-user-id  → scopes memory per promotion type so the agent recalls recent
+///                         promotions and generates varied campaigns across successive runs
+///   - tool_choice: required → ensures the agent always calls GetProductsForPromotion;
+///                             prevents fabricated product lists from reaching the response
 /// </summary>
 public class PromotionAgentService
 {
@@ -55,51 +63,46 @@ public class PromotionAgentService
 
         try
         {
-            var categoryContext = subcategoryName != null
-                ? $"in subcategory '{subcategoryName}'"
-                : categoryName != null
-                    ? $"in category '{categoryName}'"
-                    : "across all product categories";
-
             var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
-            var userMessage = $@"Create a '{promotionType}' promotion targeting '{offerCategory}' customers {categoryContext}.
 
-Today's date: {today}
+            // Build structured inputs to resolve Handlebars templates in the agent's Foundry
+            // portal instructions. This replaces the inline categoryContext string-building and
+            // the large interpolated userMessage that was here before.
+            var structuredInputs = new Dictionary<string, object>
+            {
+                ["promotionType"]  = promotionType,
+                ["offerCategory"]  = offerCategory,
+                ["todayDate"]      = today
+            };
 
-Instructions:
-1. Call GetProductsForPromotion with promotionType=""{promotionType}""{(subcategoryId.HasValue ? $", productSubcategoryId={subcategoryId}" : categoryId.HasValue ? $", productCategoryId={categoryId}" : "")} to retrieve live product data.
-2. Analyse the inventory levels and recent sales data to select 3-8 products that are the best fit for this promotion type.
-3. For Clearance: prefer products with HIGH inventory and LOW recent sales (slow-moving stock).
-4. For Volume Discount: prefer products with HIGH recent sales (amplify popular items).
-5. For Seasonal/Promotional: pick a balanced, representative set from the filtered category.
-6. Choose a discount percentage appropriate to the type: Clearance 20-40%, Volume Discount 5-15%, Seasonal 10-25%, Promotional 5-20%, Customer/Reseller Discount 10-30%.
-7. Set StartDate to today ({today}) and EndDate 30 days later (for seasonal/clearance) or 14 days later (for volume/promotional).
+            // Category/subcategory values are nullable; only add them when present so the
+            // agent's {{#if categoryName}}...{{/if}} Handlebars blocks resolve correctly.
+            if (!string.IsNullOrEmpty(categoryName))
+                structuredInputs["categoryName"] = categoryName;
+            if (!string.IsNullOrEmpty(subcategoryName))
+                structuredInputs["subcategoryName"] = subcategoryName;
+            if (categoryId.HasValue)
+                structuredInputs["categoryId"] = categoryId.Value;
+            if (subcategoryId.HasValue)
+                structuredInputs["subcategoryId"] = subcategoryId.Value;
 
-Return ONLY a valid JSON object matching this schema (no markdown, no explanation):
-{{
-  ""description"": ""Short promotional description (max 120 chars)"",
-  ""discountPct"": 0.10,
-  ""type"": ""{promotionType}"",
-  ""category"": ""{offerCategory}"",
-  ""startDate"": ""YYYY-MM-DD"",
-  ""endDate"": ""YYYY-MM-DD"",
-  ""minQty"": 1,
-  ""suggestedProducts"": [
-    {{
-      ""productId"": 123,
-      ""productName"": ""Product Name"",
-      ""currentPrice"": 99.99,
-      ""inventoryLevel"": 50,
-      ""recentSalesCount"": 5,
-      ""reason"": ""Brief reason for including this product""
-    }}
-  ],
-  ""aiReasoning"": ""2-3 sentence explanation of the promotion strategy""
-}}";
+            // Scope Foundry memory per promotion type so the agent recalls what it recently
+            // generated and produces more varied campaigns across successive admin runs.
+            var memoryUserId = $"promotion-gen-{promotionType}";
+
+            // The user message is now a short constant — all dynamic context lives in
+            // structured_inputs which resolve the Handlebars templates in the agent instructions.
+            const string userMessage = "Generate a promotion campaign following the instructions.";
 
             // Invoke the Foundry agent via the Responses API (stateless single-shot).
-            // The agent calls GetProductsForPromotion via MCP server-side.
-            var agentResponse = await _foundryClient.InvokeAsync(_agentId, userMessage);
+            // tool_choice: "required" ensures the agent always calls GetProductsForPromotion;
+            // prevents hallucinated product lists from appearing in the response.
+            var agentResponse = await _foundryClient.InvokeAsync(
+                agentId: _agentId,
+                userMessage: userMessage,
+                userId: memoryUserId,
+                structuredInputs: structuredInputs,
+                toolChoice: "required");
             var rawResponse = agentResponse.ResponseText;
 
             _logger.LogInformation("PromotionAgent raw response length: {Length}, tools used: {Tools}",

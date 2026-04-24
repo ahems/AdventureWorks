@@ -18,10 +18,14 @@ namespace api_functions.Services;
 /// OpenAI-compatible Responses API endpoint hosted by the Foundry project.
 ///
 /// Features leveraged:
-///   - store: true  → Foundry persists every response; enables memory / conversation history
+///   - store: true          → Foundry persists every response; enables memory / conversation history
 ///   - previous_response_id → links responses for multi-turn continuity (replaces threads)
-///   - output items  → captures MCP tool calls for telemetry / tracing
-///   - usage         → input/output token counts sent to App Insights
+///   - x-memory-user-id     → scopes Foundry memory to a specific user/entity
+///   - structured_inputs    → resolves Handlebars {{variable}} templates in agent instructions
+///                            at runtime without requiring separate agent versions
+///   - tool_choice          → controls whether the model must call tools ("required" / "auto" / "none")
+///   - output items         → captures MCP tool calls for telemetry / tracing
+///   - usage                → input/output token counts sent to App Insights
 /// </summary>
 public class FoundryAgentClient
 {
@@ -75,13 +79,12 @@ public class FoundryAgentClient
         _fallbackDabMcpUrl = fallbackDabMcpUrl;
         _fallbackModelDeployment = string.IsNullOrEmpty(fallbackModelDeployment) ? "chat" : fallbackModelDeployment;
 
-        // Derive base endpoint, e.g.:
-        //   https://av-ai-xxx.services.ai.azure.com/api/projects/yyy
-        //   → https://av-ai-xxx.services.ai.azure.com
-        var apiIdx = _projectEndpoint.IndexOf("/api/projects/", StringComparison.OrdinalIgnoreCase);
-        if (apiIdx < 0) apiIdx = _projectEndpoint.IndexOf("/api/", StringComparison.OrdinalIgnoreCase);
-        var baseEndpoint = apiIdx >= 0 ? _projectEndpoint[..apiIdx] : _projectEndpoint;
-        _responsesUrl = $"{baseEndpoint}/openai/v1/responses?api-version=v1";
+        // The Responses API is project-scoped. Per the official docs the endpoint is:
+        //   {projectEndpoint}/openai/v1/responses   (no ?api-version query parameter)
+        // The old pattern of stripping /api/projects/... and adding ?api-version=v1
+        // routes through the base Azure OpenAI compatibility layer, which rejects
+        // Foundry-specific parameters such as structured_inputs.
+        _responsesUrl = $"{_projectEndpoint}/openai/v1/responses";
     }
 
     /// <summary>
@@ -105,6 +108,20 @@ public class FoundryAgentClient
     ///   ID of the previous Foundry response to continue from.
     ///   When set, Foundry loads stored context automatically.
     /// </param>
+    /// <param name="userId">
+    ///   Scopes Foundry memory to a specific user/entity via the <c>x-memory-user-id</c> header.
+    ///   Use a stable identifier such as a customer ID or persona key.
+    /// </param>
+    /// <param name="structuredInputs">
+    ///   Runtime values that replace Handlebars <c>{{variable}}</c> placeholders declared in the
+    ///   agent's <c>structured_inputs</c> schema in the Foundry portal. Sent on the first
+    ///   round only; approval follow-up rounds are chained via <c>previous_response_id</c>.
+    /// </param>
+    /// <param name="toolChoice">
+    ///   Controls when the model calls tools. Use <c>"required"</c> for agents whose output
+    ///   depends entirely on MCP tool data (prevents hallucinated results). Defaults to
+    ///   Foundry's <c>"auto"</c> when <c>null</c>.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<FoundryAgentResponse> InvokeAsync(
         string agentId,
@@ -112,6 +129,8 @@ public class FoundryAgentClient
         IList<FoundryMessage>? conversationHistory = null,
         string? previousResponseId = null,
         string? userId = null,
+        Dictionary<string, object>? structuredInputs = null,
+        string? toolChoice = null,
         CancellationToken cancellationToken = default)
     {
         // --- Fetch agent definition (cached) ------------------------------------
@@ -173,7 +192,11 @@ public class FoundryAgentClient
                 Stream = false,
                 Store = true,
                 PreviousResponseId = currentPreviousId,
-                Tools = def.Tools.Count > 0 ? def.Tools : null
+                Tools = def.Tools.Count > 0 ? def.Tools : null,
+                // Structured inputs and tool_choice are only meaningful on the first round;
+                // subsequent rounds are approval responses chained via previous_response_id.
+                StructuredInputs = round == 0 && structuredInputs?.Count > 0 ? structuredInputs : null,
+                ToolChoice = round == 0 ? toolChoice : null
             };
 
             var json = JsonSerializer.Serialize(requestBody, _serializeOptions);
@@ -187,8 +210,10 @@ public class FoundryAgentClient
                 request.Headers.TryAddWithoutValidation("x-memory-user-id", userId);
 
             _logger.LogInformation(
-                "Invoking Foundry agent '{AgentId}' model='{Model}' round={Round} (previousResponseId={Prev})",
-                agentId, def.Model, round, currentPreviousId ?? "none");
+                "Invoking Foundry agent '{AgentId}' model='{Model}' round={Round} (previousResponseId={Prev}, toolChoice={ToolChoice}, structuredInputKeys={Keys})",
+                agentId, def.Model, round, currentPreviousId ?? "none",
+                toolChoice ?? "auto",
+                structuredInputs?.Count > 0 ? string.Join(",", structuredInputs.Keys) : "none");
 
             var httpResponse = await httpClient.SendAsync(request, cancellationToken);
             var responseBody = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -498,6 +523,19 @@ internal sealed class FoundryResponsesRequest
 
     /// <summary>Tools (MCP servers) from the agent definition, serialised as-is.</summary>
     public IReadOnlyList<JsonElement>? Tools { get; set; }
+
+    /// <summary>
+    /// Runtime values that resolve Handlebars {{variable}} placeholders declared in the
+    /// agent's structured_inputs schema. Null values are omitted from the serialised payload.
+    /// </summary>
+    public Dictionary<string, object>? StructuredInputs { get; set; }
+
+    /// <summary>
+    /// Controls tool invocation: "required" forces at least one tool call,
+    /// "auto" lets the model decide, "none" disables tool calls.
+    /// Omitted from the request when null (Foundry defaults to "auto").
+    /// </summary>
+    public string? ToolChoice { get; set; }
 }
 
 // ── Public types ─────────────────────────────────────────────────────────────

@@ -610,6 +610,66 @@ WHERE ProductID = @ProductId AND Quantity > 0
 3. If stock is insufficient, a `ShortageData` record is written to Table Storage and the message is re-enqueued with `MATERIALS_RETRY_DELAY_SECONDS` visibility. The status endpoint's `shortages` array reflects all active shortages.
 4. When stock later becomes available (e.g., a sibling work order completed and replenished the inventory), the retry fires and clears the shortage record.
 
+**Inventory Ledger**: Every component consumption also inserts a `Production.TransactionHistory` record with `TransactionType = 'W'` and a negative quantity, recording the cost against `Production.ProductCostHistory`. See [Inventory Ledger](#inventory-ledger-transactionhistory) below.
+
+---
+
+## Inventory Ledger (TransactionHistory)
+
+The simulator writes to `Production.TransactionHistory` (and the archive table `Production.TransactionHistoryArchive`) to maintain a full audit trail of every inventory movement. Three event types are recorded:
+
+| Code | Event                                    | Direction    | Written by                                          |
+| ---- | ---------------------------------------- | ------------ | --------------------------------------------------- |
+| `W`  | **Work Order — finished goods produced** | Positive qty | `WorkOrderSimulationService.CompleteWorkOrderAsync` |
+| `W`  | **Work Order — component consumed**      | Negative qty | `WorkOrderSimulationService.ConsumeInventoryAsync`  |
+| `P`  | **Purchase Order received**              | Positive qty | `SupplyChainService.AddToSqlInventoryAsync`         |
+| `S`  | **Store sales order**                    | Negative qty | `OrderGenerationService` (B2B store orders)         |
+
+### Schema fields written
+
+```sql
+INSERT INTO Production.TransactionHistory (
+    ProductID,            -- product moved
+    TransactionDate,      -- UTC now
+    TransactionType,      -- 'W', 'P', or 'S'
+    Quantity,             -- positive = receipt/production, negative = issue/sale
+    ActualCost,           -- unit cost at time of movement
+    ReferenceOrderID,     -- work order ID / purchase order ID / sales order ID
+    ReferenceOrderLineID, -- routing op sequence / PO line / SalesOrderDetailID
+    ModifiedDate
+)
+```
+
+### Viewing records
+
+Records are accessible via:
+
+- **Admin UI** → _Inv. Transactions_ (secondary nav > Operations) — filterable by type, date range, with pagination
+- **Product detail page** → scroll to _Transaction History_ section for the last 50 records for that product
+- **GraphQL** (DAB entity `TransactionHistory`):
+  ```graphql
+  query {
+    transactionHistories(
+      filter: { ProductID: { eq: 749 } }
+      orderBy: { TransactionDate: DESC }
+      first: 20
+    ) {
+      items {
+        TransactionID
+        TransactionDate
+        TransactionType
+        Quantity
+        ActualCost
+        ReferenceOrderID
+      }
+    }
+  }
+  ```
+
+### Archiving
+
+Records older than 1 year are moved from `Production.TransactionHistory` to `Production.TransactionHistoryArchive` by a weekly timer function (`TransactionHistoryArchiveFunction`, runs Sunday 02:00 UTC). The archive can be triggered manually via `GET /api/archive/trigger`. Archived records are visible in the Admin UI via the _Show Archive_ toggle.
+
 ---
 
 ## Scrap / Failure Simulation

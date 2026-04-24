@@ -251,7 +251,7 @@ public class ManufacturingPlanningFunction
 
     /// <summary>
     /// GET /api/plan/reorder-recommendations?days={60}
-    /// For every component forecasted to run out within <days> days, returns:
+    /// For every component forecasted to run out within &lt;days&gt; days, returns:
     /// - suggested order quantity (30-day supply)
     /// - best vendor option (cheapest that can fulfil)
     /// - all vendor alternatives with pricing

@@ -78,6 +78,7 @@ public class AIAgentFunctions
                 chatRequest.Message,
                 chatRequest.ConversationHistory ?? new List<AgentChatMessage>(),
                 chatRequest.CustomerId,
+                chatRequest.UserName,
                 chatRequest.CultureId,
                 chatRequest.ThreadId
             );
@@ -153,13 +154,16 @@ public class AIAgentFunctions
             features = new[]
             {
                 "conversational-ai",
-                "foundry-agent-threads",
+                "foundry-responses-api",
+                "structured-inputs",
+                "memory-scoping",
+                "tool-choice-required",
                 "dual-mcp-servers",
                 "contextual-suggestions",
                 "order-tracking",
                 "product-search",
                 "recommendations",
-                "thread-persistence",
+                "multi-turn-persistence",
                 "observability-telemetry"
             }
         });
@@ -175,6 +179,7 @@ public class AgentChatRequest
     public string Message { get; set; } = string.Empty;
     public List<AgentChatMessage>? ConversationHistory { get; set; }
     public int? CustomerId { get; set; }
+    public string? UserName { get; set; }
     public string? CultureId { get; set; }
     public string? ThreadId { get; set; }
 }

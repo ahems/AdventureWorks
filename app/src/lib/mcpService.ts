@@ -30,6 +30,7 @@ interface AgentChatRequest {
   message: string;
   conversationHistory: ChatMessage[];
   customerId?: number;
+  userName?: string;
   cultureId?: string;
   threadId?: string;
 }
@@ -48,6 +49,7 @@ export const chatWithAgent = async (
   message: string,
   conversationHistory: ChatMessage[],
   customerId?: number,
+  userName?: string,
   cultureId?: string,
   threadId?: string,
 ): Promise<AgentChatResponse> => {
@@ -57,6 +59,7 @@ export const chatWithAgent = async (
     message,
     conversationHistory,
     customerId,
+    userName,
     cultureId,
     threadId,
   };

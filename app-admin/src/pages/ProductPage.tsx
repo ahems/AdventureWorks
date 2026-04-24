@@ -10,6 +10,7 @@ import {
   Sparkles,
   Loader2,
   Trash2,
+  History,
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
@@ -51,12 +52,146 @@ import {
   generateProductReviews,
 } from "@/services/utilityService";
 import {
+  useProductTransactionHistory,
+  TransactionRecord,
+  TransactionType,
+} from "@/hooks/useAdminTransactions";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+const TYPE_LABELS: Record<TransactionType, string> = {
+  W: "Work Order",
+  S: "Sales Order",
+  P: "Purchase Order",
+};
+
+const TYPE_COLORS: Record<TransactionType, string> = {
+  W: "bg-blue-100 text-blue-800 border-blue-300",
+  S: "bg-orange-100 text-orange-800 border-orange-300",
+  P: "bg-green-100 text-green-800 border-green-300",
+};
+
+const formatCurrency = (val: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
+    val,
+  );
+
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+
+interface TransactionHistorySectionProps {
+  productId: number;
+}
+
+const TransactionHistorySection: React.FC<TransactionHistorySectionProps> = ({
+  productId,
+}) => {
+  const { transactions, isLoading, isError } =
+    useProductTransactionHistory(productId);
+
+  return (
+    <div className="doodle-card">
+      <div className="flex items-center gap-2 px-6 py-4 border-b-4 border-doodle-text">
+        <History className="w-5 h-5 text-doodle-text" />
+        <h2 className="font-doodle text-xl font-bold text-doodle-text">
+          Transaction History
+        </h2>
+        <span className="font-doodle text-xs text-doodle-text/50 ml-auto">
+          Last 50 records (live + archive)
+        </span>
+      </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center p-8 gap-3">
+          <div className="w-6 h-6 border-4 border-doodle-accent border-t-transparent rounded-full animate-spin" />
+          <span className="font-doodle text-doodle-text/60">Loading…</span>
+        </div>
+      ) : isError ? (
+        <p className="font-doodle text-sm text-red-600 px-6 py-4">
+          Failed to load transaction history.
+        </p>
+      ) : transactions.length === 0 ? (
+        <p className="font-doodle text-sm text-doodle-text/50 px-6 py-4">
+          No inventory movements recorded for this product yet. Run the
+          manufacturing or supply chain simulators to generate records.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-doodle-text/5 border-b-2 border-doodle-text/10">
+                <th className="font-doodle text-xs font-bold text-doodle-text/60 text-left px-4 py-2">
+                  Date
+                </th>
+                <th className="font-doodle text-xs font-bold text-doodle-text/60 text-left px-4 py-2">
+                  Type
+                </th>
+                <th className="font-doodle text-xs font-bold text-doodle-text/60 text-right px-4 py-2">
+                  Qty
+                </th>
+                <th className="font-doodle text-xs font-bold text-doodle-text/60 text-right px-4 py-2">
+                  Unit Cost
+                </th>
+                <th className="font-doodle text-xs font-bold text-doodle-text/60 text-right px-4 py-2">
+                  Ref. Order
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {(transactions as TransactionRecord[]).map((tx) => (
+                <tr
+                  key={tx.TransactionID}
+                  className="border-b border-dashed border-doodle-text/10 hover:bg-doodle-text/5"
+                >
+                  <td className="font-doodle text-sm text-doodle-text px-4 py-2 whitespace-nowrap">
+                    {formatDate(tx.TransactionDate)}
+                  </td>
+                  <td className="px-4 py-2">
+                    <span
+                      className={`font-doodle text-xs font-bold px-2 py-0.5 border-2 ${TYPE_COLORS[tx.TransactionType]}`}
+                    >
+                      {tx.TransactionType} — {TYPE_LABELS[tx.TransactionType]}
+                    </span>
+                  </td>
+                  <td
+                    className={`font-doodle text-sm font-bold text-right px-4 py-2 ${
+                      tx.Quantity > 0 ? "text-green-700" : "text-red-700"
+                    }`}
+                  >
+                    {tx.Quantity > 0 ? "+" : ""}
+                    {tx.Quantity.toLocaleString()}
+                  </td>
+                  <td className="font-doodle text-sm text-right px-4 py-2 text-doodle-text">
+                    {formatCurrency(tx.ActualCost)}
+                  </td>
+                  <td className="font-doodle text-sm text-right px-4 py-2 text-doodle-text/60">
+                    {tx.ReferenceOrderID || "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="px-6 py-3 border-t-2 border-dashed border-doodle-text/20 text-right">
+        <a
+          href={`/inventory-transactions`}
+          className="font-doodle text-xs text-doodle-blue hover:underline"
+        >
+          View all transactions →
+        </a>
+      </div>
+    </div>
+  );
+};
 
 const ProductPage: React.FC = () => {
   const { productId } = useParams<{ productId: string }>();
@@ -1100,6 +1235,10 @@ const ProductPage: React.FC = () => {
               </div>
             </div>
           </div>
+        </section>
+
+        <section className="container mx-auto px-4 pb-8">
+          <TransactionHistorySection productId={prodIdNum} />
         </section>
 
         <section className="container mx-auto px-4 pb-12">

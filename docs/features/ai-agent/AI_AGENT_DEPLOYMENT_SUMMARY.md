@@ -65,53 +65,22 @@ api-functions-postdeploy.sh hook
 ✅ Ready to use!
 ```
 
-## Agent Capabilities
+## Runtime Features
 
-All four agents are pre-configured with tool access to:
+The four deployed agents use the following Azure AI Foundry Responses API features at runtime. These are applied by `FoundryAgentClient` in `api-functions`:
 
-- **api-mcp tools** (SearchProducts, GetCustomerOrders, FindComplementaryProducts, AnalyzeProductReviews, CheckInventoryAvailability, GetCategoriesWithProducts, GetActivePromotions, GetProductsForPromotion)
-- **DAB /mcp tools** (Product, Customer, SalesOrder, ProductCategory, and all other DAB entities)
-│ 3. Set environment variables             │
-│                                          │
-│ Note: AI Agent configuration is manual   │
-│ 9. Store in azd environment              │
-└─────────────────────────────────────────┘
-  ↓
-azd deploy (application code)
-  ↓
-✅ Ready to use!
-```
+| Agent                    | Memory (`x-memory-user-id`)                             | `tool_choice` | Structured input variables                                                                                                          |
+| ------------------------ | ------------------------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Chat**                 | Customer ID                                             | `auto`        | `customerId`, `cultureId`                                                                                                           |
+| **Help-Me-Choose**       | Customer ID (or anonymous)                              | `required`    | _(wizard context \u2014 see portal definition)_                                                                                     |
+| **Order Generation**     | `order-gen-customer-{id}` or `order-gen-persona-{type}` | `required`    | `todayDate`, `personaDescription`, `isExistingCustomer`, `customerName`, `customerId`, `orderCount`, `totalSpend`, `recentProducts` |
+| **Promotion Generation** | `promotion-gen-{type}`                                  | `required`    | `promotionType`, `offerCategory`, `todayDate`, `categoryName`, `subcategoryName`, `categoryId`, `subcategoryId`                     |
 
-### What Gets Automated
+**Why `tool_choice: "required"` on three agents?** Order Generation, Promotion Generation, and Help-Me-Choose must call MCP tools to retrieve live catalog/inventory data. Without enforcement, the model may answer from training knowledge — producing hallucinated product IDs or prices that get written to the database as real orders or promotions.
 
-1. **Agent Creation**
-   - Name: "AdventureWorks Customer Service Agent"
-   - Model: Auto-selected (e.g., gpt-4.1-mini)
-   - Authentication: Managed Identity
-   - Tools: All 5 MCP Server tools
+**Why structured inputs?** Dynamic context (customer ID, persona description, today's date, category filters) used to be embedded directly in the user message string in C#. Moving these to Foundry structured inputs (`{{variable}}` Handlebars templates in each agent's portal instructions) keeps user messages short and constant, avoids prompt injection via user-controlled strings, and lets the portal instructions be the single source of truth for agent behaviour.
 
-2. **Configuration Storage**
-   - `AI_AGENT_CONFIG.json` in workspace root
-   - Environment variables:
-     - `AI_AGENT_NAME`
-     - `AI_AGENT_MODEL`
-     - `API_FUNCTIONS_URL`
-     - `AZURE_OPENAI_ENDPOINT`
-
-3. **Testing**
-   - Automatic test query during creation
-   - Test script (`test_agent.py`) for manual testing
-   - Sample queries documented
-
-## Agent Capabilities
-
-The automatically created agent has access to:
-
-1. **get_customer_orders** (CustomerID) → Order history
-2. **get_order_details** (OrderID, optional CustomerID) → Full order details
-3. **find_complementary_products** (ProductID) → AI recommendations
-4. **search_products** (searchTerm) → Product catalog search
-5. **get_product_details** (ProductID) → Product specifications
+> **Portal prerequisite**: Each agent's Foundry portal definition must declare a `structured_inputs` schema before these variable values will resolve. See [AI_AGENT_AUTOMATION.md](AI_AGENT_AUTOMATION.md#structured-inputs) for the full variable list per agent.
 
 ## Usage Examples
 

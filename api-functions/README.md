@@ -17,12 +17,35 @@ High‑level responsibilities:
 ### `AIAgentChat`
 
 - **Trigger / Route**: HTTP `POST /api/agent/chat`
-- **Purpose**: Front‑door chat endpoint for the AI support agent. Accepts a message, optional conversation history, customer metadata, and an optional `threadId` for multi-turn conversation persistence. Forwards to `AIAgentService`, which creates or resumes an Azure AI Foundry Persistent Agent thread, polls to completion, and returns the agent's reply, suggested follow‑up questions, tools used, and the `threadId` for the next request. Emits rich Application Insights telemetry for observability.
+- **Purpose**: Front-door chat endpoint for the AI support agent. Accepts a message, optional conversation history, customer metadata (`customerId`, `cultureId`), and an optional `threadId` for multi-turn conversation persistence. Forwards to `AIAgentService`, which invokes an Azure AI Foundry "kind: prompt" agent via the Responses API. Customer and culture context is passed as **structured inputs** (`{{customerId}}` / `{{cultureId}}` Handlebars templates in the agent's Foundry portal instructions) rather than being embedded in the user message. Memory is scoped per customer via the `x-memory-user-id` header. Returns the agent's reply, suggested follow-up questions, tools used, and the `threadId` (Foundry response ID) for the next request. Emits rich Application Insights telemetry for observability.
 
 ### `AIAgentStatus`
 
 - **Trigger / Route**: HTTP `GET /api/agent/status`
-- **Purpose**: Lightweight health/config endpoint for the AI agent. Returns static metadata such as agent status, framework version (`Azure.AI.Foundry`), and enabled capabilities (foundry-agent-threads, dual-mcp-servers, thread-persistence). Useful for smoke tests and diagnostics.
+- **Purpose**: Lightweight health/config endpoint for the AI agent. Returns static metadata such as agent status, framework version (`Azure.AI.Foundry`), and enabled capabilities (`foundry-responses-api`, `structured-inputs`, `memory-scoping`, `tool-choice-required`, `dual-mcp-servers`, `multi-turn-persistence`). Useful for smoke tests and diagnostics.
+
+### AI Foundry Features Used by Agent Functions
+
+All AI Foundry agent calls share the `FoundryAgentClient` singleton, which leverages these Responses API features:
+
+| Feature                   | How it's used                                                                                                                                                                                                             |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `store: true`             | Every response is persisted by Foundry; enables memory and conversation history                                                                                                                                           |
+| `previous_response_id`    | Chains multi-turn conversations (replaces thread/session management in the client)                                                                                                                                        |
+| `x-memory-user-id`        | Scopes Foundry memory per user or persona so agents recall prior interactions                                                                                                                                             |
+| `structured_inputs`       | Resolves `{{variable}}` Handlebars placeholders declared in each agent's Foundry portal definition at runtime — avoids duplicating agent versions for different customers or contexts                                     |
+| `tool_choice: "required"` | Forces MCP tool calls for agents whose output depends on live catalog/inventory data (Help-Me-Choose, Order Generation, Promotion Generation) — prevents hallucinated product IDs or prices being written to the database |
+
+**Per-agent configuration:**
+
+| Agent                                            | Memory `userId`                                         | `tool_choice` | Structured input variables                                                                                                          |
+| ------------------------------------------------ | ------------------------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Chat (`AIAgentService`)                          | Customer ID                                             | auto (null)   | `customerId`, `cultureId`                                                                                                           |
+| Help-Me-Choose (`HelpMeChooseService`)           | Customer ID                                             | `required`    | _(declared in portal)_                                                                                                              |
+| Order Generation (`OrderGenerationAgentService`) | `order-gen-customer-{id}` or `order-gen-persona-{type}` | `required`    | `todayDate`, `personaDescription`, `isExistingCustomer`, `customerName`, `customerId`, `orderCount`, `totalSpend`, `recentProducts` |
+| Promotion Generation (`PromotionAgentService`)   | `promotion-gen-{type}`                                  | `required`    | `promotionType`, `offerCategory`, `todayDate`, `categoryName`, `subcategoryName`, `categoryId`, `subcategoryId`                     |
+
+> **Foundry portal prerequisite**: The `structured_inputs` schema (declaring each variable name and type) **must be added to each agent's definition in the Foundry portal** before the Handlebars templates in the instructions will resolve. See [docs/features/ai-agent/AI_AGENT_AUTOMATION.md](../docs/features/ai-agent/AI_AGENT_AUTOMATION.md) for details.
 
 ---
 

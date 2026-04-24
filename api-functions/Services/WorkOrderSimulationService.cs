@@ -364,6 +364,9 @@ public class WorkOrderSimulationService
             WHERE WorkOrderID = @WorkOrderId AND EndDate IS NULL",
             new { WorkOrderId = workOrderId });
 
+        // Compute actual manufacturing cost (shared by TransactionHistory insert and Bank charge)
+        decimal totalActualCost = 0m;
+
         if (stocked > 0)
         {
             // Upsert ProductInventory at Finished Goods Storage (LocationID=7)
@@ -377,6 +380,18 @@ public class WorkOrderSimulationService
                         (ProductID, LocationID, Shelf, Bin, Quantity, rowguid, ModifiedDate)
                     VALUES (@ProductId, 7, 'A', 1, @Qty, NEWID(), GETDATE())",
                 new { ProductId = productId, Qty = stocked });
+
+            totalActualCost = await conn.ExecuteScalarAsync<decimal>(
+                "SELECT ISNULL(SUM(ActualCost), 0) FROM Production.WorkOrderRouting WHERE WorkOrderID = @Id AND ActualEndDate IS NOT NULL",
+                new { Id = workOrderId });
+
+            // Record production in TransactionHistory ('W' = Work Order, positive qty = units produced)
+            decimal costPerUnit = totalActualCost > 0 ? totalActualCost / stocked : 0m;
+            await conn.ExecuteAsync(@"
+                INSERT INTO Production.TransactionHistory
+                    (ProductID, ReferenceOrderID, ReferenceOrderLineID, TransactionDate, TransactionType, Quantity, ActualCost, ModifiedDate)
+                VALUES (@ProductId, @WorkOrderId, 0, GETDATE(), 'W', @Qty, @ActualCost, GETDATE())",
+                new { ProductId = productId, WorkOrderId = workOrderId, Qty = stocked, ActualCost = costPerUnit });
         }
 
         _logger.LogInformation("WorkOrder {WorkOrderId} (Product {ProductId}) completed. Stocked={Stocked}, Scrapped={Scrapped}",
@@ -391,10 +406,7 @@ public class WorkOrderSimulationService
                     "SELECT Name FROM Production.Product WHERE ProductID = @ProductId",
                     new { ProductId = productId }) ?? productId.ToString();
 
-                var totalActualCost = await conn.ExecuteScalarAsync<decimal>(
-                    "SELECT ISNULL(SUM(ActualCost), 0) FROM Production.WorkOrderRouting WHERE WorkOrderID = @Id AND ActualEndDate IS NOT NULL",
-                    new { Id = workOrderId });
-
+                // totalActualCost already computed above when inserting TransactionHistory
                 if (totalActualCost > 0m)
                 {
                     await _bank.InitializeAsync();
@@ -456,7 +468,7 @@ public class WorkOrderSimulationService
     /// Atomically deducts inventory from bins (largest bin first).
     /// Returns false if total available is insufficient — caller writes a shortage record.
     /// </summary>
-    public async Task<(bool Success, int Available)> ConsumeInventoryAsync(int productId, int requiredQty)
+    public async Task<(bool Success, int Available)> ConsumeInventoryAsync(int productId, int requiredQty, int workOrderId = 0)
     {
         using var conn = await GetConnectionAsync();
         using var tran = conn.BeginTransaction();
@@ -486,6 +498,19 @@ public class WorkOrderSimulationService
                     "WHERE ProductID = @ProductId AND LocationID = @LocationId",
                     new { Deduct = toDeduct, ProductId = productId, LocationId = locationId }, tran);
                 remaining -= toDeduct;
+            }
+
+            // Record component consumption in TransactionHistory ('W' = Work Order, negative qty = consumed)
+            if (workOrderId > 0)
+            {
+                var stdCost = await conn.ExecuteScalarAsync<decimal?>(
+                    "SELECT TOP 1 StandardCost FROM Production.ProductCostHistory WHERE ProductID = @ProductId ORDER BY StartDate DESC",
+                    new { ProductId = productId }, tran) ?? 0m;
+                await conn.ExecuteAsync(@"
+                    INSERT INTO Production.TransactionHistory
+                        (ProductID, ReferenceOrderID, ReferenceOrderLineID, TransactionDate, TransactionType, Quantity, ActualCost, ModifiedDate)
+                    VALUES (@ProductId, @WorkOrderId, 0, GETDATE(), 'W', @Qty, @ActualCost, GETDATE())",
+                    new { ProductId = productId, WorkOrderId = workOrderId, Qty = -requiredQty, ActualCost = stdCost }, tran);
             }
 
             tran.Commit();

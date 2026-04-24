@@ -375,6 +375,71 @@ public class OrderService
     }
 
     /// <summary>
+    /// Gets the TotalDue for a sales order.
+    /// Returns null if the order does not exist.
+    /// </summary>
+    public async Task<decimal?> GetOrderTotalDueAsync(int salesOrderId)
+    {
+        using var connection = await GetConnectionAsync();
+        const string sql = "SELECT TotalDue FROM Sales.SalesOrderHeader WHERE SalesOrderID = @SalesOrderId";
+        var result = await connection.QueryFirstOrDefaultAsync<decimal?>(sql, new { SalesOrderId = salesOrderId });
+        return result;
+    }
+
+    /// <summary>
+    /// Resolves the display currency and converted sale amount for a sales order using the
+    /// ship-to address country, mirroring the eshop frontend's currency detection logic:
+    ///   ShipToAddressID → StateProvinceID → CountryRegionCode
+    ///   → Sales.CountryRegionCurrency (CurrencyCode)
+    ///   → Sales.CurrencyRate latest (AverageRate = foreign units per 1 USD)
+    ///   → convertedAmount = TotalDue × AverageRate
+    ///
+    /// Falls back to USD with the original TotalDue when no currency mapping or exchange rate is found.
+    /// Returns null when the order does not exist.
+    /// </summary>
+    public async Task<(string CurrencyCode, decimal Amount)?> GetOrderSaleCurrencyAsync(int salesOrderId)
+    {
+        using var connection = await GetConnectionAsync();
+
+        // Single query: join address → state/province → country → currency → latest exchange rate
+        const string sql = @"
+            SELECT TOP 1
+                soh.TotalDue,
+                RTRIM(crc.CurrencyCode) AS CurrencyCode,
+                cr.AverageRate
+            FROM Sales.SalesOrderHeader soh
+            INNER JOIN Person.Address addr        ON addr.AddressID        = soh.ShipToAddressID
+            INNER JOIN Person.StateProvince sp    ON sp.StateProvinceID    = addr.StateProvinceID
+            LEFT  JOIN Sales.CountryRegionCurrency crc
+                                                  ON crc.CountryRegionCode = sp.CountryRegionCode
+            LEFT  JOIN (
+                SELECT RTRIM(ToCurrencyCode) AS ToCurrencyCode, MAX(CurrencyRateDate) AS LatestDate
+                FROM   Sales.CurrencyRate
+                WHERE  RTRIM(FromCurrencyCode) = 'USD'
+                GROUP  BY ToCurrencyCode
+            ) latest ON latest.ToCurrencyCode = RTRIM(crc.CurrencyCode)
+            LEFT  JOIN Sales.CurrencyRate cr
+                                                  ON RTRIM(cr.ToCurrencyCode)   = latest.ToCurrencyCode
+                                                 AND cr.CurrencyRateDate          = latest.LatestDate
+                                                 AND RTRIM(cr.FromCurrencyCode)  = 'USD'
+            WHERE soh.SalesOrderID = @SalesOrderId
+            ORDER BY crc.ModifiedDate DESC";
+
+        var row = await connection.QueryFirstOrDefaultAsync(sql, new { SalesOrderId = salesOrderId });
+        if (row == null) return null;
+
+        decimal totalDue    = (decimal)row.TotalDue;
+        string? currencyCode = row.CurrencyCode as string;
+        double? averageRate  = row.AverageRate as double?;
+
+        if (string.IsNullOrWhiteSpace(currencyCode) || currencyCode == "USD" || averageRate == null || averageRate <= 0)
+            return ("USD", totalDue);
+
+        var convertedAmount = Math.Round(totalDue * (decimal)averageRate.Value, 2);
+        return (currencyCode, convertedAmount);
+    }
+
+    /// <summary>
     /// Updates the status of a sales order in Sales.SalesOrderHeader.
     /// </summary>
     /// <returns>Number of rows affected (0 or 1).</returns>
@@ -405,4 +470,109 @@ public class OrderService
         var row = await connection.QueryFirstOrDefaultAsync<(int CustomerId, int EmailAddressId)>(sql, new { SalesOrderId = salesOrderId });
         return row.CustomerId != 0 ? row : null;
     }
+
+    /// <summary>
+    /// Returns financial breakdown and currency details for a shipped sales order to use when
+    /// recording the bank credit.  The bank should only receive net profit, so:
+    /// <list type="bullet">
+    ///   <item>Tax (TaxAmt) is excluded — it is collected on behalf of the government, not revenue.</item>
+    ///   <item>
+    ///     Freight: if the customer paid freight (Freight &gt; 0) it is a straight pass-through to the
+    ///     shipper and is excluded from the credit.  If freight was zero (free shipping was given),
+    ///     an estimated shipping cost is deducted from the sale proceeds to reflect the real cost
+    ///     borne by the business.  The estimate uses a flat rate of $7.50 USD per order, scaled by
+    ///     the number of order lines as a proxy for package weight/volume.
+    ///   </item>
+    /// </list>
+    /// The returned <c>NetAmount</c> is already converted to the order's display currency.
+    /// Returns null when the order does not exist.
+    /// </summary>
+    public async Task<OrderSaleFinancials?> GetOrderSaleFinancialsAsync(int salesOrderId)
+    {
+        using var connection = await GetConnectionAsync();
+
+        // Fetch SubTotal, TaxAmt, Freight, line count, and currency info in a single round-trip.
+        const string sql = @"
+            SELECT TOP 1
+                soh.SubTotal,
+                soh.TaxAmt,
+                soh.Freight,
+                (SELECT COUNT(*) FROM Sales.SalesOrderDetail WHERE SalesOrderID = soh.SalesOrderID) AS LineCount,
+                RTRIM(crc.CurrencyCode) AS CurrencyCode,
+                cr.AverageRate
+            FROM Sales.SalesOrderHeader soh
+            INNER JOIN Person.Address addr        ON addr.AddressID        = soh.ShipToAddressID
+            INNER JOIN Person.StateProvince sp    ON sp.StateProvinceID    = addr.StateProvinceID
+            LEFT  JOIN Sales.CountryRegionCurrency crc
+                                                  ON crc.CountryRegionCode = sp.CountryRegionCode
+            LEFT  JOIN (
+                SELECT RTRIM(ToCurrencyCode) AS ToCurrencyCode, MAX(CurrencyRateDate) AS LatestDate
+                FROM   Sales.CurrencyRate
+                WHERE  RTRIM(FromCurrencyCode) = 'USD'
+                GROUP  BY ToCurrencyCode
+            ) latest ON latest.ToCurrencyCode = RTRIM(crc.CurrencyCode)
+            LEFT  JOIN Sales.CurrencyRate cr
+                                                  ON RTRIM(cr.ToCurrencyCode)   = latest.ToCurrencyCode
+                                                 AND cr.CurrencyRateDate          = latest.LatestDate
+                                                 AND RTRIM(cr.FromCurrencyCode)  = 'USD'
+            WHERE soh.SalesOrderID = @SalesOrderId
+            ORDER BY crc.ModifiedDate DESC";
+
+        var row = await connection.QueryFirstOrDefaultAsync(sql, new { SalesOrderId = salesOrderId });
+        if (row == null) return null;
+
+        decimal subTotal  = (decimal)row.SubTotal;
+        decimal taxAmt    = (decimal)row.TaxAmt;
+        decimal freight   = (decimal)row.Freight;
+        int     lineCount = (int)row.LineCount;
+        string? currencyCode = row.CurrencyCode as string;
+        double? averageRate  = row.AverageRate as double?;
+
+        // Estimated shipping cost applied only when the customer received free shipping (Freight == 0).
+        // $7.50 USD base rate + $1.00 per additional line item (proxy for package complexity).
+        const decimal baseShippingEstimateUsd = 7.50m;
+        const decimal perLineShippingEstimateUsd = 1.00m;
+        decimal freeShippingDeductionUsd = freight == 0m
+            ? baseShippingEstimateUsd + (perLineShippingEstimateUsd * Math.Max(0, lineCount - 1))
+            : 0m;
+
+        // Net amount in USD: SubTotal (excludes tax) minus free-shipping cost estimate.
+        decimal netUsd = subTotal - freeShippingDeductionUsd;
+
+        // Convert to display currency
+        bool isUsd = string.IsNullOrWhiteSpace(currencyCode) || currencyCode == "USD" || averageRate == null || averageRate <= 0;
+        if (isUsd)
+        {
+            return new OrderSaleFinancials(
+                CurrencyCode:          "USD",
+                NetAmount:             Math.Round(netUsd, 2),
+                SubTotalUsd:           subTotal,
+                TaxAmtUsd:             taxAmt,
+                FreightUsd:            freight,
+                FreeShippingDeductionUsd: freeShippingDeductionUsd,
+                LineCount:             lineCount);
+        }
+
+        var rate = (decimal)averageRate!.Value;
+        return new OrderSaleFinancials(
+            CurrencyCode:          currencyCode!,
+            NetAmount:             Math.Round(netUsd * rate, 2),
+            SubTotalUsd:           subTotal,
+            TaxAmtUsd:             taxAmt,
+            FreightUsd:            freight,
+            FreeShippingDeductionUsd: freeShippingDeductionUsd,
+            LineCount:             lineCount);
+    }
 }
+
+/// <summary>
+/// Financial breakdown for a sales order, used when recording bank sale credits.
+/// </summary>
+public record OrderSaleFinancials(
+    string  CurrencyCode,
+    decimal NetAmount,
+    decimal SubTotalUsd,
+    decimal TaxAmtUsd,
+    decimal FreightUsd,
+    decimal FreeShippingDeductionUsd,
+    int     LineCount);

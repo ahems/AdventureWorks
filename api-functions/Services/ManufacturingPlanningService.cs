@@ -827,11 +827,11 @@ public class ManufacturingPlanningService
             ORDER BY StartDate DESC",
             new { ProductId = productId });
 
-        if (costHistory != null && costHistory.StandardCost != null)
+        decimal? costHistoryStandardCost = (decimal?)costHistory?.StandardCost;
+        if (costHistoryStandardCost != null)
         {
-            return ((decimal)costHistory.StandardCost, 
-                    (DateTime?)costHistory.StartDate, 
-                    "ProductCostHistory");
+            DateTime startDate = (DateTime)costHistory!.StartDate;
+            return (costHistoryStandardCost.Value, (DateTime?)startDate, "ProductCostHistory");
         }
 
         // Try ProductVendor.LastReceiptCost (for recently purchased components)
@@ -843,11 +843,11 @@ public class ManufacturingPlanningService
             ORDER BY LastReceiptDate DESC",
             new { ProductId = productId });
 
-        if (lastReceipt != null && lastReceipt.LastReceiptCost != null)
+        decimal? lastReceiptCost = (decimal?)lastReceipt?.LastReceiptCost;
+        if (lastReceiptCost != null)
         {
-            return ((decimal)lastReceipt.LastReceiptCost,
-                    (DateTime?)lastReceipt.LastReceiptDate,
-                    "ProductVendor.LastReceiptCost");
+            DateTime receiptDate = (DateTime)lastReceipt!.LastReceiptDate;
+            return (lastReceiptCost.Value, (DateTime?)receiptDate, "ProductVendor.LastReceiptCost");
         }
 
         // Fallback to Product.StandardCost

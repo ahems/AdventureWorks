@@ -524,7 +524,7 @@ public class SupplyChainService
                     SET ReceivedQty = @Qty, ModifiedDate = GETDATE()
                     WHERE PurchaseOrderID = @Id",
                     new { Id = poId, Qty = (decimal)qty });
-                await AddToSqlInventoryAsync(productId, qty, vendorId, unitCost);
+                await AddToSqlInventoryAsync(productId, qty, vendorId, unitCost, poId);
                 _telemetry.TrackEvent("SupplyChainOrder", new Dictionary<string, string>
                 {
                     ["PurchaseOrderId"] = poId.ToString(),
@@ -875,7 +875,7 @@ public class SupplyChainService
         if (targetStatus == "complete")
         {
             await UpdateSqlPurchaseOrderAsync(conn, purchaseOrderId, status: 4, receivedQty: qty);
-            await AddToSqlInventoryAsync(productId, qty, vendorId, unitCost);
+            await AddToSqlInventoryAsync(productId, qty, vendorId, unitCost, purchaseOrderId);
             _telemetry.TrackEvent("SupplyChainOrder", new Dictionary<string, string>
             {
                 ["PurchaseOrderId"] = purchaseOrderId.ToString(),
@@ -1164,7 +1164,7 @@ public class SupplyChainService
         await _tableClient.UpdateEntityAsync(stock, stock.ETag);
     }
 
-    private async Task AddToSqlInventoryAsync(int productId, int qty, string vendorId, double unitCost)
+    private async Task AddToSqlInventoryAsync(int productId, int qty, string vendorId, double unitCost, int purchaseOrderId = 0)
     {
         // Adds stock to the first bin (LocationID 7 = Finished Goods Storage)
         // using the same Dapper pattern as the rest of the project.
@@ -1193,6 +1193,13 @@ public class SupplyChainService
         }
 
         _logger.LogInformation("Added {Qty} units of ProductID={ProductId} to SQL inventory (LocationID=7)", qty, productId);
+
+        // Record purchase receipt in TransactionHistory ('P' = Purchase Order, positive qty = received)
+        await conn.ExecuteAsync(@"
+            INSERT INTO Production.TransactionHistory
+                (ProductID, ReferenceOrderID, ReferenceOrderLineID, TransactionDate, TransactionType, Quantity, ActualCost, ModifiedDate)
+            VALUES (@ProductId, @PurchaseOrderId, 0, GETDATE(), 'P', @Qty, @ActualCost, GETDATE())",
+            new { ProductId = productId, PurchaseOrderId = purchaseOrderId, Qty = qty, ActualCost = (decimal)unitCost });
 
         // Update ProductVendor with receipt cost and date (if vendor info provided)
         if (!string.IsNullOrEmpty(vendorId) && int.TryParse(vendorId, out int businessEntityId) && unitCost > 0)

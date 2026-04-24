@@ -18,6 +18,7 @@ public class ProcessSalesOrderStatus
     private readonly ILogger<ProcessSalesOrderStatus> _logger;
     private readonly OrderService _orderService;
     private readonly EmailService _emailService;
+    private readonly BankService _bankService;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -26,11 +27,13 @@ public class ProcessSalesOrderStatus
     public ProcessSalesOrderStatus(
         ILogger<ProcessSalesOrderStatus> logger,
         OrderService orderService,
-        EmailService emailService)
+        EmailService emailService,
+        BankService bankService)
     {
         _logger = logger;
         _orderService = orderService;
         _emailService = emailService;
+        _bankService = bankService;
     }
 
     /// <summary>
@@ -123,7 +126,10 @@ public class ProcessSalesOrderStatus
                 return;
             }
             if (status == 5)
+            {
                 await SendShippedEmailAsync(salesOrderId);
+                await RecordSaleBankCreditAsync(salesOrderId);
+            }
             _logger.LogInformation("Terminal status {Status} applied for SalesOrderID={SalesOrderId}", status, salesOrderId);
             return;
         }
@@ -138,6 +144,7 @@ public class ProcessSalesOrderStatus
                 return;
             }
             await SendShippedEmailAsync(salesOrderId);
+            await RecordSaleBankCreditAsync(salesOrderId);
             _logger.LogInformation("Backordered order moved to Shipped for SalesOrderID={SalesOrderId}", salesOrderId);
             return;
         }
@@ -164,6 +171,7 @@ public class ProcessSalesOrderStatus
         if (nextStatus == 5)
         {
             await SendShippedEmailAsync(salesOrderId);
+            await RecordSaleBankCreditAsync(salesOrderId);
             _logger.LogInformation("Order Shipped for SalesOrderID={SalesOrderId}", salesOrderId);
             return;
         }
@@ -182,6 +190,51 @@ public class ProcessSalesOrderStatus
         var visibilityApproved = TimeSpan.FromHours(delayHours);
         await RequeueAsync(salesOrderId, 2, visibilityApproved);
         _logger.LogInformation("Order Approved for SalesOrderID={SalesOrderId}, re-queued with visibility {Hours:F1} h", salesOrderId, visibilityApproved.TotalHours);
+    }
+
+    private async Task RecordSaleBankCreditAsync(int salesOrderId)
+    {
+        try
+        {
+            await _bankService.InitializeAsync();
+            var financials = await _orderService.GetOrderSaleFinancialsAsync(salesOrderId);
+            if (financials == null)
+            {
+                _logger.LogWarning("[Bank] Could not resolve financials for SalesOrderID={SalesOrderId} — skipping bank credit.", salesOrderId);
+                return;
+            }
+
+            // Build a description that explains exactly what was included/excluded.
+            string description;
+            if (financials.FreightUsd > 0m)
+            {
+                // Customer paid shipping — freight is a pass-through, tax excluded.
+                description = $"Order SO-{salesOrderId} shipped — net proceeds (SubTotal excl. tax; freight pass-through)";
+            }
+            else
+            {
+                // Free shipping was given — deduct estimated shipping cost from proceeds.
+                description = $"Order SO-{salesOrderId} shipped — net proceeds (SubTotal excl. tax; free-shipping cost est. {financials.FreeShippingDeductionUsd:N2} USD deducted)";
+            }
+
+            await _bankService.PostTransactionAsync(new BankTransactionRequest(
+                CurrencyCode:    financials.CurrencyCode,
+                Amount:          financials.NetAmount,
+                Description:     description,
+                ReferenceId:     $"SO-{salesOrderId}",
+                TransactionType: "sale"));
+
+            _logger.LogInformation(
+                "[Bank] Credited {Currency} {NetAmount:N2} for SalesOrderID={SalesOrderId} " +
+                "(SubTotal={SubTotal:N2} USD, Tax={Tax:N2} USD excluded, Freight={Freight:N2} USD, FreeShippingDeduction={FreeShipDeduction:N2} USD, Lines={Lines})",
+                financials.CurrencyCode, financials.NetAmount, salesOrderId,
+                financials.SubTotalUsd, financials.TaxAmtUsd, financials.FreightUsd,
+                financials.FreeShippingDeductionUsd, financials.LineCount);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Bank] Non-fatal: failed to record bank credit for SalesOrderID={SalesOrderId}", salesOrderId);
+        }
     }
 
     private async Task SendShippedEmailAsync(int salesOrderId)

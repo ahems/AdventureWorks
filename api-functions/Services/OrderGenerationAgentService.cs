@@ -11,6 +11,14 @@ namespace api_functions.Services;
 /// Orchestrates an Azure AI Foundry Agent that reasons over live AdventureWorks data
 /// via MCP tool servers to design a realistic purchase order for a given customer
 /// persona, then writes it to the database using OrderGenerationService.
+///
+/// Foundry features used:
+///   - structured_inputs → persona and customer context resolved via Handlebars templates
+///                         in the agent instructions; the user message is a short constant
+///   - x-memory-user-id  → scopes memory per persona type (or per customer for existing-customer),
+///                         so successive runs produce varied orders rather than repeating choices
+///   - tool_choice: required → ensures the agent always calls MCP tools; prevents hallucinated
+///                             catalog data from creating bogus orders in the database
 /// </summary>
 public class OrderGenerationAgentService
 {
@@ -94,7 +102,9 @@ public class OrderGenerationAgentService
                 if (seedProfile == null)
                     throw new InvalidOperationException($"Customer {resolvedCustomerId} not found");
 
-                Log($"Loaded profile: {seedProfile.FirstName} {seedProfile.LastName} — {seedProfile.OrderCount} orders, ${seedProfile.TotalSpend:N2} total spend", "info");
+                // Log name and order stats only — omit email to avoid PII in log traces.
+                // See: https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/tool-best-practice (Secure tool usage)
+                Log($"Loaded profile: {seedProfile.FirstName} {seedProfile.LastName} — CustomerID={resolvedCustomerId}, {seedProfile.OrderCount} orders, ${seedProfile.TotalSpend:N2} total spend", "info");
             }
 
             var personaDescription = seedProfile != null
@@ -105,115 +115,51 @@ public class OrderGenerationAgentService
 
             var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
 
-            string userMessage;
+            // Build structured inputs to resolve Handlebars templates in the agent's Foundry
+            // portal instructions. The two persona branches (existing-customer vs new-persona)
+            // are handled in the agent instructions via {{#if isExistingCustomer}}...{{else}}...{{/if}}.
+            // This replaces the dual userMessage string construction that was here before.
+            var structuredInputs = new Dictionary<string, object>
+            {
+                ["todayDate"]          = today,
+                ["personaDescription"] = personaDescription,
+                ["isExistingCustomer"] = seedProfile != null
+            };
+
             if (seedProfile != null)
             {
-                // For existing-customer persona: instruct AI to use this specific customer
                 var recentProducts = seedProfile.RecentProducts.Any()
                     ? string.Join(", ", seedProfile.RecentProducts.Take(10))
                     : "no recent orders";
-                userMessage = $@"You are generating a realistic purchase order for a SPECIFIC existing AdventureWorks customer.
-
-Customer Profile:
-  Name: {seedProfile.FirstName} {seedProfile.LastName}
-  CustomerID: {seedProfile.CustomerID}
-  Email: {seedProfile.Email ?? "n/a"}
-  Total Orders: {seedProfile.OrderCount}
-  Total Spend: ${seedProfile.TotalSpend:N2}
-  Recent Products Purchased: {recentProducts}
-
-Today's Date: {today}
-
-Your task: Determine what kind of cyclist/shopper this person is based on their purchase history and profile data.
-Then simulate creating a new order that this specific person would realistically place today.
-
-Follow these steps IN ORDER using the MCP tools:
-
-1. Call GetCategoriesWithProducts to see what products are currently available (in-stock only).
-2. Call GetActivePromotions to find current discounts that might appeal to this customer.
-3. For each product you are considering ordering, call CheckInventoryAvailability to confirm stock > 0.
-4. For products with reviews, call AnalyzeProductReviews to check sentiment — skip products with predominantly negative reviews.
-5. Design a realistic shopping basket: typically 1-5 items that make sense for this customer's established buying patterns. Consider their spend history (high spender vs budget), the categories they've bought in before, and active promotions.
-
-IMPORTANT: You MUST use this specific customer — do NOT search for a different customer.
-
-Return ONLY a valid JSON object (no markdown, no preamble):
-{{
-  ""personaSummary"": ""One sentence describing the customer's profile and their shopping intent today"",
-  ""existingCustomerId"": {seedProfile.CustomerID},
-  ""newCustomer"": null,
-  ""orderItems"": [
-    {{
-      ""productId"": 707,
-      ""productName"": ""Sport-100 Helmet, Red"",
-      ""quantity"": 1,
-      ""unitPrice"": 34.99,
-      ""specialOfferID"": 0,
-      ""reason"": ""Replacing worn helmet based on prior helmet purchases""
-    }}
-  ],
-  ""appliedPromotionIds"": [],
-  ""aiReasoning"": ""Explanation of product choices and how they fit this customer's profile""
-}}
-
-Rules:
-- existingCustomerId: MUST be {seedProfile.CustomerID} — do not change this
-- newCustomer: MUST be null — we are using the existing customer
-- specialOfferID: set to the SpecialOfferID if a promotion applies, otherwise 0
-- quantity: realistic (1-3 per item; bikes qty 1; accessories 1-2)
-- Only include products that have stock > 0
-- Order value should be consistent with this customer's historical spend level";
+                structuredInputs["customerName"]    = $"{seedProfile.FirstName} {seedProfile.LastName}";
+                structuredInputs["customerId"]      = seedProfile.CustomerID;
+                structuredInputs["orderCount"]      = seedProfile.OrderCount;
+                structuredInputs["totalSpend"]      = seedProfile.TotalSpend.ToString("N2");
+                structuredInputs["recentProducts"]  = recentProducts;
             }
-            else
-            {
-                userMessage = $@"You are generating a realistic purchase order for an AdventureWorks customer.
 
-Customer Persona: {personaDescription}
-Today's Date: {today}
+            // Scope Foundry memory per persona type so the agent recalls what it recently
+            // generated and produces more varied orders across successive admin runs.
+            // For a specific existing customer, scope to that customer ID instead.
+            var memoryUserId = seedProfile != null
+                ? $"order-gen-customer-{seedProfile.CustomerID}"
+                : $"order-gen-persona-{personaType}";
 
-Follow these steps IN ORDER using the MCP tools:
-
-1. Call GetCategoriesWithProducts to see what products are available (in-stock only).
-2. Call GetActivePromotions to find current discounts that might appeal to this customer.
-3. Call SearchCustomers (no filter, limit=30) to find a suitable EXISTING customer that fits the persona. Prefer customers with some order history. If none match well, you will create a new one.
-4. For each product you are considering ordering, call CheckInventoryAvailability to confirm stock > 0.
-5. For products with reviews, call AnalyzeProductReviews to check sentiment — skip products with predominantly negative reviews.
-6. Design a realistic shopping basket: typically 1-5 items that make sense for this persona. Consider price range, category mix, and active promotions.
-
-Return ONLY a valid JSON object (no markdown, no preamble):
-{{
-  ""personaSummary"": ""One sentence describing the customer and their shopping intent"",
-  ""existingCustomerId"": 12345,
-  ""newCustomer"": null,
-  ""orderItems"": [
-    {{
-      ""productId"": 707,
-      ""productName"": ""Sport-100 Helmet, Red"",
-      ""quantity"": 1,
-      ""unitPrice"": 34.99,
-      ""specialOfferID"": 0,
-      ""reason"": ""Newbie needs a safety helmet""
-    }}
-  ],
-  ""appliedPromotionIds"": [],
-  ""aiReasoning"": ""Explanation of product choices and persona fit""
-}}
-
-Rules:
-- existingCustomerId: set to a real CustomerID found via SearchCustomers, OR null if creating new
-- newCustomer: only set if existingCustomerId is null — provide: firstName, lastName, email, addressLine1, city, stateCode, postalCode
-- specialOfferID: set to the SpecialOfferID if a promotion applies, otherwise 0
-- quantity: realistic (1-3 per item; bikes qty 1; accessories 1-2)
-- Only include products that have stock > 0
-- Total order value should feel realistic for the persona (budget shopper vs enthusiast)";
-            }
+            // The user message is now a short constant — all dynamic context lives in
+            // structured_inputs which resolve the Handlebars templates in the agent instructions.
+            const string userMessage = "Generate a realistic purchase order following the instructions.";
 
             Log("AI agent reasoning over catalogue, promotions, and customers...", "dim");
 
             // Invoke the Foundry agent via the Responses API.
-            // The agent calls GetCategoriesWithProducts, GetActivePromotions, SearchCustomers,
-            // CheckInventoryAvailability, and AnalyzeProductReviews MCP tools server-side.
-            var agentResponse = await _foundryClient.InvokeAsync(_agentId, userMessage);
+            // tool_choice: "required" ensures the agent always calls MCP tools — preventing
+            // hallucinated catalog data from being written to the database as real orders.
+            var agentResponse = await _foundryClient.InvokeAsync(
+                agentId: _agentId,
+                userMessage: userMessage,
+                userId: memoryUserId,
+                structuredInputs: structuredInputs,
+                toolChoice: "required");
             var rawResponse = agentResponse.ResponseText;
 
             if (agentResponse.ToolsUsed.Count > 0)
@@ -268,10 +214,19 @@ Rules:
 
             foreach (var item in plan.OrderItems)
             {
-                var stock = await _orderGenService.GetProductStockAsync(item.ProductId);
-                if (stock < item.Quantity)
+                // Guard against out-of-range values in the AI-generated plan
+                // (treats agent output as untrusted input per tool best practices).
+                if (item.ProductId <= 0)
                 {
-                    Log($"  Skipping ProductID={item.ProductId} ({item.ProductName}): stock={stock} < qty={item.Quantity}", "dim");
+                    Log($"  Skipping invalid item: ProductId={item.ProductId}", "dim");
+                    continue;
+                }
+                var clampedQty = Math.Clamp(item.Quantity, 1, 10);
+
+                var stock = await _orderGenService.GetProductStockAsync(item.ProductId);
+                if (stock < clampedQty)
+                {
+                    Log($"  Skipping ProductID={item.ProductId} ({item.ProductName}): stock={stock} < qty={clampedQty}", "dim");
                     continue;
                 }
 
@@ -284,13 +239,13 @@ Rules:
                 validItems.Add(new OrderLineItem
                 {
                     ProductId = item.ProductId,
-                    Quantity = (short)Math.Max(1, item.Quantity),
+                    Quantity = (short)clampedQty,
                     UnitPrice = price,
                     SpecialOfferID = offerId
                 });
 
                 var offerNote = offerId > 1 ? $" (promotion ID={offerId})" : "";
-                Log($"  ✓ {item.ProductName} × {item.Quantity} @ ${price:N2}{offerNote} — stock: {stock}", "success");
+                Log($"  ✓ {item.ProductName} × {clampedQty} @ ${price:N2}{offerNote} — stock: {stock}", "success");
             }
 
             if (!validItems.Any())

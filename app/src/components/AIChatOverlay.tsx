@@ -127,6 +127,7 @@ export const AIChatOverlay = () => {
         textToSend,
         conversationHistory,
         user?.businessEntityId,
+        user?.firstName,
         selectedLanguage,
         threadId,
       );

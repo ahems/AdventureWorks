@@ -3,11 +3,12 @@ import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import UtilityFunctionCard from "@/components/UtilityFunctionCard";
 import UtilityDashboard from "@/components/UtilityDashboard";
-import { ThumbsUp, BarChart3, TrendingUp } from "lucide-react";
+import { ThumbsUp, BarChart3, TrendingUp, Archive } from "lucide-react";
 import {
   generateProductEmbeddings,
   generateReviewEmbeddings,
   generateProductReviews,
+  archiveTransactions,
   JobResponse,
 } from "@/services/utilityService";
 import { RecentExecution } from "@/components/UtilityDashboard";
@@ -82,6 +83,24 @@ const UtilitiesPage: React.FC = () => {
               return generateReviewEmbeddings();
             }}
             actionLabel="Generate Summary"
+          />
+          <UtilityFunctionCard
+            title="Archive Transactions"
+            description="Move TransactionHistory records older than 1 year into TransactionHistoryArchive. Runs automatically every Sunday at 02:00 UTC; use this button to trigger manually."
+            icon={<Archive className="w-6 h-6" />}
+            infoBadge="Weekly auto-run"
+            onExecute={async (): Promise<JobResponse> => {
+              toast.info("Starting transaction archive job\u2026");
+              trackExecution("Archive Transactions");
+              const result = await archiveTransactions();
+              toast.success(`Archived ${result.recordsArchived} record(s).`);
+              return {
+                id: `archive-${Date.now()}`,
+                statusQueryGetUri: null,
+                terminatePostUri: null,
+              };
+            }}
+            actionLabel="Archive Now"
           />
         </div>
       </main>

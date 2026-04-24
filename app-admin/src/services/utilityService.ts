@@ -335,6 +335,28 @@ export const generateProductImages = (productIds?: number[]) =>
     productIds?.length ? { ProductIds: productIds } : undefined,
   );
 
+export interface ArchiveTransactionsResult {
+  success: boolean;
+  recordsArchived: number;
+  archivedAt: string;
+}
+
+/**
+ * Manually triggers the TransactionHistory archive job.
+ * Moves records older than 1 year from TransactionHistory → TransactionHistoryArchive.
+ * GET /api/archive/trigger
+ */
+export const archiveTransactions =
+  async (): Promise<ArchiveTransactionsResult> => {
+    const url = `${getFunctionsApiUrl()}/api/archive/trigger`;
+    const res = await fetch(url, { method: "GET" });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ""}`);
+    }
+    return res.json() as Promise<ArchiveTransactionsResult>;
+  };
+
 export const generateSingleProductImages = (productId: number) => {
   const url = `${getFunctionsApiUrl()}/api/products/${productId}/generate-images`;
   return fetch(url, { method: "POST" }).then((res) => {

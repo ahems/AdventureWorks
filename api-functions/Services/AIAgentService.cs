@@ -19,6 +19,12 @@ namespace api_functions.Services;
 ///
 /// MCP tool execution (product search, order lookup, etc.) runs server-side in
 /// Foundry, so this service only processes the final text response.
+///
+/// Customer and culture context is supplied via Foundry structured inputs
+/// (Handlebars {{customerId}} / {{cultureId}} templates in the agent instructions),
+/// keeping the user message clean and avoiding inline string injection.
+/// Memory is scoped per customer via the x-memory-user-id header so Foundry
+/// can personalise responses using stored conversation history.
 /// </summary>
 public class AIAgentService
 {
@@ -56,6 +62,7 @@ public class AIAgentService
         string message,
         List<AgentChatMessage> conversationHistory,
         int? customerId = null,
+        string? userName = null,
         string? cultureId = null,
         string? threadId = null)
     {
@@ -72,7 +79,22 @@ public class AIAgentService
 
         try
         {
-            var userMessageText = BuildUserMessage(message, customerId, cultureId);
+            // Build structured inputs to resolve Handlebars templates in agent instructions.
+            // Keys must match the structured_inputs schema declared in the Foundry agent definition:
+            //   {{userId}}   → the customer's numeric ID (used automatically by tools)
+            //   {{userName}} → the customer's first name (used for personalised greetings)
+            //   {{cultureId}} → language/locale code (used by HelpMeChoose queries etc.)
+            Dictionary<string, object>? structuredInputs = null;
+            if (customerId.HasValue || !string.IsNullOrEmpty(userName) || !string.IsNullOrEmpty(cultureId))
+            {
+                structuredInputs = new Dictionary<string, object>();
+                if (customerId.HasValue)
+                    structuredInputs["userId"] = customerId.Value.ToString();
+                if (!string.IsNullOrEmpty(userName))
+                    structuredInputs["userName"] = userName;
+                if (!string.IsNullOrEmpty(cultureId))
+                    structuredInputs["cultureId"] = cultureId;
+            }
 
             // On first turn, seed the Foundry conversation with any history from the client.
             IList<FoundryMessage>? historyToSeed = null;
@@ -88,10 +110,11 @@ public class AIAgentService
             // ── Invoke Foundry agent via Responses API ────────────────────────────
             var agentResponse = await _foundryClient.InvokeAsync(
                 agentId: _agentId,
-                userMessage: userMessageText,
+                userMessage: message,
                 conversationHistory: historyToSeed,
                 previousResponseId: string.IsNullOrEmpty(threadId) ? null : threadId,
-                userId: customerId.HasValue ? customerId.Value.ToString() : null);
+                userId: customerId.HasValue ? customerId.Value.ToString() : null,
+                structuredInputs: structuredInputs);
 
             // ── Suggested follow-up questions ─────────────────────────────────────
             var suggestions = await GenerateSuggestedQuestionsAsync(message, agentResponse.ResponseText, customerId);
@@ -131,21 +154,6 @@ public class AIAgentService
             });
             throw;
         }
-    }
-
-    /// <summary>
-    /// Prepends customer/culture context to the user message so the agent has it inline.
-    /// </summary>
-    private static string BuildUserMessage(string message, int? customerId, string? cultureId)
-    {
-        if (customerId.HasValue || !string.IsNullOrEmpty(cultureId))
-        {
-            var parts = new List<string>();
-            if (customerId.HasValue) parts.Add($"customer_id={customerId.Value}");
-            if (!string.IsNullOrEmpty(cultureId)) parts.Add($"culture={cultureId}");
-            return $"[{string.Join(", ", parts)}] {message}";
-        }
-        return message;
     }
 
     private async Task<List<string>> GenerateSuggestedQuestionsAsync(

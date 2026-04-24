@@ -38,15 +38,32 @@ Client / MCP Agent
 
 The bank is now integrated with the Supply Chain and Manufacturing simulators so that real business events automatically flow through the virtual accounts:
 
-| Event                       | Bank transaction                                   | Reference prefix   |
-| --------------------------- | -------------------------------------------------- | ------------------ |
-| PO approved                 | USD debit for `TotalDue` (unit cost + freight)     | `PO-{id}`          |
-| PO rejected (from approved) | USD credit refund                                  | `PO-{id}-refund`   |
-| Work order completed        | USD debit for total `ActualCost` from routing      | `WO-{id}`          |
-| Routing operation completed | USD payroll debit (operator hours × hourly rate)   | `WO-{id}-OP-{seq}` |
-| Scrap event                 | USD write-off at `ProductCostHistory.StandardCost` | `SCRAP-WO-{id}`    |
+| Event                       | Bank transaction                                                        | Reference prefix   |
+| --------------------------- | ----------------------------------------------------------------------- | ------------------ |
+| Order shipped               | Credit in the order's display currency for **net proceeds** (see below) | `SO-{id}`          |
+| PO approved                 | USD debit for `TotalDue` (unit cost + freight)                          | `PO-{id}`          |
+| PO rejected (from approved) | USD credit refund                                                       | `PO-{id}-refund`   |
+| Work order completed        | USD debit for total `ActualCost` from routing                           | `WO-{id}`          |
+| Routing operation completed | USD payroll debit (operator hours × hourly rate)                        | `WO-{id}-OP-{seq}` |
+| Scrap event                 | USD write-off at `ProductCostHistory.StandardCost`                      | `SCRAP-WO-{id}`    |
 
-All bank calls are non-blocking — if Table Storage is temporarily unavailable, the simulator operation continues and a warning is logged.
+#### Sale net-proceeds calculation
+
+When an order is marked **Shipped**, the amount credited to the bank is the true net profit, not the `TotalDue` headline figure:
+
+1. **Tax excluded** — `TaxAmt` is collected on behalf of the government and is not revenue.
+2. **Freight handling**:
+   - If the customer **paid shipping** (`Freight > 0`): freight is a straight pass-through to the carrier and is excluded from the credit.
+   - If **free shipping** was given (`Freight == 0`): the business still incurs a real shipping cost. An estimated cost is deducted from `SubTotal`:
+     - **Estimate** = `$7.50 USD` base rate + `$1.00 USD` per additional line item (proxy for package weight/volume).
+3. The resulting USD net amount is converted to the order's display currency using the latest `Sales.CurrencyRate` exchange rate.
+
+**Formula**:
+
+```
+netUsd = SubTotal − freeShippingEstimate   (tax and paid freight never included)
+netInDisplayCurrency = netUsd × AverageRate   (or netUsd for USD orders)
+```
 
 ### MCP exposure
 

@@ -22,6 +22,7 @@ import {
   Bot,
   FolderOpen,
   Store,
+  History,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -66,6 +67,16 @@ const secondaryNavGroups = [
       { to: "/promotions", label: "Promotions", icon: Tag },
       { to: "/cultures", label: "Cultures", icon: Globe },
       { to: "/currencies", label: "Currencies", icon: DollarSign },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      {
+        to: "/inventory-transactions",
+        label: "Inv. Transactions",
+        icon: History,
+      },
     ],
   },
   {
@@ -355,6 +366,13 @@ const AdminHeader: React.FC = () => {
                 onClick={() => setMobileMenuOpen(false)}
               >
                 * Utilities
+              </Link>
+              <Link
+                to="/inventory-transactions"
+                className="font-doodle text-lg text-doodle-text hover:text-doodle-accent py-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                * Inv. Transactions
               </Link>
               {secondaryNavGroups.map((group) => (
                 <div

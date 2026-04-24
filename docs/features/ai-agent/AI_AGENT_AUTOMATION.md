@@ -23,7 +23,7 @@ When you run `azd up` or `azd provision`, the system automatically:
    - **Order Generation Agent** (`AI_AGENT_ORDER_ID`) — realistic order simulation
    - **Promotion Agent** (`AI_AGENT_PROMOTION_ID`) — promotion strategy generation
    - **Help Me Choose Agent** (`AI_AGENT_HELP_ME_CHOOSE_ID`) — product advisor wizard
-   
+
    Each agent is registered with two MCP tool servers:
    - `api-mcp` service (semantic product/catalog tools)
    - DAB `/mcp` endpoint (raw entity data tools)
@@ -61,7 +61,24 @@ bash scripts/utilities/create-foundry-agents.sh
 
 ## Thread Persistence
 
-Each conversation uses a Foundry-managed thread (`threadId`) that persists across requests. The frontend stores the `threadId` and sends it with each subsequent request; the C# service reuses the existing thread for full context continuity.
+Each conversation uses a Foundry-managed `previous_response_id` that persists across requests. The frontend stores the `threadId` (which holds the Foundry response ID) and sends it with each subsequent request; the C# service chains responses via `previous_response_id` for full context continuity — no client-side thread management is needed.
+
+## Structured Inputs
+
+Each agent's Foundry portal definition must declare a `structured_inputs` schema listing the Handlebars variables used in its instructions. The `api-functions` code passes runtime values for these at invocation time, and Foundry resolves `{{variable}}` placeholders before the model sees the instructions.
+
+> **Prerequisite**: If you recreate or modify an agent via `create-foundry-agents.sh`, re-add the `structured_inputs` schema block in the Foundry portal for that agent. Without it, Handlebars placeholders remain unresolved and context is lost.
+
+### Variables per agent
+
+| Agent                | Variables declared in portal `structured_inputs` schema                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Chat                 | `customerId` (string), `cultureId` (string)                                                                                                |
+| Help-Me-Choose       | _(wizard context \u2014 see HelpMeChooseService.cs)_                                                                                       |
+| Order Generation     | `todayDate`, `personaDescription`, `isExistingCustomer` (bool), `customerName`, `customerId`, `orderCount`, `totalSpend`, `recentProducts` |
+| Promotion Generation | `promotionType`, `offerCategory`, `todayDate`, `categoryName`, `subcategoryName`, `categoryId`, `subcategoryId`                            |
+
+The `isExistingCustomer`, `categoryName`, `subcategoryName`, `categoryId`, and `subcategoryId` variables should be declared as optional in the schema so agents handle both the `{{#if ...}}` and `{{else}}` branches of Handlebars conditionals correctly.
 
 ## Agent Configuration
 

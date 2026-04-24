@@ -29,6 +29,7 @@ import AiFeaturesPage from "./pages/AiFeaturesPage";
 import CustomerStatsPage from "./pages/CustomerStatsPage";
 import NotFound from "./pages/NotFound";
 import StoresPage from "./pages/StoresPage";
+import InventoryTransactionsPage from "./pages/InventoryTransactionsPage";
 
 const queryClient = new QueryClient();
 
@@ -82,6 +83,10 @@ const App = () => (
                 <Route path="/ai-features" element={<AiFeaturesPage />} />
                 <Route path="/customer-stats" element={<CustomerStatsPage />} />
                 <Route path="/search" element={<SearchPage />} />
+                <Route
+                  path="/inventory-transactions"
+                  element={<InventoryTransactionsPage />}
+                />
                 <Route path="*" element={<NotFound />} />
               </Routes>
               <GlobalVoiceAssistant />

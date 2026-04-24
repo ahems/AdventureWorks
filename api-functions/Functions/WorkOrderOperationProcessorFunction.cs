@@ -132,7 +132,7 @@ public class WorkOrderOperationProcessorFunction
 
             foreach (var (componentProductId, requiredQty) in components)
             {
-                var (success, available) = await _sim.ConsumeInventoryAsync(componentProductId, requiredQty);
+                var (success, available) = await _sim.ConsumeInventoryAsync(componentProductId, requiredQty, msg.WorkOrderId);
                 if (!success)
                 {
                     string componentName = await GetProductNameAsync(componentProductId);
