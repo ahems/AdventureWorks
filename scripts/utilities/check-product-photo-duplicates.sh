@@ -81,7 +81,7 @@ echo -e "${BLUE}Searching for ANY products with duplicate photo mappings...${NC}
 echo ""
 
 # Get all ProductProductPhoto mappings
-ALL_MAPPINGS=$(curl -s "${REST_API_URL}/ProductProductPhoto?\$top=1000")
+ALL_MAPPINGS=$(curl -s "${REST_API_URL}/ProductProductPhoto?\$first=1000")
 
 # Find products with more than 4 photos
 PRODUCTS_WITH_MANY_PHOTOS=$(echo "$ALL_MAPPINGS" | jq -r '.value | group_by(.ProductID) | .[] | select(length > 4) | {ProductID: .[0].ProductID, Count: length} | "\(.ProductID):\(.Count)"')

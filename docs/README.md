@@ -14,6 +14,7 @@ docs/
 │   ├── internationalization/  # Translation and localization
 │   ├── monitoring/      # Application Insights and telemetry
 │   ├── reviews/         # Product review generation
+│   ├── reporting/       # SQL-backed reporting charts (admin)
 │   ├── search/          # Semantic search and AI features
 │   └── seo/             # SEO implementation
 ├── testing/             # Testing guides and results
@@ -82,6 +83,12 @@ docs/
 **Location:** `features/search/`
 
 - [AI_SEARCH_TROUBLESHOOTING.md](features/search/AI_SEARCH_TROUBLESHOOTING.md) - Semantic search troubleshooting
+
+### Reporting
+
+**Location:** `features/reporting/`
+
+- [REPORTING.md](features/reporting/REPORTING.md) - Pre-aggregated SQL reports via Azure Functions + Recharts (bypasses DAB pagination)
 
 ### SEO
 

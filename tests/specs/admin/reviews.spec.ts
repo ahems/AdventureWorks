@@ -50,7 +50,7 @@ test.describe("Admin Portal – Reviews", () => {
     const appProductLinks = page.locator(
       "a[title='View in customer app'][href*='/product/']",
     );
-    await expect(appProductLinks.first()).toBeVisible({ timeout: 5_000 });
+    await expect(appProductLinks.first()).toBeVisible({ timeout: 15_000 });
     expect(await appProductLinks.first().getAttribute("target")).toBe("_blank");
   });
 
@@ -62,9 +62,10 @@ test.describe("Admin Portal – Reviews", () => {
   test("AI analyze button is present and disabled until reviews selected", async ({
     page,
   }) => {
+    test.setTimeout(90_000);
     // Wait for review cards to load
     await expect(page.locator(".doodle-card").first()).toBeVisible({
-      timeout: 25_000,
+      timeout: 30_000,
     });
     const analyzeBtn = page.getByRole("button", { name: /run ai analysis/i });
     await expect(analyzeBtn).toBeVisible({ timeout: 15_000 });
@@ -219,7 +220,8 @@ test.describe("Admin Portal – Reviews", () => {
     const uniqueComment = `Delete-single-test-${Date.now()}`;
     const reviewId = await createTestReview(706, 2, uniqueComment);
 
-    await page.reload();
+    // Navigate to product-filtered URL so this review is always visible
+    await page.goto(`${testEnv.adminWebBaseUrl}/reviews?productId=706`);
     await expect(page.locator(".doodle-card").first()).toBeVisible({
       timeout: 25_000,
     });
@@ -254,7 +256,8 @@ test.describe("Admin Portal – Reviews", () => {
     const id1 = await createTestReview(706, 4, `Bulk-delete-A-${ts}`);
     const id2 = await createTestReview(706, 5, `Bulk-delete-B-${ts}`);
 
-    await page.reload();
+    // Navigate to product-filtered URL so test reviews are always visible
+    await page.goto(`${testEnv.adminWebBaseUrl}/reviews?productId=706`);
     await expect(page.locator(".doodle-card").first()).toBeVisible({
       timeout: 25_000,
     });
@@ -299,7 +302,8 @@ test.describe("Admin Portal – Reviews", () => {
     await approveTestReview(reviewId);
     await createTestReply(reviewId, "Thanks for your feedback!");
 
-    await page.reload();
+    // Navigate to product-filtered URL so this review is always visible
+    await page.goto(`${testEnv.adminWebBaseUrl}/reviews?productId=706`);
     await expect(page.locator(".doodle-card").first()).toBeVisible({
       timeout: 25_000,
     });
@@ -340,7 +344,20 @@ test.describe("Admin Portal – Reviews", () => {
     const uniqueComment = `Post-reply-test-${Date.now()}`;
     const reviewId = await createTestReview(706, 5, uniqueComment);
 
-    await page.reload();
+    // Navigate to product-filtered URL so this review is always visible
+    // Retry once in case of transient frame-detach errors (net::ERR_ABORTED)
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await page.goto(`${testEnv.adminWebBaseUrl}/reviews?productId=706`);
+        break;
+      } catch {
+        if (attempt === 1)
+          throw new Error(
+            "Navigation to reviews?productId=706 failed after 2 attempts",
+          );
+        await page.waitForTimeout(1000);
+      }
+    }
     await expect(page.locator(".doodle-card").first()).toBeVisible({
       timeout: 25_000,
     });

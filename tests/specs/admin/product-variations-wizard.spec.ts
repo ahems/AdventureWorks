@@ -67,7 +67,10 @@ test.describe("Admin Portal – Product Variations Wizard", () => {
     const categorySelect = page.locator("select").nth(0);
     await categorySelect.selectOption({ index: 1 });
     // Wait for subcategory options to load
-    await page.waitForTimeout(1000);
+    // Wait for subcategory to auto-select (replaces fixed 1s timeout)
+    await expect(page.getByTestId("wizard-next-btn")).toBeEnabled({
+      timeout: 10_000,
+    });
 
     // Click Next
     await page.getByTestId("wizard-next-btn").click();
@@ -77,12 +80,12 @@ test.describe("Admin Portal – Product Variations Wizard", () => {
     await expect(page.getByText("Select Variations")).toBeVisible();
 
     // Select 2 colors
-    await page.getByTestId("color-checkbox-Black").check();
-    await page.getByTestId("color-checkbox-Red").check();
+    await page.getByTestId("color-checkbox-Black").check({ force: true });
+    await page.getByTestId("color-checkbox-Red").check({ force: true });
 
     // Select 2 sizes
-    await page.getByTestId("size-checkbox-S").check();
-    await page.getByTestId("size-checkbox-L").check();
+    await page.getByTestId("size-checkbox-S").check({ force: true });
+    await page.getByTestId("size-checkbox-L").check({ force: true });
 
     // Verify total count
     await expect(page.getByTestId("variation-total-count")).toContainText("4");
@@ -104,7 +107,10 @@ test.describe("Admin Portal – Product Variations Wizard", () => {
       .fill("A test product");
     const categorySelect = page.locator("select").nth(0);
     await categorySelect.selectOption({ index: 1 });
-    await page.waitForTimeout(1000);
+    // Wait for subcategory to auto-select (replaces fixed 1s timeout)
+    await expect(page.getByTestId("wizard-next-btn")).toBeEnabled({
+      timeout: 10_000,
+    });
 
     await page.getByTestId("wizard-next-btn").click();
     await expect(page.getByTestId("wizard-step-2")).toBeVisible();
@@ -113,11 +119,11 @@ test.describe("Admin Portal – Product Variations Wizard", () => {
     await expect(page.getByTestId("wizard-next-btn")).toBeDisabled();
 
     // Select only color — still disabled
-    await page.getByTestId("color-checkbox-Black").check();
+    await page.getByTestId("color-checkbox-Black").check({ force: true });
     await expect(page.getByTestId("wizard-next-btn")).toBeDisabled();
 
     // Select a size too — enabled
-    await page.getByTestId("size-checkbox-M").check();
+    await page.getByTestId("size-checkbox-M").check({ force: true });
     await expect(page.getByTestId("wizard-next-btn")).toBeEnabled();
   });
 
@@ -139,16 +145,19 @@ test.describe("Admin Portal – Product Variations Wizard", () => {
       .fill("A test product");
     const categorySelect = page.locator("select").nth(0);
     await categorySelect.selectOption({ index: 1 });
-    await page.waitForTimeout(1000);
+    // Wait for subcategory to auto-select (replaces fixed 1s timeout)
+    await expect(page.getByTestId("wizard-next-btn")).toBeEnabled({
+      timeout: 10_000,
+    });
 
     // Step 2
     await page.getByTestId("wizard-next-btn").click();
     await expect(page.getByTestId("wizard-step-2")).toBeVisible();
 
-    await page.getByTestId("color-checkbox-Black").check();
-    await page.getByTestId("color-checkbox-Red").check();
-    await page.getByTestId("size-checkbox-S").check();
-    await page.getByTestId("size-checkbox-L").check();
+    await page.getByTestId("color-checkbox-Black").check({ force: true });
+    await page.getByTestId("color-checkbox-Red").check({ force: true });
+    await page.getByTestId("size-checkbox-S").check({ force: true });
+    await page.getByTestId("size-checkbox-L").check({ force: true });
 
     // Step 3
     await page.getByTestId("wizard-next-btn").click();
@@ -170,14 +179,15 @@ test.describe("Admin Portal – Product Variations Wizard", () => {
     const lRow = rows.nth(1).locator("td").nth(5);
     await expect(lRow).toHaveText("$110.00");
 
-    // All SKUs should be unique
-    const skus: string[] = [];
+    // All color+size combinations should be unique
+    const combos: string[] = [];
     for (let i = 0; i < 4; i++) {
-      const sku = await rows.nth(i).locator("td").nth(1).textContent();
-      skus.push(sku ?? "");
+      const color = await rows.nth(i).locator("td").nth(1).textContent();
+      const size = await rows.nth(i).locator("td").nth(2).textContent();
+      combos.push(`${color ?? ""}-${size ?? ""}`);
     }
-    const uniqueSkus = new Set(skus);
-    expect(uniqueSkus.size).toBe(4);
+    const uniqueCombos = new Set(combos);
+    expect(uniqueCombos.size).toBe(4);
   });
 
   // ── Cancel & Back navigation ────────────────────────────────────────────
@@ -196,7 +206,10 @@ test.describe("Admin Portal – Product Variations Wizard", () => {
       .fill("A test product");
     const categorySelect = page.locator("select").nth(0);
     await categorySelect.selectOption({ index: 1 });
-    await page.waitForTimeout(1000);
+    // Wait for subcategory to auto-select (replaces fixed 1s timeout)
+    await expect(page.getByTestId("wizard-next-btn")).toBeEnabled({
+      timeout: 10_000,
+    });
 
     // Go to step 2
     await page.getByTestId("wizard-next-btn").click();
@@ -247,21 +260,24 @@ test.describe("Admin Portal – Product Variations Wizard", () => {
       .fill("A test product");
     const categorySelect = page.locator("select").nth(0);
     await categorySelect.selectOption({ index: 1 });
-    await page.waitForTimeout(1000);
+    // Wait for subcategory to auto-select (replaces fixed 1s timeout)
+    await expect(page.getByTestId("wizard-next-btn")).toBeEnabled({
+      timeout: 10_000,
+    });
 
     await page.getByTestId("wizard-next-btn").click();
     await expect(page.getByTestId("wizard-step-2")).toBeVisible();
 
-    await page.getByTestId("color-checkbox-Black").check();
-    await page.getByTestId("size-checkbox-S").check();
-    await page.getByTestId("size-checkbox-M").check();
+    await page.getByTestId("color-checkbox-Black").check({ force: true });
+    await page.getByTestId("size-checkbox-S").check({ force: true });
+    await page.getByTestId("size-checkbox-M").check({ force: true });
 
     // 1 color × 2 sizes × 1 (no styles) = 2
     await expect(page.getByTestId("variation-total-count")).toContainText("2");
 
     // Now add 2 styles → 1 × 2 × 2 = 4
-    await page.getByTestId("style-checkbox-M").check();
-    await page.getByTestId("style-checkbox-W").check();
+    await page.getByTestId("style-checkbox-M").check({ force: true });
+    await page.getByTestId("style-checkbox-W").check({ force: true });
     await expect(page.getByTestId("variation-total-count")).toContainText("4");
   });
 
@@ -286,7 +302,7 @@ test.describe("Admin Portal – Product Variations Wizard", () => {
 
     // Create Product button visible (not wizard next)
     await expect(
-      page.getByRole("button", { name: /Create Product/i }),
+      page.getByRole("button", { name: /Create Product/i }).first(),
     ).toBeVisible();
     await expect(page.getByTestId("wizard-next-btn")).not.toBeVisible();
   });

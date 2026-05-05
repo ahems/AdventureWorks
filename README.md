@@ -21,12 +21,20 @@ This repo implements a **3‑tier Azure application** with passwordless authenti
 ```text
 User → Static Web App → GraphQL (DAB) → Azure SQL
                      ↘ Azure Functions → Azure SQL / Storage / Email / OpenAI
+
+Admin → Container App (app-admin) → Azure Functions → Azure SQL
 ```
 
 - **Frontend** (`app/`)
-  - React + TypeScript + Vite single‑page application.
+  - React + TypeScript + Vite single‐page application.
   - Deployed as an **Azure Static Web App**.
   - Talks to backend via GraphQL (Data API Builder) and HTTP APIs (Azure Functions).
+
+- **Admin Portal** (`app-admin/`)
+  - React + TypeScript + Vite single‐page application for store administrators.
+  - Deployed as an **Azure Container App** with `minReplicas: 0` (scale-to-zero).
+  - ACR remote build; no Static Web App licensing required.
+  - Includes a [Reports page](docs/features/reporting/REPORTING.md) with pre-aggregated SQL charts.
 
 - **Backend API** (`api/`)
   - **Microsoft Data API Builder (DAB)** exposes the AdventureWorks SQL schema as GraphQL + REST.
@@ -87,6 +95,7 @@ All services authenticate using **Managed Identity** and the `Authentication=Act
 ## Repository Layout
 
 - `app/` – React + TypeScript + Vite frontend (Azure Static Web App).
+- `app-admin/` – React + TypeScript + Vite admin portal (Azure Container App, scale-to-zero).
 - `api/` – Data API Builder (DAB) configuration, Dockerfile, and local start scripts.
 - `api-functions/` – .NET 8 isolated Azure Functions with AI, email, receipts, passwords, SEO, and translation workflows.
 - `api-mcp/` – Model Context Protocol server providing AI agent tool capabilities.

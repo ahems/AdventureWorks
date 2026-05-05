@@ -55,7 +55,8 @@ public class HelpMeChooseFunctions
                 ["HasContext"] = (!string.IsNullOrWhiteSpace(request.Context)).ToString()
             });
 
-            var result = await _helpMeChooseService.GetQuestionsAsync(request.Context, request.CultureId);
+            var result = await _helpMeChooseService.GetQuestionsAsync(
+                request.Context, request.CultureId, request.CustomerId);
 
             var response = req.CreateResponse(HttpStatusCode.OK);
             await response.WriteAsJsonAsync(result);
@@ -109,7 +110,8 @@ public class HelpMeChooseFunctions
                 request.Gender,
                 request.HeightLabel,
                 request.PreferredColors,
-                request.CustomerId);
+                request.CustomerId,
+                request.PreviousThreadId);
 
             var response = req.CreateResponse(HttpStatusCode.OK);
             await response.WriteAsJsonAsync(result);

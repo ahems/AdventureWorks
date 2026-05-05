@@ -21,6 +21,8 @@ export async function createTestReview(
       EmailAddress: emailAddress,
       Rating: rating,
       Comments: comment,
+      // Use a far-future date so test reviews sort before seed data (which has dates up to ~2027)
+      ReviewDate: new Date("2099-12-31T23:59:59.000Z").toISOString(),
     }),
   });
   if (!res.ok) {

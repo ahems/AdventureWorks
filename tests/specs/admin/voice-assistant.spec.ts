@@ -35,7 +35,7 @@ test.describe("Admin Portal – Voice Sales Assistant", () => {
     await micBtn.click();
     // Headless browsers lack SpeechRecognition → component falls back to text mode
     await expect(
-      page.getByPlaceholder(/ask about customers, orders/i),
+      page.getByPlaceholder(/ask about customers, orders/i).first(),
     ).toBeVisible({ timeout: 10_000 });
   });
 
@@ -48,7 +48,7 @@ test.describe("Admin Portal – Voice Sales Assistant", () => {
     });
     await micBtn.click();
 
-    const input = page.getByPlaceholder(/ask about customers, orders/i);
+    const input = page.getByPlaceholder(/ask about customers, orders/i).first();
     await expect(input).toBeVisible({ timeout: 10_000 });
     await input.fill("How many orders are there?");
 

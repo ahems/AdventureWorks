@@ -1,0 +1,116 @@
+#
+# admin-order-advisor.yaml
+# Declarative workflow agent for the admin Order Generator wizard.
+#
+# The workflow asks the admin whether to generate an order for a new or existing
+# customer, gathers a persona or customer ID, then delegates to admin-order-agent
+# which uses live catalog and inventory data via MCP to produce a realistic order.
+#
+# Agents referenced:
+#   admin-order-intent-agent  - micro-agent that classifies as NEW_CUSTOMER or
+#                               EXISTING_CUSTOMER
+#   admin-order-agent         - full order generator (MCP tools + memory)
+#
+kind: Workflow
+trigger:
+  kind: OnConversationStart
+  id: workflow_start
+  actions:
+
+    # ── Step 1: Classify the order intent ────────────────────────────────────
+    # Run the intent classifier in an isolated conversation so its plain-text
+    # reply never appears in the main admin session history.
+    - kind: CreateConversation
+      id: create_intent_conversation
+      conversationId: Local.IntentConvId
+
+    - kind: InvokeAzureAgent
+      id: classify_intent
+      conversationId: =Local.IntentConvId
+      agent:
+        name: admin-order-intent-agent
+      input:
+        messages: =UserMessage(System.LastMessage.Text)
+      output:
+        messages: Local.IntentMessages
+        autoSend: false
+
+    # ── Step 2: Branch on customer type ──────────────────────────────────────
+    - kind: ConditionGroup
+      id: route_by_customer_type
+      conditions:
+
+        # ── Existing customer path ────────────────────────────────────────────
+        - condition: =!IsBlank(Find("EXISTING_CUSTOMER", Upper(MessageText(Local.IntentMessages))))
+          id: existing_customer_path
+          actions:
+
+            - kind: Question
+              id: ask_customer_id
+              alwaysPrompt: true
+              autoSend: false
+              property: Local.CustomerId
+              prompt:
+                kind: Message
+                text:
+                  - "Please provide the Customer ID for the existing customer you want to generate an order for. (You can also say 'random' to pick a random existing customer.)"
+              entity:
+                kind: StringPrebuiltEntity
+
+            - kind: Question
+              id: ask_existing_constraints
+              alwaysPrompt: true
+              autoSend: false
+              property: Local.Constraints
+              prompt:
+                kind: Message
+                text:
+                  - "Any constraints for this order? For example: budget limit, specific category, or complementary items only. Type 'none' if no constraints."
+              entity:
+                kind: StringPrebuiltEntity
+
+            - kind: InvokeAzureAgent
+              id: invoke_order_agent_existing
+              conversationId: =System.ConversationId
+              agent:
+                name: admin-order-agent
+              input:
+                messages: =UserMessage("Generate an order for existing customer ID: " & Local.CustomerId & ". Constraints: " & Local.Constraints & ".")
+              output:
+                autoSend: true
+
+      # ── New customer path: ask for persona ────────────────────────────────
+      elseActions:
+        - kind: Question
+          id: ask_persona
+          alwaysPrompt: true
+          autoSend: false
+          property: Local.Persona
+          prompt:
+            kind: Message
+            text:
+              - "What type of new customer persona should be simulated? Options: beginner-cyclist, enthusiast, family-shopper, commuter, mountain-enthusiast, or describe a custom persona."
+          entity:
+            kind: StringPrebuiltEntity
+
+        - kind: Question
+          id: ask_new_constraints
+          alwaysPrompt: true
+          autoSend: false
+          property: Local.Constraints
+          prompt:
+            kind: Message
+            text:
+              - "Any constraints for this order? For example: budget limit, specific product category, or item count. Type 'none' if no constraints."
+          entity:
+            kind: StringPrebuiltEntity
+
+        - kind: InvokeAzureAgent
+          id: invoke_order_agent_new
+          conversationId: =System.ConversationId
+          agent:
+            name: admin-order-agent
+          input:
+            messages: =UserMessage("Generate an order for a new customer with persona: " & Local.Persona & ". Constraints: " & Local.Constraints & ".")
+          output:
+            autoSend: true

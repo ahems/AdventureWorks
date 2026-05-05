@@ -446,6 +446,14 @@ test.describe("Admin Portal – Products (Category & Detail)", () => {
     const saveBtn = page.getByRole("button", { name: /save changes/i });
     await expect(saveBtn).toBeVisible({ timeout: 5_000 });
     await saveBtn.scrollIntoViewIfNeeded();
+
+    // Start watching for the success toast BEFORE clicking so we don't miss a fast-dismiss
+    const toastPromise = page
+      .getByText(/product saved|saved successfully/i)
+      .first()
+      .waitFor({ state: "visible", timeout: 25_000 })
+      .catch(() => null);
+
     await saveBtn.click({ force: true });
 
     // Wait for the updateProduct mutation to complete (max 15s)
@@ -466,9 +474,8 @@ test.describe("Admin Portal – Products (Category & Detail)", () => {
       `JS errors after save: ${jsErrors.join("; ")}`,
     ).toHaveLength(0);
 
-    // Success toast should appear (product saved)
-    await expect(
-      page.getByText(/product saved|saved successfully/i).first(),
-    ).toBeVisible({ timeout: 8_000 });
+    // Toast must have appeared (we started watching before clicking save)
+    const toastSeen = await toastPromise;
+    expect(toastSeen, "Product saved toast was not seen").not.toBeNull();
   });
 });

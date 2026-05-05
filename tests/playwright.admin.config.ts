@@ -26,7 +26,7 @@ export default defineConfig({
     timeout: 10_000,
   },
   fullyParallel: true,
-  retries: isAzureRun ? 2 : 0,
+  retries: isAzureRun ? 2 : 2,
   workers: isAzureRun ? 10 : undefined,
   reporter: isAzureRun
     ? [

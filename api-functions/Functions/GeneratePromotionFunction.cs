@@ -60,20 +60,28 @@ public class GeneratePromotionFunction
                 ["CategoryId"] = request.CategoryId?.ToString() ?? "all"
             });
 
-            var suggestion = await _promotionAgentService.GeneratePromotionAsync(
+            var result = await _promotionAgentService.GeneratePromotionAsync(
                 request.PromotionType,
                 request.OfferCategory ?? "Customer",
                 request.CategoryId,
                 request.CategoryName,
                 request.SubcategoryId,
-                request.SubcategoryName
+                request.SubcategoryName,
+                request.PreviousThreadId
             );
 
             var duration = DateTimeOffset.UtcNow - requestStartTime;
             _telemetryClient.TrackRequest("GeneratePromotion", requestStartTime, duration, "200", true);
 
+            // Return the suggestion with the threadId so the UI can support refinement turns
+            var responsePayload = new
+            {
+                suggestion = result.Suggestion,
+                threadId   = result.ThreadId
+            };
+
             var response = req.CreateResponse(HttpStatusCode.OK);
-            await response.WriteAsJsonAsync(suggestion);
+            await response.WriteAsJsonAsync(responsePayload);
             return response;
         }
         catch (Exception ex)
@@ -100,4 +108,9 @@ public class GeneratePromotionRequest
     public string? CategoryName { get; set; }
     public int? SubcategoryId { get; set; }
     public string? SubcategoryName { get; set; }
+    /// <summary>
+    /// Foundry response ID from a previous generate/refine call. Pass this back to continue
+    /// the stored conversation (multi-turn refinement, e.g. 'adjust discount to 20%').
+    /// </summary>
+    public string? PreviousThreadId { get; set; }
 }

@@ -114,6 +114,7 @@ export const HelpMeChooseWizard: React.FC<HelpMeChooseWizardProps> = ({
   const [step, setStep] = useState<Step>("intro");
   const [questions, setQuestions] = useState<WizardQuestion[]>([]);
   const [sessionId, setSessionId] = useState<string>("");
+  const [questionsThreadId, setQuestionsThreadId] = useState<string | undefined>(undefined);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<WizardAnswer[]>([]);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
@@ -150,6 +151,7 @@ export const HelpMeChooseWizard: React.FC<HelpMeChooseWizardProps> = ({
     setStep("intro");
     setQuestions([]);
     setSessionId("");
+    setQuestionsThreadId(undefined);
     setCurrentQuestionIndex(0);
     setAnswers([]);
     setSelectedOption(null);
@@ -191,9 +193,11 @@ export const HelpMeChooseWizard: React.FC<HelpMeChooseWizardProps> = ({
   const handleProfileContinue = useCallback(async () => {
     setStep("loading-questions");
     try {
-      const res = await getWizardQuestions(undefined, selectedLanguage);
+      const customerId = isAuthenticated ? user?.businessEntityId : undefined;
+      const res = await getWizardQuestions(undefined, selectedLanguage, customerId);
       setQuestions(res.questions);
       setSessionId(res.sessionId);
+      setQuestionsThreadId(res.threadId);
       setCurrentQuestionIndex(0);
       setAnswers([]);
       setSelectedOption(null);
@@ -203,7 +207,7 @@ export const HelpMeChooseWizard: React.FC<HelpMeChooseWizardProps> = ({
       setError(t("error.loadQuestions"));
       setStep("error");
     }
-  }, [selectedLanguage, t]);
+  }, [selectedLanguage, isAuthenticated, user, t]);
 
   // ---------------------------------------------------------------------------
   // Step: Answer a question and advance
@@ -243,6 +247,7 @@ export const HelpMeChooseWizard: React.FC<HelpMeChooseWizardProps> = ({
           heightLabel || undefined,
           selectedColors.length > 0 ? selectedColors : undefined,
           isAuthenticated ? user?.businessEntityId : undefined,
+          questionsThreadId,  // chain questions + recommendations in one Foundry conversation
         );
         setRecommendations(res.recommendations);
         setSummary(res.summary);
@@ -258,8 +263,7 @@ export const HelpMeChooseWizard: React.FC<HelpMeChooseWizardProps> = ({
     questions,
     currentQuestionIndex,
     answers,
-    sessionId,
-    selectedLanguage,
+    sessionId,    questionsThreadId,    selectedLanguage,
     isAuthenticated,
     user,
     gender,

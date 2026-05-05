@@ -219,6 +219,7 @@ module containerAppApiMcp 'modules/aca-api-mcp.bicep' = {
     identityName: identityName
     sqlConnectionString: database.outputs.connectionString
     aiFoundryEndpoint: aifoundry.outputs.endpoint
+    apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
     minReplica: 0
     maxReplica: 3
     revisionSuffix: revisionSuffix
@@ -323,8 +324,9 @@ module containerAppAdmin 'modules/aca-app-admin.bicep' = {
   }
 }
 
+output APP_URL string = staticWebAppFrontend.outputs.appRedirectUri
 output APP_REDIRECT_URI string = staticWebAppFrontend.outputs.appRedirectUri
-output APP_ADMIN_REDIRECT_URI string = containerAppAdmin.outputs.appAdminUrl
+output APP_ADMIN_URL string = containerAppAdmin.outputs.appAdminUrl
 
 // Expose values needed for local debugging / .env population
 // Application Insights connection string (need to reference component resource id after module deployment)
@@ -363,6 +365,7 @@ output API_FUNCTIONS_URL string = containerAppApiFunctions.outputs.apiFunctionsU
 output MCP_SERVICE_URL string = containerAppApiMcp.outputs.apiMcpUrl
 output API_MCP_URL string = containerAppApiMcp.outputs.apiMcpUrl
 output MCP_INSPECTOR_URL string = containerAppMcpInspector.outputs.mcpInspectorUrl
+output MCP_INSPECTOR_APP_URL string = containerAppMcpInspector.outputs.mcpInspectorUrl
 
 // Static Web App deployment token for azd deploy
 @secure()

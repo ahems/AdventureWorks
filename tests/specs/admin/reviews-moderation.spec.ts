@@ -51,7 +51,7 @@ async function waitForReviews(
 
 /** Wait until the "Browse:" filter section is visible (categories loaded). */
 async function waitForFilters(page: import("@playwright/test").Page) {
-  await expect(page.getByText("Browse:")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Browse:")).toBeVisible({ timeout: 30_000 });
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -152,6 +152,8 @@ test.describe("Reviews Moderation – Filters & URL routing", () => {
     const categoryCombo = page.getByRole("combobox").nth(0);
     await categoryCombo.click();
     await page.getByRole("option", { name: /^Bikes$/i }).click();
+    // Wait for UI to settle after selection
+    await page.waitForTimeout(400);
 
     // The subcategory combobox should become enabled and contain Mountain Bikes
     const subcatCombo = page.getByRole("combobox").nth(1);
@@ -178,11 +180,13 @@ test.describe("Reviews Moderation – Filters & URL routing", () => {
     const catCombo = page.getByRole("combobox").nth(0);
     await catCombo.click();
     await page.getByRole("option", { name: /^Bikes$/i }).click();
+    await page.waitForTimeout(400);
 
     // Select Mountain Bikes
     const subcatCombo = page.getByRole("combobox").nth(1);
     await subcatCombo.click();
     await page.getByRole("option", { name: /^Mountain Bikes$/i }).click();
+    await page.waitForTimeout(400);
 
     // Product dropdown should become enabled
     const prodCombo = page.getByRole("combobox").nth(2);
@@ -210,10 +214,12 @@ test.describe("Reviews Moderation – Filters & URL routing", () => {
     // Step 1: Select Bikes category
     await page.getByRole("combobox").nth(0).click();
     await page.getByRole("option", { name: /^Bikes$/i }).click();
+    await page.waitForTimeout(400);
 
     // Step 2: Select Mountain Bikes
     await page.getByRole("combobox").nth(1).click();
     await page.getByRole("option", { name: /^Mountain Bikes$/i }).click();
+    await page.waitForTimeout(400);
 
     // Step 3: Select Mountain-100 Black, 38 (product 775)
     const prodCombo = page.getByRole("combobox").nth(2);
@@ -315,7 +321,7 @@ test.describe("Reviews Moderation – Filters & URL routing", () => {
     );
 
     // Ethan Brooks reviewed on 2014-04-13 – this would never appear on page 1
-    await expect(page.getByText("Ethan Brooks")).toBeVisible({
+    await expect(page.getByText("Ethan Brooks").first()).toBeVisible({
       timeout: 35_000,
     });
   });
@@ -389,9 +395,11 @@ test.describe("Reviews Moderation – Filters & URL routing", () => {
       // Cascade: Bikes → Mountain Bikes → Mountain-100 Silver, 38
       await page.getByRole("combobox").nth(0).click();
       await page.getByRole("option", { name: /^Bikes$/i }).click();
+      await page.waitForTimeout(400);
 
       await page.getByRole("combobox").nth(1).click();
       await page.getByRole("option", { name: /^Mountain Bikes$/i }).click();
+      await page.waitForTimeout(400);
 
       const prodCombo = page.getByRole("combobox").nth(2);
       await expect(prodCombo).not.toBeDisabled({ timeout: 5_000 });

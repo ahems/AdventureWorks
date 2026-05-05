@@ -24,6 +24,10 @@ param foundryProjectEndpoint string = ''
 param simulationTimeScaleFactor string = '60'
 param simulationScrapRate string = '0.05'
 param materialsRetryDelaySeconds string = '30'
+param agentWorkflowChatId string = ''
+param agentWorkflowPromotionId string = ''
+param agentWorkflowOrderId string = ''
+param agentWorkflowHelpMeChooseId string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -188,6 +192,22 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
               name: 'MATERIALS_RETRY_DELAY_SECONDS'
               value: materialsRetryDelaySeconds
             }
+            {
+              name: 'AI_AGENT_WORKFLOW_CHAT_ID'
+              value: agentWorkflowChatId
+            }
+            {
+              name: 'AI_AGENT_WORKFLOW_PROMOTION_ID'
+              value: agentWorkflowPromotionId
+            }
+            {
+              name: 'AI_AGENT_WORKFLOW_ORDER_ID'
+              value: agentWorkflowOrderId
+            }
+            {
+              name: 'AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID'
+              value: agentWorkflowHelpMeChooseId
+            }
           ]
         }
       ]
@@ -258,6 +278,18 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
               metadata: {
                 accountName: storageAccountName
                 queueName: 'supply-chain-orders-queue'
+                queueLength: '5'
+              }
+              identity: azidentity.id
+            }
+          }
+          {
+            name: 'simulation-order-queue'
+            custom: {
+              type: 'azure-queue'
+              metadata: {
+                accountName: storageAccountName
+                queueName: 'simulation-order-queue'
                 queueLength: '5'
               }
               identity: azidentity.id

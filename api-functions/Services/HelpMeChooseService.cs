@@ -1,7 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Azure.AI.OpenAI;
-using Azure.Identity;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -13,9 +11,24 @@ namespace api_functions.Services;
 
 /// <summary>
 /// Service that powers the "Help Me Choose" wizard experience.
-/// Step 1: generates personalised questions using AI (direct OpenAI).
-/// Step 2: takes user answers, uses the Foundry agent (which calls MCP tools) to browse
-///         the live catalog and returns ranked product recommendations with explanations.
+///
+/// Both phases now run through the Azure AI Foundry Responses API:
+///   Step 1 (GetQuestionsAsync):       Uses the Foundry agent to generate personalised
+///                                      discovery questions. Returns a threadId (Foundry
+///                                      response ID) that the client must pass back to
+///                                      the recommendations step so both phases share a
+///                                      stored conversation context.
+///   Step 2 (GetRecommendationsAsync):  Accepts the threadId from step 1 and passes it
+///                                      as previousResponseId so the agent sees the
+///                                      questions context when producing recommendations.
+///
+/// Foundry features used:
+///   - structured_inputs    → cultureId and profileContext resolved via Handlebars
+///                            templates in the agent instructions
+///   - x-memory-user-id     → scopes memory per customer for personalisation across visits
+///   - previousResponseId   → chains both wizard phases in one stored conversation
+///   - tool_choice: required → ensures agent always calls HelpMeChoose MCP tool;
+///                             prevents hallucinated product lists
 /// </summary>
 public class HelpMeChooseService
 {
@@ -23,8 +36,6 @@ public class HelpMeChooseService
     private readonly TelemetryClient _telemetryClient;
     private readonly FoundryAgentClient _foundryClient;
     private readonly string _agentId;
-    private readonly string _endpoint;
-    private readonly string _modelDeployment;
     private readonly string _sqlConnectionString;
 
     // Cached category tree — fetched once per service lifetime.
@@ -51,18 +62,18 @@ public class HelpMeChooseService
         _foundryClient = foundryClient;
         _telemetryClient = telemetryClient;
 
-        _endpoint = configuration["AZURE_OPENAI_ENDPOINT"]
-            ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
-        _modelDeployment = configuration["chatGptDeploymentName"] ?? "chat";
-
         _sqlConnectionString = configuration["SQL_CONNECTION_STRING"]
             ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not configured");
 
-        _agentId = configuration["AI_AGENT_HELP_ME_CHOOSE_ID"]
-            ?? throw new InvalidOperationException("AI_AGENT_HELP_ME_CHOOSE_ID environment variable is not set");
+        // Use the plain help-me-choose agent (not the workflow orchestrator variant) because
+        // HelpMeChooseService relies on structured_inputs which are only configured on
+        // eshop-help-me-choose-agent. The workflow agent is a Foundry orchestrator without
+        // tool/instruction setup and would return unstructured prose.
+        var agentId = configuration["AI_AGENT_HELP_ME_CHOOSE_ID"];
+        _agentId = agentId ?? throw new InvalidOperationException(
+            "AI_AGENT_HELP_ME_CHOOSE_ID environment variable is not set");
 
-        _logger.LogInformation("HelpMeChooseService configured — endpoint: {Endpoint}, agent: {AgentId}",
-            _endpoint, _agentId);
+        _logger.LogInformation("HelpMeChooseService configured — agent: {AgentId}", _agentId);
     }
 
     // -----------------------------------------------------------------------
@@ -180,96 +191,91 @@ public class HelpMeChooseService
     }
 
     // -----------------------------------------------------------------------
-    // Agent initialisation
-    // -----------------------------------------------------------------------
-
-    // -----------------------------------------------------------------------
     // Public API
     // -----------------------------------------------------------------------
 
     /// <summary>
-    /// Generate a set of personalised discovery questions.
-    /// The questions are AI-generated based on the AdventureWorks catalog context
-    /// (bikes, components, clothing &amp; accessories).
+    /// Generate personalised discovery questions via the Foundry agent.
+    /// Uses the same agent as the recommendations phase so both turns share a
+    /// stored Foundry conversation. Returns a threadId (Foundry response ID) that
+    /// the caller must pass back to <see cref="GetRecommendationsAsync"/> so the
+    /// recommendations phase has full context from the questions turn.
     /// </summary>
-    public async Task<WizardQuestionsResponse> GetQuestionsAsync(string? context, string? cultureId)
+    public async Task<WizardQuestionsResponse> GetQuestionsAsync(
+        string? context,
+        string? cultureId,
+        int? customerId = null)
     {
         using var op = _telemetryClient.StartOperation<RequestTelemetry>("HelpMeChoose.GetQuestions");
 
         try
         {
-            // Use a lightweight, stateless OpenAI call — no MCP needed for question generation.
-            var credential = new DefaultAzureCredential();
-            var chatClient = new AzureOpenAIClient(new Uri(_endpoint), credential)
-                .GetChatClient(_modelDeployment);
-
-            var contextHint = string.IsNullOrWhiteSpace(context) ? "any of the products listed below" : context;
-            var languageHint = string.IsNullOrWhiteSpace(cultureId) ? "English" : cultureId;
             var catalogDescription = await GetCatalogDescriptionAsync();
+            var contextHint = string.IsNullOrWhiteSpace(context) ? "any product in the catalog" : context;
 
-            var prompt = $@"You are a friendly product advisor for AdventureWorks, an outdoor sports and cycling e-commerce store that sells the following product categories and subcategories:
-{catalogDescription}
-Generate exactly 5 short, engaging discovery questions to help a shopper find the perfect product.
-The shopper expressed interest in: {contextHint}.
-Answer in {languageHint} language.
-
-Rules:
-- Each question must have exactly 4 selectable options (short labels, max 30 chars each).
-- Cover: riding style / use-case, experience level, budget, frequency of use, priority (performance vs comfort vs lightweight).
-- Keep questions concise — one sentence each.
-- Do NOT number the questions.
-
-Return ONLY a valid JSON array (no markdown, no extra text):
-[
-  {{
-    ""id"": 1,
-    ""text"": ""<question text>"",
-    ""icon"": ""<single relevant emoji>"",
-    ""options"": [""<option1>"", ""<option2>"", ""<option3>"", ""<option4>""]
-  }},
-  ...
-]";
-
-            var sb = new System.Text.StringBuilder();
-            await foreach (var partial in chatClient.CompleteChatStreamingAsync(
-                [new OpenAI.Chat.UserChatMessage(prompt)]))
+            // Build structured inputs to resolve Handlebars templates in agent instructions.
+            // profileContext passes the catalog structure so the agent can generate relevant
+            // category-aware questions without needing a separate MCP tool call.
+            var structuredInputs = new Dictionary<string, object>
             {
-                foreach (var textPart in partial.ContentUpdate)
-                    if (!string.IsNullOrEmpty(textPart.Text)) sb.Append(textPart.Text);
-            }
+                ["cultureId"]       = cultureId ?? "en",
+                ["profileContext"]  = $"Shopper interest: {contextHint}. Available categories:\n{catalogDescription}"
+            };
+            if (customerId.HasValue)
+                structuredInputs["userId"] = customerId.Value.ToString();
 
-            var raw = sb.ToString().Trim();
+            // The agent instructions handle question generation when the user message
+            // indicates the questions phase. The agent uses profileContext (resolved from
+            // structured_inputs) rather than the raw catalog, keeping the message clean.
+            const string userMessage = "Generate exactly 5 personalised discovery questions for the wizard following the instructions.";
+
+            // tool_choice: auto — question generation is stateless and does not need MCP tools;
+            // the agent may optionally call tools but is not required to.
+            var agentResponse = await _foundryClient.InvokeAsync(
+                agentId: _agentId,
+                userMessage: userMessage,
+                userId: customerId.HasValue ? customerId.Value.ToString() : null,
+                structuredInputs: structuredInputs,
+                toolChoice: "auto");
+
+            var raw = agentResponse.ResponseText.Trim();
 
             // Strip possible markdown code fence
-            if (raw.StartsWith("```")) raw = System.Text.RegularExpressions.Regex.Replace(raw, @"^```[^\n]*\n?|```$", "", System.Text.RegularExpressions.RegexOptions.Multiline).Trim();
+            if (raw.StartsWith("```"))
+                raw = System.Text.RegularExpressions.Regex.Replace(raw, @"^```[^\n]*\n?|```$", "", System.Text.RegularExpressions.RegexOptions.Multiline).Trim();
+
+            // Extract JSON array from response
+            var start = raw.IndexOf('[');
+            var end   = raw.LastIndexOf(']');
+            if (start >= 0 && end > start)
+                raw = raw.Substring(start, end - start + 1);
 
             var questions = JsonSerializer.Deserialize<List<WizardQuestion>>(raw, _jsonOptions)
                             ?? BuildFallbackQuestions();
 
-            // Emit full prompt + response to App Insights for debugging
             _telemetryClient.TrackTrace(
-                $"[HelpMeChoose] Question generation prompt:\n{prompt}",
-                SeverityLevel.Verbose,
-                new Dictionary<string, string> { ["Phase"] = "QuestionPrompt", ["CultureId"] = cultureId ?? "default" });
-
-            _telemetryClient.TrackTrace(
-                $"[HelpMeChoose] Question generation raw response:\n{raw}",
+                $"[HelpMeChoose] Foundry questions response:\n{agentResponse.ResponseText}",
                 SeverityLevel.Verbose,
                 new Dictionary<string, string> { ["Phase"] = "QuestionRawResponse", ["CultureId"] = cultureId ?? "default" });
 
             op.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("HelpMeChoose.QuestionsGenerated",
-                new Dictionary<string, string> { ["Count"] = questions.Count.ToString(), ["CultureId"] = cultureId ?? "default" });
+            _telemetryClient.TrackEvent("HelpMeChoose.QuestionsGenerated", new Dictionary<string, string>
+            {
+                ["Count"]    = questions.Count.ToString(),
+                ["CultureId"] = cultureId ?? "default",
+                ["ThreadId"] = agentResponse.ResponseId ?? string.Empty
+            });
 
             return new WizardQuestionsResponse
             {
-                SessionId = Guid.NewGuid().ToString(),
-                Questions = questions
+                SessionId = agentResponse.ResponseId ?? Guid.NewGuid().ToString(),
+                Questions  = questions,
+                ThreadId   = agentResponse.ResponseId   // Pass back so recommendations phase can chain via previousResponseId
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating wizard questions");
+            _logger.LogError(ex, "Error generating wizard questions via Foundry agent");
             op.Telemetry.Success = false;
             _telemetryClient.TrackException(ex);
 
@@ -277,7 +283,7 @@ Return ONLY a valid JSON array (no markdown, no extra text):
             return new WizardQuestionsResponse
             {
                 SessionId = Guid.NewGuid().ToString(),
-                Questions = BuildFallbackQuestions()
+                Questions  = BuildFallbackQuestions()
             };
         }
     }
@@ -285,6 +291,9 @@ Return ONLY a valid JSON array (no markdown, no extra text):
     /// <summary>
     /// Take user answers and return product recommendations by reasoning over the live catalog
     /// via MCP SearchProducts and FindComplementaryProducts tools.
+    /// Pass <paramref name="previousThreadId"/> (from <see cref="GetQuestionsAsync"/>) to chain
+    /// both wizard phases in one stored Foundry conversation — the agent will see the full
+    /// questions context when generating recommendations.
     /// </summary>
     public async Task<RecommendationsResponse> GetRecommendationsAsync(
         List<WizardAnswer> answers,
@@ -293,7 +302,8 @@ Return ONLY a valid JSON array (no markdown, no extra text):
         string? gender = null,
         string? heightLabel = null,
         List<string>? preferredColors = null,
-        int? customerId = null)
+        int? customerId = null,
+        string? previousThreadId = null)
     {
         using var op = _telemetryClient.StartOperation<RequestTelemetry>("HelpMeChoose.GetRecommendations");
         var startTime = DateTimeOffset.UtcNow;
@@ -379,12 +389,13 @@ Culture/language for responses: {cultureId ?? "en-US"}";
                 new Dictionary<string, string> { ["Phase"] = "RecommendationInput", ["CultureId"] = cultureId ?? "default" });
 
             // Invoke the Foundry "kind: prompt" agent via the Responses API.
-            // The agent calls SearchProducts / FindComplementaryProducts MCP tools
-            // server-side; we just wait for the final response.
+            // Passing previousResponseId chains this turn with the questions phase so the
+            // agent sees the full wizard context stored in Foundry memory.
             // tool_choice: "required" ensures product IDs in the response come from the live
-            // catalog \u2014 hallucinated IDs would break add-to-cart downstream.
+            // catalog — hallucinated IDs would break add-to-cart downstream.
             var agentResponse = await _foundryClient.InvokeAsync(_agentId, userMessage,
                 userId: customerId.HasValue ? customerId.Value.ToString() : null,
+                previousResponseId: string.IsNullOrEmpty(previousThreadId) ? null : previousThreadId,
                 toolChoice: "required");
             string raw = agentResponse.ResponseText;
 
@@ -413,6 +424,8 @@ Culture/language for responses: {cultureId ?? "en-US"}";
             var duration = DateTimeOffset.UtcNow - startTime;
             op.Telemetry.Success = true;
 
+            result.ThreadId = agentResponse.ResponseId;
+
             // Emit a full session summary — useful for correlating the whole flow in App Insights
             _telemetryClient.TrackEvent("HelpMeChoose.SessionComplete", new Dictionary<string, string>
             {
@@ -421,7 +434,8 @@ Culture/language for responses: {cultureId ?? "en-US"}";
                 ["DurationMs"]          = duration.TotalMilliseconds.ToString("F0"),
                 ["CultureId"]           = cultureId ?? "default",
                 ["HasProfile"]          = (profileParts.Count > 0).ToString(),
-                ["ProductIds"]          = string.Join(", ", result.Recommendations.Select(r => r.ProductId))
+                ["ProductIds"]          = string.Join(", ", result.Recommendations.Select(r => r.ProductId)),
+                ["PreviousThreadId"]    = previousThreadId ?? "none"
             });
 
             _telemetryClient.TrackEvent("HelpMeChoose.RecommendationsGenerated", new Dictionary<string, string>
@@ -491,6 +505,13 @@ public class WizardQuestionsResponse
 
     [JsonPropertyName("questions")]
     public List<WizardQuestion> Questions { get; set; } = new();
+
+    /// <summary>
+    /// Foundry response ID from the questions turn. Pass back as previousThreadId in the
+    /// recommendations request to chain both wizard phases in one stored conversation.
+    /// </summary>
+    [JsonPropertyName("threadId")]
+    public string? ThreadId { get; set; }
 }
 
 public class WizardAnswer
@@ -536,6 +557,13 @@ public class RecommendationsResponse
 
     [JsonPropertyName("searchTermsUsed")]
     public List<string> SearchTermsUsed { get; set; } = new();
+
+    /// <summary>
+    /// Foundry response ID from this recommendations turn. Can be passed back for further
+    /// refinement turns (multi-turn wizard refinement).
+    /// </summary>
+    [JsonPropertyName("threadId")]
+    public string? ThreadId { get; set; }
 }
 
 public class HelpMeQuestionsRequest
@@ -545,6 +573,9 @@ public class HelpMeQuestionsRequest
 
     [JsonPropertyName("cultureId")]
     public string? CultureId { get; set; }
+
+    [JsonPropertyName("customerId")]
+    public int? CustomerId { get; set; }
 }
 
 public class HelpMeRecommendRequest
@@ -572,6 +603,13 @@ public class HelpMeRecommendRequest
 
     [JsonPropertyName("customerId")]
     public int? CustomerId { get; set; }
+
+    /// <summary>
+    /// Foundry response ID returned by the questions endpoint. Pass this back to chain
+    /// the recommendations turn with the questions turn in one stored Foundry conversation.
+    /// </summary>
+    [JsonPropertyName("previousThreadId")]
+    public string? PreviousThreadId { get; set; }
 }
 
 public class CatalogMeta

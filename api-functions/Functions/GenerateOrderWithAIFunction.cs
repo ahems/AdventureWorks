@@ -60,7 +60,11 @@ public class GenerateOrderWithAIFunction
                 ["SeedCustomerId"] = (request.SeedCustomerId?.ToString() ?? "none")
             });
 
-            var result = await _agentService.GenerateOrderAsync(request.PersonaType, request.CustomPersona, seedCustomerId: request.SeedCustomerId);
+            var result = await _agentService.GenerateOrderAsync(
+                request.PersonaType,
+                request.CustomPersona,
+                seedCustomerId: request.SeedCustomerId,
+                previousResponseId: request.PreviousThreadId);
 
             var duration = DateTimeOffset.UtcNow - requestStartTime;
             _telemetryClient.TrackRequest("GenerateOrderWithAI", requestStartTime, duration,
@@ -98,4 +102,9 @@ public class GenerateOrderWithAIRequest
     /// If null with personaType "existing-customer", a random customer is selected server-side.
     /// </summary>
     public int? SeedCustomerId { get; set; }
+    /// <summary>
+    /// Foundry response ID from a previous generate call. Pass this back to continue
+    /// the stored conversation (e.g. admin triggers a refinement run for the same persona).
+    /// </summary>
+    public string? PreviousThreadId { get; set; }
 }

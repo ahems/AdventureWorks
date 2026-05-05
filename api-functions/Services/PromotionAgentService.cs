@@ -13,10 +13,12 @@ namespace api_functions.Services;
 /// GetProductsForPromotion tool.
 ///
 /// Foundry features used:
-///   - structured_inputs → promotion type, category, and date context resolved via Handlebars
-///                         templates in the agent instructions; keeps the user message short
-///   - x-memory-user-id  → scopes memory per promotion type so the agent recalls recent
-///                         promotions and generates varied campaigns across successive runs
+///   - structured_inputs    → promotion type, category, and date context resolved via Handlebars
+///                            templates in the agent instructions; keeps the user message short
+///   - x-memory-user-id     → scopes memory per promotion type so the agent recalls recent
+///                            promotions and generates varied campaigns across successive runs
+///   - previousResponseId   → enables admin refinement turns (e.g. 'increase discount to 20%')
+///                            by continuing a stored Foundry conversation
 ///   - tool_choice: required → ensures the agent always calls GetProductsForPromotion;
 ///                             prevents fabricated product lists from reaching the response
 /// </summary>
@@ -37,22 +39,30 @@ public class PromotionAgentService
         _foundryClient = foundryClient;
         _telemetryClient = telemetryClient;
 
-        _agentId = configuration["AI_AGENT_PROMOTION_ID"]
-            ?? throw new InvalidOperationException("AI_AGENT_PROMOTION_ID environment variable is not set");
+        // Use the plain promotion agent (not the workflow orchestrator variant) because
+        // PromotionAgentService relies on structured_inputs + tool_choice="required" which are
+        // configured only on admin-promotion-agent. The workflow agent is a Foundry orchestrator
+        // without tool/instruction setup and would return unstructured prose.
+        var agentId = configuration["AI_AGENT_PROMOTION_ID"];
+        _agentId = agentId ?? throw new InvalidOperationException(
+            "AI_AGENT_PROMOTION_ID environment variable is not set");
     }
 
     /// <summary>
     /// Generate a promotion suggestion for the given parameters.
     /// Uses the Foundry agent's MCP GetProductsForPromotion tool to retrieve live data,
     /// then reasons about appropriate products, discount %, and campaign framing.
+    /// Pass <paramref name="previousResponseId"/> to continue a refinement conversation
+    /// (e.g. admin adjusts discount or target category in a follow-up turn).
     /// </summary>
-    public async Task<PromotionSuggestion> GeneratePromotionAsync(
+    public async Task<PromotionSuggestionResult> GeneratePromotionAsync(
         string promotionType,
         string offerCategory,
         int? categoryId = null,
         string? categoryName = null,
         int? subcategoryId = null,
-        string? subcategoryName = null)
+        string? subcategoryName = null,
+        string? previousResponseId = null)
     {
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("PromotionAgent.Generate");
         operation.Telemetry.Properties["PromotionType"] = promotionType;
@@ -94,13 +104,16 @@ public class PromotionAgentService
             // structured_inputs which resolve the Handlebars templates in the agent instructions.
             const string userMessage = "Generate a promotion campaign following the instructions.";
 
-            // Invoke the Foundry agent via the Responses API (stateless single-shot).
+            // Invoke the Foundry agent via the Responses API (supports multi-turn refinement).
+            // Passing previousResponseId continues a stored conversation so the admin can
+            // refine the suggestion (e.g. 'increase discount to 25%') without losing context.
             // tool_choice: "required" ensures the agent always calls GetProductsForPromotion;
             // prevents hallucinated product lists from appearing in the response.
             var agentResponse = await _foundryClient.InvokeAsync(
                 agentId: _agentId,
                 userMessage: userMessage,
                 userId: memoryUserId,
+                previousResponseId: string.IsNullOrEmpty(previousResponseId) ? null : previousResponseId,
                 structuredInputs: structuredInputs,
                 toolChoice: "required");
             var rawResponse = agentResponse.ResponseText;
@@ -116,10 +129,15 @@ public class PromotionAgentService
             {
                 ["PromotionType"] = promotionType,
                 ["ProductCount"] = suggestion.SuggestedProducts.Count.ToString(),
-                ["DurationMs"] = duration.TotalMilliseconds.ToString("F0")
+                ["DurationMs"] = duration.TotalMilliseconds.ToString("F0"),
+                ["ThreadId"] = agentResponse.ResponseId ?? string.Empty
             });
 
-            return suggestion;
+            return new PromotionSuggestionResult
+            {
+                Suggestion = suggestion,
+                ThreadId   = agentResponse.ResponseId
+            };
         }
         catch (Exception ex)
         {
@@ -176,4 +194,20 @@ public class SuggestedProduct
     public int InventoryLevel { get; set; }
     public int RecentSalesCount { get; set; }
     public string Reason { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Wraps a <see cref="PromotionSuggestion"/> with the Foundry response ID so callers
+/// can chain refinement turns by passing ThreadId back as previousResponseId.
+/// </summary>
+public class PromotionSuggestionResult
+{
+    /// <summary>The AI-generated promotion suggestion.</summary>
+    public PromotionSuggestion Suggestion { get; set; } = new();
+
+    /// <summary>
+    /// Foundry response ID. Pass back as previousResponseId in subsequent refinement
+    /// requests to continue the stored conversation (multi-turn refinement).
+    /// </summary>
+    public string? ThreadId { get; set; }
 }

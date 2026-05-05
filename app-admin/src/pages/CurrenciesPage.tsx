@@ -5,10 +5,10 @@ import {
   Trash2,
   DollarSign,
   Search,
-  RefreshCw,
   TrendingUp,
   ChevronLeft,
   ChevronRight,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,9 @@ import { Currency, CurrencyRate } from "@/types/currency";
 import {
   useAdminCurrencies,
   useAdminCurrencyRates,
+  useCreateCurrency,
+  useUpdateCurrency,
+  useDeleteCurrency,
 } from "@/hooks/useAdminCatalog";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
@@ -61,6 +64,12 @@ const CurrenciesPage = () => {
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [currencyRates, setCurrencyRates] = useState<CurrencyRate[]>([]);
   const [ratesHasMore, setRatesHasMore] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const createCurrency = useCreateCurrency();
+  const updateCurrency = useUpdateCurrency();
+  const deleteCurrency = useDeleteCurrency();
 
   useEffect(() => {
     if (apiCurrencies.length > 0) setCurrencies(apiCurrencies);
@@ -79,8 +88,6 @@ const CurrenciesPage = () => {
   const [deletingCurrency, setDeletingCurrency] = useState<Currency | null>(
     null,
   );
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
   const [formData, setFormData] = useState({
     CurrencyCode: "",
@@ -121,7 +128,7 @@ const CurrenciesPage = () => {
     setIsDeleteDialogOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.CurrencyCode.trim() || !formData.Name.trim()) {
       toast({
         title: "Validation Error",
@@ -140,154 +147,74 @@ const CurrenciesPage = () => {
       return;
     }
 
-    if (editingCurrency) {
-      setCurrencies((prev) =>
-        prev.map((c) =>
-          c.CurrencyCode === editingCurrency.CurrencyCode
-            ? {
-                ...c,
-                Name: formData.Name,
-                ModifiedDate: new Date().toISOString(),
-              }
-            : c,
-        ),
-      );
-      toast({
-        title: "Currency Updated",
-        description: `"${formData.Name}" has been updated.`,
-      });
-    } else {
-      if (
-        currencies.some(
-          (c) =>
-            c.CurrencyCode.toUpperCase() ===
-            formData.CurrencyCode.toUpperCase(),
-        )
-      ) {
-        toast({
-          title: "Duplicate Code",
-          description: "A currency with this code already exists.",
-          variant: "destructive",
-        });
-        return;
-      }
-      const newCurrency: Currency = {
-        CurrencyCode: formData.CurrencyCode.toUpperCase().trim(),
-        Name: formData.Name.trim(),
-        ModifiedDate: new Date().toISOString(),
-      };
-      setCurrencies((prev) => [...prev, newCurrency]);
-      toast({
-        title: "Currency Created",
-        description: `"${formData.Name}" has been added.`,
-      });
-    }
-    setIsDialogOpen(false);
-  };
-
-  const handleDelete = () => {
-    if (deletingCurrency) {
-      setCurrencies((prev) =>
-        prev.filter((c) => c.CurrencyCode !== deletingCurrency.CurrencyCode),
-      );
-      // Also remove associated rates
-      setCurrencyRates((prev) =>
-        prev.filter(
-          (r) =>
-            r.FromCurrencyCode !== deletingCurrency.CurrencyCode &&
-            r.ToCurrencyCode !== deletingCurrency.CurrencyCode,
-        ),
-      );
-      toast({
-        title: "Currency Deleted",
-        description: `"${deletingCurrency.Name}" and its exchange rates have been removed.`,
-      });
-    }
-    setIsDeleteDialogOpen(false);
-    setDeletingCurrency(null);
-  };
-
-  const refreshExchangeRates = async () => {
-    setIsRefreshing(true);
-
+    setIsSaving(true);
     try {
-      // Using the free ExchangeRate-API (no key required for basic usage)
-      const response = await fetch("https://open.er-api.com/v6/latest/USD");
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch exchange rates");
-      }
-
-      const data = await response.json();
-
-      if (data.result !== "success") {
-        throw new Error("API returned an error");
-      }
-
-      const now = new Date();
-      const newRates: CurrencyRate[] = [];
-      let rateId =
-        Math.max(...currencyRates.map((r) => r.CurrencyRateID), 0) + 1;
-
-      // Create rates from USD to each other currency
-      currencies.forEach((currency) => {
+      if (editingCurrency) {
+        await updateCurrency.mutateAsync({
+          CurrencyCode: editingCurrency.CurrencyCode,
+          Name: formData.Name,
+        });
+        toast({
+          title: "Currency Updated",
+          description: `"${formData.Name}" has been updated.`,
+        });
+      } else {
         if (
-          currency.CurrencyCode !== "USD" &&
-          data.rates[currency.CurrencyCode]
+          currencies.some(
+            (c) =>
+              c.CurrencyCode.toUpperCase() ===
+              formData.CurrencyCode.toUpperCase(),
+          )
         ) {
-          const rate = data.rates[currency.CurrencyCode];
-          newRates.push({
-            CurrencyRateID: rateId++,
-            CurrencyRateDate: format(now, "yyyy-MM-dd"),
-            FromCurrencyCode: "USD",
-            ToCurrencyCode: currency.CurrencyCode,
-            AverageRate: rate,
-            EndOfDayRate: rate,
-            ModifiedDate: now.toISOString(),
+          toast({
+            title: "Duplicate Code",
+            description: "A currency with this code already exists.",
+            variant: "destructive",
           });
+          return;
         }
-      });
-
-      // Add cross-rates for EUR as base
-      if (data.rates["EUR"]) {
-        currencies.forEach((currency) => {
-          if (
-            currency.CurrencyCode !== "EUR" &&
-            currency.CurrencyCode !== "USD" &&
-            data.rates[currency.CurrencyCode]
-          ) {
-            const eurRate =
-              data.rates[currency.CurrencyCode] / data.rates["EUR"];
-            newRates.push({
-              CurrencyRateID: rateId++,
-              CurrencyRateDate: format(now, "yyyy-MM-dd"),
-              FromCurrencyCode: "EUR",
-              ToCurrencyCode: currency.CurrencyCode,
-              AverageRate: eurRate,
-              EndOfDayRate: eurRate,
-              ModifiedDate: now.toISOString(),
-            });
-          }
+        await createCurrency.mutateAsync({
+          CurrencyCode: formData.CurrencyCode,
+          Name: formData.Name,
+        });
+        toast({
+          title: "Currency Created",
+          description: `"${formData.Name}" has been added.`,
         });
       }
-
-      setCurrencyRates(newRates);
-      setLastRefresh(now);
-
+      setIsDialogOpen(false);
+    } catch {
       toast({
-        title: "Exchange Rates Updated",
-        description: `Successfully refreshed ${newRates.length} exchange rates from live data.`,
-      });
-    } catch (error) {
-      console.error("Error fetching exchange rates:", error);
-      toast({
-        title: "Refresh Failed",
-        description: "Could not fetch exchange rates. Please try again later.",
+        title: "Error",
+        description: "Failed to save currency. Please try again.",
         variant: "destructive",
       });
     } finally {
-      setIsRefreshing(false);
+      setIsSaving(false);
     }
+  };
+
+  const handleDelete = async () => {
+    if (deletingCurrency) {
+      setIsDeleting(true);
+      try {
+        await deleteCurrency.mutateAsync(deletingCurrency.CurrencyCode);
+        toast({
+          title: "Currency Deleted",
+          description: `"${deletingCurrency.Name}" has been removed.`,
+        });
+      } catch {
+        toast({
+          title: "Error",
+          description: "Failed to delete currency. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+    setIsDeleteDialogOpen(false);
+    setDeletingCurrency(null);
   };
 
   return (
@@ -310,16 +237,6 @@ const CurrenciesPage = () => {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={refreshExchangeRates}
-                disabled={isRefreshing}
-              >
-                <RefreshCw
-                  className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
-                />
-                {isRefreshing ? "Refreshing..." : "Refresh Rates"}
-              </Button>
               <Button onClick={openCreateDialog}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Currency
@@ -328,7 +245,7 @@ const CurrenciesPage = () => {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -353,21 +270,6 @@ const CurrenciesPage = () => {
                 <p className="text-3xl font-bold text-primary">
                   {currencyRates.length}
                   {ratesHasMore ? "+" : ""}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <RefreshCw className="h-5 w-5 text-primary" />
-                  Last Refresh
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-lg font-medium text-muted-foreground">
-                  {lastRefresh
-                    ? format(lastRefresh, "MMM d, yyyy HH:mm")
-                    : "Never"}
                 </p>
               </CardContent>
             </Card>
@@ -468,20 +370,7 @@ const CurrenciesPage = () => {
               {/* Exchange Rates Table */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span>Current Exchange Rates</span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={refreshExchangeRates}
-                      disabled={isRefreshing}
-                    >
-                      <RefreshCw
-                        className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
-                      />
-                      Refresh
-                    </Button>
-                  </CardTitle>
+                  <CardTitle>Current Exchange Rates</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <Table>
@@ -501,8 +390,7 @@ const CurrenciesPage = () => {
                             colSpan={5}
                             className="text-center py-8 text-muted-foreground"
                           >
-                            No exchange rates available. Click "Refresh Rates"
-                            to fetch current rates.
+                            No exchange rates available.
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -619,10 +507,15 @@ const CurrenciesPage = () => {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsDialogOpen(false)}
+              disabled={isSaving}
+            >
               Cancel
             </Button>
-            <Button onClick={handleSave}>
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {editingCurrency ? "Save Changes" : "Create Currency"}
             </Button>
           </DialogFooter>
@@ -644,11 +537,13 @@ const CurrenciesPage = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
+              disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
+              {isDeleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -117,6 +117,15 @@ builder.Services.AddScoped<PasswordService>(sp =>
     return new PasswordService(connectionString);
 });
 
+// Register ReportingService for pre-aggregated SQL reporting (bypasses DAB 100-item pagination)
+builder.Services.AddScoped<ReportingService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new ReportingService(connectionString);
+});
+
 // Register PdfReceiptGenerator for PDF receipt generation
 builder.Services.AddScoped<PdfReceiptGenerator>();
 

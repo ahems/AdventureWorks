@@ -10,34 +10,27 @@ import {
   Clock,
   Loader2,
   Store,
+  Tag,
+  BarChart3,
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import AiAgentChat from "@/components/AiAgentChat";
-import NaturalLanguageBI from "@/components/NaturalLanguageBI";
 import { useAuth } from "@/context/AuthContext";
 import {
   useDashboardStats,
   getOrderStatusLabel,
 } from "@/hooks/useDashboardStats";
 
-// Static category shortcuts — same 4 categories in every AdventureWorks database
-const NAV_CATEGORIES = [
-  { ProductCategoryID: 1, Name: "Bikes" },
-  { ProductCategoryID: 2, Name: "Components" },
-  { ProductCategoryID: 3, Name: "Clothing" },
-  { ProductCategoryID: 4, Name: "Accessories" },
-];
-
 const Index: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
 
-  const totalProducts = stats?.totalProducts ?? "—";
-  const totalCustomers = stats?.totalCustomers ?? "—";
-  const totalOrders = stats?.totalOrders ?? "—";
+  const totalProducts = stats?.totalProducts?.toLocaleString() ?? "—";
+  const totalCustomers = stats?.totalCustomers?.toLocaleString() ?? "—";
+  const totalOrders = stats?.totalOrders?.toLocaleString() ?? "—";
   const pendingOrders = stats?.pendingOrders ?? 0;
-  const totalReviews = stats?.totalReviews ?? "—";
+  const totalReviews = stats?.totalReviews?.toLocaleString() ?? "—";
   const recentOrders = stats?.recentOrders ?? [];
 
   if (!isAuthenticated) {
@@ -190,17 +183,24 @@ const Index: React.FC = () => {
                 Quick Actions
               </h2>
               <div className="space-y-3">
-                {NAV_CATEGORIES.map((category) => (
-                  <Link
-                    key={category.ProductCategoryID}
-                    to={`/category/${category.ProductCategoryID}`}
-                    className="flex items-center justify-between p-3 border-2 border-doodle-text/20 hover:border-doodle-accent transition-colors"
-                  >
-                    <span className="font-doodle text-doodle-text">
-                      Browse {category.Name}
-                    </span>
-                  </Link>
-                ))}
+                <Link
+                  to="/promotions"
+                  className="flex items-center justify-between p-3 border-2 border-doodle-text/20 hover:border-doodle-accent transition-colors"
+                >
+                  <span className="font-doodle text-doodle-text flex items-center gap-2">
+                    <Tag className="w-4 h-4 text-doodle-purple" />
+                    Manage Promotions
+                  </span>
+                </Link>
+                <Link
+                  to="/reports"
+                  className="flex items-center justify-between p-3 border-2 border-doodle-text/20 hover:border-doodle-accent transition-colors"
+                >
+                  <span className="font-doodle text-doodle-text flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-doodle-blue" />
+                    View Reports
+                  </span>
+                </Link>
                 <Link
                   to="/reviews"
                   className="flex items-center justify-between p-3 border-2 border-doodle-text/20 hover:border-doodle-accent transition-colors"
@@ -210,6 +210,15 @@ const Index: React.FC = () => {
                   </span>
                   <span className="font-doodle text-sm text-doodle-accent">
                     {totalReviews} to review
+                  </span>
+                </Link>
+                <Link
+                  to="/category/1"
+                  className="flex items-center justify-between p-3 border-2 border-doodle-text/20 hover:border-doodle-accent transition-colors"
+                >
+                  <span className="font-doodle text-doodle-text flex items-center gap-2">
+                    <Package className="w-4 h-4 text-doodle-accent" />
+                    Browse Bikes
                   </span>
                 </Link>
                 <Link
@@ -286,17 +295,24 @@ const Index: React.FC = () => {
           </div>
         </section>
 
-        {/* Natural Language BI Section */}
+        {/* Business Intelligence Section */}
         <section className="container mx-auto px-4 pb-8">
-          <div className="mb-4">
-            <h2 className="font-doodle text-xl font-bold text-doodle-text flex items-center gap-2">
-              📊 Business Intelligence
+          <div className="doodle-card p-6">
+            <h2 className="font-doodle text-xl font-bold text-doodle-text mb-4 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-doodle-blue" />
+              Business Intelligence
             </h2>
-            <p className="font-doodle text-sm text-doodle-text/60">
-              Ask questions about your data in natural language
+            <p className="font-doodle text-sm text-doodle-text/60 mb-4">
+              Access reports and analytics to drive data-informed decisions.
             </p>
+            <Link
+              to="/reports"
+              className="doodle-button doodle-button-primary inline-flex items-center gap-2"
+            >
+              <BarChart3 className="w-4 h-4" />
+              View Reports
+            </Link>
           </div>
-          <NaturalLanguageBI />
         </section>
       </main>
       <Footer />

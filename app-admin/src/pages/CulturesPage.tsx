@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Pencil, Trash2, Globe, Search, FileText } from "lucide-react";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Globe,
+  Search,
+  FileText,
+  Loader2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +44,9 @@ import { Culture } from "@/types/culture";
 import {
   useAdminCultures,
   useAdminLocalizationCounts,
+  useCreateCulture,
+  useUpdateCulture,
+  useDeleteCulture,
 } from "@/hooks/useAdminCatalog";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
@@ -54,6 +65,12 @@ const CulturesPage = () => {
   const [deletingCulture, setDeletingCulture] = useState<Culture | null>(null);
   const [localizationCulture, setLocalizationCulture] =
     useState<Culture | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const createCulture = useCreateCulture();
+  const updateCulture = useUpdateCulture();
+  const deleteCulture = useDeleteCulture();
 
   const [formData, setFormData] = useState({
     CultureID: "",
@@ -95,7 +112,7 @@ const CulturesPage = () => {
     setIsDeleteDialogOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.CultureID.trim() || !formData.Name.trim()) {
       toast({
         title: "Validation Error",
@@ -105,54 +122,65 @@ const CulturesPage = () => {
       return;
     }
 
-    if (editingCulture) {
-      setCultures((prev) =>
-        prev.map((c) =>
-          c.CultureID === editingCulture.CultureID
-            ? {
-                ...c,
-                Name: formData.Name,
-                ModifiedDate: new Date().toISOString(),
-              }
-            : c,
-        ),
-      );
-      toast({
-        title: "Culture Updated",
-        description: `"${formData.Name}" has been updated.`,
-      });
-    } else {
-      if (cultures.some((c) => c.CultureID === formData.CultureID)) {
-        toast({
-          title: "Duplicate ID",
-          description: "A culture with this ID already exists.",
-          variant: "destructive",
+    setIsSaving(true);
+    try {
+      if (editingCulture) {
+        await updateCulture.mutateAsync({
+          CultureID: editingCulture.CultureID,
+          Name: formData.Name,
         });
-        return;
+        toast({
+          title: "Culture Updated",
+          description: `"${formData.Name}" has been updated.`,
+        });
+      } else {
+        if (cultures.some((c) => c.CultureID === formData.CultureID)) {
+          toast({
+            title: "Duplicate ID",
+            description: "A culture with this ID already exists.",
+            variant: "destructive",
+          });
+          return;
+        }
+        await createCulture.mutateAsync({
+          CultureID: formData.CultureID,
+          Name: formData.Name,
+        });
+        toast({
+          title: "Culture Created",
+          description: `"${formData.Name}" has been added.`,
+        });
       }
-      const newCulture: Culture = {
-        CultureID: formData.CultureID.trim(),
-        Name: formData.Name.trim(),
-        ModifiedDate: new Date().toISOString(),
-      };
-      setCultures((prev) => [...prev, newCulture]);
+      setIsDialogOpen(false);
+    } catch {
       toast({
-        title: "Culture Created",
-        description: `"${formData.Name}" has been added.`,
+        title: "Error",
+        description: "Failed to save culture. Please try again.",
+        variant: "destructive",
       });
+    } finally {
+      setIsSaving(false);
     }
-    setIsDialogOpen(false);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deletingCulture) {
-      setCultures((prev) =>
-        prev.filter((c) => c.CultureID !== deletingCulture.CultureID),
-      );
-      toast({
-        title: "Culture Deleted",
-        description: `"${deletingCulture.Name}" has been removed.`,
-      });
+      setIsDeleting(true);
+      try {
+        await deleteCulture.mutateAsync(deletingCulture.CultureID);
+        toast({
+          title: "Culture Deleted",
+          description: `"${deletingCulture.Name}" has been removed.`,
+        });
+      } catch {
+        toast({
+          title: "Error",
+          description: "Failed to delete culture. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsDeleting(false);
+      }
     }
     setIsDeleteDialogOpen(false);
     setDeletingCulture(null);
@@ -344,10 +372,15 @@ const CulturesPage = () => {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsDialogOpen(false)}
+              disabled={isSaving}
+            >
               Cancel
             </Button>
-            <Button onClick={handleSave}>
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {editingCulture ? "Save Changes" : "Create Culture"}
             </Button>
           </DialogFooter>
@@ -369,11 +402,13 @@ const CulturesPage = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
+              disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
+              {isDeleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

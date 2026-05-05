@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Azure.Core;
 using Azure.Identity;
 using Microsoft.ApplicationInsights;
@@ -158,6 +159,14 @@ public class FoundryAgentClient
         using var httpClient = _httpClientFactory.CreateClient();
         httpClient.Timeout = TimeSpan.FromMinutes(5);
 
+        // Resolve instructions once before the loop so the same resolved system prompt
+        // is re-sent in every approval round. The Responses API `instructions` field
+        // acts as a per-call system message override and is NOT automatically carried
+        // forward via `previous_response_id` when absent. Without re-sending instructions
+        // in approval continuation rounds, the model loses its format requirements (e.g.
+        // "Return ONLY a valid JSON object") and returns prose instead.
+        var resolvedInstructions = ResolveHandlebarsTemplate(def.Instructions, structuredInputs);
+
         // --- Approval loop -----------------------------------------------------
         // Foundry "kind: prompt" agents with MCP tools may require the client to
         // explicitly approve each tool call before the model can execute it.
@@ -184,19 +193,39 @@ public class FoundryAgentClient
             var token = await _credential.GetTokenAsync(
                 new TokenRequestContext([FoundryTokenScope]), cancellationToken);
 
+            var hasTools = def.Tools.Count > 0;
+
+            // Guard: "required" tool_choice is only valid when the agent actually has tools
+            // registered. If the agent definition has no tools fall back to "auto" to avoid
+            // a Foundry 400: "Tool choice 'required' must be specified with 'tools' parameter."
+            string? effectiveToolChoice = round == 0 ? toolChoice : null;
+            if (effectiveToolChoice == "required" && !hasTools)
+            {
+                _logger.LogWarning(
+                    "Agent '{AgentId}' has no tools; downgrading tool_choice from 'required' to 'auto'",
+                    agentId);
+                effectiveToolChoice = "auto";
+            }
+
             var requestBody = new FoundryResponsesRequest
             {
                 Model = def.Model,
-                Instructions = round == 0 ? def.Instructions : null, // only on first call
+                // Always include the resolved instructions so the model's format requirements
+                // (e.g. "Return ONLY a valid JSON object") are preserved across all approval
+                // rounds. The Responses API `instructions` field is a per-call system message
+                // override and is NOT automatically carried forward via `previous_response_id`,
+                // so omitting it in approval continuation rounds causes the model to lose its
+                // format constraints and return prose rather than structured JSON.
+                Instructions = resolvedInstructions,
                 Input = currentInput,
                 Stream = false,
                 Store = true,
                 PreviousResponseId = currentPreviousId,
-                Tools = def.Tools.Count > 0 ? def.Tools : null,
-                // Structured inputs and tool_choice are only meaningful on the first round;
-                // subsequent rounds are approval responses chained via previous_response_id.
+                Tools = hasTools ? def.Tools : null,
+                // structured_inputs still sent for any future Foundry-native endpoint support,
+                // but the resolved instructions are the primary mechanism.
                 StructuredInputs = round == 0 && structuredInputs?.Count > 0 ? structuredInputs : null,
-                ToolChoice = round == 0 ? toolChoice : null
+                ToolChoice = effectiveToolChoice
             };
 
             var json = JsonSerializer.Serialize(requestBody, _serializeOptions);
@@ -456,6 +485,53 @@ public class FoundryAgentClient
             agentId, model, tools.Count);
 
         return def;
+    }
+
+    /// <summary>
+    /// Resolves Handlebars-style templates in agent instructions at runtime so the
+    /// OpenAI-compatible Responses API endpoint (which does not process structured_inputs
+    /// server-side) receives the fully-resolved instruction text.
+    ///
+    /// Handles:
+    ///   {{variableName}}                              → replaced with the value from inputs
+    ///   {{#if variableName}}...{{/if}}                → inner content included if variable present
+    ///   Nested conditionals are resolved via multiple passes (inner-most first).
+    /// </summary>
+    private static string? ResolveHandlebarsTemplate(
+        string? template,
+        Dictionary<string, object>? inputs)
+    {
+        if (string.IsNullOrEmpty(template) || inputs == null || inputs.Count == 0)
+            return template;
+
+        var result = template;
+
+        // Multiple passes to resolve nested {{#if}} blocks (inner-most blocks first).
+        // Pattern matches {{#if variable}}content{{/if}} where content has NO nested {{#if.
+        const string innerIfPattern =
+            @"\{\{#if\s+(\w+)\}\}((?:(?!\{\{#if)[\s\S])*?)\{\{/if\}\}";
+
+        for (var pass = 0; pass < 5; pass++)
+        {
+            var next = Regex.Replace(result, innerIfPattern, m =>
+            {
+                var varName = m.Groups[1].Value;
+                var inner   = m.Groups[2].Value;
+                return inputs.TryGetValue(varName, out var val)
+                       && !string.IsNullOrEmpty(val?.ToString())
+                    ? inner
+                    : string.Empty;
+            });
+
+            if (next == result) break;   // converged — no more resolvable blocks
+            result = next;
+        }
+
+        // Replace remaining {{variable}} placeholders
+        foreach (var kvp in inputs)
+            result = result.Replace($"{{{{{kvp.Key}}}}}", kvp.Value?.ToString() ?? string.Empty);
+
+        return result;
     }
 
     /// <summary>

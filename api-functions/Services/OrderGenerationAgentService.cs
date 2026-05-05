@@ -13,10 +13,12 @@ namespace api_functions.Services;
 /// persona, then writes it to the database using OrderGenerationService.
 ///
 /// Foundry features used:
-///   - structured_inputs → persona and customer context resolved via Handlebars templates
-///                         in the agent instructions; the user message is a short constant
-///   - x-memory-user-id  → scopes memory per persona type (or per customer for existing-customer),
-///                         so successive runs produce varied orders rather than repeating choices
+///   - structured_inputs    → persona and customer context resolved via Handlebars templates
+///                            in the agent instructions; the user message is a short constant
+///   - x-memory-user-id     → scopes memory per persona type (or per customer for existing-customer),
+///                            so successive runs produce varied orders rather than repeating choices
+///   - previousResponseId   → enables admin refinement turns (e.g. 'adjust the order for a higher budget')
+///                            by continuing a stored Foundry conversation
 ///   - tool_choice: required → ensures the agent always calls MCP tools; prevents hallucinated
 ///                             catalog data from creating bogus orders in the database
 /// </summary>
@@ -48,19 +50,28 @@ public class OrderGenerationAgentService
         _pdfGenerator = pdfGenerator;
         _foundryClient = foundryClient;
 
-        _agentId = configuration["AI_AGENT_ORDER_ID"]
-            ?? throw new InvalidOperationException("AI_AGENT_ORDER_ID environment variable is not set");
+        // Prefer the workflow agent when deployed; fall back to the plain agent so the app
+        // remains functional before the workflow agent is created (same pattern as AIAgentService).
+        var workflowAgentId = configuration["AI_AGENT_WORKFLOW_ORDER_ID"];
+        var agentId         = configuration["AI_AGENT_ORDER_ID"];
+        _agentId = !string.IsNullOrWhiteSpace(workflowAgentId)
+            ? workflowAgentId
+            : agentId ?? throw new InvalidOperationException(
+                "Neither AI_AGENT_WORKFLOW_ORDER_ID nor AI_AGENT_ORDER_ID environment variable is set");
     }
 
     /// <summary>
     /// Generate one realistic order for the given persona.
     /// Returns a structured result with step-by-step log entries and the created order ID.
+    /// Pass <paramref name="previousResponseId"/> to continue a refinement conversation
+    /// (e.g. admin clicks 'Regenerate' to get an alternative order plan).
     /// </summary>
     public async Task<OrderGenerationResult> GenerateOrderAsync(
         string personaType,
         string? customPersona,
         int? seedCustomerId = null,
-        Action<string, string>? onLog = null)
+        Action<string, string>? onLog = null,
+        string? previousResponseId = null)
     {
         var result = new OrderGenerationResult();
         var startTime = DateTimeOffset.UtcNow;
@@ -152,12 +163,15 @@ public class OrderGenerationAgentService
             Log("AI agent reasoning over catalogue, promotions, and customers...", "dim");
 
             // Invoke the Foundry agent via the Responses API.
+            // Passing previousResponseId continues a stored conversation so the admin can
+            // trigger a refinement run (different plan for the same persona) without losing context.
             // tool_choice: "required" ensures the agent always calls MCP tools — preventing
             // hallucinated catalog data from being written to the database as real orders.
             var agentResponse = await _foundryClient.InvokeAsync(
                 agentId: _agentId,
                 userMessage: userMessage,
                 userId: memoryUserId,
+                previousResponseId: string.IsNullOrEmpty(previousResponseId) ? null : previousResponseId,
                 structuredInputs: structuredInputs,
                 toolChoice: "required");
             var rawResponse = agentResponse.ResponseText;
@@ -276,8 +290,9 @@ public class OrderGenerationAgentService
             }
 
             var duration = DateTimeOffset.UtcNow - startTime;
-            result.Success = true;
-            result.TotalDue = receiptData?.TotalDue ?? 0;
+            result.Success   = true;
+            result.TotalDue  = receiptData?.TotalDue ?? 0;
+            result.ThreadId  = agentResponse.ResponseId;
             operation.Telemetry.Success = true;
 
             _telemetryClient.TrackEvent("OrderGeneration.Success", new Dictionary<string, string>
@@ -286,7 +301,8 @@ public class OrderGenerationAgentService
                 ["CustomerId"] = customerId.ToString(),
                 ["SalesOrderId"] = salesOrderId.ToString(),
                 ["ItemCount"] = validItems.Count.ToString(),
-                ["DurationMs"] = duration.TotalMilliseconds.ToString("F0")
+                ["DurationMs"] = duration.TotalMilliseconds.ToString("F0"),
+                ["ThreadId"] = agentResponse.ResponseId ?? string.Empty
             });
 
             Log($"Done! Order #{salesOrderId} created for {result.CustomerName} — Total: ${result.TotalDue:N2}", "success");
@@ -393,6 +409,11 @@ public class OrderGenerationResult
     public string? ReceiptPdfBase64 { get; set; }
     public string? ErrorMessage { get; set; }
     public List<OrderGenLogEntry> Log { get; set; } = new();
+    /// <summary>
+    /// Foundry response ID. Pass back as previousResponseId in subsequent calls to continue
+    /// the stored conversation (e.g. admin triggers a refinement/regeneration run).
+    /// </summary>
+    public string? ThreadId { get; set; }
 }
 
 public class OrderGenLogEntry

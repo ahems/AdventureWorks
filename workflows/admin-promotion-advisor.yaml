@@ -1,0 +1,84 @@
+#
+# admin-promotion-advisor.yaml
+# Declarative workflow agent for the admin Promotion Generator wizard.
+#
+# The workflow guides an admin through selecting a promotion type and target
+# category before delegating to admin-promotion-agent to generate a full
+# campaign suggestion using live product data via MCP.
+#
+# Agents referenced:
+#   admin-promotion-intent-agent  - micro-agent that classifies the promotion intent
+#                                   as CLEARANCE, SEASONAL, BUNDLE, or FLASH_SALE
+#   admin-promotion-agent         - full campaign generator (MCP tools + memory)
+#
+kind: Workflow
+trigger:
+  kind: OnConversationStart
+  id: workflow_start
+  actions:
+
+    # ── Step 1: Classify the promotion intent ────────────────────────────────
+    # Run the intent classifier in an isolated conversation so its plain-text
+    # reply never appears in the main admin session history.
+    - kind: CreateConversation
+      id: create_intent_conversation
+      conversationId: Local.IntentConvId
+
+    - kind: InvokeAzureAgent
+      id: classify_intent
+      conversationId: =Local.IntentConvId
+      agent:
+        name: admin-promotion-intent-agent
+      input:
+        messages: =UserMessage(System.LastMessage.Text)
+      output:
+        messages: Local.IntentMessages
+        autoSend: false
+
+    # ── Step 2: Gather promotion details via Q&A ──────────────────────────────
+    - kind: Question
+      id: ask_promotion_type
+      alwaysPrompt: false
+      autoSend: false
+      property: Local.PromotionType
+      prompt:
+        kind: Message
+        text:
+          - "What type of promotion would you like to create? Options: Clearance, Seasonal, Bundle, Flash-sale, or type your own."
+      entity:
+        kind: StringPrebuiltEntity
+
+    - kind: Question
+      id: ask_offer_category
+      alwaysPrompt: true
+      autoSend: false
+      property: Local.OfferCategory
+      prompt:
+        kind: Message
+        text:
+          - "Who should the offer apply to? (Customer, Reseller, or All)"
+      entity:
+        kind: StringPrebuiltEntity
+
+    - kind: Question
+      id: ask_product_category
+      alwaysPrompt: true
+      autoSend: false
+      property: Local.ProductCategory
+      prompt:
+        kind: Message
+        text:
+          - "Should this promotion target a specific product category, or apply to all products? (e.g. Bikes, Clothing, Accessories — or type 'All' for everything)"
+      entity:
+        kind: StringPrebuiltEntity
+
+    # ── Step 3: Invoke the promotion agent to generate the campaign ───────────
+    - kind: InvokeAzureAgent
+      id: invoke_promotion_agent
+      conversationId: =System.ConversationId
+      agent:
+        name: admin-promotion-agent
+      input:
+        messages: =UserMessage("Generate a " & Local.PromotionType & " promotion campaign. Offer category: " & Local.OfferCategory & ". Product category scope: " & Local.ProductCategory & ".")
+      output:
+        autoSend: true

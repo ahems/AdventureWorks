@@ -4,7 +4,7 @@ This document describes the automated AI Agent creation process integrated into 
 
 ## Overview
 
-During `azd provision`, the deployment automatically creates four Azure AI Foundry Agents that integrate with the AdventureWorks MCP servers. This eliminates the need for manual agent setup and ensures agents are always configured correctly with the latest deployment.
+During `azd provision`, the deployment automatically creates **seven Azure AI Foundry Agents** (four base agents + three workflow routing agents) that integrate with the AdventureWorks MCP servers. This eliminates the need for manual agent setup and ensures agents are always configured correctly with the latest deployment.
 
 ## Automated Process
 
@@ -19,17 +19,24 @@ When you run `azd up` or `azd provision`, the system automatically:
    - All supporting Azure resources
 
 2. **Creates Foundry Agents** (`scripts/utilities/create-foundry-agents.sh`, called from `postprovision.sh`)
-   - **AdventureWorks Chat Agent** (`AI_AGENT_CHAT_ID`) — customer service chat
-   - **Order Generation Agent** (`AI_AGENT_ORDER_ID`) — realistic order simulation
-   - **Promotion Agent** (`AI_AGENT_PROMOTION_ID`) — promotion strategy generation
-   - **Help Me Choose Agent** (`AI_AGENT_HELP_ME_CHOOSE_ID`) — product advisor wizard
 
-   Each agent is registered with two MCP tool servers:
+   **Base agents** (invoked directly for business logic):
+   - **Chat Agent** (`AI_AGENT_CHAT_ID`) — customer service chat, product recommendations, order tracking
+   - **Help Me Choose Agent** (`AI_AGENT_HELP_ME_CHOOSE_ID`) — multi-phase product advisor wizard
+   - **Promotion Agent** (`AI_AGENT_PROMOTION_ID`) — promotion strategy generation with live catalog data
+   - **Order Generation Agent** (`AI_AGENT_ORDER_ID`) — autonomous order simulation for any persona
+
+   **Workflow routing agents** (created last; each references a base agent via a workflow YAML):
+   - **Chat Workflow Agent** (`AI_AGENT_WORKFLOW_CHAT_ID`) — routes between chat and product advisor
+   - **Promotion Workflow Agent** (`AI_AGENT_WORKFLOW_PROMOTION_ID`) — gathers promo parameters, invokes promotion agent
+   - **Order Workflow Agent** (`AI_AGENT_WORKFLOW_ORDER_ID`) — identifies persona, gathers constraints, invokes order agent
+
+   Each base agent is registered with two MCP tool servers:
    - `api-mcp` service (semantic product/catalog tools)
    - DAB `/mcp` endpoint (raw entity data tools)
 
 3. **Injects Agent IDs** (`scripts/hooks/api-functions-postdeploy.sh`)
-   - After `azd deploy`, patches the `api-functions` Container App with the agent IDs as environment variables
+   - After `azd deploy`, patches the `api-functions` Container App with all agent IDs as environment variables
 
 4. **Environment Variables** (available in azd environment)
    - `AI_FOUNDRY_PROJECT_ENDPOINT`: Azure AI Foundry project endpoint
@@ -37,6 +44,9 @@ When you run `azd up` or `azd provision`, the system automatically:
    - `AI_AGENT_ORDER_ID`: Foundry agent ID for order generation
    - `AI_AGENT_PROMOTION_ID`: Foundry agent ID for promotions
    - `AI_AGENT_HELP_ME_CHOOSE_ID`: Foundry agent ID for the wizard
+   - `AI_AGENT_WORKFLOW_CHAT_ID`: Workflow agent that routes chat vs product-advisor
+   - `AI_AGENT_WORKFLOW_PROMOTION_ID`: Workflow agent for promotion campaign generation
+   - `AI_AGENT_WORKFLOW_ORDER_ID`: Workflow agent for autonomous order simulation
    - `MCP_SERVICE_URL`: api-mcp service endpoint
 
 ## Agent Configuration
@@ -73,10 +83,30 @@ Each agent's Foundry portal definition must declare a `structured_inputs` schema
 
 | Agent                | Variables declared in portal `structured_inputs` schema                                                                                    |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Chat                 | `customerId` (string), `cultureId` (string)                                                                                                |
-| Help-Me-Choose       | _(wizard context \u2014 see HelpMeChooseService.cs)_                                                                                       |
+| Chat                 | `customerId` (string), `cultureId` (string), `userName` (string)                                                                           |
+| Help-Me-Choose       | `cultureId` (string, default `"en"`), `profileContext` (string — JSON catalog/shopper hint), `userId` (string — for memory scoping)        |
 | Order Generation     | `todayDate`, `personaDescription`, `isExistingCustomer` (bool), `customerName`, `customerId`, `orderCount`, `totalSpend`, `recentProducts` |
 | Promotion Generation | `promotionType`, `offerCategory`, `todayDate`, `categoryName`, `subcategoryName`, `categoryId`, `subcategoryId`                            |
+
+> `isExistingCustomer`, `categoryName`, `subcategoryName`, `categoryId`, `subcategoryId`, `customerName`, `customerId`, `orderCount`, `totalSpend`, `recentProducts`, and `profileContext` should be marked **optional** in the portal schema so Handlebars `{{#if}}` branches work correctly when those values are absent.
+
+## Memory Stores
+
+Each agent maintains a named Foundry memory store for long-term context. Memory is scoped per user/context via the `x-memory-user-id` header set by `FoundryAgentClient`.
+
+| Agent                | Memory Store Name             | What Is Retained                                                                                | What Is Excluded                      |
+| -------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Chat                 | `eshop-chat-memory`           | Preferred bike category, activity level, budgets, clothing/shoe sizes, brand preferences        | Payment details, passwords, addresses |
+| Help-Me-Choose       | `eshop-help-me-choose-memory` | Sport/activity preferences, skill level, budget constraints, past recommendations               | Sensitive personal or financial data  |
+| Promotion Generation | `admin-promotion-memory`      | Promotion type patterns, category performance insights, seasonal timing, discount effectiveness | Individual customer PII, payment data |
+| Order Generation     | `admin-order-memory`          | Persona order patterns, product performance by persona type, successful order compositions      | Customer PII, financial data          |
+
+Memory scoping headers set by `FoundryAgentClient`:
+
+- Chat: `customer-{customerId}`
+- Help-Me-Choose: `customer-{customerId}` (anonymous if no login)
+- Promotion: `promotion-gen-{promotionType}`
+- Order: `order-gen-customer-{customerId}` or `order-gen-persona-{personaType}`
 
 The `isExistingCustomer`, `categoryName`, `subcategoryName`, `categoryId`, and `subcategoryId` variables should be declared as optional in the schema so agents handle both the `{{#if ...}}` and `{{else}}` branches of Handlebars conditionals correctly.
 

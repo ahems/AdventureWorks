@@ -105,6 +105,176 @@ export const useAdminCurrencyRates = (after?: string | null) =>
     staleTime: 5 * 60 * 1000,
   });
 
+// ─── Culture Mutations ────────────────────────────────────────────────────────
+
+const CREATE_CULTURE = gql`
+  mutation CreateCulture(
+    $id: String!
+    $name: String!
+    $modifiedDate: DateTime!
+  ) {
+    createCulture(
+      item: { CultureID: $id, Name: $name, ModifiedDate: $modifiedDate }
+    ) {
+      CultureID
+      Name
+    }
+  }
+`;
+
+const UPDATE_CULTURE = gql`
+  mutation UpdateCulture(
+    $id: String!
+    $name: String!
+    $modifiedDate: DateTime!
+  ) {
+    updateCulture(
+      CultureID: $id
+      item: { Name: $name, ModifiedDate: $modifiedDate }
+    ) {
+      CultureID
+      Name
+    }
+  }
+`;
+
+const DELETE_CULTURE = gql`
+  mutation DeleteCulture($id: String!) {
+    deleteCulture(CultureID: $id) {
+      CultureID
+    }
+  }
+`;
+
+export const useCreateCulture = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { CultureID: string; Name: string }) => {
+      await graphqlClient.request(CREATE_CULTURE, {
+        id: vars.CultureID.trim(),
+        name: vars.Name.trim(),
+        modifiedDate: new Date().toISOString(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "cultures"] });
+    },
+  });
+};
+
+export const useUpdateCulture = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { CultureID: string; Name: string }) => {
+      await graphqlClient.request(UPDATE_CULTURE, {
+        id: vars.CultureID,
+        name: vars.Name.trim(),
+        modifiedDate: new Date().toISOString(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "cultures"] });
+    },
+  });
+};
+
+export const useDeleteCulture = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (cultureId: string) => {
+      await graphqlClient.request(DELETE_CULTURE, { id: cultureId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "cultures"] });
+    },
+  });
+};
+
+// ─── Currency Mutations ───────────────────────────────────────────────────────
+
+const CREATE_CURRENCY = gql`
+  mutation CreateCurrency(
+    $code: String!
+    $name: String!
+    $modifiedDate: DateTime!
+  ) {
+    createCurrency(
+      item: { CurrencyCode: $code, Name: $name, ModifiedDate: $modifiedDate }
+    ) {
+      CurrencyCode
+      Name
+    }
+  }
+`;
+
+const UPDATE_CURRENCY = gql`
+  mutation UpdateCurrency(
+    $code: String!
+    $name: String!
+    $modifiedDate: DateTime!
+  ) {
+    updateCurrency(
+      CurrencyCode: $code
+      item: { Name: $name, ModifiedDate: $modifiedDate }
+    ) {
+      CurrencyCode
+      Name
+    }
+  }
+`;
+
+const DELETE_CURRENCY = gql`
+  mutation DeleteCurrency($code: String!) {
+    deleteCurrency(CurrencyCode: $code) {
+      CurrencyCode
+    }
+  }
+`;
+
+export const useCreateCurrency = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { CurrencyCode: string; Name: string }) => {
+      await graphqlClient.request(CREATE_CURRENCY, {
+        code: vars.CurrencyCode.toUpperCase().trim(),
+        name: vars.Name.trim(),
+        modifiedDate: new Date().toISOString(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "currencies"] });
+    },
+  });
+};
+
+export const useUpdateCurrency = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { CurrencyCode: string; Name: string }) => {
+      await graphqlClient.request(UPDATE_CURRENCY, {
+        code: vars.CurrencyCode,
+        name: vars.Name.trim(),
+        modifiedDate: new Date().toISOString(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "currencies"] });
+    },
+  });
+};
+
+export const useDeleteCurrency = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (currencyCode: string) => {
+      await graphqlClient.request(DELETE_CURRENCY, { code: currencyCode });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "currencies"] });
+    },
+  });
+};
+
 // ─── Shopping Carts ───────────────────────────────────────────────────────────
 
 const GET_SHOPPING_CARTS_ADMIN = gql`

@@ -40,6 +40,7 @@ interface GeneratedOrderResult {
   receiptPdfBase64?: string;
   errorMessage?: string;
   log: LogEntry[];
+  threadId?: string;
 }
 
 const PERSONA_OPTIONS = [
@@ -97,13 +98,14 @@ const PERSONA_OPTIONS = [
 
 const GenerateOrdersWizardDialog: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [step, setStep] = useState<"configure" | "running" | "done">(
-    "configure",
-  );
+  const [step, setStep] = useState<
+    "configure" | "running" | "done" | "refining"
+  >("configure");
   const [selectedPersona, setSelectedPersona] = useState("newbie-male");
   const [customPersona, setCustomPersona] = useState("");
   const [log, setLog] = useState<LogEntry[]>([]);
   const [result, setResult] = useState<GeneratedOrderResult | null>(null);
+  const [refineMessage, setRefineMessage] = useState("");
   const [showReceipt, setShowReceipt] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
   const isRunning = useRef(false);
@@ -173,6 +175,7 @@ const GenerateOrdersWizardDialog: React.FC = () => {
     setStep("configure");
     setLog([]);
     setResult(null);
+    setRefineMessage("");
     setShowReceipt(false);
     setBulkStep("idle");
     setBulkResult(null);
@@ -270,6 +273,69 @@ const GenerateOrdersWizardDialog: React.FC = () => {
     }
   };
 
+  const handleRefine = async () => {
+    if (!refineMessage.trim() || !result?.threadId) return;
+
+    setStep("running");
+    setLog([]);
+    isRunning.current = true;
+
+    addLog("Refining order based on your feedback…", "info");
+
+    try {
+      const personaType =
+        selectedPersona === "custom" ? "custom" : selectedPersona;
+      const persona =
+        selectedPersona === "custom" ? customPersona.trim() : undefined;
+      const seedId =
+        selectedPersona === "existing-customer"
+          ? selectedCustomerId
+          : undefined;
+
+      const res = await generateOrderWithAI(
+        personaType,
+        persona,
+        seedId,
+        result.threadId,
+      );
+
+      if (res.log && Array.isArray(res.log)) {
+        for (const entry of res.log) {
+          addLog(entry.message, entry.type ?? "info");
+        }
+      }
+
+      setResult(res);
+      setRefineMessage("");
+
+      if (res.success) {
+        queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
+        toast({
+          title: `Order #${res.salesOrderId} Created`,
+          description: `${res.customerName} — $${(res.totalDue ?? 0).toFixed(2)}`,
+        });
+      } else {
+        addLog(res.errorMessage ?? "Unknown error", "error");
+        toast({
+          title: "Order refinement failed",
+          description: res.errorMessage ?? "See log for details",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      addLog(`Error: ${msg}`, "error");
+      toast({
+        title: "Order refinement failed",
+        description: msg,
+        variant: "destructive",
+      });
+    } finally {
+      isRunning.current = false;
+      setStep("done");
+    }
+  };
+
   const canStart =
     (selectedPersona !== "custom" || customPersona.trim().length >= 10) &&
     (selectedPersona !== "existing-customer" || !!selectedCustomerId);
@@ -293,6 +359,9 @@ const GenerateOrdersWizardDialog: React.FC = () => {
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Generate Order with AI"
         className="bg-doodle-bg border-4 border-doodle-text shadow-doodle w-full max-w-2xl mx-4 flex flex-col"
         style={{ maxHeight: "90vh" }}
       >
@@ -333,6 +402,9 @@ const GenerateOrdersWizardDialog: React.FC = () => {
                   {PERSONA_OPTIONS.map((opt) => (
                     <button
                       key={opt.value}
+                      role="radio"
+                      aria-checked={selectedPersona === opt.value}
+                      data-persona={opt.value}
                       onClick={() => setSelectedPersona(opt.value)}
                       className={`text-left p-3 border-2 transition-colors ${
                         selectedPersona === opt.value
@@ -611,7 +683,7 @@ const GenerateOrdersWizardDialog: React.FC = () => {
             </div>
           )}
 
-          {/* Running / Done step — log + results */}
+          {/* Running / Done / Refining step — log + results */}
           {(step === "running" || step === "done") && (
             <div className="space-y-4">
               {step === "done" && result?.success && (
@@ -734,6 +806,28 @@ const GenerateOrdersWizardDialog: React.FC = () => {
               </div>
             </div>
           )}
+
+          {step === "refining" && (
+            <div className="space-y-4">
+              <p className="font-doodle text-sm text-doodle-text/70">
+                Describe the changes you&apos;d like the AI to make to the
+                generated order. The agent will use your feedback and the
+                existing conversation context to produce a revised order.
+              </p>
+              <div>
+                <label className="font-doodle text-sm font-bold text-doodle-text block mb-1">
+                  Refinement instructions
+                </label>
+                <textarea
+                  value={refineMessage}
+                  onChange={(e) => setRefineMessage(e.target.value)}
+                  rows={4}
+                  placeholder="e.g. Change the customer to a family buyer, add helmets for two children, and use the current seasonal discount"
+                  className="w-full font-doodle text-sm border-2 border-doodle-text bg-white p-2 focus:border-doodle-accent focus:outline-none resize-none"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -772,6 +866,7 @@ const GenerateOrdersWizardDialog: React.FC = () => {
                   setStep("configure");
                   setLog([]);
                   setResult(null);
+                  setRefineMessage("");
                   setShowReceipt(false);
                   setBulkStep("idle");
                   setBulkResult(null);
@@ -781,11 +876,39 @@ const GenerateOrdersWizardDialog: React.FC = () => {
                 <Sparkles className="w-4 h-4" />
                 Generate Another
               </button>
+              {result?.success && result?.threadId && (
+                <button
+                  onClick={() => setStep("refining")}
+                  className="doodle-button flex items-center gap-1.5 text-sm"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Refine
+                </button>
+              )}
               <button
                 onClick={handleClose}
                 className="doodle-button-secondary text-sm"
               >
                 Close
+              </button>
+            </div>
+          )}
+
+          {step === "refining" && (
+            <div className="flex items-center justify-between w-full gap-3">
+              <button
+                onClick={() => setStep("done")}
+                className="doodle-button-secondary text-sm"
+              >
+                &lt; Back
+              </button>
+              <button
+                onClick={handleRefine}
+                disabled={!refineMessage.trim()}
+                className="doodle-button doodle-button-primary flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Sparkles className="w-4 h-4" />
+                Re-generate Order
               </button>
             </div>
           )}

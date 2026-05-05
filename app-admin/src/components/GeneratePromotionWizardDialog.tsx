@@ -43,7 +43,7 @@ interface GeneratePromotionWizardDialogProps {
   existingOffers: SpecialOffer[];
 }
 
-type Step = "configure" | "running" | "review";
+type Step = "configure" | "running" | "review" | "refining";
 
 const GeneratePromotionWizardDialog: React.FC<
   GeneratePromotionWizardDialogProps
@@ -64,6 +64,8 @@ const GeneratePromotionWizardDialog: React.FC<
   const [suggestion, setSuggestion] = useState<PromotionSuggestion | null>(
     null,
   );
+  const [threadId, setThreadId] = useState<string | undefined>(undefined);
+  const [refineMessage, setRefineMessage] = useState<string>("");
   const [editDescription, setEditDescription] = useState("");
   const [editDiscountPct, setEditDiscountPct] = useState(10);
   const [editStartDate, setEditStartDate] = useState("");
@@ -99,6 +101,8 @@ const GeneratePromotionWizardDialog: React.FC<
     setStep("configure");
     setErrorMessage(null);
     setSuggestion(null);
+    setThreadId(undefined);
+    setRefineMessage("");
     setSelectedType("Clearance");
     setSelectedOfferCategory("Customer");
     setSelectedCategoryId("");
@@ -139,14 +143,16 @@ const GeneratePromotionWizardDialog: React.FC<
         subcategoryName: selectedSubcategory?.Name,
       });
 
-      setSuggestion(result);
-      setEditDescription(result.description);
-      setEditDiscountPct(Math.round(result.discountPct * 100));
-      setEditStartDate(result.startDate);
-      setEditEndDate(result.endDate);
-      setEditMinQty(result.minQty ?? 1);
+      const s = result.suggestion;
+      setSuggestion(s);
+      setThreadId(result.threadId);
+      setEditDescription(s.description);
+      setEditDiscountPct(Math.round(s.discountPct * 100));
+      setEditStartDate(s.startDate);
+      setEditEndDate(s.endDate);
+      setEditMinQty(s.minQty ?? 1);
       setSelectedProductIds(
-        new Set(result.suggestedProducts.map((p) => p.productId)),
+        new Set(s.suggestedProducts.map((p) => p.productId)),
       );
       setStep("review");
     } catch (err) {
@@ -154,6 +160,52 @@ const GeneratePromotionWizardDialog: React.FC<
         String(err).replace(/^Error:\s*/i, "") || "AI generation failed",
       );
       setStep("configure");
+    } finally {
+      isRunning.current = false;
+    }
+  };
+
+  const handleRefine = async () => {
+    if (!refineMessage.trim()) return;
+    setStep("running");
+    setErrorMessage(null);
+    isRunning.current = true;
+
+    try {
+      const result = await generatePromotionWithAI({
+        promotionType: selectedType,
+        offerCategory: selectedOfferCategory,
+        categoryId:
+          selectedCategoryId !== ""
+            ? (selectedCategoryId as number)
+            : undefined,
+        categoryName: selectedCategory?.Name,
+        subcategoryId:
+          selectedSubcategoryId !== ""
+            ? (selectedSubcategoryId as number)
+            : undefined,
+        subcategoryName: selectedSubcategory?.Name,
+        previousThreadId: threadId,
+      });
+
+      const s = result.suggestion;
+      setSuggestion(s);
+      setThreadId(result.threadId);
+      setEditDescription(s.description);
+      setEditDiscountPct(Math.round(s.discountPct * 100));
+      setEditStartDate(s.startDate);
+      setEditEndDate(s.endDate);
+      setEditMinQty(s.minQty ?? 1);
+      setSelectedProductIds(
+        new Set(s.suggestedProducts.map((p) => p.productId)),
+      );
+      setRefineMessage("");
+      setStep("review");
+    } catch (err) {
+      setErrorMessage(
+        String(err).replace(/^Error:\s*/i, "") || "AI refinement failed",
+      );
+      setStep("review");
     } finally {
       isRunning.current = false;
     }
@@ -272,7 +324,12 @@ const GeneratePromotionWizardDialog: React.FC<
       />
 
       {/* Dialog */}
-      <div className="relative bg-doodle-bg border-2 border-doodle-border shadow-xl w-full max-w-xl flex flex-col max-h-[90vh]">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Generate Promotion with AI"
+        className="relative bg-doodle-bg border-2 border-doodle-border shadow-xl w-full max-w-xl flex flex-col max-h-[90vh]"
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b-2 border-doodle-border flex-shrink-0">
           <div className="flex items-center gap-2">
@@ -434,6 +491,37 @@ const GeneratePromotionWizardDialog: React.FC<
             </div>
           )}
 
+          {/* ── Step: refining ── */}
+          {step === "refining" && (
+            <div className="space-y-4">
+              <p className="font-doodle text-sm text-doodle-text/70">
+                Describe the changes you’d like the AI to make to the current
+                suggestion. The agent will use your feedback and the live
+                catalogue data to produce a revised promotion.
+              </p>
+              {errorMessage && (
+                <div className="flex items-start gap-2 bg-red-50 border-2 border-red-200 rounded p-3">
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <p className="font-doodle text-sm text-red-700">
+                    {errorMessage}
+                  </p>
+                </div>
+              )}
+              <div>
+                <label className="block font-doodle text-sm font-bold text-doodle-text mb-1">
+                  Refinement instructions
+                </label>
+                <textarea
+                  value={refineMessage}
+                  onChange={(e) => setRefineMessage(e.target.value)}
+                  rows={4}
+                  placeholder="e.g. Increase the discount to 20%, focus on mountain bikes only, shorten the promotion period to 2 weeks…"
+                  className="w-full border-2 border-doodle-border bg-doodle-bg font-doodle text-sm px-3 py-2 focus:outline-none focus:border-doodle-accent resize-none"
+                />
+              </div>
+            </div>
+          )}
+
           {/* ── Step: review ── */}
           {step === "review" && suggestion && (
             <div className="space-y-5">
@@ -591,12 +679,23 @@ const GeneratePromotionWizardDialog: React.FC<
                 onClick={() => {
                   setStep("configure");
                   setSuggestion(null);
+                  setThreadId(undefined);
                 }}
                 disabled={isCreating}
                 className="doodle-button px-4 py-2 font-doodle text-sm"
               >
-                ← Back
+                \u00ab Back
               </button>
+              {threadId && (
+                <button
+                  onClick={() => setStep("refining")}
+                  disabled={isCreating}
+                  className="doodle-button flex items-center gap-2 px-4 py-2 font-doodle text-sm"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Refine
+                </button>
+              )}
               <button
                 onClick={handleCreate}
                 disabled={
@@ -618,6 +717,25 @@ const GeneratePromotionWizardDialog: React.FC<
                     Create Promotion
                   </>
                 )}
+              </button>
+            </>
+          )}
+
+          {step === "refining" && (
+            <>
+              <button
+                onClick={() => setStep("review")}
+                className="doodle-button px-4 py-2 font-doodle text-sm"
+              >
+                \u00ab Back
+              </button>
+              <button
+                onClick={handleRefine}
+                disabled={!refineMessage.trim()}
+                className="doodle-button doodle-button-primary flex items-center gap-2 px-4 py-2 font-doodle text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Sparkles className="w-4 h-4" />
+                Re-generate
               </button>
             </>
           )}

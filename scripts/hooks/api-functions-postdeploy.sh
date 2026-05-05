@@ -37,6 +37,11 @@ chat_id=$(get_azd_value "AI_AGENT_CHAT_ID")
 order_id=$(get_azd_value "AI_AGENT_ORDER_ID")
 promotion_id=$(get_azd_value "AI_AGENT_PROMOTION_ID")
 help_me_choose_id=$(get_azd_value "AI_AGENT_HELP_ME_CHOOSE_ID")
+workflow_chat_id=$(get_azd_value "AI_AGENT_WORKFLOW_CHAT_ID")
+workflow_promotion_id=$(get_azd_value "AI_AGENT_WORKFLOW_PROMOTION_ID")
+workflow_order_id=$(get_azd_value "AI_AGENT_WORKFLOW_ORDER_ID")
+workflow_help_me_choose_id=$(get_azd_value "AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID")
+mcp_service_url=$(get_azd_value "MCP_SERVICE_URL")
 
 if [[ -z "$chat_id" ]] || [[ -z "$order_id" ]] || [[ -z "$promotion_id" ]] || [[ -z "$help_me_choose_id" ]]; then
   color_yellow "Warning: One or more agent IDs not found in azd environment."
@@ -61,12 +66,22 @@ if az containerapp update \
     "AI_AGENT_ORDER_ID=$order_id" \
     "AI_AGENT_PROMOTION_ID=$promotion_id" \
     "AI_AGENT_HELP_ME_CHOOSE_ID=$help_me_choose_id" \
+    "AI_AGENT_WORKFLOW_CHAT_ID=${workflow_chat_id:-}" \
+    "AI_AGENT_WORKFLOW_PROMOTION_ID=${workflow_promotion_id:-}" \
+    "AI_AGENT_WORKFLOW_ORDER_ID=${workflow_order_id:-}" \
+    "AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID=${workflow_help_me_choose_id:-}" \
+    ${mcp_service_url:+"MCP_SERVICE_URL=$mcp_service_url"} \
   --output none; then
   color_green "✓ Successfully injected agent IDs into $functions_service_name"
-  echo "  AI_AGENT_CHAT_ID           = $chat_id"
-  echo "  AI_AGENT_ORDER_ID          = $order_id"
-  echo "  AI_AGENT_PROMOTION_ID      = $promotion_id"
-  echo "  AI_AGENT_HELP_ME_CHOOSE_ID = $help_me_choose_id"
+  echo "  AI_AGENT_CHAT_ID                      = $chat_id"
+  echo "  AI_AGENT_ORDER_ID                     = $order_id"
+  echo "  AI_AGENT_PROMOTION_ID                 = $promotion_id"
+  echo "  AI_AGENT_HELP_ME_CHOOSE_ID            = $help_me_choose_id"
+  [[ -n "$workflow_chat_id" ]] && echo "  AI_AGENT_WORKFLOW_CHAT_ID             = $workflow_chat_id" || true
+  [[ -n "$workflow_promotion_id" ]] && echo "  AI_AGENT_WORKFLOW_PROMOTION_ID        = $workflow_promotion_id" || true
+  [[ -n "$workflow_order_id" ]] && echo "  AI_AGENT_WORKFLOW_ORDER_ID            = $workflow_order_id" || true
+  [[ -n "$workflow_help_me_choose_id" ]] && echo "  AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID   = $workflow_help_me_choose_id" || true
+  [[ -n "$mcp_service_url" ]] && echo "  MCP_SERVICE_URL                       = $mcp_service_url" || true
 else
   color_red "✗ Failed to update Container App environment variables."
   exit 1

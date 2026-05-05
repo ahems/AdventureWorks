@@ -111,6 +111,12 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
             description: 'Event-driven queue driving purchase order state transitions (placed-confirmed-picking-shipped-delivered) and vendor restock events'
           }
         }
+        {
+          name: 'simulation-order-queue'
+          metadata: {
+            description: 'Autonomous order simulation queue: each message carries a CustomerId (0 = new customer) and optional PersonaHint. The AI agent generates a realistic order for the specified customer or persona.'
+          }
+        }
       ]
     }
     

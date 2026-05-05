@@ -2,22 +2,24 @@
 
 ## What Was Implemented
 
-Automated Azure AI Foundry Agent creation has been fully integrated into the Azure deployment pipeline. All four agents are created automatically during `azd provision` with zero manual configuration required.
+Automated Azure AI Foundry Agent creation has been fully integrated into the Azure deployment pipeline. All **seven agents** (four base agents + three workflow routing agents) are created automatically during `azd provision` with zero manual configuration required. Every agent uses the full set of Foundry platform features: named memory stores, structured inputs (Handlebars), MCP tools, and multi-turn conversation via `previous_response_id`.
 
 ## Files Created/Modified
 
 ### New Files
 
 1. **`scripts/utilities/create-foundry-agents.sh`**
-   - Creates all four Foundry agents via `az rest --method PUT` to the Foundry data plane
+   - Creates all four base agents and three workflow routing agents via `az rest --method PUT`
+   - Base agents: chat, order, promotion, help-me-choose
+   - Workflow agents: chat-workflow, promotion-workflow, order-workflow (created last; reference base agents)
    - Reads `AI_FOUNDRY_PROJECT_ENDPOINT`, `MCP_SERVICE_URL`, `API_URL` from azd env
-   - Registers two MCP tool servers per agent (api-mcp + DAB /mcp)
-   - Stores returned agent IDs back to azd environment
+   - Registers two MCP tool servers per base agent (api-mcp + DAB /mcp)
+   - Stores all returned agent IDs back to azd environment
 
 2. **`scripts/hooks/api-functions-postdeploy.sh`**
    - Post-deploy hook for `api-functions` service
-   - Reads the four agent IDs from azd env
-   - Patches the Container App with `AI_AGENT_*_ID` environment variables
+   - Reads all seven agent IDs from azd env
+   - Patches the Container App with `AI_AGENT_*_ID` and `AI_AGENT_WORKFLOW_*_ID` environment variables
 
 ### Modified Files
 
@@ -29,9 +31,18 @@ Automated Azure AI Foundry Agent creation has been fully integrated into the Azu
 
 3. **`infra/modules/aca-api-functions.bicep`**
    - Added `AI_FOUNDRY_PROJECT_ENDPOINT` env var
-   - Removed `MCP_SERVICE_URL` and `DAB_MCP_URL` env vars (no longer needed at runtime)
+   - Added `AI_AGENT_WORKFLOW_PROMOTION_ID`, `AI_AGENT_WORKFLOW_ORDER_ID`, `AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID` parameter bindings
+   - Added KEDA scaling rule for `simulation-order-queue` (queue-length threshold: 5)
 
-4. **`api-functions/api-functions.csproj`**
+4. **`infra/modules/storage.bicep`**
+   - Added `simulation-order-queue` for autonomous AI-driven order simulation
+
+5. **`workflows/`** directory — new intent-routing workflow YAMLs
+   - `chat-product-advisor.yaml` — routes between chat and help-me-choose agents
+   - `admin-promotion-advisor.yaml` — gathers promo parameters then invokes promotion agent
+   - `admin-order-advisor.yaml` — identifies persona/customer then invokes order agent
+
+6. **`api-functions/api-functions.csproj`**
    - Removed `Microsoft.Agents.AI.*` packages and `ModelContextProtocol`
    - Added `Azure.AI.Agents.Persistent`
 
@@ -67,16 +78,41 @@ api-functions-postdeploy.sh hook
 
 ## Runtime Features
 
-The four deployed agents use the following Azure AI Foundry Responses API features at runtime. These are applied by `FoundryAgentClient` in `api-functions`:
+The seven deployed agents use the following Azure AI Foundry Responses API features at runtime. These are applied by `FoundryAgentClient` in `api-functions`:
 
-| Agent                    | Memory (`x-memory-user-id`)                             | `tool_choice` | Structured input variables                                                                                                          |
-| ------------------------ | ------------------------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| **Chat**                 | Customer ID                                             | `auto`        | `customerId`, `cultureId`                                                                                                           |
-| **Help-Me-Choose**       | Customer ID (or anonymous)                              | `required`    | _(wizard context \u2014 see portal definition)_                                                                                     |
-| **Order Generation**     | `order-gen-customer-{id}` or `order-gen-persona-{type}` | `required`    | `todayDate`, `personaDescription`, `isExistingCustomer`, `customerName`, `customerId`, `orderCount`, `totalSpend`, `recentProducts` |
-| **Promotion Generation** | `promotion-gen-{type}`                                  | `required`    | `promotionType`, `offerCategory`, `todayDate`, `categoryName`, `subcategoryName`, `categoryId`, `subcategoryId`                     |
+| Agent                    | Memory store                  | `x-memory-user-id` scope                                | `tool_choice` | Multi-turn | Structured inputs                                                                                                                   |
+| ------------------------ | ----------------------------- | ------------------------------------------------------- | ------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Chat**                 | `eshop-chat-memory`           | `customer-{customerId}`                                 | `auto`        | ✅ Yes     | `customerId`, `cultureId`, `userName`                                                                                               |
+| **Help-Me-Choose**       | `eshop-help-me-choose-memory` | `customer-{customerId}` (or anonymous)                  | `required`    | ✅ Yes     | `cultureId`, `profileContext`, `userId`                                                                                             |
+| **Order Generation**     | `admin-order-memory`          | `order-gen-customer-{id}` or `order-gen-persona-{type}` | `required`    | ✅ Yes     | `todayDate`, `personaDescription`, `isExistingCustomer`, `customerName`, `customerId`, `orderCount`, `totalSpend`, `recentProducts` |
+| **Promotion Generation** | `admin-promotion-memory`      | `promotion-gen-{type}`                                  | `required`    | ✅ Yes     | `promotionType`, `offerCategory`, `todayDate`, `categoryName`, `subcategoryName`, `categoryId`, `subcategoryId`                     |
+| **Chat Workflow**        | — (delegates to base agents)  | —                                                       | —             | —          | Routes between chat and help-me-choose based on user intent                                                                         |
+| **Promotion Workflow**   | — (delegates to Promotion)    | —                                                       | —             | —          | Gathers `promotionType`, `offerCategory`, category filters before invoking Promotion agent                                          |
+| **Order Workflow**       | — (delegates to Order)        | —                                                       | —             | —          | Identifies persona/customer, gathers constraints before invoking Order agent                                                        |
 
 **Why `tool_choice: "required"` on three agents?** Order Generation, Promotion Generation, and Help-Me-Choose must call MCP tools to retrieve live catalog/inventory data. Without enforcement, the model may answer from training knowledge — producing hallucinated product IDs or prices that get written to the database as real orders or promotions.
+
+**Why multi-turn on all base agents?** Admins and customers can refine results in follow-up messages. The Foundry `previous_response_id` chains responses so context (catalog choices, past answers) is retained across turns without the frontend managing conversation history.
+
+## Autonomous Order Simulation
+
+The Order Generation agent also runs fully autonomously via the `simulation-order-queue` queue, without any UI interaction:
+
+```
+POST /api/simulation/orders/start  { "count": 50, "customerId": 0 }
+  ↓
+Enqueues N SimulationOrderMessage objects  { customerId: 0|N, personaHint?: string }
+  ↓
+SimulationOrderQueueTrigger (queue trigger, batchSize=1)
+  ↓
+Maps customerId==0 → random persona  |  customerId>0 → existing-customer
+  ↓
+OrderGenerationAgentService.GenerateOrderAsync()  (same path as admin UI)
+  ↓
+Azure AI Foundry agent → MCP tools (search products, check inventory) → create order in SQL
+```
+
+KEDA auto-scales the Container App from 0 to N replicas based on `simulation-order-queue` depth (threshold: 5 messages). The manufacturing simulator uses `POST /api/simulation/orders/start` to drive realistic e-shop load at a controlled pace.
 
 **Why structured inputs?** Dynamic context (customer ID, persona description, today's date, category filters) used to be embedded directly in the user message string in C#. Moving these to Foundry structured inputs (`{{variable}}` Handlebars templates in each agent's portal instructions) keeps user messages short and constant, avoids prompt injection via user-controlled strings, and lets the portal instructions be the single source of truth for agent behaviour.
 

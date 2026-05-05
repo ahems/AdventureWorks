@@ -4,12 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
-import { AuthProvider, useAuth } from "@/context/AuthContext";
-import {
-  VoiceAssistantProvider,
-  useVoiceAssistant,
-} from "@/components/AdminHeader";
-import VoiceSalesAssistant from "@/components/VoiceSalesAssistant";
+import { AuthProvider } from "@/context/AuthContext";
 import Index from "./pages/Index";
 import CategoryPage from "./pages/CategoryPage";
 import ProductPage from "./pages/ProductPage";
@@ -25,73 +20,53 @@ import CurrenciesPage from "./pages/CurrenciesPage";
 import StaleCartsPage from "./pages/StaleCartsPage";
 import SearchPage from "./pages/SearchPage";
 import UtilitiesPage from "./pages/UtilitiesPage";
-import AiFeaturesPage from "./pages/AiFeaturesPage";
 import CustomerStatsPage from "./pages/CustomerStatsPage";
 import NotFound from "./pages/NotFound";
 import StoresPage from "./pages/StoresPage";
 import InventoryTransactionsPage from "./pages/InventoryTransactionsPage";
+import ReportsPage from "./pages/ReportsPage";
 
 const queryClient = new QueryClient();
-
-const GlobalVoiceAssistant = () => {
-  const { isAuthenticated } = useAuth();
-  const { isVoiceOpen, setIsVoiceOpen } = useVoiceAssistant();
-
-  if (!isAuthenticated) return null;
-
-  return (
-    <VoiceSalesAssistant
-      isOpen={isVoiceOpen}
-      onClose={() => setIsVoiceOpen(false)}
-    />
-  );
-};
 
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <VoiceAssistantProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/products" element={<ProductsPage />} />
-                <Route path="/categories" element={<CategoriesPage />} />
-                <Route
-                  path="/category/:categoryId"
-                  element={<CategoryPage />}
-                />
-                <Route path="/product/:productId" element={<ProductPage />} />
-                <Route path="/customers" element={<CustomersPage />} />
-                <Route
-                  path="/customers/:customerId"
-                  element={<CustomersPage />}
-                />
-                <Route path="/orders" element={<OrdersPage />} />
-                <Route path="/orders/:orderId" element={<OrdersPage />} />
-                <Route path="/stores" element={<StoresPage />} />
-                <Route path="/reviews" element={<ReviewsPage />} />
-                <Route path="/promotions" element={<PromotionsPage />} />
-                <Route path="/cultures" element={<CulturesPage />} />
-                <Route path="/currencies" element={<CurrenciesPage />} />
-                <Route path="/stale-carts" element={<StaleCartsPage />} />
-                <Route path="/utilities" element={<UtilitiesPage />} />
-                <Route path="/ai-features" element={<AiFeaturesPage />} />
-                <Route path="/customer-stats" element={<CustomerStatsPage />} />
-                <Route path="/search" element={<SearchPage />} />
-                <Route
-                  path="/inventory-transactions"
-                  element={<InventoryTransactionsPage />}
-                />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-              <GlobalVoiceAssistant />
-            </BrowserRouter>
-          </VoiceAssistantProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/products" element={<ProductsPage />} />
+              <Route path="/categories" element={<CategoriesPage />} />
+              <Route path="/category/:categoryId" element={<CategoryPage />} />
+              <Route path="/product/:productId" element={<ProductPage />} />
+              <Route path="/customers" element={<CustomersPage />} />
+              <Route
+                path="/customers/:customerId"
+                element={<CustomersPage />}
+              />
+              <Route path="/orders" element={<OrdersPage />} />
+              <Route path="/orders/:orderId" element={<OrdersPage />} />
+              <Route path="/stores" element={<StoresPage />} />
+              <Route path="/reviews" element={<ReviewsPage />} />
+              <Route path="/promotions" element={<PromotionsPage />} />
+              <Route path="/cultures" element={<CulturesPage />} />
+              <Route path="/currencies" element={<CurrenciesPage />} />
+              <Route path="/stale-carts" element={<StaleCartsPage />} />
+              <Route path="/utilities" element={<UtilitiesPage />} />
+              <Route path="/customer-stats" element={<CustomerStatsPage />} />
+              <Route path="/search" element={<SearchPage />} />
+              <Route
+                path="/inventory-transactions"
+                element={<InventoryTransactionsPage />}
+              />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>

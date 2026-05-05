@@ -420,7 +420,7 @@ const PromotionsPage: React.FC = () => {
               className="doodle-button doodle-button-primary flex items-center gap-2"
             >
               <Plus className="w-5 h-5" />
-              Create Promotion
+              New Promotion
             </Button>
           </div>
         </div>

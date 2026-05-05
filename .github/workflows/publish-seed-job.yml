@@ -1,0 +1,61 @@
+name: Publish AdventureWorks Seed Job
+
+"on":
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for AdventureWorks Seed Job
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/adventureworks-seed-job
+          tags: |
+            type=sha
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.title=AdventureWorks Seed Job
+            org.opencontainers.image.description=One-shot database seeding container for the AdventureWorks e-commerce demo. Runs a PowerShell script that provisions the Azure SQL schema, imports product catalogue data, images, and reference data required to bootstrap the application. Designed to run as an Azure Container App Job with Managed Identity (passwordless) authentication against an empty Azure SQL database.
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/main/seed-job/README.md
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            com.adventureworks.component=seed-job
+            com.adventureworks.runtime=azure-container-app-job
+            com.adventureworks.base-image=mcr.microsoft.com/azure-powershell:latest
+            com.adventureworks.auth=managed-identity
+
+      - name: Build and push AdventureWorks Seed Job image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./seed-job
+          file: ./seed-job/dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/adventureworks-seed-job
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true

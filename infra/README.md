@@ -8,6 +8,7 @@ At a high level, these templates provision:
   - Data API Builder (`api`) container
   - Azure Functions (`api-functions`) container
   - MCP server (`api-mcp`) container
+  - Admin portal (`app-admin`) container (scale-to-zero)
 - An Azure Static Web App for the React frontend (`app`)
 - Azure SQL Database with the AdventureWorks schema
 - Azure OpenAI / Azure AI resources
@@ -105,6 +106,15 @@ Each module focuses on a single Azure resource or closely related resource set. 
   - Define the Static Web App resource and its environment.
   - Configure authentication/authorization and API backend URLs (Functions + DAB).
   - Wire runtime config for the frontend (e.g., `config.js` endpoints).
+
+### `aca-app-admin.bicep`
+
+- **Purpose**: Deploys the **admin portal** (`app-admin/`) as an Azure Container App.
+- **Typical responsibilities**:
+  - Define the Container App for the admin React SPA image (ACR remote build).
+  - Set `minReplicas: 0` (scale-to-zero) to avoid idle cost.
+  - Inject runtime config (API Functions URL, admin redirect URI, etc.).
+  - Runs independently of the customer-facing Static Web App.
 
 ### `storage.bicep`
 

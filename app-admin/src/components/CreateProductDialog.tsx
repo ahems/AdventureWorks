@@ -837,7 +837,7 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
           maxLength={400}
           rows={3}
           className="doodle-input w-full"
-          placeholder="Describe this Product or generate using AI (above). Use US English - other languages will be automatically translated from this text."
+          placeholder="Describe this product — other languages auto-translated after creation"
         />
       </div>
     </>
