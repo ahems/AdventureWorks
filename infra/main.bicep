@@ -221,7 +221,7 @@ module containerAppApiMcp 'modules/aca-api-mcp.bicep' = {
     aiFoundryEndpoint: aifoundry.outputs.endpoint
     apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
     minReplica: 0
-    maxReplica: 3
+    maxReplica: 1
     revisionSuffix: revisionSuffix
     containerAppEnvId: containerApp.outputs.containerAppEnvId
   }

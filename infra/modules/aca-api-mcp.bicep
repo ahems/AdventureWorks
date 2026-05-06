@@ -62,6 +62,9 @@ resource apiMcp 'Microsoft.App/containerApps@2025-10-02-preview' = {
         allowInsecure: false
         transport: 'http'
         clientCertificateMode: 'ignore'
+        stickySession: {
+          affinity: 'sticky'
+        }
         corsPolicy: {
           allowedOrigins: ['*']
           allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
