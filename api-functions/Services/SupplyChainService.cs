@@ -90,8 +90,9 @@ public record VendorSummary(
 
 public class SupplyChainService
 {
-    private const string TABLE_NAME       = "awSupplyChain";
-    private const string PART_STOCK       = "stock";
+    private const string TABLE_NAME           = "awSupplyChain";
+    private const string PART_STOCK           = "stock";
+    private const string PART_PENDING_INJECTED = "pending-injected";
 
     internal const string QUEUE_NAME = "supply-chain-orders-queue";
 
@@ -429,12 +430,33 @@ public class SupplyChainService
         }
         await queueClient.CreateIfNotExistsAsync();
 
+        // Load recently-injected PO tracking rows to prevent duplicate queue messages.
+        // Any PO injected within the last 10 minutes is considered "in flight" and skipped.
+        // This guards against the scenario where InitializeAsync is called on every HTTP request
+        // and would otherwise flood the queue with duplicate approval messages.
+        var recentlyInjected = new HashSet<int>();
+        var cutoff = DateTimeOffset.UtcNow.AddMinutes(-10);
+        await foreach (var entity in _tableClient.QueryAsync<TableEntity>(
+            filter: $"PartitionKey eq '{PART_PENDING_INJECTED}'",
+            select: new[] { "RowKey", "InjectedAt" }))
+        {
+            if (entity.GetDateTimeOffset("InjectedAt") is DateTimeOffset injectedAt
+                && injectedAt >= cutoff
+                && int.TryParse(entity.RowKey, out int trackedId))
+            {
+                recentlyInjected.Add(trackedId);
+            }
+        }
+
         int enqueued = 0;
         for (int i = 0; i < poList.Count; i++)
         {
             var r    = poList[i];
             int poId = (int)r.PurchaseOrderID;
             DateTime eta = ((DateTime)r.DueDate).ToUniversalTime();
+
+            // Idempotency guard: skip POs that were already injected within the last 10 minutes.
+            if (recentlyInjected.Contains(poId)) continue;
 
             _telemetry.TrackEvent("SupplyChainOrder", new Dictionary<string, string>
             {
@@ -459,13 +481,25 @@ public class SupplyChainService
             await queueClient.SendMessageAsync(encoded,
                 visibilityTimeout: TimeSpan.FromSeconds(approvalDelaySec));
 
+            // Mark this PO as recently injected so subsequent calls within 10 min skip it.
+            var trackEntity = new TableEntity(PART_PENDING_INJECTED, poId.ToString())
+            {
+                ["InjectedAt"] = DateTimeOffset.UtcNow,
+            };
+            await _tableClient.UpsertEntityAsync(trackEntity);
+
             enqueued++;
         }
 
-        _logger.LogInformation(
-            "Injected {Count} historical Pending BOM POs into the supply-chain approval queue " +
-            "(staggered 1s apart, first fires in {BaseDelay}s).",
-            enqueued, PendingToApprovedSimSec);
+        if (enqueued > 0)
+            _logger.LogInformation(
+                "Injected {Count} historical Pending BOM POs into the supply-chain approval queue " +
+                "(staggered 1s apart, first fires in {BaseDelay}s). {Skipped} already in-flight POs skipped.",
+                enqueued, PendingToApprovedSimSec, poList.Count - enqueued);
+        else
+            _logger.LogDebug(
+                "ProcessHistoricalPendingOrders: all {Count} Status=1 POs were injected within the last 10 minutes; skipping.",
+                poList.Count);
     }
 
     // Mirrors the constant in PurchaseOrderProcessorFunction / SupplyChainControlFunction.
@@ -827,7 +861,8 @@ public class SupplyChainService
         await using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
 
-        var row = await conn.QuerySingleOrDefaultAsync(@"
+        // A PO can have multiple detail lines; use QueryAsync to handle all of them.
+        var rows = (await conn.QueryAsync(@"
             SELECT poh.Status                          AS PoStatus,
                    CAST(poh.VendorID AS VARCHAR(20))   AS VendorId,
                    v.Name                              AS VendorName,
@@ -839,11 +874,12 @@ public class SupplyChainService
             INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
             INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
             WHERE poh.PurchaseOrderID = @Id",
-            new { Id = purchaseOrderId });
+            new { Id = purchaseOrderId })).AsList();
 
-        if (row == null) return false;
+        if (rows.Count == 0) return false;
 
-        int currentPoStatus = (int)row.PoStatus;
+        var firstRow = rows[0];
+        int currentPoStatus = (int)firstRow.PoStatus;
 
         // Validate transition against current PurchaseOrderHeader.Status
         bool valid = (currentPoStatus, targetStatus) switch
@@ -856,12 +892,9 @@ public class SupplyChainService
         };
         if (!valid) return false;
 
-        int    productId  = (int)row.ProductID;
-        string vendorId   = (string)row.VendorId;
-        string vendorName = (string)row.VendorName;
-        int    qty        = (int)row.Qty;
-        double unitCost   = (double)row.UnitCost;
-        double totalDue   = (double)row.TotalDue;
+        string vendorId   = (string)firstRow.VendorId;
+        string vendorName = (string)firstRow.VendorName;
+        double totalDue   = (double)firstRow.TotalDue;
 
         byte newPoStatus = targetStatus switch
         {
@@ -874,18 +907,29 @@ public class SupplyChainService
 
         if (targetStatus == "complete")
         {
-            await UpdateSqlPurchaseOrderAsync(conn, purchaseOrderId, status: 4, receivedQty: qty);
-            await AddToSqlInventoryAsync(productId, qty, vendorId, unitCost, purchaseOrderId);
+            int totalQty = 0;
+            foreach (var row in rows)
+            {
+                int    productId = (int)row.ProductID;
+                int    qty       = (int)row.Qty;
+                double unitCost  = (double)row.UnitCost;
+                await UpdateSqlPurchaseOrderAsync(conn, purchaseOrderId, status: 4, receivedQty: qty);
+                await AddToSqlInventoryAsync(productId, qty, vendorId, unitCost, purchaseOrderId);
+                totalQty += qty;
+            }
             _telemetry.TrackEvent("SupplyChainOrder", new Dictionary<string, string>
             {
                 ["PurchaseOrderId"] = purchaseOrderId.ToString(),
                 ["EventType"]       = "complete",
-                ["Description"]     = $"Delivery confirmed. {qty} units of ProductID {productId} added to Production.ProductInventory.",
+                ["Description"]     = $"Delivery confirmed. {totalQty} units across {rows.Count} line(s) added to Production.ProductInventory.",
             });
         }
         else if (targetStatus == "rejected")
         {
-            await RefundStockAsync(vendorId, productId, qty);
+            foreach (var row in rows)
+            {
+                await RefundStockAsync(vendorId, (int)row.ProductID, (int)row.Qty);
+            }
             _telemetry.TrackEvent("SupplyChainOrder", new Dictionary<string, string>
             {
                 ["PurchaseOrderId"] = purchaseOrderId.ToString(),
@@ -930,7 +974,7 @@ public class SupplyChainService
                     await _bank.PostTransactionAsync(new BankTransactionRequest(
                         CurrencyCode:    "USD",
                         Amount:          -(decimal)totalDue,
-                        Description:     $"PO-{purchaseOrderId} approved: {qty}x ProductID {productId} from {vendorName}",
+                        Description:     $"PO-{purchaseOrderId} approved: {rows.Count} line(s) from {vendorName}",
                         ReferenceId:     $"PO-{purchaseOrderId}",
                         TransactionType: "purchase"));
                 }
@@ -951,7 +995,8 @@ public class SupplyChainService
         await using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
 
-        var row = await conn.QuerySingleOrDefaultAsync(@"
+        // A PO can have multiple detail lines; use QueryAsync to handle all of them.
+        var rows = (await conn.QueryAsync(@"
             SELECT poh.Status AS PoStatus,
                    CAST(poh.VendorID AS VARCHAR(20)) AS VendorId,
                    pod.ProductID,
@@ -959,13 +1004,17 @@ public class SupplyChainService
             FROM Purchasing.PurchaseOrderHeader poh
             INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
             WHERE poh.PurchaseOrderID = @Id",
-            new { Id = purchaseOrderId });
+            new { Id = purchaseOrderId })).AsList();
 
-        if (row == null) return false;
+        if (rows.Count == 0) return false;
         // Can only cancel while Pending (1) — once Approved it is already in transit
-        if ((int)row.PoStatus != 1) return false;
+        if ((int)rows[0].PoStatus != 1) return false;
 
-        await RefundStockAsync((string)row.VendorId, (int)row.ProductID, (int)row.Qty);
+        string vendorId = (string)rows[0].VendorId;
+        foreach (var row in rows)
+        {
+            await RefundStockAsync(vendorId, (int)row.ProductID, (int)row.Qty);
+        }
         await UpdateSqlPurchaseOrderAsync(conn, purchaseOrderId, status: 3);
         _telemetry.TrackEvent("SupplyChainOrder", new Dictionary<string, string>
         {
@@ -1064,7 +1113,7 @@ public class SupplyChainService
         await using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
 
-        var row = await conn.QuerySingleOrDefaultAsync(
+        var row = await conn.QueryFirstOrDefaultAsync(
             OrderSelectSql + " AND poh.PurchaseOrderID = @Id",
             new { Id = purchaseOrderId });
 
