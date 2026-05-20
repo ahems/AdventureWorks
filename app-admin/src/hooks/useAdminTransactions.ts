@@ -43,39 +43,13 @@ const GET_TRANSACTION_HISTORY = gql`
   query GetTransactionHistory(
     $first: Int
     $after: String
-    $productId: Int
-    $transactionType: String
-    $dateFrom: DateTime
-    $dateTo: DateTime
+    $filter: TransactionHistoryFilterInput
   ) {
     transactionHistories(
       first: $first
       after: $after
       orderBy: { TransactionDate: DESC }
-      filter: {
-        and: [
-          { ProductID: { eq: $productId } }
-          { TransactionType: { eq: $transactionType } }
-          { TransactionDate: { gte: $dateFrom } }
-          { TransactionDate: { lte: $dateTo } }
-        ]
-      }
-    ) {
-      items {
-        ${TRANSACTION_FIELDS}
-      }
-      hasNextPage
-      endCursor
-    }
-  }
-`;
-
-const GET_TRANSACTION_HISTORY_NO_FILTERS = gql`
-  query GetTransactionHistoryAll($first: Int, $after: String) {
-    transactionHistories(
-      first: $first
-      after: $after
-      orderBy: { TransactionDate: DESC }
+      filter: $filter
     ) {
       items {
         ${TRANSACTION_FIELDS}
@@ -90,39 +64,13 @@ const GET_TRANSACTION_HISTORY_ARCHIVE = gql`
   query GetTransactionHistoryArchive(
     $first: Int
     $after: String
-    $productId: Int
-    $transactionType: String
-    $dateFrom: DateTime
-    $dateTo: DateTime
+    $filter: TransactionHistoryArchiveFilterInput
   ) {
     transactionHistoryArchives(
       first: $first
       after: $after
       orderBy: { TransactionDate: DESC }
-      filter: {
-        and: [
-          { ProductID: { eq: $productId } }
-          { TransactionType: { eq: $transactionType } }
-          { TransactionDate: { gte: $dateFrom } }
-          { TransactionDate: { lte: $dateTo } }
-        ]
-      }
-    ) {
-      items {
-        ${TRANSACTION_FIELDS}
-      }
-      hasNextPage
-      endCursor
-    }
-  }
-`;
-
-const GET_TRANSACTION_HISTORY_ARCHIVE_NO_FILTERS = gql`
-  query GetTransactionHistoryArchiveAll($first: Int, $after: String) {
-    transactionHistoryArchives(
-      first: $first
-      after: $after
-      orderBy: { TransactionDate: DESC }
+      filter: $filter
     ) {
       items {
         ${TRANSACTION_FIELDS}
@@ -168,35 +116,33 @@ export interface TransactionFilters {
   pageSize?: number;
 }
 
-function buildVariables(filters: TransactionFilters) {
-  return {
-    first: filters.pageSize ?? 50,
-    after: filters.cursor ?? null,
-    productId: filters.productId ?? null,
-    transactionType: filters.transactionType ?? null,
-    dateFrom: filters.dateFrom ?? null,
-    dateTo: filters.dateTo ?? null,
-  };
+function buildFilter(filters: TransactionFilters) {
+  const conditions: object[] = [];
+  if (filters.productId != null) {
+    conditions.push({ ProductID: { eq: filters.productId } });
+  }
+  if (filters.transactionType) {
+    conditions.push({ TransactionType: { eq: filters.transactionType } });
+  }
+  if (filters.dateFrom) {
+    conditions.push({ TransactionDate: { gte: filters.dateFrom } });
+  }
+  if (filters.dateTo) {
+    conditions.push({ TransactionDate: { lte: filters.dateTo } });
+  }
+  return conditions.length > 0 ? { and: conditions } : null;
 }
 
 export function useTransactionHistory(filters: TransactionFilters) {
-  const hasFilters =
-    filters.productId ||
-    filters.transactionType ||
-    filters.dateFrom ||
-    filters.dateTo;
-
   const query = filters.showArchive
-    ? hasFilters
-      ? GET_TRANSACTION_HISTORY_ARCHIVE
-      : GET_TRANSACTION_HISTORY_ARCHIVE_NO_FILTERS
-    : hasFilters
-      ? GET_TRANSACTION_HISTORY
-      : GET_TRANSACTION_HISTORY_NO_FILTERS;
+    ? GET_TRANSACTION_HISTORY_ARCHIVE
+    : GET_TRANSACTION_HISTORY;
 
-  const variables = hasFilters
-    ? buildVariables(filters)
-    : { first: filters.pageSize ?? 50, after: filters.cursor ?? null };
+  const variables = {
+    first: filters.pageSize ?? 50,
+    after: filters.cursor ?? null,
+    filter: buildFilter(filters),
+  };
 
   return useQuery({
     queryKey: ["transactionHistory", filters],
