@@ -160,7 +160,15 @@
     "processingDesc": "We're preparing your items for dispatch",
     "shippedDesc": "Your order is on its way",
     "outForDeliveryDesc": "Your package is out for delivery today",
-    "deliveredDesc": "Your order has been delivered"
+    "deliveredDesc": "Your order has been delivered",
+    "thankYou": "Thank You!",
+    "confirmation": "Your order is confirmed",
+    "receiptSent": "A receipt has been sent to your email",
+    "shippingDetails": "Shipping Details",
+    "orderSummary": "Order Summary",
+    "continueShopping": "Continue Shopping",
+    "viewOrders": "View Orders",
+    "notFound": "Order not found"
   },
   "orderConfirmation": {
     "title": "Order Confirmed!",

@@ -1,6 +1,6 @@
 #!/bin/bash
-# Post-deployment script for API Functions Container App
-# Injects Foundry agent IDs created by create-foundry-agents.sh into the Container App
+# Post-deployment script for API Functions (Flex Consumption)
+# Injects Foundry agent IDs created by create-foundry-agents.sh into the Function App
 
 set -euo pipefail
 
@@ -30,7 +30,7 @@ get_azd_value() {
   echo "$first_line" | xargs
 }
 
-color_cyan "Injecting Foundry agent IDs into API Functions Container App..."
+color_cyan "Injecting Foundry agent IDs into API Functions (Flex Consumption)..."
 
 # ── Read agent IDs from azd environment ────────────────────────────────────────
 chat_id=$(get_azd_value "AI_AGENT_CHAT_ID")
@@ -41,9 +41,12 @@ workflow_chat_id=$(get_azd_value "AI_AGENT_WORKFLOW_CHAT_ID")
 workflow_promotion_id=$(get_azd_value "AI_AGENT_WORKFLOW_PROMOTION_ID")
 workflow_order_id=$(get_azd_value "AI_AGENT_WORKFLOW_ORDER_ID")
 workflow_help_me_choose_id=$(get_azd_value "AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID")
+cart_recovery_id=$(get_azd_value "AI_AGENT_CART_RECOVERY_ID")
+product_content_id=$(get_azd_value "AI_AGENT_PRODUCT_CONTENT_ID")
+customer_id=$(get_azd_value "AI_AGENT_CUSTOMER_ID")
 mcp_service_url=$(get_azd_value "MCP_SERVICE_URL")
 
-if [[ -z "$chat_id" ]] || [[ -z "$order_id" ]] || [[ -z "$promotion_id" ]] || [[ -z "$help_me_choose_id" ]]; then
+if [[ -z "$chat_id" ]] || [[ -z "$order_id" ]] || [[ -z "$promotion_id" ]] || [[ -z "$help_me_choose_id" ]] || [[ -z "$cart_recovery_id" ]] || [[ -z "$product_content_id" ]]; then
   color_yellow "Warning: One or more agent IDs not found in azd environment."
   color_yellow "Run 'bash scripts/utilities/create-foundry-agents.sh' to create the agents, then retry."
   exit 0
@@ -57,11 +60,11 @@ if [[ -z "$functions_service_name" ]] || [[ -z "$resource_group_name" ]]; then
   exit 0
 fi
 
-# ── Update the Container App with the new agent IDs ────────────────────────────
-if az containerapp update \
+# ── Update the Function App with the new agent IDs ────────────────────────────
+if az functionapp config appsettings set \
   --name "$functions_service_name" \
   --resource-group "$resource_group_name" \
-  --set-env-vars \
+  --settings \
     "AI_AGENT_CHAT_ID=$chat_id" \
     "AI_AGENT_ORDER_ID=$order_id" \
     "AI_AGENT_PROMOTION_ID=$promotion_id" \
@@ -70,6 +73,9 @@ if az containerapp update \
     "AI_AGENT_WORKFLOW_PROMOTION_ID=${workflow_promotion_id:-}" \
     "AI_AGENT_WORKFLOW_ORDER_ID=${workflow_order_id:-}" \
     "AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID=${workflow_help_me_choose_id:-}" \
+    "AI_AGENT_CART_RECOVERY_ID=$cart_recovery_id" \
+    "AI_AGENT_PRODUCT_CONTENT_ID=$product_content_id" \
+    ${customer_id:+"AI_AGENT_CUSTOMER_ID=$customer_id"} \
     ${mcp_service_url:+"MCP_SERVICE_URL=$mcp_service_url"} \
   --output none; then
   color_green "✓ Successfully injected agent IDs into $functions_service_name"
@@ -81,8 +87,11 @@ if az containerapp update \
   [[ -n "$workflow_promotion_id" ]] && echo "  AI_AGENT_WORKFLOW_PROMOTION_ID        = $workflow_promotion_id" || true
   [[ -n "$workflow_order_id" ]] && echo "  AI_AGENT_WORKFLOW_ORDER_ID            = $workflow_order_id" || true
   [[ -n "$workflow_help_me_choose_id" ]] && echo "  AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID   = $workflow_help_me_choose_id" || true
+  echo "  AI_AGENT_CART_RECOVERY_ID             = $cart_recovery_id"
+  echo "  AI_AGENT_PRODUCT_CONTENT_ID           = $product_content_id"
+  [[ -n "$customer_id" ]] && echo "  AI_AGENT_CUSTOMER_ID                  = $customer_id" || true
   [[ -n "$mcp_service_url" ]] && echo "  MCP_SERVICE_URL                       = $mcp_service_url" || true
 else
-  color_red "✗ Failed to update Container App environment variables."
+  color_red "✗ Failed to update Function App settings."
   exit 1
 fi

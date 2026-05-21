@@ -25,6 +25,10 @@ import NotFound from "./pages/NotFound";
 import StoresPage from "./pages/StoresPage";
 import InventoryTransactionsPage from "./pages/InventoryTransactionsPage";
 import ReportsPage from "./pages/ReportsPage";
+import ProductProfitabilityPage from "./pages/ProductProfitabilityPage";
+import LossMakersPage from "./pages/LossMakersPage";
+import SlowMoversPage from "./pages/SlowMoversPage";
+import GenerateOrderPage from "./pages/GenerateOrderPage";
 
 const queryClient = new QueryClient();
 
@@ -64,6 +68,13 @@ const App = () => (
                 element={<InventoryTransactionsPage />}
               />
               <Route path="/reports" element={<ReportsPage />} />
+              <Route
+                path="/product-profitability"
+                element={<ProductProfitabilityPage />}
+              />
+              <Route path="/loss-makers" element={<LossMakersPage />} />
+              <Route path="/slow-movers" element={<SlowMoversPage />} />
+              <Route path="/generate-order" element={<GenerateOrderPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

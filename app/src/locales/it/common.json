@@ -160,7 +160,15 @@
     "processingDesc": "Stiamo preparando i tuoi articoli per la spedizione",
     "shippedDesc": "Il tuo ordine è in arrivo",
     "outForDeliveryDesc": "Il tuo pacco è in consegna oggi",
-    "deliveredDesc": "Il tuo ordine è stato consegnato"
+    "deliveredDesc": "Il tuo ordine è stato consegnato",
+    "thankYou": "Grazie!",
+    "confirmation": "Il tuo ordine è confermato",
+    "receiptSent": "Una ricevuta è stata inviata alla tua email",
+    "shippingDetails": "Dettagli di spedizione",
+    "orderSummary": "Riepilogo dell'ordine",
+    "continueShopping": "Continua a fare acquisti",
+    "viewOrders": "Visualizza ordini",
+    "notFound": "Ordine non trovato"
   },
   "orderConfirmation": {
     "title": "Ordine Confermato!",

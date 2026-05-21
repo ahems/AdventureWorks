@@ -133,6 +133,11 @@ public class GenerateProductContentRequest
     public List<string>? AvailableColors { get; set; }
     /// <summary>Full list of available styles (value+label pairs) to evaluate; AI returns which subset make sense.</summary>
     public List<string>? AvailableStyles { get; set; }
+    /// <summary>
+    /// Optional Foundry response ID from the previous product in the same wizard run.
+    /// Enables within-session chaining so the agent avoids repeating product names.
+    /// </summary>
+    public string? PreviousResponseId { get; set; }
 }
 
 public class GenerateProductContentResponse
@@ -154,6 +159,11 @@ public class GenerateProductContentResponse
     /// <summary>Subset of AvailableStyles (values) that make sense for this product type.</summary>
     [JsonConverter(typeof(StringOrNumberListConverter))]
     public List<string> SuggestedStyles { get; set; } = new();
+    /// <summary>
+    /// Foundry response ID from this generation. Pass back as PreviousResponseId
+    /// on the next product in the same wizard run to chain the conversation.
+    /// </summary>
+    public string? ThreadId { get; set; }
 }
 
 public class ProductPhotoThumbnailData

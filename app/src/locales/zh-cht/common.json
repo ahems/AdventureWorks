@@ -160,7 +160,15 @@
     "processingDesc": "我們正在準備您的商品出貨",
     "shippedDesc": "您的訂單正在運送途中",
     "outForDeliveryDesc": "您的包裹今天正在派送中",
-    "deliveredDesc": "您的訂單已送達"
+    "deliveredDesc": "您的訂單已送達",
+    "thankYou": "謝謝！",
+    "confirmation": "您的訂單已確認",
+    "receiptSent": "收據已發送至您的電子郵件",
+    "shippingDetails": "配送詳情",
+    "orderSummary": "訂單摘要",
+    "continueShopping": "繼續購物",
+    "viewOrders": "查看訂單",
+    "notFound": "找不到訂單"
   },
   "orderConfirmation": {
     "title": "訂單已確認！",

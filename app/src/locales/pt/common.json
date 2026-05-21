@@ -160,7 +160,15 @@
     "processingDesc": "Estamos a preparar os seus artigos para envio",
     "shippedDesc": "A sua encomenda está a caminho",
     "outForDeliveryDesc": "O seu pacote está a caminho para entrega hoje",
-    "deliveredDesc": "A sua encomenda foi entregue"
+    "deliveredDesc": "A sua encomenda foi entregue",
+    "thankYou": "Obrigado!",
+    "confirmation": "Seu pedido foi confirmado",
+    "receiptSent": "Um recibo foi enviado para o seu e-mail",
+    "shippingDetails": "Detalhes de envio",
+    "orderSummary": "Resumo do pedido",
+    "continueShopping": "Continuar comprando",
+    "viewOrders": "Ver pedidos",
+    "notFound": "Pedido não encontrado"
   },
   "orderConfirmation": {
     "title": "Pedido Confirmado!",

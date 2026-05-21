@@ -160,7 +160,15 @@
     "processingDesc": "Мы готовим ваши товары к отправке",
     "shippedDesc": "Ваш заказ в пути",
     "outForDeliveryDesc": "Ваша посылка сегодня доставляется",
-    "deliveredDesc": "Ваш заказ был доставлен"
+    "deliveredDesc": "Ваш заказ был доставлен",
+    "thankYou": "Спасибо!",
+    "confirmation": "Ваш заказ подтверждён",
+    "receiptSent": "Квитанция отправлена на ваш электронный адрес",
+    "shippingDetails": "Детали доставки",
+    "orderSummary": "Сводка заказа",
+    "continueShopping": "Продолжить покупки",
+    "viewOrders": "Просмотреть заказы",
+    "notFound": "Заказ не найден"
   },
   "orderConfirmation": {
     "title": "Заказ подтверждён!",

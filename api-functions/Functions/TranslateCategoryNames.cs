@@ -293,7 +293,7 @@ public class CategoryManagementFunctions
         try
         {
             request = await req.ReadFromJsonAsync<DeleteEntityRequest>();
-            if (request == null || request.Id <= 0)
+            if (request == null || request.ResolvedId <= 0)
             {
                 var bad = req.CreateResponse(HttpStatusCode.BadRequest);
                 await bad.WriteAsJsonAsync(new DeleteEntityResult { Success = false, Message = "id is required." });
@@ -309,28 +309,28 @@ public class CategoryManagementFunctions
 
         try
         {
-            var hasSubcats = await _productService.CategoryHasSubcategoriesAsync(request.Id);
+            var hasSubcats = await _productService.CategoryHasSubcategoriesAsync(request.ResolvedId);
             if (hasSubcats)
             {
                 var conflict = req.CreateResponse(HttpStatusCode.Conflict);
                 await conflict.WriteAsJsonAsync(new DeleteEntityResult
                 {
                     Success = false,
-                    Message = $"Category {request.Id} cannot be deleted: it still has subcategories. Delete all subcategories first."
+                    Message = $"Category {request.ResolvedId} cannot be deleted: it still has subcategories. Delete all subcategories first."
                 });
                 return conflict;
             }
 
-            await _productService.DeleteCategoryAsync(request.Id);
-            _logger.LogInformation("Deleted category {Id}", request.Id);
+            await _productService.DeleteCategoryAsync(request.ResolvedId);
+            _logger.LogInformation("Deleted category {Id}", request.ResolvedId);
 
             var ok = req.CreateResponse(HttpStatusCode.OK);
-            await ok.WriteAsJsonAsync(new DeleteEntityResult { Success = true, Message = $"Category {request.Id} deleted." });
+            await ok.WriteAsJsonAsync(new DeleteEntityResult { Success = true, Message = $"Category {request.ResolvedId} deleted." });
             return ok;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "DeleteCategory failed for {Id}", request.Id);
+            _logger.LogError(ex, "DeleteCategory failed for {Id}", request.ResolvedId);
             var error = req.CreateResponse(HttpStatusCode.InternalServerError);
             await error.WriteAsJsonAsync(new DeleteEntityResult { Success = false, Message = ex.Message });
             return error;

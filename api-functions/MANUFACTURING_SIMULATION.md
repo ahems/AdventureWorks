@@ -1132,14 +1132,15 @@ Returns all vendor offers for all purchasable BOM components. Each row is one ve
     "estimatedDeliverySimHrs": 336.0,
     "estimatedDeliveryRealMins": 336.0,
     "inStock": true,
-    "incomingQty": 10
+    "incomingQty": 10,
+    "earliestIncomingEtaUtc": "2026-05-16T09:30:00Z"
   }
 ]
 ```
 
 Results are sorted by `productId` then `totalCost` ascending — cheapest option first per component.
 
-**`stockAvailable`** is what remains at the vendor **after** deducting all in-flight orders — it is the quantity you can still order right now. **`incomingQty`** is the total units across all open orders (`pending`/`approved`) that have already left the vendor's shelf and will be delivered to your warehouse. Display both together so the UI can show e.g. `"70 available · 10 incoming"`.
+**`stockAvailable`** is what remains at the vendor **after** deducting all in-flight orders — it is the quantity you can still order right now. **`incomingQty`** is the total units across all open orders (`pending`/`approved`) that have already left the vendor's shelf and will be delivered to your warehouse. **`earliestIncomingEtaUtc`** is the UTC `DueDate` of the soonest in-flight order for this vendor+product pair; `null` when `incomingQty` is 0. Use all three together so the UI can show e.g. `"70 available · 10 incoming · arrives ~14 min"`.
 
 **Use this for:** a comparison grid showing all vendors side-by-side for a given component.
 

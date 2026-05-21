@@ -191,6 +191,7 @@ public class SuggestedProduct
     public int ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
     public decimal CurrentPrice { get; set; }
+    public decimal StandardCost { get; set; }
     public int InventoryLevel { get; set; }
     public int RecentSalesCount { get; set; }
     public string Reason { get; set; } = string.Empty;

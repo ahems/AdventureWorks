@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
-  Plus,
-  Pencil,
-  Trash2,
   DollarSign,
   Search,
   TrendingUp,
   ChevronLeft,
   ChevronRight,
   Loader2,
+  RefreshCw,
+  ArrowLeft,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,35 +22,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Currency, CurrencyRate } from "@/types/currency";
 import {
   useAdminCurrencies,
   useAdminCurrencyRates,
-  useCreateCurrency,
-  useUpdateCurrency,
-  useDeleteCurrency,
+  useRefreshExchangeRates,
 } from "@/hooks/useAdminCatalog";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
@@ -57,42 +36,45 @@ import { format } from "date-fns";
 
 const CurrenciesPage = () => {
   const { toast } = useToast();
-  const { data: apiCurrencies = [] } = useAdminCurrencies();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // URL-driven tab and currency filter
+  const activeTab = searchParams.get("tab") ?? "currencies";
+  const filterCurrency = searchParams.get("currency") ?? "";
+
+  // Pagination state — reset when the currency filter changes
   const [ratesCursor, setRatesCursor] = useState<string | null>(null);
   const [ratesCursorStack, setRatesCursorStack] = useState<string[]>([]);
-  const { data: ratesData } = useAdminCurrencyRates(ratesCursor);
+
+  useEffect(() => {
+    setRatesCursor(null);
+    setRatesCursorStack([]);
+  }, [filterCurrency]);
+
+  const { data: apiCurrencies = [] } = useAdminCurrencies();
+  const { data: ratesData } = useAdminCurrencyRates(
+    ratesCursor,
+    filterCurrency || null,
+  );
+
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [currencyRates, setCurrencyRates] = useState<CurrencyRate[]>([]);
   const [ratesHasMore, setRatesHasMore] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
-  const createCurrency = useCreateCurrency();
-  const updateCurrency = useUpdateCurrency();
-  const deleteCurrency = useDeleteCurrency();
+  const refreshRates = useRefreshExchangeRates();
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (apiCurrencies.length > 0) setCurrencies(apiCurrencies);
   }, [apiCurrencies]);
+
   useEffect(() => {
     const items = ratesData?.items;
-    if (items && items.length > 0) {
+    if (items) {
       setCurrencyRates(items);
       setRatesHasMore(ratesData?.hasNextPage ?? false);
     }
   }, [ratesData]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [editingCurrency, setEditingCurrency] = useState<Currency | null>(null);
-  const [deletingCurrency, setDeletingCurrency] = useState<Currency | null>(
-    null,
-  );
-
-  const [formData, setFormData] = useState({
-    CurrencyCode: "",
-    Name: "",
-  });
 
   const filteredCurrencies = currencies.filter(
     (currency) =>
@@ -100,121 +82,39 @@ const CurrenciesPage = () => {
       currency.CurrencyCode.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  const getRatesForCurrency = (currencyCode: string) => {
-    return currencyRates.filter(
-      (rate) =>
-        rate.FromCurrencyCode === currencyCode ||
-        rate.ToCurrencyCode === currencyCode,
-    ).length;
+  const handleViewRates = (currencyCode: string) => {
+    setSearchParams({ tab: "rates", currency: currencyCode });
   };
 
-  const openCreateDialog = () => {
-    setEditingCurrency(null);
-    setFormData({ CurrencyCode: "", Name: "" });
-    setIsDialogOpen(true);
-  };
-
-  const openEditDialog = (currency: Currency) => {
-    setEditingCurrency(currency);
-    setFormData({
-      CurrencyCode: currency.CurrencyCode,
-      Name: currency.Name,
-    });
-    setIsDialogOpen(true);
-  };
-
-  const openDeleteDialog = (currency: Currency) => {
-    setDeletingCurrency(currency);
-    setIsDeleteDialogOpen(true);
-  };
-
-  const handleSave = async () => {
-    if (!formData.CurrencyCode.trim() || !formData.Name.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Currency Code and Name are required.",
-        variant: "destructive",
-      });
-      return;
+  const handleTabChange = (tab: string) => {
+    if (tab === "currencies") {
+      setSearchParams({});
+    } else {
+      setSearchParams({ tab });
     }
+  };
 
-    if (formData.CurrencyCode.length !== 3) {
-      toast({
-        title: "Validation Error",
-        description: "Currency Code must be exactly 3 characters.",
-        variant: "destructive",
-      });
-      return;
-    }
+  const handleClearFilter = () => {
+    setSearchParams({ tab: "rates" });
+  };
 
-    setIsSaving(true);
+  const handleRefreshRates = async () => {
     try {
-      if (editingCurrency) {
-        await updateCurrency.mutateAsync({
-          CurrencyCode: editingCurrency.CurrencyCode,
-          Name: formData.Name,
-        });
-        toast({
-          title: "Currency Updated",
-          description: `"${formData.Name}" has been updated.`,
-        });
-      } else {
-        if (
-          currencies.some(
-            (c) =>
-              c.CurrencyCode.toUpperCase() ===
-              formData.CurrencyCode.toUpperCase(),
-          )
-        ) {
-          toast({
-            title: "Duplicate Code",
-            description: "A currency with this code already exists.",
-            variant: "destructive",
-          });
-          return;
-        }
-        await createCurrency.mutateAsync({
-          CurrencyCode: formData.CurrencyCode,
-          Name: formData.Name,
-        });
-        toast({
-          title: "Currency Created",
-          description: `"${formData.Name}" has been added.`,
-        });
-      }
-      setIsDialogOpen(false);
-    } catch {
+      const result = await refreshRates.mutateAsync();
       toast({
-        title: "Error",
-        description: "Failed to save currency. Please try again.",
+        title: "Exchange Rates Updated",
+        description: `Updated ${result.updated} rates for ${result.rateDate}.${result.skipped > 0 ? ` ${result.skipped} currencies not in ECB data were skipped.` : ""}`,
+      });
+    } catch (err) {
+      toast({
+        title: "Refresh Failed",
+        description:
+          err instanceof Error
+            ? err.message
+            : "Could not refresh exchange rates.",
         variant: "destructive",
       });
-    } finally {
-      setIsSaving(false);
     }
-  };
-
-  const handleDelete = async () => {
-    if (deletingCurrency) {
-      setIsDeleting(true);
-      try {
-        await deleteCurrency.mutateAsync(deletingCurrency.CurrencyCode);
-        toast({
-          title: "Currency Deleted",
-          description: `"${deletingCurrency.Name}" has been removed.`,
-        });
-      } catch {
-        toast({
-          title: "Error",
-          description: "Failed to delete currency. Please try again.",
-          variant: "destructive",
-        });
-      } finally {
-        setIsDeleting(false);
-      }
-    }
-    setIsDeleteDialogOpen(false);
-    setDeletingCurrency(null);
   };
 
   return (
@@ -223,28 +123,18 @@ const CurrenciesPage = () => {
 
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="flex flex-col gap-6">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div className="flex items-center gap-3">
-              <DollarSign className="h-8 w-8 text-primary" />
-              <div>
-                <h1 className="text-3xl font-bold text-foreground">
-                  Currencies
-                </h1>
-                <p className="text-muted-foreground">
-                  Manage currencies and exchange rates for international pricing
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={openCreateDialog}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Currency
-              </Button>
+          {/* Page header */}
+          <div className="flex items-center gap-3">
+            <DollarSign className="h-8 w-8 text-primary" />
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">Currencies</h1>
+              <p className="text-muted-foreground">
+                View currencies and exchange rates for international pricing
+              </p>
             </div>
           </div>
 
-          {/* Stats Cards */}
+          {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardHeader className="pb-2">
@@ -264,6 +154,7 @@ const CurrenciesPage = () => {
                 <CardTitle className="text-lg flex items-center gap-2">
                   <TrendingUp className="h-5 w-5 text-primary" />
                   Exchange Rates
+                  {filterCurrency ? ` — ${filterCurrency}` : ""}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -275,14 +166,28 @@ const CurrenciesPage = () => {
             </Card>
           </div>
 
-          <Tabs defaultValue="currencies" className="w-full">
-            <TabsList>
-              <TabsTrigger value="currencies">Currencies</TabsTrigger>
-              <TabsTrigger value="rates">Exchange Rates</TabsTrigger>
-            </TabsList>
+          {/* URL-driven tab bar */}
+          <div className="border-b">
+            <nav className="flex gap-1 -mb-px">
+              {(["currencies", "rates"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => handleTabChange(tab)}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === tab
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {tab === "currencies" ? "Currencies" : "Exchange Rates"}
+                </button>
+              ))}
+            </nav>
+          </div>
 
-            <TabsContent value="currencies" className="space-y-4">
-              {/* Search */}
+          {/* ── Currencies tab ──────────────────────────────────────────────── */}
+          {activeTab === "currencies" && (
+            <div className="space-y-4">
               <div className="relative max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -293,7 +198,6 @@ const CurrenciesPage = () => {
                 />
               </div>
 
-              {/* Currencies Table */}
               <Card>
                 <CardContent className="p-0">
                   <Table>
@@ -301,16 +205,17 @@ const CurrenciesPage = () => {
                       <TableRow>
                         <TableHead>Code</TableHead>
                         <TableHead>Name</TableHead>
-                        <TableHead>Exchange Rates</TableHead>
                         <TableHead>Last Modified</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                        <TableHead className="text-right">
+                          Exchange Rates
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredCurrencies.length === 0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={5}
+                            colSpan={4}
                             className="text-center py-8 text-muted-foreground"
                           >
                             No currencies found.
@@ -323,15 +228,6 @@ const CurrenciesPage = () => {
                               {currency.CurrencyCode}
                             </TableCell>
                             <TableCell>{currency.Name}</TableCell>
-                            <TableCell>
-                              <Badge variant="secondary">
-                                <TrendingUp className="h-3 w-3 mr-1" />
-                                {getRatesForCurrency(
-                                  currency.CurrencyCode,
-                                )}{" "}
-                                rates
-                              </Badge>
-                            </TableCell>
                             <TableCell className="text-muted-foreground">
                               {format(
                                 new Date(currency.ModifiedDate),
@@ -339,23 +235,16 @@ const CurrenciesPage = () => {
                               )}
                             </TableCell>
                             <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => openEditDialog(currency)}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => openDeleteDialog(currency)}
-                                  className="text-destructive hover:text-destructive"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  handleViewRates(currency.CurrencyCode)
+                                }
+                              >
+                                <ExternalLink className="h-3 w-3 mr-1" />
+                                View Rates
+                              </Button>
                             </TableCell>
                           </TableRow>
                         ))
@@ -364,13 +253,66 @@ const CurrenciesPage = () => {
                   </Table>
                 </CardContent>
               </Card>
-            </TabsContent>
+            </div>
+          )}
 
-            <TabsContent value="rates" className="space-y-4">
-              {/* Exchange Rates Table */}
+          {/* ── Exchange Rates tab ─────────────────────────────────────────── */}
+          {activeTab === "rates" && (
+            <div className="space-y-4">
+              {/* Toolbar */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  {filterCurrency ? (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleClearFilter}
+                      >
+                        <ArrowLeft className="h-4 w-4 mr-1" />
+                        All rates
+                      </Button>
+                      <Badge variant="secondary" className="text-sm px-3 py-1">
+                        <TrendingUp className="h-3 w-3 mr-1" />
+                        Filtered by: {filterCurrency}
+                        <button
+                          onClick={handleClearFilter}
+                          className="ml-2 hover:text-destructive"
+                          aria-label="Clear filter"
+                        >
+                          ×
+                        </button>
+                      </Badge>
+                    </>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">
+                      Showing all exchange rates
+                    </span>
+                  )}
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefreshRates}
+                  disabled={refreshRates.isPending}
+                >
+                  {refreshRates.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  {refreshRates.isPending ? "Refreshing…" : "Refresh from ECB"}
+                </Button>
+              </div>
+
               <Card>
                 <CardHeader>
-                  <CardTitle>Current Exchange Rates</CardTitle>
+                  <CardTitle>
+                    {filterCurrency
+                      ? `Exchange Rates for ${filterCurrency}`
+                      : "Current Exchange Rates"}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <Table>
@@ -390,7 +332,9 @@ const CurrenciesPage = () => {
                             colSpan={5}
                             className="text-center py-8 text-muted-foreground"
                           >
-                            No exchange rates available.
+                            {filterCurrency
+                              ? `No exchange rates found for ${filterCurrency}.`
+                              : "No exchange rates available."}
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -419,7 +363,8 @@ const CurrenciesPage = () => {
                   </Table>
                 </CardContent>
               </Card>
-              {/* DAB page navigation for exchange rates */}
+
+              {/* Pagination */}
               {(ratesCursorStack.length > 0 || ratesData?.hasNextPage) && (
                 <div className="flex items-center justify-between pt-2">
                   <Button
@@ -448,107 +393,13 @@ const CurrenciesPage = () => {
                     Next 100 <ChevronRight className="h-4 w-4 ml-2" />
                   </Button>
                 </div>
-              )}{" "}
-            </TabsContent>
-          </Tabs>
+              )}
+            </div>
+          )}
         </div>
       </main>
 
       <Footer />
-
-      {/* Create/Edit Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingCurrency ? "Edit Currency" : "Add New Currency"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingCurrency
-                ? "Update the currency details below."
-                : "Enter the details for the new currency."}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="currencyCode">Currency Code</Label>
-              <Input
-                id="currencyCode"
-                placeholder="e.g., USD, EUR, GBP"
-                value={formData.CurrencyCode}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    CurrencyCode: e.target.value.toUpperCase(),
-                  }))
-                }
-                disabled={!!editingCurrency}
-                maxLength={3}
-                className="font-mono"
-              />
-              <p className="text-xs text-muted-foreground">
-                Standard 3-letter ISO 4217 currency code
-              </p>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                placeholder="e.g., US Dollar, Euro, British Pound"
-                value={formData.Name}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, Name: e.target.value }))
-                }
-                maxLength={50}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsDialogOpen(false)}
-              disabled={isSaving}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={isSaving}>
-              {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {editingCurrency ? "Save Changes" : "Create Currency"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation */}
-      <AlertDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Currency</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete "{deletingCurrency?.Name}" (
-              {deletingCurrency?.CurrencyCode})? This will also remove all
-              associated exchange rates. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isDeleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 };

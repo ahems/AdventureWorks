@@ -155,6 +155,7 @@ public class ProductService
                 p.ProductID,
                 p.Name AS ProductName,
                 p.ListPrice,
+                p.StandardCost,
                 pc.Name AS CategoryName,
                 ps.Name AS SubcategoryName,
                 ISNULL(inv.TotalInventory, 0) AS TotalInventory,
@@ -215,6 +216,8 @@ public class ProductService
             result.AppendLine($"ProductID: {p.ProductID} | {p.ProductName}");
             result.AppendLine($"  Category: {p.CategoryName ?? "N/A"} > {p.SubcategoryName ?? "N/A"}");
             result.AppendLine($"  List Price: ${p.ListPrice:N2}");
+            result.AppendLine($"  Standard Cost: ${p.StandardCost:N2}");
+            result.AppendLine($"  Gross Margin at List Price: {(p.ListPrice > 0 ? ((p.ListPrice - p.StandardCost) / p.ListPrice * 100) : 0):N1}%");
             result.AppendLine($"  Inventory (Finished Goods): {p.TotalInventory} units");
             result.AppendLine($"  Sales last 90 days: {p.RecentSalesCount} orders | Revenue: ${p.RecentRevenue:N2}");
             result.AppendLine($"  Active discounts: {p.ActiveDiscounts}");
@@ -379,6 +382,110 @@ public class ProductService
             if (products.Count > 10)
                 sb.AppendLine($"    ... and {products.Count - 10} more");
             sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
+    public async Task<string> GetTopSellingProductsAsync(int topN = 10, int? dateRangeMonths = null)
+    {
+        topN = Math.Max(1, Math.Min(50, topN));
+
+        using var connection = await GetConnectionAsync();
+
+        string sql;
+
+        if (dateRangeMonths.HasValue && dateRangeMonths.Value > 0)
+        {
+            // Aggregate SalesOrderDetail filtered by date via SalesOrderHeader.
+            // Use NOLOCK to avoid shared-lock contention and a pre-aggregating subquery
+            // so the outer join works on a small result set.
+            // MIN(pc.Name) deduplicates when ProductCategory has multi-language rows.
+            sql = @"
+                SELECT TOP (@TopN)
+                    agg.ProductID,
+                    p.Name          AS ProductName,
+                    MIN(pc.Name)    AS CategoryName,
+                    agg.TotalQtySold,
+                    agg.TotalOrders,
+                    agg.TotalRevenue
+                FROM (
+                    SELECT sod.ProductID,
+                           SUM(sod.OrderQty)             AS TotalQtySold,
+                           COUNT(DISTINCT sod.SalesOrderID) AS TotalOrders,
+                           SUM(sod.LineTotal)             AS TotalRevenue
+                    FROM   Sales.SalesOrderDetail sod WITH (NOLOCK)
+                    INNER JOIN Sales.SalesOrderHeader soh WITH (NOLOCK)
+                           ON sod.SalesOrderID = soh.SalesOrderID
+                    WHERE  soh.OrderDate >= DATEADD(MONTH, -@DateRangeMonths, GETDATE())
+                    GROUP BY sod.ProductID
+                ) AS agg
+                INNER JOIN Production.Product p WITH (NOLOCK)
+                        ON agg.ProductID = p.ProductID
+                LEFT  JOIN Production.ProductSubcategory ps WITH (NOLOCK)
+                        ON p.ProductSubcategoryID = ps.ProductSubcategoryID
+                LEFT  JOIN Production.ProductCategory pc WITH (NOLOCK)
+                        ON ps.ProductCategoryID = pc.ProductCategoryID
+                WHERE p.FinishedGoodsFlag = 1
+                GROUP BY agg.ProductID, p.Name, agg.TotalQtySold, agg.TotalOrders, agg.TotalRevenue
+                ORDER BY agg.TotalRevenue DESC";
+        }
+        else
+        {
+            // All-time ranking — pre-aggregate SalesOrderDetail first (single-table scan),
+            // then join the small result set to Product/Category.  NOLOCK avoids lock waits.
+            // MIN(pc.Name) deduplicates when ProductCategory has multi-language rows.
+            sql = @"
+                SELECT TOP (@TopN)
+                    agg.ProductID,
+                    p.Name          AS ProductName,
+                    MIN(pc.Name)    AS CategoryName,
+                    agg.TotalQtySold,
+                    agg.TotalOrders,
+                    agg.TotalRevenue
+                FROM (
+                    SELECT ProductID,
+                           SUM(OrderQty)              AS TotalQtySold,
+                           COUNT(DISTINCT SalesOrderID) AS TotalOrders,
+                           SUM(LineTotal)              AS TotalRevenue
+                    FROM   Sales.SalesOrderDetail WITH (NOLOCK)
+                    GROUP BY ProductID
+                ) AS agg
+                INNER JOIN Production.Product p WITH (NOLOCK)
+                        ON agg.ProductID = p.ProductID
+                LEFT  JOIN Production.ProductSubcategory ps WITH (NOLOCK)
+                        ON p.ProductSubcategoryID = ps.ProductSubcategoryID
+                LEFT  JOIN Production.ProductCategory pc WITH (NOLOCK)
+                        ON ps.ProductCategoryID = pc.ProductCategoryID
+                WHERE p.FinishedGoodsFlag = 1
+                GROUP BY agg.ProductID, p.Name, agg.TotalQtySold, agg.TotalOrders, agg.TotalRevenue
+                ORDER BY agg.TotalRevenue DESC";
+        }
+
+        var param = dateRangeMonths.HasValue && dateRangeMonths.Value > 0
+            ? (object)new { TopN = topN, DateRangeMonths = dateRangeMonths.Value }
+            : new { TopN = topN };
+
+        var rows = await connection.QueryAsync(sql, param, commandTimeout: 120);
+        var list = rows.ToList();
+
+        if (!list.Any())
+            return "No sales data found for the specified period.";
+
+        var sb = new System.Text.StringBuilder();
+        var period = (dateRangeMonths.HasValue && dateRangeMonths.Value > 0)
+            ? $"last {dateRangeMonths.Value} month(s)"
+            : "all time";
+        sb.AppendLine($"Top {list.Count} best-selling products ({period}):");
+        sb.AppendLine();
+
+        int rank = 1;
+        foreach (var row in list)
+        {
+            var category = string.IsNullOrEmpty((string?)row.CategoryName) ? "Uncategorized" : (string)row.CategoryName;
+            sb.AppendLine($"{rank}. {row.ProductName} (ID: {row.ProductID}) — {category}");
+            sb.AppendLine($"   Revenue: ${(decimal)row.TotalRevenue:N2} | Units sold: {(int)row.TotalQtySold:N0} | Orders: {(int)row.TotalOrders:N0}");
+            rank++;
         }
 
         return sb.ToString();

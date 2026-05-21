@@ -14,9 +14,11 @@ import {
   FolderOpen,
   Globe,
   DollarSign,
-  Sparkles,
-  ChevronDown,
-  ChevronUp,
+  ShoppingBag,
+  Users,
+  Package,
+  Tag,
+  FolderPlus,
 } from "lucide-react";
 import {
   generateProductEmbeddings,
@@ -33,7 +35,6 @@ const UtilitiesPage: React.FC = () => {
   const [recentExecutions, setRecentExecutions] = useState<RecentExecution[]>(
     [],
   );
-  const [showProductAI, setShowProductAI] = useState(false);
 
   const trackExecution = (
     name: string,
@@ -124,63 +125,81 @@ const UtilitiesPage: React.FC = () => {
           />
         </div>
 
-        {/* Product AI Enhancement */}
-        <div className="mt-8">
-          <button
-            onClick={() => setShowProductAI(!showProductAI)}
-            className="w-full doodle-card p-4 flex items-center justify-between text-left hover:shadow-md transition-shadow"
+        {/* AI Generators */}
+        <h3 className="font-doodle text-lg font-semibold text-doodle-text mb-3 mt-6">
+          AI Generators
+        </h3>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <Link
+            to="/generate-order"
+            className="doodle-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow"
           >
-            <div className="flex items-center gap-3">
-              <Sparkles className="w-5 h-5 text-doodle-purple" />
-              <h2 className="font-doodle text-xl font-semibold text-doodle-text">
-                Product AI Enhancement
-              </h2>
+            <ShoppingBag className="w-8 h-8 text-doodle-purple shrink-0" />
+            <div>
+              <p className="font-doodle font-semibold text-doodle-text">
+                Generate Orders
+              </p>
+              <p className="font-doodle text-sm text-doodle-text/60">
+                Create realistic AI-generated orders using persona profiles
+              </p>
             </div>
-            {showProductAI ? (
-              <ChevronUp className="w-5 h-5 text-doodle-text/50" />
-            ) : (
-              <ChevronDown className="w-5 h-5 text-doodle-text/50" />
-            )}
-          </button>
-          {showProductAI && (
-            <div className="mt-4 grid gap-6 md:grid-cols-2">
-              <div className="doodle-card p-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <Sparkles className="w-6 h-6 text-doodle-purple shrink-0" />
-                  <h3 className="font-doodle font-semibold text-doodle-text">
-                    Embellish Product Descriptions
-                  </h3>
-                </div>
-                <p className="font-doodle text-sm text-doodle-text/70 mb-4">
-                  Use AI to embellish and enhance product descriptions for all
-                  products. Automatically improves copy to be more engaging and
-                  SEO-friendly.
-                </p>
-                <div className="flex items-center gap-2 p-2 border border-doodle-text/20 bg-doodle-text/5">
-                  <span className="font-doodle text-xs text-doodle-text/50">
-                    Feature available via the AI Functions API
-                  </span>
-                </div>
-              </div>
-              <div className="doodle-card p-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <Bot className="w-6 h-6 text-doodle-blue shrink-0" />
-                  <h3 className="font-doodle font-semibold text-doodle-text">
-                    AI Product Tagging
-                  </h3>
-                </div>
-                <p className="font-doodle text-sm text-doodle-text/70 mb-4">
-                  Automatically generate product tags and keywords using AI
-                  analysis of product names, descriptions, and categories.
-                </p>
-                <div className="flex items-center gap-2 p-2 border border-doodle-text/20 bg-doodle-text/5">
-                  <span className="font-doodle text-xs text-doodle-text/50">
-                    Feature available via the AI Functions API
-                  </span>
-                </div>
-              </div>
+          </Link>
+          <Link
+            to="/customers"
+            className="doodle-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow"
+          >
+            <Users className="w-8 h-8 text-doodle-blue shrink-0" />
+            <div>
+              <p className="font-doodle font-semibold text-doodle-text">
+                Generate Customer
+              </p>
+              <p className="font-doodle text-sm text-doodle-text/60">
+                Generate synthetic customers with realistic AI profiles
+              </p>
             </div>
-          )}
+          </Link>
+          <Link
+            to="/products"
+            className="doodle-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow"
+          >
+            <Package className="w-8 h-8 text-doodle-green shrink-0" />
+            <div>
+              <p className="font-doodle font-semibold text-doodle-text">
+                Generate Products
+              </p>
+              <p className="font-doodle text-sm text-doodle-text/60">
+                AI product content, images and translations wizard
+              </p>
+            </div>
+          </Link>
+          <Link
+            to="/promotions"
+            className="doodle-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow"
+          >
+            <Tag className="w-8 h-8 text-doodle-orange shrink-0" />
+            <div>
+              <p className="font-doodle font-semibold text-doodle-text">
+                Generate Promotion
+              </p>
+              <p className="font-doodle text-sm text-doodle-text/60">
+                AI-powered promotional campaign generation wizard
+              </p>
+            </div>
+          </Link>
+          <Link
+            to="/categories"
+            className="doodle-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow"
+          >
+            <FolderPlus className="w-8 h-8 text-doodle-yellow shrink-0" />
+            <div>
+              <p className="font-doodle font-semibold text-doodle-text">
+                Generate Categories
+              </p>
+              <p className="font-doodle text-sm text-doodle-text/60">
+                AI-generated product categories and subcategories
+              </p>
+            </div>
+          </Link>
         </div>
 
         {/* Tools & Inspectors */}

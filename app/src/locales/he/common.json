@@ -160,7 +160,15 @@
     "processingDesc": "אנו מכינים את הפריטים שלך למשלוח",
     "shippedDesc": "ההזמנה שלך בדרך",
     "outForDeliveryDesc": "החבילה שלך בדרך למשלוח היום",
-    "deliveredDesc": "ההזמנה שלך נמסרה"
+    "deliveredDesc": "ההזמנה שלך נמסרה",
+    "thankYou": "תודה!",
+    "confirmation": "הזמנתך אושרה",
+    "receiptSent": "קבלה נשלחה לכתובת האימייל שלך",
+    "shippingDetails": "פרטי משלוח",
+    "orderSummary": "סיכום הזמנה",
+    "continueShopping": "המשך קניות",
+    "viewOrders": "צפה בהזמנות",
+    "notFound": "ההזמנה לא נמצאה"
   },
   "orderConfirmation": {
     "title": "ההזמנה אושרה!",

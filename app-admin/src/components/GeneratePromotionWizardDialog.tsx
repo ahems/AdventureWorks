@@ -6,9 +6,11 @@ import {
   Loader2,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   Package,
   TrendingUp,
   ChevronDown,
+  DollarSign,
 } from "lucide-react";
 import {
   useAdminCategories,
@@ -147,7 +149,7 @@ const GeneratePromotionWizardDialog: React.FC<
       setSuggestion(s);
       setThreadId(result.threadId);
       setEditDescription(s.description);
-      setEditDiscountPct(Math.round(s.discountPct * 100));
+      setEditDiscountPct(Math.round(s.discountPct));
       setEditStartDate(s.startDate);
       setEditEndDate(s.endDate);
       setEditMinQty(s.minQty ?? 1);
@@ -192,7 +194,7 @@ const GeneratePromotionWizardDialog: React.FC<
       setSuggestion(s);
       setThreadId(result.threadId);
       setEditDescription(s.description);
-      setEditDiscountPct(Math.round(s.discountPct * 100));
+      setEditDiscountPct(Math.round(s.discountPct));
       setEditStartDate(s.startDate);
       setEditEndDate(s.endDate);
       setEditMinQty(s.minQty ?? 1);
@@ -629,6 +631,44 @@ const GeneratePromotionWizardDialog: React.FC<
                 </div>
               </div>
 
+              {/* Cost / loss warning banner */}
+              {(() => {
+                const lossProducts = suggestion.suggestedProducts.filter(
+                  (p) => {
+                    if (!p.standardCost) return false;
+                    const discountedPrice =
+                      p.currentPrice * (1 - editDiscountPct / 100);
+                    return (
+                      selectedProductIds.has(p.productId) &&
+                      discountedPrice < p.standardCost
+                    );
+                  },
+                );
+                return lossProducts.length > 0 ? (
+                  <div className="flex items-start gap-2 bg-amber-50 border-2 border-amber-300 rounded p-3">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-doodle text-sm font-bold text-amber-800">
+                        {lossProducts.length === 1
+                          ? "1 selected product would sell at a loss"
+                          : `${lossProducts.length} selected products would sell at a loss`}{" "}
+                        at {editDiscountPct}% discount
+                      </p>
+                      <p className="font-doodle text-xs text-amber-700 mt-0.5">
+                        {lossProducts
+                          .map((p) => {
+                            const discountedPrice =
+                              p.currentPrice * (1 - editDiscountPct / 100);
+                            const lossAmt = p.standardCost - discountedPrice;
+                            return `${p.productName} (−$${lossAmt.toFixed(2)}/unit)`;
+                          })
+                          .join(", ")}
+                      </p>
+                    </div>
+                  </div>
+                ) : null;
+              })()}
+
               {/* Suggested products */}
               <div>
                 <label className="block font-doodle text-sm font-bold text-doodle-text mb-2">
@@ -645,6 +685,7 @@ const GeneratePromotionWizardDialog: React.FC<
                       product={product}
                       checked={selectedProductIds.has(product.productId)}
                       onToggle={toggleProduct}
+                      discountPct={editDiscountPct}
                     />
                   ))}
                 </div>
@@ -684,7 +725,7 @@ const GeneratePromotionWizardDialog: React.FC<
                 disabled={isCreating}
                 className="doodle-button px-4 py-2 font-doodle text-sm"
               >
-                \u00ab Back
+                « Back
               </button>
               {threadId && (
                 <button
@@ -727,7 +768,7 @@ const GeneratePromotionWizardDialog: React.FC<
                 onClick={() => setStep("review")}
                 className="doodle-button px-4 py-2 font-doodle text-sm"
               >
-                \u00ab Back
+                « Back
               </button>
               <button
                 onClick={handleRefine}
@@ -752,46 +793,79 @@ interface ProductRowProps {
   product: SuggestedProduct;
   checked: boolean;
   onToggle: (id: number) => void;
+  discountPct: number;
 }
 
 const ProductRow: React.FC<ProductRowProps> = ({
   product,
   checked,
   onToggle,
-}) => (
-  <label className="flex items-start gap-3 px-3 py-2 cursor-pointer hover:bg-doodle-accent/5 transition-colors">
-    <input
-      type="checkbox"
-      checked={checked}
-      onChange={() => onToggle(product.productId)}
-      className="mt-1 accent-doodle-accent"
-    />
-    <div className="flex-1 min-w-0">
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-doodle text-sm font-bold text-doodle-text truncate">
-          {product.productName}
-        </span>
-        <span className="font-doodle text-sm text-doodle-text/70 shrink-0">
-          ${product.currentPrice?.toFixed(2)}
-        </span>
+  discountPct,
+}) => {
+  const discountedPrice = product.currentPrice * (1 - discountPct / 100);
+  const hasCost = product.standardCost > 0;
+  const isLoss = hasCost && discountedPrice < product.standardCost;
+  const marginPct = hasCost
+    ? ((discountedPrice - product.standardCost) / discountedPrice) * 100
+    : null;
+
+  return (
+    <label className="flex items-start gap-3 px-3 py-2 cursor-pointer hover:bg-doodle-accent/5 transition-colors">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={() => onToggle(product.productId)}
+        className="mt-1 accent-doodle-accent"
+      />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-doodle text-sm font-bold text-doodle-text truncate">
+            {product.productName}
+          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="font-doodle text-xs text-doodle-text/50 line-through">
+              ${product.currentPrice?.toFixed(2)}
+            </span>
+            <span
+              className={`font-doodle text-sm font-bold ${
+                isLoss ? "text-red-600" : "text-emerald-700"
+              }`}
+            >
+              ${discountedPrice.toFixed(2)}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+          <span className="flex items-center gap-1 font-doodle text-xs text-doodle-text/50">
+            <Package className="w-3 h-3" />
+            {product.inventoryLevel} in stock
+          </span>
+          <span className="flex items-center gap-1 font-doodle text-xs text-doodle-text/50">
+            <TrendingUp className="w-3 h-3" />
+            {product.recentSalesCount} sales (90d)
+          </span>
+          {hasCost && (
+            <span
+              className={`flex items-center gap-1 font-doodle text-xs font-semibold ${
+                isLoss ? "text-red-600" : "text-emerald-700"
+              }`}
+            >
+              <DollarSign className="w-3 h-3" />
+              Cost ${product.standardCost.toFixed(2)} ·{" "}
+              {isLoss
+                ? `Loss $${(product.standardCost - discountedPrice).toFixed(2)}/unit`
+                : `Margin ${marginPct!.toFixed(1)}%`}
+            </span>
+          )}
+        </div>
+        {product.reason && (
+          <p className="font-doodle text-xs text-doodle-text/40 mt-0.5 italic">
+            {product.reason}
+          </p>
+        )}
       </div>
-      <div className="flex items-center gap-3 mt-0.5">
-        <span className="flex items-center gap-1 font-doodle text-xs text-doodle-text/50">
-          <Package className="w-3 h-3" />
-          {product.inventoryLevel} in stock
-        </span>
-        <span className="flex items-center gap-1 font-doodle text-xs text-doodle-text/50">
-          <TrendingUp className="w-3 h-3" />
-          {product.recentSalesCount} sales (90d)
-        </span>
-      </div>
-      {product.reason && (
-        <p className="font-doodle text-xs text-doodle-text/40 mt-0.5 italic">
-          {product.reason}
-        </p>
-      )}
-    </div>
-  </label>
-);
+    </label>
+  );
+};
 
 export default GeneratePromotionWizardDialog;

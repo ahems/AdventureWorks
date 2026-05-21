@@ -21,6 +21,7 @@ export interface Order {
   DueDate: string;
   ShipDate: string | null;
   Status: OrderStatus;
+  OnlineOrderFlag: boolean;
   SubTotal: number;
   TaxAmt: number;
   Freight: number;

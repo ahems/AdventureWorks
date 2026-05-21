@@ -10,10 +10,13 @@
 #   bash scripts/utilities/agents/eshop-chat-agent.sh
 #   bash scripts/utilities/agents/admin-order-agent.sh
 #   bash scripts/utilities/agents/admin-promotion-agent.sh
+#   bash scripts/utilities/agents/admin-cart-recovery-agent.sh
+#   bash scripts/utilities/agents/admin-customer-agent.sh
 #   bash scripts/utilities/agents/eshop-help-me-choose-agent.sh
 #   bash scripts/utilities/agents/eshop-workflow-agent.sh
 #   bash scripts/utilities/agents/admin-promotion-workflow-agent.sh
 #   bash scripts/utilities/agents/admin-order-workflow-agent.sh
+#   bash scripts/utilities/agents/manufacturing-agent.sh
 #
 # Prerequisites:
 #   - azd environment populated (run after `azd provision`)
@@ -57,6 +60,12 @@ bash "$SCRIPT_DIR/agents/admin-order-agent.sh"
 echo ""
 bash "$SCRIPT_DIR/agents/admin-promotion-agent.sh"
 echo ""
+bash "$SCRIPT_DIR/agents/admin-cart-recovery-agent.sh"
+echo ""
+bash "$SCRIPT_DIR/agents/admin-customer-agent.sh"
+echo ""
+bash "$SCRIPT_DIR/agents/admin-product-content-agent.sh"
+echo ""
 bash "$SCRIPT_DIR/agents/eshop-help-me-choose-agent.sh"
 echo ""
 # The workflow agents must be created AFTER their respective base agents because
@@ -66,6 +75,8 @@ echo ""
 bash "$SCRIPT_DIR/agents/admin-promotion-workflow-agent.sh"
 echo ""
 bash "$SCRIPT_DIR/agents/admin-order-workflow-agent.sh"
+echo ""
+bash "$SCRIPT_DIR/agents/manufacturing-agent.sh"
 
 echo ""
 echo "=========================================="
@@ -74,8 +85,10 @@ echo "Agent IDs stored in azd environment:"
 echo "  AI_AGENT_CHAT_ID                   = $(get_azd_value AI_AGENT_CHAT_ID)"
 echo "  AI_AGENT_ORDER_ID                  = $(get_azd_value AI_AGENT_ORDER_ID)"
 echo "  AI_AGENT_PROMOTION_ID              = $(get_azd_value AI_AGENT_PROMOTION_ID)"
+echo "  AI_AGENT_CART_RECOVERY_ID          = $(get_azd_value AI_AGENT_CART_RECOVERY_ID)"
+echo "  AI_AGENT_PRODUCT_CONTENT_ID        = $(get_azd_value AI_AGENT_PRODUCT_CONTENT_ID)"
 echo "  AI_AGENT_HELP_ME_CHOOSE_ID         = $(get_azd_value AI_AGENT_HELP_ME_CHOOSE_ID)"
 echo "  AI_AGENT_WORKFLOW_CHAT_ID          = $(get_azd_value AI_AGENT_WORKFLOW_CHAT_ID)"
 echo "  AI_AGENT_WORKFLOW_PROMOTION_ID     = $(get_azd_value AI_AGENT_WORKFLOW_PROMOTION_ID)"
 echo "  AI_AGENT_WORKFLOW_ORDER_ID         = $(get_azd_value AI_AGENT_WORKFLOW_ORDER_ID)"
-echo "==========================================="
+echo "  AI_AGENT_MANUFACTURING_ID          = $(get_azd_value AI_AGENT_MANUFACTURING_ID)"

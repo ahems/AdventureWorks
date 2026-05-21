@@ -1,5 +1,9 @@
 # AdventureWorks E-Commerce - AI Agent Instructions
 
+## GitHub Source Control Policy
+
+**Do not commit, push, or check in any file changes to GitHub on behalf of the user.** All Git operations (commits, pushes, pull requests, branch creation, etc.) must be performed manually by the user.
+
 ## Architecture Overview
 
 This is a **3-tier Azure application** demonstrating enterprise patterns with passwordless authentication:

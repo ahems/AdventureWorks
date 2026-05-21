@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   Search,
@@ -471,6 +471,9 @@ const ExpandedCustomerView: React.FC<{
 // ── Main page ─────────────────────────────────────────────────────────────────
 const CustomersPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isSelectForOrderMode = searchParams.get("selectForOrder") === "true";
   const [dabCursor, setDabCursor] = useState<string | null>(null);
   const [cursorStack, setCursorStack] = useState<string[]>([]);
   const { data: apiData, isLoading: customersLoading } =
@@ -482,7 +485,9 @@ const CustomersPage: React.FC = () => {
   const [stateFilter, setStateFilter] = useState("all");
   const [countryFilter, setCountryFilter] = useState("all");
   const [spentFilter, setSpentFilter] = useState("all");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [sortBy, setSortBy] = useState<
+    "spend" | "newest" | "oldest" | "name-az" | "name-za"
+  >("spend");
   const [expandedCustomerId, setExpandedCustomerId] = useState<number | null>(
     null,
   );
@@ -495,13 +500,11 @@ const CustomersPage: React.FC = () => {
   );
   const [bulkEmailDialogOpen, setBulkEmailDialogOpen] = useState(false);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
-  const itemsPerPage = 10;
 
-  // Populate customers from API when loaded; reset local display page on DAB cursor change
+  // Populate customers from API when loaded
   useEffect(() => {
     if (apiData?.items && apiData.items.length > 0) {
       setCustomers(apiData.items);
-      setCurrentPage(1);
     }
   }, [apiData]);
 
@@ -566,11 +569,29 @@ const CustomersPage: React.FC = () => {
     );
   });
 
-  // Sort by TotalSpent descending (customers who spent most first)
-  const sortedCustomers = useMemo(
-    () => [...filteredCustomers].sort((a, b) => b.TotalSpent - a.TotalSpent),
-    [filteredCustomers],
-  );
+  const sortedCustomers = useMemo(() => {
+    const arr = [...filteredCustomers];
+    switch (sortBy) {
+      case "newest":
+        return arr.sort((a, b) => b.CustomerID - a.CustomerID);
+      case "oldest":
+        return arr.sort((a, b) => a.CustomerID - b.CustomerID);
+      case "name-az":
+        return arr.sort(
+          (a, b) =>
+            a.LastName.localeCompare(b.LastName) ||
+            a.FirstName.localeCompare(b.FirstName),
+        );
+      case "name-za":
+        return arr.sort(
+          (a, b) =>
+            b.LastName.localeCompare(a.LastName) ||
+            b.FirstName.localeCompare(a.FirstName),
+        );
+      default:
+        return arr.sort((a, b) => b.TotalSpent - a.TotalSpent);
+    }
+  }, [filteredCustomers, sortBy]);
 
   const activeFiltersCount = [
     cityFilter,
@@ -589,15 +610,7 @@ const CustomersPage: React.FC = () => {
     setCountryFilter("all");
     setSpentFilter("all");
     setSearchQuery("");
-    setCurrentPage(1);
   };
-
-  const totalPages = Math.ceil(sortedCustomers.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedCustomers = sortedCustomers.slice(
-    startIndex,
-    startIndex + itemsPerPage,
-  );
 
   const handleToggleExpand = (customerId: number) => {
     if (expandedCustomerId === customerId) {
@@ -628,12 +641,10 @@ const CustomersPage: React.FC = () => {
   };
 
   const toggleSelectAll = () => {
-    if (selectedCustomerIds.size === paginatedCustomers.length) {
+    if (selectedCustomerIds.size === sortedCustomers.length) {
       setSelectedCustomerIds(new Set());
     } else {
-      setSelectedCustomerIds(
-        new Set(paginatedCustomers.map((c) => c.CustomerID)),
-      );
+      setSelectedCustomerIds(new Set(sortedCustomers.map((c) => c.CustomerID)));
     }
   };
 
@@ -696,7 +707,6 @@ const CustomersPage: React.FC = () => {
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
-                    setCurrentPage(1);
                   }}
                   placeholder="Search by name, email, city or country…"
                   className="w-full pl-10 pr-4 py-2 font-doodle border-2 border-doodle-text bg-white focus:border-doodle-accent focus:outline-none"
@@ -716,7 +726,6 @@ const CustomersPage: React.FC = () => {
                   value={cityFilter}
                   onValueChange={(v) => {
                     setCityFilter(v);
-                    setCurrentPage(1);
                   }}
                 >
                   <SelectTrigger className="w-36 font-doodle">
@@ -742,7 +751,6 @@ const CustomersPage: React.FC = () => {
                   value={stateFilter}
                   onValueChange={(v) => {
                     setStateFilter(v);
-                    setCurrentPage(1);
                   }}
                 >
                   <SelectTrigger className="w-36 font-doodle">
@@ -768,7 +776,6 @@ const CustomersPage: React.FC = () => {
                   value={countryFilter}
                   onValueChange={(v) => {
                     setCountryFilter(v);
-                    setCurrentPage(1);
                   }}
                 >
                   <SelectTrigger className="w-44 font-doodle">
@@ -796,7 +803,6 @@ const CustomersPage: React.FC = () => {
                   value={spentFilter}
                   onValueChange={(v) => {
                     setSpentFilter(v);
-                    setCurrentPage(1);
                   }}
                 >
                   <SelectTrigger className="w-44 font-doodle">
@@ -817,20 +823,63 @@ const CustomersPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-4 mt-4">
+            <div className="flex flex-wrap items-center gap-4 mt-4">
               <p className="font-doodle text-sm text-doodle-text/60">
                 Showing {filteredCustomers.length} customer
                 {filteredCustomers.length !== 1 ? "s" : ""}
                 {customersLoading && " (loading…)"}
               </p>
-              <span className="font-doodle text-xs text-doodle-text/40 flex items-center gap-1">
-                <ArrowUpDown className="w-3 h-3" /> Sorted by highest spend
-              </span>
+              <div className="flex items-center gap-2">
+                <ArrowUpDown className="w-3 h-3 text-doodle-text/40" />
+                <Select
+                  value={sortBy}
+                  onValueChange={(v) => setSortBy(v as typeof sortBy)}
+                >
+                  <SelectTrigger className="h-7 text-xs font-doodle border-doodle-text/30 w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="spend" className="font-doodle text-xs">
+                      Highest spend
+                    </SelectItem>
+                    <SelectItem value="newest" className="font-doodle text-xs">
+                      Newest customers
+                    </SelectItem>
+                    <SelectItem value="oldest" className="font-doodle text-xs">
+                      Longest established
+                    </SelectItem>
+                    <SelectItem value="name-az" className="font-doodle text-xs">
+                      Name A → Z
+                    </SelectItem>
+                    <SelectItem value="name-za" className="font-doodle text-xs">
+                      Name Z → A
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         </section>
 
         <section className="container mx-auto px-4 pb-12">
+          {/* Select for Order mode banner */}
+          {isSelectForOrderMode && (
+            <div className="mb-4 flex items-center justify-between gap-4 p-3 bg-doodle-accent/10 border-2 border-doodle-accent">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-doodle-accent shrink-0" />
+                <span className="font-doodle text-sm font-bold text-doodle-text">
+                  Select a customer to generate an AI order for
+                </span>
+              </div>
+              <Link
+                to="/generate-order"
+                className="font-doodle text-xs text-doodle-text/60 hover:text-doodle-text underline shrink-0"
+              >
+                Cancel
+              </Link>
+            </div>
+          )}
+
           {/* Bulk Actions Bar */}
           <div className="doodle-card p-3 mb-4 flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -838,8 +887,8 @@ const CustomersPage: React.FC = () => {
                 onClick={toggleSelectAll}
                 className="font-doodle text-sm flex items-center gap-2 hover:text-doodle-accent transition-colors"
               >
-                {selectedCustomerIds.size === paginatedCustomers.length &&
-                paginatedCustomers.length > 0 ? (
+                {selectedCustomerIds.size === sortedCustomers.length &&
+                sortedCustomers.length > 0 ? (
                   <CheckSquare className="w-4 h-4" />
                 ) : (
                   <Square className="w-4 h-4" />
@@ -869,14 +918,14 @@ const CustomersPage: React.FC = () => {
                   <div className="h-4 bg-doodle-text/10 rounded w-1/2" />
                 </div>
               ))
-            ) : paginatedCustomers.length === 0 ? (
+            ) : sortedCustomers.length === 0 ? (
               <div className="doodle-card p-8 text-center">
                 <p className="font-doodle text-doodle-text/60">
                   No customers match your filters.
                 </p>
               </div>
             ) : (
-              paginatedCustomers.map((customer) => {
+              sortedCustomers.map((customer) => {
                 const isExpanded = expandedCustomerId === customer.CustomerID;
                 const isEditing = editingCustomerId === customer.CustomerID;
                 const isSelected = selectedCustomerIds.has(customer.CustomerID);
@@ -947,6 +996,49 @@ const CustomersPage: React.FC = () => {
                               </p>
                             )}
                           </div>
+                          {isSelectForOrderMode ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate("/generate-order", {
+                                  state: {
+                                    customerId: customer.SalesCustomerID,
+                                    firstName: customer.FirstName,
+                                    lastName: customer.LastName,
+                                    email: customer.EmailAddress,
+                                    orderCount: customer.TotalOrders,
+                                    totalSpend: customer.TotalSpent,
+                                  },
+                                });
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 font-doodle text-sm bg-doodle-accent text-white border-2 border-doodle-text rounded transition-colors hover:bg-doodle-accent/90 shrink-0"
+                            >
+                              <Sparkles className="w-3.5 h-3.5" />
+                              Select
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              title="Generate Order with AI"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate("/generate-order", {
+                                  state: {
+                                    customerId: customer.SalesCustomerID,
+                                    firstName: customer.FirstName,
+                                    lastName: customer.LastName,
+                                    email: customer.EmailAddress,
+                                    orderCount: customer.TotalOrders,
+                                    totalSpend: customer.TotalSpent,
+                                  },
+                                });
+                              }}
+                              className="p-1.5 text-doodle-text/40 hover:text-doodle-accent transition-colors shrink-0"
+                            >
+                              <Sparkles className="w-4 h-4" />
+                            </button>
+                          )}
                           {isExpanded ? (
                             <ChevronUp className="w-5 h-5 text-doodle-text/50" />
                           ) : (
@@ -1003,31 +1095,6 @@ const CustomersPage: React.FC = () => {
                 className="inline-flex items-center gap-1 p-2 font-doodle text-sm disabled:opacity-40"
               >
                 Next 100 <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-          )}
-
-          {/* Local page navigation within batch */}
-          {totalPages > 1 && (
-            <div className="doodle-card p-4 mt-6 flex items-center justify-center gap-2">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="p-2 disabled:opacity-40"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <span className="font-doodle">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
-                }
-                disabled={currentPage === totalPages}
-                className="p-2 disabled:opacity-40"
-              >
-                <ChevronRight className="w-5 h-5" />
               </button>
             </div>
           )}

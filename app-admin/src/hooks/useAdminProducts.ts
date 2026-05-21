@@ -717,6 +717,89 @@ export const useUpdateProduct = () => {
   });
 };
 
+// ─── Update Product Price ────────────────────────────────────────────────────
+
+const UPDATE_PRODUCT_PRICE = gql`
+  mutation UpdateProductPrice(
+    $id: Int!
+    $listPrice: Decimal!
+    $modifiedDate: DateTime!
+  ) {
+    updateProduct(
+      ProductID: $id
+      item: { ListPrice: $listPrice, ModifiedDate: $modifiedDate }
+    ) {
+      ProductID
+      ListPrice
+    }
+  }
+`;
+
+export const useUpdateProductPrice = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { ProductID: number; ListPrice: number }) => {
+      await graphqlClient.request(UPDATE_PRODUCT_PRICE, {
+        id: vars.ProductID,
+        listPrice: vars.ListPrice,
+        modifiedDate: new Date().toISOString(),
+      });
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "product", vars.ProductID],
+      });
+      queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
+      queryClient.invalidateQueries({
+        queryKey: ["reporting", "product-profitability-detail"],
+      });
+    },
+  });
+};
+
+// ─── Discontinue Product ─────────────────────────────────────────────────────
+
+const DISCONTINUE_PRODUCT = gql`
+  mutation DiscontinueProduct(
+    $id: Int!
+    $discontinuedDate: DateTime
+    $modifiedDate: DateTime!
+  ) {
+    updateProduct(
+      ProductID: $id
+      item: { DiscontinuedDate: $discontinuedDate, ModifiedDate: $modifiedDate }
+    ) {
+      ProductID
+      DiscontinuedDate
+    }
+  }
+`;
+
+export const useDiscontinueProduct = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: {
+      ProductID: number;
+      DiscontinuedDate: string | null;
+    }) => {
+      await graphqlClient.request(DISCONTINUE_PRODUCT, {
+        id: vars.ProductID,
+        discontinuedDate: vars.DiscontinuedDate,
+        modifiedDate: new Date().toISOString(),
+      });
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "product", vars.ProductID],
+      });
+      queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
+      queryClient.invalidateQueries({
+        queryKey: ["reporting", "product-profitability-detail"],
+      });
+    },
+  });
+};
+
 // ─── Create Product Model ────────────────────────────────────────────────────
 
 const CREATE_PRODUCT_MODEL = gql`

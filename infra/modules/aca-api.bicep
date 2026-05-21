@@ -84,8 +84,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           name: apiName
           image: bootstrapImage
           resources: {
-            cpu: json('4.0')
-            memory: '8Gi'
+            cpu: json('2.0')
+            memory: '4Gi'
           }
           env: [
             {

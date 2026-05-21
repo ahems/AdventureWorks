@@ -54,9 +54,6 @@ resource mcpInspector 'Microsoft.App/containerApps@2024-03-01' = {
         allowInsecure: false
         transport: 'http'
         clientCertificateMode: 'ignore'
-        stickySession: {
-          affinity: 'sticky'
-        }
         corsPolicy: {
           allowedOrigins: ['*']
           allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']

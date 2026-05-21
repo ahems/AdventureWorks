@@ -160,7 +160,15 @@
     "processingDesc": "We zijn uw artikelen aan het klaarmaken voor verzending",
     "shippedDesc": "Uw bestelling is onderweg",
     "outForDeliveryDesc": "Uw pakket wordt vandaag bezorgd",
-    "deliveredDesc": "Uw bestelling is geleverd"
+    "deliveredDesc": "Uw bestelling is geleverd",
+    "thankYou": "Bedankt!",
+    "confirmation": "Uw bestelling is bevestigd",
+    "receiptSent": "Een bon is verzonden naar uw e-mailadres",
+    "shippingDetails": "Verzendgegevens",
+    "orderSummary": "Besteloverzicht",
+    "continueShopping": "Verder winkelen",
+    "viewOrders": "Bestellingen bekijken",
+    "notFound": "Bestelling niet gevonden"
   },
   "orderConfirmation": {
     "title": "Bestelling Bevestigd!",

@@ -27,7 +27,7 @@ param embeddingDeploymentVersion string
 param embeddingSkuName string
 param availableEmbeddingDeploymentCapacity int
 param imageModelName string = ''
-param imageDeploymentName string = 'gpt-image-1'
+param imageDeploymentName string = 'gpt-image-2'
 param imageDeploymentVersion string = ''
 param imageSkuName string = ''
 param availableImageDeploymentCapacity int = 0
@@ -37,6 +37,7 @@ param revisionSuffix string = toLower(substring(replace(newGuid(),'-',''), 0, 8)
 param AIServicesKind string = 'AIServices'
 param publicNetworkAccess string = 'Enabled'
 param sqlDatabaseName string
+param skipLocalDevRoleAssignments bool = false
 @description('Location for Playwright Testing workspace. Must be one of: eastus, westus3, westeurope, eastasia. Defaults to resource group location.')
 @allowed(['eastus', 'westus3', 'westeurope', 'eastasia'])
 param playwrightLocation string = 'westeurope'
@@ -107,10 +108,11 @@ module aifoundry 'modules/aiservices.bicep' = {
     projectName: 'av-aiproject-${resourceToken}'
     appInsightsId: appinsights.outputs.resourceId
     appInsightConnectionString: appinsights.outputs.connectionString
-    appInsightConnectionName: 'av-appinsights-connection-${resourceToken}'
+    appInsightConnectionName: 'AppInsights'
     aoaiConnectionName: 'av-aoai-connection-${resourceToken}'
     storageAccountName: storage.outputs.storageAccountName
     storageAccountConnectionName: 'av-storage-connection-${resourceToken}'
+    skipLocalDevRoleAssignments: skipLocalDevRoleAssignments
   }
   dependsOn: [
     identity
@@ -227,13 +229,12 @@ module containerAppApiMcp 'modules/aca-api-mcp.bicep' = {
   }
 }
 
-module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
-  name: 'Deploy-Container-App-API-Functions'
+module containerAppApiFunctions 'modules/flex-api-functions.bicep' = {
+  name: 'Deploy-Flex-API-Functions'
   params: {
     location: location
     appInsightsName: appInsightsName
     apiFunctionsName: 'av-func-${resourceToken}'
-    containerRegistryName: acrName
     identityName: identityName
     sqlConnectionString: database.outputs.connectionString
     aiFoundryEndpoint: aifoundry.outputs.endpoint
@@ -242,10 +243,6 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
     communicationServiceEndpoint: communication.outputs.communicationServiceEndpoint
     emailSenderDomain: communication.outputs.senderDomain
     foundryProjectEndpoint: aifoundry.outputs.projectEndpoint
-    minReplica: 0
-    maxReplica: 5
-    revisionSuffix: revisionSuffix
-    containerAppEnvId: containerApp.outputs.containerAppEnvId
   }
 }
 

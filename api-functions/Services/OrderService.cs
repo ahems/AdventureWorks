@@ -446,10 +446,14 @@ public class OrderService
     public async Task<int> UpdateOrderStatusAsync(int salesOrderId, byte status)
     {
         using var connection = await GetConnectionAsync();
+        // Guard: do not overwrite a terminal status (Rejected=4, Shipped=5, Cancelled=6).
+        // This prevents late-arriving queue messages from rolling back a manually-advanced
+        // order and ensures idempotency when the same status is applied twice.
         const string sql = @"
             UPDATE Sales.SalesOrderHeader
             SET Status = @Status, ModifiedDate = GETDATE()
-            WHERE SalesOrderID = @SalesOrderId";
+            WHERE SalesOrderID = @SalesOrderId
+              AND Status NOT IN (4, 5, 6)";
         return await connection.ExecuteAsync(sql, new { SalesOrderId = salesOrderId, Status = status });
     }
 

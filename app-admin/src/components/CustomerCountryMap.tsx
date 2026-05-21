@@ -1,17 +1,10 @@
 import React, { useMemo } from "react";
-import { Customer } from "@/types/customer";
 import CountryFlag from "@/components/CountryFlag";
 import { Users, TrendingUp } from "lucide-react";
+import type { CustomerCountryStat } from "@/types/customerStats";
 
 interface CustomerCountryMapProps {
-  customers: Customer[];
-}
-
-interface CountryStats {
-  country: string;
-  count: number;
-  totalSpent: number;
-  percentage: number;
+  countryStats: CustomerCountryStat[];
 }
 
 // Approximate coordinates for countries on the map (as percentages)
@@ -49,31 +42,17 @@ const countryPositions: Record<string, { x: number; y: number }> = {
 };
 
 const CustomerCountryMap: React.FC<CustomerCountryMapProps> = ({
-  customers,
+  countryStats: rawStats,
 }) => {
   const countryStats = useMemo(() => {
-    const stats: Record<string, { count: number; totalSpent: number }> = {};
-
-    customers.forEach((customer) => {
-      if (!stats[customer.Country]) {
-        stats[customer.Country] = { count: 0, totalSpent: 0 };
-      }
-      stats[customer.Country].count++;
-      stats[customer.Country].totalSpent += customer.TotalSpent;
-    });
-
-    const total = customers.length;
-    const result: CountryStats[] = Object.entries(stats)
-      .map(([country, data]) => ({
-        country,
-        count: data.count,
-        totalSpent: data.totalSpent,
-        percentage: (data.count / total) * 100,
-      }))
-      .sort((a, b) => b.count - a.count);
-
-    return result;
-  }, [customers]);
+    const total = rawStats.reduce((sum, s) => sum + s.customerCount, 0);
+    return rawStats.map((s) => ({
+      country: s.countryName,
+      count: s.customerCount,
+      totalSpent: s.totalRevenue,
+      percentage: total > 0 ? (s.customerCount / total) * 100 : 0,
+    }));
+  }, [rawStats]);
 
   const maxCount = Math.max(...countryStats.map((s) => s.count));
 

@@ -1,16 +1,15 @@
-using System.Net;
 using System.Text.Json;
 using Azure.Storage.Queues;
 using Azure.Identity;
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using api_functions.Services;
 
 namespace api_functions.Functions;
 
 /// <summary>
-/// Processes sales order status messages from the queue and provides HTTP entry point to begin processing.
+/// Processes sales order status messages from the queue.
+/// The initial status-1 message is now enqueued server-side by <see cref="OrderPlacedSqlTrigger"/>.
 /// </summary>
 public class ProcessSalesOrderStatus
 {
@@ -34,57 +33,6 @@ public class ProcessSalesOrderStatus
         _orderService = orderService;
         _emailService = emailService;
         _bankService = bankService;
-    }
-
-    /// <summary>
-    /// HTTP trigger to start order status processing. Enqueues first message with Status 1 and visibility 5–60 minutes.
-    /// </summary>
-    [Function(nameof(BeginProcessingOrder))]
-    public async Task<HttpResponseData> BeginProcessingOrder(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "orders/begin-processing-order")] HttpRequestData req)
-    {
-        try
-        {
-            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            var request = JsonSerializer.Deserialize<BeginProcessingOrderRequest>(requestBody, JsonOptions);
-            var salesOrderId = request?.SalesOrderId ?? request?.SalesOrderID ?? 0;
-
-            if (salesOrderId <= 0)
-            {
-                var badRequest = req.CreateResponse(HttpStatusCode.BadRequest);
-                await badRequest.WriteAsJsonAsync(new { error = "salesOrderId must be greater than 0" });
-                return badRequest;
-            }
-
-            var queueClient = await GetQueueClientAsync();
-            var message = JsonSerializer.Serialize(new { SalesOrderID = salesOrderId, Status = 1 });
-            var visibilityMinutes = 5 + (55 * Random.Shared.NextDouble());
-            var visibility = TimeSpan.FromMinutes(visibilityMinutes);
-
-            await queueClient.SendMessageAsync(
-                message,
-                visibilityTimeout: visibility,
-                timeToLive: null);
-
-            _logger.LogInformation(
-                "Enqueued begin-processing for SalesOrderID={SalesOrderId}, visibility={VisibilityMinutes:F1} min",
-                salesOrderId, visibility.TotalMinutes);
-
-            var accepted = req.CreateResponse(HttpStatusCode.Accepted);
-            await accepted.WriteAsJsonAsync(new
-            {
-                message = "Order status processing started",
-                salesOrderId
-            });
-            return accepted;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error enqueueing begin-processing order");
-            var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await errorResponse.WriteStringAsync($"Error: {ex.Message}");
-            return errorResponse;
-        }
     }
 
     /// <summary>
@@ -292,9 +240,4 @@ public class ProcessSalesOrderStatus
         public int Status { get; set; }
     }
 
-    private class BeginProcessingOrderRequest
-    {
-        public int SalesOrderId { get; set; }
-        public int SalesOrderID { get; set; }
-    }
 }

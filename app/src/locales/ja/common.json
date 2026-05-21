@@ -160,7 +160,15 @@
     "processingDesc": "ご注文の商品を発送準備中です",
     "shippedDesc": "ご注文の商品は発送されました",
     "outForDeliveryDesc": "お荷物は本日配達中です",
-    "deliveredDesc": "ご注文の商品が配達されました"
+    "deliveredDesc": "ご注文の商品が配達されました",
+    "thankYou": "ありがとうございます！",
+    "confirmation": "ご注文が確定しました",
+    "receiptSent": "領収書がメールアドレスに送信されました",
+    "shippingDetails": "配送の詳細",
+    "orderSummary": "注文の概要",
+    "continueShopping": "買い物を続ける",
+    "viewOrders": "注文を見る",
+    "notFound": "注文が見つかりません"
   },
   "orderConfirmation": {
     "title": "ご注文が確定しました！",

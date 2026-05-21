@@ -52,6 +52,13 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
             description: 'Container for translated language files'
           }
         }
+        {
+          name: 'function-releases'
+          publicAccess: 'None'
+          metadata: {
+            description: 'Deployment packages for Flex Consumption function app'
+          }
+        }
       ]
     }
     

@@ -44,11 +44,8 @@ services:
         interactive: false
   api-functions:
     project: ./api-functions
-    host: containerapp
+    host: function
     language: csharp
-    docker:
-      path: Dockerfile
-      remoteBuild: true
     hooks:
       postdeploy:
         shell: sh

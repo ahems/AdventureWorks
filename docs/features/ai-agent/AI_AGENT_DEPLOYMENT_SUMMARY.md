@@ -2,7 +2,7 @@
 
 ## What Was Implemented
 
-Automated Azure AI Foundry Agent creation has been fully integrated into the Azure deployment pipeline. All **seven agents** (four base agents + three workflow routing agents) are created automatically during `azd provision` with zero manual configuration required. Every agent uses the full set of Foundry platform features: named memory stores, structured inputs (Handlebars), MCP tools, and multi-turn conversation via `previous_response_id`.
+Automated Azure AI Foundry Agent creation has been fully integrated into the Azure deployment pipeline. All **eight agents** (five base agents + three workflow routing agents) are created automatically during `azd provision` with zero manual configuration required. Every agent uses the full set of Foundry platform features: named memory stores, structured inputs (Handlebars), MCP tools, and multi-turn conversation via `previous_response_id`.
 
 ## Files Created/Modified
 
@@ -10,7 +10,7 @@ Automated Azure AI Foundry Agent creation has been fully integrated into the Azu
 
 1. **`scripts/utilities/create-foundry-agents.sh`**
    - Creates all four base agents and three workflow routing agents via `az rest --method PUT`
-   - Base agents: chat, order, promotion, help-me-choose
+   - Base agents: chat, order, promotion, help-me-choose, customer
    - Workflow agents: chat-workflow, promotion-workflow, order-workflow (created last; reference base agents)
    - Reads `AI_FOUNDRY_PROJECT_ENDPOINT`, `MCP_SERVICE_URL`, `API_URL` from azd env
    - Registers two MCP tool servers per base agent (api-mcp + DAB /mcp)
@@ -86,6 +86,7 @@ The seven deployed agents use the following Azure AI Foundry Responses API featu
 | **Help-Me-Choose**       | `eshop-help-me-choose-memory` | `customer-{customerId}` (or anonymous)                  | `required`    | ✅ Yes     | `cultureId`, `profileContext`, `userId`                                                                                             |
 | **Order Generation**     | `admin-order-memory`          | `order-gen-customer-{id}` or `order-gen-persona-{type}` | `required`    | ✅ Yes     | `todayDate`, `personaDescription`, `isExistingCustomer`, `customerName`, `customerId`, `orderCount`, `totalSpend`, `recentProducts` |
 | **Promotion Generation** | `admin-promotion-memory`      | `promotion-gen-{type}`                                  | `required`    | ✅ Yes     | `promotionType`, `offerCategory`, `todayDate`, `categoryName`, `subcategoryName`, `categoryId`, `subcategoryId`                     |
+| **Customer Generation**  | `admin-customer-memory`       | `customer-gen-locale-{locale}`                          | `auto`        | ❌ No      | `locale`, `todayDate`                                                                                                               |
 | **Chat Workflow**        | — (delegates to base agents)  | —                                                       | —             | —          | Routes between chat and help-me-choose based on user intent                                                                         |
 | **Promotion Workflow**   | — (delegates to Promotion)    | —                                                       | —             | —          | Gathers `promotionType`, `offerCategory`, category filters before invoking Promotion agent                                          |
 | **Order Workflow**       | — (delegates to Order)        | —                                                       | —             | —          | Identifies persona/customer, gathers constraints before invoking Order agent                                                        |

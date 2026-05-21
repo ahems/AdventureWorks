@@ -95,8 +95,11 @@ interface TransactionHistorySectionProps {
 const TransactionHistorySection: React.FC<TransactionHistorySectionProps> = ({
   productId,
 }) => {
-  const { transactions, isLoading, isError } =
-    useProductTransactionHistory(productId);
+  const {
+    data: transactions = [],
+    isLoading,
+    isError,
+  } = useProductTransactionHistory(productId);
 
   return (
     <div className="doodle-card">

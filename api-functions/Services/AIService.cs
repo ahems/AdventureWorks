@@ -740,7 +740,13 @@ Return the reviews as a JSON array.";
     public async Task<List<ProductPhotoData>> GenerateProductImagesAsync(List<ProductImageData> products)
     {
         var credential = new DefaultAzureCredential();
-        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        // gpt-image-1 generation can take 2-4 minutes per image.  The SDK default
+        // NetworkTimeout is 100 s which is too short, causing AggregateException
+        // "Retry failed after N tries" instead of a catchable 429.  Set a longer
+        // per-request timeout so the SDK waits for the actual response.
+        var imageClientOptions = new AzureOpenAIClientOptions();
+        imageClientOptions.NetworkTimeout = TimeSpan.FromMinutes(8);
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential, imageClientOptions);
         var imageClient = client.GetImageClient(_imageDeploymentName);
 
         var photos = new List<ProductPhotoData>();
@@ -858,54 +864,83 @@ Return the reviews as a JSON array.";
             // Generate images
             for (int i = 0; i < prompts.Count; i++)
             {
-                try
+                const int maxImageAttempts = 4;
+                int attempt = 0;
+                while (true)
                 {
-                    _logger.LogInformation(
-                        "Generating image {index} for ProductID {productId}: {prompt}",
-                        i + 1,
-                        product.ProductID,
-                        prompts[i].Substring(0, Math.Min(100, prompts[i].Length))
-                    );
-
-                    var imageOptions = new ImageGenerationOptions
+                    attempt++;
+                    try
                     {
-                        Quality = "high",
-                        Size = GeneratedImageSize.W1024xH1024
-                        // ResponseFormat not supported by Azure OpenAI DALL-E models
-                    };
+                        _logger.LogInformation(
+                            "Generating image {index} for ProductID {productId} (attempt {attempt}): {prompt}",
+                            i + 1,
+                            product.ProductID,
+                            attempt,
+                            prompts[i].Substring(0, Math.Min(100, prompts[i].Length))
+                        );
 
-                    var imageResult = await imageClient.GenerateImageAsync(prompts[i], imageOptions);
-                    var imageBytes = imageResult.Value.ImageBytes.ToArray();
+                        var imageOptions = new ImageGenerationOptions
+                        {
+                            Quality = "high",
+                            Size = GeneratedImageSize.W1024xH1024
+                            // ResponseFormat not supported by Azure OpenAI DALL-E models
+                        };
 
-                    var photoNumber = product.ExistingPhotoCount + i + 1;
-                    var fileName = $"product_{product.ProductID}_photo_{photoNumber}.png";
+                        var imageResult = await imageClient.GenerateImageAsync(prompts[i], imageOptions);
+                        var imageBytes = imageResult.Value.ImageBytes.ToArray();
 
-                    photos.Add(new ProductPhotoData
+                        var photoNumber = product.ExistingPhotoCount + i + 1;
+                        var fileName = $"product_{product.ProductID}_photo_{photoNumber}.png";
+
+                        photos.Add(new ProductPhotoData
+                        {
+                            ProductID = product.ProductID,
+                            ImageData = imageBytes,
+                            FileName = fileName,
+                            IsPrimary = photoNumber == 1 // First photo is primary
+                        });
+
+                        _logger.LogInformation(
+                            "Generated image {index} for ProductID {productId}: {size} bytes, {fileName}",
+                            i + 1,
+                            product.ProductID,
+                            imageBytes.Length,
+                            fileName
+                        );
+                        break; // success — move to next image
+                    }
+                    catch (System.ClientModel.ClientResultException ex) when (ex.Status == 429 && attempt < maxImageAttempts)
                     {
-                        ProductID = product.ProductID,
-                        ImageData = imageBytes,
-                        FileName = fileName,
-                        IsPrimary = photoNumber == 1 // First photo is primary
-                    });
-
-                    _logger.LogInformation(
-                        "Generated image {index} for ProductID {productId}: {size} bytes, {fileName}",
-                        i + 1,
-                        product.ProductID,
-                        imageBytes.Length,
-                        fileName
-                    );
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(
-                        ex,
-                        "Failed to generate image {index} for ProductID {productId}",
-                        i + 1,
-                        product.ProductID
-                    );
-                    // Re-throw to halt the entire orchestration
-                    throw;
+                        // Rate-limited: wait with exponential back-off before retrying (30 s, 60 s, 90 s).
+                        var delaySeconds = 30 * attempt;
+                        _logger.LogWarning(
+                            "Image {index} for ProductID {productId} hit rate limit (attempt {attempt}/{max}). " +
+                            "Waiting {delay}s before retry.",
+                            i + 1, product.ProductID, attempt, maxImageAttempts, delaySeconds);
+                        await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
+                    }
+                    catch (AggregateException) when (attempt < maxImageAttempts)
+                    {
+                        // SDK exhausted its own internal retries (e.g. repeated timeouts).
+                        // Wait before our next outer attempt.
+                        var delaySeconds = 30 * attempt;
+                        _logger.LogWarning(
+                            "Image {index} for ProductID {productId} SDK retries exhausted (attempt {attempt}/{max}). " +
+                            "Waiting {delay}s before retry.",
+                            i + 1, product.ProductID, attempt, maxImageAttempts, delaySeconds);
+                        await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(
+                            ex,
+                            "Failed to generate image {index} for ProductID {productId}",
+                            i + 1,
+                            product.ProductID
+                        );
+                        // Re-throw to let the queue mechanism handle the retry
+                        throw;
+                    }
                 }
             }
         }

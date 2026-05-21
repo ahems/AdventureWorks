@@ -45,6 +45,20 @@ const GET_CURRENCIES_ADMIN = gql`
   }
 `;
 
+const CURRENCY_RATE_FIELDS = `
+  items {
+    CurrencyRateID
+    CurrencyRateDate
+    FromCurrencyCode
+    ToCurrencyCode
+    AverageRate
+    EndOfDayRate
+    ModifiedDate
+  }
+  hasNextPage
+  endCursor
+`;
+
 const GET_CURRENCY_RATES_ADMIN = gql`
   query GetCurrencyRatesAdmin($after: String) {
     currencyRates(
@@ -52,17 +66,25 @@ const GET_CURRENCY_RATES_ADMIN = gql`
       after: $after
       orderBy: { CurrencyRateDate: DESC }
     ) {
-      items {
-        CurrencyRateID
-        CurrencyRateDate
-        FromCurrencyCode
-        ToCurrencyCode
-        AverageRate
-        EndOfDayRate
-        ModifiedDate
+      ${CURRENCY_RATE_FIELDS}
+    }
+  }
+`;
+
+const GET_CURRENCY_RATES_BY_CURRENCY = gql`
+  query GetCurrencyRatesByCurrency($after: String, $currency: String!) {
+    currencyRates(
+      first: 100
+      after: $after
+      orderBy: { CurrencyRateDate: DESC }
+      filter: {
+        or: [
+          { FromCurrencyCode: { eq: $currency } }
+          { ToCurrencyCode: { eq: $currency } }
+        ]
       }
-      hasNextPage
-      endCursor
+    ) {
+      ${CURRENCY_RATE_FIELDS}
     }
   }
 `;
@@ -85,9 +107,12 @@ export interface PagedCurrencyRates {
   endCursor: string;
 }
 
-export const useAdminCurrencyRates = (after?: string | null) =>
+export const useAdminCurrencyRates = (
+  after?: string | null,
+  currencyCode?: string | null,
+) =>
   useQuery<PagedCurrencyRates>({
-    queryKey: ["admin", "currencyRates", after ?? null],
+    queryKey: ["admin", "currencyRates", after ?? null, currencyCode ?? null],
     queryFn: async () => {
       const data = await graphqlClient.request<{
         currencyRates?: {
@@ -95,7 +120,14 @@ export const useAdminCurrencyRates = (after?: string | null) =>
           hasNextPage?: boolean;
           endCursor?: string;
         };
-      }>(GET_CURRENCY_RATES_ADMIN, { after: after ?? null });
+      }>(
+        currencyCode
+          ? GET_CURRENCY_RATES_BY_CURRENCY
+          : GET_CURRENCY_RATES_ADMIN,
+        currencyCode
+          ? { after: after ?? null, currency: currencyCode }
+          : { after: after ?? null },
+      );
       return {
         items: data.currencyRates?.items ?? [],
         hasNextPage: data.currencyRates?.hasNextPage ?? false,
@@ -104,6 +136,32 @@ export const useAdminCurrencyRates = (after?: string | null) =>
     },
     staleTime: 5 * 60 * 1000,
   });
+
+export const useRefreshExchangeRates = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (): Promise<{
+      updated: number;
+      skipped: number;
+      rateDate: string;
+      refreshedAt: string;
+    }> => {
+      const { getFunctionsApiUrl } = await import("@/lib/utils");
+      const res = await fetch(
+        `${getFunctionsApiUrl()}/api/exchange-rates/refresh`,
+        { method: "POST" },
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err?.error ?? "Exchange rate refresh failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "currencyRates"] });
+    },
+  });
+};
 
 // ─── Culture Mutations ────────────────────────────────────────────────────────
 

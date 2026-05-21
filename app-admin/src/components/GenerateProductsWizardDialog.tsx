@@ -155,6 +155,9 @@ const GenerateProductsWizardDialog: React.FC<
     );
 
     let successCount = 0;
+    // Tracks the Foundry response ID from the previous product so each successive
+    // product in the same run knows what was already designed (avoids duplicates).
+    let previousResponseId: string | undefined = undefined;
 
     for (let i = 0; i < productCount; i++) {
       addLog(`\n─── Product ${i + 1} of ${productCount} ───`, "info");
@@ -182,11 +185,14 @@ const GenerateProductsWizardDialog: React.FC<
           availableColors: PRODUCT_COLORS,
           availableStyles: PRODUCT_STYLES.map((s) => s.label),
         };
-        let content = await generateProductContent(aiParams);
+        let content = await generateProductContent(
+          aiParams,
+          previousResponseId,
+        );
 
         if (!content.productName) {
           addLog("AI did not return a product name — retrying once…", "dim");
-          content = await generateProductContent(aiParams);
+          content = await generateProductContent(aiParams, previousResponseId);
         }
 
         if (!content.productName) {
@@ -195,6 +201,11 @@ const GenerateProductsWizardDialog: React.FC<
             "error",
           );
           continue;
+        }
+
+        // Chain the next product to this response so the agent avoids repeating names.
+        if (content.threadId) {
+          previousResponseId = content.threadId;
         }
 
         addLog(`AI created: "${content.productName}"`, "success");

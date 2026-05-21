@@ -160,7 +160,15 @@
     "processingDesc": "Chúng tôi đang chuẩn bị hàng hóa của bạn để gửi đi",
     "shippedDesc": "Đơn hàng của bạn đang được vận chuyển",
     "outForDeliveryDesc": "Gói hàng của bạn đang được giao trong ngày hôm nay",
-    "deliveredDesc": "Đơn hàng của bạn đã được giao thành công"
+    "deliveredDesc": "Đơn hàng của bạn đã được giao thành công",
+    "thankYou": "Cảm ơn!",
+    "confirmation": "Đơn hàng của bạn đã được xác nhận",
+    "receiptSent": "Biên lai đã được gửi đến email của bạn",
+    "shippingDetails": "Chi tiết vận chuyển",
+    "orderSummary": "Tóm tắt đơn hàng",
+    "continueShopping": "Tiếp tục mua sắm",
+    "viewOrders": "Xem đơn hàng",
+    "notFound": "Không tìm thấy đơn hàng"
   },
   "orderConfirmation": {
     "title": "Đơn hàng đã được xác nhận!",

@@ -8,9 +8,9 @@ export interface AgentMessage {
 }
 
 interface AgentApiResponse {
-  Response: string;
-  SuggestedQuestions: string[];
-  ToolsUsed: string[];
+  response: string;
+  suggestedQuestions: string[];
+  toolsUsed: string[];
 }
 
 export async function sendAgentMessage(
@@ -41,9 +41,9 @@ export async function sendAgentMessage(
   const data: AgentApiResponse = await response.json();
   return {
     role: "assistant",
-    content: data.Response ?? "No response from agent.",
-    suggestedFollowUps: data.SuggestedQuestions ?? [],
-    toolsUsed: data.ToolsUsed ?? [],
+    content: data.response || "I wasn't able to find an answer. Please try rephrasing your question.",
+    suggestedFollowUps: data.suggestedQuestions ?? [],
+    toolsUsed: data.toolsUsed ?? [],
   };
 }
 

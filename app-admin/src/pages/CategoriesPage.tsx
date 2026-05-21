@@ -283,7 +283,7 @@ const CreateCategoryDialog: React.FC<CreateCategoryDialogProps> = ({
       if (!result.success) throw new Error(result.message ?? "Create failed");
       // Fire-and-forget translation
       const payload: CategoryTranslationPayload = {
-        categoryId: result.categoryId!,
+        categoryId: result.id!,
         englishName: name.trim(),
         type: "category",
       };

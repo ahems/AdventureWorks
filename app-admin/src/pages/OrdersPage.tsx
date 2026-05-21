@@ -29,6 +29,7 @@ import {
 import {
   useAdminOrders,
   useCancelOrder,
+  useShipOrder,
   useOrderById,
   useReceiptStatus,
 } from "@/hooks/useAdminOrders";
@@ -48,7 +49,7 @@ import { toast } from "@/hooks/use-toast";
 import { getFunctionsApiUrl } from "@/lib/utils";
 import ReceiptPreviewModal from "@/components/ReceiptPreviewModal";
 import EmailReceiptDialog from "@/components/EmailReceiptDialog";
-import GenerateOrdersWizardDialog from "@/components/GenerateOrdersWizardDialog";
+import { Sparkles } from "lucide-react";
 
 const ALL_STATUSES = Object.keys(ORDER_STATUS_CONFIG) as OrderStatus[];
 const DEFAULT_STATUS_FILTERS: OrderStatus[] = [...ALL_STATUSES];
@@ -134,9 +135,10 @@ const ReceiptActions: React.FC<ReceiptActionsProps> = ({
 
 const OrdersPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
-  const [dabCursor, setDabCursor] = useState<string | null>(null);
-  const [cursorStack, setCursorStack] = useState<string[]>([]);
   const [searchParams] = useSearchParams();
+  const [orderChannel, setOrderChannel] = useState<"consumer" | "b2b">(
+    "consumer",
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilters, setStatusFilters] = useState<OrderStatus[]>(
     DEFAULT_STATUS_FILTERS,
@@ -150,6 +152,7 @@ const OrdersPage: React.FC = () => {
   const [processingOrderId, setProcessingOrderId] = useState<number | null>(
     null,
   );
+  const [shippingOrderId, setShippingOrderId] = useState<number | null>(null);
   const [generatingReceiptId, setGeneratingReceiptId] = useState<number | null>(
     null,
   );
@@ -224,14 +227,19 @@ const OrdersPage: React.FC = () => {
     : null;
   const isDirectLink = directOrderId !== null && !isNaN(directOrderId);
 
-  const { data: apiData, isLoading: ordersLoading } = useAdminOrders(
-    isDirectLink ? null : dabCursor,
+  const { data: apiOrders = [], isLoading: ordersLoading } = useAdminOrders();
+  const channelOrders = React.useMemo(
+    () =>
+      apiOrders.filter(
+        (o) => o.OnlineOrderFlag === (orderChannel === "consumer"),
+      ),
+    [apiOrders, orderChannel],
   );
   const { data: directOrder, isLoading: directOrderLoading } = useOrderById(
     isDirectLink ? directOrderId : null,
   );
-  const apiOrders = React.useMemo(() => apiData?.items ?? [], [apiData]);
   const cancelOrder = useCancelOrder();
+  const shipOrder = useShipOrder();
 
   // Auto-expand the order when coming via direct link
   useEffect(() => {
@@ -288,6 +296,27 @@ const OrdersPage: React.FC = () => {
     });
   };
 
+  const handleShipOrder = async (e: React.MouseEvent, order: Order) => {
+    e.stopPropagation();
+    setShippingOrderId(order.SalesOrderID);
+    try {
+      await shipOrder.mutateAsync(order.SalesOrderID);
+      toast({
+        title: `Shipment queued — SO${order.SalesOrderID}`,
+        description:
+          "Order has been queued for shipment. Status will update shortly.",
+      });
+    } catch (err) {
+      toast({
+        title: "Failed to ship order",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setShippingOrderId(null);
+    }
+  };
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
@@ -297,7 +326,7 @@ const OrdersPage: React.FC = () => {
     ? directOrder
       ? [directOrder]
       : []
-    : apiOrders.filter((o) => {
+    : channelOrders.filter((o) => {
         const matchesSearch =
           o.SalesOrderID.toString().includes(searchQuery) ||
           o.CustomerID.toString().includes(searchQuery);
@@ -442,15 +471,43 @@ const OrdersPage: React.FC = () => {
                 )}
                 {!isDirectLink && (
                   <p className="font-doodle text-sm text-doodle-text/60 mt-1">
-                    {filteredOrders.length === apiOrders.length
-                      ? `${apiOrders.length} order${apiOrders.length !== 1 ? "s" : ""} in this batch`
-                      : `${filteredOrders.length} of ${apiOrders.length} order${apiOrders.length !== 1 ? "s" : ""} (filtered)`}
+                    {filteredOrders.length} Order
+                    {filteredOrders.length !== 1 ? "s" : ""} Shown - showing
+                    Orders {startIndex + 1} to{" "}
+                    {Math.min(startIndex + itemsPerPage, filteredOrders.length)}
                   </p>
                 )}
               </div>
               {!isDirectLink && (
                 <div className="flex items-center gap-2 flex-wrap justify-end">
-                  <GenerateOrdersWizardDialog />
+                  {/* Channel toggle */}
+                  <div className="flex border-2 border-doodle-text overflow-hidden shrink-0">
+                    <button
+                      onClick={() => {
+                        setOrderChannel("consumer");
+                        setCurrentPage(1);
+                      }}
+                      className={`px-3 py-1.5 font-doodle text-sm transition-colors ${orderChannel === "consumer" ? "bg-doodle-text text-white" : "bg-white text-doodle-text hover:bg-doodle-text/10"}`}
+                    >
+                      🛍️ Consumer
+                    </button>
+                    <button
+                      onClick={() => {
+                        setOrderChannel("b2b");
+                        setCurrentPage(1);
+                      }}
+                      className={`px-3 py-1.5 font-doodle text-sm transition-colors border-l-2 border-doodle-text ${orderChannel === "b2b" ? "bg-doodle-text text-white" : "bg-white text-doodle-text hover:bg-doodle-text/10"}`}
+                    >
+                      🏢 B2B / Stores
+                    </button>
+                  </div>
+                  <Link
+                    to="/generate-order"
+                    className="doodle-button doodle-button-primary flex items-center gap-1.5 px-3 py-1.5 text-sm shrink-0"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    Generate with AI
+                  </Link>
                   <button
                     onClick={handleGenerateMissingReceipts}
                     disabled={missingReceiptsCooldown}
@@ -887,6 +944,24 @@ const OrdersPage: React.FC = () => {
                                   : `${ORDER_STATUS_CONFIG["Processing"].label}`}
                               </button>
                             )}
+                            {nextStatuses.includes("Shipped") && (
+                              <button
+                                onClick={(e) => handleShipOrder(e, order)}
+                                disabled={
+                                  shippingOrderId === order.SalesOrderID
+                                }
+                                className="doodle-button doodle-button-primary text-sm py-2 px-4 flex items-center gap-2 hover:bg-purple-100 hover:text-purple-700 hover:border-purple-300"
+                              >
+                                {shippingOrderId === order.SalesOrderID ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  ORDER_STATUS_CONFIG["Shipped"].icon
+                                )}
+                                {shippingOrderId === order.SalesOrderID
+                                  ? "Shipping…"
+                                  : "Ship Order"}
+                              </button>
+                            )}
                             {nextStatuses.includes("Cancelled") && (
                               <button
                                 onClick={(e) => handleCancelOrder(e, order)}
@@ -988,75 +1063,33 @@ const OrdersPage: React.FC = () => {
             })}
           </div>
 
-          {/* Combined pagination: batch nav + page nav in one card */}
-          {!isDirectLink &&
-            (cursorStack.length > 0 ||
-              apiData?.hasNextPage ||
-              totalPages > 1) && (
-              <div className="doodle-card p-4 mt-6 flex flex-col gap-3">
-                {/* Batch nav — previous/next 100 */}
-                {(cursorStack.length > 0 || apiData?.hasNextPage) && (
-                  <div className="flex items-center justify-between">
-                    <button
-                      onClick={() => {
-                        const prev =
-                          cursorStack[cursorStack.length - 1] ?? null;
-                        setCursorStack((s) => s.slice(0, -1));
-                        setDabCursor(prev);
-                        setCurrentPage(1);
-                      }}
-                      disabled={cursorStack.length === 0}
-                      className="inline-flex items-center gap-1 p-2 font-doodle text-sm disabled:opacity-40"
-                      aria-label="Previous 100"
-                    >
-                      <ChevronLeft className="w-5 h-5" /> Previous 100
-                    </button>
-                    <span className="font-doodle text-sm text-doodle-text/60">
-                      Batch {cursorStack.length + 1}
-                    </span>
-                    <button
-                      onClick={() => {
-                        setCursorStack((s) => [...s, dabCursor ?? ""]);
-                        setDabCursor(apiData!.endCursor);
-                        setCurrentPage(1);
-                      }}
-                      disabled={!apiData?.hasNextPage}
-                      className="inline-flex items-center gap-1 p-2 font-doodle text-sm disabled:opacity-40"
-                      aria-label="Next 100"
-                    >
-                      Next 100 <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
-                )}
-
-                {/* Page nav within current batch */}
-                {totalPages > 1 && (
-                  <div
-                    className={`flex items-center justify-center gap-2 ${cursorStack.length > 0 || apiData?.hasNextPage ? "border-t border-doodle-text/20 pt-3" : ""}`}
-                  >
-                    <button
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                      className="p-2 disabled:opacity-40"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                    </button>
-                    <span className="font-doodle text-sm">
-                      Page {currentPage} of {totalPages}
-                    </span>
-                    <button
-                      onClick={() =>
-                        setCurrentPage((p) => Math.min(totalPages, p + 1))
-                      }
-                      disabled={currentPage === totalPages}
-                      className="p-2 disabled:opacity-40"
-                    >
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
-                )}
+          {/* Page navigation */}
+          {!isDirectLink && totalPages > 1 && (
+            <div className="doodle-card p-4 mt-6 flex flex-col gap-3">
+              {/* Page nav */}
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 disabled:opacity-40"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <span className="font-doodle text-sm">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  }
+                  disabled={currentPage === totalPages}
+                  className="p-2 disabled:opacity-40"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
               </div>
-            )}
+            </div>
+          )}
         </section>
       </main>
       <Footer />

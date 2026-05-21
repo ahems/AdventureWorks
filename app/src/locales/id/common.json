@@ -160,7 +160,15 @@
     "processingDesc": "Kami sedang menyiapkan barang Anda untuk pengiriman",
     "shippedDesc": "Pesanan Anda sedang dalam perjalanan",
     "outForDeliveryDesc": "Paket Anda sedang dalam pengiriman hari ini",
-    "deliveredDesc": "Pesanan Anda telah dikirimkan"
+    "deliveredDesc": "Pesanan Anda telah dikirimkan",
+    "thankYou": "Terima kasih!",
+    "confirmation": "Pesanan Anda telah dikonfirmasi",
+    "receiptSent": "Tanda terima telah dikirimkan ke email Anda",
+    "shippingDetails": "Detail Pengiriman",
+    "orderSummary": "Ringkasan Pesanan",
+    "continueShopping": "Lanjutkan Belanja",
+    "viewOrders": "Lihat Pesanan",
+    "notFound": "Pesanan tidak ditemukan"
   },
   "orderConfirmation": {
     "title": "Pesanan Dikonfirmasi!",

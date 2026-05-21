@@ -63,7 +63,10 @@ public record SupplyQuote(
     // shipped/delayed) for this vendor+product pair. These units have already been deducted
     // from StockAvailable at the vendor; once delivered they will be added to
     // Production.ProductInventory. Use this to show "X incoming" alongside stock level.
-    int IncomingQty = 0);
+    int IncomingQty = 0,
+    // UTC timestamp of the earliest DueDate across all open in-flight orders for this
+    // vendor+product pair. Null when IncomingQty == 0. Use this to show "arriving in ~X mins".
+    DateTime? EarliestIncomingEtaUtc = null);
 
 public record PurchaseOrder(
     string OrderId,
@@ -517,6 +520,8 @@ public class SupplyChainService
 
         // Find approved POs for BOM purchased components with active vendors.
         // Idempotent: POs already at Status=3/4 won't be selected by WHERE poh.Status = 2.
+        // Scoped to historical seed-data orders (OrderDate > 1 day old) to avoid immediately
+        // completing simulator-placed orders that the queue processor is already handling.
         var pending = await conn.QueryAsync(@"
             SELECT poh.PurchaseOrderID,
                    CAST(poh.VendorID AS VARCHAR(20))   AS VendorId,
@@ -532,7 +537,8 @@ public class SupplyChainService
                 ON bom.ComponentID = p.ProductID AND bom.EndDate IS NULL
             WHERE poh.Status = 2
               AND v.ActiveFlag = 1
-              AND p.MakeFlag = 0");
+              AND p.MakeFlag = 0
+              AND poh.OrderDate < DATEADD(day, -1, GETDATE())");
 
         int passed = 0, rejected = 0;
         foreach (var r in pending)
@@ -647,10 +653,12 @@ public class SupplyChainService
     /// Builds a (vendorId, productId) → incomingQty lookup from all open purchase orders
     /// (Status=2 Approved — in transit). Sourced from SQL.
     /// </summary>
-    private async Task<Dictionary<(string VendorId, int ProductId), int>> GetIncomingQtyMapAsync(
+    private record IncomingEntry(int Qty, DateTime? EarliestEta);
+
+    private async Task<Dictionary<(string VendorId, int ProductId), IncomingEntry>> GetIncomingQtyMapAsync(
         string? scopeVendorId = null, int? scopeProductId = null)
     {
-        var map = new Dictionary<(string, int), int>();
+        var map = new Dictionary<(string, int), IncomingEntry>();
 
         string whereExtra = "";
         if (!string.IsNullOrEmpty(scopeVendorId))
@@ -664,18 +672,31 @@ public class SupplyChainService
         var rows = await conn.QueryAsync($@"
             SELECT CAST(poh.VendorID AS VARCHAR(20)) AS VendorId,
                    pod.ProductID,
-                   CAST(pod.OrderQty AS INT) AS Qty
+                   CAST(pod.OrderQty AS INT) AS Qty,
+                   pod.DueDate AS EarliestEta
             FROM Purchasing.PurchaseOrderHeader poh
             INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
             INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
             INNER JOIN Production.Product p ON pod.ProductID = p.ProductID
             INNER JOIN Production.BillOfMaterials bom ON bom.ComponentID = p.ProductID AND bom.EndDate IS NULL
-            WHERE poh.Status = 2 AND v.ActiveFlag = 1 AND p.MakeFlag = 0{whereExtra}");
+            WHERE poh.Status IN (1, 2) AND v.ActiveFlag = 1 AND p.MakeFlag = 0{whereExtra}");
 
         foreach (var r in rows)
         {
             var key = ((string)r.VendorId, (int)r.ProductID);
-            map[key] = map.TryGetValue(key, out int cur) ? cur + (int)r.Qty : (int)r.Qty;
+            int addQty = (int)r.Qty;
+            DateTime? eta = r.EarliestEta is DateTime d ? (DateTime?)d.ToUniversalTime() : null;
+            if (map.TryGetValue(key, out var cur))
+            {
+                DateTime? minEta = (cur.EarliestEta.HasValue && eta.HasValue)
+                    ? (cur.EarliestEta.Value < eta.Value ? cur.EarliestEta : eta)
+                    : (cur.EarliestEta ?? eta);
+                map[key] = new IncomingEntry(cur.Qty + addQty, minEta);
+            }
+            else
+            {
+                map[key] = new IncomingEntry(addQty, eta);
+            }
         }
         return map;
     }
@@ -709,7 +730,8 @@ public class SupplyChainService
             int    maxQty       = e.GetInt32("MaxOrderQty") ?? 10000;
             double weight       = e.GetDouble("WeightKg") ?? 0.5;
             int    stock        = e.GetInt32("CurrentStock") ?? 0;
-            int    incoming     = incomingMap.TryGetValue((vendorId, productId), out int iq) ? iq : 0;
+            int       incoming    = incomingMap.TryGetValue((vendorId, productId), out var ie) ? ie.Qty : 0;
+            DateTime? earliestEta = ie?.EarliestEta;
 
             double shipping     = Math.Round(vendor.ShipBase + weight * vendor.ShipRate, 2);
             double simHrs       = leadTime * 24.0;
@@ -726,7 +748,8 @@ public class SupplyChainService
                 LeadTimeDays: leadTime,
                 MinOrderQty: minQty,
                 MaxOrderQty: maxQty,
-                IncomingQty: incoming));
+                IncomingQty: incoming,
+                EarliestIncomingEtaUtc: earliestEta));
         }
         return quotes.OrderBy(q => q.ProductId).ThenBy(q => q.TotalCost).ToList();
     }
@@ -756,7 +779,8 @@ public class SupplyChainService
 
         // Tally in-flight orders scoped to this exact vendor+product
         var incomingMap = await GetIncomingQtyMapAsync(scopeVendorId: vendorId, scopeProductId: productId);
-        int incoming = incomingMap.TryGetValue((vendorId, productId), out int iq) ? iq : 0;
+        int incoming = incomingMap.TryGetValue((vendorId, productId), out var ie) ? ie.Qty : 0;
+        DateTime? earliestEta = ie?.EarliestEta;
 
         return new SupplyQuote(
             vendorId, vendor.Name, productId, name, qty, stock,
@@ -768,7 +792,8 @@ public class SupplyChainService
             LeadTimeDays: leadTime,
             MinOrderQty: minQty,
             MaxOrderQty: maxQty,
-            IncomingQty: incoming);
+            IncomingQty: incoming,
+            EarliestIncomingEtaUtc: earliestEta);
     }
 
     // ── Order placement ────────────────────────────────────────────────────────

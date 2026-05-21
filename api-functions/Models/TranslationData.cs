@@ -155,6 +155,11 @@ public class CreateSubcategoryRequest
 public class DeleteEntityRequest
 {
     public int Id { get; set; }
+    /// <summary>Accepted as a fallback when the client sends "categoryId" instead of "id".</summary>
+    public int CategoryId { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int ResolvedId => Id > 0 ? Id : CategoryId;
 }
 
 public class CreateEntityResult

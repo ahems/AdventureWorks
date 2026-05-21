@@ -7,6 +7,7 @@ param kind string = 'AIServices'
 param restoreOpenAi bool = false
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param aadAdminObjectId string
+param skipLocalDevRoleAssignments bool = false
 param projectName string
 param appInsightsId string
 param appInsightConnectionString string
@@ -34,7 +35,7 @@ param embeddingDeploymentVersion string = ''
 param embeddingDeploymentCapacity int = 0
 param embeddingSkuName string = ''
 param imageModelName string = ''
-param imageDeploymentName string = 'gpt-image-1'
+param imageDeploymentName string = 'gpt-image-2'
 param imageDeploymentVersion string = ''
 param imageDeploymentCapacity int = 0
 param imageSkuName string = ''
@@ -251,7 +252,7 @@ resource aiDeveloperRoleAssignment 'Microsoft.Authorization/roleAssignments@2020
 }
 
 // Grant the same Azure AI Developer role to local devs for testing with az login
-resource aiDeveloperLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = {
+resource aiDeveloperLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = if (!skipLocalDevRoleAssignments) {
   name: guid(account.id, aadAdminObjectId, '64702f94-c441-49e6-a78b-ef80e0188fee')
   scope: account
   properties: {
@@ -264,7 +265,7 @@ resource aiDeveloperLocalRoleAssignment 'Microsoft.Authorization/roleAssignments
 // Grant the specified Entra ID admin/user data-plane access for local development
 // Enables DefaultAzureCredential (az login) to call Microsoft Foundry deployments during development
 // Uses deterministic GUID to maintain idempotency across deployments
-resource openAiUserLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = {
+resource openAiUserLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = if (!skipLocalDevRoleAssignments) {
   name: guid(account.id, aadAdminObjectId, 'a001fd3d-188f-4b5d-821b-7da978bf7442')
   scope: account
   properties: {

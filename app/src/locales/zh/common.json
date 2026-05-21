@@ -160,7 +160,15 @@
     "processingDesc": "我们正在为您的物品准备发货",
     "shippedDesc": "您的订单正在配送中",
     "outForDeliveryDesc": "您的包裹今天正在派送中",
-    "deliveredDesc": "您的订单已送达"
+    "deliveredDesc": "您的订单已送达",
+    "thankYou": "谢谢！",
+    "confirmation": "您的订单已确认",
+    "receiptSent": "收据已发送至您的电子邮件",
+    "shippingDetails": "配送详情",
+    "orderSummary": "订单摘要",
+    "continueShopping": "继续购物",
+    "viewOrders": "查看订单",
+    "notFound": "未找到订单"
   },
   "orderConfirmation": {
     "title": "订单已确认！",

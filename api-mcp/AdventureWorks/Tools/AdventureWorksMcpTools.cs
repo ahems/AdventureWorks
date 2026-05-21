@@ -535,4 +535,39 @@ public class AdventureWorksMcpTools
             throw;
         }
     }
+
+    [McpServerTool]
+    [Description("Get the top-selling products ranked by total revenue. Use this for admin analytics questions about best sellers, most popular products, top revenue items, or product sales performance. Optionally filter to a recent time window using dateRangeMonths (e.g. 12 for the last year, 3 for the last quarter). Leave dateRangeMonths as 0 or omit it for all-time rankings.")]
+    public async Task<string> GetTopSellingProducts(int topN = 10, int dateRangeMonths = 0)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetTopSellingProducts");
+        operation.Telemetry.Properties["topN"] = topN.ToString();
+        operation.Telemetry.Properties["dateRangeMonths"] = dateRangeMonths.ToString();
+
+        try
+        {
+            var result = await _productService.GetTopSellingProductsAsync(
+                topN,
+                dateRangeMonths > 0 ? dateRangeMonths : (int?)null);
+            operation.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
+            {
+                { "tool", "GetTopSellingProducts" },
+                { "topN", topN.ToString() },
+                { "dateRangeMonths", dateRangeMonths.ToString() },
+                { "resultLength", result.Length.ToString() }
+            });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string>
+            {
+                { "tool", "GetTopSellingProducts" },
+                { "topN", topN.ToString() }
+            });
+            throw;
+        }
+    }
 }

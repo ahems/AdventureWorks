@@ -10,29 +10,34 @@ using api_functions.Services;
 namespace api_functions.Functions;
 
 /// <summary>
-/// Generates a creative product name and description using AI based on
-/// product category, subcategory, and optional attributes.
+/// Generates a creative product name, description, pricing, and variation hints using the
+/// Azure AI Foundry product-content agent.
 /// </summary>
 public class GenerateProductContentFunction
 {
     private readonly ILogger<GenerateProductContentFunction> _logger;
-    private readonly AIService _aiService;
+    private readonly ProductContentAgentService _productContentService;
     private readonly TelemetryClient _telemetryClient;
 
     public GenerateProductContentFunction(
         ILogger<GenerateProductContentFunction> logger,
-        AIService aiService,
+        ProductContentAgentService productContentService,
         TelemetryClient telemetryClient)
     {
         _logger = logger;
-        _aiService = aiService;
+        _productContentService = productContentService;
         _telemetryClient = telemetryClient;
     }
 
     /// <summary>
     /// POST /api/products/generate-content
-    /// Body: { "category": string, "subcategory": string, "productLine"?: string, "class"?: string, "style"?: string }
-    /// Returns: { "productName": string, "productDescription": string }
+    /// Body: { "category": string, "subcategory": string, "productLine"?: string,
+    ///         "class"?: string, "style"?: string, "availableSizes"?: string[],
+    ///         "availableColors"?: string[], "availableStyles"?: string[],
+    ///         "previousResponseId"?: string }
+    /// Returns: { "productName", "productDescription", "estimatedWeightLb",
+    ///            "suggestedStandardCost", "suggestedListPrice", "suggestedSizes",
+    ///            "suggestedColors", "suggestedStyles", "threadId"? }
     /// </summary>
     [Function("GenerateProductContent")]
     public async Task<HttpResponseData> GenerateProductContent(
@@ -58,11 +63,16 @@ public class GenerateProductContentFunction
 
             _telemetryClient.TrackEvent("GenerateProductContent.Started", new Dictionary<string, string>
             {
-                ["Category"] = request.Category,
-                ["Subcategory"] = request.Subcategory
+                ["Category"]             = request.Category,
+                ["Subcategory"]          = request.Subcategory,
+                ["HasPreviousResponse"]  = (!string.IsNullOrEmpty(request.PreviousResponseId)).ToString()
             });
 
-            var result = await _aiService.GenerateProductContentAsync(request);
+            var (result, threadId) = await _productContentService.GenerateProductContentAsync(
+                request, request.PreviousResponseId);
+
+            // Attach the Foundry response ID so the wizard can chain subsequent products.
+            result.ThreadId = threadId;
 
             var ok = req.CreateResponse(HttpStatusCode.OK);
             await ok.WriteAsJsonAsync(result);

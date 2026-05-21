@@ -10,22 +10,22 @@ using api_functions.Services;
 namespace api_functions.Functions;
 
 /// <summary>
-/// Analyses abandoned shopping carts using AI and returns a per-cart recovery
-/// strategy (score, urgency, email copy, recommended discount).
+/// Analyses abandoned shopping carts using the Azure AI Foundry cart-recovery agent
+/// and returns a per-cart recovery strategy (score, urgency, email copy, recommended discount).
 /// </summary>
 public class CartRecoveryAnalysisFunction
 {
     private readonly ILogger<CartRecoveryAnalysisFunction> _logger;
-    private readonly AIService _aiService;
+    private readonly CartRecoveryAgentService _cartRecoveryService;
     private readonly TelemetryClient _telemetryClient;
 
     public CartRecoveryAnalysisFunction(
         ILogger<CartRecoveryAnalysisFunction> logger,
-        AIService aiService,
+        CartRecoveryAgentService cartRecoveryService,
         TelemetryClient telemetryClient)
     {
         _logger = logger;
-        _aiService = aiService;
+        _cartRecoveryService = cartRecoveryService;
         _telemetryClient = telemetryClient;
     }
 
@@ -61,7 +61,7 @@ public class CartRecoveryAnalysisFunction
                 ["CartCount"] = request.Carts.Count.ToString()
             });
 
-            var strategies = await _aiService.AnalyzeCartRecoveryAsync(request.Carts);
+            var strategies = await _cartRecoveryService.AnalyzeCartsAsync(request.Carts);
 
             var ok = req.CreateResponse(HttpStatusCode.OK);
             await ok.WriteAsJsonAsync(new { strategies });

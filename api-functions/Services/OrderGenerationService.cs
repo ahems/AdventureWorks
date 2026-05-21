@@ -132,12 +132,14 @@ public class OrderGenerationService
                 transaction: tx);
 
             // 7. Customer
+            // AccountNumber is a computed column on Sales.Customer (derived from CustomerID
+            // by the scalar function dbo.ufnLeadingZeros) — it cannot be INSERT-targeted.
+            // Sales.SalesOrderNumber does not exist as a SEQUENCE; SalesOrderNumber is a
+            // computed column on Sales.SalesOrderHeader.  Both are omitted from the INSERT.
             var customerId = await connection.ExecuteScalarAsync<int>(@"
-                INSERT INTO Sales.Customer (PersonID, TerritoryID, AccountNumber, rowguid, ModifiedDate)
+                INSERT INTO Sales.Customer (PersonID, TerritoryID, rowguid, ModifiedDate)
                 OUTPUT INSERTED.CustomerID
-                SELECT @BizEntityId, 1,
-                       'AW' + RIGHT('000000' + CAST(NEXT VALUE FOR Sales.SalesOrderNumber AS VARCHAR), 8),
-                       NEWID(), GETDATE()",
+                VALUES (@BizEntityId, 1, NEWID(), GETDATE())",
                 new { BizEntityId = bizEntityId },
                 transaction: tx);
 

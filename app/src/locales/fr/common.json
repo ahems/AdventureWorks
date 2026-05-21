@@ -160,7 +160,15 @@
     "processingDesc": "Nous préparons vos articles pour l'expédition",
     "shippedDesc": "Votre commande est en route",
     "outForDeliveryDesc": "Votre colis est en cours de livraison aujourd'hui",
-    "deliveredDesc": "Votre commande a été livrée"
+    "deliveredDesc": "Votre commande a été livrée",
+    "thankYou": "Merci !",
+    "confirmation": "Votre commande est confirmée",
+    "receiptSent": "Un reçu a été envoyé à votre adresse e-mail",
+    "shippingDetails": "Détails de livraison",
+    "orderSummary": "Récapitulatif de commande",
+    "continueShopping": "Continuer mes achats",
+    "viewOrders": "Voir mes commandes",
+    "notFound": "Commande introuvable"
   },
   "orderConfirmation": {
     "title": "Commande confirmée !",

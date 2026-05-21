@@ -46,6 +46,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -340,28 +341,43 @@ const ReviewsPage: React.FC = () => {
           productName: productMap.get(r.productId)?.Name,
         }));
 
-      const res = await fetch(
-        `${getFunctionsApiUrl()}/api/reviews/analyze-batch`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reviews: payload }),
-        },
-      );
+      const BATCH_SIZE = 50;
+      const allAnalyses: Array<{
+        productReviewId: number;
+        sentiment: Sentiment;
+        flags: string[];
+        suggestedResponse?: string;
+        error?: string;
+      }> = [];
 
-      if (!res.ok) {
-        throw new Error(`API returned ${res.status}`);
+      for (let i = 0; i < payload.length; i += BATCH_SIZE) {
+        const batch = payload.slice(i, i + BATCH_SIZE);
+        const res = await fetch(
+          `${getFunctionsApiUrl()}/api/reviews/analyze-batch`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reviews: batch }),
+          },
+        );
+
+        if (!res.ok) {
+          throw new Error(`API returned ${res.status}`);
+        }
+
+        const data: {
+          analyses: Array<{
+            productReviewId: number;
+            sentiment: Sentiment;
+            flags: string[];
+            suggestedResponse?: string;
+            error?: string;
+          }>;
+        } = await res.json();
+        allAnalyses.push(...data.analyses);
       }
 
-      const data: {
-        analyses: Array<{
-          productReviewId: number;
-          sentiment: Sentiment;
-          flags: string[];
-          suggestedResponse?: string;
-          error?: string;
-        }>;
-      } = await res.json();
+      const data = { analyses: allAnalyses };
 
       const analysisMap = new Map(
         data.analyses.map((a) => [a.productReviewId, a]),
@@ -684,6 +700,10 @@ const ReviewsPage: React.FC = () => {
                           <Sparkles className="w-5 h-5 text-doodle-accent" />
                           AI Review Summary
                         </DialogTitle>
+                        <DialogDescription className="sr-only">
+                          AI-generated summary of product reviews including
+                          sentiment analysis and themes.
+                        </DialogDescription>
                       </DialogHeader>
                       {aiSummary && (
                         <div className="space-y-4">

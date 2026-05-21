@@ -160,7 +160,15 @@
     "processingDesc": "Gönderim için ürünlerinizi hazırlıyoruz",
     "shippedDesc": "Siparişiniz yolda",
     "outForDeliveryDesc": "Paketiniz bugün teslimat için yola çıktı",
-    "deliveredDesc": "Siparişiniz teslim edildi"
+    "deliveredDesc": "Siparişiniz teslim edildi",
+    "thankYou": "Teşekkürler!",
+    "confirmation": "Siparişiniz onaylandı",
+    "receiptSent": "Bir makbuz e-posta adresinize gönderildi",
+    "shippingDetails": "Gönderim Detayları",
+    "orderSummary": "Sipariş Özeti",
+    "continueShopping": "Alışverişe Devam Et",
+    "viewOrders": "Siparişleri Görüntüle",
+    "notFound": "Sipariş bulunamadı"
   },
   "orderConfirmation": {
     "title": "Sipariş Onaylandı!",

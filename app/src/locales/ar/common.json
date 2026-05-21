@@ -160,7 +160,15 @@
     "processingDesc": "نحن نقوم بتحضير أغراضك للشحن",
     "shippedDesc": "طلبك في طريقه إليك",
     "outForDeliveryDesc": "تم إرسال طردك للتوصيل اليوم",
-    "deliveredDesc": "تم تسليم طلبك"
+    "deliveredDesc": "تم تسليم طلبك",
+    "thankYou": "شكراً!",
+    "confirmation": "تم تأكيد طلبك",
+    "receiptSent": "تم إرسال إيصال إلى بريدك الإلكتروني",
+    "shippingDetails": "تفاصيل الشحن",
+    "orderSummary": "ملخص الطلب",
+    "continueShopping": "مواصلة التسوق",
+    "viewOrders": "عرض الطلبات",
+    "notFound": "الطلب غير موجود"
   },
   "orderConfirmation": {
     "title": "تم تأكيد الطلب!",

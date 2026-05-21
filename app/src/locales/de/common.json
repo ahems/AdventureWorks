@@ -160,7 +160,15 @@
     "processingDesc": "Wir bereiten Ihre Artikel für den Versand vor",
     "shippedDesc": "Ihre Bestellung ist unterwegs",
     "outForDeliveryDesc": "Ihr Paket wird heute zugestellt",
-    "deliveredDesc": "Ihre Bestellung wurde geliefert"
+    "deliveredDesc": "Ihre Bestellung wurde geliefert",
+    "thankYou": "Vielen Dank!",
+    "confirmation": "Ihre Bestellung ist bestätigt",
+    "receiptSent": "Eine Quittung wurde an Ihre E-Mail-Adresse gesendet",
+    "shippingDetails": "Versanddetails",
+    "orderSummary": "Bestellübersicht",
+    "continueShopping": "Weiter einkaufen",
+    "viewOrders": "Bestellungen ansehen",
+    "notFound": "Bestellung nicht gefunden"
   },
   "orderConfirmation": {
     "title": "Bestellung bestätigt!",

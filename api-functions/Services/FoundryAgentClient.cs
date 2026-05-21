@@ -400,6 +400,12 @@ public class FoundryAgentClient
             toolsUsed.Count > 0 ? string.Join(",", toolsUsed.Distinct()) : "none",
             inputTokens, outputTokens);
 
+        if (responseText.Length == 0)
+            _logger.LogWarning(
+                "Foundry agent '{AgentId}' returned no text output. ResponseId={ResponseId}, ToolsUsed={Tools}. Output may contain only reasoning or tool-call items.",
+                agentId, responseId ?? "?",
+                toolsUsed.Count > 0 ? string.Join(",", toolsUsed.Distinct()) : "none");
+
         return new FoundryAgentResponse
         {
             ResponseId = responseId,
@@ -477,14 +483,46 @@ public class FoundryAgentClient
                 tools.Add(tool.Clone());
         }
 
-        var def = new CachedAgentDefinition(model, instructions, tools);
-        _agentDefCache.TryAdd(agentId, def);
+        // If the agent definition has no MCP tools configured but fallback MCP URLs are
+        // available via environment variables, inject them so the agent can reach live data.
+        // This handles agents created in the Foundry portal without explicit MCP server setup.
+        if (tools.Count == 0 && !string.IsNullOrEmpty(_fallbackMcpServiceUrl))
+        {
+            _logger.LogWarning(
+                "Agent '{AgentId}' has no tools in its Foundry definition. " +
+                "Augmenting with MCP tools from MCP_SERVICE_URL environment variable. " +
+                "To silence this warning, configure the MCP server URL directly in the agent definition.",
+                agentId);
+
+            var augmented = BuildFallbackDefinition();
+
+            // When the Foundry agent has no tools, its instructions may also be absent or
+            // unsuitable for data queries.  Supply a concise fallback system prompt so the
+            // model knows what it is and how to use the injected MCP tools.
+            var effectiveInstructions = !string.IsNullOrWhiteSpace(instructions)
+                ? instructions
+                : "You are an AI data assistant for the AdventureWorks business. " +
+                  "You have access to MCP tools that can query live product, order, customer, " +
+                  "inventory, and sales data. Always use the available tools to answer " +
+                  "data questions rather than asking the user to provide data. " +
+                  "Respond concisely and in plain language suitable for a business analyst.";
+
+            var def = new CachedAgentDefinition(model, effectiveInstructions, augmented.Tools);
+            _agentDefCache.TryAdd(agentId, def);
+            _logger.LogInformation(
+                "Cached augmented agent definition for '{AgentId}': model={Model}, tools={ToolCount} (from MCP_SERVICE_URL)",
+                agentId, model, def.Tools.Count);
+            return def;
+        }
+
+        var cachedDef = new CachedAgentDefinition(model, instructions, tools);
+        _agentDefCache.TryAdd(agentId, cachedDef);
 
         _logger.LogInformation(
             "Cached agent definition for '{AgentId}': model={Model}, tools={ToolCount}",
-            agentId, model, tools.Count);
+            agentId, model, cachedDef.Tools.Count);
 
-        return def;
+        return cachedDef;
     }
 
     /// <summary>

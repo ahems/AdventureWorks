@@ -30,7 +30,7 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
   name: appInsightsName
 }
 
-resource apiMcp 'Microsoft.App/containerApps@2025-10-02-preview' = {
+resource apiMcp 'Microsoft.App/containerApps@2024-03-01' = {
   name: apiMcpName
   location: location
   identity: {
@@ -51,20 +51,12 @@ resource apiMcp 'Microsoft.App/containerApps@2025-10-02-preview' = {
           value: sqlConnectionString
         }
       ]
-      runtime: {
-        dotnet: {
-          autoConfigureDataProtection: true
-        }
-      }
       ingress: {
         external: true
         targetPort: 8080
         allowInsecure: false
         transport: 'http'
         clientCertificateMode: 'ignore'
-        stickySession: {
-          affinity: 'sticky'
-        }
         corsPolicy: {
           allowedOrigins: ['*']
           allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']

@@ -4,17 +4,21 @@ import { ArrowLeft, BarChart3 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/context/AuthContext";
-import { useAdminCustomers } from "@/hooks/useAdminCustomers";
-import { useAdminOrders } from "@/hooks/useAdminOrders";
+import {
+  useCustomerStatsSummary,
+  useCustomerCountryBreakdown,
+  useCustomerRegionBreakdown,
+  useCustomerMonthlyRevenue,
+} from "@/hooks/useCustomerStats";
 import CustomerStatsDashboard from "@/components/CustomerStatsDashboard";
 import CustomerCountryMap from "@/components/CustomerCountryMap";
 
 const CustomerStatsPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
-  const { data: apiData, isLoading: customersLoading } = useAdminCustomers();
-  const { data: ordersData } = useAdminOrders();
-  const customers = React.useMemo(() => apiData?.items ?? [], [apiData]);
-  const orders = React.useMemo(() => ordersData?.items ?? [], [ordersData]);
+  const { data: summary, isLoading: summaryLoading } = useCustomerStatsSummary();
+  const { data: countryStats = [] } = useCustomerCountryBreakdown();
+  const { data: regionStats = [] } = useCustomerRegionBreakdown();
+  const { data: monthlyRevenue = [] } = useCustomerMonthlyRevenue();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -39,7 +43,7 @@ const CustomerStatsPage: React.FC = () => {
                 Customer Statistics
               </h1>
             </div>
-            {customersLoading && (
+            {summaryLoading && (
               <p className="font-doodle text-sm text-doodle-text/60 mt-4">
                 Loading customer data…
               </p>
@@ -47,8 +51,13 @@ const CustomerStatsPage: React.FC = () => {
           </div>
         </section>
 
-        <CustomerStatsDashboard customers={customers} orders={orders} />
-        <CustomerCountryMap customers={customers} />
+        <CustomerStatsDashboard
+          summary={summary}
+          countryStats={countryStats}
+          regionStats={regionStats}
+          monthlyRevenue={monthlyRevenue}
+        />
+        <CustomerCountryMap countryStats={countryStats} />
       </main>
       <Footer />
     </div>

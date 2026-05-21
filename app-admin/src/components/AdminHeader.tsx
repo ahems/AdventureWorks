@@ -18,18 +18,28 @@ import {
   Store,
   History,
   BarChart3,
-  Mic,
   FolderOpen,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import AppBreadcrumb from "@/components/AppBreadcrumb";
-import VoiceAssistantPanel from "@/components/VoiceAssistantPanel";
+
+const SALES_NAV_ITEMS = [
+  {
+    to: "/product-profitability",
+    label: "Product Profitability",
+    icon: TrendingUp,
+  },
+  { to: "/loss-makers", label: "Loss Makers", icon: TrendingDown },
+  { to: "/slow-movers", label: "Slow Movers", icon: Package },
+  { to: "/promotions", label: "Promotions", icon: Tag },
+];
 
 const secondaryNavGroups = [
   {
     label: "Data",
-    items: [{ to: "/promotions", label: "Promotions", icon: Tag }],
+    items: [{ to: "/categories", label: "Categories", icon: FolderOpen }],
   },
   {
     label: "Operations",
@@ -49,22 +59,27 @@ const AdminHeader: React.FC = () => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [userMenuOpen, setUserMenuOpen] = React.useState(false);
+  const [salesMenuOpen, setSalesMenuOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [showSearch, setShowSearch] = React.useState(false);
-  const [isVoiceOpen, setIsVoiceOpen] = React.useState(false);
   const [showSecondaryNav, setShowSecondaryNav] = React.useState(() => {
     const saved = localStorage.getItem("showSecondaryNav");
     return saved !== null ? saved === "true" : true;
   });
 
   const userMenuRef = React.useRef<HTMLDivElement>(null);
+  const salesMenuRef = React.useRef<HTMLDivElement>(null);
+
+  const salesActive = SALES_NAV_ITEMS.some((item) =>
+    location.pathname.startsWith(item.to),
+  );
 
   // Persist secondary nav state
   React.useEffect(() => {
     localStorage.setItem("showSecondaryNav", String(showSecondaryNav));
   }, [showSecondaryNav]);
 
-  // Close user menu when clicking outside
+  // Close menus when clicking outside
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -72,6 +87,12 @@ const AdminHeader: React.FC = () => {
         !userMenuRef.current.contains(event.target as Node)
       ) {
         setUserMenuOpen(false);
+      }
+      if (
+        salesMenuRef.current &&
+        !salesMenuRef.current.contains(event.target as Node)
+      ) {
+        setSalesMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -109,7 +130,7 @@ const AdminHeader: React.FC = () => {
 
             {/* Desktop Navigation - Only show when authenticated */}
             {isAuthenticated && (
-              <nav className="hidden md:flex items-center gap-5">
+              <nav className="hidden md:flex items-center gap-5 mx-6 self-stretch">
                 <Link
                   to="/products"
                   className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors flex items-center gap-1 ${location.pathname.startsWith("/products") || location.pathname.startsWith("/category") || location.pathname.startsWith("/product") ? "squiggle" : ""}`}
@@ -117,13 +138,45 @@ const AdminHeader: React.FC = () => {
                   <Package className="w-4 h-4" />
                   Products
                 </Link>
-                <Link
-                  to="/categories"
-                  className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors flex items-center gap-1 ${location.pathname.startsWith("/categories") ? "squiggle" : ""}`}
+                {/* Sales dropdown */}
+                <div
+                  className="relative self-stretch flex items-center"
+                  ref={salesMenuRef}
                 >
-                  <FolderOpen className="w-4 h-4" />
-                  Categories
-                </Link>
+                  <button
+                    onClick={() => setSalesMenuOpen(!salesMenuOpen)}
+                    className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors flex items-center gap-1 ${
+                      salesActive ? "squiggle" : ""
+                    }`}
+                  >
+                    <TrendingUp className="w-4 h-4" />
+                    Sales
+                    <ChevronDown
+                      className={`w-3 h-3 transition-transform ${
+                        salesMenuOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+                  {salesMenuOpen && (
+                    <div className="absolute top-full left-0 mt-2 w-52 doodle-card p-1.5 z-50">
+                      {SALES_NAV_ITEMS.map((item) => (
+                        <Link
+                          key={item.to}
+                          to={item.to}
+                          onClick={() => setSalesMenuOpen(false)}
+                          className={`flex items-center gap-2 px-3 py-2 font-doodle text-sm rounded transition-colors ${
+                            location.pathname.startsWith(item.to)
+                              ? "text-doodle-accent font-bold bg-doodle-accent/5"
+                              : "text-doodle-text hover:text-doodle-accent hover:bg-doodle-text/5"
+                          }`}
+                        >
+                          <item.icon className="w-4 h-4 shrink-0" />
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <Link
                   to="/reviews"
                   className={`font-doodle text-doodle-text hover:text-doodle-accent transition-colors flex items-center gap-1 ${location.pathname.startsWith("/reviews") ? "squiggle" : ""}`}
@@ -171,20 +224,6 @@ const AdminHeader: React.FC = () => {
 
             {/* Right Side */}
             <div className="flex items-center gap-2 md:gap-3">
-              {/* Theme Toggle */}
-              <ThemeToggle />
-
-              {/* Voice Assistant Toggle - Only show when authenticated */}
-              {isAuthenticated && (
-                <button
-                  onClick={() => setIsVoiceOpen(!isVoiceOpen)}
-                  className={`doodle-button p-2 ${isVoiceOpen ? "bg-doodle-accent/10" : ""}`}
-                  aria-label="Toggle voice assistant"
-                >
-                  <Mic className="w-5 h-5" />
-                </button>
-              )}
-
               {/* Search Button - Only show when authenticated */}
               {isAuthenticated && (
                 <button
@@ -341,6 +380,23 @@ const AdminHeader: React.FC = () => {
                 >
                   * Inv. Transactions
                 </Link>
+                {/* Sales section */}
+                <div className="border-t-2 border-dashed border-doodle-text/30 my-2 pt-2">
+                  <p className="font-doodle text-xs text-doodle-text/50 mb-2">
+                    Sales
+                  </p>
+                  {SALES_NAV_ITEMS.map((item) => (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      className="font-doodle text-base text-doodle-text/70 hover:text-doodle-accent py-1 flex items-center gap-2"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <item.icon className="w-4 h-4" />
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
                 {secondaryNavGroups.map((group) => (
                   <div
                     key={group.label}
@@ -456,11 +512,6 @@ const AdminHeader: React.FC = () => {
           </div>
         )}
       </header>
-
-      {/* Voice Assistant Panel */}
-      {isVoiceOpen && isAuthenticated && (
-        <VoiceAssistantPanel onClose={() => setIsVoiceOpen(false)} />
-      )}
     </>
   );
 };

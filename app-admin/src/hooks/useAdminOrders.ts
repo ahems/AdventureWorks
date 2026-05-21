@@ -39,6 +39,7 @@ const GET_ORDERS_ADMIN = gql`
         DueDate
         ShipDate
         Status
+        OnlineOrderFlag
         SubTotal
         TaxAmt
         Freight
@@ -78,6 +79,7 @@ interface RawOrderHeader {
   DueDate?: string;
   ShipDate?: string;
   Status: number;
+  OnlineOrderFlag?: boolean;
   SubTotal?: number;
   TaxAmt?: number;
   Freight?: number;
@@ -101,18 +103,13 @@ const mapOrder = (header: RawOrderHeader): Order => ({
   DueDate: header.DueDate,
   ShipDate: header.ShipDate,
   Status: dbStatusToOrderStatus(header.Status),
+  OnlineOrderFlag: header.OnlineOrderFlag ?? true,
   SubTotal: header.SubTotal,
   TaxAmt: header.TaxAmt,
   Freight: header.Freight,
   TotalDue: header.TotalDue,
   OrderItems: (header.salesOrderDetails?.items ?? []).map(mapOrderItem),
 });
-
-export interface PagedOrders {
-  items: Order[];
-  hasNextPage: boolean;
-  endCursor: string;
-}
 
 const CANCEL_ORDER_MUTATION = gql`
   mutation CancelOrder($id: Int!) {
@@ -128,6 +125,22 @@ export const useCancelOrder = () => {
   return useMutation({
     mutationFn: async (salesOrderId: number) => {
       await graphqlClient.request(CANCEL_ORDER_MUTATION, { id: salesOrderId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
+    },
+  });
+};
+
+export const useShipOrder = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (salesOrderId: number) => {
+      const res = await fetch(
+        `${getFunctionsApiUrl()}/api/orders/${salesOrderId}/ship`,
+        { method: "POST" },
+      );
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
@@ -180,22 +193,27 @@ export const useOrderById = (orderId: number | null) =>
     staleTime: 2 * 60 * 1000,
   });
 
-export const useAdminOrders = (after?: string | null) =>
-  useQuery<PagedOrders>({
-    queryKey: ["admin", "orders", after ?? null],
+export const useAdminOrders = () =>
+  useQuery<Order[]>({
+    queryKey: ["admin", "orders"],
     queryFn: async () => {
-      const data = await graphqlClient.request<{
-        salesOrderHeaders?: {
-          items: RawOrderHeader[];
-          hasNextPage?: boolean;
-          endCursor?: string;
-        };
-      }>(GET_ORDERS_ADMIN, { after: after ?? null });
-      return {
-        items: (data.salesOrderHeaders?.items ?? []).map(mapOrder),
-        hasNextPage: data.salesOrderHeaders?.hasNextPage ?? false,
-        endCursor: data.salesOrderHeaders?.endCursor ?? "",
-      };
+      const allItems: Order[] = [];
+      let cursor: string | null = null;
+      let hasMore = true;
+      while (hasMore) {
+        const data = await graphqlClient.request<{
+          salesOrderHeaders?: {
+            items: RawOrderHeader[];
+            hasNextPage?: boolean;
+            endCursor?: string;
+          };
+        }>(GET_ORDERS_ADMIN, { after: cursor });
+        const page = data.salesOrderHeaders;
+        allItems.push(...(page?.items ?? []).map(mapOrder));
+        hasMore = page?.hasNextPage ?? false;
+        cursor = page?.endCursor ?? null;
+      }
+      return allItems;
     },
     staleTime: 2 * 60 * 1000,
   });

@@ -66,6 +66,15 @@ builder.Services.AddScoped<AddressService>(sp =>
     return new AddressService(connectionString);
 });
 
+// Register CustomerStatsService for global customer analytics (bypasses DAB 100-item pagination)
+builder.Services.AddScoped<CustomerStatsService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new CustomerStatsService(connectionString);
+});
+
 builder.Services.AddScoped<ProductService>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
@@ -115,6 +124,17 @@ builder.Services.AddScoped<PasswordService>(sp =>
     var connectionString = configuration["SQL_CONNECTION_STRING"]
         ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
     return new PasswordService(connectionString);
+});
+
+// Register ExchangeRateService for refreshing Sales.CurrencyRate from Frankfurter API
+builder.Services.AddScoped<ExchangeRateService>(sp =>
+{
+    var configuration    = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var logger            = sp.GetRequiredService<ILogger<ExchangeRateService>>();
+    return new ExchangeRateService(connectionString, httpClientFactory, logger);
 });
 
 // Register ReportingService for pre-aggregated SQL reporting (bypasses DAB 100-item pagination)
@@ -170,6 +190,36 @@ builder.Services.AddScoped<AIAgentService>(sp =>
     var telemetryClient = sp.GetRequiredService<TelemetryClient>();
 
     return new AIAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
+// Register Product Content Agent Service for AI-powered product generation via Foundry
+builder.Services.AddScoped<ProductContentAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<ProductContentAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new ProductContentAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
+// Register Cart Recovery Agent Service for abandoned-cart analysis via Foundry
+builder.Services.AddScoped<CartRecoveryAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<CartRecoveryAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new CartRecoveryAgentService(
         logger,
         configuration,
         foundryClient,
@@ -267,6 +317,16 @@ builder.Services.AddScoped<OrderGenerationService>(sp =>
     return new OrderGenerationService(connectionString, sp.GetRequiredService<ILogger<OrderGenerationService>>());
 });
 
+// Register ManufacturingAgentService: autonomous agent invoked by SQL change-tracking trigger
+builder.Services.AddScoped<ManufacturingAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<ManufacturingAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+    return new ManufacturingAgentService(logger, configuration, foundryClient, telemetryClient);
+});
+
 // Register OrderGenerationAgentService: AI+Foundry orchestration for order generation wizard
 builder.Services.AddScoped<OrderGenerationAgentService>(sp =>
 {
@@ -285,6 +345,23 @@ builder.Services.AddScoped<OrderGenerationAgentService>(sp =>
         orderGenService,
         receiptService,
         pdfGenerator,
+        foundryClient);
+});
+
+// Register CustomerGenerationAgentService: AI+Foundry orchestration for customer generation
+builder.Services.AddScoped<CustomerGenerationAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<CustomerGenerationAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+    var orderGenService = sp.GetRequiredService<OrderGenerationService>();
+
+    return new CustomerGenerationAgentService(
+        logger,
+        configuration,
+        telemetryClient,
+        orderGenService,
         foundryClient);
 });
 

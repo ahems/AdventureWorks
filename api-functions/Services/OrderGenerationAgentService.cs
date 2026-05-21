@@ -50,14 +50,15 @@ public class OrderGenerationAgentService
         _pdfGenerator = pdfGenerator;
         _foundryClient = foundryClient;
 
-        // Prefer the workflow agent when deployed; fall back to the plain agent so the app
-        // remains functional before the workflow agent is created (same pattern as AIAgentService).
-        var workflowAgentId = configuration["AI_AGENT_WORKFLOW_ORDER_ID"];
-        var agentId         = configuration["AI_AGENT_ORDER_ID"];
-        _agentId = !string.IsNullOrWhiteSpace(workflowAgentId)
-            ? workflowAgentId
-            : agentId ?? throw new InvalidOperationException(
-                "Neither AI_AGENT_WORKFLOW_ORDER_ID nor AI_AGENT_ORDER_ID environment variable is set");
+        // Always use the direct order-generation agent (AI_AGENT_ORDER_ID) for programmatic
+        // order creation — it is instructed to return a structured JSON plan that this service
+        // parses into a database order.  The workflow agent (AI_AGENT_WORKFLOW_ORDER_ID) is a
+        // conversational Foundry Workflow designed for the portal chat experience; it returns
+        // human-readable prose and is incompatible with ParseOrderPlan.
+        var agentId = configuration["AI_AGENT_ORDER_ID"]
+            ?? throw new InvalidOperationException(
+                "AI_AGENT_ORDER_ID environment variable is not set");
+        _agentId = agentId;
     }
 
     /// <summary>
@@ -247,7 +248,8 @@ public class OrderGenerationAgentService
                 var price = item.UnitPrice > 0 ? item.UnitPrice
                     : await _orderGenService.GetProductPriceAsync(item.ProductId);
 
-                var offerId = item.SpecialOfferID > 0 ? item.SpecialOfferID
+                var rawOfferId = item.SpecialOfferID ?? 0;
+                var offerId = rawOfferId > 0 ? rawOfferId
                     : await _orderGenService.GetBestSpecialOfferAsync(item.ProductId);
 
                 validItems.Add(new OrderLineItem
@@ -384,8 +386,15 @@ public class OrderGenerationAgentService
 
         var start = cleaned.IndexOf('{');
         var end = cleaned.LastIndexOf('}');
-        if (start >= 0 && end > start)
-            cleaned = cleaned.Substring(start, end - start + 1);
+
+        if (start < 0 || end <= start)
+        {
+            var preview = cleaned.Length > 200 ? cleaned[..200] + "..." : cleaned;
+            throw new InvalidOperationException(
+                $"AI returned text instead of a JSON order plan. Response preview: '{preview}'");
+        }
+
+        cleaned = cleaned.Substring(start, end - start + 1);
 
         return JsonSerializer.Deserialize<OrderPlan>(cleaned,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
@@ -450,6 +459,6 @@ public class PlannedOrderItem
     public string ProductName { get; set; } = string.Empty;
     public int Quantity { get; set; } = 1;
     public decimal UnitPrice { get; set; }
-    public int SpecialOfferID { get; set; }
+    public int? SpecialOfferID { get; set; }
     public string Reason { get; set; } = string.Empty;
 }

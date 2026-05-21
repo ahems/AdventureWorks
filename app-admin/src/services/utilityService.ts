@@ -216,7 +216,7 @@ export const translateCategoryName = async (
 
 export interface CreateCategoryResult {
   success: boolean;
-  categoryId: number;
+  id: number;
   message: string;
 }
 
@@ -275,7 +275,7 @@ export const deleteCategory = async (
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ categoryId }),
+    body: JSON.stringify({ id: categoryId }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -393,10 +393,13 @@ export interface GenerateProductContentResponse {
   suggestedSizes: string[];
   suggestedColors: string[];
   suggestedStyles: string[];
+  /** Foundry response ID — pass as previousResponseId on the next product in the same wizard run. */
+  threadId?: string;
 }
 
 export const generateProductContent = async (
   request: GenerateProductContentRequest,
+  previousResponseId?: string,
 ): Promise<GenerateProductContentResponse> => {
   const url = `${getFunctionsApiUrl()}/api/products/generate-content`;
   const res = await fetch(url, {
@@ -411,6 +414,7 @@ export const generateProductContent = async (
       availableSizes: request.availableSizes ?? null,
       availableColors: request.availableColors ?? null,
       availableStyles: request.availableStyles ?? null,
+      previousResponseId: previousResponseId ?? null,
     }),
   });
   if (!res.ok) {
@@ -430,6 +434,7 @@ export const generateProductContent = async (
     suggestedSizes: data.suggestedSizes ?? [],
     suggestedColors: data.suggestedColors ?? [],
     suggestedStyles: data.suggestedStyles ?? [],
+    threadId: data.threadId ?? undefined,
   };
 };
 
@@ -492,6 +497,7 @@ export interface SuggestedProduct {
   productId: number;
   productName: string;
   currentPrice: number;
+  standardCost: number;
   inventoryLevel: number;
   recentSalesCount: number;
   reason: string;
@@ -609,7 +615,12 @@ export const generateOrderWithAI = async (
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ personaType, customPersona, seedCustomerId, previousThreadId }),
+    body: JSON.stringify({
+      personaType,
+      customPersona,
+      seedCustomerId,
+      previousThreadId,
+    }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
