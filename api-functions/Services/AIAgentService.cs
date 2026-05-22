@@ -32,6 +32,7 @@ public class AIAgentService
     private readonly FoundryAgentClient _foundryClient;
     private readonly TelemetryClient _telemetryClient;
     private readonly string _agentId;
+    private readonly string? _adminAgentId;
     private readonly string _openAiEndpoint;
     private readonly string _modelDeployment;
 
@@ -56,16 +57,22 @@ public class AIAgentService
             : chatAgentId ?? throw new InvalidOperationException(
                 "Neither AI_AGENT_WORKFLOW_CHAT_ID nor AI_AGENT_CHAT_ID environment variable is set");
 
+        // Admin chat agent — falls back to the customer chat agent if not configured
+        var adminAgentId = configuration["AI_AGENT_ADMIN_CHAT_ID"];
+        _adminAgentId = !string.IsNullOrWhiteSpace(adminAgentId) ? adminAgentId : null;
+
         _openAiEndpoint = configuration["AZURE_OPENAI_ENDPOINT"]
             ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT environment variable is not set");
         _modelDeployment = configuration["chatGptDeploymentName"] ?? "chat";
 
-        _logger.LogInformation("AIAgentService configured with Foundry agent ID: {AgentId}", _agentId);
+        _logger.LogInformation("AIAgentService configured with Foundry agent ID: {AgentId}, Admin agent ID: {AdminAgentId}",
+            _agentId, _adminAgentId ?? "(using customer agent)");
     }
 
     /// <summary>
     /// Process a chat message using the Foundry Responses API.
     /// Pass <paramref name="threadId"/> (a previous Foundry response ID) to continue a stored conversation.
+    /// Set <paramref name="isAdmin"/> to true to route to the admin analytics agent instead of the customer chat agent.
     /// </summary>
     public async Task<AgentResponse> ProcessMessageAsync(
         string message,
@@ -73,9 +80,11 @@ public class AIAgentService
         int? customerId = null,
         string? userName = null,
         string? cultureId = null,
-        string? threadId = null)
+        string? threadId = null,
+        bool isAdmin = false)
     {
-        var sessionId = customerId.HasValue ? $"customer-{customerId.Value}" : Guid.NewGuid().ToString();
+        var resolvedAgentId = isAdmin && _adminAgentId != null ? _adminAgentId : _agentId;
+        var sessionId = isAdmin ? "admin" : (customerId.HasValue ? $"customer-{customerId.Value}" : Guid.NewGuid().ToString());
 
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("AgentChat");
         operation.Telemetry.Properties["SessionId"] = sessionId;
@@ -83,6 +92,8 @@ public class AIAgentService
         operation.Telemetry.Properties["CultureId"] = cultureId ?? "default";
         operation.Telemetry.Properties["MessageLength"] = message.Length.ToString();
         operation.Telemetry.Properties["HasPreviousResponse"] = (!string.IsNullOrEmpty(threadId)).ToString();
+        operation.Telemetry.Properties["IsAdmin"] = isAdmin.ToString();
+        operation.Telemetry.Properties["AgentId"] = resolvedAgentId;
 
         var startTime = DateTimeOffset.UtcNow;
 
@@ -118,7 +129,7 @@ public class AIAgentService
 
             // ── Invoke Foundry agent via Responses API ────────────────────────────
             var agentResponse = await _foundryClient.InvokeAsync(
-                agentId: _agentId,
+                agentId: resolvedAgentId,
                 userMessage: message,
                 conversationHistory: historyToSeed,
                 previousResponseId: string.IsNullOrEmpty(threadId) ? null : threadId,

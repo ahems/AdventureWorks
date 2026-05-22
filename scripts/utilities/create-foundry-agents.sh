@@ -8,6 +8,7 @@
 #
 # To deploy a single agent without running all, run its script directly:
 #   bash scripts/utilities/agents/eshop-chat-agent.sh
+#   bash scripts/utilities/agents/admin-chat-agent.sh
 #   bash scripts/utilities/agents/admin-order-agent.sh
 #   bash scripts/utilities/agents/admin-promotion-agent.sh
 #   bash scripts/utilities/agents/admin-cart-recovery-agent.sh
@@ -55,6 +56,8 @@ export FOUNDRY_CONNECTIONS_READY=1
 
 # ── Run each agent script ─────────────────────────────────────────────────────
 bash "$SCRIPT_DIR/agents/eshop-chat-agent.sh"
+echo ""
+bash "$SCRIPT_DIR/agents/admin-chat-agent.sh"
 echo ""
 bash "$SCRIPT_DIR/agents/admin-order-agent.sh"
 echo ""

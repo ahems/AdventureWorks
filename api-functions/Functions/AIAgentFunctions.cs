@@ -80,8 +80,8 @@ public class AIAgentFunctions
                 chatRequest.CustomerId,
                 chatRequest.UserName,
                 chatRequest.CultureId,
-                chatRequest.ThreadId
-            );
+                chatRequest.ThreadId,
+                isAdmin: chatRequest.IsAdmin);
 
             var requestDuration = DateTimeOffset.UtcNow - requestStartTime;
 
@@ -182,4 +182,6 @@ public class AgentChatRequest
     public string? UserName { get; set; }
     public string? CultureId { get; set; }
     public string? ThreadId { get; set; }
+    /// <summary>When true, routes the request to the admin analytics agent (AI_AGENT_ADMIN_CHAT_ID) instead of the customer chat agent.</summary>
+    public bool IsAdmin { get; set; } = false;
 }

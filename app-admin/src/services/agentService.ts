@@ -28,6 +28,7 @@ export async function sendAgentMessage(
         Role: m.role,
         Content: m.content,
       })),
+      isAdmin: true,
     }),
   });
 
@@ -41,7 +42,9 @@ export async function sendAgentMessage(
   const data: AgentApiResponse = await response.json();
   return {
     role: "assistant",
-    content: data.response || "I wasn't able to find an answer. Please try rephrasing your question.",
+    content:
+      data.response ||
+      "I wasn't able to find an answer. Please try rephrasing your question.",
     suggestedFollowUps: data.suggestedQuestions ?? [],
     toolsUsed: data.toolsUsed ?? [],
   };

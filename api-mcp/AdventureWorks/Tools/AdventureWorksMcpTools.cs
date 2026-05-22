@@ -510,6 +510,37 @@ public class AdventureWorksMcpTools
     }
 
     [McpServerTool]
+    [Description("Admin tool: Find the most recently registered customers who have NEVER placed any order. Returns CustomerID, full name, email, and location. Use this for conversion analysis, outreach campaigns, or when asked about new customers without purchases.")]
+    public async Task<string> GetRecentCustomersWithoutOrders(int limit = 10)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetRecentCustomersWithoutOrders");
+        operation.Telemetry.Properties["limit"] = limit.ToString();
+
+        try
+        {
+            var result = await _orderService.GetRecentCustomersWithoutOrdersAsync(limit);
+            operation.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
+            {
+                { "tool", "GetRecentCustomersWithoutOrders" },
+                { "limit", limit.ToString() },
+                { "resultLength", result.Length.ToString() }
+            });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string>
+            {
+                { "tool", "GetRecentCustomersWithoutOrders" },
+                { "limit", limit.ToString() }
+            });
+            throw;
+        }
+    }
+
+    [McpServerTool]
     [Description("Search existing AdventureWorks customers by name (partial match). Returns CustomerID, name, email, location, and order history summary. Use this to find a real customer to associate with a generated order.")]
     public async Task<string> SearchCustomers(string? nameFilter = null, int limit = 20)
     {
@@ -567,6 +598,133 @@ public class AdventureWorksMcpTools
                 { "tool", "GetTopSellingProducts" },
                 { "topN", topN.ToString() }
             });
+            throw;
+        }
+    }
+
+    [McpServerTool]
+    [Description("Admin tool: Return high-level business KPIs — total customers, total orders, total revenue, orders and revenue broken down by status (In Process, Approved, Backordered, Rejected, Shipped, Cancelled), and top 5 product categories by revenue. Use this when asked for a dashboard, business overview, summary stats, or 'show me the numbers'.")]
+    public async Task<string> GetBusinessStats()
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetBusinessStats");
+        try
+        {
+            var result = await _orderService.GetBusinessStatsAsync();
+            operation.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
+            {
+                { "tool", "GetBusinessStats" },
+                { "resultLength", result.Length.ToString() }
+            });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetBusinessStats" } });
+            throw;
+        }
+    }
+
+    [McpServerTool]
+    [Description("Admin tool: Return the top N customers ranked by their lifetime total spend. Use this when asked 'who are the best/top customers', 'highest-value customers', or 'biggest spenders'. Default is top 10; pass topN to change.")]
+    public async Task<string> GetTopCustomers(int topN = 10)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetTopCustomers");
+        operation.Telemetry.Properties["topN"] = topN.ToString();
+        try
+        {
+            var result = await _orderService.GetTopCustomersAsync(topN);
+            operation.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
+            {
+                { "tool", "GetTopCustomers" },
+                { "topN", topN.ToString() },
+                { "resultLength", result.Length.ToString() }
+            });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetTopCustomers" }, { "topN", topN.ToString() } });
+            throw;
+        }
+    }
+
+    [McpServerTool]
+    [Description("Admin tool: Return orders filtered by a plain-English status name. Accepted values for statusFilter: 'pending' (same as 'in process'), 'approved', 'backordered', 'rejected', 'shipped', 'cancelled'. Leave statusFilter empty or null to return all orders. Use this when asked to 'show pending orders', 'list shipped orders', 'find cancelled orders', etc.")]
+    public async Task<string> GetOrdersByStatus(string? statusFilter = null, int limit = 50)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetOrdersByStatus");
+        operation.Telemetry.Properties["statusFilter"] = statusFilter ?? "all";
+        operation.Telemetry.Properties["limit"] = limit.ToString();
+        try
+        {
+            var result = await _orderService.GetOrdersByStatusAsync(statusFilter, limit);
+            operation.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
+            {
+                { "tool", "GetOrdersByStatus" },
+                { "statusFilter", statusFilter ?? "all" },
+                { "resultLength", result.Length.ToString() }
+            });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetOrdersByStatus" }, { "statusFilter", statusFilter ?? "all" } });
+            throw;
+        }
+    }
+
+    [McpServerTool]
+    [Description("Admin tool: Generate a sales report grouped by order status. Returns order count, total revenue, average order value, and date range for each status (In Process, Approved, Backordered, Rejected, Shipped, Cancelled) plus a grand total. Use this when asked for a 'sales report by status', 'order breakdown', or 'revenue by status'.")]
+    public async Task<string> GetSalesReportByStatus()
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetSalesReportByStatus");
+        try
+        {
+            var result = await _orderService.GetSalesReportByStatusAsync();
+            operation.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
+            {
+                { "tool", "GetSalesReportByStatus" },
+                { "resultLength", result.Length.ToString() }
+            });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetSalesReportByStatus" } });
+            throw;
+        }
+    }
+
+    [McpServerTool]
+    [Description("Admin tool: Get a comprehensive performance summary for a specific product by ProductID. Returns pricing, gross margin, total units sold, total revenue, sales rank among all products, current stock level, and customer review rating. Use this when asked to 'analyze product X', 'how is product X performing', or 'product X success'.")]
+    public async Task<string> GetProductPerformanceSummary(int productId)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetProductPerformanceSummary");
+        operation.Telemetry.Properties["productId"] = productId.ToString();
+        try
+        {
+            var result = await _orderService.GetProductPerformanceSummaryAsync(productId);
+            operation.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
+            {
+                { "tool", "GetProductPerformanceSummary" },
+                { "productId", productId.ToString() },
+                { "resultLength", result.Length.ToString() }
+            });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetProductPerformanceSummary" }, { "productId", productId.ToString() } });
             throw;
         }
     }

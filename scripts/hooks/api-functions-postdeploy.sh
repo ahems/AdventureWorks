@@ -44,6 +44,7 @@ workflow_help_me_choose_id=$(get_azd_value "AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID"
 cart_recovery_id=$(get_azd_value "AI_AGENT_CART_RECOVERY_ID")
 product_content_id=$(get_azd_value "AI_AGENT_PRODUCT_CONTENT_ID")
 customer_id=$(get_azd_value "AI_AGENT_CUSTOMER_ID")
+admin_chat_id=$(get_azd_value "AI_AGENT_ADMIN_CHAT_ID")
 mcp_service_url=$(get_azd_value "MCP_SERVICE_URL")
 
 if [[ -z "$chat_id" ]] || [[ -z "$order_id" ]] || [[ -z "$promotion_id" ]] || [[ -z "$help_me_choose_id" ]] || [[ -z "$cart_recovery_id" ]] || [[ -z "$product_content_id" ]]; then
@@ -76,6 +77,7 @@ if az functionapp config appsettings set \
     "AI_AGENT_CART_RECOVERY_ID=$cart_recovery_id" \
     "AI_AGENT_PRODUCT_CONTENT_ID=$product_content_id" \
     ${customer_id:+"AI_AGENT_CUSTOMER_ID=$customer_id"} \
+    ${admin_chat_id:+"AI_AGENT_ADMIN_CHAT_ID=$admin_chat_id"} \
     ${mcp_service_url:+"MCP_SERVICE_URL=$mcp_service_url"} \
   --output none; then
   color_green "✓ Successfully injected agent IDs into $functions_service_name"
@@ -90,6 +92,7 @@ if az functionapp config appsettings set \
   echo "  AI_AGENT_CART_RECOVERY_ID             = $cart_recovery_id"
   echo "  AI_AGENT_PRODUCT_CONTENT_ID           = $product_content_id"
   [[ -n "$customer_id" ]] && echo "  AI_AGENT_CUSTOMER_ID                  = $customer_id" || true
+  [[ -n "$admin_chat_id" ]] && echo "  AI_AGENT_ADMIN_CHAT_ID                = $admin_chat_id" || true
   [[ -n "$mcp_service_url" ]] && echo "  MCP_SERVICE_URL                       = $mcp_service_url" || true
 else
   color_red "✗ Failed to update Function App settings."
