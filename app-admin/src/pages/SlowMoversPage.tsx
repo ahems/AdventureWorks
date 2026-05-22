@@ -25,7 +25,11 @@ import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import ChannelSelector from "@/components/ChannelSelector";
 import { useAuth } from "@/context/AuthContext";
-import { useSlowMoversData, type SlowMover, type SalesChannel } from "@/hooks/useReportingData";
+import {
+  useSlowMoversData,
+  type SlowMover,
+  type SalesChannel,
+} from "@/hooks/useReportingData";
 import { useUpdateProductPrice } from "@/hooks/useAdminProducts";
 import ClearancePromotionDialog, {
   type ClearanceProduct,
@@ -274,27 +278,27 @@ const SlowMoversPage: React.FC = () => {
               <div className="flex flex-col items-end gap-3">
                 <ChannelSelector channel={channel} onChange={setChannel} />
                 <div className="flex gap-2 flex-wrap justify-end">
-                <Link
-                  to="/loss-makers"
-                  className="doodle-button inline-flex items-center gap-2 font-doodle text-sm"
-                >
-                  <TrendingDown className="w-4 h-4" />
-                  Loss Makers
-                </Link>
-                <Link
-                  to="/product-profitability"
-                  className="doodle-button inline-flex items-center gap-2 font-doodle text-sm"
-                >
-                  <TrendingUp className="w-4 h-4" />
-                  All Products
-                </Link>
-                <Link
-                  to="/promotions"
-                  className="doodle-button inline-flex items-center gap-2 font-doodle text-sm"
-                >
-                  <Tag className="w-4 h-4" />
-                  Manage Promotions
-                </Link>
+                  <Link
+                    to="/loss-makers"
+                    className="doodle-button inline-flex items-center gap-2 font-doodle text-sm"
+                  >
+                    <TrendingDown className="w-4 h-4" />
+                    Loss Makers
+                  </Link>
+                  <Link
+                    to="/product-profitability"
+                    className="doodle-button inline-flex items-center gap-2 font-doodle text-sm"
+                  >
+                    <TrendingUp className="w-4 h-4" />
+                    All Products
+                  </Link>
+                  <Link
+                    to="/promotions"
+                    className="doodle-button inline-flex items-center gap-2 font-doodle text-sm"
+                  >
+                    <Tag className="w-4 h-4" />
+                    Manage Promotions
+                  </Link>
                 </div>
               </div>
             </div>
@@ -439,253 +443,263 @@ const SlowMoversPage: React.FC = () => {
               </div>
 
               {/* ── Table ─────────────────────────────────────────────────── */}
-              <div className="doodle-card overflow-x-auto mb-4">
-                <table className="w-full text-sm">
-                  <thead className="bg-yellow-50/50 border-b-2 border-doodle-text/20">
-                    <tr>
-                      <SortTh
-                        col="productName"
-                        current={sortKey}
-                        asc={sortAsc}
-                        onSort={handleSort}
-                        className="min-w-48"
-                      >
-                        Product
-                      </SortTh>
-                      <SortTh
-                        col="categoryName"
-                        current={sortKey}
-                        asc={sortAsc}
-                        onSort={handleSort}
-                      >
-                        Category
-                      </SortTh>
-                      <SortTh
-                        col="currentListPrice"
-                        current={sortKey}
-                        asc={sortAsc}
-                        onSort={handleSort}
-                      >
-                        List Price
-                      </SortTh>
-                      <SortTh
-                        col="currentCost"
-                        current={sortKey}
-                        asc={sortAsc}
-                        onSort={handleSort}
-                      >
-                        Std Cost
-                      </SortTh>
-                      <SortTh
-                        col="marginPct"
-                        current={sortKey}
-                        asc={sortAsc}
-                        onSort={handleSort}
-                      >
-                        Margin
-                      </SortTh>
-                      <SortTh
-                        col="currentStock"
-                        current={sortKey}
-                        asc={sortAsc}
-                        onSort={handleSort}
-                      >
-                        Stock
-                      </SortTh>
-                      <SortTh
-                        col="stockValue"
-                        current={sortKey}
-                        asc={sortAsc}
-                        onSort={handleSort}
-                      >
-                        Stock Value
-                      </SortTh>
-                      <SortTh
-                        col="unitsSoldLast12Months"
-                        current={sortKey}
-                        asc={sortAsc}
-                        onSort={handleSort}
-                      >
-                        Units (12mo)
-                      </SortTh>
-                      <SortTh
-                        col="daysSinceLastSale"
-                        current={sortKey}
-                        asc={sortAsc}
-                        onSort={handleSort}
-                      >
-                        Last Sale
-                      </SortTh>
-                      <SortTh
-                        col="activeDiscounts"
-                        current={sortKey}
-                        asc={sortAsc}
-                        onSort={handleSort}
-                      >
-                        Promos
-                      </SortTh>
-                      <th className="px-3 py-2 text-left font-doodle text-xs font-bold text-doodle-text/70 uppercase tracking-wide whitespace-nowrap min-w-[160px]">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageRows.length === 0 ? (
+              <div className="doodle-card overflow-hidden mb-4">
+                <div
+                  className="overflow-x-auto"
+                  style={{ transform: "rotateX(180deg)" }}
+                >
+                  <table
+                    className="w-full text-sm"
+                    style={{ transform: "rotateX(180deg)" }}
+                  >
+                    <thead className="bg-yellow-50/50 border-b-2 border-doodle-text/20">
                       <tr>
-                        <td
-                          colSpan={11}
-                          className="py-12 text-center font-doodle text-sm text-doodle-text/50"
+                        <SortTh
+                          col="productName"
+                          current={sortKey}
+                          asc={sortAsc}
+                          onSort={handleSort}
+                          className="min-w-48"
                         >
-                          {!data || data.length === 0
-                            ? "No slow movers at this threshold — great inventory velocity!"
-                            : "No results match your search."}
-                        </td>
+                          Product
+                        </SortTh>
+                        <SortTh
+                          col="categoryName"
+                          current={sortKey}
+                          asc={sortAsc}
+                          onSort={handleSort}
+                        >
+                          Category
+                        </SortTh>
+                        <SortTh
+                          col="currentListPrice"
+                          current={sortKey}
+                          asc={sortAsc}
+                          onSort={handleSort}
+                        >
+                          List Price
+                        </SortTh>
+                        <SortTh
+                          col="currentCost"
+                          current={sortKey}
+                          asc={sortAsc}
+                          onSort={handleSort}
+                        >
+                          Std Cost
+                        </SortTh>
+                        <SortTh
+                          col="marginPct"
+                          current={sortKey}
+                          asc={sortAsc}
+                          onSort={handleSort}
+                        >
+                          Margin
+                        </SortTh>
+                        <SortTh
+                          col="currentStock"
+                          current={sortKey}
+                          asc={sortAsc}
+                          onSort={handleSort}
+                        >
+                          Stock
+                        </SortTh>
+                        <SortTh
+                          col="stockValue"
+                          current={sortKey}
+                          asc={sortAsc}
+                          onSort={handleSort}
+                        >
+                          Stock Value
+                        </SortTh>
+                        <SortTh
+                          col="unitsSoldLast12Months"
+                          current={sortKey}
+                          asc={sortAsc}
+                          onSort={handleSort}
+                        >
+                          Units (12mo)
+                        </SortTh>
+                        <SortTh
+                          col="daysSinceLastSale"
+                          current={sortKey}
+                          asc={sortAsc}
+                          onSort={handleSort}
+                        >
+                          Last Sale
+                        </SortTh>
+                        <SortTh
+                          col="activeDiscounts"
+                          current={sortKey}
+                          asc={sortAsc}
+                          onSort={handleSort}
+                        >
+                          Promos
+                        </SortTh>
+                        <th className="px-3 py-2 text-left font-doodle text-xs font-bold text-doodle-text/70 uppercase tracking-wide whitespace-nowrap min-w-[160px]">
+                          Actions
+                        </th>
                       </tr>
-                    ) : (
-                      pageRows.map((row) => {
-                        const isEditing =
-                          editingPrice?.productId === row.productID;
-                        const rowBg =
-                          row.daysSinceLastSale === null
-                            ? "bg-red-50 hover:bg-red-100/60"
-                            : row.daysSinceLastSale > 365
-                              ? "bg-orange-50 hover:bg-orange-100/60"
-                              : "bg-yellow-50/40 hover:bg-yellow-50";
-                        return (
-                          <tr
-                            key={row.productID}
-                            className={`border-b border-doodle-text/10 transition-colors ${rowBg}`}
+                    </thead>
+                    <tbody>
+                      {pageRows.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={11}
+                            className="py-12 text-center font-doodle text-sm text-doodle-text/50"
                           >
-                            <td className="px-3 py-2 font-doodle text-xs font-semibold text-doodle-text">
-                              <Link
-                                to={`/product/${row.productID}`}
-                                className="hover:text-doodle-accent"
-                              >
-                                {row.productName}
-                              </Link>
-                            </td>
-                            <td className="px-3 py-2 font-doodle text-xs text-doodle-text/70">
-                              {row.categoryName ?? "—"}
-                            </td>
-
-                            {/* Inline price edit */}
-                            <td className="px-3 py-2 font-doodle text-xs">
-                              {isEditing ? (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-doodle-text/50">$</span>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={editingPrice.value}
-                                    onChange={(e) =>
-                                      setEditingPrice({
-                                        productId: row.productID,
-                                        value: e.target.value,
-                                      })
-                                    }
-                                    className="w-24 px-1 py-0.5 border-2 border-doodle-accent focus:outline-none font-doodle text-xs"
-                                    autoFocus
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter")
-                                        commitEdit(row.productID);
-                                      if (e.key === "Escape") cancelEdit();
-                                    }}
-                                  />
-                                  <button
-                                    onClick={() => commitEdit(row.productID)}
-                                    disabled={isPriceSaving}
-                                    className="text-green-600 hover:text-green-700"
-                                  >
-                                    {isPriceSaving ? (
-                                      <Loader2 className="w-3 h-3 animate-spin" />
-                                    ) : (
-                                      <Check className="w-3 h-3" />
-                                    )}
-                                  </button>
-                                  <button
-                                    onClick={cancelEdit}
-                                    className="text-red-500 hover:text-red-600"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => startEdit(row)}
-                                  className="flex items-center gap-1 text-doodle-text hover:text-doodle-accent group"
+                            {!data || data.length === 0
+                              ? "No slow movers at this threshold — great inventory velocity!"
+                              : "No results match your search."}
+                          </td>
+                        </tr>
+                      ) : (
+                        pageRows.map((row) => {
+                          const isEditing =
+                            editingPrice?.productId === row.productID;
+                          const rowBg =
+                            row.daysSinceLastSale === null
+                              ? "bg-red-50 hover:bg-red-100/60"
+                              : row.daysSinceLastSale > 365
+                                ? "bg-orange-50 hover:bg-orange-100/60"
+                                : "bg-yellow-50/40 hover:bg-yellow-50";
+                          return (
+                            <tr
+                              key={row.productID}
+                              className={`border-b border-doodle-text/10 transition-colors ${rowBg}`}
+                            >
+                              <td className="px-3 py-2 font-doodle text-xs font-semibold text-doodle-text">
+                                <Link
+                                  to={`/product/${row.productID}`}
+                                  className="hover:text-doodle-accent"
                                 >
-                                  {fmt(row.currentListPrice)}
-                                  <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-60" />
-                                </button>
-                              )}
-                            </td>
+                                  {row.productName}
+                                </Link>
+                              </td>
+                              <td className="px-3 py-2 font-doodle text-xs text-doodle-text/70">
+                                {row.categoryName ?? "—"}
+                              </td>
 
-                            <td className="px-3 py-2 font-doodle text-xs text-doodle-text/70">
-                              {fmt(row.currentCost)}
-                            </td>
-                            <td className="px-3 py-2 font-doodle text-xs">
-                              {fmtPct(row.marginPct)}
-                            </td>
-                            <td className="px-3 py-2 font-doodle text-xs text-right text-doodle-text/70">
-                              {row.currentStock.toLocaleString()}
-                            </td>
-                            <td className="px-3 py-2 font-doodle text-xs text-right font-semibold text-yellow-700">
-                              {fmt(row.stockValue)}
-                            </td>
-                            <td className="px-3 py-2 font-doodle text-xs text-right text-doodle-text/70">
-                              {row.unitsSoldLast12Months.toLocaleString()}
-                            </td>
-                            <td className="px-3 py-2">
-                              {daysBadge(row.daysSinceLastSale)}
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              {row.activeDiscounts > 0 ? (
-                                <span className="inline-flex items-center gap-1 text-xs font-doodle text-doodle-accent font-semibold">
-                                  <Tag className="w-3 h-3" />
-                                  {row.activeDiscounts}
-                                </span>
-                              ) : (
-                                <span className="text-xs font-doodle text-doodle-text/30">
-                                  —
-                                </span>
-                              )}
-                            </td>
-
-                            {/* Actions */}
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-1.5 flex-nowrap">
-                                {!isEditing && (
+                              {/* Inline price edit */}
+                              <td className="px-3 py-2 font-doodle text-xs">
+                                {isEditing ? (
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-doodle-text/50">
+                                      $
+                                    </span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={editingPrice.value}
+                                      onChange={(e) =>
+                                        setEditingPrice({
+                                          productId: row.productID,
+                                          value: e.target.value,
+                                        })
+                                      }
+                                      className="w-24 px-1 py-0.5 border-2 border-doodle-accent focus:outline-none font-doodle text-xs"
+                                      autoFocus
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter")
+                                          commitEdit(row.productID);
+                                        if (e.key === "Escape") cancelEdit();
+                                      }}
+                                    />
+                                    <button
+                                      onClick={() => commitEdit(row.productID)}
+                                      disabled={isPriceSaving}
+                                      className="text-green-600 hover:text-green-700"
+                                    >
+                                      {isPriceSaving ? (
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                      ) : (
+                                        <Check className="w-3 h-3" />
+                                      )}
+                                    </button>
+                                    <button
+                                      onClick={cancelEdit}
+                                      className="text-red-500 hover:text-red-600"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ) : (
                                   <button
                                     onClick={() => startEdit(row)}
-                                    className="doodle-button py-1 px-2 text-xs font-doodle flex items-center gap-1"
+                                    className="flex items-center gap-1 text-doodle-text hover:text-doodle-accent group"
                                   >
-                                    <Edit2 className="w-3 h-3" />
-                                    Price
+                                    {fmt(row.currentListPrice)}
+                                    <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-60" />
                                   </button>
                                 )}
-                                <button
-                                  onClick={() => {
-                                    setClearanceTarget({
-                                      productID: row.productID,
-                                      productName: row.productName,
-                                    });
-                                    setClearanceDialogOpen(true);
-                                  }}
-                                  className="doodle-button py-1 px-2 text-xs font-doodle flex items-center gap-1"
-                                  title="Add clearance promotion"
-                                >
-                                  <Tag className="w-3 h-3" />
-                                  Promo
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+                              </td>
+
+                              <td className="px-3 py-2 font-doodle text-xs text-doodle-text/70">
+                                {fmt(row.currentCost)}
+                              </td>
+                              <td className="px-3 py-2 font-doodle text-xs">
+                                {fmtPct(row.marginPct)}
+                              </td>
+                              <td className="px-3 py-2 font-doodle text-xs text-right text-doodle-text/70">
+                                {row.currentStock.toLocaleString()}
+                              </td>
+                              <td className="px-3 py-2 font-doodle text-xs text-right font-semibold text-yellow-700">
+                                {fmt(row.stockValue)}
+                              </td>
+                              <td className="px-3 py-2 font-doodle text-xs text-right text-doodle-text/70">
+                                {row.unitsSoldLast12Months.toLocaleString()}
+                              </td>
+                              <td className="px-3 py-2">
+                                {daysBadge(row.daysSinceLastSale)}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                {row.activeDiscounts > 0 ? (
+                                  <span className="inline-flex items-center gap-1 text-xs font-doodle text-doodle-accent font-semibold">
+                                    <Tag className="w-3 h-3" />
+                                    {row.activeDiscounts}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs font-doodle text-doodle-text/30">
+                                    —
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Actions */}
+                              <td className="px-3 py-2">
+                                <div className="flex items-center gap-1.5 flex-nowrap">
+                                  {!isEditing && (
+                                    <button
+                                      onClick={() => startEdit(row)}
+                                      className="doodle-button py-1 px-2 text-xs font-doodle flex items-center gap-1"
+                                    >
+                                      <Edit2 className="w-3 h-3" />
+                                      Price
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => {
+                                      setClearanceTarget({
+                                        productID: row.productID,
+                                        productName: row.productName,
+                                      });
+                                      setClearanceDialogOpen(true);
+                                    }}
+                                    className="doodle-button py-1 px-2 text-xs font-doodle flex items-center gap-1"
+                                    title="Add clearance promotion"
+                                  >
+                                    <Tag className="w-3 h-3" />
+                                    Promo
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               {/* ── Pagination ────────────────────────────────────────────── */}

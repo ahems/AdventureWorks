@@ -5,14 +5,9 @@ import {
   Star,
   Trash2,
   CheckCircle,
-  Sparkles,
   MessageSquare,
-  TrendingUp,
-  ThumbsUp,
-  ThumbsDown,
   Minus,
   Loader2,
-  RefreshCw,
   Filter,
   X,
   Search,
@@ -32,7 +27,6 @@ import {
   useAdminReviewsByProduct,
   useReviewTotalCount,
   approveReview,
-  submitReply,
   deleteReview,
 } from "@/hooks/useAdminReviews";
 import {
@@ -43,14 +37,6 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -64,10 +50,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { getFunctionsApiUrl } from "@/lib/utils";
 import { getAppUrl } from "@/lib/utils";
-
-type Sentiment = "positive" | "neutral" | "negative";
 
 interface ReviewWithAI {
   id: string;
@@ -86,10 +69,6 @@ interface ReviewWithAI {
     by: string;
     date: string;
   };
-  sentiment?: Sentiment;
-  aiSuggestedResponse?: string;
-  flags?: string[];
-  aiError?: string;
 }
 
 // ─── AI analysis is performed server-side via POST /api/reviews/analyze-batch
@@ -121,8 +100,6 @@ const ReviewsPage: React.FC = () => {
     [allProducts],
   );
   const [reviews, setReviews] = useState<ReviewWithAI[]>([]);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showSummary, setShowSummary] = useState(false);
 
   // Sync from API when cursor changes or data first loads.
   // When a product is selected via URL, use the product-filtered query result.
@@ -130,20 +107,7 @@ const ReviewsPage: React.FC = () => {
     const activeData = urlProductIdNum ? productApiData : apiData;
     const items = activeData?.items;
     if (items && items.length > 0) {
-      setReviews((prev) => {
-        // Preserve AI analysis results already in local state
-        const prevMap = new Map(prev.map((r) => [r.id, r]));
-        return items.map((item) => {
-          const existing = prevMap.get(item.id);
-          return {
-            ...(item as ReviewWithAI),
-            sentiment: existing?.sentiment,
-            aiSuggestedResponse: existing?.aiSuggestedResponse,
-            flags: existing?.flags,
-            aiError: existing?.aiError,
-          };
-        });
-      });
+      setReviews(items.map((item) => item as ReviewWithAI));
     } else if (items && items.length === 0 && urlProductIdNum) {
       // Product query returned empty – clear the list so we don't show stale data
       setReviews([]);
@@ -157,9 +121,7 @@ const ReviewsPage: React.FC = () => {
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [sentimentFilter, setSentimentFilter] = useState<string>("all");
   const [ratingFilter, setRatingFilter] = useState<string>("all");
-  const [flagFilter, setFlagFilter] = useState<string>("all");
   const [moderationFilter, setModerationFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [subcategoryFilter, setSubcategoryFilter] = useState<string>("all");
@@ -220,13 +182,6 @@ const ReviewsPage: React.FC = () => {
     }
   };
 
-  // Get all unique flags from reviews
-  const allFlags = useMemo(() => {
-    const flags = new Set<string>();
-    reviews.forEach((r) => r.flags?.forEach((f) => flags.add(f)));
-    return Array.from(flags);
-  }, [reviews]);
-
   // Filter reviews
   const filteredReviews = useMemo(() => {
     return reviews.filter((review) => {
@@ -260,28 +215,10 @@ const ReviewsPage: React.FC = () => {
         }
       }
 
-      // Sentiment filter
-      if (sentimentFilter !== "all" && review.sentiment !== sentimentFilter) {
-        return false;
-      }
-
       // Rating filter
       if (ratingFilter !== "all") {
         const rating = parseInt(ratingFilter);
         if (review.rating !== rating) return false;
-      }
-
-      // Flag filter
-      if (flagFilter !== "all") {
-        if (
-          flagFilter === "flagged" &&
-          (!review.flags || review.flags.length === 0)
-        ) {
-          return false;
-        }
-        if (flagFilter !== "flagged" && !review.flags?.includes(flagFilter)) {
-          return false;
-        }
       }
 
       // Moderation filter
@@ -294,9 +231,7 @@ const ReviewsPage: React.FC = () => {
   }, [
     reviews,
     searchQuery,
-    sentimentFilter,
     ratingFilter,
-    flagFilter,
     moderationFilter,
     categoryFilter,
     subcategoryFilter,
@@ -307,9 +242,7 @@ const ReviewsPage: React.FC = () => {
 
   const hasActiveFilters =
     searchQuery.trim() !== "" ||
-    sentimentFilter !== "all" ||
     ratingFilter !== "all" ||
-    flagFilter !== "all" ||
     moderationFilter !== "all" ||
     categoryFilter !== "all" ||
     subcategoryFilter !== "all" ||
@@ -317,106 +250,12 @@ const ReviewsPage: React.FC = () => {
 
   const clearFilters = () => {
     setSearchQuery("");
-    setSentimentFilter("all");
     setRatingFilter("all");
-    setFlagFilter("all");
     setModerationFilter("all");
     setCategoryFilter("all");
     setSubcategoryFilter("all");
     setProductFilter("all");
     setSearchParams({});
-  };
-
-  const runAIAnalysis = async () => {
-    setIsAnalyzing(true);
-
-    try {
-      const payload = reviews
-        .filter((r) => selectedReviews.has(r.id))
-        .map((r) => ({
-          productReviewId: parseInt(r.id, 10) || 0,
-          rating: r.rating,
-          comments: r.comment,
-          reviewerName: r.userName,
-          productName: productMap.get(r.productId)?.Name,
-        }));
-
-      const BATCH_SIZE = 50;
-      const allAnalyses: Array<{
-        productReviewId: number;
-        sentiment: Sentiment;
-        flags: string[];
-        suggestedResponse?: string;
-        error?: string;
-      }> = [];
-
-      for (let i = 0; i < payload.length; i += BATCH_SIZE) {
-        const batch = payload.slice(i, i + BATCH_SIZE);
-        const res = await fetch(
-          `${getFunctionsApiUrl()}/api/reviews/analyze-batch`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ reviews: batch }),
-          },
-        );
-
-        if (!res.ok) {
-          throw new Error(`API returned ${res.status}`);
-        }
-
-        const data: {
-          analyses: Array<{
-            productReviewId: number;
-            sentiment: Sentiment;
-            flags: string[];
-            suggestedResponse?: string;
-            error?: string;
-          }>;
-        } = await res.json();
-        allAnalyses.push(...data.analyses);
-      }
-
-      const data = { analyses: allAnalyses };
-
-      const analysisMap = new Map(
-        data.analyses.map((a) => [a.productReviewId, a]),
-      );
-
-      setReviews((prev) =>
-        prev.map((r) => {
-          const analysis = analysisMap.get(parseInt(r.id, 10) || 0);
-          if (!analysis) return r;
-          return {
-            ...r,
-            sentiment: analysis.error ? r.sentiment : analysis.sentiment,
-            aiSuggestedResponse: analysis.error
-              ? undefined
-              : analysis.suggestedResponse,
-            flags: analysis.error ? r.flags : analysis.flags,
-            aiError: analysis.error,
-          };
-        }),
-      );
-
-      const errorCount = data.analyses.filter((a) => a.error).length;
-      toast({
-        title: "AI Analysis Complete",
-        description:
-          errorCount > 0
-            ? `Analysed ${data.analyses.length - errorCount} reviews. ${errorCount} could not be analysed.`
-            : `Analysed ${data.analyses.length} reviews with sentiment, flags, and response suggestions.`,
-      });
-    } catch (err) {
-      console.error("runAIAnalysis error:", err);
-      toast({
-        title: "Analysis Failed",
-        description: "Could not reach the analysis service. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsAnalyzing(false);
-    }
   };
 
   const handleApprove = async (id: string) => {
@@ -527,125 +366,10 @@ const ReviewsPage: React.FC = () => {
     }
   };
 
-  const copyResponse = (response: string) => {
-    navigator.clipboard.writeText(response);
-    toast({
-      title: "Copied!",
-      description: "AI response copied to clipboard.",
-    });
-  };
-
-  const handlePostReply = async (review: ReviewWithAI, replyText: string) => {
-    try {
-      const saved = await submitReply(review.id, replyText);
-      await approveReview(review.id);
-      setReviews((prev) =>
-        prev.map((r) =>
-          r.id === review.id
-            ? {
-                ...r,
-                isModerated: true,
-                existingReply: {
-                  replyId: saved.ProductReviewReplyID,
-                  text: saved.Reply,
-                  by: saved.RepliedBy,
-                  date: saved.ReplyDate,
-                },
-              }
-            : r,
-        ),
-      );
-      toast({
-        title: "Reply Posted",
-        description: "The reply has been saved and the review approved.",
-      });
-    } catch {
-      toast({
-        title: "Post Reply Failed",
-        description: "Could not save the reply. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const getSentimentIcon = (sentiment?: Sentiment) => {
-    switch (sentiment) {
-      case "positive":
-        return <ThumbsUp className="w-4 h-4 text-doodle-green" />;
-      case "negative":
-        return <ThumbsDown className="w-4 h-4 text-doodle-accent" />;
-      case "neutral":
-        return <Minus className="w-4 h-4 text-yellow-500" />;
-      default:
-        return null;
-    }
-  };
-
-  const getSentimentBadge = (sentiment?: Sentiment) => {
-    if (!sentiment) return null;
-    const variants: Record<Sentiment, string> = {
-      positive: "bg-doodle-green/20 text-doodle-green border-doodle-green/30",
-      negative:
-        "bg-doodle-accent/20 text-doodle-accent border-doodle-accent/30",
-      neutral: "bg-yellow-500/20 text-yellow-600 border-yellow-500/30",
-    };
-    return (
-      <Badge className={`font-doodle text-xs ${variants[sentiment]}`}>
-        {getSentimentIcon(sentiment)}
-        <span className="ml-1 capitalize">{sentiment}</span>
-      </Badge>
-    );
-  };
-
-  // Generate AI summary
-  const aiSummary = useMemo(() => {
-    const analyzed = reviews.filter((r) => r.sentiment);
-    if (analyzed.length === 0) return null;
-
-    const sentimentCounts = {
-      positive: analyzed.filter((r) => r.sentiment === "positive").length,
-      neutral: analyzed.filter((r) => r.sentiment === "neutral").length,
-      negative: analyzed.filter((r) => r.sentiment === "negative").length,
-    };
-
-    const avgRating =
-      reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length;
-
-    const themes: string[] = [];
-    const text = reviews
-      .map((r) => `${r.title} ${r.comment}`)
-      .join(" ")
-      .toLowerCase();
-    if (text.includes("quality")) themes.push("Product Quality");
-    if (text.includes("price") || text.includes("value"))
-      themes.push("Value for Money");
-    if (text.includes("delivery") || text.includes("shipping"))
-      themes.push("Shipping Experience");
-    if (text.includes("service") || text.includes("support"))
-      themes.push("Customer Service");
-    if (text.includes("easy") || text.includes("simple"))
-      themes.push("Ease of Use");
-
-    return {
-      total: reviews.length,
-      avgRating: avgRating.toFixed(1),
-      sentimentCounts,
-      themes: themes.length > 0 ? themes : ["General Feedback"],
-      recommendation:
-        sentimentCounts.positive > sentimentCounts.negative
-          ? "Customer sentiment is largely positive. Focus on maintaining quality and addressing the few concerns raised."
-          : sentimentCounts.negative > sentimentCounts.positive
-            ? "Several customers have expressed concerns. Prioritize addressing common issues to improve satisfaction."
-            : "Customer sentiment is mixed. Review individual feedback to identify areas for improvement.",
-    };
-  }, [reviews]);
-
   // Redirect if not authenticated
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
-
-  const hasAIAnalysis = reviews.some((r) => r.sentiment);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -653,150 +377,15 @@ const ReviewsPage: React.FC = () => {
       <main className="flex-1 pt-4">
         <section className="container mx-auto px-4 pb-8">
           <div className="doodle-card p-6">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div>
-                <h1 className="font-doodle text-3xl font-bold text-doodle-text mb-2">
-                  Review Moderation
-                </h1>
-                <p className="font-doodle text-doodle-text/70">
-                  {hasActiveFilters
-                    ? `Showing ${filteredReviews.length} of ${reviews.length} reviews`
-                    : `${totalReviewCount ?? reviews.length} reviews to moderate`}
-                </p>
-              </div>
-
-              <div className="flex gap-2 flex-wrap">
-                <Button
-                  onClick={runAIAnalysis}
-                  disabled={isAnalyzing || selectedReviews.size === 0}
-                  className="font-doodle gap-2"
-                  variant="outline"
-                >
-                  {isAnalyzing ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : hasAIAnalysis ? (
-                    <RefreshCw className="w-4 h-4" />
-                  ) : (
-                    <Sparkles className="w-4 h-4" />
-                  )}
-                  {isAnalyzing
-                    ? "Analyzing..."
-                    : hasAIAnalysis
-                      ? `Re-analyze (${selectedReviews.size})`
-                      : `Run AI Analysis (${selectedReviews.size})`}
-                </Button>
-
-                {hasAIAnalysis && (
-                  <Dialog open={showSummary} onOpenChange={setShowSummary}>
-                    <DialogTrigger asChild>
-                      <Button variant="default" className="font-doodle gap-2">
-                        <TrendingUp className="w-4 h-4" />
-                        View AI Summary
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-lg">
-                      <DialogHeader>
-                        <DialogTitle className="font-doodle flex items-center gap-2">
-                          <Sparkles className="w-5 h-5 text-doodle-accent" />
-                          AI Review Summary
-                        </DialogTitle>
-                        <DialogDescription className="sr-only">
-                          AI-generated summary of product reviews including
-                          sentiment analysis and themes.
-                        </DialogDescription>
-                      </DialogHeader>
-                      {aiSummary && (
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="doodle-card p-3 text-center">
-                              <p className="font-doodle text-2xl font-bold text-doodle-text">
-                                {aiSummary.total}
-                              </p>
-                              <p className="font-doodle text-xs text-doodle-text/60">
-                                Total Reviews
-                              </p>
-                            </div>
-                            <div className="doodle-card p-3 text-center">
-                              <p className="font-doodle text-2xl font-bold text-doodle-accent">
-                                {aiSummary.avgRating}★
-                              </p>
-                              <p className="font-doodle text-xs text-doodle-text/60">
-                                Avg Rating
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="doodle-card p-4">
-                            <p className="font-doodle text-sm font-bold mb-3">
-                              Sentiment Distribution
-                            </p>
-                            <div className="flex gap-2">
-                              <div className="flex-1 text-center p-2 rounded bg-doodle-green/10">
-                                <ThumbsUp className="w-4 h-4 mx-auto text-doodle-green mb-1" />
-                                <p className="font-doodle text-lg font-bold text-doodle-green">
-                                  {aiSummary.sentimentCounts.positive}
-                                </p>
-                                <p className="font-doodle text-xs text-doodle-text/60">
-                                  Positive
-                                </p>
-                              </div>
-                              <div className="flex-1 text-center p-2 rounded bg-yellow-500/10">
-                                <Minus className="w-4 h-4 mx-auto text-yellow-500 mb-1" />
-                                <p className="font-doodle text-lg font-bold text-yellow-600">
-                                  {aiSummary.sentimentCounts.neutral}
-                                </p>
-                                <p className="font-doodle text-xs text-doodle-text/60">
-                                  Neutral
-                                </p>
-                              </div>
-                              <div className="flex-1 text-center p-2 rounded bg-doodle-accent/10">
-                                <ThumbsDown className="w-4 h-4 mx-auto text-doodle-accent mb-1" />
-                                <p className="font-doodle text-lg font-bold text-doodle-accent">
-                                  {aiSummary.sentimentCounts.negative}
-                                </p>
-                                <p className="font-doodle text-xs text-doodle-text/60">
-                                  Negative
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="doodle-card p-4">
-                            <p className="font-doodle text-sm font-bold mb-2">
-                              Common Themes
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              {aiSummary.themes.map((theme, i) => (
-                                <Badge
-                                  key={i}
-                                  variant="secondary"
-                                  className="font-doodle"
-                                >
-                                  {theme}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="doodle-card p-4 bg-doodle-primary/5 border-doodle-primary/20">
-                            <p className="font-doodle text-sm font-bold mb-2 flex items-center gap-2">
-                              <Sparkles className="w-4 h-4 text-doodle-primary" />
-                              AI Recommendation
-                            </p>
-                            <p className="font-doodle text-sm text-doodle-text/80">
-                              {aiSummary.recommendation}
-                            </p>
-                          </div>
-
-                          <p className="font-doodle text-[10px] text-doodle-text/40 text-center">
-                            Powered by Azure AI
-                          </p>
-                        </div>
-                      )}
-                    </DialogContent>
-                  </Dialog>
-                )}
-              </div>
+            <div>
+              <h1 className="font-doodle text-3xl font-bold text-doodle-text mb-2">
+                Review Moderation
+              </h1>
+              <p className="font-doodle text-doodle-text/70">
+                {hasActiveFilters
+                  ? `Showing ${filteredReviews.length} of ${reviews.length} reviews`
+                  : `${totalReviewCount ?? reviews.length} reviews to moderate`}
+              </p>
             </div>
           </div>
         </section>
@@ -933,35 +522,6 @@ const ReviewsPage: React.FC = () => {
               </div>
 
               <div className="flex flex-wrap gap-3 flex-1">
-                <Select
-                  value={sentimentFilter}
-                  onValueChange={setSentimentFilter}
-                >
-                  <SelectTrigger className="w-[140px] font-doodle text-sm h-9">
-                    <SelectValue placeholder="Sentiment" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Sentiment</SelectItem>
-                    <SelectItem value="positive">
-                      <span className="flex items-center gap-2">
-                        <ThumbsUp className="w-3 h-3 text-doodle-green" />{" "}
-                        Positive
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="neutral">
-                      <span className="flex items-center gap-2">
-                        <Minus className="w-3 h-3 text-yellow-500" /> Neutral
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="negative">
-                      <span className="flex items-center gap-2">
-                        <ThumbsDown className="w-3 h-3 text-doodle-accent" />{" "}
-                        Negative
-                      </span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-
                 <Select value={ratingFilter} onValueChange={setRatingFilter}>
                   <SelectTrigger className="w-[130px] font-doodle text-sm h-9">
                     <SelectValue placeholder="Rating" />
@@ -1001,21 +561,6 @@ const ReviewsPage: React.FC = () => {
                   </SelectContent>
                 </Select>
 
-                <Select value={flagFilter} onValueChange={setFlagFilter}>
-                  <SelectTrigger className="w-[150px] font-doodle text-sm h-9">
-                    <SelectValue placeholder="Flags" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Reviews</SelectItem>
-                    <SelectItem value="flagged">Flagged Only</SelectItem>
-                    {allFlags.map((flag) => (
-                      <SelectItem key={flag} value={flag}>
-                        {flag}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
                 <Select
                   value={moderationFilter}
                   onValueChange={setModerationFilter}
@@ -1052,13 +597,6 @@ const ReviewsPage: React.FC = () => {
                 </Button>
               )}
             </div>
-
-            {!hasAIAnalysis && (
-              <p className="font-doodle text-xs text-doodle-text/50 mt-3 flex items-center gap-1">
-                <Sparkles className="w-3 h-3" />
-                Run AI Analysis to enable sentiment and flag filtering
-              </p>
-            )}
           </div>
         </section>
 
@@ -1184,29 +722,6 @@ const ReviewsPage: React.FC = () => {
                                 Pending
                               </Badge>
                             )}
-                            {review.aiError ? (
-                              <Badge
-                                variant="outline"
-                                className="font-doodle text-xs opacity-50"
-                              >
-                                Analysis unavailable
-                              </Badge>
-                            ) : (
-                              <>
-                                {getSentimentBadge(review.sentiment)}
-                                {review.flags &&
-                                  review.flags.length > 0 &&
-                                  review.flags.map((flag, i) => (
-                                    <Badge
-                                      key={i}
-                                      variant="destructive"
-                                      className="font-doodle text-xs"
-                                    >
-                                      {flag}
-                                    </Badge>
-                                  ))}
-                              </>
-                            )}
                           </div>
                           <h3 className="font-doodle font-bold text-doodle-text">
                             {review.title}
@@ -1246,7 +761,7 @@ const ReviewsPage: React.FC = () => {
                           </p>
 
                           {/* Show persisted staff reply if it exists */}
-                          {review.existingReply ? (
+                          {review.existingReply && (
                             <div className="mt-3 p-3 bg-doodle-green/5 rounded-lg border border-doodle-green/20">
                               <div className="flex items-center gap-2 mb-2">
                                 <MessageSquare className="w-3 h-3 text-doodle-green" />
@@ -1263,45 +778,7 @@ const ReviewsPage: React.FC = () => {
                                 {review.existingReply.text}
                               </p>
                             </div>
-                          ) : review.aiSuggestedResponse ? (
-                            <div className="mt-3 p-3 bg-doodle-primary/5 rounded-lg border border-doodle-primary/20">
-                              <div className="flex items-center gap-2 mb-2">
-                                <Sparkles className="w-3 h-3 text-doodle-primary" />
-                                <span className="font-doodle text-xs font-bold text-doodle-primary">
-                                  AI Suggested Response
-                                </span>
-                              </div>
-                              <p className="font-doodle text-sm text-doodle-text/80">
-                                {review.aiSuggestedResponse}
-                              </p>
-                              <div className="flex gap-2 mt-2">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="font-doodle text-xs h-7"
-                                  onClick={() =>
-                                    copyResponse(review.aiSuggestedResponse!)
-                                  }
-                                >
-                                  <MessageSquare className="w-3 h-3 mr-1" />
-                                  Copy
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  className="font-doodle text-xs h-7 gap-1"
-                                  onClick={() =>
-                                    handlePostReply(
-                                      review,
-                                      review.aiSuggestedResponse!,
-                                    )
-                                  }
-                                >
-                                  <CheckCircle className="w-3 h-3" />
-                                  Post as Reply
-                                </Button>
-                              </div>
-                            </div>
-                          ) : null}
+                          )}
                         </div>
                       </div>
                       <div className="flex items-start gap-2">

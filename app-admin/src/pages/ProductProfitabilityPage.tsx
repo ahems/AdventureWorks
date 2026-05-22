@@ -440,6 +440,7 @@ const ProductProfitabilityPage: React.FC = () => {
                 </Link>
                 </div>
               </div>
+            </div>
           </div>
 
           {/* ── KPI cards ─────────────────────────────────────────────────── */}
@@ -615,8 +616,11 @@ const ProductProfitabilityPage: React.FC = () => {
               )}
 
               {/* ── Table ────────────────────────────────────────────────── */}
-              <div className="doodle-card overflow-x-auto">
-                <table className="w-full text-sm">
+              <div className="doodle-card overflow-hidden">
+                {/* overflow-x-auto is rotated 180° so the scrollbar appears at the top;
+                    the table is rotated back to stay right-side up */}
+                <div className="overflow-x-auto" style={{ transform: "rotateX(180deg)" }}>
+                <table className="w-full text-sm" style={{ transform: "rotateX(180deg)" }}>
                   <thead className="border-b-2 border-doodle-text/20 bg-gray-50">
                     <tr>
                       <th className="px-3 py-2 text-left font-doodle text-xs font-bold text-doodle-text/70 uppercase tracking-wide w-10">
@@ -943,6 +947,7 @@ const ProductProfitabilityPage: React.FC = () => {
                     )}
                   </tbody>
                 </table>
+                </div>
               </div>
 
               {/* ── Pagination ───────────────────────────────────────────── */}

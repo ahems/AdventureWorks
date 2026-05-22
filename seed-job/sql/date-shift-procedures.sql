@@ -21,6 +21,20 @@
 --        across all AdventureWorks schema tables.
 --        Idempotent: skips silently if the data appears already shifted.
 --
+--        After the uniform shift, three targeted re-anchor blocks fix open
+--        records whose due/ship dates fell in the past, giving manufacturing
+--        and supply-chain tools realistic near-future data:
+--          A. Pending PurchaseOrders (Status=1): ShipDate and
+--             PurchaseOrderDetail.DueDate re-set to GETDATE() + vendor
+--             AverageLeadTime + deterministic spread (7-20 days ahead).
+--          B. In-process WorkOrders (Status=1): DueDate spread across the
+--             next 1-14 days; StartDate = DueDate - original duration (capped
+--             at -30 days) so active manufacturing jobs show near-future
+--             completion.
+--          C. In-process SalesOrders (Status=1): DueDate set to
+--             OrderDate + 7 days, ShipDate cleared to NULL so open seed-era
+--             orders appear pending rather than overdue.
+--
 -- USAGE PATTERN
 --   Step 1  EXEC dbo.uspFindDateHighWatermark
 --           Note the HighWatermarkDate value from the final result set.
@@ -482,6 +496,137 @@ BEGIN
 
         DROP TABLE #SpecialOfferDurations;
 
+        -- -----------------------------------------------------------------
+        -- Block A: Re-anchor pending PurchaseOrders so they appear as
+        -- upcoming deliveries rather than overdue.
+        --
+        -- Targets PurchaseOrderHeader rows where Status=1 (Pending) and
+        -- the ShipDate is NULL or already in the past after the uniform
+        -- shift.  Only seed-era rows (OrderDate <= @ShiftThreshold) are
+        -- touched; supply-chain-simulation POs have OrderDate >> threshold
+        -- and are naturally excluded.
+        --
+        -- The new ShipDate is GETDATE() + vendor AverageLeadTime +
+        -- (PurchaseOrderID % 14), giving a deterministic 7-20 day spread
+        -- so deliveries do not all arrive on the same day.  When no
+        -- ProductVendor record can be found the lead-time defaults to 7.
+        -- PurchaseOrderDetail.DueDate (per-line) is aligned to the same
+        -- value so the supply-chain bootstrap stays consistent.
+        -- -----------------------------------------------------------------
+        SELECT  poh.PurchaseOrderID,
+                DATEADD(DAY,
+                    (poh.PurchaseOrderID % 14)
+                    + ISNULL(
+                        (SELECT TOP 1 pv.AverageLeadTime
+                         FROM   [Purchasing].[PurchaseOrderDetail] pod2
+                         INNER JOIN [Purchasing].[ProductVendor] pv
+                                ON  pv.BusinessEntityID = poh.VendorID
+                                AND pv.ProductID        = pod2.ProductID
+                         WHERE  pod2.PurchaseOrderID = poh.PurchaseOrderID
+                         ORDER BY pv.AverageLeadTime DESC),
+                        7),
+                    GETDATE()) AS NewShipDate
+        INTO #PendingPoAnchor
+        FROM   [Purchasing].[PurchaseOrderHeader] poh
+        WHERE  poh.Status = 1
+          AND  (poh.ShipDate IS NULL OR poh.ShipDate < GETDATE())
+          AND  CAST(poh.OrderDate AS DATETIME) <= @ShiftThreshold;
+
+        UPDATE poh
+        SET    poh.ShipDate = a.NewShipDate
+        FROM   [Purchasing].[PurchaseOrderHeader] poh
+        JOIN   #PendingPoAnchor a ON poh.PurchaseOrderID = a.PurchaseOrderID;
+
+        SET @RowsAffected = @@ROWCOUNT;
+        SET @TotalUpdated += @RowsAffected;
+        PRINT '  Re-anchored [Purchasing].[PurchaseOrderHeader].ShipDate (pending -> near future) — '
+              + CAST(@RowsAffected AS VARCHAR) + ' PO header(s)';
+
+        UPDATE pod
+        SET    pod.DueDate = a.NewShipDate
+        FROM   [Purchasing].[PurchaseOrderDetail] pod
+        JOIN   #PendingPoAnchor a ON pod.PurchaseOrderID = a.PurchaseOrderID;
+
+        SET @RowsAffected = @@ROWCOUNT;
+        SET @TotalUpdated += @RowsAffected;
+        PRINT '  Re-anchored [Purchasing].[PurchaseOrderDetail].DueDate (pending -> near future) — '
+              + CAST(@RowsAffected AS VARCHAR) + ' line(s)';
+
+        DROP TABLE #PendingPoAnchor;
+
+        -- -----------------------------------------------------------------
+        -- Block B: Re-anchor in-process WorkOrders so manufacturing jobs
+        -- appear actively in progress with near-future completion dates.
+        --
+        -- Targets WorkOrder rows where Status=1 (In Process) and DueDate
+        -- is in the past after the uniform shift.  Only seed-era rows
+        -- (DueDate <= @ShiftThreshold) are touched.
+        --
+        -- The new DueDate is spread across the next 1-14 days using
+        -- WorkOrderID % 14 (deterministic).  StartDate is recalculated as
+        -- new DueDate - original duration, capped at no earlier than
+        -- 30 days ago so no job appears to have started more than a month
+        -- back.  EndDate is already NULL for Status=1 rows and is not
+        -- updated.
+        -- -----------------------------------------------------------------
+        SELECT  wo.WorkOrderID,
+                DATEDIFF(DAY, wo.StartDate, wo.DueDate) AS DurationDays
+        INTO #WoAnchor
+        FROM   [Production].[WorkOrder] wo
+        WHERE  wo.Status = 1
+          AND  wo.DueDate < GETDATE()
+          AND  CAST(wo.DueDate AS DATETIME) <= @ShiftThreshold;
+
+        UPDATE wo
+        SET    wo.DueDate   = DATEADD(DAY,
+                                  (wo.WorkOrderID % 14) + 1,
+                                  CAST(GETDATE() AS DATE)),
+               wo.StartDate = CASE
+                                  WHEN DATEADD(DAY, -(a.DurationDays),
+                                           DATEADD(DAY, (wo.WorkOrderID % 14) + 1,
+                                               CAST(GETDATE() AS DATE)))
+                                       < DATEADD(DAY, -30, CAST(GETDATE() AS DATE))
+                                  THEN DATEADD(DAY, -30, CAST(GETDATE() AS DATE))
+                                  ELSE DATEADD(DAY, -(a.DurationDays),
+                                           DATEADD(DAY, (wo.WorkOrderID % 14) + 1,
+                                               CAST(GETDATE() AS DATE)))
+                              END
+        FROM   [Production].[WorkOrder] wo
+        JOIN   #WoAnchor a ON wo.WorkOrderID = a.WorkOrderID;
+
+        SET @RowsAffected = @@ROWCOUNT;
+        SET @TotalUpdated += @RowsAffected;
+        PRINT '  Re-anchored [Production].[WorkOrder] in-process DueDate/StartDate (-> near future) — '
+              + CAST(@RowsAffected AS VARCHAR) + ' row(s)';
+
+        DROP TABLE #WoAnchor;
+
+        -- -----------------------------------------------------------------
+        -- Block C: Re-anchor in-process SalesOrders so open seed-era orders
+        -- appear pending rather than overdue.
+        --
+        -- Targets SalesOrderHeader rows where Status=1 (In Process) and
+        -- DueDate is in the past after the uniform shift.  Only seed-era
+        -- rows (OrderDate <= @ShiftThreshold) are touched.
+        --
+        -- DueDate is set to OrderDate + 7 days (a standard processing
+        -- window).  ShipDate is cleared to NULL to correctly reflect that
+        -- the order has not yet shipped.  AI-generated orders with
+        -- OrderDate >> @ShiftThreshold are naturally excluded.
+        -- -----------------------------------------------------------------
+        UPDATE soh
+        SET    soh.DueDate  = DATEADD(DAY, 7, CAST(soh.OrderDate AS DATE)),
+               soh.ShipDate = NULL
+        FROM   [Sales].[SalesOrderHeader] soh
+        WHERE  soh.Status = 1
+          AND  soh.DueDate < GETDATE()
+          AND  CAST(soh.OrderDate AS DATETIME) <= @ShiftThreshold;
+
+        SET @RowsAffected = @@ROWCOUNT;
+        SET @TotalUpdated += @RowsAffected;
+        PRINT '  Re-anchored [Sales].[SalesOrderHeader] in-process DueDate (OrderDate + 7 days) — '
+              + CAST(@RowsAffected AS VARCHAR) + ' row(s)';
+
         COMMIT TRANSACTION;
 
         PRINT '======================================================';
@@ -503,9 +648,13 @@ BEGIN
 
         ROLLBACK TRANSACTION;
 
-        -- Clean up temp table if the SpecialOffer UPDATE had not yet dropped it
+        -- Clean up temp tables if the blocks had not yet dropped them
         IF OBJECT_ID('tempdb..#SpecialOfferDurations') IS NOT NULL
             DROP TABLE #SpecialOfferDurations;
+        IF OBJECT_ID('tempdb..#PendingPoAnchor') IS NOT NULL
+            DROP TABLE #PendingPoAnchor;
+        IF OBJECT_ID('tempdb..#WoAnchor') IS NOT NULL
+            DROP TABLE #WoAnchor;
 
         -- Re-enable constraints even on failure so they are not left disabled
         ALTER TABLE [HumanResources].[Employee]             CHECK CONSTRAINT [CK_Employee_BirthDate];
