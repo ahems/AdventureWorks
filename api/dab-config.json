@@ -22,7 +22,9 @@
       "port": 80,
       "mode": "development",
       "cors": {
-        "origins": ["*"],
+        "origins": [
+          "*"
+        ],
         "allow-credentials": false
       },
       "authentication": {
@@ -64,13 +66,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -94,13 +95,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -127,7 +127,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -155,13 +157,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -185,13 +186,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -215,13 +215,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -249,13 +248,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -291,13 +289,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -337,27 +334,34 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "currency": {
           "cardinality": "one",
           "target.entity": "Currency",
-          "source.fields": ["ToCurrencyCode"],
-          "target.fields": ["CurrencyCode"]
+          "source.fields": [
+            "ToCurrencyCode"
+          ],
+          "target.fields": [
+            "CurrencyCode"
+          ]
         },
         "fromCurrency": {
           "cardinality": "one",
           "target.entity": "Currency",
-          "source.fields": ["FromCurrencyCode"],
-          "target.fields": ["CurrencyCode"]
+          "source.fields": [
+            "FromCurrencyCode"
+          ],
+          "target.fields": [
+            "CurrencyCode"
+          ]
         }
       }
     },
@@ -381,13 +385,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -442,7 +445,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -481,7 +486,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -528,15 +535,21 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "countryRegion": {
           "cardinality": "one",
           "target.entity": "CountryRegion",
-          "source.fields": ["CountryRegionCode"],
-          "target.fields": ["CountryRegionCode"]
+          "source.fields": [
+            "CountryRegionCode"
+          ],
+          "target.fields": [
+            "CountryRegionCode"
+          ]
         }
       }
     },
@@ -560,13 +573,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -601,15 +613,21 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "addressType": {
           "cardinality": "one",
           "target.entity": "AddressType",
-          "source.fields": ["AddressTypeID"],
-          "target.fields": ["AddressTypeID"]
+          "source.fields": [
+            "AddressTypeID"
+          ],
+          "target.fields": [
+            "AddressTypeID"
+          ]
         }
       }
     },
@@ -680,7 +698,10 @@
             {
               "action": "create",
               "fields": {
-                "exclude": ["rowguid", "ModifiedDate"]
+                "exclude": [
+                  "rowguid",
+                  "ModifiedDate"
+                ]
               }
             },
             {
@@ -689,7 +710,11 @@
             {
               "action": "update",
               "fields": {
-                "exclude": ["BusinessEntityID", "rowguid", "ModifiedDate"]
+                "exclude": [
+                  "BusinessEntityID",
+                  "rowguid",
+                  "ModifiedDate"
+                ]
               }
             },
             {
@@ -702,20 +727,32 @@
         "emailAddresses": {
           "cardinality": "many",
           "target.entity": "EmailAddress",
-          "source.fields": ["BusinessEntityID"],
-          "target.fields": ["BusinessEntityID"]
+          "source.fields": [
+            "BusinessEntityID"
+          ],
+          "target.fields": [
+            "BusinessEntityID"
+          ]
         },
         "phoneNumbers": {
           "cardinality": "many",
           "target.entity": "PersonPhone",
-          "source.fields": ["BusinessEntityID"],
-          "target.fields": ["BusinessEntityID"]
+          "source.fields": [
+            "BusinessEntityID"
+          ],
+          "target.fields": [
+            "BusinessEntityID"
+          ]
         },
         "salesCustomer": {
           "cardinality": "one",
           "target.entity": "Customer",
-          "source.fields": ["BusinessEntityID"],
-          "target.fields": ["PersonID"]
+          "source.fields": [
+            "BusinessEntityID"
+          ],
+          "target.fields": [
+            "PersonID"
+          ]
         }
       }
     },
@@ -747,13 +784,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -784,10 +820,20 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["create", "read", "update", "delete"],
+          "actions": [
+            "create",
+            "read",
+            "update",
+            "delete"
+          ],
           "fields": {
-            "include": ["*"],
-            "exclude": ["rowguid", "ModifiedDate"]
+            "include": [
+              "*"
+            ],
+            "exclude": [
+              "rowguid",
+              "ModifiedDate"
+            ]
           }
         }
       ]
@@ -819,15 +865,21 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "phoneNumberType": {
           "cardinality": "one",
           "target.entity": "PhoneNumberType",
-          "source.fields": ["PhoneNumberTypeID"],
-          "target.fields": ["PhoneNumberTypeID"]
+          "source.fields": [
+            "PhoneNumberTypeID"
+          ],
+          "target.fields": [
+            "PhoneNumberTypeID"
+          ]
         }
       }
     },
@@ -851,27 +903,34 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "person": {
           "cardinality": "one",
           "target.entity": "Person",
-          "source.fields": ["BusinessEntityID"],
-          "target.fields": ["BusinessEntityID"]
+          "source.fields": [
+            "BusinessEntityID"
+          ],
+          "target.fields": [
+            "BusinessEntityID"
+          ]
         },
         "creditCard": {
           "cardinality": "one",
           "target.entity": "CreditCard",
-          "source.fields": ["CreditCardID"],
-          "target.fields": ["CreditCardID"]
+          "source.fields": [
+            "CreditCardID"
+          ],
+          "target.fields": [
+            "CreditCardID"
+          ]
         }
       }
     },
@@ -922,15 +981,21 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "salesTerritory": {
           "cardinality": "one",
           "target.entity": "SalesTerritory",
-          "source.fields": ["TerritoryID"],
-          "target.fields": ["TerritoryID"]
+          "source.fields": [
+            "TerritoryID"
+          ],
+          "target.fields": [
+            "TerritoryID"
+          ]
         }
       }
     },
@@ -969,21 +1034,31 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "salesCustomer": {
           "cardinality": "one",
           "target.entity": "Customer",
-          "source.fields": ["BusinessEntityID"],
-          "target.fields": ["StoreID"]
+          "source.fields": [
+            "BusinessEntityID"
+          ],
+          "target.fields": [
+            "StoreID"
+          ]
         },
         "salesPerson": {
           "cardinality": "one",
           "target.entity": "SalesPerson",
-          "source.fields": ["SalesPersonID"],
-          "target.fields": ["BusinessEntityID"]
+          "source.fields": [
+            "SalesPersonID"
+          ],
+          "target.fields": [
+            "BusinessEntityID"
+          ]
         }
       }
     },
@@ -1022,10 +1097,20 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["create", "read", "update", "delete"],
+          "actions": [
+            "create",
+            "read",
+            "update",
+            "delete"
+          ],
           "fields": {
-            "include": ["*"],
-            "exclude": ["rowguid", "ModifiedDate"]
+            "include": [
+              "*"
+            ],
+            "exclude": [
+              "rowguid",
+              "ModifiedDate"
+            ]
           }
         }
       ],
@@ -1033,14 +1118,22 @@
         "salesOrderHeaders": {
           "cardinality": "many",
           "target.entity": "SalesOrderHeader",
-          "source.fields": ["CustomerID"],
-          "target.fields": ["CustomerID"]
+          "source.fields": [
+            "CustomerID"
+          ],
+          "target.fields": [
+            "CustomerID"
+          ]
         },
         "store": {
           "cardinality": "one",
           "target.entity": "Store",
-          "source.fields": ["StoreID"],
-          "target.fields": ["BusinessEntityID"]
+          "source.fields": [
+            "StoreID"
+          ],
+          "target.fields": [
+            "BusinessEntityID"
+          ]
         }
       }
     },
@@ -1064,13 +1157,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -1102,13 +1194,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -1139,15 +1230,21 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "subcategories": {
           "cardinality": "many",
           "target.entity": "ProductSubcategory",
-          "source.fields": ["ProductCategoryID"],
-          "target.fields": ["ProductCategoryID"]
+          "source.fields": [
+            "ProductCategoryID"
+          ],
+          "target.fields": [
+            "ProductCategoryID"
+          ]
         }
       }
     },
@@ -1182,21 +1279,31 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "category": {
           "cardinality": "one",
           "target.entity": "ProductCategory",
-          "source.fields": ["ProductCategoryID"],
-          "target.fields": ["ProductCategoryID"]
+          "source.fields": [
+            "ProductCategoryID"
+          ],
+          "target.fields": [
+            "ProductCategoryID"
+          ]
         },
         "products": {
           "cardinality": "many",
           "target.entity": "Product",
-          "source.fields": ["ProductSubcategoryID"],
-          "target.fields": ["ProductSubcategoryID"]
+          "source.fields": [
+            "ProductSubcategoryID"
+          ],
+          "target.fields": [
+            "ProductSubcategoryID"
+          ]
         }
       }
     },
@@ -1235,15 +1342,21 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "products": {
           "cardinality": "many",
           "target.entity": "Product",
-          "source.fields": ["ProductModelID"],
-          "target.fields": ["ProductModelID"]
+          "source.fields": [
+            "ProductModelID"
+          ],
+          "target.fields": [
+            "ProductModelID"
+          ]
         }
       }
     },
@@ -1278,7 +1391,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -1306,33 +1421,44 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "productDescription": {
           "cardinality": "one",
           "target.entity": "ProductDescription",
-          "source.fields": ["ProductDescriptionID"],
-          "target.fields": ["ProductDescriptionID"]
+          "source.fields": [
+            "ProductDescriptionID"
+          ],
+          "target.fields": [
+            "ProductDescriptionID"
+          ]
         },
         "productModel": {
           "cardinality": "one",
           "target.entity": "ProductModel",
-          "source.fields": ["ProductModelID"],
-          "target.fields": ["ProductModelID"]
+          "source.fields": [
+            "ProductModelID"
+          ],
+          "target.fields": [
+            "ProductModelID"
+          ]
         },
         "culture": {
           "cardinality": "one",
           "target.entity": "Culture",
-          "source.fields": ["CultureID"],
-          "target.fields": ["CultureID"]
+          "source.fields": [
+            "CultureID"
+          ],
+          "target.fields": [
+            "CultureID"
+          ]
         }
       }
     },
@@ -1340,7 +1466,10 @@
       "source": {
         "object": "Production.vProductSearch",
         "type": "view",
-        "key-fields": ["ProductID", "ProductDescriptionID"]
+        "key-fields": [
+          "ProductID",
+          "ProductDescriptionID"
+        ]
       },
       "description": "Read-only view for AI-powered semantic product search. Joins Product, ProductModel, ProductModelProductDescriptionCulture, ProductDescription, and ProductName to expose per-language search data including DescriptionEmbedding and ProductNameEmbedding (both VECTOR(1536), text-embedding-3-small) for vector similarity search. Only finished goods are included.",
       "fields": [
@@ -1380,7 +1509,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["read"]
+          "actions": [
+            "read"
+          ]
         }
       ]
     },
@@ -1404,27 +1535,34 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "productModel": {
           "cardinality": "one",
           "target.entity": "ProductModel",
-          "source.fields": ["ProductModelID"],
-          "target.fields": ["ProductModelID"]
+          "source.fields": [
+            "ProductModelID"
+          ],
+          "target.fields": [
+            "ProductModelID"
+          ]
         },
         "illustration": {
           "cardinality": "one",
           "target.entity": "Illustration",
-          "source.fields": ["IllustrationID"],
-          "target.fields": ["IllustrationID"]
+          "source.fields": [
+            "IllustrationID"
+          ],
+          "target.fields": [
+            "IllustrationID"
+          ]
         }
       }
     },
@@ -1539,33 +1677,51 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "productProductPhotos": {
           "cardinality": "many",
           "target.entity": "ProductProductPhoto",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         },
         "productNames": {
           "cardinality": "many",
           "target.entity": "ProductName",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         },
         "subcategory": {
           "cardinality": "one",
           "target.entity": "ProductSubcategory",
-          "source.fields": ["ProductSubcategoryID"],
-          "target.fields": ["ProductSubcategoryID"]
+          "source.fields": [
+            "ProductSubcategoryID"
+          ],
+          "target.fields": [
+            "ProductSubcategoryID"
+          ]
         },
         "productModel": {
           "cardinality": "one",
           "target.entity": "ProductModel",
-          "source.fields": ["ProductModelID"],
-          "target.fields": ["ProductModelID"]
+          "source.fields": [
+            "ProductModelID"
+          ],
+          "target.fields": [
+            "ProductModelID"
+          ]
         }
       }
     },
@@ -1600,7 +1756,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -1632,21 +1790,24 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "product": {
           "cardinality": "one",
           "target.entity": "Product",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         }
       }
     },
@@ -1678,21 +1839,24 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "product": {
           "cardinality": "one",
           "target.entity": "Product",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         }
       }
     },
@@ -1735,21 +1899,31 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "product": {
           "cardinality": "one",
           "target.entity": "Product",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         },
         "location": {
           "cardinality": "one",
           "target.entity": "Location",
-          "source.fields": ["LocationID"],
-          "target.fields": ["LocationID"]
+          "source.fields": [
+            "LocationID"
+          ],
+          "target.fields": [
+            "LocationID"
+          ]
         }
       }
     },
@@ -1808,15 +1982,21 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "specialOfferProducts": {
           "cardinality": "many",
           "target.entity": "SpecialOfferProduct",
-          "source.fields": ["SpecialOfferID"],
-          "target.fields": ["SpecialOfferID"]
+          "source.fields": [
+            "SpecialOfferID"
+          ],
+          "target.fields": [
+            "SpecialOfferID"
+          ]
         }
       }
     },
@@ -1847,21 +2027,31 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "specialOffer": {
           "cardinality": "one",
           "target.entity": "SpecialOffer",
-          "source.fields": ["SpecialOfferID"],
-          "target.fields": ["SpecialOfferID"]
+          "source.fields": [
+            "SpecialOfferID"
+          ],
+          "target.fields": [
+            "SpecialOfferID"
+          ]
         },
         "product": {
           "cardinality": "one",
           "target.entity": "Product",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         }
       }
     },
@@ -1980,51 +2170,81 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "salesOrderDetails": {
           "cardinality": "many",
           "target.entity": "SalesOrderDetail",
-          "source.fields": ["SalesOrderID"],
-          "target.fields": ["SalesOrderID"]
+          "source.fields": [
+            "SalesOrderID"
+          ],
+          "target.fields": [
+            "SalesOrderID"
+          ]
         },
         "shipMethod": {
           "cardinality": "one",
           "target.entity": "ShipMethod",
-          "source.fields": ["ShipMethodID"],
-          "target.fields": ["ShipMethodID"]
+          "source.fields": [
+            "ShipMethodID"
+          ],
+          "target.fields": [
+            "ShipMethodID"
+          ]
         },
         "currencyRate": {
           "cardinality": "one",
           "target.entity": "CurrencyRate",
-          "source.fields": ["CurrencyRateID"],
-          "target.fields": ["CurrencyRateID"]
+          "source.fields": [
+            "CurrencyRateID"
+          ],
+          "target.fields": [
+            "CurrencyRateID"
+          ]
         },
         "customer": {
           "cardinality": "one",
           "target.entity": "Customer",
-          "source.fields": ["CustomerID"],
-          "target.fields": ["CustomerID"]
+          "source.fields": [
+            "CustomerID"
+          ],
+          "target.fields": [
+            "CustomerID"
+          ]
         },
         "salesPerson": {
           "cardinality": "one",
           "target.entity": "SalesPerson",
-          "source.fields": ["SalesPersonID"],
-          "target.fields": ["BusinessEntityID"]
+          "source.fields": [
+            "SalesPersonID"
+          ],
+          "target.fields": [
+            "BusinessEntityID"
+          ]
         },
         "salesTerritory": {
           "cardinality": "one",
           "target.entity": "SalesTerritory",
-          "source.fields": ["TerritoryID"],
-          "target.fields": ["TerritoryID"]
+          "source.fields": [
+            "TerritoryID"
+          ],
+          "target.fields": [
+            "TerritoryID"
+          ]
         },
         "creditCard": {
           "cardinality": "one",
           "target.entity": "CreditCard",
-          "source.fields": ["CreditCardID"],
-          "target.fields": ["CreditCardID"]
+          "source.fields": [
+            "CreditCardID"
+          ],
+          "target.fields": [
+            "CreditCardID"
+          ]
         }
       }
     },
@@ -2083,21 +2303,31 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "salesOrderHeader": {
           "cardinality": "one",
           "target.entity": "SalesOrderHeader",
-          "source.fields": ["SalesOrderID"],
-          "target.fields": ["SalesOrderID"]
+          "source.fields": [
+            "SalesOrderID"
+          ],
+          "target.fields": [
+            "SalesOrderID"
+          ]
         },
         "product": {
           "cardinality": "one",
           "target.entity": "Product",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         }
       }
     },
@@ -2121,27 +2351,34 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "salesOrderHeader": {
           "cardinality": "one",
           "target.entity": "SalesOrderHeader",
-          "source.fields": ["SalesOrderID"],
-          "target.fields": ["SalesOrderID"]
+          "source.fields": [
+            "SalesOrderID"
+          ],
+          "target.fields": [
+            "SalesOrderID"
+          ]
         },
         "salesReason": {
           "cardinality": "one",
           "target.entity": "SalesReason",
-          "source.fields": ["SalesReasonID"],
-          "target.fields": ["SalesReasonID"]
+          "source.fields": [
+            "SalesReasonID"
+          ],
+          "target.fields": [
+            "SalesReasonID"
+          ]
         }
       }
     },
@@ -2180,15 +2417,21 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "product": {
           "cardinality": "one",
           "target.entity": "Product",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         }
       }
     },
@@ -2212,27 +2455,34 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "countryRegion": {
           "cardinality": "one",
           "target.entity": "CountryRegion",
-          "source.fields": ["CountryRegionCode"],
-          "target.fields": ["CountryRegionCode"]
+          "source.fields": [
+            "CountryRegionCode"
+          ],
+          "target.fields": [
+            "CountryRegionCode"
+          ]
         },
         "currency": {
           "cardinality": "one",
           "target.entity": "Currency",
-          "source.fields": ["CurrencyCode"],
-          "target.fields": ["CurrencyCode"]
+          "source.fields": [
+            "CurrencyCode"
+          ],
+          "target.fields": [
+            "CurrencyCode"
+          ]
         }
       }
     },
@@ -2272,21 +2522,24 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "stateProvince": {
           "cardinality": "one",
           "target.entity": "StateProvince",
-          "source.fields": ["StateProvinceID"],
-          "target.fields": ["StateProvinceID"]
+          "source.fields": [
+            "StateProvinceID"
+          ],
+          "target.fields": [
+            "StateProvinceID"
+          ]
         }
       }
     },
@@ -2310,13 +2563,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -2344,13 +2596,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -2382,13 +2633,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -2424,27 +2674,34 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "department": {
           "cardinality": "one",
           "target.entity": "Department",
-          "source.fields": ["DepartmentID"],
-          "target.fields": ["DepartmentID"]
+          "source.fields": [
+            "DepartmentID"
+          ],
+          "target.fields": [
+            "DepartmentID"
+          ]
         },
         "shift": {
           "cardinality": "one",
           "target.entity": "Shift",
-          "source.fields": ["ShiftID"],
-          "target.fields": ["ShiftID"]
+          "source.fields": [
+            "ShiftID"
+          ],
+          "target.fields": [
+            "ShiftID"
+          ]
         }
       }
     },
@@ -2476,13 +2733,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -2514,27 +2770,34 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "person": {
           "cardinality": "one",
           "target.entity": "Person",
-          "source.fields": ["PersonID"],
-          "target.fields": ["BusinessEntityID"]
+          "source.fields": [
+            "PersonID"
+          ],
+          "target.fields": [
+            "BusinessEntityID"
+          ]
         },
         "contactType": {
           "cardinality": "one",
           "target.entity": "ContactType",
-          "source.fields": ["ContactTypeID"],
-          "target.fields": ["ContactTypeID"]
+          "source.fields": [
+            "ContactTypeID"
+          ],
+          "target.fields": [
+            "ContactTypeID"
+          ]
         }
       }
     },
@@ -2581,7 +2844,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -2640,21 +2905,31 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "product": {
           "cardinality": "one",
           "target.entity": "Product",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         },
         "vendor": {
           "cardinality": "one",
           "target.entity": "Vendor",
-          "source.fields": ["BusinessEntityID"],
-          "target.fields": ["BusinessEntityID"]
+          "source.fields": [
+            "BusinessEntityID"
+          ],
+          "target.fields": [
+            "BusinessEntityID"
+          ]
         }
       }
     },
@@ -2721,27 +2996,41 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "vendor": {
           "cardinality": "one",
           "target.entity": "Vendor",
-          "source.fields": ["VendorID"],
-          "target.fields": ["BusinessEntityID"]
+          "source.fields": [
+            "VendorID"
+          ],
+          "target.fields": [
+            "BusinessEntityID"
+          ]
         },
         "shipMethod": {
           "cardinality": "one",
           "target.entity": "ShipMethod",
-          "source.fields": ["ShipMethodID"],
-          "target.fields": ["ShipMethodID"]
+          "source.fields": [
+            "ShipMethodID"
+          ],
+          "target.fields": [
+            "ShipMethodID"
+          ]
         },
         "purchaseOrderDetails": {
           "cardinality": "many",
           "target.entity": "PurchaseOrderDetail",
-          "source.fields": ["PurchaseOrderID"],
-          "target.fields": ["PurchaseOrderID"]
+          "source.fields": [
+            "PurchaseOrderID"
+          ],
+          "target.fields": [
+            "PurchaseOrderID"
+          ]
         }
       }
     },
@@ -2800,21 +3089,31 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "purchaseOrderHeader": {
           "cardinality": "one",
           "target.entity": "PurchaseOrderHeader",
-          "source.fields": ["PurchaseOrderID"],
-          "target.fields": ["PurchaseOrderID"]
+          "source.fields": [
+            "PurchaseOrderID"
+          ],
+          "target.fields": [
+            "PurchaseOrderID"
+          ]
         },
         "product": {
           "cardinality": "one",
           "target.entity": "Product",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         }
       }
     },
@@ -2850,13 +3149,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -2884,21 +3182,24 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "productPhoto": {
           "cardinality": "one",
           "target.entity": "ProductPhoto",
-          "source.fields": ["ProductPhotoID"],
-          "target.fields": ["ProductPhotoID"]
+          "source.fields": [
+            "ProductPhotoID"
+          ],
+          "target.fields": [
+            "ProductPhotoID"
+          ]
         }
       }
     },
@@ -2946,21 +3247,24 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "product": {
           "cardinality": "one",
           "target.entity": "Product",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         }
       }
     },
@@ -3008,21 +3312,24 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "product": {
           "cardinality": "one",
           "target.entity": "Product",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         }
       }
     },
@@ -3074,33 +3381,44 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "product": {
           "cardinality": "one",
           "target.entity": "Product",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         },
         "scrapReason": {
           "cardinality": "one",
           "target.entity": "ScrapReason",
-          "source.fields": ["ScrapReasonID"],
-          "target.fields": ["ScrapReasonID"]
+          "source.fields": [
+            "ScrapReasonID"
+          ],
+          "target.fields": [
+            "ScrapReasonID"
+          ]
         },
         "workOrderRoutings": {
           "cardinality": "many",
           "target.entity": "WorkOrderRouting",
-          "source.fields": ["WorkOrderID"],
-          "target.fields": ["WorkOrderID"]
+          "source.fields": [
+            "WorkOrderID"
+          ],
+          "target.fields": [
+            "WorkOrderID"
+          ]
         }
       }
     },
@@ -3160,27 +3478,34 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "workOrder": {
           "cardinality": "one",
           "target.entity": "WorkOrder",
-          "source.fields": ["WorkOrderID"],
-          "target.fields": ["WorkOrderID"]
+          "source.fields": [
+            "WorkOrderID"
+          ],
+          "target.fields": [
+            "WorkOrderID"
+          ]
         },
         "location": {
           "cardinality": "one",
           "target.entity": "Location",
-          "source.fields": ["LocationID"],
-          "target.fields": ["LocationID"]
+          "source.fields": [
+            "LocationID"
+          ],
+          "target.fields": [
+            "LocationID"
+          ]
         }
       }
     },
@@ -3212,21 +3537,24 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "salesPerson": {
           "cardinality": "one",
           "target.entity": "SalesPerson",
-          "source.fields": ["BusinessEntityID"],
-          "target.fields": ["BusinessEntityID"]
+          "source.fields": [
+            "BusinessEntityID"
+          ],
+          "target.fields": [
+            "BusinessEntityID"
+          ]
         }
       }
     },
@@ -3262,13 +3590,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -3296,13 +3623,12 @@
           "description": "Date and time the record was last updated, maintained automatically by the system."
         }
       ],
-      "mcp": {
-        "enabled": false
-      },
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ]
     },
@@ -3365,21 +3691,31 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "productReviewReplies": {
           "cardinality": "many",
           "target.entity": "ProductReviewReply",
-          "source.fields": ["ProductReviewID"],
-          "target.fields": ["ProductReviewID"]
+          "source.fields": [
+            "ProductReviewID"
+          ],
+          "target.fields": [
+            "ProductReviewID"
+          ]
         },
         "product": {
           "cardinality": "one",
           "target.entity": "Product",
-          "source.fields": ["ProductID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ProductID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         }
       }
     },
@@ -3418,15 +3754,21 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "productReview": {
           "cardinality": "one",
           "target.entity": "ProductReview",
-          "source.fields": ["ProductReviewID"],
-          "target.fields": ["ProductReviewID"]
+          "source.fields": [
+            "ProductReviewID"
+          ],
+          "target.fields": [
+            "ProductReviewID"
+          ]
         }
       }
     },
@@ -3477,21 +3819,31 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["*"]
+          "actions": [
+            "*"
+          ]
         }
       ],
       "relationships": {
         "component": {
           "cardinality": "one",
           "target.entity": "Product",
-          "source.fields": ["ComponentID"],
-          "target.fields": ["ProductID"]
+          "source.fields": [
+            "ComponentID"
+          ],
+          "target.fields": [
+            "ProductID"
+          ]
         },
         "unitMeasure": {
           "cardinality": "one",
           "target.entity": "UnitMeasure",
-          "source.fields": ["UnitMeasureCode"],
-          "target.fields": ["UnitMeasureCode"]
+          "source.fields": [
+            "UnitMeasureCode"
+          ],
+          "target.fields": [
+            "UnitMeasureCode"
+          ]
         }
       }
     },
@@ -3499,7 +3851,9 @@
       "source": {
         "object": "HumanResources.vEmployee",
         "type": "view",
-        "key-fields": ["BusinessEntityID"]
+        "key-fields": [
+          "BusinessEntityID"
+        ]
       },
       "description": "Read-only view of Adventure Works Cycles employees for API access. Based on HumanResources.Employee but excludes the hierarchyid columns (OrganizationNode, OrganizationLevel) which are not supported by Data API Builder. Includes identity, job title, employment dates, leave balances, and current status.",
       "fields": [
@@ -3623,7 +3977,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["read"]
+          "actions": [
+            "read"
+          ]
         }
       ]
     },
@@ -3631,7 +3987,10 @@
       "source": {
         "object": "Production.vHelpMeChoose",
         "type": "view",
-        "key-fields": ["CultureID", "ProductID"]
+        "key-fields": [
+          "CultureID",
+          "ProductID"
+        ]
       },
       "description": "Comprehensive read-only view for the Help Me Choose AI agent. Flattens finished-goods product attributes (ProductID, ProductName, ProductDescription, Color, Size, ProductLine, Style), culture-specific Category and Subcategory names, IsInStock (derived from ProductInventory), ListPrice, and AverageRating/ReviewCount (aggregated from ProductReview) \u2014 one row per ProductID + CultureID combination.",
       "fields": [
@@ -3695,7 +4054,9 @@
       "permissions": [
         {
           "role": "anonymous",
-          "actions": ["read"]
+          "actions": [
+            "read"
+          ]
         }
       ]
     }
