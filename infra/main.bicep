@@ -321,9 +321,28 @@ module containerAppAdmin 'modules/aca-app-admin.bicep' = {
   }
 }
 
+module containerAppManufacturing 'modules/aca-app-manufacturing.bicep' = {
+  name: 'Deploy-Container-App-Manufacturing'
+  params: {
+    location: location
+    appInsightsName: appInsightsName
+    appManufacturingName: 'av-app-manufacturing-${resourceToken}'
+    containerRegistryName: acrName
+    identityName: identityName
+    apiUrl: containerAppApi.outputs.apiUrl
+    apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
+    appInsightsConnectionString: appinsights.outputs.connectionString
+    minReplica: 0
+    maxReplica: 3
+    revisionSuffix: revisionSuffix
+    containerAppEnvId: containerApp.outputs.containerAppEnvId
+  }
+}
+
 output APP_URL string = staticWebAppFrontend.outputs.appRedirectUri
 output APP_REDIRECT_URI string = staticWebAppFrontend.outputs.appRedirectUri
 output APP_ADMIN_URL string = containerAppAdmin.outputs.appAdminUrl
+output APP_MANUFACTURING_URL string = containerAppManufacturing.outputs.appManufacturingUrl
 
 // Expose values needed for local debugging / .env population
 // Application Insights connection string (need to reference component resource id after module deployment)
@@ -352,6 +371,7 @@ output STORAGE_ACCOUNT_NAME string = storage.outputs.storageAccountName
 // Service names for azd deploy mapping (required by azd CLI)
 output SERVICE_APP_NAME string = staticWebAppFrontend.outputs.staticWebAppName
 output SERVICE_APP_ADMIN_NAME string = containerAppAdmin.outputs.appAdminName
+output SERVICE_APP_MANUFACTURING_NAME string = containerAppManufacturing.outputs.appManufacturingName
 output SERVICE_API_NAME string = 'av-api-${resourceToken}'
 output SERVICE_API_FUNCTIONS_NAME string = 'av-func-${resourceToken}'
 output SERVICE_API_MCP_NAME string = 'av-mcp-${resourceToken}'

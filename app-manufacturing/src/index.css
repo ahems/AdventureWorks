@@ -1,0 +1,215 @@
+@import url('https://fonts.googleapis.com/css2?family=Short+Stack&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* DoodleCSS-inspired Production Admin Design System */
+
+@layer base {
+  :root {
+    --background: 32 50% 97%;
+    --foreground: 0 0% 24%;
+
+    --card: 32 50% 97%;
+    --card-foreground: 0 0% 24%;
+
+    --popover: 32 50% 97%;
+    --popover-foreground: 0 0% 24%;
+
+    --primary: 15 80% 55%;
+    --primary-foreground: 32 50% 97%;
+
+    --secondary: 32 30% 90%;
+    --secondary-foreground: 0 0% 24%;
+
+    --muted: 32 20% 88%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 145 45% 35%;
+    --accent-foreground: 32 50% 97%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 32 50% 97%;
+
+    --border: 0 0% 75%;
+    --input: 0 0% 75%;
+    --ring: 15 80% 55%;
+
+    --radius: 0.25rem;
+
+    --doodle-bg: 32 50% 97%;
+    --doodle-text: 0 0% 24%;
+    --doodle-link: 0 0% 11%;
+    --doodle-accent: 1 100% 68%;
+    --doodle-green: 145 26% 39%;
+    --doodle-blue: 222 100% 68%;
+
+    --sidebar-background: 32 50% 97%;
+    --sidebar-foreground: 0 0% 24%;
+    --sidebar-primary: 15 80% 55%;
+    --sidebar-primary-foreground: 32 50% 97%;
+    --sidebar-accent: 32 30% 90%;
+    --sidebar-accent-foreground: 0 0% 24%;
+    --sidebar-border: 0 0% 75%;
+    --sidebar-ring: 15 80% 55%;
+  }
+
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-doodle-bg text-doodle-text;
+    font-family: 'Short Stack', cursive;
+  }
+}
+
+@layer utilities {
+  .doodle-border {
+    position: relative;
+    @apply border-[3px] border-doodle-text rounded-sm;
+    box-shadow: 
+      2px 2px 0 hsl(var(--doodle-text)),
+      -1px -1px 0 hsl(var(--doodle-text)),
+      1px -1px 0 hsl(var(--doodle-text)),
+      -1px 1px 0 hsl(var(--doodle-text));
+  }
+
+  .doodle-border-light {
+    @apply border-2 border-doodle-text rounded-sm;
+    box-shadow: 1px 1px 0 hsl(var(--doodle-text));
+  }
+
+  .doodle-card {
+    position: relative;
+    @apply bg-doodle-bg border-[3px] border-doodle-text rounded;
+    box-shadow: 4px 4px 0 hsl(var(--doodle-text));
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .doodle-card:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 hsl(var(--doodle-text));
+  }
+
+  .doodle-card-static {
+    position: relative;
+    @apply bg-doodle-bg border-[3px] border-doodle-text rounded;
+    box-shadow: 4px 4px 0 hsl(var(--doodle-text));
+  }
+
+  .doodle-dialog {
+    @apply bg-doodle-bg border-[3px] border-doodle-text rounded;
+    box-shadow: 4px 4px 0 hsl(var(--doodle-text));
+  }
+
+  .doodle-button {
+    position: relative;
+    @apply bg-doodle-bg border-[3px] border-doodle-text text-doodle-text;
+    padding: 0.5rem 1.5rem;
+    font-family: 'Short Stack', cursive;
+    font-size: 1rem;
+    cursor: pointer;
+    box-shadow: 3px 3px 0 hsl(var(--doodle-text));
+    transition: all 0.15s ease;
+  }
+
+  .doodle-button:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 4px 4px 0 hsl(var(--doodle-text));
+  }
+
+  .doodle-button:active {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 hsl(var(--doodle-text));
+  }
+
+  .doodle-button-primary {
+    @apply bg-doodle-accent text-white border-doodle-text;
+  }
+
+  .doodle-button-accent {
+    @apply bg-doodle-green text-white border-doodle-text;
+  }
+
+  .doodle-input {
+    @apply bg-doodle-bg border-[3px] border-doodle-text text-doodle-text;
+    padding: 0.5rem 1rem;
+    font-family: 'Short Stack', cursive;
+    font-size: 1rem;
+    box-shadow: 2px 2px 0 hsl(var(--doodle-text));
+  }
+
+  .doodle-input:focus {
+    @apply outline-2 outline-dashed outline-doodle-text outline-offset-2;
+  }
+
+  .squiggle {
+    text-decoration: underline;
+    text-decoration-style: wavy;
+    text-underline-offset: 4px;
+  }
+
+  .hand-heading {
+    font-family: 'Short Stack', cursive;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .float-animation {
+    animation: float 3s ease-in-out infinite;
+  }
+
+  @keyframes wiggle {
+    0%, 100% { transform: rotate(-2deg); }
+    50% { transform: rotate(2deg); }
+  }
+
+  .wiggle-animation {
+    animation: wiggle 0.5s ease-in-out infinite;
+  }
+
+  @keyframes bounce-in {
+    0% { transform: scale(0.9); opacity: 0; }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .bounce-in {
+    animation: bounce-in 0.4s ease-out;
+  }
+
+  .delay-100 { animation-delay: 100ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-400 { animation-delay: 400ms; }
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-doodle-bg;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-doodle-text border-2 border-doodle-bg rounded;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-doodle-text/80;
+}

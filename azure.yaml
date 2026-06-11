@@ -76,6 +76,13 @@ services:
     docker:
       path: Dockerfile
       remoteBuild: true
+  app-manufacturing:
+    project: ./app-manufacturing
+    host: containerapp
+    language: docker
+    docker:
+      path: Dockerfile
+      remoteBuild: true
   mcp-inspector:
     project: ./mcp-inspector
     host: containerapp

@@ -10,6 +10,8 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
         gnupg \
         ca-certificates \
         unzip \
+        git-lfs \
+    && git lfs install \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 22.x (LTS - Node 20 reaches EOL April 2026)
