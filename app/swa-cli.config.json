@@ -7,8 +7,7 @@
       "appBuildCommand": "bash scripts/build-with-env.sh",
       "run": "npm run dev",
       "appDevserverUrl": "http://localhost:5173",
-      "appName": "todoapp-swa-ewphuc52etkbc",
-      "resourceGroup": "rg-adamhems-adventureworks"
+      "env": "production"
     }
   }
 }

@@ -27,7 +27,7 @@
 --          A. Pending PurchaseOrders (Status=1): ShipDate and
 --             PurchaseOrderDetail.DueDate re-set to GETDATE() + vendor
 --             AverageLeadTime + deterministic spread (7-20 days ahead).
---          B. In-process WorkOrders (Status=1): DueDate spread across the
+--          B. In-process WorkOrders (EndDate IS NULL): DueDate spread across the
 --             next 1-14 days; StartDate = DueDate - original duration (capped
 --             at -30 days) so active manufacturing jobs show near-future
 --             completion.
@@ -558,7 +558,7 @@ BEGIN
         -- Block B: Re-anchor in-process WorkOrders so manufacturing jobs
         -- appear actively in progress with near-future completion dates.
         --
-        -- Targets WorkOrder rows where Status=1 (In Process) and DueDate
+        -- Targets WorkOrder rows where EndDate IS NULL (In Process) and DueDate
         -- is in the past after the uniform shift.  Only seed-era rows
         -- (DueDate <= @ShiftThreshold) are touched.
         --
@@ -566,14 +566,13 @@ BEGIN
         -- WorkOrderID % 14 (deterministic).  StartDate is recalculated as
         -- new DueDate - original duration, capped at no earlier than
         -- 30 days ago so no job appears to have started more than a month
-        -- back.  EndDate is already NULL for Status=1 rows and is not
-        -- updated.
+        -- back.  EndDate remains NULL (in-process) and is not updated.
         -- -----------------------------------------------------------------
         SELECT  wo.WorkOrderID,
                 DATEDIFF(DAY, wo.StartDate, wo.DueDate) AS DurationDays
         INTO #WoAnchor
         FROM   [Production].[WorkOrder] wo
-        WHERE  wo.Status = 1
+        WHERE  wo.EndDate IS NULL
           AND  wo.DueDate < GETDATE()
           AND  CAST(wo.DueDate AS DATETIME) <= @ShiftThreshold;
 

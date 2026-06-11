@@ -2325,6 +2325,43 @@ WHEN NOT MATCHED THEN
     }
     # Note: ProductProductPhoto-ai.csv mappings are loaded earlier in the CSV data loading section
 
+    # ==========================================
+    # Enable SQL Change Tracking (idempotent)
+    # Now safe to run because Sales.SalesOrderHeader exists after schema creation.
+    # ==========================================
+    Write-Log "`n=========================================="
+    Write-Log "Enabling SQL Change Tracking..."
+    Write-Log "=========================================="
+    try {
+        # Database-level Change Tracking
+        $checkCT = $conn.CreateCommand()
+        $checkCT.CommandText = 'SELECT COUNT(*) FROM sys.change_tracking_databases WHERE database_id = DB_ID()'
+        $ctOn = [int]$checkCT.ExecuteScalar()
+        if ($ctOn -eq 0) {
+            $alterCT = $conn.CreateCommand()
+            $alterCT.CommandText = "ALTER DATABASE [$DatabaseName] SET CHANGE_TRACKING = ON (CHANGE_RETENTION = 2 DAYS, AUTO_CLEANUP = ON)"
+            $null = $alterCT.ExecuteNonQuery()
+            Write-Log "  ✓ Database Change Tracking: ENABLED"
+        } else {
+            Write-Log "  ✓ Database Change Tracking: already enabled"
+        }
+
+        # Table-level Change Tracking on Sales.SalesOrderHeader
+        $checkTable = $conn.CreateCommand()
+        $checkTable.CommandText = 'SELECT COUNT(*) FROM sys.change_tracking_tables WHERE object_id = OBJECT_ID(''[Sales].[SalesOrderHeader]'')'
+        $tableOn = [int]$checkTable.ExecuteScalar()
+        if ($tableOn -eq 0) {
+            $alterTable = $conn.CreateCommand()
+            $alterTable.CommandText = 'ALTER TABLE [Sales].[SalesOrderHeader] ENABLE CHANGE_TRACKING WITH (TRACK_COLUMNS_UPDATED = OFF)'
+            $null = $alterTable.ExecuteNonQuery()
+            Write-Log "  ✓ Sales.SalesOrderHeader Change Tracking: ENABLED"
+        } else {
+            Write-Log "  ✓ Sales.SalesOrderHeader Change Tracking: already enabled"
+        }
+    } catch {
+        Write-Log "  WARNING: Change Tracking setup failed (non-fatal): $($_.Exception.Message)"
+    }
+
     $script:seedSuccess = $true
     $conn.Close()
 }
