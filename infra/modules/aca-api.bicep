@@ -87,6 +87,18 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             cpu: json('2.0')
             memory: '4Gi'
           }
+          probes: [
+            {
+              type: 'Startup'
+              tcpSocket: {
+                port: 80
+              }
+              initialDelaySeconds: 60
+              periodSeconds: 10
+              failureThreshold: 12
+              timeoutSeconds: 5
+            }
+          ]
           env: [
             {
               name: 'DATABASE_CONNECTION_STRING'

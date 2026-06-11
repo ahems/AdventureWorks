@@ -45,20 +45,16 @@ The agent:
 
 | Environment variable          | Description                                                 |
 | ----------------------------- | ----------------------------------------------------------- |
-| `AI_AGENT_MANUFACTURING_ID`   | Foundry agent ID (set by `manufacturing-agent.sh`)          |
+| `AI_AGENT_MANUFACTURING_ID`   | Foundry agent ID (set automatically by `postprovision.sh`)  |
 | `AI_FOUNDRY_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint                           |
 | `SQL_CONNECTION_STRING`       | Azure SQL connection string (Active Directory Default auth) |
 | `AzureWebJobsStorage`         | Azure Storage connection for queue output bindings          |
 
 ## Creating the agent
 
-Run after `azd provision` to create or update the agent in Azure AI Foundry:
+The manufacturing agent is created **automatically** during `azd up` as part of `postprovision.sh`. No manual step is required.
 
-```bash
-bash scripts/utilities/agents/manufacturing-agent.sh
-```
-
-Or run all agents at once:
+To recreate or update the agent after deployment, re-run the agent creation script:
 
 ```bash
 bash scripts/utilities/create-foundry-agents.sh

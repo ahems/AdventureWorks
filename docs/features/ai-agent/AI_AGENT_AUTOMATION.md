@@ -4,7 +4,7 @@ This document describes the automated AI Agent creation process integrated into 
 
 ## Overview
 
-During `azd provision`, the deployment automatically creates **eight Azure AI Foundry Agents** (five base agents + three workflow routing agents) that integrate with the AdventureWorks MCP servers. This eliminates the need for manual agent setup and ensures agents are always configured correctly with the latest deployment.
+During `azd provision`, the deployment automatically creates **fifteen Azure AI Foundry Agents** across the eshop and admin portal surfaces. This eliminates the need for manual agent setup and ensures agents are always configured correctly with the latest deployment.
 
 ## Automated Process
 
@@ -20,19 +20,28 @@ When you run `azd up` or `azd provision`, the system automatically:
 
 2. **Creates Foundry Agents** (`scripts/utilities/create-foundry-agents.sh`, called from `postprovision.sh`)
 
-   **Base agents** (invoked directly for business logic):
-   - **Chat Agent** (`AI_AGENT_CHAT_ID`) — customer service chat, product recommendations, order tracking
+   **Eshop agents** (customer-facing):
+   - **Eshop Chat Agent** (`AI_AGENT_CHAT_ID`) — customer service chat, product recommendations, order tracking
    - **Help Me Choose Agent** (`AI_AGENT_HELP_ME_CHOOSE_ID`) — multi-phase product advisor wizard
-   - **Promotion Agent** (`AI_AGENT_PROMOTION_ID`) — promotion strategy generation with live catalog data
-   - **Order Generation Agent** (`AI_AGENT_ORDER_ID`) — autonomous order simulation for any persona
-   - **Customer Generation Agent** (`AI_AGENT_CUSTOMER_ID`) — generates realistic fictitious customer profiles for any locale
+   - **Eshop Intent Agent** — classifies intent and routes to the right eshop workflow
+   - **Eshop Workflow Agent** (`AI_AGENT_WORKFLOW_CHAT_ID`) — orchestrates chat vs product-advisor routing
 
-   **Workflow routing agents** (created last; each references a base agent via a workflow YAML):
-   - **Chat Workflow Agent** (`AI_AGENT_WORKFLOW_CHAT_ID`) — routes between chat and product advisor
-   - **Promotion Workflow Agent** (`AI_AGENT_WORKFLOW_PROMOTION_ID`) — gathers promo parameters, invokes promotion agent
-   - **Order Workflow Agent** (`AI_AGENT_WORKFLOW_ORDER_ID`) — identifies persona, gathers constraints, invokes order agent
+   **Admin agents** (internal portal):
+   - **Admin Chat Agent** — general-purpose admin assistant with full catalog and order access
+   - **Admin Order Agent** (`AI_AGENT_ORDER_ID`) — autonomous order simulation for any persona
+   - **Admin Promotion Agent** (`AI_AGENT_PROMOTION_ID`) — promotion strategy generation with live catalog data
+   - **Admin Cart Recovery Agent** (`AI_AGENT_CART_RECOVERY_ID`) — analyses stale carts and generates recovery strategies
+   - **Admin Customer Agent** — generates realistic fictitious customer profiles for any locale
+   - **Admin Product Content Agent** (`AI_AGENT_PRODUCT_CONTENT_ID`) — generates and refines product descriptions and marketing copy
+   - **Admin Order Intent Agent** — classifies admin order generation requests
+   - **Admin Order Workflow Agent** (`AI_AGENT_WORKFLOW_ORDER_ID`) — identifies persona, gathers constraints, invokes order agent
+   - **Admin Promotion Intent Agent** — classifies promotion campaign generation requests
+   - **Admin Promotion Workflow Agent** (`AI_AGENT_WORKFLOW_PROMOTION_ID`) — gathers promo parameters, invokes promotion agent
 
-   Each base agent is registered with two MCP tool servers:
+   **Autonomous (fire-and-forget) agents:**
+   - **Manufacturing Agent** (`AI_AGENT_MANUFACTURING_ID`) — triggered on new order placement via SQL Change Tracking; checks inventory and manufacturing feasibility without human interaction
+
+   Each agent that requires live data is registered with two MCP tool servers:
    - `api-mcp` service (semantic product/catalog tools)
    - DAB `/mcp` endpoint (raw entity data tools)
 
@@ -41,14 +50,16 @@ When you run `azd up` or `azd provision`, the system automatically:
 
 4. **Environment Variables** (available in azd environment)
    - `AI_FOUNDRY_PROJECT_ENDPOINT`: Azure AI Foundry project endpoint
-   - `AI_AGENT_CHAT_ID`: Foundry agent ID for chat
-   - `AI_AGENT_ORDER_ID`: Foundry agent ID for order generation
-   - `AI_AGENT_PROMOTION_ID`: Foundry agent ID for promotions
-   - `AI_AGENT_HELP_ME_CHOOSE_ID`: Foundry agent ID for the wizard
-   - `AI_AGENT_WORKFLOW_CHAT_ID`: Workflow agent that routes chat vs product-advisor
-   - `AI_AGENT_WORKFLOW_PROMOTION_ID`: Workflow agent for promotion campaign generation
-   - `AI_AGENT_WORKFLOW_ORDER_ID`: Workflow agent for autonomous order simulation
-   - `AI_AGENT_CUSTOMER_ID`: Foundry agent ID for locale-aware customer generation
+   - `AI_AGENT_CHAT_ID`: Eshop chat agent
+   - `AI_AGENT_ORDER_ID`: Admin order generation agent
+   - `AI_AGENT_PROMOTION_ID`: Admin promotion generation agent
+   - `AI_AGENT_CART_RECOVERY_ID`: Admin cart recovery analysis agent
+   - `AI_AGENT_PRODUCT_CONTENT_ID`: Admin product content generation agent
+   - `AI_AGENT_HELP_ME_CHOOSE_ID`: Eshop product advisor wizard agent
+   - `AI_AGENT_WORKFLOW_CHAT_ID`: Eshop workflow routing agent
+   - `AI_AGENT_WORKFLOW_PROMOTION_ID`: Admin promotion workflow agent
+   - `AI_AGENT_WORKFLOW_ORDER_ID`: Admin order workflow agent
+   - `AI_AGENT_MANUFACTURING_ID`: Autonomous manufacturing agent
    - `MCP_SERVICE_URL`: api-mcp service endpoint
 
 ## Agent Configuration
