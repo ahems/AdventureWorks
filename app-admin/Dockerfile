@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM mcr.microsoft.com/mirror/docker/library/node:20-bookworm-slim AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ COPY . .
 RUN npm run build
 
 # Production stage - serve with 'serve'
-FROM node:20-alpine
+FROM mcr.microsoft.com/mirror/docker/library/node:20-bookworm-slim
 
 WORKDIR /app
 
