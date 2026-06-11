@@ -381,3 +381,210 @@ GO
 PRINT 'Updated view Production.vProductSearch to include ProductName and ProductNameEmbedding';
 
 GO
+
+-- Step 17: Add IsModerated flag to ProductReview
+-- Tracks whether a review has been reviewed and approved by AdventureWorks staff.
+-- Defaults to 0 (unmoderated) for all new and existing reviews.
+
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[Production].[ProductReview]') AND name = 'IsModerated')
+BEGIN
+    ALTER TABLE [Production].[ProductReview]
+    ADD [IsModerated] BIT NOT NULL DEFAULT 0;
+
+    PRINT 'ProductReview.IsModerated column added (default 0 = unmoderated)';
+END
+ELSE
+BEGIN
+    PRINT 'ProductReview.IsModerated column already exists - skipping';
+END;
+
+GO
+
+-- Step 18: Create Production.ProductReviewReply table
+-- Stores optional staff replies to product reviews, linked 1:many to ProductReview.
+-- No CultureID: replies are always written in the language of the original review.
+
+IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE object_id = OBJECT_ID(N'[Production].[ProductReviewReply]'))
+BEGIN
+    CREATE TABLE [Production].[ProductReviewReply] (
+        [ProductReviewReplyID] INT            IDENTITY(1,1) NOT NULL,
+        [ProductReviewID]      INT            NOT NULL,
+        [Reply]                NVARCHAR(3850) NOT NULL,
+        [RepliedBy]            NVARCHAR(100)  NOT NULL CONSTRAINT [DF_ProductReviewReply_RepliedBy] DEFAULT ('AdventureWorks Team'),
+        [ReplyDate]            DATETIME       NOT NULL CONSTRAINT [DF_ProductReviewReply_ReplyDate] DEFAULT (GETDATE()),
+        [ModifiedDate]         DATETIME       NOT NULL CONSTRAINT [DF_ProductReviewReply_ModifiedDate] DEFAULT (GETDATE()),
+        CONSTRAINT [PK_ProductReviewReply_ProductReviewReplyID]
+            PRIMARY KEY CLUSTERED ([ProductReviewReplyID] ASC),
+        CONSTRAINT [FK_ProductReviewReply_ProductReview]
+            FOREIGN KEY ([ProductReviewID]) REFERENCES [Production].[ProductReview]([ProductReviewID])
+    );
+
+    CREATE NONCLUSTERED INDEX [IX_ProductReviewReply_ProductReviewID]
+    ON [Production].[ProductReviewReply]([ProductReviewID]);
+
+    PRINT 'Created table Production.ProductReviewReply with FK and index';
+END
+ELSE
+BEGIN
+    PRINT 'Table Production.ProductReviewReply already exists - skipping';
+END;
+
+GO
+
+-- Step 19: Recreate vReviewSearch to include IsModerated
+-- Always drop and recreate to keep view current with schema changes.
+
+IF EXISTS (SELECT 1 FROM sys.views WHERE object_id = OBJECT_ID(N'[Production].[vReviewSearch]'))
+BEGIN
+    DROP VIEW [Production].[vReviewSearch];
+END;
+
+GO
+
+CREATE VIEW [Production].[vReviewSearch]
+AS
+SELECT
+        pr.[ProductReviewID],
+        pr.[ProductID],
+        pr.[ReviewerName],
+        pr.[ReviewDate],
+        pr.[Rating],
+        pr.[Comments],
+        pr.[CommentsEmbedding],
+        pr.[HelpfulVotes],
+        pr.[UserID],
+        pr.[IsModerated],
+        pr.[ModifiedDate],
+        p.[Name]          AS [ProductName],
+        p.[ProductNumber]
+    FROM [Production].[ProductReview] pr
+        INNER JOIN [Production].[Product] p
+            ON pr.[ProductID] = p.[ProductID];
+
+GO
+
+PRINT 'Recreated view Production.vReviewSearch with IsModerated column';
+
+GO
+
+-- Step 20: Create HumanResources.vEmployee view
+-- DAB (Data API Builder) does not support hierarchyid columns (OrganizationNode, OrganizationLevel).
+-- This view exposes the Employee table for the Manufacturing demo UI by excluding those columns.
+
+IF EXISTS (SELECT 1 FROM sys.views WHERE object_id = OBJECT_ID(N'[HumanResources].[vEmployee]'))
+BEGIN
+    DROP VIEW [HumanResources].[vEmployee];
+    PRINT 'Dropped existing HumanResources.vEmployee view';
+END;
+
+GO
+
+CREATE VIEW [HumanResources].[vEmployee]
+AS
+SELECT
+    [BusinessEntityID],
+    [NationalIDNumber],
+    [LoginID],
+    [JobTitle],
+    [BirthDate],
+    [MaritalStatus],
+    [Gender],
+    [HireDate],
+    [SalariedFlag],
+    [VacationHours],
+    [SickLeaveHours],
+    [CurrentFlag],
+    [rowguid],
+    [ModifiedDate]
+FROM [HumanResources].[Employee];
+
+GO
+
+PRINT 'Created view HumanResources.vEmployee (excludes hierarchyid columns for DAB compatibility)';
+
+GO
+
+-- Step 21: Create Production.vHelpMeChoose view
+-- Comprehensive flat view for the Help Me Choose AI agent.
+-- Combines finished-goods product attributes, culture-specific translated names and descriptions,
+-- culture-specific category and subcategory names, inventory stock status, list price,
+-- and aggregated product review ratings — one row per (ProductID, CultureID).
+-- Key fields: CultureID + ProductID (unique per culture per product).
+
+IF EXISTS (SELECT 1 FROM sys.views WHERE object_id = OBJECT_ID(N'[Production].[vHelpMeChoose]'))
+BEGIN
+    DROP VIEW [Production].[vHelpMeChoose];
+    PRINT 'Dropped existing Production.vHelpMeChoose view';
+END;
+
+GO
+
+CREATE VIEW [Production].[vHelpMeChoose]
+AS
+SELECT
+    p.[ProductID],
+    COALESCE(pn.[Name], p.[Name])                                       AS [ProductName],
+    pd.[Description]                                                    AS [ProductDescription],
+    p.[Color],
+    p.[Size],
+    CASE RTRIM(p.[ProductLine])
+        WHEN 'R' THEN 'Road'
+        WHEN 'M' THEN 'Mountain'
+        WHEN 'T' THEN 'Touring'
+        WHEN 'S' THEN 'Standard'
+        ELSE NULL
+    END                                                                 AS [ProductLine],
+    CASE RTRIM(p.[Style])
+        WHEN 'W' THEN 'Womens'
+        WHEN 'M' THEN 'Mens'
+        WHEN 'U' THEN 'Universal'
+        ELSE NULL
+    END                                                                 AS [Style],
+    pcat.[Name]                                                         AS [Category],
+    psc.[Name]                                                          AS [Subcategory],
+    pmx.[CultureID],
+    CAST(
+        CASE WHEN ISNULL(inv.[TotalQuantity], 0) > 0 THEN 1 ELSE 0 END
+        AS BIT
+    )                                                                   AS [IsInStock],
+    p.[ListPrice],
+    CAST(ISNULL(rev.[AvgRating], 0.0) AS DECIMAL(3, 2))                AS [AverageRating],
+    ISNULL(rev.[ReviewCount], 0)                                        AS [ReviewCount]
+FROM [Production].[Product] p
+    INNER JOIN [Production].[ProductModel] pm
+        ON p.[ProductModelID] = pm.[ProductModelID]
+    INNER JOIN [Production].[ProductModelProductDescriptionCulture] pmx
+        ON pm.[ProductModelID] = pmx.[ProductModelID]
+    INNER JOIN [Production].[ProductDescription] pd
+        ON pmx.[ProductDescriptionID] = pd.[ProductDescriptionID]
+    LEFT JOIN [Production].[ProductSubcategory] psc
+        ON p.[ProductSubcategoryID] = psc.[ProductSubcategoryID]
+        AND psc.[CultureID] = pmx.[CultureID]
+    LEFT JOIN [Production].[ProductCategory] pcat
+        ON psc.[ProductCategoryID] = pcat.[ProductCategoryID]
+        AND pcat.[CultureID] = pmx.[CultureID]
+    LEFT JOIN [Production].[ProductName] pn
+        ON p.[ProductID] = pn.[ProductID]
+        AND pn.[CultureID] = pmx.[CultureID]
+    LEFT JOIN (
+        SELECT [ProductID], SUM([Quantity]) AS [TotalQuantity]
+        FROM [Production].[ProductInventory]
+        GROUP BY [ProductID]
+    ) inv
+        ON p.[ProductID] = inv.[ProductID]
+    LEFT JOIN (
+        SELECT
+            [ProductID],
+            AVG(CAST([Rating] AS DECIMAL(10, 2))) AS [AvgRating],
+            COUNT(*)                              AS [ReviewCount]
+        FROM [Production].[ProductReview]
+        GROUP BY [ProductID]
+    ) rev
+        ON p.[ProductID] = rev.[ProductID]
+WHERE p.[FinishedGoodsFlag] = 1;
+
+GO
+
+PRINT 'Created view Production.vHelpMeChoose for the Help Me Choose AI agent';
+
+GO

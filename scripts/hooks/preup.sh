@@ -84,8 +84,26 @@ ensure_foundry_account() {
     if [[ "$existing_loc" != "$loc" ]]; then
       color_yellow "Warning: Existing account region '$existing_loc' differs from requested '$loc'; proceeding with existing region."
     fi
+    # Ensure allowProjectManagement is enabled on the existing account — required for the
+    # "New Foundry" portal experience. A fresh account created without this flag will show
+    # the classic portal until the flag is set.
+    local allow_pm
+    allow_pm=$(az cognitiveservices account show -n "$acct" -g "$rg" --subscription "$sub_id" \
+      --query properties.allowProjectManagement -o tsv 2>/dev/null || echo "false")
+    if [[ "$allow_pm" != "true" ]]; then
+      color_dark_gray "Enabling allowProjectManagement on existing account '$acct'..."
+      az cognitiveservices account update \
+        --name "$acct" \
+        --resource-group "$rg" \
+        --subscription "$sub_id" \
+        --allow-project-management \
+        >/dev/null
+    fi
   else
     color_green "Creating Microsoft Foundry account '$acct' in $loc..."
+    # --allow-project-management enables the new Microsoft Foundry portal experience
+    # (the "New Foundry" toggle defaults to on). Without this flag the account is created
+    # in classic mode and the toggle defaults to off.
     az cognitiveservices account create \
       --name "$acct" \
       --resource-group "$rg" \
@@ -94,6 +112,7 @@ ensure_foundry_account() {
       --sku S0 \
       --location "$loc" \
       --custom-domain "$acct" \
+      --allow-project-management \
       --yes \
       >/dev/null
   fi
@@ -223,6 +242,47 @@ if [[ -z "$name_val" ]] || [[ -z "$object_id_val" ]]; then
   set_azd_value "OBJECT_ID" "$object_id_val"
   color_green "Persisted NAME and OBJECT_ID to azd env."
 fi
+
+# Clean up auto-created role assignments on the Foundry account that conflict with
+# Bicep's deterministic (version 5 UUID) role assignments. Azure AI Foundry
+# auto-assigns roles using random (version 4) UUIDs; ARM raises RoleAssignmentExists
+# when Bicep tries to create the same principal+role+scope under a different GUID.
+# Fix: delete the auto-created assignments so Bicep can recreate them idempotently.
+_existing_rg=$(get_azd_value "AZURE_RESOURCE_GROUP")
+_existing_acct=$(get_azd_value "AZURE_OPENAI_ACCOUNT_NAME")
+_identity_name=$(get_azd_value "USER_MANAGED_IDENTITY_NAME")
+if [[ -n "$_existing_acct" ]] && [[ -n "$_existing_rg" ]] && \
+   [[ -n "$subscription_id" ]] && [[ -n "$_identity_name" ]]; then
+  if az cognitiveservices account show -n "$_existing_acct" -g "$_existing_rg" \
+       --subscription "$subscription_id" &>/dev/null 2>&1; then
+    _acct_scope=$(az cognitiveservices account show -n "$_existing_acct" -g "$_existing_rg" \
+      --subscription "$subscription_id" --query id -o tsv 2>/dev/null)
+    _identity_principal=$(az identity show -n "$_identity_name" -g "$_existing_rg" \
+      --subscription "$subscription_id" --query principalId -o tsv 2>/dev/null)
+    if [[ -n "$_acct_scope" ]] && [[ -n "$_identity_principal" ]]; then
+      for _check_role in "64702f94-c441-49e6-a78b-ef80e0188fee" "a001fd3d-188f-4b5d-821b-7da978bf7442"; do
+        _ra_ids=$(az role assignment list --scope "$_acct_scope" \
+          --assignee "$_identity_principal" --role "$_check_role" \
+          --query "[].id" -o tsv 2>/dev/null)
+        while IFS= read -r _ra_id; do
+          [[ -z "$_ra_id" ]] && continue
+          _guid=$(basename "$_ra_id")
+          # UUID version nibble is at position 14 in xxxxxxxx-xxxx-Vxxx-... format.
+          # Bicep's guid() produces version 5; version 4 = auto-created by Foundry.
+          _version=${_guid:14:1}
+          if [[ "$_version" != "5" ]]; then
+            color_yellow "Removing auto-created (v${_version}) role assignment ($_guid) to allow Bicep to recreate idempotently."
+            az role assignment delete --ids "$_ra_id" --subscription "$subscription_id" 2>/dev/null && \
+              color_green "Removed conflicting role assignment: $_guid" || \
+              color_yellow "Warning: Could not remove role assignment: $_guid (continuing)"
+          fi
+        done <<< "$_ra_ids"
+      done
+    fi
+  fi
+fi
+# User role assignments are Bicep-created (version 5 UUIDs) and idempotent — no skip needed.
+set_azd_value "SKIP_LOCAL_DEV_ROLE_ASSIGNMENTS" "false"
 
 # Azure AI Foundry provisioning + model selection (skip if already fully selected)
 existing_chat_complete=""
@@ -509,14 +569,14 @@ else
   color_yellow "Warning: No embeddings model selected."
 fi
 
-# Select image generation model (specifically filter for gpt-image-1)
-image_candidates=$(echo "$sorted" | jq -c '[.[] | select(.ModelName | test("^gpt-?image-?1$"; "i"))]')
+# Select image generation model (specifically filter for gpt-image-2)
+image_candidates=$(echo "$sorted" | jq -c '[.[] | select(.ModelName | test("^gpt-?image-?2$"; "i"))]')
 image_pick=$(echo "$image_candidates" | jq -c 'first(.[])' 2>/dev/null || echo "null")
 
 if [[ "$image_pick" != "null" ]] && [[ -n "$image_pick" ]]; then
   set_azd_value "imageDeploymentVersion" "$(echo "$image_pick" | jq -r '.ModelVersion')"
   set_azd_value "imageDeploymentSkuName" "$(echo "$image_pick" | jq -r '.SkuName')"
-  set_azd_value "imageDeploymentModelName" "gpt-image-1"
+  set_azd_value "imageDeploymentModelName" "gpt-image-2"
   set_azd_value "imageModelFormat" "$(echo "$image_pick" | jq -r '.ModelFormat')"
   set_azd_value "availableImageDeploymentCapacity" "$(echo "$image_pick" | jq -r '.AvailableCapacity')"
   
@@ -524,9 +584,9 @@ if [[ "$image_pick" != "null" ]] && [[ -n "$image_pick" ]]; then
   sku_name=$(echo "$image_pick" | jq -r '.SkuName')
   model_format=$(echo "$image_pick" | jq -r '.ModelFormat')
   capacity=$(echo "$image_pick" | jq -r '.AvailableCapacity')
-  color_green "Selected Image model: gpt-image-1 $model_version SKU $sku_name Format $model_format Capacity $capacity"
+  color_green "Selected Image model: gpt-image-2 $model_version SKU $sku_name Format $model_format Capacity $capacity"
 else
-  color_yellow "Warning: No gpt-image-1 model available in Azure catalog for this region. Bicep will skip image model deployment."
+  color_yellow "Warning: No gpt-image-2 model available in Azure catalog for this region. Bicep will skip image model deployment."
 fi
 
 color_cyan "preup.sh completed."

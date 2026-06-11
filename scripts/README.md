@@ -19,14 +19,14 @@ scripts/
 
 These scripts are automatically executed during `azd` operations:
 
-| Script                | Runs During        | Purpose                                        | Duration          |
-| --------------------- | ------------------ | ---------------------------------------------- | ----------------- |
-| **preup.ps1**         | Before `azd up`    | Creates Entra ID apps, discovers OpenAI models | ~2-3 min          |
-| **postprovision.sh**  | After provisioning | Database role assignments, seed-job deployment | ~2-3 min (hook) + ~8 min (seed-job async) |
-| **postup.ps1**        | After `azd up`     | Final configuration                            | < 1 min           |
-| **predeploy.sh**      | Before deployment  | Build preparation                              | ~1-2 min          |
-| **postdeploy.ps1**    | After deployment   | CORS config, redirect URIs                     | < 1 min           |
-| **postdown.ps1**      | After `azd down`   | Cleanup operations                             | < 1 min           |
+| Script               | Runs During        | Purpose                                        | Duration                                  |
+| -------------------- | ------------------ | ---------------------------------------------- | ----------------------------------------- |
+| **preup.ps1**        | Before `azd up`    | Creates Entra ID apps, discovers OpenAI models | ~2-3 min                                  |
+| **postprovision.sh** | After provisioning | Database role assignments, seed-job deployment | ~2-3 min (hook) + ~8 min (seed-job async) |
+| **postup.ps1**       | After `azd up`     | Final configuration                            | < 1 min                                   |
+| **predeploy.sh**     | Before deployment  | Build preparation                              | ~1-2 min                                  |
+| **postdeploy.ps1**   | After deployment   | CORS config, redirect URIs                     | < 1 min                                   |
+| **postdown.ps1**     | After `azd down`   | Cleanup operations                             | < 1 min                                   |
 
 **Total `azd up` time:** ~29 minutes (includes ~21 minutes for infrastructure provisioning + ~8 minutes for seed-job data loading)
 
@@ -85,6 +85,7 @@ Development and maintenance utilities:
 - **audit-locale-gaps.sh** - Audit translation gaps: missing locale folders, missing namespace files, keys missing/extra vs `en`, and wrapped keys. Use `--json` for machine-readable output.
 - **flatten-locale-json.sh** - Flatten locale JSONs: replace `{"": "value"}` with `"value"` so i18next resolves keys correctly. Dry run by default; use `--write` to apply.
 - **batch-translate-language-file.sh** - Batch translate UI language files via Azure Function; downloads results to `app/src/locales` when `az` and `STORAGE_ACCOUNT_NAME` (azd env) are available.
+- **list-app-urls.sh** - Parse `azd env` values and print current app URLs for the Static Web App and Container Apps.
 - **check-product-photo-duplicates.sh** - Detect duplicate product photos in database
 - **dab-seed-comparison.sh** - Compare Known Good vs Clean (seed) DAB deployment; cross-check discrepancies with seed CSVs
 - **download-large-images.ps1** - Download large product images from Azure
@@ -150,6 +151,9 @@ Run from repository root:
 
 # Batch translate UI language files (downloads to app/src/locales when az + storage env set)
 ./scripts/utilities/batch-translate-language-file.sh   # or --missing-only
+
+# List current deployed app endpoints from azd env values
+./scripts/utilities/list-app-urls.sh
 
 # Check for duplicate photos
 ./scripts/utilities/check-product-photo-duplicates.sh

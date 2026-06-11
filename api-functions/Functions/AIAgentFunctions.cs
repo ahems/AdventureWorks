@@ -78,8 +78,10 @@ public class AIAgentFunctions
                 chatRequest.Message,
                 chatRequest.ConversationHistory ?? new List<AgentChatMessage>(),
                 chatRequest.CustomerId,
-                chatRequest.CultureId
-            );
+                chatRequest.UserName,
+                chatRequest.CultureId,
+                chatRequest.ThreadId,
+                isAdmin: chatRequest.IsAdmin);
 
             var requestDuration = DateTimeOffset.UtcNow - requestStartTime;
 
@@ -147,18 +149,21 @@ public class AIAgentFunctions
         await response.WriteAsJsonAsync(new
         {
             status = "operational",
-            version = "2.0",
-            framework = "Microsoft.Agents.AI",
+            version = "3.0",
+            framework = "Azure.AI.Foundry",
             features = new[]
             {
                 "conversational-ai",
-                "mcp-tool-integration",
-                "durable-agent-threads",
+                "foundry-responses-api",
+                "structured-inputs",
+                "memory-scoping",
+                "tool-choice-required",
+                "dual-mcp-servers",
                 "contextual-suggestions",
                 "order-tracking",
                 "product-search",
                 "recommendations",
-                "streaming-responses",
+                "multi-turn-persistence",
                 "observability-telemetry"
             }
         });
@@ -174,5 +179,9 @@ public class AgentChatRequest
     public string Message { get; set; } = string.Empty;
     public List<AgentChatMessage>? ConversationHistory { get; set; }
     public int? CustomerId { get; set; }
+    public string? UserName { get; set; }
     public string? CultureId { get; set; }
+    public string? ThreadId { get; set; }
+    /// <summary>When true, routes the request to the admin analytics agent (AI_AGENT_ADMIN_CHAT_ID) instead of the customer chat agent.</summary>
+    public bool IsAdmin { get; set; } = false;
 }

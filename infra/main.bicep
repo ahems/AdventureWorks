@@ -27,7 +27,7 @@ param embeddingDeploymentVersion string
 param embeddingSkuName string
 param availableEmbeddingDeploymentCapacity int
 param imageModelName string = ''
-param imageDeploymentName string = 'gpt-image-1'
+param imageDeploymentName string = 'gpt-image-2'
 param imageDeploymentVersion string = ''
 param imageSkuName string = ''
 param availableImageDeploymentCapacity int = 0
@@ -37,6 +37,7 @@ param revisionSuffix string = toLower(substring(replace(newGuid(),'-',''), 0, 8)
 param AIServicesKind string = 'AIServices'
 param publicNetworkAccess string = 'Enabled'
 param sqlDatabaseName string
+param skipLocalDevRoleAssignments bool = false
 @description('Location for Playwright Testing workspace. Must be one of: eastus, westus3, westeurope, eastasia. Defaults to resource group location.')
 @allowed(['eastus', 'westus3', 'westeurope', 'eastasia'])
 param playwrightLocation string = 'westeurope'
@@ -107,10 +108,11 @@ module aifoundry 'modules/aiservices.bicep' = {
     projectName: 'av-aiproject-${resourceToken}'
     appInsightsId: appinsights.outputs.resourceId
     appInsightConnectionString: appinsights.outputs.connectionString
-    appInsightConnectionName: 'av-appinsights-connection-${resourceToken}'
+    appInsightConnectionName: 'AppInsights'
     aoaiConnectionName: 'av-aoai-connection-${resourceToken}'
     storageAccountName: storage.outputs.storageAccountName
     storageAccountConnectionName: 'av-storage-connection-${resourceToken}'
+    skipLocalDevRoleAssignments: skipLocalDevRoleAssignments
   }
   dependsOn: [
     identity
@@ -219,20 +221,20 @@ module containerAppApiMcp 'modules/aca-api-mcp.bicep' = {
     identityName: identityName
     sqlConnectionString: database.outputs.connectionString
     aiFoundryEndpoint: aifoundry.outputs.endpoint
+    apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
     minReplica: 0
-    maxReplica: 3
+    maxReplica: 1
     revisionSuffix: revisionSuffix
     containerAppEnvId: containerApp.outputs.containerAppEnvId
   }
 }
 
-module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
-  name: 'Deploy-Container-App-API-Functions'
+module containerAppApiFunctions 'modules/flex-api-functions.bicep' = {
+  name: 'Deploy-Flex-API-Functions'
   params: {
     location: location
     appInsightsName: appInsightsName
     apiFunctionsName: 'av-func-${resourceToken}'
-    containerRegistryName: acrName
     identityName: identityName
     sqlConnectionString: database.outputs.connectionString
     aiFoundryEndpoint: aifoundry.outputs.endpoint
@@ -240,11 +242,7 @@ module containerAppApiFunctions 'modules/aca-api-functions.bicep' = {
     storageAccountName: storage.outputs.storageAccountName
     communicationServiceEndpoint: communication.outputs.communicationServiceEndpoint
     emailSenderDomain: communication.outputs.senderDomain
-    mcpServiceUrl: containerAppApiMcp.outputs.apiMcpUrl
-    minReplica: 0
-    maxReplica: 3
-    revisionSuffix: revisionSuffix
-    containerAppEnvId: containerApp.outputs.containerAppEnvId
+    foundryProjectEndpoint: aifoundry.outputs.projectEndpoint
   }
 }
 
@@ -274,7 +272,7 @@ module containerAppSeedJob 'modules/aca-seed-job.bicep' = {
 module staticWebAppFrontend 'modules/swa-app.bicep' = {
   name: 'Deploy-Static-Web-App-Frontend'
   params: {
-    swaName: 'av-swa-${resourceToken}'
+    swaName: 'av-app-${resourceToken}'
     location: 'eastus2'
     identityName: identityName
     apiUrl: containerAppApi.outputs.apiUrl
@@ -284,7 +282,48 @@ module staticWebAppFrontend 'modules/swa-app.bicep' = {
   }
 }
 
+module containerAppMcpInspector 'modules/aca-mcp-inspector.bicep' = {
+  name: 'Deploy-Container-App-MCP-Inspector'
+  params: {
+    location: location
+    appInsightsName: appInsightsName
+    mcpInspectorName: 'av-mcp-inspector-${resourceToken}'
+    containerRegistryName: acrName
+    identityName: identityName
+    apiMcpUrl: containerAppApiMcp.outputs.apiMcpUrl
+    apiDabMcpUrl: 'https://${containerAppApi.outputs.apiFqdn}/mcp'
+    containerAppEnvId: containerApp.outputs.containerAppEnvId
+    containerAppEnvDefaultDomain: containerApp.outputs.containerAppEnvDefaultDomain
+    minReplica: 0
+    maxReplica: 1
+    revisionSuffix: revisionSuffix
+  }
+}
+
+module containerAppAdmin 'modules/aca-app-admin.bicep' = {
+  name: 'Deploy-Container-App-Admin'
+  params: {
+    location: location
+    appInsightsName: appInsightsName
+    appAdminName: 'av-app-admin-${resourceToken}'
+    containerRegistryName: acrName
+    identityName: identityName
+    apiUrl: containerAppApi.outputs.apiUrl
+    apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
+    apiMcpUrl: containerAppApiMcp.outputs.apiMcpUrl
+    appInsightsConnectionString: appinsights.outputs.connectionString
+    appUrl: staticWebAppFrontend.outputs.appRedirectUri
+    mcpInspectorUrl: containerAppMcpInspector.outputs.mcpInspectorUrl
+    minReplica: 0
+    maxReplica: 3
+    revisionSuffix: revisionSuffix
+    containerAppEnvId: containerApp.outputs.containerAppEnvId
+  }
+}
+
+output APP_URL string = staticWebAppFrontend.outputs.appRedirectUri
 output APP_REDIRECT_URI string = staticWebAppFrontend.outputs.appRedirectUri
+output APP_ADMIN_URL string = containerAppAdmin.outputs.appAdminUrl
 
 // Expose values needed for local debugging / .env population
 // Application Insights connection string (need to reference component resource id after module deployment)
@@ -312,14 +351,18 @@ output STORAGE_ACCOUNT_NAME string = storage.outputs.storageAccountName
 
 // Service names for azd deploy mapping (required by azd CLI)
 output SERVICE_APP_NAME string = staticWebAppFrontend.outputs.staticWebAppName
+output SERVICE_APP_ADMIN_NAME string = containerAppAdmin.outputs.appAdminName
 output SERVICE_API_NAME string = 'av-api-${resourceToken}'
 output SERVICE_API_FUNCTIONS_NAME string = 'av-func-${resourceToken}'
 output SERVICE_API_MCP_NAME string = 'av-mcp-${resourceToken}'
 output SERVICE_SEED_JOB_NAME string = containerAppSeedJob.outputs.seedJobName
+output SERVICE_MCP_INSPECTOR_NAME string = containerAppMcpInspector.outputs.mcpInspectorName
 
 output API_FUNCTIONS_URL string = containerAppApiFunctions.outputs.apiFunctionsUrl
 output MCP_SERVICE_URL string = containerAppApiMcp.outputs.apiMcpUrl
 output API_MCP_URL string = containerAppApiMcp.outputs.apiMcpUrl
+output MCP_INSPECTOR_URL string = containerAppMcpInspector.outputs.mcpInspectorUrl
+output MCP_INSPECTOR_APP_URL string = containerAppMcpInspector.outputs.mcpInspectorUrl
 
 // Static Web App deployment token for azd deploy
 @secure()
@@ -331,6 +374,8 @@ output COMMUNICATION_SERVICE_ENDPOINT string = communication.outputs.communicati
 output EMAIL_SENDER_DOMAIN string = communication.outputs.senderDomain
 output PROJECT_NAME string = aifoundry.outputs.projectName
 output PROJECT_RESOURCE_ID string = aifoundry.outputs.projectResourceId
+output AI_FOUNDRY_PROJECT_ENDPOINT string = aifoundry.outputs.projectEndpoint
+output chatGptDeploymentName string = chatGptDeploymentName
 output CONTAINER_APP_ENVIRONMENT_NAME string = containerApp.outputs.containerAppEnvName
 
 // Playwright Workspaces outputs (Azure LoadTest Service)

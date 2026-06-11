@@ -17,6 +17,11 @@ public class TranslationWrapper
     public List<TranslatedDescription>? Translations { get; set; }
 }
 
+public class TextTranslationWrapper
+{
+    public List<TextTranslation>? Translations { get; set; }
+}
+
 public class AIService
 {
     private readonly string _endpoint;
@@ -31,167 +36,6 @@ public class AIService
         _endpoint = endpoint;
         _logger = logger;
         _telemetryClient = telemetryClient;
-    }
-
-    public async Task<List<EnhancedProductData>> EnhanceProductsAsync(List<ProductData> products)
-    {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("EnhanceProducts");
-        operation.Telemetry.Properties["ProductCount"] = products.Count.ToString();
-
-        try
-        {
-            var credential = new DefaultAzureCredential();
-            var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
-            var chatClient = client.GetChatClient(_deploymentName);
-
-            var enhancedProducts = new List<EnhancedProductData>();
-
-            // Process products in batches of 10 to avoid token limits
-            const int batchSize = 10;
-            var batchCount = (int)Math.Ceiling(products.Count / (double)batchSize);
-
-            for (int i = 0; i < products.Count; i += batchSize)
-            {
-                var batch = products.Skip(i).Take(batchSize).ToList();
-                var batchResults = await ProcessBatchAsync(chatClient, batch);
-                enhancedProducts.AddRange(batchResults);
-            }
-
-            _telemetryClient.TrackEvent("ProductEnhancementCompleted", new Dictionary<string, string>
-            {
-                ["TotalProducts"] = products.Count.ToString(),
-                ["BatchCount"] = batchCount.ToString(),
-                ["EnhancedCount"] = enhancedProducts.Count.ToString()
-            });
-
-            operation.Telemetry.Success = true;
-            return enhancedProducts;
-        }
-        catch (Exception ex)
-        {
-            operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string>
-            {
-                ["Operation"] = "EnhanceProducts",
-                ["ProductCount"] = products.Count.ToString()
-            });
-            throw;
-        }
-    }
-
-    private async Task<List<EnhancedProductData>> ProcessBatchAsync(ChatClient chatClient, List<ProductData> products)
-    {
-        var startTime = DateTimeOffset.UtcNow;
-
-        var systemPrompt = @"You are a creative product description writer for an outdoor adventure equipment retailer called AdventureWorks.
-Your task is to enhance product descriptions and fill in missing product data.
-
-For each product, you must:
-1. Create an enhanced, longer, more detailed product description based on the existing name, description, and category. Add fun, realistic feature descriptions like 'super shiny', 'extra-light', or 'go-faster stripes'. Be creative but realistic - no magical or fantasy features.
-2. Fill in any missing data (Color, Size, Weight) with realistic values based on the product type. Use metric units (cm for size, kg for weight).
-
-Return ONLY a valid JSON array with this exact structure for each product:
-[
-  {
-    ""ProductID"": 123,
-    ""ProductDescriptionID"": 456,
-    ""EnhancedDescription"": ""enhanced description here"",
-    ""Color"": ""Red"",
-    ""Size"": ""42"",
-    ""SizeUnitMeasureCode"": ""CM"",
-    ""Weight"": 2.5,
-    ""WeightUnitMeasureCode"": ""KG""
-  }
-]
-
-Important constraints:
-- Weight must be a number, not a string
-- Size maximum length: 5 characters
-- If a value already exists in the input, keep it. Only fill in missing (null) values.";
-
-        var productJson = JsonSerializer.Serialize(products.Select(p => new
-        {
-            p.ProductID,
-            p.ProductDescriptionID,
-            p.Name,
-            p.Description,
-            p.ProductCategoryName,
-            p.ProductSubcategoryName,
-            p.Color,
-            p.Size,
-            p.SizeUnitMeasureCode,
-            p.Weight,
-            p.WeightUnitMeasureCode,
-            p.Class,
-            p.Style
-        }), new JsonSerializerOptions { WriteIndented = true });
-
-        var userPrompt = $"Here are the products to enhance:\n\n{productJson}\n\nReturn the enhanced data as a JSON array.";
-
-        var messages = new List<ChatMessage>
-        {
-            new SystemChatMessage(systemPrompt),
-            new UserChatMessage(userPrompt)
-        };
-
-        ChatCompletion response;
-        using (var depOperation = _telemetryClient.StartOperation<DependencyTelemetry>("EnhanceProducts"))
-        {
-            depOperation.Telemetry.Type = "OpenAI";
-            depOperation.Telemetry.Target = "OpenAI";
-            depOperation.Telemetry.Data = "ChatCompletion";
-
-            try
-            {
-                response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
-                {
-                    Temperature = 0.7f,
-                    MaxOutputTokenCount = 4000
-                });
-                depOperation.Telemetry.Success = true;
-            }
-            catch
-            {
-                depOperation.Telemetry.Success = false;
-                throw;
-            }
-        }
-
-        var tokenMetrics = new Dictionary<string, double>
-        {
-            ["InputTokens"] = response.Usage?.InputTokenCount ?? 0,
-            ["OutputTokens"] = response.Usage?.OutputTokenCount ?? 0,
-            ["TotalTokens"] = response.Usage?.TotalTokenCount ?? 0
-        };
-
-        foreach (var metric in tokenMetrics)
-        {
-            _telemetryClient.TrackMetric($"AI.ProductEnhancement.{metric.Key}", metric.Value);
-        }
-
-        var content = response.Content[0].Text;
-
-        // Extract JSON from response (may be wrapped in markdown code blocks)
-        var jsonStart = content.IndexOf('[');
-        var jsonEnd = content.LastIndexOf(']') + 1;
-        var json = content.Substring(jsonStart, jsonEnd - jsonStart);
-
-        var enhancedProducts = JsonSerializer.Deserialize<List<EnhancedProductData>>(json);
-
-        // Log the description lengths
-        if (enhancedProducts != null)
-        {
-            foreach (var product in enhancedProducts)
-            {
-                _logger.LogInformation(
-                    "Product {ProductID}: Enhanced description length = {Length} characters",
-                    product.ProductID,
-                    product.EnhancedDescription?.Length ?? 0
-                );
-            }
-        }
-
-        return enhancedProducts ?? new List<EnhancedProductData>();
     }
 
     public async Task<List<TranslatedDescription>> TranslateProductAsync(
@@ -253,6 +97,103 @@ Important constraints:
         }
 
         return translations;
+    }
+
+    /// <summary>
+    /// Translates a short text (e.g. a promotion description) into multiple target cultures in a single AI call.
+    /// English-variant cultures (en-au, en-ca, en-gb, en-ie, en-nz) should be handled by the caller
+    /// (copy verbatim) — pass only non-English cultures here.
+    /// </summary>
+    public async Task<List<TextTranslation>> TranslateTextAsync(
+        string text,
+        string context,
+        List<CultureInfo> targetCultures)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("TranslateText");
+        operation.Telemetry.Properties["TargetCultureCount"] = targetCultures.Count.ToString();
+
+        try
+        {
+            var credential = new DefaultAzureCredential();
+            var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+            var chatClient = client.GetChatClient(_deploymentName);
+
+            var systemPrompt = @"You are a professional translator for an outdoor adventure equipment retailer called AdventureWorks.
+Translate a short marketing text into multiple languages while preserving tone, style, and meaning.
+
+Guidelines:
+1. Preserve the marketing and promotional tone of the original text.
+2. Keep brand and product names in English (e.g. 'AdventureWorks').
+3. Use culturally appropriate expressions in each target language.
+4. Keep the translation concise — similar length to the original.
+
+Return ONLY a valid JSON object with this exact structure:
+{
+  ""translations"": [
+    {
+      ""CultureID"": ""fr"",
+      ""TranslatedText"": ""translated text here""
+    }
+  ]
+}";
+
+            var culturesJson = JsonSerializer.Serialize(
+                targetCultures.Select(c => new { CultureID = c.CultureID.Trim(), CultureName = c.Name }),
+                new JsonSerializerOptions { WriteIndented = true });
+
+            var userPrompt = $@"Context: {context}
+
+Original English text:
+{text}
+
+Target languages:
+{culturesJson}
+
+Translate the text into each target language. Return ONLY a valid JSON object with a 'translations' array.";
+
+            var messages = new List<ChatMessage>
+            {
+                new SystemChatMessage(systemPrompt),
+                new UserChatMessage(userPrompt)
+            };
+
+            var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+            {
+                Temperature = 0.3f,
+                MaxOutputTokenCount = 8000,
+                ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
+            });
+
+            var content = response.Value.Content[0].Text;
+
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                _logger.LogError("Empty response from AI for TranslateText");
+                return new List<TextTranslation>();
+            }
+
+            var wrapper = JsonSerializer.Deserialize<TextTranslationWrapper>(content,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            var results = wrapper?.Translations ?? new List<TextTranslation>();
+
+            operation.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("TextTranslated", new Dictionary<string, string>
+            {
+                ["CultureCount"] = results.Count.ToString()
+            });
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string>
+            {
+                ["Operation"] = "TranslateText"
+            });
+            throw;
+        }
     }
 
     private async Task<List<TranslatedDescription>> TranslateProductAsync(
@@ -480,6 +421,35 @@ Translate the description into each target language. Return ONLY a valid JSON ob
         }
     }
 
+    public async Task<List<ProductNameEmbedding>> GenerateProductNameEmbeddingsAsync(List<ProductNameEmbeddingData> names)
+    {
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var embeddingClient = client.GetEmbeddingClient(_embeddingDeploymentName);
+
+        var embeddings = new List<ProductNameEmbedding>();
+
+        foreach (var item in names)
+        {
+            try
+            {
+                var embeddingResponse = await embeddingClient.GenerateEmbeddingAsync(item.Name);
+                embeddings.Add(new ProductNameEmbedding
+                {
+                    ProductID = item.ProductID,
+                    CultureID = item.CultureID,
+                    Embedding = embeddingResponse.Value.ToFloats().ToArray()
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to generate embedding for ProductID={pid} CultureID={cid}", item.ProductID, item.CultureID);
+            }
+        }
+
+        return embeddings;
+    }
+
     /// <summary>
     /// Builds enriched text for embedding generation that includes product variants.
     /// This allows semantic search to match queries like "red bike" or "large helmet".
@@ -635,8 +605,8 @@ Translate the description into each target language. Return ONLY a valid JSON ob
     {
         var random = new Random();
 
-        // Generate between 0 and 10 reviews per product
-        var reviewCount = random.Next(0, 11);
+        // Generate between 1 and 10 reviews per product
+        var reviewCount = random.Next(1, 11);
 
         if (reviewCount == 0)
         {
@@ -770,15 +740,25 @@ Return the reviews as a JSON array.";
     public async Task<List<ProductPhotoData>> GenerateProductImagesAsync(List<ProductImageData> products)
     {
         var credential = new DefaultAzureCredential();
-        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        // gpt-image-1 generation can take 2-4 minutes per image.  The SDK default
+        // NetworkTimeout is 100 s which is too short, causing AggregateException
+        // "Retry failed after N tries" instead of a catchable 429.  Set a longer
+        // per-request timeout so the SDK waits for the actual response.
+        var imageClientOptions = new AzureOpenAIClientOptions();
+        imageClientOptions.NetworkTimeout = TimeSpan.FromMinutes(8);
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential, imageClientOptions);
         var imageClient = client.GetImageClient(_imageDeploymentName);
 
         var photos = new List<ProductPhotoData>();
 
         foreach (var product in products)
         {
-            // Only generate images if the product doesn't already have 4 or more photos
-            if (product.ExistingPhotoCount >= 4)
+            // Determine target photo count: Universal style gets an extra image (male + female model)
+            var isUniversal = product.Style?.Trim().ToUpperInvariant() == "U";
+            var targetPhotoCount = isUniversal ? 5 : 4;
+
+            // Only generate images if the product doesn't already have enough photos
+            if (product.ExistingPhotoCount >= targetPhotoCount)
             {
                 _logger.LogInformation(
                     "Skipping ProductID {productId} - already has {count} photos",
@@ -788,7 +768,7 @@ Return the reviews as a JSON array.";
                 continue;
             }
 
-            var imagesToGenerate = 4 - product.ExistingPhotoCount;
+            var imagesToGenerate = targetPhotoCount - product.ExistingPhotoCount;
             _logger.LogInformation(
                 "Generating {count} images for ProductID {productId} ({name})",
                 imagesToGenerate,
@@ -796,28 +776,86 @@ Return the reviews as a JSON array.";
                 product.Name
             );
 
-            // Create prompts for different perspectives
-            var prompts = new List<string>();
-            var basePrompt = $"Professional product photography of {product.Name}";
-
-            if (!string.IsNullOrEmpty(product.Description))
+            // Map single-char ProductLine code to full name
+            var productLineLong = product.ProductLine?.Trim().ToUpperInvariant() switch
             {
-                basePrompt += $". {product.Description}";
-            }
-
-            if (!string.IsNullOrEmpty(product.ProductCategoryName))
-            {
-                basePrompt += $" Category: {product.ProductCategoryName}.";
-            }
-
-            var perspectives = new[]
-            {
-                " Product in use by an outdoor enthusiast, action shot, dynamic composition.",
-                " Close-up detail shot showing product features and quality, studio lighting.",
-                " Three-quarter view on white background, professional e-commerce style.",
-                " Lifestyle shot in natural outdoor environment, contextual setting."
+                "R" => "Road",
+                "M" => "Mountain",
+                "T" => "Touring",
+                "S" => "Standard",
+                _ => null
             };
 
+            // Map single-char Style code to gender description
+            var styleCode = product.Style?.Trim().ToUpperInvariant();
+            var genderLabel = styleCode switch
+            {
+                "M" => "men's",
+                "W" => "women's",
+                "U" => "unisex",
+                _ => null
+            };
+
+            // Build rich base prompt from all available product attributes
+            var promptParts = new List<string>
+            {
+                $"Professional product photography of {product.Name}"
+            };
+
+            if (!string.IsNullOrEmpty(product.Description))
+                promptParts.Add(product.Description);
+
+            if (!string.IsNullOrEmpty(product.ProductCategoryName))
+                promptParts.Add($"Category: {product.ProductCategoryName}");
+
+            if (!string.IsNullOrEmpty(product.ProductSubcategoryName))
+                promptParts.Add($"Subcategory: {product.ProductSubcategoryName}");
+
+            if (!string.IsNullOrEmpty(productLineLong))
+                promptParts.Add($"Product line: {productLineLong}");
+
+            if (!string.IsNullOrEmpty(product.Color))
+                promptParts.Add($"The product colour is {product.Color.ToLower()}");
+
+            if (genderLabel != null)
+                promptParts.Add($"This is a {genderLabel} product");
+
+            var basePrompt = string.Join(". ", promptParts) + ".";
+
+            // Randomly select a model ethnicity for person-based shots for diversity
+            var ethnicities = new[] { "Black", "East Asian", "South Asian", "Hispanic", "Middle Eastern", "White" };
+            var rng = new Random(product.ProductID); // seed by ProductID so it's consistent per product
+            var ethnicity = ethnicities[rng.Next(ethnicities.Length)];
+
+            // Build perspective suffixes based on Style
+            List<string> perspectives;
+            if (isUniversal)
+            {
+                // Universal: 5 images — male model, female model, detail, flat-lay, lifestyle with both
+                perspectives = new List<string>
+                {
+                    $" {ethnicity} male model wearing or using the product in an outdoor action shot, dynamic composition, natural lighting.",
+                    $" {ethnicity} female model wearing or using the product in an outdoor action shot, dynamic composition, natural lighting.",
+                    " Close-up detail shot highlighting product quality and features, studio lighting, white background.",
+                    " Overhead flat-lay of the product on a natural textured surface such as weathered wood or slate rock, creative composition, soft natural lighting.",
+                    $" Lifestyle shot in a natural outdoor environment featuring both a {ethnicity} male and female model together using the product."
+                };
+            }
+            else
+            {
+                var modelAdjective = styleCode == "W" ? "Female" : styleCode == "M" ? "Male" : "Outdoor enthusiast";
+                var modelGender = styleCode == "W" ? "female" : styleCode == "M" ? "male" : "outdoor enthusiast";
+                perspectives = new List<string>
+                {
+                    $" {ethnicity} {modelAdjective.ToLower()} model wearing or using the product in an outdoor action shot, dynamic composition, natural lighting.",
+                    " Close-up detail shot highlighting product quality and features, studio lighting, white background.",
+                    " Overhead flat-lay of the product on a natural textured surface such as weathered wood or slate rock, creative composition, soft natural lighting.",
+                    $" Lifestyle shot in a natural outdoor environment with a {ethnicity} {modelGender} model using the product in context."
+                };
+            }
+
+            // Create prompts for each remaining perspective
+            var prompts = new List<string>();
             for (int i = 0; i < imagesToGenerate; i++)
             {
                 prompts.Add(basePrompt + perspectives[i]);
@@ -826,54 +864,83 @@ Return the reviews as a JSON array.";
             // Generate images
             for (int i = 0; i < prompts.Count; i++)
             {
-                try
+                const int maxImageAttempts = 4;
+                int attempt = 0;
+                while (true)
                 {
-                    _logger.LogInformation(
-                        "Generating image {index} for ProductID {productId}: {prompt}",
-                        i + 1,
-                        product.ProductID,
-                        prompts[i].Substring(0, Math.Min(100, prompts[i].Length))
-                    );
-
-                    var imageOptions = new ImageGenerationOptions
+                    attempt++;
+                    try
                     {
-                        Quality = "high",
-                        Size = GeneratedImageSize.W1024xH1024
-                        // ResponseFormat not supported by Azure OpenAI DALL-E models
-                    };
+                        _logger.LogInformation(
+                            "Generating image {index} for ProductID {productId} (attempt {attempt}): {prompt}",
+                            i + 1,
+                            product.ProductID,
+                            attempt,
+                            prompts[i].Substring(0, Math.Min(100, prompts[i].Length))
+                        );
 
-                    var imageResult = await imageClient.GenerateImageAsync(prompts[i], imageOptions);
-                    var imageBytes = imageResult.Value.ImageBytes.ToArray();
+                        var imageOptions = new ImageGenerationOptions
+                        {
+                            Quality = "high",
+                            Size = GeneratedImageSize.W1024xH1024
+                            // ResponseFormat not supported by Azure OpenAI DALL-E models
+                        };
 
-                    var photoNumber = product.ExistingPhotoCount + i + 1;
-                    var fileName = $"product_{product.ProductID}_photo_{photoNumber}.png";
+                        var imageResult = await imageClient.GenerateImageAsync(prompts[i], imageOptions);
+                        var imageBytes = imageResult.Value.ImageBytes.ToArray();
 
-                    photos.Add(new ProductPhotoData
+                        var photoNumber = product.ExistingPhotoCount + i + 1;
+                        var fileName = $"product_{product.ProductID}_photo_{photoNumber}.png";
+
+                        photos.Add(new ProductPhotoData
+                        {
+                            ProductID = product.ProductID,
+                            ImageData = imageBytes,
+                            FileName = fileName,
+                            IsPrimary = photoNumber == 1 // First photo is primary
+                        });
+
+                        _logger.LogInformation(
+                            "Generated image {index} for ProductID {productId}: {size} bytes, {fileName}",
+                            i + 1,
+                            product.ProductID,
+                            imageBytes.Length,
+                            fileName
+                        );
+                        break; // success — move to next image
+                    }
+                    catch (System.ClientModel.ClientResultException ex) when (ex.Status == 429 && attempt < maxImageAttempts)
                     {
-                        ProductID = product.ProductID,
-                        ImageData = imageBytes,
-                        FileName = fileName,
-                        IsPrimary = photoNumber == 1 // First photo is primary
-                    });
-
-                    _logger.LogInformation(
-                        "Generated image {index} for ProductID {productId}: {size} bytes, {fileName}",
-                        i + 1,
-                        product.ProductID,
-                        imageBytes.Length,
-                        fileName
-                    );
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(
-                        ex,
-                        "Failed to generate image {index} for ProductID {productId}",
-                        i + 1,
-                        product.ProductID
-                    );
-                    // Re-throw to halt the entire orchestration
-                    throw;
+                        // Rate-limited: wait with exponential back-off before retrying (30 s, 60 s, 90 s).
+                        var delaySeconds = 30 * attempt;
+                        _logger.LogWarning(
+                            "Image {index} for ProductID {productId} hit rate limit (attempt {attempt}/{max}). " +
+                            "Waiting {delay}s before retry.",
+                            i + 1, product.ProductID, attempt, maxImageAttempts, delaySeconds);
+                        await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
+                    }
+                    catch (AggregateException) when (attempt < maxImageAttempts)
+                    {
+                        // SDK exhausted its own internal retries (e.g. repeated timeouts).
+                        // Wait before our next outer attempt.
+                        var delaySeconds = 30 * attempt;
+                        _logger.LogWarning(
+                            "Image {index} for ProductID {productId} SDK retries exhausted (attempt {attempt}/{max}). " +
+                            "Waiting {delay}s before retry.",
+                            i + 1, product.ProductID, attempt, maxImageAttempts, delaySeconds);
+                        await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(
+                            ex,
+                            "Failed to generate image {index} for ProductID {productId}",
+                            i + 1,
+                            product.ProductID
+                        );
+                        // Re-throw to let the queue mechanism handle the retry
+                        throw;
+                    }
                 }
             }
         }
@@ -1071,6 +1138,275 @@ CRITICAL INSTRUCTIONS:
         }
     }
 
+    // ─── Review Batch Analysis ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Analyses a list of reviews using the "chat" AI model, returning per-review
+    /// sentiment classification, content flags, and a suggested response.
+    /// Batches of 10 are sent in parallel; any batch that fails is returned with
+    /// an <see cref="ReviewAnalysisResult.Error"/> field so callers receive partial
+    /// results rather than a hard failure.
+    /// </summary>
+    public async Task<List<ReviewAnalysisResult>> AnalyzeReviewsAsync(List<ReviewInput> reviews)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("AnalyzeReviews");
+        operation.Telemetry.Properties["ReviewCount"] = reviews.Count.ToString();
+
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var chatClient = client.GetChatClient(_deploymentName);
+
+        var results = new List<ReviewAnalysisResult>();
+        const int batchSize = 10;
+
+        for (int i = 0; i < reviews.Count; i += batchSize)
+        {
+            var batch = reviews.Skip(i).Take(batchSize).ToList();
+            try
+            {
+                var batchResults = await AnalyzeReviewBatchAsync(chatClient, batch);
+                results.AddRange(batchResults);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Review analysis failed for batch starting at index {Index}", i);
+                results.AddRange(batch.Select(r => new ReviewAnalysisResult
+                {
+                    ProductReviewId = r.ProductReviewId,
+                    Sentiment = "neutral",
+                    Flags = new List<string>(),
+                    SuggestedResponse = null,
+                    Error = "Analysis unavailable"
+                }));
+            }
+        }
+
+        operation.Telemetry.Success = true;
+        return results;
+    }
+
+    private async Task<List<ReviewAnalysisResult>> AnalyzeReviewBatchAsync(
+        ChatClient chatClient, List<ReviewInput> reviews)
+    {
+        const string systemPrompt = @"You are a customer review analysis assistant for AdventureWorks, an outdoor and sporting goods retailer.
+For each review provided, return a JSON array with one object per review containing:
+- productReviewId: the review ID as an integer (copy from input)
+- sentiment: ""positive"", ""neutral"", or ""negative""
+- flags: array of applicable strings from: [""Short Review"", ""Potential Spam"", ""Refund Request"", ""Excessive Punctuation"", ""Offensive Language""]
+- suggestedResponse: a concise, professional, brand-appropriate response (2-3 sentences) the company could post
+
+Return ONLY a valid JSON array. No markdown fences, no explanation.";
+
+        var userPrompt = "Reviews to analyse:\n\n" + JsonSerializer.Serialize(reviews.Select(r => new
+        {
+            productReviewId = r.ProductReviewId,
+            rating = r.Rating,
+            reviewerName = r.ReviewerName ?? "Anonymous",
+            productName = r.ProductName ?? "Unknown Product",
+            comments = r.Comments ?? ""
+        }), new JsonSerializerOptions { WriteIndented = false });
+
+        var messages = new List<ChatMessage>
+        {
+            new SystemChatMessage(systemPrompt),
+            new UserChatMessage(userPrompt)
+        };
+
+        var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+        {
+            Temperature = 0.3f,
+            MaxOutputTokenCount = 2000
+        });
+
+        var content = response.Value.Content[0].Text ?? "[]";
+        // Strip markdown code fences if the model wrapped the output
+        content = StripMarkdownFences(content);
+
+        var batchResults = JsonSerializer.Deserialize<List<ReviewAnalysisResult>>(content,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        return batchResults ?? reviews.Select(r => new ReviewAnalysisResult
+        {
+            ProductReviewId = r.ProductReviewId,
+            Sentiment = "neutral",
+            Flags = new List<string>(),
+            Error = "Parse error"
+        }).ToList();
+    }
+
+    // ─── AI Email Content Generation ─────────────────────────────────────────
+
+    /// <summary>
+    /// Generates a personalised email subject and body using the "chat" AI model.
+    /// Returns an <see cref="EmailContent"/> with an <see cref="EmailContent.Error"/>
+    /// field if the model call fails, so callers can fall back gracefully.
+    /// </summary>
+    public async Task<EmailContent> GenerateEmailContentAsync(EmailContentRequest request)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("GenerateEmailContent");
+        operation.Telemetry.Properties["TemplateType"] = request.TemplateType;
+
+        try
+        {
+            var credential = new DefaultAzureCredential();
+            var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+            var chatClient = client.GetChatClient(_deploymentName);
+
+            const string systemPrompt = @"You are an email marketing specialist for AdventureWorks, an outdoor and sporting goods retailer.
+Generate a personalised email subject and body based on the template type and customer context provided.
+The tone should be warm, friendly, and on-brand. Keep the body concise (3-5 short paragraphs).
+Return ONLY a valid JSON object with exactly two fields: { ""subject"": ""..."", ""body"": ""..."" }
+No markdown fences, no explanation.";
+
+            var contextDetails = new System.Text.StringBuilder();
+            contextDetails.AppendLine($"Customer first name: {request.FirstName}");
+            contextDetails.AppendLine($"Template type: {request.TemplateType.Replace('_', ' ')}");
+            if (request.TotalOrders.HasValue) contextDetails.AppendLine($"Total orders: {request.TotalOrders}");
+            if (request.TotalSpent.HasValue) contextDetails.AppendLine($"Total spent: ${request.TotalSpent:F2}");
+            if (request.CartValue.HasValue) contextDetails.AppendLine($"Abandoned cart value: ${request.CartValue:F2}");
+            if (request.LastOrderId.HasValue) contextDetails.AppendLine($"Last order ID: {request.LastOrderId}");
+            if (request.ProductNames?.Count > 0)
+                contextDetails.AppendLine($"Relevant products: {string.Join(", ", request.ProductNames)}");
+
+            var messages = new List<ChatMessage>
+            {
+                new SystemChatMessage(systemPrompt),
+                new UserChatMessage(contextDetails.ToString())
+            };
+
+            var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+            {
+                Temperature = 0.7f,
+                MaxOutputTokenCount = 500
+            });
+
+            var content = response.Value.Content[0].Text ?? "{}";
+            content = StripMarkdownFences(content);
+
+            var result = JsonSerializer.Deserialize<EmailContent>(content,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            operation.Telemetry.Success = true;
+            return result ?? new EmailContent { Error = "Empty response from model" };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Email content generation failed for template {TemplateType}", request.TemplateType);
+            operation.Telemetry.Success = false;
+            return new EmailContent { Error = "Content generation unavailable" };
+        }
+    }
+
+    // ─── Cart Recovery Analysis ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Analyses a list of abandoned shopping carts using the "chat" AI model and
+    /// returns a recovery strategy per cart (score, urgency, email copy, discount).
+    /// Any batch that fails is returned with <see cref="CartRecoveryResult.Error"/>
+    /// so callers receive partial results rather than a hard failure.
+    /// </summary>
+    public async Task<List<CartRecoveryResult>> AnalyzeCartRecoveryAsync(List<CartRecoveryInput> carts)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("AnalyzeCartRecovery");
+        operation.Telemetry.Properties["CartCount"] = carts.Count.ToString();
+
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var chatClient = client.GetChatClient(_deploymentName);
+
+        var results = new List<CartRecoveryResult>();
+        const int batchSize = 10;
+
+        for (int i = 0; i < carts.Count; i += batchSize)
+        {
+            var batch = carts.Skip(i).Take(batchSize).ToList();
+            try
+            {
+                var batchResults = await AnalyzeCartRecoveryBatchAsync(chatClient, batch);
+                results.AddRange(batchResults);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Cart recovery analysis failed for batch starting at index {Index}", i);
+                results.AddRange(batch.Select(c => new CartRecoveryResult
+                {
+                    CartId = c.CartId,
+                    RecoveryScore = 0,
+                    Urgency = "low",
+                    Error = "Analysis unavailable"
+                }));
+            }
+        }
+
+        operation.Telemetry.Success = true;
+        return results;
+    }
+
+    private async Task<List<CartRecoveryResult>> AnalyzeCartRecoveryBatchAsync(
+        ChatClient chatClient, List<CartRecoveryInput> carts)
+    {
+        const string systemPrompt = @"You are a cart recovery specialist for AdventureWorks, an outdoor and sporting goods retailer.
+For each abandoned cart provided, return a JSON array with one object per cart containing:
+- cartId: the cart ID as a string (copy from input)
+- recoveryScore: integer 0-100 (likelihood of recovery considering cart value, staleness, number of items)
+- urgency: ""high"" (score >= 70), ""medium"" (score 40-69), or ""low"" (score < 40)
+- emailSubject: a compelling, personalised email subject line
+- emailBody: a short recovery email body (3-4 sentences, first-name personalised)
+- recommendedDiscount: integer percentage (10 for high, 5 for medium, 0 for low)
+- strategy: one sentence describing the recommended follow-up action
+
+Return ONLY a valid JSON array. No markdown fences, no explanation.";
+
+        var userPrompt = "Abandoned carts to analyse:\n\n" + JsonSerializer.Serialize(carts.Select(c => new
+        {
+            cartId = c.CartId,
+            customerName = c.CustomerName,
+            totalValue = c.TotalValue,
+            daysStale = c.DaysStale,
+            totalItems = c.TotalItems,
+            products = c.ProductNames ?? new List<string>()
+        }), new JsonSerializerOptions { WriteIndented = false });
+
+        var messages = new List<ChatMessage>
+        {
+            new SystemChatMessage(systemPrompt),
+            new UserChatMessage(userPrompt)
+        };
+
+        var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+        {
+            Temperature = 0.4f,
+            MaxOutputTokenCount = 2000
+        });
+
+        var content = response.Value.Content[0].Text ?? "[]";
+        content = StripMarkdownFences(content);
+
+        var batchResults = JsonSerializer.Deserialize<List<CartRecoveryResult>>(content,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        return batchResults ?? carts.Select(c => new CartRecoveryResult
+        {
+            CartId = c.CartId,
+            Error = "Parse error"
+        }).ToList();
+    }
+
+    // ─── Shared Helpers ───────────────────────────────────────────────────────
+
+    private static string StripMarkdownFences(string text)
+    {
+        // Remove ```json ... ``` or ``` ... ``` wrappers if the model added them
+        var trimmed = text.Trim();
+        if (trimmed.StartsWith("```"))
+        {
+            var firstNewline = trimmed.IndexOf('\n');
+            if (firstNewline >= 0) trimmed = trimmed[(firstNewline + 1)..];
+            if (trimmed.EndsWith("```")) trimmed = trimmed[..^3];
+        }
+        return trimmed.Trim();
+    }
+
     private RegionalInfo GetRegionalInfo(string languageCode)
     {
         return languageCode.ToLowerInvariant() switch
@@ -1214,6 +1550,373 @@ CRITICAL INSTRUCTIONS:
                 ExampleCities = new[] { "New York", "Los Angeles", "Chicago", "Houston", "Phoenix" }
             }
         };
+    }
+
+    public async Task<GenerateProductContentResponse> GenerateProductContentAsync(
+        GenerateProductContentRequest request)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("GenerateProductContent");
+        operation.Telemetry.Properties["Category"] = request.Category;
+        operation.Telemetry.Properties["Subcategory"] = request.Subcategory;
+
+        try
+        {
+            var credential = new DefaultAzureCredential();
+            var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+            var chatClient = client.GetChatClient(_deploymentName);
+
+            var productLine = string.IsNullOrWhiteSpace(request.ProductLine) ? "N/A" : request.ProductLine;
+            var productClass = string.IsNullOrWhiteSpace(request.Class) ? "N/A" : request.Class;
+            var style = string.IsNullOrWhiteSpace(request.Style) ? "N/A" : request.Style;
+
+            // Build the available-options sections only when data is provided (wizard mode)
+            var sizesSection = (request.AvailableSizes?.Count > 0)
+                ? $"\nAvailable sizes to choose from (pick only those that make sense, may be empty): {string.Join(", ", request.AvailableSizes)}"
+                : string.Empty;
+            var colorsSection = (request.AvailableColors?.Count > 0)
+                ? $"\nAvailable colors to choose from (pick only those that make sense, may be empty): {string.Join(", ", request.AvailableColors)}"
+                : string.Empty;
+            var stylesSection = (request.AvailableStyles?.Count > 0)
+                ? $"\nAvailable styles to choose from (pick only those that make sense, may be empty): {string.Join(", ", request.AvailableStyles)}"
+                : string.Empty;
+
+            var systemPrompt = @"You are a creative product copywriter and pricing analyst for the fictional AdventureWorks e‑commerce brand.
+
+Context:
+AdventureWorks is a demo outdoor / cycling goods retailer. The tone should feel realistic and professional — like a real retail website — but also playful and light‑hearted.
+
+Your task:
+Return a JSON object with all required fields below. Do NOT add extra text outside the JSON.
+
+JSON fields:
+- productName: (string) 2–5 words, premium retail product name — avoid real trademarks
+- productDescription: (string) 2 short engaging marketing paragraphs (4–6 sentences total) in US English — focus on experience, NOT specs or pricing
+- estimatedWeightLb: (number) realistic weight in pounds for the product given its category/subcategory
+- suggestedStandardCost: (number) realistic USD manufacturing or bulk purchase cost
+- suggestedListPrice: (number) realistic USD retail price; must be >= suggestedStandardCost
+- suggestedSizes: (array of strings -- always quoted, even for numeric sizes like ""48"") subset of the provided available sizes that physically make sense for this product; empty array if sizes don't vary
+- suggestedColors: (array of strings) subset of the provided available colors that make sense for this product; empty array if color doesn't vary
+- suggestedStyles: (array of strings) subset of the provided available styles that make sense for this product; empty array if style doesn't vary
+
+Guidelines for suggestedSizes:
+- Bikes: use only numeric frame sizes (38–70)
+- Apparel (jerseys, shorts, gloves): use only clothing sizes (XS, S, M, L, XL)
+- Helmets, caps: S, M, L only
+- Small accessories (water bottles, lights, locks): return empty array (one size)
+- Tires: use numeric sizes if available; otherwise empty
+
+Return ONLY a valid JSON object.";
+
+            var userPrompt = $@"Category: {request.Category}
+Subcategory: {request.Subcategory}
+Product Line (optional): {productLine}
+Class (optional): {productClass}
+Style (optional): {style}{sizesSection}{colorsSection}{stylesSection}
+
+Generate the JSON object for this product.";
+
+            var messages = new List<ChatMessage>
+            {
+                new SystemChatMessage(systemPrompt),
+                new UserChatMessage(userPrompt)
+            };
+
+            ChatCompletion response;
+            using (var depOperation = _telemetryClient.StartOperation<DependencyTelemetry>("GenerateProductContent"))
+            {
+                depOperation.Telemetry.Type = "OpenAI";
+                depOperation.Telemetry.Target = "OpenAI";
+                depOperation.Telemetry.Data = "ChatCompletion";
+
+                try
+                {
+                    response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+                    {
+                        Temperature = 0.9f,
+                        MaxOutputTokenCount = 800,
+                        ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
+                    });
+                    depOperation.Telemetry.Success = true;
+                }
+                catch
+                {
+                    depOperation.Telemetry.Success = false;
+                    throw;
+                }
+            }
+
+            _telemetryClient.TrackMetric("AI.GenerateProductContent.InputTokens", response.Usage?.InputTokenCount ?? 0);
+            _telemetryClient.TrackMetric("AI.GenerateProductContent.OutputTokens", response.Usage?.OutputTokenCount ?? 0);
+
+            var raw = response.Content[0].Text ?? "{}";
+
+            GenerateProductContentResponse result;
+            try
+            {
+                result = JsonSerializer.Deserialize<GenerateProductContentResponse>(raw,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    ?? new GenerateProductContentResponse();
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "GenerateProductContent: Failed to parse JSON response. Raw={Raw}", raw);
+                result = new GenerateProductContentResponse();
+            }
+
+            // Ensure list price >= standard cost
+            if (result.SuggestedListPrice < result.SuggestedStandardCost && result.SuggestedStandardCost > 0)
+                result.SuggestedListPrice = Math.Round(result.SuggestedStandardCost * 1.2m, 2);
+
+            _logger.LogInformation(
+                "GenerateProductContent: Category={Category}, Subcategory={Subcategory}, Name={Name}",
+                request.Category, request.Subcategory, result.ProductName);
+
+            _telemetryClient.TrackEvent("GenerateProductContent.Completed", new Dictionary<string, string>
+            {
+                ["Category"] = request.Category,
+                ["Subcategory"] = request.Subcategory,
+                ["ProductName"] = result.ProductName
+            });
+
+            operation.Telemetry.Success = true;
+            return result;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string>
+            {
+                ["Operation"] = "GenerateProductContent",
+                ["Category"] = request.Category,
+                ["Subcategory"] = request.Subcategory
+            });
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Generates AdventureWorks staff reply texts for a subset of customer reviews.
+    /// Returns a dictionary keyed by ProductReviewID containing the suggested reply text.
+    /// </summary>
+    public async Task<Dictionary<int, string>> GenerateReviewRepliesAsync(
+        List<(int ReviewId, string ReviewerName, int Rating, string Comments, string ProductName)> reviews)
+    {
+        if (reviews.Count == 0) return new Dictionary<int, string>();
+
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var chatClient = client.GetChatClient(_deploymentName);
+
+        const string systemPrompt = @"You are a friendly customer service representative for AdventureWorks, an outdoor adventure equipment retailer.
+Your job is to write short, warm, brand-appropriate replies to customer product reviews.
+Keep each reply to 2–3 sentences. Be genuine and helpful. Match the tone to the review (enthusiastic for positives, empathetic for negatives).
+Never be defensive. Sign off as 'The AdventureWorks Team'.
+
+Return ONLY a valid JSON array with this structure:
+[{ ""reviewId"": 123, ""reply"": ""Thank you for your kind words! ..."" }]";
+
+        var reviewsJson = JsonSerializer.Serialize(reviews.Select(r => new
+        {
+            reviewId = r.ReviewId,
+            reviewerName = r.ReviewerName,
+            rating = r.Rating,
+            comments = r.Comments,
+            productName = r.ProductName
+        }), new JsonSerializerOptions { WriteIndented = false });
+
+        var userPrompt = $"Generate staff replies for these reviews:\n\n{reviewsJson}\n\nReturn the JSON array only.";
+
+        var messages = new List<ChatMessage>
+        {
+            new SystemChatMessage(systemPrompt),
+            new UserChatMessage(userPrompt)
+        };
+
+        try
+        {
+            var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+            {
+                Temperature = 0.7f,
+                MaxOutputTokenCount = 2000
+            });
+
+            var content = StripMarkdownFences(response.Value.Content[0].Text ?? "[]");
+            var parsed = JsonSerializer.Deserialize<List<ReviewReplyItem>>(content,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            return (parsed ?? new List<ReviewReplyItem>())
+                .Where(r => !string.IsNullOrWhiteSpace(r.Reply))
+                .ToDictionary(r => r.ReviewId, r => r.Reply!);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GenerateReviewReplies failed");
+            return new Dictionary<int, string>();
+        }
+    }
+
+    private class ReviewReplyItem
+    {
+        public int ReviewId { get; set; }
+        public string? Reply { get; set; }
+    }
+
+    // ─── Generate Category / Subcategory With AI ──────────────────────────────
+
+    private static string BuildCategoryHierarchyJson(
+        List<CategoryHierarchyItem> categories,
+        List<SubcategoryHierarchyItem> subcategories)
+    {
+        var hierarchy = categories.Select(c => new
+        {
+            category = c.Name,
+            subcategories = subcategories
+                .Where(s => s.ProductCategoryID == c.ProductCategoryID)
+                .Select(s => s.Name)
+                .ToList()
+        });
+        return JsonSerializer.Serialize(hierarchy, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    /// <summary>
+    /// Asks AI to suggest a new top-level product category for AdventureWorks
+    /// that is not already in the existing hierarchy.
+    /// Returns (true, name) if a suggestion was made, (false, null) otherwise.
+    /// </summary>
+    public async Task<(bool Suggested, string Name)> SuggestNewCategoryAsync(
+        List<CategoryHierarchyItem> existingCategories,
+        List<SubcategoryHierarchyItem> existingSubcategories)
+    {
+        var hierarchyJson = BuildCategoryHierarchyJson(existingCategories, existingSubcategories);
+
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var chatClient = client.GetChatClient(_deploymentName);
+
+        const string systemPrompt = @"You are a product catalog consultant for AdventureWorks, an outdoor and adventure sports equipment e-commerce site.
+AdventureWorks sells outdoor, cycling, and adventure sports equipment — primarily bikes, bike components, clothing, and accessories.
+
+Your task: suggest ONE new top-level product category that would make commercial sense for AdventureWorks but is NOT already in the provided category list.
+Think about adjacent markets that complement outdoor / cycling products (e.g. water sports, camping, fitness, nutrition, footwear).
+
+Rules:
+- The category name must be 1–4 words, title-cased
+- It must not duplicate or closely overlap any existing category
+- If you genuinely cannot think of a suitable category that isn't already covered, set suggested to false
+
+Return ONLY a valid JSON object:
+{
+  ""suggested"": true,
+  ""name"": ""New Category Name""
+}
+or
+{
+  ""suggested"": false,
+  ""name"": null
+}";
+
+        var userPrompt = $"Current AdventureWorks category hierarchy:\n{hierarchyJson}\n\nSuggest a new top-level category.";
+
+        var messages = new List<ChatMessage>
+        {
+            new SystemChatMessage(systemPrompt),
+            new UserChatMessage(userPrompt)
+        };
+
+        var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+        {
+            Temperature = 0.8f,
+            MaxOutputTokenCount = 100,
+            ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
+        });
+
+        var raw = response.Value.Content[0].Text ?? "{}";
+        using var doc = JsonDocument.Parse(raw);
+        var root = doc.RootElement;
+
+        var suggested = root.TryGetProperty("suggested", out var sugProp) && sugProp.GetBoolean();
+        var name = root.TryGetProperty("name", out var nameProp) && nameProp.ValueKind == JsonValueKind.String
+            ? nameProp.GetString() ?? string.Empty
+            : string.Empty;
+
+        return (suggested && !string.IsNullOrWhiteSpace(name), name);
+    }
+
+    /// <summary>
+    /// Asks AI to suggest a new subcategory for the given parent category in AdventureWorks
+    /// that is not already in the existing hierarchy.
+    /// Returns (true, name) if a suggestion was made, (false, null) otherwise.
+    /// </summary>
+    public async Task<(bool Suggested, string Name)> SuggestNewSubcategoryAsync(
+        int categoryId,
+        string categoryName,
+        List<CategoryHierarchyItem> allCategories,
+        List<SubcategoryHierarchyItem> allSubcategories)
+    {
+        var hierarchyJson = BuildCategoryHierarchyJson(allCategories, allSubcategories);
+
+        var existingSubsForCategory = allSubcategories
+            .Where(s => s.ProductCategoryID == categoryId)
+            .Select(s => s.Name)
+            .ToList();
+
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var chatClient = client.GetChatClient(_deploymentName);
+
+        const string systemPrompt = @"You are a product catalog consultant for AdventureWorks, an outdoor and adventure sports equipment e-commerce site.
+AdventureWorks sells outdoor, cycling, and adventure sports equipment.
+
+Your task: suggest ONE new subcategory for a specific parent category that would make commercial sense but is NOT already in the provided subcategory list for that parent category.
+
+Rules:
+- The subcategory name must be 1–4 words, title-cased
+- It must not duplicate or closely overlap any existing subcategory for this category
+- It should be a logical product subdivision of the parent category
+- If you genuinely cannot think of a suitable subcategory that isn't already covered, set suggested to false
+
+Return ONLY a valid JSON object:
+{
+  ""suggested"": true,
+  ""name"": ""New Subcategory Name""
+}
+or
+{
+  ""suggested"": false,
+  ""name"": null
+}";
+
+        var userPrompt = $@"Full AdventureWorks category hierarchy for context:
+{hierarchyJson}
+
+Target parent category: ""{categoryName}""
+Existing subcategories for ""{categoryName}"": {JsonSerializer.Serialize(existingSubsForCategory)}
+
+Suggest a new subcategory for the ""{categoryName}"" category.";
+
+        var messages = new List<ChatMessage>
+        {
+            new SystemChatMessage(systemPrompt),
+            new UserChatMessage(userPrompt)
+        };
+
+        var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+        {
+            Temperature = 0.8f,
+            MaxOutputTokenCount = 100,
+            ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
+        });
+
+        var raw = response.Value.Content[0].Text ?? "{}";
+        using var doc = JsonDocument.Parse(raw);
+        var root = doc.RootElement;
+
+        var suggested = root.TryGetProperty("suggested", out var sugProp) && sugProp.GetBoolean();
+        var name = root.TryGetProperty("name", out var nameProp) && nameProp.ValueKind == JsonValueKind.String
+            ? nameProp.GetString() ?? string.Empty
+            : string.Empty;
+
+        return (suggested && !string.IsNullOrWhiteSpace(name), name);
     }
 }
 

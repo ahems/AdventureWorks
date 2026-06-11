@@ -4,7 +4,7 @@ This document describes the automated AI Agent creation process integrated into 
 
 ## Overview
 
-During `azd provision`, the deployment automatically creates an AI Agent that integrates with the AdventureWorks MCP Server. This eliminates the need for manual agent setup and ensures the agent is always configured correctly with the latest deployment.
+During `azd provision`, the deployment automatically creates **fifteen Azure AI Foundry Agents** across the eshop and admin portal surfaces. This eliminates the need for manual agent setup and ensures agents are always configured correctly with the latest deployment.
 
 ## Automated Process
 
@@ -13,21 +13,118 @@ During `azd provision`, the deployment automatically creates an AI Agent that in
 When you run `azd up` or `azd provision`, the system automatically:
 
 1. **Deploys Infrastructure** (via Bicep templates)
-   - Azure AI Foundry (Cognitive Services)
-   - Azure Functions Container App with MCP Server
+   - Azure AI Foundry Hub + Project
+   - Azure OpenAI with GPT model deployments
+   - Azure Container Apps (api-functions, api-mcp, DAB)
    - All supporting Azure resources
 
-2. **Configuration** (manual or via custom automation)
-   - AI Agent configuration is not automated by default
-   - Can be configured manually using `agent-framework-azure-ai` Python package
-   - Agent can use MCP tools from the deployed MCP Server
-   - Configuration requires setting up agent instructions for customer service
-   - Configuration can be saved to `AI_AGENT_CONFIG.json`
+2. **Creates Foundry Agents** (`scripts/utilities/create-foundry-agents.sh`, called from `postprovision.sh`)
 
-3. **Environment Variables** (available in azd environment)
-   - `AI_AGENT_MODEL`: Deployed model name
-   - `API_FUNCTIONS_URL`: MCP Server endpoint
-   - `AZURE_OPENAI_ENDPOINT`: AI Foundry endpoint
+   **Eshop agents** (customer-facing):
+   - **Eshop Chat Agent** (`AI_AGENT_CHAT_ID`) — customer service chat, product recommendations, order tracking
+   - **Help Me Choose Agent** (`AI_AGENT_HELP_ME_CHOOSE_ID`) — multi-phase product advisor wizard
+   - **Eshop Intent Agent** — classifies intent and routes to the right eshop workflow
+   - **Eshop Workflow Agent** (`AI_AGENT_WORKFLOW_CHAT_ID`) — orchestrates chat vs product-advisor routing
+
+   **Admin agents** (internal portal):
+   - **Admin Chat Agent** — general-purpose admin assistant with full catalog and order access
+   - **Admin Order Agent** (`AI_AGENT_ORDER_ID`) — autonomous order simulation for any persona
+   - **Admin Promotion Agent** (`AI_AGENT_PROMOTION_ID`) — promotion strategy generation with live catalog data
+   - **Admin Cart Recovery Agent** (`AI_AGENT_CART_RECOVERY_ID`) — analyses stale carts and generates recovery strategies
+   - **Admin Customer Agent** — generates realistic fictitious customer profiles for any locale
+   - **Admin Product Content Agent** (`AI_AGENT_PRODUCT_CONTENT_ID`) — generates and refines product descriptions and marketing copy
+   - **Admin Order Intent Agent** — classifies admin order generation requests
+   - **Admin Order Workflow Agent** (`AI_AGENT_WORKFLOW_ORDER_ID`) — identifies persona, gathers constraints, invokes order agent
+   - **Admin Promotion Intent Agent** — classifies promotion campaign generation requests
+   - **Admin Promotion Workflow Agent** (`AI_AGENT_WORKFLOW_PROMOTION_ID`) — gathers promo parameters, invokes promotion agent
+
+   **Autonomous (fire-and-forget) agents:**
+   - **Manufacturing Agent** (`AI_AGENT_MANUFACTURING_ID`) — triggered on new order placement via SQL Change Tracking; checks inventory and manufacturing feasibility without human interaction
+
+   Each agent that requires live data is registered with two MCP tool servers:
+   - `api-mcp` service (semantic product/catalog tools)
+   - DAB `/mcp` endpoint (raw entity data tools)
+
+3. **Injects Agent IDs** (`scripts/hooks/api-functions-postdeploy.sh`)
+   - After `azd deploy`, patches the `api-functions` Container App with all agent IDs as environment variables
+
+4. **Environment Variables** (available in azd environment)
+   - `AI_FOUNDRY_PROJECT_ENDPOINT`: Azure AI Foundry project endpoint
+   - `AI_AGENT_CHAT_ID`: Eshop chat agent
+   - `AI_AGENT_ORDER_ID`: Admin order generation agent
+   - `AI_AGENT_PROMOTION_ID`: Admin promotion generation agent
+   - `AI_AGENT_CART_RECOVERY_ID`: Admin cart recovery analysis agent
+   - `AI_AGENT_PRODUCT_CONTENT_ID`: Admin product content generation agent
+   - `AI_AGENT_HELP_ME_CHOOSE_ID`: Eshop product advisor wizard agent
+   - `AI_AGENT_WORKFLOW_CHAT_ID`: Eshop workflow routing agent
+   - `AI_AGENT_WORKFLOW_PROMOTION_ID`: Admin promotion workflow agent
+   - `AI_AGENT_WORKFLOW_ORDER_ID`: Admin order workflow agent
+   - `AI_AGENT_MANUFACTURING_ID`: Autonomous manufacturing agent
+   - `MCP_SERVICE_URL`: api-mcp service endpoint
+
+## Agent Configuration
+
+### Agent Details
+
+Each agent is created via `az rest --method PUT` to the Foundry data plane API with:
+
+- **Model:** Auto-selected from `chatGptDeploymentName` env var (e.g., `gpt-4.1-mini`)
+- **Authentication:** Azure Managed Identity (passwordless)
+- **Tool Servers:** Two MCP servers registered per agent
+  - `api-mcp` — custom semantic tools (SearchProducts, GetCustomerOrders, etc.)
+  - DAB `/mcp` — GraphQL entity tools (Product, Customer, SalesOrder, etc.)
+
+### re-running Agent Creation
+
+The creation script is idempotent — re-running `postprovision.sh` will recreate agents. To update an agent's instructions or tool configuration, edit `scripts/utilities/create-foundry-agents.sh` and re-run:
+
+```bash
+bash scripts/utilities/create-foundry-agents.sh
+```
+
+## Thread Persistence
+
+Each conversation uses a Foundry-managed `previous_response_id` that persists across requests. The frontend stores the `threadId` (which holds the Foundry response ID) and sends it with each subsequent request; the C# service chains responses via `previous_response_id` for full context continuity — no client-side thread management is needed.
+
+## Structured Inputs
+
+Each agent's Foundry portal definition must declare a `structured_inputs` schema listing the Handlebars variables used in its instructions. The `api-functions` code passes runtime values for these at invocation time, and Foundry resolves `{{variable}}` placeholders before the model sees the instructions.
+
+> **Prerequisite**: If you recreate or modify an agent via `create-foundry-agents.sh`, re-add the `structured_inputs` schema block in the Foundry portal for that agent. Without it, Handlebars placeholders remain unresolved and context is lost.
+
+### Variables per agent
+
+| Agent                | Variables declared in portal `structured_inputs` schema                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Chat                 | `customerId` (string), `cultureId` (string), `userName` (string)                                                                           |
+| Help-Me-Choose       | `cultureId` (string, default `"en"`), `profileContext` (string — JSON catalog/shopper hint), `userId` (string — for memory scoping)        |
+| Order Generation     | `todayDate`, `personaDescription`, `isExistingCustomer` (bool), `customerName`, `customerId`, `orderCount`, `totalSpend`, `recentProducts` |
+| Promotion Generation | `promotionType`, `offerCategory`, `todayDate`, `categoryName`, `subcategoryName`, `categoryId`, `subcategoryId`                            |
+| Customer Generation  | `locale` (string), `todayDate` (string)                                                                                                    |
+
+> `isExistingCustomer`, `categoryName`, `subcategoryName`, `categoryId`, `subcategoryId`, `customerName`, `customerId`, `orderCount`, `totalSpend`, `recentProducts`, and `profileContext` should be marked **optional** in the portal schema so Handlebars `{{#if}}` branches work correctly when those values are absent.
+
+## Memory Stores
+
+Each agent maintains a named Foundry memory store for long-term context. Memory is scoped per user/context via the `x-memory-user-id` header set by `FoundryAgentClient`.
+
+| Agent                | Memory Store Name             | What Is Retained                                                                                | What Is Excluded                                 |
+| -------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| Chat                 | `eshop-chat-memory`           | Preferred bike category, activity level, budgets, clothing/shoe sizes, brand preferences        | Payment details, passwords, addresses            |
+| Help-Me-Choose       | `eshop-help-me-choose-memory` | Sport/activity preferences, skill level, budget constraints, past recommendations               | Sensitive personal or financial data             |
+| Promotion Generation | `admin-promotion-memory`      | Promotion type patterns, category performance insights, seasonal timing, discount effectiveness | Individual customer PII, payment data            |
+| Order Generation     | `admin-order-memory`          | Persona order patterns, product performance by persona type, successful order compositions      | Customer PII, financial data                     |
+| Customer Generation  | `admin-customer-memory`       | Recently generated customer names, cities, email domains per locale for variety across runs     | Real personal data (all profiles are fictitious) |
+
+Memory scoping headers set by `FoundryAgentClient`:
+
+- Chat: `customer-{customerId}`
+- Help-Me-Choose: `customer-{customerId}` (anonymous if no login)
+- Promotion: `promotion-gen-{promotionType}`
+- Order: `order-gen-customer-{customerId}` or `order-gen-persona-{personaType}`
+- Customer: `customer-gen-locale-{locale}`
+
+The `isExistingCustomer`, `categoryName`, `subcategoryName`, `categoryId`, and `subcategoryId` variables should be declared as optional in the schema so agents handle both the `{{#if ...}}` and `{{else}}` branches of Handlebars conditionals correctly.
 
 ## Agent Configuration
 

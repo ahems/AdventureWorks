@@ -9,18 +9,29 @@ import { trackError } from "@/lib/appInsights";
 const STORAGE_KEY = "adventureworks_user_reviews";
 
 // Convert API ProductReview to app Review format
-const convertProductReview = (pr: ProductReview): Review => ({
-  id: `api_${pr.ProductReviewID}`,
-  productId: pr.ProductID,
-  userName: pr.ReviewerName,
-  rating: pr.Rating,
-  title: "", // API doesn't have separate title field
-  comment: pr.Comments,
-  createdAt: new Date(pr.ReviewDate).toISOString().split("T")[0],
-  helpful: pr.HelpfulVotes || 0, // Use HelpfulVotes from API
-  markedUsefulBy: [], // Will track user votes in localStorage
-  userID: pr.UserID,
-});
+const convertProductReview = (pr: ProductReview): Review => {
+  const firstReply = pr.productReviewReplies?.items?.[0];
+  return {
+    id: `api_${pr.ProductReviewID}`,
+    productId: pr.ProductID,
+    userName: pr.ReviewerName,
+    rating: pr.Rating,
+    title: "", // API doesn't have separate title field
+    comment: pr.Comments,
+    createdAt: new Date(pr.ReviewDate).toISOString().split("T")[0],
+    helpful: pr.HelpfulVotes || 0,
+    markedUsefulBy: [],
+    userID: pr.UserID,
+    isModerated: pr.IsModerated ?? false,
+    staffReply: firstReply
+      ? {
+          text: firstReply.Reply,
+          repliedBy: firstReply.RepliedBy,
+          date: firstReply.ReplyDate,
+        }
+      : undefined,
+  };
+};
 
 interface ReviewsResponse {
   productReviews: {
@@ -318,9 +329,7 @@ export const useReviews = (productId: number) => {
     // Legacy or anonymous reviews (userID null/undefined) do not count as "reviewed by this user".
     return reviews.some(
       (r) =>
-        r.productId === productId &&
-        r.userID != null &&
-        r.userID === userId,
+        r.productId === productId && r.userID != null && r.userID === userId,
     );
   };
 

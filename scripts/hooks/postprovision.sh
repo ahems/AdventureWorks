@@ -162,6 +162,77 @@ fi
 
 echo ""
 echo "=========================================="
+echo "Enabling SQL Change Tracking for order trigger..."
+echo "=========================================="
+
+if [ -n "$SQL_SERVER_NAME" ] && [ -n "$SQL_DATABASE_NAME" ]; then
+    # Use 'if' to capture exit code safely under 'set -e'; prevents premature script exit
+    if PWSH_CT_OUTPUT=$(pwsh -NoProfile -NonInteractive -Command "
+        param()
+        \$ServerName   = '$SQL_SERVER_NAME'
+        \$DatabaseName = '$SQL_DATABASE_NAME'
+
+        try {
+            \$tokenJson = az account get-access-token --resource https://database.windows.net/ 2>&1 | ConvertFrom-Json
+            if (-not \$tokenJson.accessToken) { Write-Error 'Failed to get access token'; exit 1 }
+            \$token = \$tokenJson.accessToken
+        } catch { Write-Error \"Token error: \$_\"; exit 1 }
+
+        try {
+            \$connString = \"Server=tcp:\${ServerName}.database.windows.net,1433;Initial Catalog=\${DatabaseName};Encrypt=True;TrustServerCertificate=False;\"
+            \$conn = New-Object System.Data.SqlClient.SqlConnection(\$connString)
+            \$conn.AccessToken = \$token
+            \$conn.Open()
+
+            # Enable DB-level Change Tracking (idempotent)
+            \$check = \$conn.CreateCommand()
+            \$check.CommandText = 'SELECT COUNT(*) FROM sys.change_tracking_databases WHERE database_id = DB_ID()'
+            \$ctOn = [int]\$check.ExecuteScalar()
+            if (\$ctOn -eq 0) {
+                \$alter = \$conn.CreateCommand()
+                \$alter.CommandText = \"ALTER DATABASE [\${DatabaseName}] SET CHANGE_TRACKING = ON (CHANGE_RETENTION = 2 DAYS, AUTO_CLEANUP = ON)\"
+                \$null = \$alter.ExecuteNonQuery()
+                Write-Host '  ✓ Database Change Tracking: ENABLED'
+            } else {
+                Write-Host '  ✓ Database Change Tracking: already enabled'
+            }
+
+            # Enable table-level Change Tracking on Sales.SalesOrderHeader only if the table exists.
+            # The table is created by the seed job which runs after post-provision; skip gracefully if absent.
+            \$existsCmd = \$conn.CreateCommand()
+            \$existsCmd.CommandText = \"SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'Sales' AND TABLE_NAME = 'SalesOrderHeader'\"
+            \$tableExists = [int]\$existsCmd.ExecuteScalar()
+            if (\$tableExists -eq 0) {
+                Write-Host '  ℹ  Sales.SalesOrderHeader not yet present (seed job has not run) — table Change Tracking will be enabled by the seed job.'
+            } else {
+                \$check2 = \$conn.CreateCommand()
+                \$check2.CommandText = 'SELECT COUNT(*) FROM sys.change_tracking_tables WHERE object_id = OBJECT_ID(''[Sales].[SalesOrderHeader]'')'
+                \$tableOn = [int]\$check2.ExecuteScalar()
+                if (\$tableOn -eq 0) {
+                    \$alter2 = \$conn.CreateCommand()
+                    \$alter2.CommandText = 'ALTER TABLE [Sales].[SalesOrderHeader] ENABLE CHANGE_TRACKING WITH (TRACK_COLUMNS_UPDATED = OFF)'
+                    \$null = \$alter2.ExecuteNonQuery()
+                    Write-Host '  ✓ Sales.SalesOrderHeader Change Tracking: ENABLED'
+                } else {
+                    Write-Host '  ✓ Sales.SalesOrderHeader Change Tracking: already enabled'
+                }
+            }
+
+            \$conn.Close()
+        } catch { Write-Error \"SQL error: \$_\"; exit 1 }
+    " 2>&1); then
+        echo "$PWSH_CT_OUTPUT"
+    else
+        PWSH_CT_EXIT=$?
+        echo "$PWSH_CT_OUTPUT"
+        echo "  WARNING: SQL Change Tracking setup failed (non-fatal, exit $PWSH_CT_EXIT). Re-run manually if needed."
+    fi
+else
+    echo "  WARNING: SQL_SERVER_NAME or SQL_DATABASE_NAME not set — skipping Change Tracking setup."
+fi
+
+echo ""
+echo "=========================================="
 echo "Building and deploying seed-job image..."
 echo "=========================================="
 
@@ -232,6 +303,14 @@ echo "Starting seed job to populate database..."
 echo "  ✓ Seed job started successfully"
 echo "  Note: The job runs asynchronously. Check execution status with:"
 echo "    az containerapp job execution list --name $SEED_JOB_NAME --resource-group $RESOURCE_GROUP --query \"[0].properties.status\" -o tsv"
+
+echo ""
+echo "=========================================="
+echo "Creating / Updating Azure AI Foundry Agents..."
+echo "=========================================="
+bash "$(git rev-parse --show-toplevel)/scripts/utilities/create-foundry-agents.sh" || {
+    echo "  WARNING: Foundry agent creation failed. Re-run 'bash scripts/utilities/create-foundry-agents.sh' after provisioning."
+}
 
 echo ""
 echo "=========================================="

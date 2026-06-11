@@ -92,9 +92,9 @@ azd env set chatGptSkuName "Standard"
 azd env set embeddingDeploymentModelName "text-embedding-3-small"
 azd env set embeddingDeploymentSkuName "GlobalStandard"
 azd env set embeddingDeploymentVersion 1
-azd env set imageDeploymentModelName "gpt-image-1"
+azd env set imageDeploymentModelName "gpt-image-2"
 azd env set imageDeploymentSkuName "GlobalStandard"
-azd env set imageDeploymentVersion "2025-04-15"
+azd env set imageDeploymentVersion "2026-04-21"
 azd env set imageModelFormat "OpenAI"
 ```
 
@@ -144,6 +144,8 @@ Key sections:
     - `api`: Data API Builder (`containerapp`, `docker`, remote build).
     - `api-functions`: .NET Azure Functions (`containerapp`, `csharp`, Docker remote build).
     - `app`: React frontend (`staticwebapp`, `js`), custom `buildCommand` and `dist` output.
+    - `app-admin`: Admin portal (`containerapp`, `docker`, remote ACR build).
+    - `mcp-inspector`: MCP Inspector UI (`containerapp`, `docker`, remote ACR build).
 
 - **`infra`**
   - Points at the Bicep templates in `infra/` for infrastructure provisioning.
@@ -178,7 +180,7 @@ Defined hooks:
 
 ---
 
-### 5.2.1 `scripts/preup.ps1`
+### 5.2.1 `scripts/hooks/preup.sh`
 
 **Hook:** `preup`
 
@@ -201,7 +203,7 @@ This script is responsible for the **AI infrastructure preparation** that the re
 
 ---
 
-### 5.2.2 `scripts/postup.ps1`
+### 5.2.2 `scripts/hooks/postup.sh`
 
 **Hook:** `postup`
 
@@ -248,6 +250,7 @@ Key responsibilities:
   - Starts the seed-job asynchronously to populate the database with schema and data from `seed-job/sql/`.
 
 The seed-job runs as a containerized Azure Container App Job that:
+
 - Executes `seed-database.ps1` inside the container.
 - Loads SQL scripts (`AdventureWorks.sql`, `AdventureWorks-AI.sql`) and CSV files (both original and AI-enhanced).
 - Populates product images from the `seed-job/images/` directory.
@@ -256,6 +259,7 @@ The seed-job runs as a containerized Azure Container App Job that:
 In short, `postprovision` wires up the **database and identity layer**, then triggers an asynchronous job to populate the database so the app can talk to SQL using managed identity with a fully seeded dataset.
 
 **Note:** You can monitor seed-job execution with:
+
 ```bash
 az containerapp job execution list --name <seed-job-name> --resource-group <resource-group>
 ```

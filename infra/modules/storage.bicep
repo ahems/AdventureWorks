@@ -52,6 +52,13 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
             description: 'Container for translated language files'
           }
         }
+        {
+          name: 'function-releases'
+          publicAccess: 'None'
+          metadata: {
+            description: 'Deployment packages for Flex Consumption function app'
+          }
+        }
       ]
     }
     
@@ -70,9 +77,21 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
           }
         }
         {
-          name: 'product-image-generation'
+          name: 'ai-job-image-queue'
           metadata: {
-            description: 'Queue for generating AI product images'
+            description: 'Serial job queue for DALL-E image generation (one message at a time)'
+          }
+        }
+        {
+          name: 'ai-job-chat-queue'
+          metadata: {
+            description: 'Serial job queue for GPT chat operations: translations and review generation'
+          }
+        }
+        {
+          name: 'ai-job-embeddings-queue'
+          metadata: {
+            description: 'Serial job queue for text-embedding operations: product and review embeddings'
           }
         }
         {
@@ -82,15 +101,27 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
           }
         }
         {
-          name: 'product-review-generation'
-          metadata: {
-            description: 'Queue for generating AI product reviews'
-          }
-        }
-        {
           name: 'sales-order-status'
           metadata: {
             description: 'Queue for tracking the status of sales orders'
+          }
+        }
+        {
+          name: 'production-wo-queue'
+          metadata: {
+            description: 'Event-driven queue that drives the manufacturing simulation: each message represents one WorkOrder routing-operation phase'
+          }
+        }
+        {
+          name: 'supply-chain-orders-queue'
+          metadata: {
+            description: 'Event-driven queue driving purchase order state transitions (placed-confirmed-picking-shipped-delivered) and vendor restock events'
+          }
+        }
+        {
+          name: 'simulation-order-queue'
+          metadata: {
+            description: 'Autonomous order simulation queue: each message carries a CustomerId (0 = new customer) and optional PersonaHint. The AI agent generates a realistic order for the specified customer or persona.'
           }
         }
       ]

@@ -1,146 +1,227 @@
-# AI Agent Migration to Microsoft Agents Framework
+# AI Agent Migration to Azure AI Foundry Agents
 
 ## Summary
 
-Successfully migrated the chat agent in the `api-functions` project from manual Azure OpenAI integration to the **Microsoft Agents Framework (Microsoft.Agents.AI)** with durable agent capabilities and comprehensive observability.
+All four AI agent services in `api-functions` have been fully migrated to the **Azure AI Foundry Responses API** (`FoundryAgentClient` / `Azure.AI.Projects`). Agents are defined and managed in Azure AI Foundry; MCP tool execution happens server-side inside Foundry — no client-side MCP wiring is needed.
+
+Every agent now uses the complete Foundry platform feature set:
+
+- **Named memory stores** — long-term context retained per user/persona across sessions
+- **Structured inputs** — Handlebars `{{variable}}` placeholders resolved by Foundry at invocation time (prevents prompt injection)
+- **MCP tools** — live catalog/inventory data access; `tool_choice: "required"` on three agents to prevent hallucinations
+- **Multi-turn** — `previous_response_id` chains turns so admins and customers can refine results in follow-up messages
+- **Workflow routing agents** — three new workflow YAMLs route conversational intent to the correct base agent
+
+### Phase 1 (completed earlier): Chat agent
+
+Migrated the chat agent from **Microsoft.Agents.AI** (with local `McpClient` tool execution) to the Foundry Responses API.
 
 ## Changes Made
 
 ### 1. **NuGet Package Updates** ([api-functions.csproj](api-functions/api-functions.csproj))
 
-Added Microsoft Agents Framework packages:
+Removed Microsoft Agents Framework packages:
 
 ```xml
-<PackageReference Include="Microsoft.Agents.AI" Version="*-*" />
-<PackageReference Include="Microsoft.Agents.AI.AzureAI" Version="*-*" />
-<PackageReference Include="Microsoft.Agents.AI.Hosting.AzureFunctions" Version="*-*" />
-<PackageReference Include="Microsoft.Agents.AI.Workflows" Version="*-*" />
+<!-- REMOVED -->
+<PackageReference Include="Microsoft.Agents.AI" />
+<PackageReference Include="Microsoft.Agents.AI.AzureAI" />
+<PackageReference Include="Microsoft.Agents.AI.Hosting.AzureFunctions" />
+<PackageReference Include="Microsoft.Agents.AI.Workflows" />
+<PackageReference Include="ModelContextProtocol" />
 ```
 
-Updated DurableTask packages for compatibility:
+Added Azure AI Foundry SDK:
 
 ```xml
-<PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.11.0" />
-<PackageReference Include="Microsoft.DurableTask.Client" Version="1.18.0" />
+<PackageReference Include="Azure.AI.Agents.Persistent" Version="1.0.0-beta.2" />
+<!-- Azure.AI.Projects was already present -->
 ```
 
-### 2. **AIAgentService Migration** ([Services/AIAgentService.cs](api-functions/Services/AIAgentService.cs))
+### 2. **Foundry Agent Creation** ([scripts/utilities/create-foundry-agents.sh](scripts/utilities/create-foundry-agents.sh))
+
+New standalone script (called from `postprovision.sh`) that creates all four agents as data-plane resources via `az rest --method PUT`. Each agent definition includes two MCP tool servers:
+
+- **api-mcp** – semantic search / product tools
+- **DAB /mcp** – raw entity data tools
+
+Agent IDs are written back to the azd environment (`AI_AGENT_CHAT_ID`, `AI_AGENT_ORDER_ID`, `AI_AGENT_PROMOTION_ID`, `AI_AGENT_HELP_ME_CHOOSE_ID`).
+
+### 3. **Container App Patching** ([scripts/hooks/api-functions-postdeploy.sh](scripts/hooks/api-functions-postdeploy.sh))
+
+New post-deploy hook that reads the four agent IDs from `azd env` and patches the Container App environment variables so the running Functions app can resolve `AI_AGENT_*_ID`.
+
+### 4. **AIAgentService.cs** ([Services/AIAgentService.cs](api-functions/Services/AIAgentService.cs))
 
 **Key Changes:**
 
-- Replaced manual OpenAI SDK usage with **Microsoft Agents Framework**
-- Integrated **Model Context Protocol (MCP)** using native `McpClient` from `ModelContextProtocol` package
-- Implemented **lazy initialization** pattern for agent and MCP client
-- Added **thread-based conversation management** for durability
-- Streaming responses via `RunStreamingAsync()`
+- Injected `PersistentAgentsClient` (singleton registered in Program.cs)
+- Thread persistence: if `threadId` is supplied the existing Foundry thread is reused; otherwise a new one is created and history bootstrapped
+- Polls `RunStatus` until `Completed`; extracts assistant message via `GetMessagesAsync`
+- Tool usage collected from `GetRunStepsAsync` → `RunStepFunctionToolCall.Name`
+- Returns `AgentResponse { Response, SuggestedQuestions, ToolsUsed, ThreadId }`
 
 **Before:**
 
 ```csharp
-var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
-var chatClient = client.GetChatClient(_modelDeployment);
-var completion = await chatClient.CompleteChatAsync(messages, chatOptions);
-// Manual tool call handling loop...
+var mcpClient = await McpClient.CreateAsync(...);
+var mcpTools  = await mcpClient.ListToolsAsync();
+var chatClient = new AzureOpenAIClient(...).GetChatClient(_modelDeployment).AsIChatClient();
+_agent = new ChatClientAgent(chatClient, instructions: ..., tools: mcpTools);
+await foreach (var update in agent.RunStreamingAsync(messages)) { ... }
 ```
 
 **After:**
 
 ```csharp
-var chatClient = client.GetChatClient(_modelDeployment).AsIChatClient();
-_agent = new ChatClientAgent(
-    chatClient,
-    instructions: systemInstructions,
-    name: "AdventureWorks Customer Service Agent",
-    tools: mcpTools.ToArray()
-);
-await foreach (var update in agent.RunStreamingAsync(message, thread))
+// Thread reuse or creation
+var threadId = existing ?? (await _agentsClient.Threads.CreateThreadAsync()).Value.Id;
+await _agentsClient.Messages.CreateMessageAsync(threadId, MessageRole.User, message);
+var run = await _agentsClient.Runs.CreateRunAsync(threadId, _agentId);
+while (run.Value.Status == RunStatus.Queued || run.Value.Status == RunStatus.InProgress)
 {
-    // Framework handles tool calls automatically
+    await Task.Delay(1000);
+    run = await _agentsClient.Runs.GetRunAsync(threadId, run.Value.Id);
 }
+// Extract response and tool names from steps
 ```
 
-**MCP Integration:**
+### 5. **PromotionAgentService / OrderGenerationAgentService / HelpMeChooseService**
 
-- Replaces custom JSON-RPC implementation with native `McpClient`
-- MCP tools are automatically discovered from the external api-mcp service via HTTP
-- Framework handles tool execution and result marshalling
+Same pattern applied to all three services:
 
-### 3. **Program.cs Configuration** ([Program.cs](api-functions/Program.cs))
+- Removed `IHttpClientFactory`, `McpClient`, `ChatClientAgent`, `SemaphoreSlim _initLock`, `AIAgent _agent` fields
+- Injected `PersistentAgentsClient` + `_agentId` from config
+- Fresh thread per call (stateless); poll to completion; extract last assistant message
 
-Added OpenTelemetry sources for Agent Framework:
+### 6. **Thread Persistence in the Frontend**
+
+- `app/src/lib/mcpService.ts`: `threadId?` added to `AgentChatRequest` and `AgentChatResponse`
+- `app/src/components/AIChatOverlay.tsx`: `useState<string | undefined>` tracks `threadId`; passed on each request and stored from each response; cleared when the overlay is closed or language changes
+
+## Architecture After Full Migration
+
+All four agents now share the same `FoundryAgentClient` pattern:
+
+```
+Customer app (eshop)
+  Browser → AIChatOverlay         → POST /api/agent/chat { message, threadId? }
+                                  ← { response, suggestedQuestions, toolsUsed, threadId }
+
+  Browser → HelpMeChooseWizard    → POST /api/helpme/questions { profile, ... }
+                                  ← { questions, threadId }         ← NEW: threadId
+                                  → POST /api/helpme/recommend  { answers, previousThreadId }
+                                  ← { recommendations, threadId }   ← NEW: chained turn
+
+Admin app
+  Browser → GeneratePromotionDialog → POST /api/GeneratePromotion { type, ... }
+                                    ← { suggestion, threadId }       ← NEW: threadId
+                                    → POST /api/GeneratePromotion { refinement, previousThreadId }
+                                    ← { refined suggestion, threadId }
+
+  Browser → GenerateOrdersDialog    → POST /api/GenerateOrderWithAI { persona, ... }
+                                    ← { order, threadId }             ← NEW: threadId
+                                    → POST /api/GenerateOrderWithAI  { refinement, previousThreadId }
+                                    ← { refined order, threadId }
+
+Autonomous (no UI)
+  Queue message { customerId: 0|N }
+    → SimulationOrderQueueTrigger
+    → OrderGenerationAgentService.GenerateOrderAsync()
+    → FoundryAgentClient.InvokeAsync()
+```
+
+**Common invocation pattern** (`FoundryAgentClient.InvokeAsync`):
 
 ```csharp
-builder.Services.AddOpenTelemetry()
-    .WithTracing(tracing =>
-    {
-        tracing
-            .AddHttpClientInstrumentation()
-            .AddSqlClientInstrumentation(options =>
-            {
-                options.SetDbStatementForText = true;
-            })
-            .AddSource("Microsoft.Agents.*")  // Agent Framework tracing
-            .AddSource("AIAgentService");      // Custom agent service tracing
-    });
+var response = await _foundryClient.InvokeAsync(
+    agentId:            _agentId,              // or workflow agent ID
+    userMessage:        message,
+    previousResponseId: threadId,              // null on first turn; chains multi-turn
+    userId:             memoryUserId,          // → x-memory-user-id header for Foundry memory
+    structuredInputs:   inputs,                // Handlebars {{variable}} resolution
+    toolChoice:         "required" | "auto");  // required on 3 agents; auto on chat
 ```
 
-Updated service registration:
+## Phase 2 Changes: Help-Me-Choose, Promotion, Order
 
-```csharp
-builder.Services.AddScoped<AIAgentService>(sp =>
-{
-    var configuration = sp.GetRequiredService<IConfiguration>();
-    var logger = sp.GetRequiredService<ILogger<AIAgentService>>();
-    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
-    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+### 1. **HelpMeChooseService.cs** — Migrate questions phase + two-phase chaining
 
-    return new AIAgentService(
-        logger,
-        configuration,
-        httpClientFactory,
-        telemetryClient);
-});
+**Before:** `GetQuestionsAsync` called Azure OpenAI directly (stateless, no agent context).
+
+**After:**
+
+- `GetQuestionsAsync` invokes `FoundryAgentClient.InvokeAsync()` using the Help-Me-Choose agent with `profileContext` structured input; returns a `threadId`
+- `GetRecommendationsAsync` accepts `previousThreadId` and passes it as `previousResponseId` so the recommendations turn sees the full questions context in one stored Foundry conversation
+
+### 2. **PromotionAgentService.cs** — Multi-turn refinement
+
+`GeneratePromotionAsync` accepts an optional `previousResponseId`. When present, Foundry continues the stored conversation — the admin can say "change the discount to 25%" and get a refined suggestion without repeating all inputs.
+
+### 3. **OrderGenerationAgentService.cs** — Multi-turn refinement
+
+Same pattern as Promotion. `GenerateOrderAsync` accepts `previousResponseId`. Admins can refine persona constraints in follow-up turns.
+
+### 4. **Agent creation scripts** — Memory stores, structured inputs, MCP tools
+
+| Script                              | New additions                                                                 |
+| ----------------------------------- | ----------------------------------------------------------------------------- |
+| `eshop-help-me-choose-agent.sh`     | Added `userId` + `profileContext` to `structured_inputs`                      |
+| `admin-promotion-agent.sh`          | Added `admin-promotion-memory` store, `structured_inputs`, MCP tool allowlist |
+| `admin-order-agent.sh`              | Added `admin-order-memory` store, `structured_inputs`, MCP tool allowlist     |
+| `admin-promotion-workflow-agent.sh` | NEW — creates workflow agent referencing `admin-promotion-advisor.yaml`       |
+| `admin-order-workflow-agent.sh`     | NEW — creates workflow agent referencing `admin-order-advisor.yaml`           |
+
+### 5. **Workflow YAMLs** (`workflows/` directory)
+
+| File                           | Purpose                                                                     |
+| ------------------------------ | --------------------------------------------------------------------------- |
+| `chat-product-advisor.yaml`    | Routes chat vs product-advisor intent                                       |
+| `admin-promotion-advisor.yaml` | NEW — gathers promo type + category, then invokes promotion agent           |
+| `admin-order-advisor.yaml`     | NEW — identifies persona/customer, gathers constraints, invokes order agent |
+
+### 6. **Frontend — Multi-Turn Refinement UI**
+
+- `app/src/lib/helpMeService.ts` — `threadId?` on questions response; `previousThreadId?` on recommendations request
+- `app/src/components/HelpMeChooseWizard.tsx` — stores `questionsThreadId`; passes as `previousThreadId` to recommendations
+- `app-admin/src/services/utilityService.ts` — `threadId?` / `previousThreadId?` on promotion + order API calls
+- `app-admin/src/components/GeneratePromotionWizardDialog.tsx` — added **Refine** step after Review
+- `app-admin/src/components/GenerateOrdersWizardDialog.tsx` — added **Refine** step after results
+
+### 7. **Autonomous Order Simulation** — Phase 8
+
+New queue-driven entry point for the manufacturing simulator:
+
+- `api-functions/Models/SimulationOrderMessage.cs` — `{ customerId: int, personaHint?: string }`
+- `api-functions/Functions/SimulationOrderQueueTrigger.cs` — queue trigger on `simulation-order-queue`; also exposes `POST /api/simulation/orders/start` for batch enqueue with pace control
+- `infra/modules/storage.bicep` — added `simulation-order-queue`
+- `infra/modules/aca-api-functions.bicep` — KEDA rule scales 0→N on queue depth ≥ 5
+
+The Order agent is invoked identically whether triggered from the admin UI, the bulk endpoint, or the simulation queue.
+
+## Architecture Diagram (after all phases)
+
 ```
+scripts/utilities/agents/
+  eshop-chat-agent.sh               → AI_AGENT_CHAT_ID
+  eshop-help-me-choose-agent.sh     → AI_AGENT_HELP_ME_CHOOSE_ID
+  admin-promotion-agent.sh          → AI_AGENT_PROMOTION_ID
+  admin-order-agent.sh              → AI_AGENT_ORDER_ID
+  eshop-workflow-agent.sh           → AI_AGENT_WORKFLOW_CHAT_ID
+  admin-promotion-workflow-agent.sh → AI_AGENT_WORKFLOW_PROMOTION_ID
+  admin-order-workflow-agent.sh     → AI_AGENT_WORKFLOW_ORDER_ID
 
-### 4. **Function Endpoint Updates** ([Functions/AIAgentFunctions.cs](api-functions/Functions/AIAgentFunctions.cs))
+workflows/
+  chat-product-advisor.yaml         (referenced by eshop-workflow-agent)
+  admin-promotion-advisor.yaml      (referenced by admin-promotion-workflow-agent)
+  admin-order-advisor.yaml          (referenced by admin-order-workflow-agent)
 
-Updated status endpoint to reflect new capabilities:
-
-```json
-{
-  "status": "operational",
-  "version": "2.0",
-  "framework": "Microsoft.Agents.AI",
-  "features": [
-    "conversational-ai",
-    "mcp-tool-integration",
-    "durable-agent-threads",
-    "contextual-suggestions",
-    "order-tracking",
-    "product-search",
-    "recommendations",
-    "streaming-responses",
-    "observability-telemetry"
-  ]
-}
-```
-
-## Architecture
-
-### Agent Lifecycle
-
-```
-User Request → AIAgentFunctions.Chat()
-    ↓
-AIAgentService.ProcessMessageAsync()
-    ↓
-GetOrCreateAgentAsync() (lazy init)
-    ├── Initialize McpClient (HTTP transport to api-mcp)
-    ├── List available MCP tools
-    └── Create ChatClientAgent with tools
-    ↓
-agent.RunStreamingAsync() → Streaming responses
-    └── Framework handles tool calls automatically
+api-functions/Services/
+  FoundryAgentClient.cs             (shared singleton — Responses API, approval loop)
+  AIAgentService.cs                 → AI_AGENT_WORKFLOW_CHAT_ID (prefers) / AI_AGENT_CHAT_ID
+  HelpMeChooseService.cs            → AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID / AI_AGENT_HELP_ME_CHOOSE_ID
+  PromotionAgentService.cs          → AI_AGENT_WORKFLOW_PROMOTION_ID / AI_AGENT_PROMOTION_ID
+  OrderGenerationAgentService.cs    → AI_AGENT_WORKFLOW_ORDER_ID / AI_AGENT_ORDER_ID
 ```
 
 ### Key Features

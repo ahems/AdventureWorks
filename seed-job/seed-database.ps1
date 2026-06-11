@@ -43,6 +43,7 @@ $ErrorActionPreference = 'Stop'
 
 # Capture start time for duration tracking
 $scriptStartTime = Get-Date
+$script:seedSuccess = $false  # Set to $true only on successful completion
 Write-Log "=========================================="
 Write-Log "DATABASE SEEDING SCRIPT STARTED"
 Write-Log "Seed script version: $ScriptVersion"
@@ -417,8 +418,18 @@ try {
     # script; ProductCategory, ProductSubcategory, SpecialOffer, and
     # ProductModelProductDescriptionCulture all reference Culture, so they must
     # be dropped first (here and/or in the SQL script's early drop block).
+    # ProductReviewReply (AI table) has a FK on ProductReview so must be dropped
+    # before AdventureWorks.sql tries to drop ProductReview.
+    # SimOrderTracking and SimOrderState (supply chain sim tables) have FKs on
+    # PurchaseOrderHeader and must be dropped before AdventureWorks.sql tries to
+    # drop PurchaseOrderHeader. These tables were previously created by
+    # EnsureSqlTablesAsync() in SupplyChainService, which has since been removed.
     # ---------------------------------------------------------------------
     $aiTablesPreCleanup = @(
+        # Supply chain simulation tables (FK to PurchaseOrderHeader) - drop first
+        "IF OBJECT_ID(N'[Purchasing].[SimOrderTracking]', 'U') IS NOT NULL DROP TABLE [Purchasing].[SimOrderTracking]",
+        "IF OBJECT_ID(N'[Purchasing].[SimOrderState]', 'U') IS NOT NULL DROP TABLE [Purchasing].[SimOrderState]",
+        "IF OBJECT_ID(N'[Production].[ProductReviewReply]', 'U') IS NOT NULL DROP TABLE [Production].[ProductReviewReply]",
         "IF OBJECT_ID(N'[Production].[ProductName]', 'U') IS NOT NULL DROP TABLE [Production].[ProductName]",
         "IF OBJECT_ID(N'[Production].[ProductCategory]', 'U') IS NOT NULL DROP TABLE [Production].[ProductCategory]",
         "IF OBJECT_ID(N'[Production].[ProductSubcategory]', 'U') IS NOT NULL DROP TABLE [Production].[ProductSubcategory]",
@@ -951,8 +962,9 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         # Enhanced product descriptions with embeddings (DescriptionEmbedding VECTOR field, JSON array).
         # ProductDescription-ai.csv adds NEW rows only (IDs 2011+); the 762 base rows from ProductDescription.csv never get embeddings here.
         @{ Table='Production.ProductDescription'; File='ProductDescription-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('DescriptionEmbedding') }
-        # AI-translated product descriptions (actual text content for 16 new cultures; CSV has only ID, Description, ModifiedDate).
-        # DefaultColumns and Update path omit DescriptionEmbedding so existing embeddings are preserved (not overwritten).
+        # AI-translated product descriptions (actual text content for 16 new cultures PLUS AI-enhanced US English for the 127 original 'en' rows).
+        # CSV has only ID, Description, ModifiedDate. DefaultColumns omits DescriptionEmbedding so existing embeddings are preserved (not overwritten).
+        # UpdateIfExists=$true: rows 2112+ are new inserts; rows 1-762 (original 'en') are UPDATED with AI-enhanced US English text.
         @{ Table='Production.ProductDescription'; File='ProductDescription-ai-translations.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false; DefaultColumns=@('rowguid', 'DescriptionEmbedding'); UpdateIfExists=$true }
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # AI-translated product description culture mappings (16 additional cultures beyond base AdventureWorks 7)
@@ -2077,19 +2089,195 @@ INNER JOIN RankedPhotos rp ON pp.ProductID = rp.ProductID AND pp.ProductPhotoID 
         Write-Warning "  Placeholder photo cleanup failed: $($_.Exception.Message)"
     }
     
-    # Wait for background PNG upload job to complete
+    # -------------------------------------------------------------------------
+    # Demo Admin User: create a known employee with a verifiable password so the
+    # admin UI can be demonstrated without any signup flow.
+    #
+    # Algorithm mirrors PasswordService.cs exactly:
+    #   SaltSize=6, HashSize=96, Iterations=100000, SHA256
+    # Fixed salt bytes "AWDemo" (0x41,0x57,0x44,0x65,0x6D,0x6F) -> base64 "QVdEZW1v"
+    # Password: Admin1234!
+    # BusinessEntityID: 99001 (well above seeded CSV data range)
+    # -------------------------------------------------------------------------
+    Write-Log "`nSeeding demo admin user (demo.admin@adventureworks.com)..."
+    try {
+        # Pick random first and last name from Person.csv (field delimiter +|, row terminator &|)
+        # Field indices (0-based): 4 = FirstName, 6 = LastName
+        $personCsvPath = Join-Path $PSScriptRoot 'sql/Person.csv'
+        $personRows = (Get-Content $personCsvPath -Raw) -split '&\|' |
+                      Where-Object { $_.Trim() -ne '' }
+        $fnFields    = ($personRows | Get-Random) -split '\+\|'
+        $lnFields    = ($personRows | Get-Random) -split '\+\|'
+        $demoFirstName = ($fnFields[4].Trim()) -replace "'", "''"
+        $demoLastName  = ($lnFields[6].Trim()) -replace "'", "''"
+        Write-Log "  Random name chosen: $demoFirstName $demoLastName"
+
+        $demoId      = 99001
+        $demoEmail   = 'demo.admin@adventureworks.com'
+        $demoPass    = 'Admin1234!'
+        $demoSaltB64 = 'QVdEZW1v'  # base64([byte[]](0x41,0x57,0x44,0x65,0x6D,0x6F))
+
+        # Compute the PBKDF2-SHA256 hash using .NET (identical to PasswordService.cs)
+        $saltBytes = [System.Convert]::FromBase64String($demoSaltB64)
+        $pbkdf2 = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
+            $demoPass,
+            $saltBytes,
+            100000,
+            [System.Security.Cryptography.HashAlgorithmName]::SHA256
+        )
+        $hashBytes   = $pbkdf2.GetBytes(96)
+        $demoHashB64 = [System.Convert]::ToBase64String($hashBytes)
+        $pbkdf2.Dispose()
+
+        $cmd.CommandText = @"
+-- BusinessEntity
+MERGE Person.BusinessEntity AS tgt
+USING (SELECT $demoId AS BusinessEntityID) AS src ON tgt.BusinessEntityID = src.BusinessEntityID
+WHEN NOT MATCHED THEN
+    INSERT (rowguid, ModifiedDate) VALUES (NEWID(), GETDATE());
+
+-- Person (EM = Employee)
+MERGE Person.Person AS tgt
+USING (SELECT $demoId AS BusinessEntityID) AS src ON tgt.BusinessEntityID = src.BusinessEntityID
+WHEN MATCHED THEN
+    UPDATE SET FirstName='$demoFirstName', LastName='$demoLastName', PersonType='EM', ModifiedDate=GETDATE()
+WHEN NOT MATCHED THEN
+    INSERT (BusinessEntityID, PersonType, FirstName, LastName, rowguid, ModifiedDate)
+    VALUES ($demoId, 'EM', '$demoFirstName', '$demoLastName', NEWID(), GETDATE());
+
+-- EmailAddress (EmailAddressID is IDENTITY – omit it from INSERT)
+MERGE Person.EmailAddress AS tgt
+USING (SELECT $demoId AS BusinessEntityID) AS src ON tgt.BusinessEntityID = src.BusinessEntityID
+WHEN MATCHED THEN
+    UPDATE SET EmailAddress='$demoEmail', ModifiedDate=GETDATE()
+WHEN NOT MATCHED THEN
+    INSERT (BusinessEntityID, EmailAddress, rowguid, ModifiedDate)
+    VALUES ($demoId, '$demoEmail', NEWID(), GETDATE());
+
+-- Password
+MERGE Person.Password AS tgt
+USING (SELECT $demoId AS BusinessEntityID) AS src ON tgt.BusinessEntityID = src.BusinessEntityID
+WHEN MATCHED THEN
+    UPDATE SET PasswordHash='$demoHashB64', PasswordSalt='$demoSaltB64', ModifiedDate=GETDATE()
+WHEN NOT MATCHED THEN
+    INSERT (BusinessEntityID, PasswordHash, PasswordSalt, rowguid, ModifiedDate)
+    VALUES ($demoId, '$demoHashB64', '$demoSaltB64', NEWID(), GETDATE());
+"@
+        $null = $cmd.ExecuteNonQuery()
+        Write-Log "  ✓ Demo admin user seeded (BusinessEntityID=$demoId, name=$demoFirstName $demoLastName, email=$demoEmail)"
+    }
+    catch {
+        Write-Log "  WARNING: Failed to seed demo admin user: $($_.Exception.Message)"
+    }
+
+    # -------------------------------------------------------------------------
+    # Bring all AdventureWorks dates forward so the most recent activity
+    # appears to have happened yesterday in real time.
+    #
+    # Step A: Deploy / refresh both stored procedures from date-shift-procedures.sql.
+    # Step B: Run dbo.uspFindDateHighWatermark to discover the seed-era high
+    #         watermark.  The procedure returns two result sets; the second
+    #         contains a single row with HighWatermarkDate.
+    # Step C: Pass that value to dbo.uspShiftDatesForward which applies a
+    #         uniform offset to every qualifying date column.  The procedure is
+    #         idempotent — it skips silently if the data has already been shifted.
+    # -------------------------------------------------------------------------
+    $elapsed = (Get-Date) - $scriptStartTime
+    Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Deploying date-shift stored procedures..."
+
+    $dateShiftSqlPath = Join-Path $PSScriptRoot 'sql' 'date-shift-procedures.sql'
+    if (Test-Path $dateShiftSqlPath) {
+        $dateShiftSql = Get-Content -Path $dateShiftSqlPath -Raw -Encoding UTF8
+        $dateShiftBatches = $dateShiftSql -split '(?mi)^\s*GO\s*$'
+
+        # Clear any leftover parameters from previous operations.
+        # If cmd.Parameters is non-empty, Microsoft.Data.SqlClient wraps the SQL
+        # in sp_executesql — which forbids CREATE PROCEDURE inside it.
+        $cmd.Parameters.Clear()
+        $cmd.Transaction = $null
+
+        $dsSuccessCount = 0
+        foreach ($batch in $dateShiftBatches) {
+            $cleanBatch = $batch -replace '(?mi)^\s*GO\s*$', ''
+            $trimmedBatch = $cleanBatch.Trim()
+            if ($trimmedBatch.Length -eq 0) { continue }
+            try {
+                $cmd.CommandText = $trimmedBatch
+                $null = $cmd.ExecuteNonQuery()
+                $dsSuccessCount++
+            }
+            catch {
+                Write-Log "  WARNING: Failed to deploy date-shift batch: $($_.Exception.Message)"
+            }
+        }
+        Write-Log "  ✓ Date-shift procedures deployed ($dsSuccessCount batch(es))"
+
+        # --- Step B: discover the seed-era high watermark ---
+        $elapsed = (Get-Date) - $scriptStartTime
+        Write-Log "[+$([math]::Floor($elapsed.TotalMinutes))m] Running dbo.uspFindDateHighWatermark..."
+
+        $highWatermark = $null
+        try {
+            $cmd.CommandText = 'EXEC dbo.uspFindDateHighWatermark'
+            $reader = $cmd.ExecuteReader()
+
+            # Skip result set 1 (per-column audit rows) — advance to result set 2
+            $null = $reader.NextResult()
+
+            if ($reader.Read()) {
+                $hwValue = $reader['HighWatermarkDate']
+                if ($hwValue -ne [System.DBNull]::Value) {
+                    $highWatermark = $hwValue
+                }
+            }
+            $reader.Close()
+
+            if ($null -ne $highWatermark) {
+                Write-Log "  ✓ High watermark: $highWatermark"
+            } else {
+                Write-Log "  WARNING: uspFindDateHighWatermark returned no watermark — skipping date shift."
+            }
+        }
+        catch {
+            Write-Log "  WARNING: uspFindDateHighWatermark failed: $($_.Exception.Message) — skipping date shift."
+        }
+
+        # --- Step C: shift all dates forward ---
+        if ($null -ne $highWatermark) {
+            $elapsed = (Get-Date) - $scriptStartTime
+            Write-Log "[+$([math]::Floor($elapsed.TotalMinutes))m] Running dbo.uspShiftDatesForward..."
+            try {
+                $hwStr = ([datetime]$highWatermark).ToString('yyyy-MM-dd HH:mm:ss')
+                $cmd.CommandText = "EXEC dbo.uspShiftDatesForward @OriginalHighWatermark = '$hwStr'"
+                $null = $cmd.ExecuteNonQuery()
+                $elapsed = (Get-Date) - $scriptStartTime
+                Write-Log "  ✓ Date shift complete [+$([math]::Floor($elapsed.TotalMinutes))m]"
+            }
+            catch {
+                Write-Log "  WARNING: uspShiftDatesForward failed: $($_.Exception.Message)"
+            }
+        }
+    }
+    else {
+        Write-Log "  date-shift-procedures.sql not found at $dateShiftSqlPath — skipping date shift."
+    }
+
+    # -------------------------------------------------------------------------
+    # Wait for background PNG image upload to complete.
+    # Intentionally last: the upload runs concurrently with all other work and
+    # we don't want it to block CSV loading, schema changes, or date shifting.
+    # -------------------------------------------------------------------------
     $elapsed = (Get-Date) - $scriptStartTime
     Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Waiting for PNG image upload to complete..."
-    
-    # Wait for the job and get results
+
     $pngResult = Receive-Job -Job $pngUploadJob -Wait
     $pngJobState = $pngUploadJob.State
     $pngJobError = $pngUploadJob.Error
     Remove-Job -Job $pngUploadJob
-    
+
     $elapsed = (Get-Date) - $scriptStartTime
     Write-Log "`nPNG Upload Summary: [+$([math]::Floor($elapsed.TotalMinutes))m]"
-    
+
     # Job failed before returning (e.g. runspace/assembly error)
     if ($pngJobState -eq 'Failed') {
         Write-Log "  PNG upload job failed (job state: Failed). Error: $($pngJobError | Out-String)"
@@ -2135,9 +2323,46 @@ INNER JOIN RankedPhotos rp ON pp.ProductID = rp.ProductID AND pp.ProductPhotoID 
     else {
         Write-Log "  PNG upload result was unexpected. Job state: $pngJobState. Result: $($pngResult | ConvertTo-Json -Compress -Depth 3)"
     }
-    
     # Note: ProductProductPhoto-ai.csv mappings are loaded earlier in the CSV data loading section
-    
+
+    # ==========================================
+    # Enable SQL Change Tracking (idempotent)
+    # Now safe to run because Sales.SalesOrderHeader exists after schema creation.
+    # ==========================================
+    Write-Log "`n=========================================="
+    Write-Log "Enabling SQL Change Tracking..."
+    Write-Log "=========================================="
+    try {
+        # Database-level Change Tracking
+        $checkCT = $conn.CreateCommand()
+        $checkCT.CommandText = 'SELECT COUNT(*) FROM sys.change_tracking_databases WHERE database_id = DB_ID()'
+        $ctOn = [int]$checkCT.ExecuteScalar()
+        if ($ctOn -eq 0) {
+            $alterCT = $conn.CreateCommand()
+            $alterCT.CommandText = "ALTER DATABASE [$DatabaseName] SET CHANGE_TRACKING = ON (CHANGE_RETENTION = 2 DAYS, AUTO_CLEANUP = ON)"
+            $null = $alterCT.ExecuteNonQuery()
+            Write-Log "  ✓ Database Change Tracking: ENABLED"
+        } else {
+            Write-Log "  ✓ Database Change Tracking: already enabled"
+        }
+
+        # Table-level Change Tracking on Sales.SalesOrderHeader
+        $checkTable = $conn.CreateCommand()
+        $checkTable.CommandText = 'SELECT COUNT(*) FROM sys.change_tracking_tables WHERE object_id = OBJECT_ID(''[Sales].[SalesOrderHeader]'')'
+        $tableOn = [int]$checkTable.ExecuteScalar()
+        if ($tableOn -eq 0) {
+            $alterTable = $conn.CreateCommand()
+            $alterTable.CommandText = 'ALTER TABLE [Sales].[SalesOrderHeader] ENABLE CHANGE_TRACKING WITH (TRACK_COLUMNS_UPDATED = OFF)'
+            $null = $alterTable.ExecuteNonQuery()
+            Write-Log "  ✓ Sales.SalesOrderHeader Change Tracking: ENABLED"
+        } else {
+            Write-Log "  ✓ Sales.SalesOrderHeader Change Tracking: already enabled"
+        }
+    } catch {
+        Write-Log "  WARNING: Change Tracking setup failed (non-fatal): $($_.Exception.Message)"
+    }
+
+    $script:seedSuccess = $true
     $conn.Close()
 }
 catch {
@@ -2146,7 +2371,11 @@ catch {
     $scriptEndTime = Get-Date
     $scriptDuration = $scriptEndTime - $scriptStartTime
     Write-Log "`n=========================================="
-    Write-Log "DATABASE SEEDING SCRIPT COMPLETED SUCCESSFULLY"
+    if ($script:seedSuccess) {
+        Write-Log "DATABASE SEEDING SCRIPT COMPLETED SUCCESSFULLY"
+    } else {
+        Write-Log "DATABASE SEEDING SCRIPT FAILED"
+    }
     Write-Log "Finished at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
     Write-Log "Total duration: $([math]::Floor($scriptDuration.TotalMinutes))m $($scriptDuration.Seconds)s"
     Write-Log "=========================================="

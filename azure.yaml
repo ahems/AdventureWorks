@@ -44,11 +44,13 @@ services:
         interactive: false
   api-functions:
     project: ./api-functions
-    host: containerapp
+    host: function
     language: csharp
-    docker:
-      path: Dockerfile
-      remoteBuild: true
+    hooks:
+      postdeploy:
+        shell: sh
+        run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/api-functions-postdeploy.sh"
+        interactive: false
   app:
     project: ./app
     host: staticwebapp
@@ -67,6 +69,20 @@ services:
         shell: sh
         run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/app-postdeploy.sh"
         interactive: false
+  app-admin:
+    project: ./app-admin
+    host: containerapp
+    language: docker
+    docker:
+      path: Dockerfile
+      remoteBuild: true
+  mcp-inspector:
+    project: ./mcp-inspector
+    host: containerapp
+    language: docker
+    docker:
+      path: Dockerfile
+      remoteBuild: true
 infra:
   provider: bicep
   path: ./infra

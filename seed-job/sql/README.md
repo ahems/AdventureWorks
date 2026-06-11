@@ -18,6 +18,7 @@ These files are containerized and deployed as part of the **seed-job** Azure Con
 - `AdventureWorks.sql` – Core schema and data load script for the AdventureWorks sample database. Creates tables and imports the base CSVs.
 - `AdventureWorks-AI.sql` – Additional schema and data for AI scenarios (e.g., review/description embeddings, AI-specific support tables, and references to the AI CSV files).
 - `assign-database-roles.sql` – Grants the appropriate database roles/permissions (for example, to managed identities used by the app) so that the app can read/write as required.
+- `date-shift-procedures.sql` – Defines `dbo.uspFindDateHighWatermark` and `dbo.uspShiftDatesForward`. Brings all seed-era dates forward so the most recent activity appears to have happened yesterday, then re-anchors pending PurchaseOrders, in-process WorkOrders, and in-process SalesOrders to near-future dates for realistic demo behaviour.
 
 ## CSV Data Files
 
@@ -75,6 +76,7 @@ Below is a quick reference for the CSVs in this folder. Unless otherwise noted, 
 - `ProductProductPhoto-ai.csv` – **Generated at seed time** from the image file list (filesystem is source of truth). See below.
 
 **ProductPhoto and image files (source of truth: filesystem):** The seed job (1) **scans** `seed-job/images/` for files matching `product_<ProductID>_photo_<2|3|4>_small.png` (or `_thumb.png`) with a matching large `.png`; (2) **generates** `ProductProductPhoto-ai.csv` from that list (sorted by ProductID, photo number) and assigns **ProductPhotoID** 1000, 1001, 1002, … in that order; (3) loads the base **ProductPhoto.csv** and **ProductProductPhoto.csv**; (4) loads the generated **ProductProductPhoto-ai.csv**; (5) **PNG upload** inserts each image into `[Production].[ProductPhoto]` with the same ProductPhotoID from the generated CSV. So the list of image files is the source of truth; the CSV is derived from it each run. **Note:** Image filenames in the repo currently only include product IDs **680–999** (e.g. `product_877_photo_2.png`). Products 1–679 have no AI-generated images in the filesystem unless you add them or pull them from another deployment (e.g. via `scripts/utilities/download-large-images.ps1`).
+
 - `ProductReview.csv` – Base product reviews.
 - `ProductReview-ai.csv` – AI-generated product reviews used to demonstrate review generation and embeddings.
 - `ProductReview-ai-UserID.csv` – ProductReviewID and UserID (Person.BusinessEntityID, PersonType IN) per row; used by the seed-job to update `Production.ProductReview.UserID` after the other review CSVs are loaded. Generate with `node scripts/utilities/generate-product-review-userids.js` (requires `API_URL` or `VITE_API_URL` pointing at the DAB API).
@@ -129,12 +131,14 @@ These files are consumed by the SQL scripts and deployment automation to populat
 ## Deployment Process
 
 During `azd up`, the `postprovision.sh` hook:
+
 1. Builds the seed-job container image with these files using Azure Container Registry
 2. Deploys and starts the seed-job as an Azure Container App Job
 3. The job executes `seed-database.ps1` which loads all SQL scripts and CSV files
 4. **Total seed-job execution time: ~8 minutes**
 
 You can monitor the seed-job progress with:
+
 ```bash
 az containerapp job execution list --name <seed-job-name> --resource-group <resource-group>
 ```

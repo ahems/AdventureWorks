@@ -17,6 +17,8 @@
 !tailwind.config.ts
 !tsconfig*.json
 !vite.config.ts
+!scripts/
+!scripts/**
 
 # Ignore node_modules even if allowed above
 node_modules/

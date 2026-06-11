@@ -77,6 +77,17 @@ public class PdfReceiptGenerator
     }
 
     /// <summary>
+    /// Generate a PDF receipt in-memory and return as a base64-encoded string.
+    /// No blob storage upload — intended for in-wizard preview.
+    /// </summary>
+    public Task<string> GenerateReceiptPdfBase64Async(ReceiptData receipt)
+    {
+        _logger.LogInformation("Generating in-memory PDF receipt for order {orderNumber}", receipt.SalesOrderNumber);
+        var pdfBytes = GeneratePdf(receipt);
+        return Task.FromResult(Convert.ToBase64String(pdfBytes));
+    }
+
+    /// <summary>
     /// Generate PDF document using QuestPDF
     /// </summary>
     private byte[] GeneratePdf(ReceiptData receipt)

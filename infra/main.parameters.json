@@ -64,6 +64,9 @@
     },
     "foundryLocation": {
       "value": "${FOUNDRY_LOCATION}"
+    },
+    "skipLocalDevRoleAssignments": {
+      "value": "${SKIP_LOCAL_DEV_ROLE_ASSIGNMENTS:-false}"
     }
   }
 }

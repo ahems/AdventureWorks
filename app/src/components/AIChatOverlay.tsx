@@ -25,6 +25,7 @@ export const AIChatOverlay = () => {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
+  const [threadId, setThreadId] = useState<string | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -82,6 +83,7 @@ export const AIChatOverlay = () => {
           timestamp: new Date(),
         },
       ]);
+      setThreadId(undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLanguage, t, user?.firstName, isOpen]);
@@ -125,8 +127,15 @@ export const AIChatOverlay = () => {
         textToSend,
         conversationHistory,
         user?.businessEntityId,
+        user?.firstName,
         selectedLanguage,
+        threadId,
       );
+
+      // Persist the thread for continued conversation
+      if (agentResponse.threadId) {
+        setThreadId(agentResponse.threadId);
+      }
 
       // Add assistant response
       const assistantMessage: Message = {
@@ -191,7 +200,10 @@ export const AIChatOverlay = () => {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setIsOpen(false)}
+              onClick={() => {
+                setIsOpen(false);
+                setThreadId(undefined);
+              }}
               className="h-8 w-8 text-primary-foreground hover:bg-primary-foreground/20"
             >
               <X className="h-4 w-4" />

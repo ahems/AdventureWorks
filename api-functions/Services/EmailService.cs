@@ -384,11 +384,8 @@ public class EmailService
                 emailMessage);
 
             _logger.LogInformation(
-                "Email sent to customer {CustomerId} ({FirstName} {LastName}) at {EmailAddress}. Message ID: {MessageId}",
+                "Email sent to customer {CustomerId}. Message ID: {MessageId}",
                 customerId,
-                customerInfo.Value.FirstName,
-                customerInfo.Value.LastName,
-                emailAddress,
                 emailSendOperation.Id);
 
             return true;
@@ -398,6 +395,35 @@ public class EmailService
             _logger.LogError(ex,
                 "Error sending email to customer {CustomerId} with EmailAddressId {EmailAddressId}",
                 customerId, emailAddressId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Send a plain-text email to a person (Person.Person row) identified by BusinessEntityID.
+    /// Looks up the email address and first name from the DB automatically.
+    /// </summary>
+    public async Task<bool> SendPersonEmailByIdAsync(int personId, string subject, string emailContent)
+    {
+        try
+        {
+            using var connection = await CreateConnectionAsync();
+
+            var emailAddress = await connection.QueryFirstOrDefaultAsync<string>(
+                "SELECT TOP 1 EmailAddress FROM Person.EmailAddress WHERE BusinessEntityID = @PersonId ORDER BY EmailAddressID",
+                new { PersonId = personId });
+            if (string.IsNullOrEmpty(emailAddress)) return false;
+
+            var firstName = await connection.QueryFirstOrDefaultAsync<string?>(
+                "SELECT FirstName FROM Person.Person WHERE BusinessEntityID = @PersonId",
+                new { PersonId = personId }) ?? "Customer";
+
+            var htmlContent = GenerateHtmlContent(subject, emailContent, firstName);
+            return await SendEmailDirectAsync(emailAddress, subject, htmlContent);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending email to person {PersonId}", personId);
             return false;
         }
     }
@@ -431,16 +457,14 @@ public class EmailService
                 emailMessage);
 
             _logger.LogInformation(
-                "Direct email sent to {EmailAddress}. Subject: {Subject}, Message ID: {MessageId}",
-                toEmail,
-                subject,
+                "Direct email sent successfully. Message ID: {MessageId}",
                 emailSendOperation.Id);
 
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error sending direct email to {EmailAddress}", toEmail);
+            _logger.LogError(ex, "Error sending direct email");
             return false;
         }
     }

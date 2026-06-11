@@ -6,6 +6,9 @@ RUN dotnet new tool-manifest
 
 RUN dotnet tool install Microsoft.DataApiBuilder
 
+# Cache-bust: update this string when dab-config.json changes to force layer rebuild
+RUN echo "dab-config-v9-2026-05-19-fix-jobcandidate" > /dev/null
+
 # Copy the pre-configured dab-config.json file
 COPY dab-config.json .
 

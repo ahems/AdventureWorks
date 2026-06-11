@@ -13,10 +13,12 @@
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
+const { randomInt } = require("crypto");
 
-const graphqlEndpoint =
-  process.env.API_URL || process.env.VITE_API_URL || "";
-const baseUrl = graphqlEndpoint.replace(/\/graphql\/?$/i, "") || "https://av-api-pdnyzls7xb2ye.yellowdesert-d26d8c44.eastus2.azurecontainerapps.io";
+const graphqlEndpoint = process.env.API_URL || process.env.VITE_API_URL || "";
+const baseUrl =
+  graphqlEndpoint.replace(/\/graphql\/?$/i, "") ||
+  "https://av-api-pdnyzls7xb2ye.yellowdesert-d26d8c44.eastus2.azurecontainerapps.io";
 const endpoint = baseUrl + (baseUrl.endsWith("/graphql") ? "" : "/graphql");
 
 const repoRoot = path.resolve(__dirname, "../..");
@@ -67,7 +69,7 @@ async function fetchAllINBusinessEntityIDs() {
   let page = 0;
   while (true) {
     page++;
-    const afterClause = cursor ? `, after: "${cursor.replace(/"/g, '\\"')}"` : "";
+    const afterClause = cursor ? `, after: ${JSON.stringify(cursor)}` : "";
     const query = `
       query {
         people(first: 1000, filter: { PersonType: { eq: "IN" } }, orderBy: { BusinessEntityID: ASC }${afterClause}) {
@@ -112,7 +114,7 @@ function main() {
     const fromBase = getProductReviewIdsFromCsv(productReviewCsv);
     const fromAi = getProductReviewIdsFromCsv(productReviewAiCsv);
     const allReviewIds = [...new Set([...fromBase, ...fromAi])].sort(
-      (a, b) => a - b
+      (a, b) => a - b,
     );
     console.log(
       "  ProductReviewIDs:",
@@ -121,7 +123,7 @@ function main() {
       fromAi.length,
       "from ProductReview-ai.csv =>",
       allReviewIds.length,
-      "unique"
+      "unique",
     );
 
     if (inIds.length === 0) {
@@ -131,8 +133,7 @@ function main() {
 
     const lines = ["ProductReviewID\tUserID"];
     for (const reviewId of allReviewIds) {
-      const userID =
-        inIds[Math.floor(Math.random() * inIds.length)];
+      const userID = inIds[randomInt(inIds.length)];
       lines.push(`${reviewId}\t${userID}`);
     }
     fs.writeFileSync(outputCsv, lines.join("\n") + "\n", "utf8");

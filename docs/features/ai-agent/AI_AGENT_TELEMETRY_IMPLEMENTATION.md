@@ -33,13 +33,18 @@ Added comprehensive telemetry tracking for all AI operations:
 
 #### 2. **AIAgentService.cs** - Chat Agent Telemetry
 
-Already had comprehensive telemetry for chat agent interactions:
+Full telemetry for Foundry Responses API interactions:
 
-- Request operation tracking for chat completions
-- Custom events for agent responses
-- Tool call tracking
-- MCP server interaction monitoring
+- Request operation tracking with `ThreadId` property (holds the Foundry `previous_response_id`)
+- `HasThread` property (true when continuing an existing conversation)
+- Custom events for agent responses (`Agent.ConversationCompleted`)
+- `ToolsUsed` collected from Foundry response output items (MCP tool call names)
+- `ThreadId` returned in response for multi-turn conversation tracking
 - Exception tracking with full context
+
+**Note on `tool_choice: "required"` agents**: For Help-Me-Choose, Order Generation, and Promotion Generation, `ToolsUsed.Count > 0` is guaranteed on a successful response — the model is required to call at least one MCP tool. A `ToolsUsed.Count == 0` result from these agents should be treated as an anomaly in your KQL queries.
+
+**PII-safe logging**: Customer email addresses are intentionally excluded from all `ILogger` calls in `OrderGenerationAgentService`. Log entries contain CustomerID and order statistics only. Application Insights custom events for customer-facing operations follow the same convention.
 
 #### 3. **AIAgentFunctions.cs** - HTTP Endpoint Telemetry
 

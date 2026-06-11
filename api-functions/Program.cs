@@ -10,12 +10,8 @@ using Azure.Core.Serialization;
 using AddressFunctions.Services;
 using api_functions.Services;
 using Microsoft.OpenApi.Models;
-using Microsoft.Agents.AI;
-using Microsoft.Agents.AI.Hosting.AzureFunctions;
-using Microsoft.Extensions.AI;
+using Azure.AI.Projects;
 using Azure.AI.OpenAI;
-using ModelContextProtocol.Client;
-using System.Text.Json;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
@@ -47,7 +43,7 @@ var defaultCredential = new DefaultAzureCredential(new DefaultAzureCredentialOpt
 });
 builder.Services.AddSingleton(defaultCredential);
 
-// Register HttpClient for MCP tool calls
+// Register HttpClient (retained for services that still need it)
 builder.Services.AddHttpClient();
 
 // Aspire SQL Client with automatic tracing and health checks
@@ -70,12 +66,29 @@ builder.Services.AddScoped<AddressService>(sp =>
     return new AddressService(connectionString);
 });
 
+// Register CustomerStatsService for global customer analytics (bypasses DAB 100-item pagination)
+builder.Services.AddScoped<CustomerStatsService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new CustomerStatsService(connectionString);
+});
+
 builder.Services.AddScoped<ProductService>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
     var connectionString = configuration["SQL_CONNECTION_STRING"]
         ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
     return new ProductService(connectionString);
+});
+
+builder.Services.AddScoped<SpecialOfferService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new SpecialOfferService(connectionString);
 });
 
 builder.Services.AddScoped<ReviewService>(sp =>
@@ -113,23 +126,256 @@ builder.Services.AddScoped<PasswordService>(sp =>
     return new PasswordService(connectionString);
 });
 
+// Register ExchangeRateService for refreshing Sales.CurrencyRate from Frankfurter API
+builder.Services.AddScoped<ExchangeRateService>(sp =>
+{
+    var configuration    = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var logger            = sp.GetRequiredService<ILogger<ExchangeRateService>>();
+    return new ExchangeRateService(connectionString, httpClientFactory, logger);
+});
+
+// Register ReportingService for pre-aggregated SQL reporting (bypasses DAB 100-item pagination)
+builder.Services.AddScoped<ReportingService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new ReportingService(connectionString);
+});
+
 // Register PdfReceiptGenerator for PDF receipt generation
 builder.Services.AddScoped<PdfReceiptGenerator>();
 
-// Register AI Agent Service for conversational AI with MCP tools using Microsoft Agent Framework
-// Service handles MCP client lifecycle and provides durable agent capabilities
+// Register Azure AI Foundry Responses API client — singleton shared across all agent services.
+// Invokes "kind: prompt" agents created in the new Foundry portal experience.
+// Uses previous_response_id for multi-turn continuity and store:true for Foundry memory.
+builder.Services.AddSingleton<FoundryAgentClient>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var credential = sp.GetRequiredService<DefaultAzureCredential>();
+    var logger = sp.GetRequiredService<ILogger<FoundryAgentClient>>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var projectEndpoint = configuration["AI_FOUNDRY_PROJECT_ENDPOINT"]
+        ?? throw new InvalidOperationException("AI_FOUNDRY_PROJECT_ENDPOINT environment variable is not set");
+
+    // MCP tool URLs — used as fallback tool config when the managed identity
+    // lacks "AIServices/agents/read" permission to fetch the agent definition dynamically.
+    var mcpServiceUrl = configuration["MCP_SERVICE_URL"] ?? string.Empty;
+    var apiUrl = configuration["API_URL"] ?? string.Empty;
+
+    // Derive the DAB API origin (strip any path suffix like /graphql/) and append /mcp
+    var dabMcpUrl = string.Empty;
+    if (!string.IsNullOrEmpty(apiUrl))
+    {
+        if (Uri.TryCreate(apiUrl, UriKind.Absolute, out var apiUri))
+            dabMcpUrl = $"{apiUri.Scheme}://{apiUri.Authority}/mcp";
+    }
+
+    // Model deployment name (falls back to "chat" which is the standard deployment)
+    var modelDeployment = configuration["chatGptDeploymentName"] ?? "chat";
+
+    return new FoundryAgentClient(logger, telemetryClient, credential, projectEndpoint, httpClientFactory, mcpServiceUrl, dabMcpUrl, modelDeployment);
+});
+
+// Register AI Agent Service for conversational AI backed by Azure AI Foundry
 builder.Services.AddScoped<AIAgentService>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
     var logger = sp.GetRequiredService<ILogger<AIAgentService>>();
-    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
     var telemetryClient = sp.GetRequiredService<TelemetryClient>();
 
     return new AIAgentService(
         logger,
         configuration,
-        httpClientFactory,
+        foundryClient,
         telemetryClient);
+});
+
+// Register Product Content Agent Service for AI-powered product generation via Foundry
+builder.Services.AddScoped<ProductContentAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<ProductContentAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new ProductContentAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
+// Register Cart Recovery Agent Service for abandoned-cart analysis via Foundry
+builder.Services.AddScoped<CartRecoveryAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<CartRecoveryAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new CartRecoveryAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
+// Register Promotion Agent Service for single-shot AI promotion generation via Foundry
+builder.Services.AddScoped<PromotionAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<PromotionAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new PromotionAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
+// Register HelpMeChoose Service for the AI-powered product-advisor wizard
+builder.Services.AddScoped<HelpMeChooseService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<HelpMeChooseService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new HelpMeChooseService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
+// Register WorkOrderSimulationService for the manufacturing simulation engine
+builder.Services.AddScoped<WorkOrderSimulationService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
+    var simulationTimeScale = double.TryParse(configuration["SIMULATION_TIME_SCALE_FACTOR"], out var scale) ? scale : 60.0;
+    var defaultScrapRate    = double.TryParse(configuration["SIMULATION_SCRAP_RATE"],        out var rate)  ? rate  : 0.05;
+    var logger = sp.GetRequiredService<ILogger<WorkOrderSimulationService>>();
+    var bank   = sp.GetRequiredService<BankService>();
+    return new WorkOrderSimulationService(connectionString, tableServiceUri, simulationTimeScale, defaultScrapRate, logger, bank);
+});
+
+// Register SupplyChainService for the procurement simulation
+builder.Services.AddScoped<SupplyChainService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
+    var simulationTimeScale = double.TryParse(configuration["SIMULATION_TIME_SCALE_FACTOR"], out var scSupply) ? scSupply : 60.0;
+    var logger    = sp.GetRequiredService<ILogger<SupplyChainService>>();
+    var telemetry = sp.GetRequiredService<TelemetryClient>();
+    var bank      = sp.GetRequiredService<BankService>();
+    return new SupplyChainService(connectionString, tableServiceUri, simulationTimeScale, logger, telemetry, bank);
+});
+
+// Register ManufacturingPlanningService for planning intelligence endpoints
+builder.Services.AddScoped<ManufacturingPlanningService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var logger = sp.GetRequiredService<ILogger<ManufacturingPlanningService>>();
+    return new ManufacturingPlanningService(connectionString, logger);
+});
+
+// Register WorkforceService — sources HumanResources data for manufacturing operator assignment
+builder.Services.AddScoped<WorkforceService>(sp =>
+{
+    var configuration  = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
+    var logger = sp.GetRequiredService<ILogger<WorkforceService>>();
+    return new WorkforceService(connectionString, tableServiceUri, logger);
+});
+
+// Register OrderGenerationService for SQL write operations during AI order generation
+builder.Services.AddScoped<OrderGenerationService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new OrderGenerationService(connectionString, sp.GetRequiredService<ILogger<OrderGenerationService>>());
+});
+
+// Register ManufacturingAgentService: autonomous agent invoked by SQL change-tracking trigger
+builder.Services.AddScoped<ManufacturingAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<ManufacturingAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+    return new ManufacturingAgentService(logger, configuration, foundryClient, telemetryClient);
+});
+
+// Register OrderGenerationAgentService: AI+Foundry orchestration for order generation wizard
+builder.Services.AddScoped<OrderGenerationAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<OrderGenerationAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+    var orderGenService = sp.GetRequiredService<OrderGenerationService>();
+    var receiptService = sp.GetRequiredService<ReceiptService>();
+    var pdfGenerator = sp.GetRequiredService<PdfReceiptGenerator>();
+
+    return new OrderGenerationAgentService(
+        logger,
+        configuration,
+        telemetryClient,
+        orderGenService,
+        receiptService,
+        pdfGenerator,
+        foundryClient);
+});
+
+// Register CustomerGenerationAgentService: AI+Foundry orchestration for customer generation
+builder.Services.AddScoped<CustomerGenerationAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<CustomerGenerationAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+    var orderGenService = sp.GetRequiredService<OrderGenerationService>();
+
+    return new CustomerGenerationAgentService(
+        logger,
+        configuration,
+        telemetryClient,
+        orderGenService,
+        foundryClient);
+});
+
+// Register BankService for the virtual bank simulator
+builder.Services.AddScoped<BankService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
+    var logger = sp.GetRequiredService<ILogger<BankService>>();
+    var telemetry = sp.GetRequiredService<TelemetryClient>();
+    return new BankService(connectionString, tableServiceUri, logger, telemetry);
 });
 
 // Register AIService with Azure OpenAI endpoint
@@ -176,66 +422,6 @@ builder.Services.AddScoped<EmailService>(sp =>
         sp.GetRequiredService<ILogger<EmailService>>());
 });
 
-// Create and register Durable Agent with MCP tools
-// Note: This runs synchronously at startup, so MCP initialization happens before agent registration
-var config = builder.Configuration;
-var mcpServerUrl = config["MCP_SERVICE_URL"];
-if (string.IsNullOrEmpty(mcpServerUrl))
-{
-    mcpServerUrl = "http://localhost:5000/mcp";
-}
-
-// Initialize MCP client synchronously (required for durable agent registration)
-var mcpClient = McpClient.CreateAsync(
-    new HttpClientTransport(
-        new()
-        {
-            Name = "AdventureWorks MCP",
-            Endpoint = new Uri(mcpServerUrl.TrimEnd('/'))
-        }
-    )
-).GetAwaiter().GetResult();
-
-var mcpTools = mcpClient.ListToolsAsync().GetAwaiter().GetResult();
-
-// Create the durable agent with Azure OpenAI and MCP tools
-var endpoint = config["AZURE_OPENAI_ENDPOINT"]
-    ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT environment variable is not set");
-var deploymentName = config["chatGptDeploymentName"] ?? "chat";
-
-var chatClient = new AzureOpenAIClient(new Uri(endpoint), defaultCredential)
-    .GetChatClient(deploymentName)
-    .AsIChatClient();
-
-var durableAgent = new ChatClientAgent(
-    chatClient,
-    tools: mcpTools.Cast<Microsoft.Extensions.AI.AITool>().ToList(),
-    name: "AdventureWorksAgent",
-    instructions: @"You are a helpful customer service assistant for AdventureWorks, an outdoor and sporting goods retailer.
-
-You have access to tools that allow you to:
-- Retrieve customer order history and order details
-- Search for products and get detailed product information
-- Find complementary products and personalized recommendations
-- Analyze product reviews and customer sentiment
-- Check real-time inventory availability across warehouses
-
-Guidelines:
-- Be friendly, professional, and helpful
-- When you need to use a tool, tell the customer what you're checking
-- Provide clear, concise answers
-- If you need more information (like order number or product ID), ask for it
-- Suggest relevant products and help with purchase decisions
-- Always maintain customer context throughout the conversation");
-
-// Configure as durable agent for Azure Functions
-builder.ConfigureDurableAgents(options => options.AddAIAgent(durableAgent));
-
 var app = builder.Build();
-
-// Log MCP tools initialization
-var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
-var programLogger = loggerFactory.CreateLogger("Program");
-programLogger.LogInformation("Loaded {ToolCount} MCP tools for durable agent from {McpServerUrl}", mcpTools.Count, mcpServerUrl);
 
 app.Run();

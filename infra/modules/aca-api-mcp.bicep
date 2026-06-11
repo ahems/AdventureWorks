@@ -5,6 +5,7 @@ param containerRegistryName string = 'avacr${toLower(uniqueString(resourceGroup(
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param containerAppEnvId string
 param bootstrapImage string = 'mcr.microsoft.com/dotnet/aspnet:8.0'
+param apiFunctionsUrl string
 @minValue(0)
 @maxValue(25)
 param minReplica int = 0
@@ -29,7 +30,7 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
   name: appInsightsName
 }
 
-resource apiMcp 'Microsoft.App/containerApps@2025-10-02-preview' = {
+resource apiMcp 'Microsoft.App/containerApps@2024-03-01' = {
   name: apiMcpName
   location: location
   identity: {
@@ -50,11 +51,6 @@ resource apiMcp 'Microsoft.App/containerApps@2025-10-02-preview' = {
           value: sqlConnectionString
         }
       ]
-      runtime: {
-        dotnet: {
-          autoConfigureDataProtection: true
-        }
-      }
       ingress: {
         external: true
         targetPort: 8080
@@ -107,6 +103,10 @@ resource apiMcp 'Microsoft.App/containerApps@2025-10-02-preview' = {
             {
               name: 'AZURE_OPENAI_ENDPOINT'
               value: aiFoundryEndpoint
+            }
+            {
+              name: 'API_FUNCTIONS_URL'
+              value: apiFunctionsUrl
             }
             {
               name: 'ASPNETCORE_URLS'

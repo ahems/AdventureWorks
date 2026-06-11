@@ -21,23 +21,18 @@ Tests the AI chat endpoints in the Functions API:
 #### 2.1: Agent Status
 
 - **Endpoint**: `GET /api/agent/status`
-- **Validates**: Service is operational and returns configuration
+- **Validates**: Service is operational, `framework` equals `"Azure.AI.Foundry"`, and features include `"foundry-agent-threads"`, `"dual-mcp-servers"`, `"thread-persistence"`
 
 #### 2.2: Simple Chat
 
 - **Endpoint**: `POST /api/agent/chat`
 - **Test**: Basic greeting message
-- **Validates**: AI responds to simple conversational input
+- **Validates**: AI responds to simple conversational input; response contains `threadId`
 
-#### 2.3: Product Search Intent
+#### 2.3: Multi-turn Thread Continuation
 
-- **Test**: "I'm looking for bikes. What do you have?"
-- **Validates**: AI can handle product search queries
-
-#### 2.4: Order Inquiry
-
-- **Test**: "Can you show me my recent orders?"
-- **Validates**: AI can handle order-related questions
+- **Test**: Second message using the `threadId` returned from 2.2
+- **Validates**: The agent resumes the same Foundry thread (contextual continuation)
 
 ### Part 3: MCP Server Tools (Direct)
 
@@ -274,9 +269,10 @@ Test Script
     ↓
     ├─→ Functions API (/api/agent/chat)
     │       ↓
-    │       └─→ Azure OpenAI (GPT-4)
-    │               ↓
-    │               └─→ MCP Server (SSE)
+    │       └─→ Azure AI Foundry (PersistentAgentsClient)
+    │               ↓ (server-side in Foundry)
+    │               ├─→ api-mcp MCP server
+    │               └─→ DAB /mcp endpoint
     │                       ↓
     │                       └─→ Azure SQL
     │                           (Business Data)
@@ -312,6 +308,81 @@ Test Script
 | Review Analysis        | MCP Direct      | AnalyzeProductReviews          | ✓      |
 | Inventory Check        | MCP Direct      | CheckInventoryAvailability     | ✓      |
 | Chat Tool Integration  | Functions + MCP | All Tools                      | ✓      |
+
+## Testing AI Foundry Features
+
+The following scenarios verify the Foundry-specific features added across all four agents.
+
+### Structured Inputs Resolution
+
+Verify that `{{customerId}}` and `{{cultureId}}` placeholders in the Chat agent's instructions are resolved, not passed literally to the model:
+
+```bash
+# POST /api/agent/chat with customerId set — the agent should greet the customer by name
+# (it looks them up via MCP tools using the resolved customerId, not the raw string)
+curl -s -X POST "$API_FUNCTIONS_URL/api/agent/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Who am I?","customerId":29825}' | jq '{response:.response, threadId:.threadId}'
+```
+
+The response should reference customer 29825's name — not contain literal `{{customerId}}` text.
+
+### Memory Scoping (`x-memory-user-id`)
+
+Verify that memory is scoped per user by checking that two different customers do not share conversation state:
+
+```bash
+# Customer A — ask about orders
+curl -s -X POST "$API_FUNCTIONS_URL/api/agent/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"What was my last order?","customerId":29825}' | jq '.response'
+
+# Customer B — ask about orders; should NOT reference Customer A's data
+curl -s -X POST "$API_FUNCTIONS_URL/api/agent/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"What was my last order?","customerId":30119}' | jq '.response'
+```
+
+### `tool_choice: "required"` Enforcement
+
+Verify that agents with `tool_choice: "required"` always invoke at least one MCP tool:
+
+```bash
+# Order Generation — check that ToolsUsed is populated
+curl -s -X POST "$API_FUNCTIONS_URL/api/admin/generate-order" \
+  -H "Content-Type: application/json" \
+  -d '{"personaType":"weekend-warrior"}' | jq '.log[] | select(.type=="dim") | .message | select(contains("tools"))'
+
+# Help-Me-Choose — check that tool calls appear in the response
+curl -s -X POST "$API_FUNCTIONS_URL/api/help-me-choose/recommendations" \
+  -H "Content-Type: application/json" \
+  -d '{"budget":500,"activityType":"mountain biking"}' | jq '.toolsUsed'
+```
+
+Expect at least one tool name in `toolsUsed`/log for each call. An empty `toolsUsed` for these agents indicates a misconfiguration.
+
+### PII Absence in Logs
+
+Verify that customer email addresses do not appear in Application Insights traces from Order Generation:
+
+```bash
+# In Azure Portal → App Insights → Logs:
+traces
+| where message contains "Loaded profile:"
+| project timestamp, message
+| order by timestamp desc
+| take 20
+```
+
+The `message` field should contain `CustomerID=` and order count stats but **not** an email address (e.g. `@adventure-works.com`).
+
+### Agent Status Feature Flags
+
+```bash
+curl -s "$API_FUNCTIONS_URL/api/agent/status" | jq '.features'
+```
+
+Expected output includes: `"foundry-responses-api"`, `"structured-inputs"`, `"memory-scoping"`, `"tool-choice-required"`, `"dual-mcp-servers"`, `"multi-turn-persistence"`.
 
 ## Related Documentation
 

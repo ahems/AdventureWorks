@@ -28,6 +28,36 @@ public class AddressService
     }
 
     /// <summary>
+    /// Get addresses for multiple persons by BusinessEntityID, joined with StateProvince and CountryRegion.
+    /// This avoids the DAB limitation with the geography-typed SpatialLocation column in Person.Address.
+    /// </summary>
+    public async Task<IEnumerable<PersonAddressResult>> GetPersonAddressesAsync(IEnumerable<int> businessEntityIds)
+    {
+        var idList = businessEntityIds.ToList();
+        if (!idList.Any())
+            return Enumerable.Empty<PersonAddressResult>();
+
+        using var connection = await CreateConnectionAsync();
+
+        var sql = @"
+            SELECT
+                bea.BusinessEntityID,
+                a.AddressLine1,
+                a.AddressLine2,
+                a.City,
+                a.PostalCode,
+                sp.Name AS StateProvinceName,
+                cr.Name AS CountryName
+            FROM Person.BusinessEntityAddress bea
+            INNER JOIN Person.Address a ON bea.AddressID = a.AddressID
+            INNER JOIN Person.StateProvince sp ON a.StateProvinceID = sp.StateProvinceID
+            INNER JOIN Person.CountryRegion cr ON sp.CountryRegionCode = cr.CountryRegionCode
+            WHERE bea.BusinessEntityID IN @Ids";
+
+        return await connection.QueryAsync<PersonAddressResult>(sql, new { Ids = idList });
+    }
+
+    /// <summary>
     /// Get all addresses with optional pagination
     /// </summary>
     public async Task<IEnumerable<Address>> GetAddressesAsync(int? limit = 100, int? offset = 0)

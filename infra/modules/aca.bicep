@@ -88,5 +88,6 @@ resource seedJobStorage 'Microsoft.App/managedEnvironments/storages@2023-11-02-p
 
 output containerAppEnvId string = containerAppEnv.id
 output containerAppEnvName string = containerAppEnv.name
+output containerAppEnvDefaultDomain string = containerAppEnv.properties.defaultDomain
 output applicationInsightsConnectionString string = appInsights.properties.ConnectionString
 

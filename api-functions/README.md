@@ -17,12 +17,35 @@ High‑level responsibilities:
 ### `AIAgentChat`
 
 - **Trigger / Route**: HTTP `POST /api/agent/chat`
-- **Purpose**: Front‑door chat endpoint for the AI support agent. Accepts a message plus optional conversation history and customer metadata, forwards to the `AIAgentService` (which talks to the external MCP server), and returns the agents reply plus suggested follow‑up questions. Emits rich Application Insights telemetry for observability.
+- **Purpose**: Front-door chat endpoint for the AI support agent. Accepts a message, optional conversation history, customer metadata (`customerId`, `cultureId`), and an optional `threadId` for multi-turn conversation persistence. Forwards to `AIAgentService`, which invokes an Azure AI Foundry "kind: prompt" agent via the Responses API. Customer and culture context is passed as **structured inputs** (`{{customerId}}` / `{{cultureId}}` Handlebars templates in the agent's Foundry portal instructions) rather than being embedded in the user message. Memory is scoped per customer via the `x-memory-user-id` header. Returns the agent's reply, suggested follow-up questions, tools used, and the `threadId` (Foundry response ID) for the next request. Emits rich Application Insights telemetry for observability.
 
 ### `AIAgentStatus`
 
 - **Trigger / Route**: HTTP `GET /api/agent/status`
-- **Purpose**: Lightweight health/config endpoint for the AI agent. Returns static metadata such as agent status, framework version, and enabled capabilities (MCP tools, durable threads, etc.). Useful for smoke tests and diagnostics.
+- **Purpose**: Lightweight health/config endpoint for the AI agent. Returns static metadata such as agent status, framework version (`Azure.AI.Foundry`), and enabled capabilities (`foundry-responses-api`, `structured-inputs`, `memory-scoping`, `tool-choice-required`, `dual-mcp-servers`, `multi-turn-persistence`). Useful for smoke tests and diagnostics.
+
+### AI Foundry Features Used by Agent Functions
+
+All AI Foundry agent calls share the `FoundryAgentClient` singleton, which leverages these Responses API features:
+
+| Feature                   | How it's used                                                                                                                                                                                                             |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `store: true`             | Every response is persisted by Foundry; enables memory and conversation history                                                                                                                                           |
+| `previous_response_id`    | Chains multi-turn conversations (replaces thread/session management in the client)                                                                                                                                        |
+| `x-memory-user-id`        | Scopes Foundry memory per user or persona so agents recall prior interactions                                                                                                                                             |
+| `structured_inputs`       | Resolves `{{variable}}` Handlebars placeholders declared in each agent's Foundry portal definition at runtime — avoids duplicating agent versions for different customers or contexts                                     |
+| `tool_choice: "required"` | Forces MCP tool calls for agents whose output depends on live catalog/inventory data (Help-Me-Choose, Order Generation, Promotion Generation) — prevents hallucinated product IDs or prices being written to the database |
+
+**Per-agent configuration:**
+
+| Agent                                            | Memory `userId`                                         | `tool_choice` | Structured input variables                                                                                                          |
+| ------------------------------------------------ | ------------------------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Chat (`AIAgentService`)                          | Customer ID                                             | auto (null)   | `customerId`, `cultureId`                                                                                                           |
+| Help-Me-Choose (`HelpMeChooseService`)           | Customer ID                                             | `required`    | _(declared in portal)_                                                                                                              |
+| Order Generation (`OrderGenerationAgentService`) | `order-gen-customer-{id}` or `order-gen-persona-{type}` | `required`    | `todayDate`, `personaDescription`, `isExistingCustomer`, `customerName`, `customerId`, `orderCount`, `totalSpend`, `recentProducts` |
+| Promotion Generation (`PromotionAgentService`)   | `promotion-gen-{type}`                                  | `required`    | `promotionType`, `offerCategory`, `todayDate`, `categoryName`, `subcategoryName`, `categoryId`, `subcategoryId`                     |
+
+> **Foundry portal prerequisite**: The `structured_inputs` schema (declaring each variable name and type) **must be added to each agent's definition in the Foundry portal** before the Handlebars templates in the instructions will resolve. See [docs/features/ai-agent/AI_AGENT_AUTOMATION.md](../docs/features/ai-agent/AI_AGENT_AUTOMATION.md) for details.
 
 ---
 
@@ -346,6 +369,367 @@ Demo pipeline that simulates order lifecycle (In Process → Approved/Rejected �
 
 ---
 
+## Simulator Control & Financial Reporting Functions
+
+### `ResetAllSimulators`
+
+- **Trigger / Route**: HTTP `POST /api/simulators/reset`
+- **Purpose**: Coordinated reset of all three simulators in the correct order — clears the manufacturing work-order queue, resets the supply chain (reverts POs and re-seeds vendor stock), then resets the bank (wipes transaction history and re-seeds the USD balance). Returns a step-by-step result with the new USD seed amount. Use this instead of individual resets to avoid orphaned bank transactions.
+
+### `GetFinancialSummary`
+
+- **Trigger / Route**: HTTP `GET /api/financials/summary`
+- **Purpose**: Returns an aggregated financial summary across all simulators, bucketing bank transactions by reference prefix into procurement spend, manufacturing overhead, payroll, and scrap write-offs. Includes computed totals (`totalOperatingCost`, `totalAllSpend`).
+
+### `GetProcurementTransactions`
+
+- **Trigger / Route**: HTTP `GET /api/financials/procurement[?maxCount=50]`
+- **Purpose**: Returns recent procurement transactions — PO approval debits (`PO-*`) and rejection refunds (`PO-*-refund`) — ordered by time descending. `maxCount` 1–500, default 50.
+
+### `GetManufacturingTransactions`
+
+- **Trigger / Route**: HTTP `GET /api/financials/manufacturing[?type=all&maxCount=50]`
+- **Purpose**: Returns recent manufacturing financial transactions filtered by type. `type` can be `all` (default), `completions` (WO completion overhead), `payroll` (per-operation labour), or `scrap` (scrap write-offs). `maxCount` 1–500, default 50.
+
+---
+
+## Admin AI Generation Functions
+
+These endpoints power the AI-driven generation features in the admin portal (`app-admin`).
+
+### `GenerateOrderWithAI`
+
+- **Trigger / Route**: HTTP `POST /api/GenerateOrderWithAI`
+- **Purpose**: AI-driven order simulation pipeline. Accepts a `personaType` (e.g. `"sporty-adventurer"`, `"existing-customer"`, `"random"`) and an optional `seedCustomerId`. Uses the Foundry Order Generation agent with `tool_choice: "required"` to research products via MCP, then creates a customer (if new), places an order, and generates a receipt PDF. Returns `salesOrderId`, customer details, `totalDue`, `receiptPdfBase64`, and a log of agent steps. Supports multi-turn refinement via `previousResponseId`.
+
+### `GenerateCustomerWithAI`
+
+- **Trigger / Route**: HTTP `POST /api/customers/generate-with-ai`
+- **Purpose**: Generates a realistic fictitious customer profile for a given locale/persona using the Foundry Customer agent. Returns the created customer's ID, name, and email, ready for use in order simulation.
+
+### `GeneratePromotion`
+
+- **Trigger / Route**: HTTP `POST /api/GeneratePromotion`
+- **Purpose**: Generates a promotion campaign suggestion using the Foundry Promotion agent. Accepts `promotionType`, `offerCategory`, `categoryId`, `categoryName`, `subcategoryId`, and `subcategoryName`. Returns a promotion strategy with discount percentage, conditions, headline, and body copy, plus a `threadId` for multi-turn refinement turns.
+
+### `GenerateOrdersBulk`
+
+- **Trigger / Route**: HTTP `POST /api/GenerateOrdersBulk`
+- **Purpose**: Bulk order generation utility that enqueues multiple AI order-generation jobs concurrently. Used by the admin portal's Generate Orders page to simulate realistic purchase patterns across various personas.
+
+### `CartRecoveryAnalysis`
+
+- **Trigger / Route**: HTTP `POST /api/carts/analyze-recovery`
+- **Purpose**: Analyses a batch of abandoned shopping carts using the Foundry Cart Recovery agent. Body: `{ "carts": [{ "cartId", "customerName", "totalValue", "daysStale", "totalItems", "productNames"? }] }`. Returns per-cart recovery strategies including `recoveryScore`, `urgency`, `emailSubject`, `emailBody`, and `recommendedDiscount`.
+
+### `GenerateReviewsWithReplies`
+
+- **Trigger / Route**: HTTP `POST /api/products/{productId}/generate-reviews-with-replies`
+- **Purpose**: Generates synthetic product reviews with AI-written merchant reply responses for a specific product. Used by the admin portal's Reviews page to populate demo review content.
+
+### `ReviewAnalysisBatch`
+
+- **Trigger / Route**: HTTP `POST /api/reviews/analyze-batch`
+- **Purpose**: Batch sentiment and theme analysis for a set of product reviews. Returns per-review analysis including sentiment score, key themes, and suggested action. Used by the admin portal Reviews page.
+
+---
+
+## Customer & Reporting Functions
+
+### `GetTopSpenders`
+
+- **Trigger / Route**: HTTP `GET /api/customers/top-spenders?limit=100`
+- **Purpose**: Returns the top N customers by total spend, joining `Sales.Customer`, `Person.Person`, and `Sales.SalesOrderHeader`. Used by the admin portal Customer Stats page.
+
+### `GetCustomerStats`
+
+- **Trigger / Route**: HTTP `GET /api/customers/stats`
+- **Purpose**: Returns aggregate customer statistics (total customers, new this month, average order value, etc.) for the admin portal dashboard.
+
+### `SearchSuggestions`
+
+- **Trigger / Route**: HTTP `GET /api/search/suggestions?q={term}`
+- **Purpose**: Returns lightweight type-ahead search suggestions based on product names and categories. Used by the eshop search bar for fast autocomplete.
+
+### `GetReceiptStatus`
+
+- **Trigger / Route**: HTTP `GET /api/orders/{salesOrderId}/receipt-status`
+- **Purpose**: Returns whether a PDF receipt has been generated for the given order, and if so the blob URL. Used by the order confirmation page to show a download link once the async receipt job completes.
+
+### `GetReceipt`
+
+- **Trigger / Route**: HTTP `GET /api/orders/{salesOrderId}/receipt`
+- **Purpose**: Redirects or returns the PDF receipt blob for a given order. Returns `404` if the receipt has not yet been generated.
+
+### `AdvanceOrderStatus`
+
+- **Trigger / Route**: HTTP `POST /api/orders/{orderId}/advance-status`
+- **Purpose**: Manually advances a sales order to the next status step in the pipeline by enqueuing a `sales-order-status` message. Useful for admin testing and demos without waiting for the automatic queue delay.
+
+### `UpdateExchangeRates`
+
+- **Trigger / Route**: HTTP `POST /api/exchange-rates/refresh`
+- **Purpose**: Refreshes currency exchange rates in the database. Used by the admin portal Currencies page and the bank simulator to keep FX data current.
+
+---
+
+## Store / B2B Order Management Functions
+
+These functions support the admin portal Stores page, which allows placing orders on behalf of B2B stores (phone/email orders).
+
+### `GetStores`
+
+- **Trigger / Route**: HTTP `GET /api/stores`
+- **Purpose**: Returns all B2B stores with aggregated customer stats (order count, total revenue, last order date). Uses a CTE to aggregate across all `Sales.Customer` rows per store.
+
+### `GetStore`
+
+- **Trigger / Route**: HTTP `GET /api/stores/{storeId}`
+- **Purpose**: Returns a single store with full details including contact info and order history summary.
+
+### `GetStoreOrders`
+
+- **Trigger / Route**: HTTP `GET /api/stores/{storeId}/orders`
+- **Purpose**: Returns the order history for a specific store, joining through all `Customer` records associated with the store.
+
+### `PlaceStoreOrder`
+
+- **Trigger / Route**: HTTP `POST /api/store-orders`
+- **Purpose**: Places a new B2B order on behalf of a store. Validates stock, creates `SalesOrderHeader` and `SalesOrderDetail` records, and triggers the order status pipeline.
+
+### `GetStoreProducts`
+
+- **Trigger / Route**: HTTP `GET /api/store-products`
+- **Purpose**: Returns products available for store ordering with inventory information and pricing.
+
+### `GetOrderLines`
+
+- **Trigger / Route**: HTTP `GET /api/orders/{orderId}/lines`
+- **Purpose**: Returns the line items for a specific order. Used by the Reorder feature in the admin portal.
+
+### `GetProductCatalog`
+
+- **Trigger / Route**: HTTP `GET /api/product-catalog`
+- **Purpose**: Returns product categories with their subcategories and product counts. Powers the category picker in store order creation.
+
+### `GetStoreTerritories`
+
+- **Trigger / Route**: HTTP `GET /api/store-territories`
+- **Purpose**: Returns territory summaries for B2B stores, sorted by revenue. Used for geographic analytics in the admin portal.
+
+---
+
+## Manufacturing Control & Planning Functions
+
+These functions expose the manufacturing simulation. See [MANUFACTURING_SIMULATION.md](./MANUFACTURING_SIMULATION.md) for full simulation details.
+
+### `ManufacturingBegin`
+
+- **Trigger / Route**: HTTP `POST /api/manufacturing/begin`
+- **Purpose**: Explodes the Bill of Materials, creates Work Orders and routing operations, and seeds the `work-order-queue` to start the production simulation.
+
+### `ManufacturingStop`
+
+- **Trigger / Route**: HTTP `POST /api/manufacturing/stop`
+- **Purpose**: Clears the production queue, halting the manufacturing simulation (scale-to-zero follows).
+
+### `ManufacturingStatus`
+
+- **Trigger / Route**: HTTP `GET /api/manufacturing/status`
+- **Purpose**: Returns live manufacturing counts — work orders in each status, shortages, scrap events, and per-location load.
+
+### `ManufacturingActive`
+
+- **Trigger / Route**: HTTP `GET /api/manufacturing/active`
+- **Purpose**: Returns in-progress routing operations with elapsed time, used to animate the simulation dashboard.
+
+### `GetScrapConfig` / `UpdateScrapConfig`
+
+- **Trigger / Routes**: `GET /api/manufacturing/scrap-config`, `PUT /api/manufacturing/scrap-config/{locationId}`
+- **Purpose**: Get or update per-location failure rates and applicable scrap reasons.
+
+### `GetLocationConfig` / `UpdateLocationConfig`
+
+- **Trigger / Routes**: `GET /api/manufacturing/location-config`, `PUT /api/manufacturing/location-config/{locationId}`
+- **Purpose**: Get or update per-location capacity, shift, and throughput speed settings.
+
+### `GetWorkforce` / `GetWorkforceDetail`
+
+- **Trigger / Routes**: `GET /api/manufacturing/workforce`, `GET /api/manufacturing/workforce/detail`
+- **Purpose**: Headcount summary by location and shift, or full worker list with status and pay rate.
+
+### `GetScrapEvents`
+
+- **Trigger / Route**: HTTP `GET /api/manufacturing/scrap-events[?vendorId=]`
+- **Purpose**: Returns all scrap events with optional vendor filter. Used for quality analysis.
+
+### `GetVendorQuality` / `GetVendorQualityById`
+
+- **Trigger / Routes**: `GET /api/manufacturing/vendor-quality`, `GET /api/manufacturing/vendor-quality/{vendorId}`
+- **Purpose**: Aggregated quality report per supplier vendor, or scoped to one vendor.
+
+### `GetPlanFeasibility` / `GetPlanFeasibilityBulk`
+
+- **Trigger / Routes**: `GET /api/plan/feasibility/{productId}?qty={n}`, `GET /api/plan/feasibility?qty={n}`
+- **Purpose**: Check if a product (or all products) can be manufactured at a given quantity given current inventory and work orders.
+
+### `GetPlanCost` / `GetPlanCostCurrent`
+
+- **Trigger / Routes**: `GET /api/plan/cost/{productId}`, `GET /api/plan/cost/{productId}/current`
+- **Purpose**: Standard vs current-price cost analysis for manufacturing a product.
+
+### `GetPlanCatalog`
+
+- **Trigger / Route**: HTTP `GET /api/plan/catalog`
+- **Purpose**: Returns the manufacturable product catalog with BOM complexity and last production date.
+
+### `GetOverstock`
+
+- **Trigger / Route**: HTTP `GET /api/plan/overstock?minWeeks={n}`
+- **Purpose**: Returns products with more than `minWeeks` of stock on hand.
+
+### `GetThinMargin`
+
+- **Trigger / Route**: HTTP `GET /api/plan/thin-margin?maxMarginPct={0.20}`
+- **Purpose**: Returns products with gross margin below the threshold.
+
+### `GetShortageforecast`
+
+- **Trigger / Route**: HTTP `GET /api/plan/shortage-forecast?days={90}`
+- **Purpose**: Forecasts which components will run out within the given number of days.
+
+### `GetReorderRecommendations`
+
+- **Trigger / Route**: HTTP `GET /api/plan/reorder-recommendations?days={60}`
+- **Purpose**: Returns reorder recommendations for components expected to run short within the window.
+
+### `WorkOrderOperationProcessor`
+
+- **Trigger**: Queue `work-order-queue`
+- **Purpose**: Queue-driven worker that processes manufacturing routing operations step-by-step, advancing work order status, recording scrap events, and making bank debit calls for labour and overhead costs.
+
+---
+
+## Supply Chain Control Functions
+
+These functions expose the supply chain simulation. See [MANUFACTURING_SIMULATION.md](./MANUFACTURING_SIMULATION.md) for context.
+
+### `GetVendors` / `GetVendor`
+
+- **Trigger / Routes**: `GET /api/supply/vendors`, `GET /api/supply/vendors/{vendorId}`
+- **Purpose**: Returns all vendors or a single vendor with stock and lead-time information.
+
+### `GetSupplyCatalog` / `GetSupplyCatalogByProduct`
+
+- **Trigger / Routes**: `GET /api/supply/catalog`, `GET /api/supply/catalog/{productId}`
+- **Purpose**: Returns all purchasable components from vendors, or components for a specific product.
+
+### `GetSupplyQuote`
+
+- **Trigger / Route**: HTTP `GET /api/supply/quote?productId={id}&vendorId={id}&qty={n}`
+- **Purpose**: Returns a price quote for purchasing a component from a specific vendor at a given quantity.
+
+### `PlaceSupplyOrder`
+
+- **Trigger / Route**: HTTP `POST /api/supply/order`
+- **Purpose**: Places a purchase order with a vendor. Validates stock, records the PO in the database, and makes a bank debit for the cost.
+
+### `GetSupplyOrders` / `GetSupplyOrderHistory`
+
+- **Trigger / Routes**: `GET /api/supply/orders`, `GET /api/supply/orders/history`
+- **Purpose**: Returns open purchase orders or the full PO history.
+
+### `GetSupplyOrder`
+
+- **Trigger / Route**: HTTP `GET /api/supply/order/{orderId}`
+- **Purpose**: Returns a single purchase order by ID.
+
+### `CancelSupplyOrder`
+
+- **Trigger / Route**: HTTP `DELETE /api/supply/order/{orderId}`
+- **Purpose**: Cancels an open purchase order and issues a refund bank credit.
+
+### `SupplyChainRestock`
+
+- **Trigger / Route**: HTTP `POST /api/supply/restock`
+- **Purpose**: Triggers an automatic restock of vendor inventory to baseline levels (used by the simulator reset flow).
+
+### `PurchaseOrderProcessor`
+
+- **Trigger**: Queue `purchase-order-queue`
+- **Purpose**: Queue-driven worker that processes purchase order approvals and rejections, updates inventory, and records bank transactions.
+
+---
+
+## Bank Simulator Functions
+
+These functions expose the virtual bank. See [BANK_SIMULATOR.md](./BANK_SIMULATOR.md) for full documentation.
+
+### `BankGetStatus`
+
+- **Trigger / Route**: HTTP `GET /api/bank/status`
+- **Purpose**: Returns the bank's overall health status and configuration.
+
+### `BankGetAccounts` / `BankGetAccount`
+
+- **Trigger / Routes**: `GET /api/bank/accounts`, `GET /api/bank/accounts/{currencyCode}`
+- **Purpose**: Returns all accounts or a specific currency account with current balance.
+
+### `BankGetTransactions` / `BankGetTransactionsByCurrency`
+
+- **Trigger / Routes**: `GET /api/bank/transactions`, `GET /api/bank/transactions/{currencyCode}`
+- **Purpose**: Returns recent transaction history, optionally filtered to a currency.
+
+### `BankDeposit`
+
+- **Trigger / Route**: HTTP `POST /api/bank/deposit`
+- **Purpose**: Credits an amount to a currency account. Body: `{ "currencyCode", "amount", "reference", "description" }`.
+
+### `BankWithdraw`
+
+- **Trigger / Route**: HTTP `POST /api/bank/withdraw`
+- **Purpose**: Debits an amount from a currency account. Returns `400` if insufficient funds.
+
+### `BankGetCurrencies`
+
+- **Trigger / Route**: HTTP `GET /api/bank/currencies`
+- **Purpose**: Returns all supported currencies and their current exchange rates.
+
+---
+
+## Order-Triggered SQL Function
+
+### `OrderPlacedSqlTrigger`
+
+- **Trigger**: Azure Functions SQL Change Tracking on `Sales.SalesOrderHeader` (INSERT)
+- **Purpose**: Fires automatically whenever a new order row is inserted. Enqueues receipt generation, starts the order status pipeline, and fire-and-forgets the Manufacturing agent to assess inventory and feasibility. See [docs/features/ai-agent/MANUFACTURING_AGENT.md](../docs/features/ai-agent/MANUFACTURING_AGENT.md) for the full architecture.
+
+---
+
+## Simulation Queue & Background Functions
+
+### `SimulationOrderStart`
+
+- **Trigger / Route**: HTTP `POST /api/simulation/orders/start`
+- **Purpose**: Starts a simulation run that generates a burst of demo orders through the pipeline to warm up the system and demonstrate the full order lifecycle.
+
+### `SimulationOrderQueueTrigger`
+
+- **Trigger**: Queue `simulation-order-queue`
+- **Purpose**: Processes queued simulation order generation jobs, calling `GenerateOrderWithAI` for each configured persona.
+
+### `AIJobProcessor`
+
+- **Trigger**: Queue `ai-job-queue`
+- **Purpose**: Generic background AI job processor that dequeues tasks (e.g. bulk content generation or embedding jobs) and runs them asynchronously without blocking HTTP responses.
+
+### `TransactionHistoryArchive`
+
+- **Trigger / Route**: HTTP `GET /api/archive/trigger`
+- **Purpose**: Archives old bank transaction history rows beyond a retention threshold to keep the transactions table lean.
+
+---
+
 ## How This Project Fits Into The Overall Architecture
 
 - **Frontend (`app/`)** calls these Functions for operations that need server‑side processing, long‑running workloads, or integration with external services (OpenAI, email, blob storage).
@@ -366,3 +750,5 @@ For examples of how these Functions are exercised, see the test scripts in the r
 - Translations and localization flows: [docs/features/internationalization/](../docs/features/internationalization/)
 - Review generation and embeddings: [docs/features/reviews/](../docs/features/reviews/) and [docs/data-management/](../docs/data-management/)
 - SEO endpoints and frontend usage: [docs/features/seo/](../docs/features/seo/)
+- Manufacturing simulation: [MANUFACTURING_SIMULATION.md](./MANUFACTURING_SIMULATION.md)
+- Bank simulator: [BANK_SIMULATOR.md](./BANK_SIMULATOR.md)

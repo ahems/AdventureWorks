@@ -12,10 +12,13 @@
       "lfs": true
     },
     "ghcr.io/azure/azure-dev/azd:latest": {
-      "version": "1.23.8"
+      "version": "latest"
     },
     "ghcr.io/devcontainers/features/powershell:1": {
       "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/dotnet:2": {
+      "version": "8.0"
     }
   },
   "customizations": {
@@ -38,12 +41,11 @@
 
         // Format settings
         "editor.formatOnSave": true,
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
-
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
       }
     }
   },
-  "postCreateCommand": "az bicep install && npm ci && npx playwright install --with-deps chromium && (cd app && npm ci) && npm install --prefix app @playwright/test csv-parse",
+  "postCreateCommand": "git lfs pull && az bicep install && npm ci && npx playwright install --with-deps chromium && (cd app && npm ci) && npm install --prefix app @playwright/test csv-parse",
   "hostRequirements": {
     "memory": "8gb"
   }

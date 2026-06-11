@@ -7,6 +7,7 @@ param kind string = 'AIServices'
 param restoreOpenAi bool = false
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param aadAdminObjectId string
+param skipLocalDevRoleAssignments bool = false
 param projectName string
 param appInsightsId string
 param appInsightConnectionString string
@@ -34,7 +35,7 @@ param embeddingDeploymentVersion string = ''
 param embeddingDeploymentCapacity int = 0
 param embeddingSkuName string = ''
 param imageModelName string = ''
-param imageDeploymentName string = 'gpt-image-1'
+param imageDeploymentName string = 'gpt-image-2'
 param imageDeploymentVersion string = ''
 param imageDeploymentCapacity int = 0
 param imageSkuName string = ''
@@ -122,13 +123,16 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2022-09-01' existing 
 
 // Microsoft Foundry resource (AIServices kind enables access to broader model catalog, agents, and Foundry Tools)
 // Uses latest 2025-06-01 API with allowProjectManagement for full Foundry capabilities
+// defaultProject enables the "New Foundry" portal experience by designating the default project
+// SystemAssigned identity is required alongside UserAssigned so Foundry can manage its internal
+// Key Vault workspace identity — needed for ApiKey-type project connections (e.g. AppInsights tracing).
 resource account 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   name: name
   location: location
   tags: tags
   kind: kind
   identity: {
-    type: 'UserAssigned'
+    type: 'SystemAssigned, UserAssigned'
     userAssignedIdentities: {
       '${azidentity.id}': {}
     }
@@ -142,13 +146,16 @@ resource account 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
     restrictOutboundNetworkAccess: false
     restore: restoreOpenAi
     allowProjectManagement: true // Required for Microsoft Foundry features (projects, agents, broader model catalog)
+    defaultProject: projectName // Sets the default Foundry project, enabling the New Foundry portal experience
   }
   sku: sku
 }
 
-resource aiServiceConnection 'Microsoft.CognitiveServices/accounts/connections@2025-04-01-preview' = {
+// Connections are scoped to the project so they are isolated per-project rather than shared at
+// the account level. Project-scoped connections are visible only within this project's context.
+resource aiServiceConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-06-01' = {
   name: aoaiConnectionName
-  parent: account
+  parent: aiProject
   properties: {
     category: 'AzureOpenAI'
     authType: 'AAD'
@@ -161,10 +168,10 @@ resource aiServiceConnection 'Microsoft.CognitiveServices/accounts/connections@2
   }
 }
 
-// Creates the Azure Foundry connection to your Azure Storage resource
-resource storageAccountConnection 'Microsoft.CognitiveServices/accounts/connections@2025-04-01-preview' = {
+// Creates the Azure Foundry connection to your Azure Storage resource, scoped to the project
+resource storageAccountConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-06-01' = {
   name: storageAccountConnectionName
-  parent: account
+  parent: aiProject
   properties: {
     category: 'AzureStorageAccount'
     target: storageAccount.properties.primaryEndpoints.blob
@@ -177,9 +184,29 @@ resource storageAccountConnection 'Microsoft.CognitiveServices/accounts/connecti
   }
 }
 
+// Connects the project to Application Insights for the Foundry portal Tracing experience.
+// Requires the account to have a SystemAssigned identity so Foundry can store the ApiKey in
+// its internally managed Key Vault workspace identity.
+resource appInsightsConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-06-01' = {
+  name: appInsightConnectionName
+  parent: aiProject
+  properties: {
+    category: 'AppInsights'
+    authType: 'ApiKey'
+    isSharedToAll: true
+    target: 'https://eastus2-3.in.applicationinsights.azure.com/'
+    credentials: {
+      key: appInsightConnectionString
+    }
+    metadata: {
+      ResourceId: appInsightsId
+    }
+  }
+}
+
 // Microsoft Foundry Project (organizes work, provides access management and data isolation)
 // Projects are containers for agents, model deployments, and other Foundry resources
-resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-04-01-preview' = {
+resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = {
   name: projectName
   parent: account
   location: location
@@ -210,10 +237,35 @@ resource openAiUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-
   }
 }
 
+// Grant the managed identity Azure AI Developer role for Foundry Agents API access
+// Required for: reading agent definitions (agents/read), invoking agents, and using the Responses API with MCP tools
+// Role: Azure AI Developer (64702f94-c441-49e6-a78b-ef80e0188fee)
+// Without this role, the Container App cannot call GET /api/projects/{name}/agents/{agentId}
+resource aiDeveloperRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = {
+  name: guid(account.id, azidentity.id, '64702f94-c441-49e6-a78b-ef80e0188fee')
+  scope: account
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '64702f94-c441-49e6-a78b-ef80e0188fee') // Azure AI Developer
+    principalId: azidentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Grant the same Azure AI Developer role to local devs for testing with az login
+resource aiDeveloperLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = if (!skipLocalDevRoleAssignments) {
+  name: guid(account.id, aadAdminObjectId, '64702f94-c441-49e6-a78b-ef80e0188fee')
+  scope: account
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '64702f94-c441-49e6-a78b-ef80e0188fee') // Azure AI Developer
+    principalId: aadAdminObjectId
+    principalType: 'User'
+  }
+}
+
 // Grant the specified Entra ID admin/user data-plane access for local development
 // Enables DefaultAzureCredential (az login) to call Microsoft Foundry deployments during development
 // Uses deterministic GUID to maintain idempotency across deployments
-resource openAiUserLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = {
+resource openAiUserLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = if (!skipLocalDevRoleAssignments) {
   name: guid(account.id, aadAdminObjectId, 'a001fd3d-188f-4b5d-821b-7da978bf7442')
   scope: account
   properties: {
@@ -225,6 +277,8 @@ resource openAiUserLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@
 
 // Deploy models to Microsoft Foundry resource using latest API
 // Models deployed here are accessible via Azure AI Model Inference API endpoint
+// dependsOn aiProject: project creation writes to the parent account's ETag; without this
+// dependency, concurrent project + deployment operations cause IfMatchPreconditionFailed.
 @batchSize(1)
 resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = [for deployment in allDeployments: {
   parent: account
@@ -233,6 +287,7 @@ resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01
     model: deployment.model
   }
   sku: deployment.sku
+  dependsOn: [aiProject]
 }]
 
 output endpoint string = account.properties.endpoint

@@ -165,8 +165,6 @@ const OrderConfirmationPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [emailAddressId, setEmailAddressId] = useState<number | null>(null);
   const [selectedEmail, setSelectedEmail] = useState<string>("");
-  const [receiptRequestSent, setReceiptRequestSent] = useState(false);
-  const [receiptError, setReceiptError] = useState<string | null>(null);
   const { t } = useTranslation("common");
 
   // Fetch order data from API using order ID from URL
@@ -275,12 +273,22 @@ const OrderConfirmationPage: React.FC = () => {
           if (addressRes.ok) {
             // Functions API uses camelCase (JsonNamingPolicy.CamelCase)
             const raw = (await addressRes.json()) as Record<string, unknown>;
-            const addressLine1 = (raw.addressLine1 ?? raw.AddressLine1) as string ?? "";
-            const addressLine2 = (raw.addressLine2 ?? raw.AddressLine2) as string | null | undefined;
-            const city = (raw.city ?? raw.City) as string ?? "";
-            const stateProvinceId = Number(raw.stateProvinceID ?? raw.StateProvinceID ?? 0);
-            const postalCode = (raw.postalCode ?? raw.PostalCode) as string ?? "";
-            let stateProvince: { StateProvinceCode: string; Name: string } | null = null;
+            const addressLine1 =
+              ((raw.addressLine1 ?? raw.AddressLine1) as string) ?? "";
+            const addressLine2 = (raw.addressLine2 ?? raw.AddressLine2) as
+              | string
+              | null
+              | undefined;
+            const city = ((raw.city ?? raw.City) as string) ?? "";
+            const stateProvinceId = Number(
+              raw.stateProvinceID ?? raw.StateProvinceID ?? 0,
+            );
+            const postalCode =
+              ((raw.postalCode ?? raw.PostalCode) as string) ?? "";
+            let stateProvince: {
+              StateProvinceCode: string;
+              Name: string;
+            } | null = null;
             let countryRegion: { Name: string } | null = null;
             if (Number.isInteger(stateProvinceId) && stateProvinceId > 0) {
               try {
@@ -293,14 +301,21 @@ const OrderConfirmationPage: React.FC = () => {
                 }>(GET_STATE_PROVINCE, { stateProvinceId });
                 const sp = stateResponse.stateProvince_by_pk;
                 if (sp) {
-                  stateProvince = { StateProvinceCode: sp.StateProvinceCode, Name: sp.Name };
+                  stateProvince = {
+                    StateProvinceCode: sp.StateProvinceCode,
+                    Name: sp.Name,
+                  };
                   if (sp.CountryRegionCode) {
                     countryRegionCode = sp.CountryRegionCode;
                     const countryResponse = await graphqlClient.request<{
                       countryRegion_by_pk: { Name: string } | null;
-                    }>(GET_COUNTRY_REGION, { countryRegionCode: sp.CountryRegionCode });
+                    }>(GET_COUNTRY_REGION, {
+                      countryRegionCode: sp.CountryRegionCode,
+                    });
                     if (countryResponse.countryRegion_by_pk?.Name) {
-                      countryRegion = { Name: countryResponse.countryRegion_by_pk.Name };
+                      countryRegion = {
+                        Name: countryResponse.countryRegion_by_pk.Name,
+                      };
                     }
                   }
                 }
@@ -353,17 +368,21 @@ const OrderConfirmationPage: React.FC = () => {
         if (countryRegionCode) {
           try {
             const currencyResponse = await graphqlClient.request<{
-              countryRegionCurrencies: { items: Array<{ CurrencyCode: string }> };
+              countryRegionCurrencies: {
+                items: Array<{ CurrencyCode: string }>;
+              };
             }>(GET_COUNTRY_CURRENCY, { countryCode: countryRegionCode });
             if (currencyResponse.countryRegionCurrencies.items.length > 0) {
-              const targetCurrency = currencyResponse.countryRegionCurrencies.items[0].CurrencyCode;
+              const targetCurrency =
+                currencyResponse.countryRegionCurrencies.items[0].CurrencyCode;
               if (targetCurrency !== "USD") {
                 const rateResponse = await graphqlClient.request<{
                   currencyRates: { items: Array<{ AverageRate: number }> };
                 }>(GET_CURRENCY_RATE, { toCurrencyCode: targetCurrency });
                 if (rateResponse.currencyRates.items.length > 0) {
                   currencyCode = targetCurrency;
-                  exchangeRate = rateResponse.currencyRates.items[0].AverageRate;
+                  exchangeRate =
+                    rateResponse.currencyRates.items[0].AverageRate;
                 }
               }
             }
@@ -413,77 +432,8 @@ const OrderConfirmationPage: React.FC = () => {
         // Clear the stored email ID from localStorage after order is confirmed
         localStorage.removeItem("checkout_email_id");
 
-        // Generate PDF receipt and send confirmation email with attachment (fire-and-forget)
-        const willSendReceipt = !!(selectedEmailId && orderData.CustomerID);
-        if (willSendReceipt) {
-          try {
-            const functionsApiUrl = getFunctionsApiUrl();
-            const receiptUrl = `${functionsApiUrl}/api/orders/generate-and-send-receipt`;
-            const receiptBody = {
-              salesOrderId: Number(salesOrderId),
-              customerId: Number(orderData.CustomerID),
-              emailAddressId: Number(selectedEmailId),
-            };
-            const response = await fetch(receiptUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(receiptBody),
-            });
-
-            if (response.ok) {
-              setReceiptRequestSent(true);
-              trackEvent("Order_ReceiptGenerationInitiated", {
-                salesOrderId: salesOrderId,
-                emailAddressId: selectedEmailId,
-              });
-            } else {
-              const responseText = await response.text();
-              const errMsg = `Receipt request failed (${response.status}). Check browser console for URL and response.`;
-              setReceiptError(errMsg);
-              trackError("Failed to initiate receipt and email", undefined, {
-                page: "OrderConfirmationPage",
-                salesOrderId: salesOrderId,
-                responseText: responseText,
-              });
-            }
-          } catch (error) {
-            const errMsg =
-              "We couldn't send your receipt email. Please contact support with your order number.";
-            setReceiptError(errMsg);
-            trackError("Error initiating receipt generation and email", error, {
-              page: "OrderConfirmationPage",
-              salesOrderId: salesOrderId,
-              emailAddressId: selectedEmailId,
-            });
-          }
-        }
-
-        // Start order status processing pipeline (fire-and-forget)
-        try {
-          const functionsApiUrl = getFunctionsApiUrl();
-          const beginProcessingUrl = `${functionsApiUrl}/api/orders/begin-processing-order`;
-          const beginResponse = await fetch(beginProcessingUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ salesOrderId: Number(salesOrderId) }),
-          });
-          if (beginResponse.ok) {
-            trackEvent("Order_StatusProcessingInitiated", { salesOrderId: salesOrderId });
-          } else {
-            trackError("Failed to initiate order status processing", undefined, {
-              page: "OrderConfirmationPage",
-              salesOrderId: salesOrderId,
-              status: beginResponse.status,
-            });
-          }
-        } catch (error) {
-          trackError("Error initiating order status processing", error, {
-            page: "OrderConfirmationPage",
-            salesOrderId: salesOrderId,
-          });
-        }
+        // Post-order processing (receipt generation, status pipeline, and manufacturing agent)
+        // is now handled server-side by OrderPlacedSqlTrigger via SQL Change Tracking.
       } catch (error) {
         trackError("Error fetching order", error, {
           page: "OrderConfirmationPage",
@@ -539,11 +489,6 @@ const OrderConfirmationPage: React.FC = () => {
       <Header />
       <main className="flex-1 container mx-auto px-4 py-12">
         <div className="max-w-md mx-auto">
-          {receiptError && (
-            <div className="mb-4 p-4 rounded-lg bg-doodle-warning/20 text-doodle-warning border border-doodle-warning/40">
-              {receiptError}
-            </div>
-          )}
           <div className="doodle-card p-8">
             <div className="flex items-center gap-3 mb-6">
               <CheckCircle className="w-12 h-12 text-doodle-accent flex-shrink-0" />
@@ -561,17 +506,16 @@ const OrderConfirmationPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Package className="w-5 h-5 text-doodle-accent" />
                 <span className="font-doodle text-doodle-text">
-                  {t("orderTracking.orderNumber")}: <strong>{order.salesOrderNumber}</strong>
+                  {t("orderTracking.orderNumber")}:{" "}
+                  <strong>{order.salesOrderNumber}</strong>
                 </span>
               </div>
-              {receiptRequestSent && (
-                <div className="flex items-center gap-2">
-                  <Mail className="w-5 h-5 text-doodle-accent" />
-                  <span className="font-doodle text-doodle-text/70 text-sm">
-                    {t("orderTracking.receiptSent")}
-                  </span>
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                <Mail className="w-5 h-5 text-doodle-accent" />
+                <span className="font-doodle text-doodle-text/70">
+                  {t("orderTracking.receiptSent")}
+                </span>
+              </div>
             </div>
 
             <div className="border border-doodle-border rounded-lg p-4 mb-8">
@@ -585,7 +529,8 @@ const OrderConfirmationPage: React.FC = () => {
                 <p>{order.shipping.address}</p>
                 {order.shipping.address2 && <p>{order.shipping.address2}</p>}
                 <p>
-                  {order.shipping.city}, {order.shipping.state} {order.shipping.zipCode}
+                  {order.shipping.city}, {order.shipping.state}{" "}
+                  {order.shipping.zipCode}
                 </p>
                 <p>{order.shipping.country}</p>
               </div>
@@ -645,6 +590,6 @@ const OrderConfirmationPage: React.FC = () => {
       <Footer />
     </div>
   );
-}
+};
 
 export default OrderConfirmationPage;

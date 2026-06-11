@@ -8,6 +8,7 @@ API_URL=$(azd env get-value API_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
 API_FUNC_URL=$(azd env get-value API_FUNCTIONS_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
 API_MCP_URL=$(azd env get-value API_MCP_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
 APPINSIGHTS_CONN_STR=$(azd env get-value APPINSIGHTS_CONNECTIONSTRING 2>/dev/null | head -n1 | tr -d '\n\r ')
+APP_URL=$(azd env get-value APP_REDIRECT_URI 2>/dev/null | head -n1 | tr -d '\n\r ')
 
 echo "[PreDeploy] Setting environment variables for SWA build"
 echo "  VITE_API_URL: $API_URL"

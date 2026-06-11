@@ -1,16 +1,15 @@
-using System.Net;
 using System.Text.Json;
 using Azure.Storage.Queues;
 using Azure.Identity;
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using api_functions.Services;
 
 namespace api_functions.Functions;
 
 /// <summary>
-/// Processes sales order status messages from the queue and provides HTTP entry point to begin processing.
+/// Processes sales order status messages from the queue.
+/// The initial status-1 message is now enqueued server-side by <see cref="OrderPlacedSqlTrigger"/>.
 /// </summary>
 public class ProcessSalesOrderStatus
 {
@@ -18,6 +17,7 @@ public class ProcessSalesOrderStatus
     private readonly ILogger<ProcessSalesOrderStatus> _logger;
     private readonly OrderService _orderService;
     private readonly EmailService _emailService;
+    private readonly BankService _bankService;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -26,62 +26,13 @@ public class ProcessSalesOrderStatus
     public ProcessSalesOrderStatus(
         ILogger<ProcessSalesOrderStatus> logger,
         OrderService orderService,
-        EmailService emailService)
+        EmailService emailService,
+        BankService bankService)
     {
         _logger = logger;
         _orderService = orderService;
         _emailService = emailService;
-    }
-
-    /// <summary>
-    /// HTTP trigger to start order status processing. Enqueues first message with Status 1 and visibility 5–60 minutes.
-    /// </summary>
-    [Function(nameof(BeginProcessingOrder))]
-    public async Task<HttpResponseData> BeginProcessingOrder(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "orders/begin-processing-order")] HttpRequestData req)
-    {
-        try
-        {
-            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            var request = JsonSerializer.Deserialize<BeginProcessingOrderRequest>(requestBody, JsonOptions);
-            var salesOrderId = request?.SalesOrderId ?? request?.SalesOrderID ?? 0;
-
-            if (salesOrderId <= 0)
-            {
-                var badRequest = req.CreateResponse(HttpStatusCode.BadRequest);
-                await badRequest.WriteAsJsonAsync(new { error = "salesOrderId must be greater than 0" });
-                return badRequest;
-            }
-
-            var queueClient = await GetQueueClientAsync();
-            var message = JsonSerializer.Serialize(new { SalesOrderID = salesOrderId, Status = 1 });
-            var visibilityMinutes = 5 + (55 * Random.Shared.NextDouble());
-            var visibility = TimeSpan.FromMinutes(visibilityMinutes);
-
-            await queueClient.SendMessageAsync(
-                message,
-                visibilityTimeout: visibility,
-                timeToLive: null);
-
-            _logger.LogInformation(
-                "Enqueued begin-processing for SalesOrderID={SalesOrderId}, visibility={VisibilityMinutes:F1} min",
-                salesOrderId, visibility.TotalMinutes);
-
-            var accepted = req.CreateResponse(HttpStatusCode.Accepted);
-            await accepted.WriteAsJsonAsync(new
-            {
-                message = "Order status processing started",
-                salesOrderId
-            });
-            return accepted;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error enqueueing begin-processing order");
-            var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await errorResponse.WriteStringAsync($"Error: {ex.Message}");
-            return errorResponse;
-        }
+        _bankService = bankService;
     }
 
     /// <summary>
@@ -123,7 +74,10 @@ public class ProcessSalesOrderStatus
                 return;
             }
             if (status == 5)
+            {
                 await SendShippedEmailAsync(salesOrderId);
+                await RecordSaleBankCreditAsync(salesOrderId);
+            }
             _logger.LogInformation("Terminal status {Status} applied for SalesOrderID={SalesOrderId}", status, salesOrderId);
             return;
         }
@@ -138,6 +92,7 @@ public class ProcessSalesOrderStatus
                 return;
             }
             await SendShippedEmailAsync(salesOrderId);
+            await RecordSaleBankCreditAsync(salesOrderId);
             _logger.LogInformation("Backordered order moved to Shipped for SalesOrderID={SalesOrderId}", salesOrderId);
             return;
         }
@@ -164,6 +119,7 @@ public class ProcessSalesOrderStatus
         if (nextStatus == 5)
         {
             await SendShippedEmailAsync(salesOrderId);
+            await RecordSaleBankCreditAsync(salesOrderId);
             _logger.LogInformation("Order Shipped for SalesOrderID={SalesOrderId}", salesOrderId);
             return;
         }
@@ -182,6 +138,51 @@ public class ProcessSalesOrderStatus
         var visibilityApproved = TimeSpan.FromHours(delayHours);
         await RequeueAsync(salesOrderId, 2, visibilityApproved);
         _logger.LogInformation("Order Approved for SalesOrderID={SalesOrderId}, re-queued with visibility {Hours:F1} h", salesOrderId, visibilityApproved.TotalHours);
+    }
+
+    private async Task RecordSaleBankCreditAsync(int salesOrderId)
+    {
+        try
+        {
+            await _bankService.InitializeAsync();
+            var financials = await _orderService.GetOrderSaleFinancialsAsync(salesOrderId);
+            if (financials == null)
+            {
+                _logger.LogWarning("[Bank] Could not resolve financials for SalesOrderID={SalesOrderId} — skipping bank credit.", salesOrderId);
+                return;
+            }
+
+            // Build a description that explains exactly what was included/excluded.
+            string description;
+            if (financials.FreightUsd > 0m)
+            {
+                // Customer paid shipping — freight is a pass-through, tax excluded.
+                description = $"Order SO-{salesOrderId} shipped — net proceeds (SubTotal excl. tax; freight pass-through)";
+            }
+            else
+            {
+                // Free shipping was given — deduct estimated shipping cost from proceeds.
+                description = $"Order SO-{salesOrderId} shipped — net proceeds (SubTotal excl. tax; free-shipping cost est. {financials.FreeShippingDeductionUsd:N2} USD deducted)";
+            }
+
+            await _bankService.PostTransactionAsync(new BankTransactionRequest(
+                CurrencyCode:    financials.CurrencyCode,
+                Amount:          financials.NetAmount,
+                Description:     description,
+                ReferenceId:     $"SO-{salesOrderId}",
+                TransactionType: "sale"));
+
+            _logger.LogInformation(
+                "[Bank] Credited {Currency} {NetAmount:N2} for SalesOrderID={SalesOrderId} " +
+                "(SubTotal={SubTotal:N2} USD, Tax={Tax:N2} USD excluded, Freight={Freight:N2} USD, FreeShippingDeduction={FreeShipDeduction:N2} USD, Lines={Lines})",
+                financials.CurrencyCode, financials.NetAmount, salesOrderId,
+                financials.SubTotalUsd, financials.TaxAmtUsd, financials.FreightUsd,
+                financials.FreeShippingDeductionUsd, financials.LineCount);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Bank] Non-fatal: failed to record bank credit for SalesOrderID={SalesOrderId}", salesOrderId);
+        }
     }
 
     private async Task SendShippedEmailAsync(int salesOrderId)
@@ -239,9 +240,4 @@ public class ProcessSalesOrderStatus
         public int Status { get; set; }
     }
 
-    private class BeginProcessingOrderRequest
-    {
-        public int SalesOrderId { get; set; }
-        public int SalesOrderID { get; set; }
-    }
 }

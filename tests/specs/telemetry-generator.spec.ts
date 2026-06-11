@@ -54,7 +54,8 @@ test.describe("Telemetry Generator - Anonymous Browsing", () => {
     // Track telemetry requests for visibility
     let telemetryCount = 0;
     page.on("request", (request) => {
-      if (request.url().includes("applicationinsights.azure.com")) {
+      const { hostname } = new URL(request.url());
+      if (hostname.endsWith(".applicationinsights.azure.com")) {
         telemetryCount++;
       }
     });

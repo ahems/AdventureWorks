@@ -10,6 +10,15 @@ export interface Review {
   markedUsefulBy: string[]; // User IDs who marked this as useful
   /** Set for API reviews: Person.BusinessEntityID of the reviewer; used to show "already reviewed" only for the current user */
   userID?: number;
+  isModerated?: boolean;
+  staffReply?: StaffReply;
+}
+
+// A single staff reply to a review
+export interface StaffReply {
+  text: string;
+  repliedBy: string;
+  date: string;
 }
 
 // API ProductReview structure
@@ -23,4 +32,13 @@ export interface ProductReview {
   Comments: string;
   HelpfulVotes: number;
   UserID?: number;
+  IsModerated?: boolean;
+  productReviewReplies?: {
+    items: Array<{
+      ProductReviewReplyID: number;
+      Reply: string;
+      RepliedBy: string;
+      ReplyDate: string;
+    }>;
+  };
 }

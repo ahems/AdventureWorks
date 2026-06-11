@@ -30,5 +30,10 @@
   "files.associations": {
     "*.bicep": "bicep",
     "dab-config*.json": "jsonc"
+  },
+  "chat.mcp.serverSampling": {
+    "AdventureWorks/.vscode/mcp.json: azure-ai-foundry/mcp-foundry": {
+      "allowedModels": ["copilot/auto", "copilotcli/claude-sonnet-4.6"]
+    }
   }
 }

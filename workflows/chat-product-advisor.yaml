@@ -1,0 +1,106 @@
+#
+# chat-product-advisor.yaml
+# Declarative workflow agent that routes customer chat messages.
+#
+# When the customer asks for product recommendations the workflow gathers their
+# preferences through a short Q&A and delegates to eshop-help-me-choose-agent.
+# All other requests (orders, returns, FAQs, general chat) are handled directly
+# by eshop-chat-agent.
+#
+# Agents referenced:
+#   eshop-intent-agent          - micro-agent that classifies intent as
+#                                 PRODUCT_ADVISOR or CHAT (no tools)
+#   eshop-chat-agent            - full customer service agent (orders, FAQ, etc.)
+#   eshop-help-me-choose-agent  - product recommendation specialist
+#
+kind: Workflow
+trigger:
+  kind: OnConversationStart
+  id: workflow_start
+  actions:
+
+    # ── Step 1: Classify the user's intent ──────────────────────────────────────
+    # Run the intent classifier in an isolated conversation so its plain-text
+    # "PRODUCT_ADVISOR" / "CHAT" reply never appears in the main chat history.
+    - kind: CreateConversation
+      id: create_intent_conversation
+      conversationId: Local.IntentConvId
+
+    - kind: InvokeAzureAgent
+      id: classify_intent
+      conversationId: =Local.IntentConvId
+      agent:
+        name: eshop-intent-agent
+      input:
+        messages: =UserMessage(System.LastMessage.Text)
+      output:
+        messages: Local.IntentMessages
+        autoSend: false
+
+    # ── Step 2: Branch on intent ──────────────────────────────────────────────
+    - kind: ConditionGroup
+      id: route_by_intent
+      conditions:
+
+        # ── PRODUCT ADVISOR path ─────────────────────────────────────────────
+        - condition: =!IsBlank(Find("PRODUCT_ADVISOR", Upper(MessageText(Local.IntentMessages))))
+          id: product_advisor_path
+          actions:
+
+            # Q&A — gather the customer's product preferences
+            - kind: Question
+              id: ask_product_type
+              alwaysPrompt: true
+              autoSend: false
+              property: Local.ProductType
+              prompt:
+                kind: Message
+                text:
+                  - "I'd love to help you find the perfect product! What type of product or activity are you looking for? For example: road biking, mountain biking, hiking, running, camping, or cycling clothing?"
+              entity:
+                kind: StringPrebuiltEntity
+
+            - kind: Question
+              id: ask_budget
+              alwaysPrompt: true
+              autoSend: false
+              property: Local.Budget
+              prompt:
+                kind: Message
+                text:
+                  - "Great choice! Do you have a budget in mind? You can give me a range (e.g. under $500, $200-$400) or just say 'no budget' if you're open to anything."
+              entity:
+                kind: StringPrebuiltEntity
+
+            - kind: Question
+              id: ask_preferences
+              alwaysPrompt: true
+              autoSend: false
+              property: Local.Preferences
+              prompt:
+                kind: Message
+                text:
+                  - "Any other preferences? For example: a specific size, colour, experience level (beginner, intermediate, or expert), or anything else I should know?"
+              entity:
+                kind: StringPrebuiltEntity
+
+            # Invoke the product advisor with the collected preferences
+            - kind: InvokeAzureAgent
+              id: invoke_advisor
+              conversationId: =System.ConversationId
+              agent:
+                name: eshop-help-me-choose-agent
+              input:
+                messages: =UserMessage("Product type: " & Local.ProductType & ". Budget: " & Local.Budget & ". Additional preferences: " & Local.Preferences)
+              output:
+                autoSend: true
+
+      # ── CHAT path: let the chat agent handle everything else ─────────────────
+      elseActions:
+        - kind: InvokeAzureAgent
+          id: handle_chat
+          conversationId: =System.ConversationId
+          agent:
+            name: eshop-chat-agent
+          output:
+            autoSend: true

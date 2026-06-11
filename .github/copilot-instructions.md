@@ -1,5 +1,9 @@
 # AdventureWorks E-Commerce - AI Agent Instructions
 
+## GitHub Source Control Policy
+
+**Do not commit, push, or check in any file changes to GitHub on behalf of the user.** All Git operations (commits, pushes, pull requests, branch creation, etc.) must be performed manually by the user.
+
 ## Architecture Overview
 
 This is a **3-tier Azure application** demonstrating enterprise patterns with passwordless authentication:
@@ -110,6 +114,7 @@ azd up  # Full deploy: preup → provision → deploy → postdeploy
 **Key distinction**: `api/` and `api-functions/` build with **remote build** in ACR (see `azure.yaml`). The `app/` builds locally then deploys to Static Web Apps.
 
 **Note:** The seed-job runs asynchronously in the background. Monitor its progress with:
+
 ```bash
 az containerapp job execution list --name <seed-job-name> --resource-group <resource-group>
 ```
@@ -265,6 +270,8 @@ DAB entities map to these via `dab-config.json` source definitions:
 "Product": { "source": "Production.Product" }
 ```
 
+**Note**: `Person.Address` is **excluded from DAB** because the `SpatialLocation` column uses the SQL `geography` type which DAB does not support. Address data is accessed exclusively via the `AddressFunctions` Azure Function.
+
 ### Managed Identity Authentication Flow
 
 All Azure resources use passwordless auth:
@@ -329,10 +336,12 @@ az monitor app-insights query --app <app-name> --analytics-query "requests | top
 1. **CORS during local dev**: Always use `dab-config.json` (not `dab-config.prod.json`) locally
 2. **GraphQL query failures**: Check for `.items` in response - DAB wraps all lists
 3. **API pagination limits**: DAB API returns maximum 100 items per query - use filters or pagination to access larger datasets
-4. **Direct SQL access**: Connecting to Azure SQL from dev container typically fails due to Entra ID auth - use the DAB API instead to query the database
-5. **Build failures**: Functions require restore before build - use `restore (functions)` task first
-6. **Connection errors**: Ensure `az login` is fresh - tokens expire after hours
-7. **Missing env vars**: DAB reads from `@env()` placeholders - check azd environment with `azd env get-values`
+4. **DAB 1.7 OData pagination parameter**: Use `$first` instead of `$top` for limiting results in REST calls (e.g. `?$first=10`). DAB 1.7+ replaced `$top` with `$first`. `$skip` is also unsupported — use `$after` for cursor-based pagination.
+5. **Address entity not in DAB**: `Person.Address` is excluded from DAB because the `SpatialLocation` (`geography`) column is unsupported. Use the `AddressFunctions` Azure Function for address data instead.
+6. **Direct SQL access**: Connecting to Azure SQL from dev container typically fails due to Entra ID auth - use the DAB API instead to query the database
+7. **Build failures**: Functions require restore before build - use `restore (functions)` task first
+8. **Connection errors**: Ensure `az login` is fresh - tokens expire after hours
+9. **Missing env vars**: DAB reads from `@env()` placeholders - check azd environment with `azd env get-values`
 
 ## Documentation Map
 

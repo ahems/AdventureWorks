@@ -11,7 +11,7 @@ import { testEnv } from "./utils/env";
  * Services checked:
  *   1. Static Web App  – GET webBaseUrl
  *   2. Functions API   – GET functionsBaseUrl/api/health
- *   3. DAB/GraphQL API – GET restApiBaseUrl/Product?$top=1
+ *   3. DAB/GraphQL API – GET restApiBaseUrl/Product?$first=1
  */
 
 interface ServiceCheck {
@@ -40,7 +40,7 @@ async function globalSetup(_config: FullConfig) {
     { name: "Functions API", url: `${testEnv.functionsBaseUrl}/api/health` },
     {
       name: "GraphQL API (DAB)",
-      url: `${testEnv.restApiBaseUrl}/Product?$top=1`,
+      url: `${testEnv.restApiBaseUrl}/Product?$first=1`,
     },
   ];
 

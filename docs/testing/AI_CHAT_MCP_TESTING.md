@@ -98,7 +98,8 @@ Content-Type: application/json
   "conversationHistory": [
     {"role": "user", "content": "previous message"},
     {"role": "assistant", "content": "previous response"}
-  ]
+  ],
+  "threadId": "thread_abc123"  // optional — omit on first request, include on subsequent
 }
 ```
 
@@ -108,9 +109,22 @@ Content-Type: application/json
 {
   "response": "Here are your recent orders...",
   "suggestedQuestions": ["Track my order", "Find products"],
-  "toolsUsed": ["get_customer_orders"]
+  "toolsUsed": ["GetCustomerOrders"],
+  "threadId": "thread_abc123"  // persist and send back on the next request
 }
 ```
+
+## Thread Persistence
+
+The AI agent uses Azure AI Foundry Persistent Threads. Each conversation has a `threadId`:
+
+- **First request**: omit `threadId` — a new Foundry thread is created
+- **Subsequent requests**: include the `threadId` returned from the previous response
+- **Close/language change**: discard the `threadId` to start a fresh conversation
+
+Tests should verify that:
+1. The first chat response includes a non-empty `threadId`
+2. A follow-up request with the same `threadId` receives a contextually aware response
 
 ## Data Sources
 

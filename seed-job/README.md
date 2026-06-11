@@ -36,6 +36,7 @@ The container uses **Managed Identity** (passwordless authentication) to connect
 - **Azure Resources**: Authenticates via managed identity for Azure resource access
 
 Environment variables required:
+
 - `AZURE_RESOURCE_GROUP`
 - `SQL_SERVER_NAME`
 - `SQL_DATABASE_NAME`
@@ -57,6 +58,7 @@ seed-job/
     ├── AdventureWorks.sql           # Core schema + data load
     ├── AdventureWorks-AI.sql        # AI-specific schema (vectors, etc.)
     ├── assign-database-roles.sql    # Managed identity permissions
+    ├── date-shift-procedures.sql    # Time-shifts seed-era dates to yesterday
     ├── *.csv                        # Original AdventureWorks data
     └── *-ai.csv                     # AI-augmented datasets
 ```
@@ -79,6 +81,7 @@ Defines the container image:
 Main PowerShell script (~1,585 lines) that orchestrates the entire seeding process:
 
 **Key Features:**
+
 - Comprehensive error handling and logging
 - Managed identity authentication
 - Progress tracking with elapsed time reporting
@@ -87,6 +90,7 @@ Main PowerShell script (~1,585 lines) that orchestrates the entire seeding proce
 - Product image upload to Azure Blob Storage
 
 **Execution Flow:**
+
 1. Validates environment variables
 2. Authenticates using managed identity
 3. Waits for managed identity token availability
@@ -94,6 +98,7 @@ Main PowerShell script (~1,585 lines) that orchestrates the entire seeding proce
 5. Imports CSV data files (base + AI-enhanced)
 6. Uploads product images to Azure Blob Storage
 7. Verifies data integrity with row counts
+8. Deploys and runs `dbo.uspShiftDatesForward` (`date-shift-procedures.sql`) to bring all seed-era dates forward so recent activity appears to have occurred yesterday, and re-anchors pending PurchaseOrders, in-process WorkOrders, and open SalesOrders to near-future dates for realistic demo behaviour
 
 ### 3. `sql/` Directory
 
@@ -269,6 +274,7 @@ The seed job populates the database with:
 ### Job Fails to Start
 
 **Check:**
+
 - Container App Job exists: `az containerapp job show --name <job-name> --resource-group <rg>`
 - Managed identity is assigned
 - Environment variables are set correctly
@@ -278,6 +284,7 @@ The seed job populates the database with:
 **Symptoms:** "Failed to acquire managed identity token"
 
 **Solutions:**
+
 - Verify managed identity has db_datareader, db_datawriter, db_ddladmin roles
 - Check SQL Server firewall allows Azure services
 - Confirm `assign-database-roles.sql` was executed in `postprovision.sh`
@@ -287,23 +294,26 @@ The seed job populates the database with:
 **Symptoms:** Row count mismatches or import errors; log shows `✗ Failed to load ... from ...`
 
 **How to find the error in the seed log:**
+
 1. Search the log for **`ProductReview`** (or the table that failed) and **`Failed`** to locate the failure line.
 2. The next log line is the exception message: **`✗ Failed to load Production.ProductReview from ProductReview.csv: <message>`**
 3. On the next run, the script also logs **Inner** (if any), **Error type**, and the first 5 lines of **ScriptStackTrace** to narrow down where it failed.
 
 **Common causes by file:**
 
-| File | Delimiter | Common causes |
-|------|-----------|----------------|
-| Most CSVs | Tab (`\t`) | Wrong delimiter; BOM or CRLF vs LF; column count doesn’t match table |
-| **ProductReview.csv** | Tab | **Comments** column must be **UTF-16 LE hex** (even length, 0-9A-F only). Invalid hex or odd length → "Hex string length must be even" or "Could not find any recognizable digits". Ensure no newlines inside a row. |
-| ProductReview-ai.csv | Tab | **CommentsEmbedding** must be a JSON array of 1536 floats; plain text in Comments. |
+| File                  | Delimiter  | Common causes                                                                                                                                                                                                        |
+| --------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Most CSVs             | Tab (`\t`) | Wrong delimiter; BOM or CRLF vs LF; column count doesn’t match table                                                                                                                                                 |
+| **ProductReview.csv** | Tab        | **Comments** column must be **UTF-16 LE hex** (even length, 0-9A-F only). Invalid hex or odd length → "Hex string length must be even" or "Could not find any recognizable digits". Ensure no newlines inside a row. |
+| ProductReview-ai.csv  | Tab        | **CommentsEmbedding** must be a JSON array of 1536 floats; plain text in Comments.                                                                                                                                   |
 
 **ProductReview.csv specifics:**
+
 - Loaded with `HexColumns=@('Comments')`: the 7th column is decoded from hex to Unicode before INSERT.
 - Validate hex locally: each row’s Comments field must be an even-length string of hex digits (no spaces, no 0x prefix in the CSV). Re-run `scripts/utilities/clean-product-review-csv.py` if the source was plain text or had newlines.
 
 **General:**
+
 - Delimiter: most seed CSVs use **tab**, not pipe (see `seed-database.ps1` `Delimiter` per file).
 - Encoding: UTF-8 expected; avoid BOM if the script doesn’t strip it.
 - Line endings: script uses `RowTerminator="\n"`; CRLF can cause extra columns if not normalized.
@@ -313,6 +323,7 @@ The seed job populates the database with:
 **Symptoms:** Images not appearing in application
 
 **Solutions:**
+
 - Verify Storage Account exists and is accessible
 - Check managed identity has Storage Blob Data Contributor role
 - Confirm STORAGE_ACCOUNT_NAME environment variable is set
@@ -324,6 +335,7 @@ The seed job populates the database with:
 **Cause:** The seed loads 762 base rows from `ProductDescription.csv` (no embeddings) and adds 1848 rows from `ProductDescription-ai.csv` (with embeddings). The base 762 never receive embeddings during seed. `ProductDescription-ai-translations.csv` only updates `Description`/`ModifiedDate` and correctly does not overwrite `DescriptionEmbedding`.
 
 **Solutions:**
+
 1. **Source API CSV (recommended for repeatable seed):** Run `scripts/utilities/export-product-description-embeddings-from-source-api.sh` to generate `sql/ProductDescription-ai-embeddings.csv`; the seed job will apply these updates after import.
 2. **Post-seed backfill:** Run the **GenerateProductEmbeddings** Azure Function (or equivalent) after seeding to backfill descriptions where `DescriptionEmbedding IS NULL`.
 
@@ -391,6 +403,7 @@ az containerapp job start \
 ```
 
 This is useful for:
+
 - Resetting the database to initial state
 - Testing schema changes
 - Re-importing data after modifications

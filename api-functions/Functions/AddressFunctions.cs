@@ -21,6 +21,56 @@ public class AddressFunctions
     }
 
     /// <summary>
+    /// Get addresses for multiple persons by BusinessEntityID.
+    /// Returns joined address data (street, city, state, country) without the unsupported geography column.
+    /// </summary>
+    /// <param name="req">HTTP request with required query param: businessEntityIds (comma-separated integers)</param>
+    /// <returns>Array of PersonAddressResult</returns>
+    [Function("GetPersonAddresses")]
+    public async Task<HttpResponseData> GetPersonAddresses(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "person-addresses")] HttpRequestData req)
+    {
+        _logger.LogInformation("GetPersonAddresses function processing request");
+
+        try
+        {
+            var queryParams = QueryHelpers.ParseQuery(req.Url.Query);
+            if (!queryParams.TryGetValue("businessEntityIds", out var idsValue) || string.IsNullOrWhiteSpace(idsValue))
+            {
+                var badRequest = req.CreateResponse(HttpStatusCode.BadRequest);
+                await badRequest.WriteAsJsonAsync(new { error = "businessEntityIds query parameter is required (comma-separated integers)" });
+                return badRequest;
+            }
+
+            var ids = idsValue.ToString()
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => int.TryParse(s.Trim(), out var id) ? (int?)id : null)
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .ToList();
+
+            if (ids.Count == 0)
+            {
+                var badRequest = req.CreateResponse(HttpStatusCode.BadRequest);
+                await badRequest.WriteAsJsonAsync(new { error = "No valid integer IDs provided in businessEntityIds" });
+                return badRequest;
+            }
+
+            var addresses = await _addressService.GetPersonAddressesAsync(ids);
+            var response = req.CreateResponse(HttpStatusCode.OK);
+            await response.WriteAsJsonAsync(addresses);
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting person addresses");
+            var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await errorResponse.WriteAsJsonAsync(new { error = "An error occurred while retrieving person addresses" });
+            return errorResponse;
+        }
+    }
+
+    /// <summary>
     /// Get all addresses with pagination
     /// </summary>
     /// <param name="req">HTTP request with optional query parameters: limit (default 100), offset (default 0)</param>
