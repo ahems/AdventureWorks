@@ -116,6 +116,11 @@ public class SupplyChainService
     private List<VendorInfo>? _vendorCache;
     private readonly SemaphoreSlim _vendorLoadLock = new(1, 1);
 
+    // Static initialization guard — ensures InitializeAsync body runs only once per process
+    // even when multiple scoped instances are created concurrently (e.g. parallel useQueries).
+    private static readonly SemaphoreSlim _initLock = new(1, 1);
+    private static volatile bool _initComplete = false;
+
     // Cached default purchasing employee ID for new PurchaseOrderHeader rows
     private int? _defaultEmployeeId;
 
@@ -262,96 +267,112 @@ public class SupplyChainService
     /// </summary>
     public async Task InitializeAsync()
     {
-        // Process any existing Approved (Status=2) BOM vendor POs from the AdventureWorks data.
-        // Runs every call but is idempotent — POs already at Status=3/4 will not match.
-        await ProcessHistoricalApprovedOrdersAsync();
+        // Fast path: already initialized in this process — skip all work.
+        if (_initComplete) return;
 
-        // Table Storage used only for vendor stock levels
-        await _tableClient.CreateIfNotExistsAsync();
-
-        // Fast path: if stock rows already exist, skip all seeding work.
-        // We still need to run ProcessHistoricalPendingOrdersAsync even when already seeded
-        // because it is idempotent (guarded by SimOrderState) and handles the queue injection.
-        bool alreadySeeded = false;
-        await foreach (var _ in _tableClient.QueryAsync<TableEntity>(
-            filter: $"PartitionKey eq '{PART_STOCK}'",
-            maxPerPage: 1,
-            select: new[] { "RowKey" }))
+        await _initLock.WaitAsync();
+        try
         {
-            alreadySeeded = true;
-            break;
-        }
+            // Double-check after acquiring lock in case another request just finished.
+            if (_initComplete) return;
 
-        // Fetch pending BOM orders before seeding so stock accounts for already-committed qty.
-        // Returns (VendorId, ProductId) → total OrderQty across all Status=1 BOM POs.
-        var pendingQtys = await GetPendingBomOrderQtysAsync();
+            // Process any existing Approved (Status=2) BOM vendor POs from the AdventureWorks data.
+            // Runs once per process lifetime; idempotent — POs already at Status=3/4 will not match.
+            await ProcessHistoricalApprovedOrdersAsync();
 
-        if (!alreadySeeded)
-        {
-            var vendors         = await GetVendorsAsync();
-            var vendorDict      = vendors.ToDictionary(v => v.VendorId);
-            var vendorProducts  = await GetVendorProductsFromSqlAsync();
-            var historicalStock = await GetHistoricalStockLevelsAsync();
+            // Table Storage used only for vendor stock levels
+            await _tableClient.CreateIfNotExistsAsync();
 
-            int seededFromHistory = 0, seededFromFormula = 0;
-
-            foreach (var vp in vendorProducts)
+            // Fast path: if stock rows already exist, skip all seeding work.
+            // We still need to run ProcessHistoricalPendingOrdersAsync even when already seeded
+            // because it is idempotent (guarded by SimOrderState) and handles the queue injection.
+            bool alreadySeeded = false;
+            await foreach (var _ in _tableClient.QueryAsync<TableEntity>(
+                filter: $"PartitionKey eq '{PART_STOCK}'",
+                maxPerPage: 1,
+                select: new[] { "RowKey" }))
             {
-                if (!vendorDict.TryGetValue(vp.VendorId, out var vendor)) continue;
-
-                var rowKey   = StockRowKey(vp.VendorId, vp.ProductId);
-                int maxStock = Math.Max(vp.MaxOrderQty, 10);
-
-                int initStock;
-                if (historicalStock.TryGetValue((vp.VendorId, vp.ProductId), out int histQty))
-                {
-                    // Seed from the average stocked qty on completed POs for this vendor+product,
-                    // randomised ±20 % to give a realistic spread across runs.
-                    initStock = (int)Math.Round(histQty * (0.8 + 0.4 * Random.Shared.NextDouble()));
-                    initStock = Math.Clamp(initStock, 0, maxStock);
-                    seededFromHistory++;
-                }
-                else
-                {
-                    // No purchase history for this pair — fall back to credit-rating fill ratio
-                    double fillRatio = vendor.CreditRating >= 1 && vendor.CreditRating <= 5
-                        ? FillRatioByRating[vendor.CreditRating] : 0.70;
-                    initStock = (int)Math.Round(maxStock * fillRatio
-                        * (0.7 + 0.6 * Random.Shared.NextDouble()));
-                    initStock = Math.Clamp(initStock, 0, maxStock);
-                    seededFromFormula++;
-                }
-
-                // Deduct qty already committed in Status=1 (Pending) BOM purchase orders so
-                // that stockAvailable accurately reflects what is still orderable at this vendor.
-                if (pendingQtys.TryGetValue((vp.VendorId, vp.ProductId), out int pendingQty))
-                    initStock = Math.Max(0, initStock - pendingQty);
-
-                var entity = new TableEntity(PART_STOCK, rowKey)
-                {
-                    ["VendorId"]        = vp.VendorId,
-                    ["ProductId"]       = vp.ProductId,
-                    ["ProductName"]     = vp.ProductName,
-                    ["StandardPrice"]   = vp.StandardPrice,
-                    ["AverageLeadTime"] = vp.AverageLeadTime,
-                    ["MinOrderQty"]     = vp.MinOrderQty,
-                    ["MaxOrderQty"]     = vp.MaxOrderQty,
-                    ["WeightKg"]        = vp.WeightKg > 0 ? vp.WeightKg : 0.5,
-                    ["CurrentStock"]    = initStock,
-                    ["MaxStock"]        = maxStock,
-                };
-                await _tableClient.UpsertEntityAsync(entity);
+                alreadySeeded = true;
+                break;
             }
 
-            _logger.LogInformation(
-                "Supply chain initialized: {VendorCount} vendors, {ProductCount} vendor-product pairs " +
-                "({FromHistory} seeded from PO history, {FromFormula} from fill-ratio fallback)",
-                vendors.Count, vendorProducts.Count, seededFromHistory, seededFromFormula);
-        }
+            // Fetch pending BOM orders before seeding so stock accounts for already-committed qty.
+            // Returns (VendorId, ProductId) → total OrderQty across all Status=1 BOM POs.
+            var pendingQtys = await GetPendingBomOrderQtysAsync();
 
-        // Inject historical Pending (Status=1) BOM orders into the queue so they go through
-        // the normal approval → delivery state machine.
-        await ProcessHistoricalPendingOrdersAsync(pendingQtys);
+            if (!alreadySeeded)
+            {
+                var vendors         = await GetVendorsAsync();
+                var vendorDict      = vendors.ToDictionary(v => v.VendorId);
+                var vendorProducts  = await GetVendorProductsFromSqlAsync();
+                var historicalStock = await GetHistoricalStockLevelsAsync();
+
+                int seededFromHistory = 0, seededFromFormula = 0;
+
+                foreach (var vp in vendorProducts)
+                {
+                    if (!vendorDict.TryGetValue(vp.VendorId, out var vendor)) continue;
+
+                    var rowKey   = StockRowKey(vp.VendorId, vp.ProductId);
+                    int maxStock = Math.Max(vp.MaxOrderQty, 10);
+
+                    int initStock;
+                    if (historicalStock.TryGetValue((vp.VendorId, vp.ProductId), out int histQty))
+                    {
+                        // Seed from the average stocked qty on completed POs for this vendor+product,
+                        // randomised ±20 % to give a realistic spread across runs.
+                        initStock = (int)Math.Round(histQty * (0.8 + 0.4 * Random.Shared.NextDouble()));
+                        initStock = Math.Clamp(initStock, 0, maxStock);
+                        seededFromHistory++;
+                    }
+                    else
+                    {
+                        // No purchase history for this pair — fall back to credit-rating fill ratio
+                        double fillRatio = vendor.CreditRating >= 1 && vendor.CreditRating <= 5
+                            ? FillRatioByRating[vendor.CreditRating] : 0.70;
+                        initStock = (int)Math.Round(maxStock * fillRatio
+                            * (0.7 + 0.6 * Random.Shared.NextDouble()));
+                        initStock = Math.Clamp(initStock, 0, maxStock);
+                        seededFromFormula++;
+                    }
+
+                    // Deduct qty already committed in Status=1 (Pending) BOM purchase orders so
+                    // that stockAvailable accurately reflects what is still orderable at this vendor.
+                    if (pendingQtys.TryGetValue((vp.VendorId, vp.ProductId), out int pendingQty))
+                        initStock = Math.Max(0, initStock - pendingQty);
+
+                    var entity = new TableEntity(PART_STOCK, rowKey)
+                    {
+                        ["VendorId"]        = vp.VendorId,
+                        ["ProductId"]       = vp.ProductId,
+                        ["ProductName"]     = vp.ProductName,
+                        ["StandardPrice"]   = vp.StandardPrice,
+                        ["AverageLeadTime"] = vp.AverageLeadTime,
+                        ["MinOrderQty"]     = vp.MinOrderQty,
+                        ["MaxOrderQty"]     = vp.MaxOrderQty,
+                        ["WeightKg"]        = vp.WeightKg > 0 ? vp.WeightKg : 0.5,
+                        ["CurrentStock"]    = initStock,
+                        ["MaxStock"]        = maxStock,
+                    };
+                    await _tableClient.UpsertEntityAsync(entity);
+                }
+
+                _logger.LogInformation(
+                    "Supply chain initialized: {VendorCount} vendors, {ProductCount} vendor-product pairs " +
+                    "({FromHistory} seeded from PO history, {FromFormula} from fill-ratio fallback)",
+                    vendors.Count, vendorProducts.Count, seededFromHistory, seededFromFormula);
+            }
+
+            // Inject historical Pending (Status=1) BOM orders into the queue so they go through
+            // the normal approval → delivery state machine.
+            await ProcessHistoricalPendingOrdersAsync(pendingQtys);
+
+            _initComplete = true;
+        }
+        finally
+        {
+            _initLock.Release();
+        }
     }
 
     /// <summary>

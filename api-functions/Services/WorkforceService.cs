@@ -90,6 +90,11 @@ public class WorkforceService
     private readonly TableClient _tableClient;
     private readonly ILogger<WorkforceService> _logger;
 
+    // Static initialization guard — ensures seeding runs only once per process
+    // even when Dashboard and WorkforcePage fire concurrent requests on load.
+    private static readonly SemaphoreSlim _initLock = new(1, 1);
+    private static volatile bool _initComplete = false;
+
     public WorkforceService(
         string connectionString,
         string tableServiceUri,
@@ -110,58 +115,77 @@ public class WorkforceService
     /// </summary>
     public async Task InitializeAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
+        // Fast path: already initialized in this process — skip all work.
+        if (_initComplete) return;
 
-        // Check if already initialized
-        bool alreadySeeded = false;
-        await foreach (var _ in _tableClient.QueryAsync<TableEntity>(
-            filter: $"PartitionKey eq '{PART_WORKFORCE}'",
-            maxPerPage: 1,
-            select: new[] { "RowKey" }))
+        await _initLock.WaitAsync();
+        try
         {
-            alreadySeeded = true;
-            break;
-        }
-        if (alreadySeeded) return;
+            // Double-check after acquiring lock.
+            if (_initComplete) return;
 
-        var employees = await LoadManufacturingEmployeesAsync();
+            await _tableClient.CreateIfNotExistsAsync();
 
-        // Distribute employees evenly across manufacturing locations deterministically
-        int locationCount = ManufacturingLocationIds.Length;
-        for (int i = 0; i < employees.Count; i++)
-        {
-            var emp       = employees[i];
-            int locationId= ManufacturingLocationIds[i % locationCount];
-            string locName = LocationNames.GetValueOrDefault(locationId, locationId.ToString());
-            double tenure = (DateTime.UtcNow - emp.HireDate).TotalDays / 365.25;
-            double scrap  = Math.Max(0.5, 1.0 - tenure / 20.0);  // 0yr→1.0× 10yr→0.5×
-
-            var entity = new TableEntity(PART_WORKFORCE, emp.BusinessEntityId.ToString())
+            // Check if already initialized
+            bool alreadySeeded = false;
+            await foreach (var _ in _tableClient.QueryAsync<TableEntity>(
+                filter: $"PartitionKey eq '{PART_WORKFORCE}'",
+                maxPerPage: 1,
+                select: new[] { "RowKey" }))
             {
-                ["FullName"]            = emp.FullName,
-                ["JobTitle"]            = emp.JobTitle,
-                ["DepartmentId"]        = emp.DepartmentId,
-                ["DepartmentName"]      = emp.DepartmentName,
-                ["ShiftId"]             = emp.ShiftId,
-                ["ShiftName"]           = emp.ShiftName,
-                ["ShiftStartHour"]      = emp.ShiftStart.Hours,
-                ["ShiftEndHour"]        = emp.ShiftEnd.Hours,
-                ["LocationId"]          = locationId,
-                ["LocationName"]        = locName,
-                ["HourlyRate"]          = emp.HourlyRate,
-                ["TenureYears"]         = Math.Round(tenure, 1),
-                ["ScrapRateMultiplier"] = Math.Round(scrap, 3),
-                ["VacationHours"]       = emp.VacationHours,
-                ["SickLeaveHours"]      = emp.SickLeaveHours,
-                ["Status"]              = "available",
-                ["CurrentWorkOrderId"]  = (int?)null,
-                ["CurrentOperation"]    = (string?)null,
-                ["BusyUntilUtc"]        = (DateTimeOffset?)null,
-            };
-            await _tableClient.UpsertEntityAsync(entity);
-        }
+                alreadySeeded = true;
+                break;
+            }
+            if (alreadySeeded)
+            {
+                _initComplete = true;
+                return;
+            }
 
-        _logger.LogInformation("Workforce initialized: {Count} manufacturing employees seeded", employees.Count);
+            var employees = await LoadManufacturingEmployeesAsync();
+
+            // Distribute employees evenly across manufacturing locations deterministically
+            int locationCount = ManufacturingLocationIds.Length;
+            for (int i = 0; i < employees.Count; i++)
+            {
+                var emp       = employees[i];
+                int locationId= ManufacturingLocationIds[i % locationCount];
+                string locName = LocationNames.GetValueOrDefault(locationId, locationId.ToString());
+                double tenure = (DateTime.UtcNow - emp.HireDate).TotalDays / 365.25;
+                double scrap  = Math.Max(0.5, 1.0 - tenure / 20.0);  // 0yr→1.0× 10yr→0.5×
+
+                var entity = new TableEntity(PART_WORKFORCE, emp.BusinessEntityId.ToString())
+                {
+                    ["FullName"]            = emp.FullName,
+                    ["JobTitle"]            = emp.JobTitle,
+                    ["DepartmentId"]        = emp.DepartmentId,
+                    ["DepartmentName"]      = emp.DepartmentName,
+                    ["ShiftId"]             = emp.ShiftId,
+                    ["ShiftName"]           = emp.ShiftName,
+                    ["ShiftStartHour"]      = emp.ShiftStart.Hours,
+                    ["ShiftEndHour"]        = emp.ShiftEnd.Hours,
+                    ["LocationId"]          = locationId,
+                    ["LocationName"]        = locName,
+                    ["HourlyRate"]          = emp.HourlyRate,
+                    ["TenureYears"]         = Math.Round(tenure, 1),
+                    ["ScrapRateMultiplier"] = Math.Round(scrap, 3),
+                    ["VacationHours"]       = emp.VacationHours,
+                    ["SickLeaveHours"]      = emp.SickLeaveHours,
+                    ["Status"]              = "available",
+                    ["CurrentWorkOrderId"]  = (int?)null,
+                    ["CurrentOperation"]    = (string?)null,
+                    ["BusyUntilUtc"]        = (DateTimeOffset?)null,
+                };
+                await _tableClient.UpsertEntityAsync(entity);
+            }
+
+            _logger.LogInformation("Workforce initialized: {Count} manufacturing employees seeded", employees.Count);
+            _initComplete = true;
+        }
+        finally
+        {
+            _initLock.Release();
+        }
     }
 
     // ── Workforce queries ──────────────────────────────────────────────────────
