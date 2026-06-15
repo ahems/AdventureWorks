@@ -45,6 +45,9 @@
       }
     }
   },
+  "containerEnv": {
+    "AZD_SKIP_FIRST_RUN": "true"
+  },
   "postCreateCommand": "git lfs pull || true && az bicep install && npm ci && npx playwright install --with-deps chromium && (cd app && npm ci) && (cd app-admin && npm ci) && (cd app-manufacturing && npm ci) && npm install --prefix app @playwright/test csv-parse && dotnet restore api-functions/api-functions.csproj && dotnet restore api-mcp/ServiceDefaults/ServiceDefaults.csproj && dotnet restore api-mcp/AppHost/AppHost.csproj",
   "hostRequirements": {
     "memory": "8gb"

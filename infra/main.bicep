@@ -326,7 +326,7 @@ module containerAppManufacturing 'modules/aca-app-manufacturing.bicep' = {
   params: {
     location: location
     appInsightsName: appInsightsName
-    appManufacturingName: 'av-app-manufacturing-${resourceToken}'
+    appManufacturingName: 'av-app-manufactur-${resourceToken}'
     containerRegistryName: acrName
     identityName: identityName
     apiUrl: containerAppApi.outputs.apiUrl

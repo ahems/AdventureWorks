@@ -1,5 +1,5 @@
 param appInsightsName string = 'av-appinsights-${toLower(uniqueString(resourceGroup().id))}'
-param appManufacturingName string = 'av-app-manufacturing-${uniqueString(resourceGroup().id)}'
+param appManufacturingName string = 'av-app-manufactur-${uniqueString(resourceGroup().id)}'
 param location string = resourceGroup().location
 param containerRegistryName string = 'avacr${toLower(uniqueString(resourceGroup().id))}'
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
