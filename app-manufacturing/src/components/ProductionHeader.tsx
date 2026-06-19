@@ -1,6 +1,7 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Bike, ClipboardList, Cog, Calendar, Play, PackageCheck, LayoutDashboard, MapPin, ChevronDown, ChevronUp, HardHat, Truck, Users, BarChart3, ShoppingCart, Settings as SettingsIcon } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Menu, X, Bike, ClipboardList, Cog, Calendar, Play, PackageCheck, LayoutDashboard, MapPin, ChevronDown, ChevronUp, HardHat, Truck, Users, BarChart3, ShoppingCart, Settings as SettingsIcon, LogOut } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 import AppBreadcrumb from '@/components/AppBreadcrumb';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
@@ -45,7 +46,21 @@ const secondaryNavGroups = [
 
 const ProductionHeader: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [userMenuOpen, setUserMenuOpen] = React.useState(false);
+  const userMenuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   const [showSecondaryNav, setShowSecondaryNav] = React.useState(() => {
     const saved = localStorage.getItem('showSecondaryNav');
     return saved !== null ? saved === 'true' : true;
@@ -103,6 +118,46 @@ const ProductionHeader: React.FC = () => {
 
           {/* Right Side */}
           <div className="flex items-center gap-2">
+            {/* User Avatar Dropdown - desktop */}
+            {user && (
+              <div className="relative hidden md:block" ref={userMenuRef}>
+                <button
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="doodle-button flex items-center gap-2 py-2 px-3"
+                >
+                  <div className="w-6 h-6 rounded-full bg-doodle-green flex items-center justify-center">
+                    <span className="text-white text-xs font-bold">
+                      {user.firstName[0]}{user.lastName[0]}
+                    </span>
+                  </div>
+                  <span className="hidden sm:inline font-doodle text-sm">
+                    {user.firstName}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Dropdown Menu */}
+                {userMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 doodle-card p-2 z-50">
+                    <div className="px-3 py-2 border-b-2 border-dashed border-doodle-text/20 mb-2">
+                      <p className="font-doodle font-bold text-doodle-text">
+                        {user.firstName} {user.lastName}
+                      </p>
+                      <p className="font-doodle text-xs text-doodle-text/60 truncate">
+                        {user.email}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { logout(); setUserMenuOpen(false); navigate('/login'); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 font-doodle text-doodle-accent hover:bg-doodle-text/10 transition-colors"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             <button
               className="md:hidden doodle-button p-2"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -140,6 +195,18 @@ const ProductionHeader: React.FC = () => {
                   ))}
                 </div>
               ))}
+              {user && (
+                <div className="border-t-2 border-dashed border-doodle-text/30 my-2 pt-2">
+                  <p className="font-doodle text-xs text-doodle-text/50 mb-2">{user.firstName} {user.lastName}</p>
+                  <button
+                    onClick={() => { logout(); navigate('/login'); setMobileMenuOpen(false); }}
+                    className="font-doodle text-base text-doodle-accent hover:text-doodle-accent/70 py-1 flex items-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sign Out
+                  </button>
+                </div>
+              )}
             </div>
           </nav>
         )}

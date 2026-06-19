@@ -238,20 +238,6 @@ const AdminHeader: React.FC = () => {
               {/* Auth Section */}
               {isAuthenticated && user ? (
                 <div className="flex items-center gap-2">
-                  {/* Always-visible Sign Out button so tests can find it directly */}
-                  <button
-                    onClick={() => {
-                      logout();
-                      navigate("/login");
-                    }}
-                    className="doodle-button flex items-center gap-1 py-2 px-3 text-doodle-accent"
-                    aria-label="Sign Out"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span className="hidden sm:inline font-doodle text-sm">
-                      Sign Out
-                    </span>
-                  </button>
                   <div className="relative" ref={userMenuRef}>
                     <button
                       onClick={() => setUserMenuOpen(!userMenuOpen)}
