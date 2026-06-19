@@ -9,9 +9,9 @@ namespace api_functions.Functions;
 
 /// <summary>
 /// Coordinated simulator control endpoint.
-/// Consolidates the reset operation so all three simulators (manufacturing queue,
-/// supply chain, and bank) are cleared together in the correct order, avoiding orphaned
-/// bank transactions from partial resets.
+/// Consolidates the reset operation so all four simulators (manufacturing queue,
+/// supply chain, bank, and shopping simulator) are cleared together in the correct
+/// order, avoiding orphaned bank transactions from partial resets.
 /// </summary>
 public class SimulatorControlFunction
 {
@@ -24,15 +24,18 @@ public class SimulatorControlFunction
     private readonly ILogger<SimulatorControlFunction> _logger;
     private readonly SupplyChainService _supplyChain;
     private readonly BankService _bank;
+    private readonly ShoppingSimulatorService _shoppingSimulator;
 
     public SimulatorControlFunction(
         ILogger<SimulatorControlFunction> logger,
         SupplyChainService supplyChain,
-        BankService bank)
+        BankService bank,
+        ShoppingSimulatorService shoppingSimulator)
     {
-        _logger      = logger;
-        _supplyChain = supplyChain;
-        _bank        = bank;
+        _logger            = logger;
+        _supplyChain       = supplyChain;
+        _bank              = bank;
+        _shoppingSimulator = shoppingSimulator;
     }
 
     /// <summary>
@@ -40,6 +43,7 @@ public class SimulatorControlFunction
     /// 1. Clear the manufacturing work-order queue (stops in-flight routing operations).
     /// 2. Reset the supply chain (reverts all POs to initial state, re-seeds vendor stock).
     /// 3. Reset the bank (wipes all transactions, re-seeds the USD balance from profit data).
+    /// 4. Stop the shopping simulator, clear its queue, and reset all counters.
     ///
     /// Use this instead of individual resets to ensure bank transactions remain
     /// consistent with simulator state.
@@ -96,11 +100,24 @@ public class SimulatorControlFunction
             steps.Add($"Bank reset FAILED: {ex.Message}");
         }
 
+        // Step 4 — Stop shopping simulator and clear its queue and stats
+        try
+        {
+            await _shoppingSimulator.ResetStateAsync();
+            steps.Add("Shopping simulator stopped, queue cleared, and counters reset.");
+            _logger.LogInformation("[SimulatorControl] Step 4 complete: shopping simulator reset.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SimulatorControl] Step 4 failed: could not reset shopping simulator.");
+            steps.Add($"Shopping simulator reset FAILED: {ex.Message}");
+        }
+
         var resp = req.CreateResponse(HttpStatusCode.OK);
         resp.Headers.Add("Content-Type", "application/json; charset=utf-8");
         await resp.WriteStringAsync(JsonSerializer.Serialize(new
         {
-            message  = "Simulator reset complete.",
+            message    = "Simulator reset complete.",
             steps,
             resetAtUtc = DateTimeOffset.UtcNow,
         }, _json));

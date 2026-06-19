@@ -308,6 +308,22 @@ builder.Services.AddScoped<WorkforceService>(sp =>
     return new WorkforceService(connectionString, tableServiceUri, logger);
 });
 
+// Register ShoppingSimulatorService — manages Shopping Simulator state, queue depth, and
+// the cached top-spender list used by the timer-driven order injection function.
+builder.Services.AddScoped<ShoppingSimulatorService>(sp =>
+{
+    var configuration    = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var accountName      = configuration["AzureWebJobsStorage:accountName"] ?? string.Empty;
+    var tableServiceUri  = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{accountName}.table.core.windows.net";
+    var queueServiceUri  = configuration["AzureWebJobsStorage:queueServiceUri"]
+        ?? $"https://{accountName}.queue.core.windows.net";
+    var logger = sp.GetRequiredService<ILogger<ShoppingSimulatorService>>();
+    return new ShoppingSimulatorService(connectionString, tableServiceUri, queueServiceUri, logger);
+});
+
 // Register OrderGenerationService for SQL write operations during AI order generation
 builder.Services.AddScoped<OrderGenerationService>(sp =>
 {

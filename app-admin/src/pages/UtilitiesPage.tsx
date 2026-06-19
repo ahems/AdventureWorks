@@ -108,6 +108,20 @@ const UtilitiesPage: React.FC = () => {
               </p>
             </div>
           </Link>
+          <Link
+            to="/shopping-simulator"
+            className="doodle-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow"
+          >
+            <Bot className="w-8 h-8 text-doodle-green shrink-0" />
+            <div>
+              <p className="font-doodle font-semibold text-doodle-text">
+                Shopping Simulator
+              </p>
+              <p className="font-doodle text-sm text-doodle-text/60">
+                Simulate continuous customer orders at configurable rates
+              </p>
+            </div>
+          </Link>
         </div>
 
         {/* Tools & Inspectors */}

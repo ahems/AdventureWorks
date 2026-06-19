@@ -720,3 +720,66 @@ export const generateCustomerWithAI = async (
   }
   return res.json();
 };
+
+// ── Shopping Simulator ─────────────────────────────────────────────────────
+
+export interface ShoppingSimulatorStatus {
+  isRunning: boolean;
+  ordersPerMinute: number;
+  existingCustomerPercentage: number;
+  startedAt: string | null;
+  totalQueued: number;
+  newCustomerQueued: number;
+  existingCustomerQueued: number;
+  queueDepth: number;
+  message?: string;
+}
+
+export interface ShoppingSimulatorStartConfig {
+  ordersPerMinute: number;
+  existingCustomerPercentage: number;
+}
+
+export const getShoppingSimulatorStatus =
+  async (): Promise<ShoppingSimulatorStatus> => {
+    const url = `${getFunctionsApiUrl()}/api/shopping-simulator/status`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `ShoppingSimulator status HTTP ${res.status}${text ? `: ${text}` : ""}`,
+      );
+    }
+    return res.json();
+  };
+
+export const startShoppingSimulator = async (
+  config: ShoppingSimulatorStartConfig,
+): Promise<ShoppingSimulatorStatus> => {
+  const url = `${getFunctionsApiUrl()}/api/shopping-simulator/start`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `ShoppingSimulator start HTTP ${res.status}${text ? `: ${text}` : ""}`,
+    );
+  }
+  return res.json();
+};
+
+export const stopShoppingSimulator =
+  async (): Promise<ShoppingSimulatorStatus> => {
+    const url = `${getFunctionsApiUrl()}/api/shopping-simulator/stop`;
+    const res = await fetch(url, { method: "POST" });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `ShoppingSimulator stop HTTP ${res.status}${text ? `: ${text}` : ""}`,
+      );
+    }
+    return res.json();
+  };

@@ -30,7 +30,7 @@ public class SimulationOrderQueueTrigger
 {
     internal const string QUEUE_NAME = "simulation-order-queue";
 
-    private static readonly string[] RandomPersonas =
+    internal static readonly string[] RandomPersonas =
     [
         "newbie-male",
         "newbie-female",
