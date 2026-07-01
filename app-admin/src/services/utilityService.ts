@@ -783,3 +783,16 @@ export const stopShoppingSimulator =
     }
     return res.json();
   };
+
+export const clearShoppingSimulatorQueue =
+  async (): Promise<ShoppingSimulatorStatus> => {
+    const url = `${getFunctionsApiUrl()}/api/shopping-simulator/clear-queue`;
+    const res = await fetch(url, { method: "POST" });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `ShoppingSimulator clear-queue HTTP ${res.status}${text ? `: ${text}` : ""}`,
+      );
+    }
+    return res.json();
+  };

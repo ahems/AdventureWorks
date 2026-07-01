@@ -32,6 +32,7 @@ import {
   useShipOrder,
   useOrderById,
   useReceiptStatus,
+  orderStatusToDbStatuses,
 } from "@/hooks/useAdminOrders";
 import {
   useAdminCategories,
@@ -52,7 +53,14 @@ import EmailReceiptDialog from "@/components/EmailReceiptDialog";
 import { Sparkles } from "lucide-react";
 
 const ALL_STATUSES = Object.keys(ORDER_STATUS_CONFIG) as OrderStatus[];
-const DEFAULT_STATUS_FILTERS: OrderStatus[] = [...ALL_STATUSES];
+const DEFAULT_STATUS_FILTERS: OrderStatus[] = ["Processing"];
+
+const getDefaultDateFrom = (): string => {
+  const d = new Date();
+  d.setDate(d.getDate() - 7);
+  return d.toISOString().split("T")[0];
+};
+const getDefaultDateTo = (): string => new Date().toISOString().split("T")[0];
 
 interface ReceiptActionsProps {
   order: Order;
@@ -158,9 +166,9 @@ const OrdersPage: React.FC = () => {
   );
   const [missingReceiptsCooldown, setMissingReceiptsCooldown] = useState(false);
 
-  // Date filter state
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  // Date filter state — default to last 7 days
+  const [dateFrom, setDateFrom] = useState(getDefaultDateFrom);
+  const [dateTo, setDateTo] = useState(getDefaultDateTo);
 
   // Category / subcategory / product filter state
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
@@ -227,7 +235,15 @@ const OrdersPage: React.FC = () => {
     : null;
   const isDirectLink = directOrderId !== null && !isNaN(directOrderId);
 
-  const { data: apiOrders = [], isLoading: ordersLoading } = useAdminOrders();
+  const dbStatuses = useMemo(
+    () => statusFilters.flatMap(orderStatusToDbStatuses),
+    [statusFilters],
+  );
+  const { data: apiOrders = [], isLoading: ordersLoading } = useAdminOrders({
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+    statuses: dbStatuses,
+  });
   const channelOrders = React.useMemo(
     () =>
       apiOrders.filter(
@@ -330,14 +346,6 @@ const OrdersPage: React.FC = () => {
         const matchesSearch =
           o.SalesOrderID.toString().includes(searchQuery) ||
           o.CustomerID.toString().includes(searchQuery);
-        const matchesStatus = statusFilters.includes(o.Status);
-
-        const orderDate = o.OrderDate ? new Date(o.OrderDate) : null;
-        const matchesDateFrom =
-          !dateFrom || (orderDate !== null && orderDate >= new Date(dateFrom));
-        const matchesDateTo =
-          !dateTo ||
-          (orderDate !== null && orderDate <= new Date(dateTo + "T23:59:59"));
 
         const matchesCategory =
           !categoryFilter ||
@@ -359,9 +367,6 @@ const OrdersPage: React.FC = () => {
 
         return (
           matchesSearch &&
-          matchesStatus &&
-          matchesDateFrom &&
-          matchesDateTo &&
           matchesCategory &&
           matchesSubcategory &&
           matchesProduct

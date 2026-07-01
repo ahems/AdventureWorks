@@ -11,9 +11,10 @@ namespace api_functions.Functions;
 /// <summary>
 /// HTTP control endpoints for the Shopping Simulator.
 ///
-/// GET  /api/shopping-simulator/status  — returns current state + queue depth
-/// POST /api/shopping-simulator/start   — starts the simulator with given config
-/// POST /api/shopping-simulator/stop    — stops the simulator and clears the queue
+/// GET  /api/shopping-simulator/status      — returns current state + queue depth
+/// POST /api/shopping-simulator/start        — starts the simulator with given config
+/// POST /api/shopping-simulator/stop         — stops the simulator (existing queue messages continue processing)
+/// POST /api/shopping-simulator/clear-queue  — clears all pending queue messages (does not change running state)
 /// </summary>
 public class ShoppingSimulatorControlFunction
 {
@@ -116,7 +117,8 @@ public class ShoppingSimulatorControlFunction
     // ── POST stop ────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Stops the Shopping Simulator and immediately clears all pending messages from the queue.
+    /// Stops the Shopping Simulator. No new messages will be enqueued but any messages
+    /// already in the queue continue to be processed by the queue trigger.
     /// </summary>
     [Function("ShoppingSimulator_Stop")]
     public async Task<HttpResponseData> Stop(
@@ -126,16 +128,54 @@ public class ShoppingSimulatorControlFunction
         var state = await _simulator.GetStateAsync();
         state.IsRunning = false;
         await _simulator.SaveStateAsync(state);
-        await _simulator.ClearQueueAsync();
 
-        _logger.LogInformation("[ShoppingSimulator] Stopped — queue cleared. Total queued this session: {Total}",
-            state.TotalQueued);
+        var queueDepth = await _simulator.GetQueueDepthAsync();
+
+        _logger.LogInformation("[ShoppingSimulator] Stopped — {Pending} messages still in queue. Total queued this session: {Total}",
+            queueDepth, state.TotalQueued);
 
         _telemetry.TrackEvent("ShoppingSimulator.Stopped", new Dictionary<string, string>
         {
             ["TotalQueued"]           = state.TotalQueued.ToString(),
             ["NewCustomerQueued"]     = state.NewCustomerQueued.ToString(),
             ["ExistingCustomerQueued"] = state.ExistingCustomerQueued.ToString(),
+            ["PendingInQueue"]        = queueDepth.ToString(),
+        });
+
+        var resp = req.CreateResponse(HttpStatusCode.OK);
+        await resp.WriteAsJsonAsync(new
+        {
+            state.IsRunning,
+            state.OrdersPerMinute,
+            state.ExistingCustomerPercentage,
+            state.StartedAt,
+            state.TotalQueued,
+            state.NewCustomerQueued,
+            state.ExistingCustomerQueued,
+            queueDepth,
+            message = $"Shopping simulator stopped. {queueDepth} pending order{(queueDepth == 1 ? "" : "s")} will still be placed.",
+        });
+        return resp;
+    }
+
+    // ── POST clear-queue ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Clears all pending messages from the simulation queue without changing the running state.
+    /// Intended for admin use when the simulator is stopped.
+    /// </summary>
+    [Function("ShoppingSimulator_ClearQueue")]
+    public async Task<HttpResponseData> ClearQueue(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "shopping-simulator/clear-queue")]
+        HttpRequestData req)
+    {
+        var state = await _simulator.GetStateAsync();
+        await _simulator.ClearQueueAsync();
+
+        _logger.LogInformation("[ShoppingSimulator] Queue manually cleared by admin.");
+        _telemetry.TrackEvent("ShoppingSimulator.QueueCleared", new Dictionary<string, string>
+        {
+            ["WasRunning"] = state.IsRunning.ToString(),
         });
 
         var resp = req.CreateResponse(HttpStatusCode.OK);
@@ -149,7 +189,7 @@ public class ShoppingSimulatorControlFunction
             state.NewCustomerQueued,
             state.ExistingCustomerQueued,
             queueDepth = 0L,
-            message = "Shopping simulator stopped and queue cleared.",
+            message = "Queue cleared.",
         });
         return resp;
     }

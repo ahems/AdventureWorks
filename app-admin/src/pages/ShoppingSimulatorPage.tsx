@@ -7,6 +7,7 @@ import {
   Activity,
   Users,
   UserPlus,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +19,7 @@ import {
   getShoppingSimulatorStatus,
   startShoppingSimulator,
   stopShoppingSimulator,
+  clearShoppingSimulatorQueue,
   type ShoppingSimulatorStatus,
 } from "@/services/utilityService";
 
@@ -115,6 +117,19 @@ export default function ShoppingSimulatorPage() {
       setStatus(s);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to stop simulator");
+    } finally {
+      setActionPending(false);
+    }
+  };
+
+  const handleClearQueue = async () => {
+    setActionPending(true);
+    setError(null);
+    try {
+      const s = await clearShoppingSimulatorQueue();
+      setStatus(s);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to clear queue");
     } finally {
       setActionPending(false);
     }
@@ -302,8 +317,8 @@ export default function ShoppingSimulatorPage() {
           </CardContent>
         </Card>
 
-        {/* ── Live stats card (shown when there's any activity) ────── */}
-        {(status.isRunning || total > 0) && (
+        {/* ── Live stats card (shown when running or orders still pending) ── */}
+        {(status.isRunning || status.queueDepth > 0) && (
           <Card className="doodle-card mb-6">
             <CardHeader className="pb-3">
               <CardTitle className="font-doodle text-lg text-doodle-text flex items-center gap-2">
@@ -315,24 +330,47 @@ export default function ShoppingSimulatorPage() {
               {/* Queue depth + started at */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="doodle-card p-3 text-center">
+                  <p className="font-doodle text-2xl font-bold text-doodle-text">
+                    {total.toLocaleString()}
+                  </p>
+                  <p className="font-doodle text-xs text-doodle-text/60 mt-1">
+                    Queued This Run
+                  </p>
+                </div>
+                <div className="doodle-card p-3 text-center">
                   <p className="font-doodle text-2xl font-bold text-doodle-accent">
                     {status.queueDepth >= 0
                       ? status.queueDepth.toLocaleString()
                       : "—"}
                   </p>
                   <p className="font-doodle text-xs text-doodle-text/60 mt-1">
-                    Queue Depth
-                  </p>
-                </div>
-                <div className="doodle-card p-3 text-center">
-                  <p className="font-doodle text-2xl font-bold text-doodle-text">
-                    {total.toLocaleString()}
-                  </p>
-                  <p className="font-doodle text-xs text-doodle-text/60 mt-1">
                     Total Queued
                   </p>
                 </div>
               </div>
+
+              {/* Clear queue button — only shown when stopped with pending messages */}
+              {!status.isRunning && status.queueDepth > 0 && (
+                <div className="pt-1">
+                  <Button
+                    onClick={handleClearQueue}
+                    disabled={actionPending}
+                    variant="outline"
+                    className="doodle-button doodle-button-danger w-full flex items-center gap-2 justify-center py-2"
+                  >
+                    {actionPending ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                    <span className="font-doodle font-bold text-sm">
+                      {actionPending
+                        ? "Clearing…"
+                        : `Clear Queue (${status.queueDepth.toLocaleString()} pending)`}
+                    </span>
+                  </Button>
+                </div>
+              )}
 
               {/* Persona breakdown */}
               {total > 0 && (
