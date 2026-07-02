@@ -1034,6 +1034,9 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture-ai.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModelIllustration'; File='ProductModelIllustration.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.Product'; File='Product.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # AI-generated standard costs for manufactured sub-assemblies (BOM rollup + labor).
+        # UpdateIfExists: rows match existing ProductIDs and UPDATE StandardCost/ListPrice columns.
+        @{ Table='Production.Product'; File='Product-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; UpdateIfExists=$true }
         # Translated product names with vector embeddings for all 23 cultures.
         # ProductNameEmbedding is VECTOR(1536) - stored as JSON array in CSV, loaded via CAST(N'...' AS VECTOR(1536)).
         # Must be loaded AFTER Product.csv (FK to Production.Product) and Culture data (FK to Production.Culture).
@@ -1042,6 +1045,8 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         # AI-generated product reviews: Comments are plain text (not hex); CommentsEmbedding is VECTOR; HelpfulVotes/UserID not in CSV
         @{ Table='Production.ProductReview'; File='ProductReview-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('CommentsEmbedding'); DefaultColumns=@('HelpfulVotes','UserID') }
         @{ Table='Production.ProductCostHistory'; File='ProductCostHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # AI-generated cost history for manufactured sub-assemblies that had zero StandardCost in original data.
+        @{ Table='Production.ProductCostHistory'; File='ProductCostHistory-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductListPriceHistory'; File='ProductListPriceHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductInventory'; File='ProductInventory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         
