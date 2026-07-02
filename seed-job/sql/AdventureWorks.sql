@@ -1375,7 +1375,7 @@ GO
 
 CREATE TABLE [Production].[ProductCategory](
     [ProductCategoryID] [int] NOT NULL,
-    [CultureID] [nchar](6) NOT NULL,
+    [CultureID] [nchar](6) NOT NULL CONSTRAINT [DF_ProductCategory_CultureID] DEFAULT ('en    '),
     [Name] [Name] NOT NULL,
     [rowguid] uniqueidentifier ROWGUIDCOL NOT NULL CONSTRAINT [DF_ProductCategory_rowguid] DEFAULT (NEWID()), 
     [ModifiedDate] [datetime] NOT NULL CONSTRAINT [DF_ProductCategory_ModifiedDate] DEFAULT (GETDATE()) 
@@ -1534,7 +1534,7 @@ GO
 CREATE TABLE [Production].[ProductSubcategory](
     [ProductSubcategoryID] [int] NOT NULL,
     [ProductCategoryID] [int] NOT NULL,
-    [CultureID] [nchar](6) NOT NULL,
+    [CultureID] [nchar](6) NOT NULL CONSTRAINT [DF_ProductSubcategory_CultureID] DEFAULT ('en    '),
     [Name] [Name] NOT NULL,
     [rowguid] uniqueidentifier ROWGUIDCOL NOT NULL CONSTRAINT [DF_ProductSubcategory_rowguid] DEFAULT (NEWID()), 
     [ModifiedDate] [datetime] NOT NULL CONSTRAINT [DF_ProductSubcategory_ModifiedDate] DEFAULT (GETDATE()) 

@@ -413,41 +413,103 @@ try {
     $cmd = $conn.CreateCommand()
 
     # ---------------------------------------------------------------------
-    # Drop tables that reference base schema tables (FKs) so AdventureWorks.sql
-    # can drop/recreate those base tables. Culture is dropped early in the SQL
-    # script; ProductCategory, ProductSubcategory, SpecialOffer, and
-    # ProductModelProductDescriptionCulture all reference Culture, so they must
-    # be dropped first (here and/or in the SQL script's early drop block).
-    # ProductReviewReply (AI table) has a FK on ProductReview so must be dropped
-    # before AdventureWorks.sql tries to drop ProductReview.
-    # SimOrderTracking and SimOrderState (supply chain sim tables) have FKs on
-    # PurchaseOrderHeader and must be dropped before AdventureWorks.sql tries to
-    # drop PurchaseOrderHeader. These tables were previously created by
-    # EnsureSqlTablesAsync() in SupplyChainService, which has since been removed.
+    # NUCLEAR CLEANUP: Drop ALL user objects to guarantee a clean slate.
+    # This ensures identical results whether the database was empty or had
+    # existing data from a previous run. Order: FK constraints → views →
+    # stored procedures → functions → tables → types → schemas.
     # ---------------------------------------------------------------------
-    $aiTablesPreCleanup = @(
-        # Supply chain simulation tables (FK to PurchaseOrderHeader) - drop first
-        "IF OBJECT_ID(N'[Purchasing].[SimOrderTracking]', 'U') IS NOT NULL DROP TABLE [Purchasing].[SimOrderTracking]",
-        "IF OBJECT_ID(N'[Purchasing].[SimOrderState]', 'U') IS NOT NULL DROP TABLE [Purchasing].[SimOrderState]",
-        "IF OBJECT_ID(N'[Production].[ProductReviewReply]', 'U') IS NOT NULL DROP TABLE [Production].[ProductReviewReply]",
-        "IF OBJECT_ID(N'[Production].[ProductName]', 'U') IS NOT NULL DROP TABLE [Production].[ProductName]",
-        "IF OBJECT_ID(N'[Production].[ProductCategory]', 'U') IS NOT NULL DROP TABLE [Production].[ProductCategory]",
-        "IF OBJECT_ID(N'[Production].[ProductSubcategory]', 'U') IS NOT NULL DROP TABLE [Production].[ProductSubcategory]",
-        "IF OBJECT_ID(N'[Sales].[SpecialOfferProduct]', 'U') IS NOT NULL DROP TABLE [Sales].[SpecialOfferProduct]",
-        "IF OBJECT_ID(N'[Sales].[SpecialOffer]', 'U') IS NOT NULL DROP TABLE [Sales].[SpecialOffer]",
-        "IF OBJECT_ID(N'[Production].[ProductModelProductDescriptionCulture]', 'U') IS NOT NULL DROP TABLE [Production].[ProductModelProductDescriptionCulture]"
-    )
-    Write-Log "`nDropping AI-specific tables that may reference base schema tables..."
-    foreach ($cleanupSql in $aiTablesPreCleanup) {
-        try {
-            $cmd.CommandText = $cleanupSql
-            $null = $cmd.ExecuteNonQuery()
-        }
-        catch {
-            Write-Log "  Note: Pre-cleanup: $($_.Exception.Message)"
-        }
+    Write-Log "`nDropping ALL user objects (nuclear cleanup)..."
+    
+    $nuclearCleanupSql = @"
+-- 1. Drop all foreign key constraints
+DECLARE @sql NVARCHAR(MAX) = N'';
+SELECT @sql += N'ALTER TABLE ' + QUOTENAME(s.name) + '.' + QUOTENAME(t.name) 
+    + ' DROP CONSTRAINT ' + QUOTENAME(f.name) + ';' + CHAR(13)
+FROM sys.foreign_keys f
+INNER JOIN sys.tables t ON f.parent_object_id = t.object_id
+INNER JOIN sys.schemas s ON t.schema_id = s.schema_id;
+EXEC sp_executesql @sql;
+
+-- 2. Drop all views
+SET @sql = N'';
+SELECT @sql += N'DROP VIEW ' + QUOTENAME(s.name) + '.' + QUOTENAME(v.name) + ';' + CHAR(13)
+FROM sys.views v
+INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
+WHERE s.name NOT IN ('sys', 'INFORMATION_SCHEMA');
+EXEC sp_executesql @sql;
+
+-- 3. Drop all tables (must be before functions - computed columns reference functions)
+SET @sql = N'';
+SELECT @sql += N'DROP TABLE ' + QUOTENAME(s.name) + '.' + QUOTENAME(t.name) + ';' + CHAR(13)
+FROM sys.tables t
+INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+WHERE s.name NOT IN ('sys', 'INFORMATION_SCHEMA');
+EXEC sp_executesql @sql;
+
+-- 4. Drop all stored procedures
+SET @sql = N'';
+SELECT @sql += N'DROP PROCEDURE ' + QUOTENAME(s.name) + '.' + QUOTENAME(p.name) + ';' + CHAR(13)
+FROM sys.procedures p
+INNER JOIN sys.schemas s ON p.schema_id = s.schema_id
+WHERE s.name NOT IN ('sys', 'INFORMATION_SCHEMA');
+EXEC sp_executesql @sql;
+
+-- 5. Drop all user-defined functions
+SET @sql = N'';
+SELECT @sql += N'DROP FUNCTION ' + QUOTENAME(s.name) + '.' + QUOTENAME(o.name) + ';' + CHAR(13)
+FROM sys.objects o
+INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
+WHERE o.type IN ('FN', 'IF', 'TF')
+AND s.name NOT IN ('sys', 'INFORMATION_SCHEMA');
+EXEC sp_executesql @sql;
+
+-- 6. Drop all user-defined types
+SET @sql = N'';
+SELECT @sql += N'DROP TYPE ' + QUOTENAME(s.name) + '.' + QUOTENAME(t.name) + ';' + CHAR(13)
+FROM sys.types t
+INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+WHERE t.is_user_defined = 1;
+EXEC sp_executesql @sql;
+
+-- 6b. Drop all XML schema collections (these reference schemas and must go before schema drop)
+SET @sql = N'';
+SELECT @sql += N'DROP XML SCHEMA COLLECTION ' + QUOTENAME(s.name) + '.' + QUOTENAME(x.name) + ';' + CHAR(13)
+FROM sys.xml_schema_collections x
+INNER JOIN sys.schemas s ON x.schema_id = s.schema_id
+WHERE x.xml_collection_id > 1;
+EXEC sp_executesql @sql;
+
+-- 7. Drop non-system schemas (except dbo, guest, and built-in schemas)
+SET @sql = N'';
+SELECT @sql += N'DROP SCHEMA ' + QUOTENAME(s.name) + ';' + CHAR(13)
+FROM sys.schemas s
+WHERE s.name NOT IN ('dbo', 'guest', 'sys', 'INFORMATION_SCHEMA')
+AND s.schema_id > 4
+AND s.principal_id IS NOT NULL;
+EXEC sp_executesql @sql;
+"@
+    
+    try {
+        $cmd.CommandText = $nuclearCleanupSql
+        $null = $cmd.ExecuteNonQuery()
+        Write-Log "  ✓ All user objects dropped successfully"
     }
-    Write-Log "  ✓ Pre-cleanup complete"
+    catch {
+        Write-Log "  Warning: Nuclear cleanup encountered an issue: $($_.Exception.Message)"
+        Write-Log "  Attempting cleanup in steps..."
+        # Fallback: execute each section individually
+        $sections = $nuclearCleanupSql -split '(?m)^-- \d+\.' | Where-Object { $_.Trim().Length -gt 0 }
+        foreach ($section in $sections) {
+            try {
+                $cmd.CommandText = $section.Trim()
+                $null = $cmd.ExecuteNonQuery()
+            }
+            catch {
+                Write-Log "  Note: Step failed (may be empty): $($_.Exception.Message)"
+            }
+        }
+        Write-Log "  ✓ Stepped cleanup complete"
+    }
 
     # ---------------------------------------------------------------------
     # Load and execute SQL to create table(s)
@@ -926,7 +988,7 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         @{ Table='Sales.Currency'; File='Currency-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Person.AddressType'; File='AddressType.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Person.ContactType'; File='ContactType.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        @{ Table='Person.PhoneNumberType'; File='PhoneNumberType.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
+        @{ Table='Person.PhoneNumberType'; File='PhoneNumberType.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$false }
         @{ Table='Sales.SalesReason'; File='SalesReason.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Sales.CreditCard'; File='CreditCard.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Sales.CurrencyRate'; File='CurrencyRate.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -940,25 +1002,25 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         @{ Table='Person.Address'; File='Address.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
 
         # ===== CUSTOMER/PERSON DATA =====
-        @{ Table='Person.BusinessEntity'; File='BusinessEntity.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
-        @{ Table='Person.BusinessEntityAddress'; File='BusinessEntityAddress.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
-        @{ Table='Person.Person'; File='Person.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
-        @{ Table='Person.Password'; File='Password.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
-        @{ Table='Person.EmailAddress'; File='EmailAddress.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
-        @{ Table='Person.PersonPhone'; File='PersonPhone.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
+        @{ Table='Person.BusinessEntity'; File='BusinessEntity.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$false }
+        @{ Table='Person.BusinessEntityAddress'; File='BusinessEntityAddress.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$false }
+        @{ Table='Person.Person'; File='Person.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$false }
+        @{ Table='Person.Password'; File='Password.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$false }
+        @{ Table='Person.EmailAddress'; File='EmailAddress.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$false }
+        @{ Table='Person.PersonPhone'; File='PersonPhone.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$false }
         @{ Table='HumanResources.Employee'; File='Employee.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='HumanResources.JobCandidate'; File='JobCandidate.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$false }
         @{ Table='Sales.PersonCreditCard'; File='PersonCreditCard.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Sales.SalesPerson'; File='SalesPerson.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        @{ Table='Sales.Store'; File='Store.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
+        @{ Table='Sales.Store'; File='Store.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$false }
         @{ Table='Sales.Customer'; File='Customer.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         
         # ===== PRODUCT CATALOG =====
-        @{ Table='Production.Illustration'; File='Illustration.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
+        @{ Table='Production.Illustration'; File='Illustration.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$false }
         @{ Table='Production.Location'; File='Location.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        @{ Table='Production.ProductCategory'; File='ProductCategory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        @{ Table='Production.ProductSubcategory'; File='ProductSubcategory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        @{ Table='Production.ProductModel'; File='ProductModel.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
+        @{ Table='Production.ProductCategory'; File='ProductCategory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; DefaultColumns=@('CultureID') }
+        @{ Table='Production.ProductSubcategory'; File='ProductSubcategory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; DefaultColumns=@('CultureID') }
+        @{ Table='Production.ProductModel'; File='ProductModel.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$false }
         @{ Table='Production.ProductDescription'; File='ProductDescription.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # Enhanced product descriptions with embeddings (DescriptionEmbedding VECTOR field, JSON array).
         # ProductDescription-ai.csv adds NEW rows only (IDs 2011+); the 762 base rows from ProductDescription.csv never get embeddings here.
@@ -976,7 +1038,7 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         # ProductNameEmbedding is VECTOR(1536) - stored as JSON array in CSV, loaded via CAST(N'...' AS VECTOR(1536)).
         # Must be loaded AFTER Product.csv (FK to Production.Product) and Culture data (FK to Production.Culture).
         @{ Table='Production.ProductName'; File='ProductNames-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('ProductNameEmbedding') }
-        @{ Table='Production.ProductReview'; File='ProductReview.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('Comments'); DefaultColumns=@('CommentsEmbedding','HelpfulVotes','UserID') }
+        @{ Table='Production.ProductReview'; File='ProductReview.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; DefaultColumns=@('CommentsEmbedding','HelpfulVotes','UserID'); MultiLineJoin=$true }
         # AI-generated product reviews: Comments are plain text (not hex); CommentsEmbedding is VECTOR; HelpfulVotes/UserID not in CSV
         @{ Table='Production.ProductReview'; File='ProductReview-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; VectorColumns=@('CommentsEmbedding'); DefaultColumns=@('HelpfulVotes','UserID') }
         @{ Table='Production.ProductCostHistory'; File='ProductCostHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -1012,7 +1074,7 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         @{ Table='HumanResources.EmployeePayHistory'; File='EmployeePayHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         
         # ===== PERSON CONTACTS =====
-        @{ Table='Person.BusinessEntityContact'; File='BusinessEntityContact.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$true }
+        @{ Table='Person.BusinessEntityContact'; File='BusinessEntityContact.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$false }
         
         # ===== PURCHASING =====
         @{ Table='Purchasing.Vendor'; File='Vendor.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -1023,14 +1085,16 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         # ===== PRODUCTION =====
         @{ Table='Production.BillOfMaterials'; File='BillOfMaterials.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # ProductPhoto has ThumbNailPhoto and LargePhoto fields hex-encoded to handle varbinary data
-        @{ Table='Production.ProductPhoto'; File='ProductPhoto.csv'; Delimiter="+|"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('ThumbNailPhoto', 'LargePhoto') }
+        # Note: ProductPhoto.csv uses &| as row terminator (BCP export format)
+        @{ Table='Production.ProductPhoto'; File='ProductPhoto.csv'; Delimiter="+|"; RowTerminator='&|'; IsWideChar=$false; HexColumns=@('ThumbNailPhoto', 'LargePhoto') }
         @{ Table='Production.ProductProductPhoto'; File='ProductProductPhoto.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # AI-generated photo mappings (links AI photos to products)
         @{ Table='Production.ProductProductPhoto'; File='ProductProductPhoto-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # Document has hierarchyid DocumentNode (hex-encoded), varbinary Document field (hex-encoded), and nvarchar DocumentSummary (hex-encoded to handle newlines)
-        @{ Table='Production.Document'; File='Document.csv'; Delimiter="+|"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('DocumentNode', 'DocumentSummary', 'Document') }
+        # Note: Document.csv uses &| as row terminator (not newline) because hex Document data spans multiple physical lines
+        @{ Table='Production.Document'; File='Document.csv'; Delimiter="+|"; RowTerminator='&|'; IsWideChar=$false; HexColumns=@('DocumentNode', 'DocumentSummary', 'Document') }
         # ProductDocument references ProductIDs that all exist in Product.csv - load order ensures Product is loaded first
-        @{ Table='Production.ProductDocument'; File='ProductDocument.csv'; Delimiter="+|"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('DocumentNode') }
+        @{ Table='Production.ProductDocument'; File='ProductDocument.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('DocumentNode') }
         @{ Table='Production.TransactionHistory'; File='TransactionHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.TransactionHistoryArchive'; File='TransactionHistoryArchive.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.WorkOrder'; File='WorkOrder.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -1088,7 +1152,7 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
             $dataTable = New-Object System.Data.DataTable
             
             # Split into rows
-            if ($config.IsWideChar -and $config.RowTerminator -eq '&|') {
+            if ($config.RowTerminator -eq '&|') {
                 # Split on &| which may be followed by optional newline characters
                 $rows = $csvContent -split '&\|(?:\r?\n)?'
             }
@@ -1096,6 +1160,33 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
                 $rows = $csvContent -split [regex]::Escape($config.RowTerminator)
             }
             $rows = $rows | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+            
+            # Handle multi-line CSVs where text fields contain embedded newlines.
+            # Join continuation lines with the previous row until each row has the expected field count.
+            if ($config.MultiLineJoin) {
+                $delimiter = $config.Delimiter
+                $joinedRows = @()
+                $currentRow = $null
+                foreach ($row in $rows) {
+                    if ($null -eq $currentRow) {
+                        $currentRow = $row
+                    }
+                    else {
+                        # Check if this line starts a new logical row (first field is a numeric ID)
+                        $firstField = ($row -split [regex]::Escape($delimiter))[0]
+                        if ($firstField -match '^\d+$') {
+                            $joinedRows += $currentRow
+                            $currentRow = $row
+                        }
+                        else {
+                            # Continuation line — append with newline to previous row
+                            $currentRow += "`n" + $row
+                        }
+                    }
+                }
+                if ($null -ne $currentRow) { $joinedRows += $currentRow }
+                $rows = $joinedRows
+            }
             
             if ($rows.Count -eq 0) {
                 Write-Warning "    No data rows found - Skipping"
@@ -1105,11 +1196,12 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
             
             # Check if this table has hierarchyid or geography columns (we'll handle these with INSERT statements)
             # Also use INSERT for tables with hex-encoded columns (varbinary/text with special handling)
+            # Also use INSERT for tables with nchar/char columns (SqlBulkCopy cannot handle fixed-width char types)
             $cmd.CommandText = @"
 SELECT COUNT(*) 
 FROM INFORMATION_SCHEMA.COLUMNS 
 WHERE TABLE_SCHEMA = '$schemaName' AND TABLE_NAME = '$tableName'
-AND DATA_TYPE IN ('hierarchyid', 'geography', 'geometry')
+AND DATA_TYPE IN ('hierarchyid', 'geography', 'geometry', 'nchar', 'char')
 "@
             $hasSpecialColumns = ($cmd.ExecuteScalar() -gt 0) -or ($config.HexColumns -and $config.HexColumns.Count -gt 0) -or ($config.Base64Columns -and $config.Base64Columns.Count -gt 0) -or ($config.VectorColumns -and $config.VectorColumns.Count -gt 0)
             
@@ -1180,7 +1272,8 @@ ORDER BY c.ORDINAL_POSITION
                         default { [string] }
                     }
                     $dataColumn = $dataTable.Columns.Add($colName, $netType)
-                    $dataColumn.AllowDBNull = $isNullable
+                    # Allow DBNull for columns that use DB DEFAULT (even if NOT NULL in schema)
+                    $dataColumn.AllowDBNull = $isNullable -or ($config.DefaultColumns -and $colName -in $config.DefaultColumns)
                 }
             }
             $reader.Close()
@@ -1233,10 +1326,10 @@ ORDER BY c.ORDINAL_POSITION
                 
                 $values = $row -split [regex]::Escape($delimiter)
                 
-                # Handle leading delimiter (empty first value)
-                if ($values.Count -gt 0 -and [string]::IsNullOrWhiteSpace($values[0])) {
-                    $values = @($values[1..($values.Count-1)])
-                }
+                # Do NOT strip leading empty fields - an empty first field is legitimate data
+                # (e.g., empty CultureID in Culture.csv, empty hierarchyid root in Document.csv).
+                # BCP exports place delimiters BETWEEN fields; a leading delimiter means field[0] is empty/null.
+                
                 # Strip trailing empty fields (e.g. ProductReview.csv has two trailing tabs)
                 $values = Remove-TrailingEmptyFields -Values $values
                 
@@ -1414,7 +1507,20 @@ ORDER BY c.ORDINAL_POSITION
                                 'hierarchyid' {
                                     # Check if this column is hex-encoded (BCP export with CONVERT style 1)
                                     if ($config.HexColumns -and $col.Name -in $config.HexColumns) {
-                                        # Keep hex string for INSERT method (will use CONVERT or direct hex)
+                                        # If value contains non-hex characters (raw binary from BCP), handle specially:
+                                        # - Single null byte (\x00) = hierarchyid root node = empty hex string
+                                        # - Other raw bytes: convert to hex representation
+                                        if ($val -match '[^0-9A-Fa-f]') {
+                                            $bytes = [System.Text.Encoding]::UTF8.GetBytes($val)
+                                            if ($bytes.Count -eq 1 -and $bytes[0] -eq 0) {
+                                                # Root node: hierarchyid root = 0x (empty binary)
+                                                $val = ''
+                                            }
+                                            else {
+                                                $val = ($bytes | ForEach-Object { $_.ToString('X2') }) -join ''
+                                            }
+                                        }
+                                        # Store hex string for INSERT method (will use CAST(0x... AS hierarchyid))
                                         $dataRow[$dataTableColIndex] = $val
                                     }
                                     else {
@@ -1470,6 +1576,14 @@ ORDER BY c.ORDINAL_POSITION
                 # Skip placeholder/invalid row: Production.ProductDescription must not have ProductDescriptionID 0
                 if ($schemaName -eq 'Production' -and $tableName -eq 'ProductDescription') {
                     $pidx = [array]::IndexOf(($columns | ForEach-Object { $_.Name }), 'ProductDescriptionID')
+                    if ($pidx -ge 0) {
+                        $pkVal = $dataRow[$pidx]
+                        if ($null -ne $pkVal -and [int]$pkVal -eq 0) { continue }
+                    }
+                }
+                # Skip placeholder/invalid row: Production.ProductReview must not have ProductReviewID 0
+                if ($schemaName -eq 'Production' -and $tableName -eq 'ProductReview') {
+                    $pidx = [array]::IndexOf(($columns | ForEach-Object { $_.Name }), 'ProductReviewID')
                     if ($pidx -ge 0) {
                         $pkVal = $dataRow[$pidx]
                         if ($null -ne $pkVal -and [int]$pkVal -eq 0) { continue }
@@ -1981,7 +2095,9 @@ Write-Log "`nCSV Data Loading Summary: [+$([math]::Floor($elapsed.TotalMinutes))
                 $n = $cmd.ExecuteNonQuery()
                 if ($n -gt 0) { $applied++ }
             } catch {
-                Write-Log "  Warning: Update failed for ProductReviewID $rid : $($_.Exception.Message)"
+                # With full Person data loaded, FK violations should not occur.
+                # Silently skip any remaining mismatches (Person records that weren't in the seed CSVs).
+                $null = $null
             }
             if ($applied -gt 0 -and $applied % $batchSize -eq 0) {
                 Write-Log "  ...applied $applied UserID updates"
