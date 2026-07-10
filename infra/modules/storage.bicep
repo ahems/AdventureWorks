@@ -128,7 +128,26 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
     }
     
     tableServices: {
-      tables: []
+      tables: [
+        {
+          name: 'shoppingSimulator'
+        }
+        {
+          name: 'awOrderPipelineConfig'
+        }
+        {
+          name: 'awSupplyChain'
+        }
+        {
+          name: 'awManufacturing'
+        }
+        {
+          name: 'awBankAccounts'
+        }
+        {
+          name: 'awBankTransactions'
+        }
+      ]
     }
     
     fileServices: {

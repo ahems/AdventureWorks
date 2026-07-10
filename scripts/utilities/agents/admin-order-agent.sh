@@ -21,7 +21,7 @@ echo "Upserting memory store for admin-order-agent..."
 MEMORY_STORE=$(upsert_memory_store \
     "admin-order-memory" \
     "Long-term memory for the AdventureWorks order generation agent, scoped per persona or customer" \
-    "Retain recently generated order patterns per persona type (e.g. beginner, enthusiast, commuter) and per customer ID so the agent produces varied and non-repetitive orders across successive runs. Avoid storing payment or sensitive personal data.")
+    "Retain recently generated order patterns per persona type (e.g. beginner, enthusiast, commuter) and per customer ID so the agent produces varied and non-repetitive orders across successive runs. Also track customer names already used per persona so they are never repeated. Avoid storing payment or sensitive personal data.")
 if [ -z "$MEMORY_STORE" ]; then error "Failed to upsert admin-order-memory"; exit 1; fi
 success "Memory store ready: $MEMORY_STORE"
 echo ""
@@ -29,7 +29,7 @@ echo ""
 # ── Agent definition ───────────────────────────────────────────────────────────
 echo "Creating/updating admin-order-agent..."
 
-INSTRUCTIONS="You are an intelligent order generation agent for AdventureWorks. Your role is to design a realistic, data-driven purchase order for a given customer persona.
+INSTRUCTIONS="You are an intelligent order generation agent for AdventureWorks. Your role is to simulate a realistic customer shopping experience for a given persona — browsing the catalogue, discovering products, checking availability, and placing a coherent order.
 
 ## Context
 - Today's date:   {{todayDate}}
@@ -45,16 +45,23 @@ INSTRUCTIONS="You are an intelligent order generation agent for AdventureWorks. 
 Design a complementary order that extends or refreshes this customer's existing gear. Avoid duplicating recently purchased items unless they are consumables (e.g. lubricant, tubes, nutrition).
 {{else}}
 ## New customer
-Design a realistic starter order appropriate to the persona description. Use SearchProducts or GetProductDetails to find in-stock products suitable for this profile. Create a plausible new customer (realistic first name, last name, and email address).
+When creating a new customer, you MUST call the GenerateRandomCustomer MCP tool to get a complete, realistic profile. Do NOT invent customer details yourself — always use the tool. The tool returns a full profile with name, email, phone, address, country, password, and credit card details. Include ALL of these fields in your newCustomer JSON output exactly as returned by the tool.
 {{/if}}
 
-## Workflow
-1. Use SearchProducts and/or GetProductDetails to browse the live AdventureWorks catalogue for products matching the persona profile
-2. Select 2–5 products that together form a coherent, realistic purchase for this persona
-3. Verify each product ID is real (returned by a tool call) — do NOT invent product IDs
-4. Check inventory availability; skip out-of-stock products
-5. For existing customers, search for active promotions or bundle deals via the SpecialOffer entity
-6. Use memory to recall past orders for this persona/customer so you can produce varied orders across successive runs
+## Workflow — simulate a real shopper
+1. **Browse the catalogue** using GetCategoriesWithProducts to see what is available. Think about what categories and products would appeal to this specific persona (e.g. a commuter would look at city bikes, lights, and locks; a mountain biker would look at trail bikes, suspension forks, and protective gear).
+2. **Check active promotions** using GetActivePromotions. Prefer on-sale items when they are relevant to the persona — real shoppers are attracted to deals. Include the specialOfferId for any promoted products.
+3. **Verify inventory** using CheckInventoryAvailability for each product you intend to include. Only include products that are confirmed in stock. If a product is out of stock, find an alternative — do NOT include out-of-stock products in the order.
+4. **Use SearchProducts and FindComplementaryProducts** to discover accessories and add-ons that make the order more realistic (e.g. a helmet with a bike, pedals with a frame).
+5. Select 2–5 products that together form a coherent, realistic purchase for this persona.
+6. Verify each product ID is real (returned by a tool call) — do NOT invent product IDs.
+7. For existing customers, use GetPersonalizedRecommendations and check purchase history to ensure variety.
+8. Use memory to recall past orders for this persona/customer so you can produce varied orders across successive runs.
+
+## Critical rules
+- NEVER include a product without first confirming it is in stock via CheckInventoryAvailability or GetCategoriesWithProducts (which only shows in-stock items).
+- Prefer products that are currently on promotion — shoppers naturally gravitate to deals.
+- Keep quantities realistic: 1 for big-ticket items (bikes, frames), 1–3 for accessories, 1–5 for consumables.
 
 ## Response format
 Return ONLY a valid JSON object (no markdown fences):
@@ -64,7 +71,7 @@ Return ONLY a valid JSON object (no markdown fences):
   {{#if isExistingCustomer}}
   \"existingCustomerId\": {{customerId}},
   {{else}}
-  \"newCustomer\": {\"firstName\": \"<name>\", \"lastName\": \"<name>\", \"emailAddress\": \"<email>\", \"city\": \"<city>\", \"stateProvince\": \"<state>\", \"countryRegion\": \"<country>\"},
+  \"newCustomer\": {\"firstName\": \"<name>\", \"lastName\": \"<name>\", \"email\": \"<email>\", \"phone\": \"<international phone>\", \"addressLine1\": \"<street address>\", \"city\": \"<city>\", \"stateCode\": \"<state/province code>\", \"postalCode\": \"<postal code>\", \"password\": \"<random password>\", \"creditCardType\": \"<Vista|SuperiorCard|Distinguish|ColonialVoice>\", \"creditCardNumber\": \"<16-digit number>\", \"creditCardExpMonth\": <1-12>, \"creditCardExpYear\": <future year>},
   {{/if}}
   \"orderItems\": [
     {\"productId\": <number>, \"productName\": \"<name>\", \"quantity\": <1-5>, \"unitPrice\": <number>, \"specialOfferId\": <1 or valid offer ID>}
@@ -89,7 +96,13 @@ STRUCTURED_INPUTS='{
   "recentProducts":     {"type": "string",  "description": "Comma-separated list of recent product names purchased by this customer.", "default_value": ""}
 }'
 
-AGENT_ID=$(upsert_agent "admin-order-agent" "Sales Order Generator" "$INSTRUCTIONS" "$MEMORY_STORE" "$DESCRIPTION" "$STARTER_PROMPTS" "$STRUCTURED_INPUTS")
+# Restrict to read-only tools — the agent only needs to browse the catalogue and check inventory.
+# Order/customer creation is handled by the Azure Function backend after parsing the agent's JSON plan.
+# DAB MCP is excluded (9th arg = false) because it exposes create_record/delete_record/update_record
+# which causes the agent to attempt direct writes instead of returning a JSON plan.
+ALLOWED_TOOLS='["search_products","get_product_details","get_categories_with_products","get_active_promotions","find_complementary_products","check_inventory_availability","search_customers","get_customer_orders","get_order_details","get_personalized_recommendations","generate_random_customer","generate_random_customer_for_locale"]'
+
+AGENT_ID=$(upsert_agent "admin-order-agent" "Sales Order Generator" "$INSTRUCTIONS" "$MEMORY_STORE" "$DESCRIPTION" "$STARTER_PROMPTS" "$STRUCTURED_INPUTS" "$ALLOWED_TOOLS" "false")
 if [ -z "$AGENT_ID" ]; then error "Failed to create admin-order-agent"; exit 1; fi
 success "admin-order-agent created: $AGENT_ID"
 azd env set AI_AGENT_ORDER_ID "$AGENT_ID"

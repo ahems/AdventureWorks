@@ -159,6 +159,9 @@ module appinsights 'modules/applicationinsights.bicep' = {
     appName: appInsightsName
     workspaceName: workspaceName
     location: location
+    identityName: identityName
+    aadAdminObjectId: aadAdminObjectId
+    skipLocalDevRoleAssignments: skipLocalDevRoleAssignments
   }
   dependsOn: [
     identity
@@ -314,6 +317,7 @@ module containerAppAdmin 'modules/aca-app-admin.bicep' = {
     appInsightsConnectionString: appinsights.outputs.connectionString
     appUrl: staticWebAppFrontend.outputs.appRedirectUri
     mcpInspectorUrl: containerAppMcpInspector.outputs.mcpInspectorUrl
+    appManufacturingUrl: containerAppManufacturing.outputs.appManufacturingUrl
     minReplica: 0
     maxReplica: 3
     revisionSuffix: revisionSuffix

@@ -36,15 +36,7 @@ INSTRUCTIONS="You are a customer profile generation agent for AdventureWorks. Yo
 - Target locale: {{locale}}
 
 ## Requirements
-Generate a single fictitious customer profile culturally appropriate for the target locale:
-- **firstName** and **lastName**: typical names for that locale/culture
-- **email**: firstname.lastname style with a plausible domain (gmail, yahoo, hotmail, or a popular local domain for that country). Use lowercase.
-- **phone**: correct country dialling code and format for the locale
-- **addressLine1**: realistic street address format for that country
-- **city**: a real city in that country
-- **stateCode**: 2-3 letter province/state/region code; use the local equivalent (e.g. \"BY\" for Bavaria in Germany, \"IDF\" for Île-de-France). If the country has no states, use a plausible 2-letter abbreviation.
-- **postalCode**: correct format for the country (e.g. 5-digit for US/DE, alphanumeric for UK/CA)
-- **country**: full English name of the country
+Generate a single fictitious customer profile culturally appropriate for the target locale. You MUST call the GenerateRandomCustomerForLocale MCP tool with the target locale to get a complete, realistic profile. Do NOT invent customer details yourself — always use the tool. The tool returns all required fields with realistic data including a password and credit card. Include ALL fields from the tool response in your JSON output.
 
 ## Diversity
 Use your memory of recently generated profiles for this locale to produce a varied result — different names, cities, and address styles each time.
@@ -60,7 +52,12 @@ Return ONLY a valid JSON object with no markdown fences, no comments, no extra t
   \"city\": \"...\",
   \"stateCode\": \"...\",
   \"postalCode\": \"...\",
-  \"country\": \"...\"
+  \"country\": \"...\",
+  \"password\": \"...\",
+  \"creditCardType\": \"<Vista|SuperiorCard|Distinguish|ColonialVoice>\",
+  \"creditCardNumber\": \"<16-digit number>\",
+  \"creditCardExpMonth\": <1-12>,
+  \"creditCardExpYear\": <future year>
 }"
 
 DESCRIPTION="Generates realistic, completely fictitious customer profiles for any locale. Produces culturally appropriate names, addresses, phone numbers, and emails. Uses memory to ensure variety across successive runs for the same locale."
@@ -73,7 +70,10 @@ STRUCTURED_INPUTS='{
   "todayDate": {"type": "string", "description": "Today'\''s date (YYYY-MM-DD).", "default_value": ""}
 }'
 
-AGENT_ID=$(upsert_agent "admin-customer-agent" "Customer Profile Generator" "$INSTRUCTIONS" "$MEMORY_STORE" "$DESCRIPTION" "$STARTER_PROMPTS" "$STRUCTURED_INPUTS")
+# Allow only the customer generation MCP tools
+ALLOWED_TOOLS='["generate_random_customer","generate_random_customer_for_locale"]'
+
+AGENT_ID=$(upsert_agent "admin-customer-agent" "Customer Profile Generator" "$INSTRUCTIONS" "$MEMORY_STORE" "$DESCRIPTION" "$STARTER_PROMPTS" "$STRUCTURED_INPUTS" "$ALLOWED_TOOLS" "false")
 if [ -z "$AGENT_ID" ]; then error "Failed to create admin-customer-agent"; exit 1; fi
 success "admin-customer-agent created: $AGENT_ID"
 azd env set AI_AGENT_CUSTOMER_ID "$AGENT_ID"

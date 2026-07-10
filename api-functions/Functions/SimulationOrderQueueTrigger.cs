@@ -44,15 +44,18 @@ public class SimulationOrderQueueTrigger
     private readonly ILogger<SimulationOrderQueueTrigger> _logger;
     private readonly OrderGenerationAgentService _agentService;
     private readonly TelemetryClient _telemetryClient;
+    private readonly ShoppingSimulatorService _simulator;
 
     public SimulationOrderQueueTrigger(
         ILogger<SimulationOrderQueueTrigger> logger,
         OrderGenerationAgentService agentService,
-        TelemetryClient telemetryClient)
+        TelemetryClient telemetryClient,
+        ShoppingSimulatorService simulator)
     {
         _logger = logger;
         _agentService = agentService;
         _telemetryClient = telemetryClient;
+        _simulator = simulator;
     }
 
     // ── Queue trigger ────────────────────────────────────────────────────────
@@ -132,6 +135,22 @@ public class SimulationOrderQueueTrigger
                     ["NewCustomer"]   = result.NewCustomerCreated.ToString(),
                     ["TotalDue"]      = result.TotalDue.ToString("F2")
                 });
+
+                await _simulator.SaveResultAsync(new Models.SimulationOrderResultEntity
+                {
+                    RowKey = Models.SimulationOrderResultEntity.GenerateRowKey(DateTimeOffset.UtcNow),
+                    Success = true,
+                    SalesOrderId = result.SalesOrderId,
+                    CustomerId = result.CustomerId,
+                    CustomerName = result.CustomerName,
+                    NewCustomerCreated = result.NewCustomerCreated,
+                    TotalDue = (double)result.TotalDue,
+                    PersonaType = personaType,
+                    AiReasoning = result.Log.FirstOrDefault(l => l.Type == "success")?.Message
+                        ?? result.Log.LastOrDefault()?.Message,
+                    ItemCount = result.Log.Count(l => l.Message.Contains("product", StringComparison.OrdinalIgnoreCase)),
+                    CompletedAt = DateTimeOffset.UtcNow,
+                });
             }
             else
             {
@@ -139,6 +158,15 @@ public class SimulationOrderQueueTrigger
                 _telemetryClient.TrackEvent("SimulationOrder.Failed", new Dictionary<string, string>(trackProps)
                 {
                     ["Error"] = result.ErrorMessage ?? "unknown"
+                });
+
+                await _simulator.SaveResultAsync(new Models.SimulationOrderResultEntity
+                {
+                    RowKey = Models.SimulationOrderResultEntity.GenerateRowKey(DateTimeOffset.UtcNow),
+                    Success = false,
+                    ErrorMessage = result.ErrorMessage,
+                    PersonaType = personaType,
+                    CompletedAt = DateTimeOffset.UtcNow,
                 });
             }
         }

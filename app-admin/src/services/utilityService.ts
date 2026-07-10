@@ -796,3 +796,138 @@ export const clearShoppingSimulatorQueue =
     }
     return res.json();
   };
+
+export interface SimulationOrderResult {
+  success: boolean;
+  salesOrderId: number;
+  customerId: number;
+  customerName: string | null;
+  newCustomerCreated: boolean;
+  totalDue: number;
+  errorMessage: string | null;
+  personaType: string | null;
+  aiReasoning: string | null;
+  itemCount: number;
+  completedAt: string;
+}
+
+export const getShoppingSimulatorResults = async (
+  limit = 50,
+): Promise<SimulationOrderResult[]> => {
+  const url = `${getFunctionsApiUrl()}/api/shopping-simulator/results?limit=${limit}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `ShoppingSimulator results HTTP ${res.status}${text ? `: ${text}` : ""}`,
+    );
+  }
+  return res.json();
+};
+
+// ── Order Pipeline Configuration ───────────────────────────────────────────
+
+export interface OrderPipelineConfig {
+  processingToApprovedMinMinutes: number;
+  processingToApprovedMaxMinutes: number;
+  approvedToShippedMinHours: number;
+  approvedToShippedMaxHours: number;
+}
+
+export interface OrderPipelineStatusEntry {
+  orderCount: number;
+  totalValue: number;
+}
+
+export interface OrderPipelineStatus {
+  inProcess: OrderPipelineStatusEntry;
+  approved: OrderPipelineStatusEntry;
+  backordered: OrderPipelineStatusEntry;
+  rejected: OrderPipelineStatusEntry;
+  shipped: OrderPipelineStatusEntry;
+  cancelled: OrderPipelineStatusEntry;
+  note: string;
+}
+
+export interface OrderPipelinePromoteResult {
+  promoted: number;
+  message: string;
+}
+
+export const getOrderPipelineConfig =
+  async (): Promise<OrderPipelineConfig> => {
+    const res = await fetch(
+      `${getFunctionsApiUrl()}/api/orders/pipeline/config`,
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `Pipeline config GET HTTP ${res.status}${text ? `: ${text}` : ""}`,
+      );
+    }
+    return res.json();
+  };
+
+export const saveOrderPipelineConfig = async (
+  config: OrderPipelineConfig,
+): Promise<OrderPipelineConfig> => {
+  const res = await fetch(
+    `${getFunctionsApiUrl()}/api/orders/pipeline/config`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    },
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Pipeline config PUT HTTP ${res.status}${text ? `: ${text}` : ""}`,
+    );
+  }
+  return res.json();
+};
+
+export const getOrderPipelineStatus =
+  async (): Promise<OrderPipelineStatus> => {
+    const res = await fetch(
+      `${getFunctionsApiUrl()}/api/orders/pipeline/status`,
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `Pipeline status GET HTTP ${res.status}${text ? `: ${text}` : ""}`,
+      );
+    }
+    return res.json();
+  };
+
+export const promoteOrdersPendingToApproved =
+  async (): Promise<OrderPipelinePromoteResult> => {
+    const res = await fetch(
+      `${getFunctionsApiUrl()}/api/orders/pipeline/promote-pending`,
+      { method: "POST" },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `Promote pending HTTP ${res.status}${text ? `: ${text}` : ""}`,
+      );
+    }
+    return res.json();
+  };
+
+export const promoteOrdersApprovedToShipped =
+  async (): Promise<OrderPipelinePromoteResult> => {
+    const res = await fetch(
+      `${getFunctionsApiUrl()}/api/orders/pipeline/promote-approved`,
+      { method: "POST" },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `Promote approved HTTP ${res.status}${text ? `: ${text}` : ""}`,
+      );
+    }
+    return res.json();
+  };

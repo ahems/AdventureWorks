@@ -30,6 +30,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Customer } from "@/types/customer";
 import {
   useAdminCustomers,
+  useCustomerById,
   useCustomerOrders,
 } from "@/hooks/useAdminCustomers";
 import { useAdminCustomerAddresses } from "@/hooks/useAdminCustomerAddresses";
@@ -474,20 +475,29 @@ const CustomersPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isSelectForOrderMode = searchParams.get("selectForOrder") === "true";
+  const directCustomerIdParam = searchParams.get("customerId");
+  const directCustomerId = directCustomerIdParam
+    ? parseInt(directCustomerIdParam, 10)
+    : null;
+  const isDirectLink = directCustomerId !== null && !isNaN(directCustomerId);
   const [dabCursor, setDabCursor] = useState<string | null>(null);
   const [cursorStack, setCursorStack] = useState<string[]>([]);
-  const { data: apiData, isLoading: customersLoading } =
-    useAdminCustomers(dabCursor);
+  const [sortBy, setSortBy] = useState<
+    "spend" | "newest" | "oldest" | "name-az" | "name-za"
+  >("spend");
+  const { data: apiData, isLoading: customersLoading } = useAdminCustomers(
+    dabCursor,
+    sortBy,
+  );
   const apiCustomers = React.useMemo(() => apiData?.items ?? [], [apiData]);
+  const { data: directCustomer, isLoading: directCustomerLoading } =
+    useCustomerById(isDirectLink ? directCustomerId : null);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [cityFilter, setCityFilter] = useState("all");
   const [stateFilter, setStateFilter] = useState("all");
   const [countryFilter, setCountryFilter] = useState("all");
   const [spentFilter, setSpentFilter] = useState("all");
-  const [sortBy, setSortBy] = useState<
-    "spend" | "newest" | "oldest" | "name-az" | "name-za"
-  >("spend");
   const [expandedCustomerId, setExpandedCustomerId] = useState<number | null>(
     null,
   );
@@ -507,6 +517,13 @@ const CustomersPage: React.FC = () => {
       setCustomers(apiData.items);
     }
   }, [apiData]);
+
+  // Auto-expand customer when linked via ?customerId=
+  useEffect(() => {
+    if (isDirectLink && directCustomerId) {
+      setExpandedCustomerId(directCustomerId);
+    }
+  }, [isDirectLink, directCustomerId]);
 
   // Extract unique filter values from the loaded batch
   const uniqueCities = useMemo(
@@ -593,6 +610,13 @@ const CustomersPage: React.FC = () => {
     }
   }, [filteredCustomers, sortBy]);
 
+  // When arriving via direct link, show only that customer; otherwise use normal list
+  const displayedCustomers = isDirectLink
+    ? directCustomer
+      ? [directCustomer]
+      : []
+    : sortedCustomers;
+
   const activeFiltersCount = [
     cityFilter,
     stateFilter,
@@ -641,10 +665,12 @@ const CustomersPage: React.FC = () => {
   };
 
   const toggleSelectAll = () => {
-    if (selectedCustomerIds.size === sortedCustomers.length) {
+    if (selectedCustomerIds.size === displayedCustomers.length) {
       setSelectedCustomerIds(new Set());
     } else {
-      setSelectedCustomerIds(new Set(sortedCustomers.map((c) => c.CustomerID)));
+      setSelectedCustomerIds(
+        new Set(displayedCustomers.map((c) => c.CustomerID)),
+      );
     }
   };
 
@@ -833,7 +859,11 @@ const CustomersPage: React.FC = () => {
                 <ArrowUpDown className="w-3 h-3 text-doodle-text/40" />
                 <Select
                   value={sortBy}
-                  onValueChange={(v) => setSortBy(v as typeof sortBy)}
+                  onValueChange={(v) => {
+                    setSortBy(v as typeof sortBy);
+                    setDabCursor(null);
+                    setCursorStack([]);
+                  }}
                 >
                   <SelectTrigger className="h-7 text-xs font-doodle border-doodle-text/30 w-44">
                     <SelectValue />
@@ -887,8 +917,8 @@ const CustomersPage: React.FC = () => {
                 onClick={toggleSelectAll}
                 className="font-doodle text-sm flex items-center gap-2 hover:text-doodle-accent transition-colors"
               >
-                {selectedCustomerIds.size === sortedCustomers.length &&
-                sortedCustomers.length > 0 ? (
+                {selectedCustomerIds.size === displayedCustomers.length &&
+                displayedCustomers.length > 0 ? (
                   <CheckSquare className="w-4 h-4" />
                 ) : (
                   <Square className="w-4 h-4" />
@@ -911,21 +941,33 @@ const CustomersPage: React.FC = () => {
 
           {/* Customer list */}
           <div className="space-y-4">
-            {customersLoading && customers.length === 0 ? (
+            {(
+              isDirectLink
+                ? directCustomerLoading
+                : customersLoading && customers.length === 0
+            ) ? (
               [...Array(5)].map((_, i) => (
                 <div key={i} className="doodle-card p-4 animate-pulse">
                   <div className="h-5 bg-doodle-text/10 rounded w-1/3 mb-2" />
                   <div className="h-4 bg-doodle-text/10 rounded w-1/2" />
                 </div>
               ))
-            ) : sortedCustomers.length === 0 ? (
+            ) : isDirectLink &&
+              !directCustomerLoading &&
+              displayedCustomers.length === 0 ? (
+              <div className="doodle-card p-8 text-center">
+                <p className="font-doodle text-doodle-text/60">
+                  Customer #{directCustomerId} not found.
+                </p>
+              </div>
+            ) : displayedCustomers.length === 0 ? (
               <div className="doodle-card p-8 text-center">
                 <p className="font-doodle text-doodle-text/60">
                   No customers match your filters.
                 </p>
               </div>
             ) : (
-              sortedCustomers.map((customer) => {
+              displayedCustomers.map((customer) => {
                 const isExpanded = expandedCustomerId === customer.CustomerID;
                 const isEditing = editingCustomerId === customer.CustomerID;
                 const isSelected = selectedCustomerIds.has(customer.CustomerID);

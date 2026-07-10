@@ -4,6 +4,7 @@ using Azure.Storage.Queues;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
+using api_functions.Services;
 
 namespace api_functions.Functions;
 
@@ -20,10 +21,12 @@ public class OrderStatusFunctions
     private const string StatusQueueName = "sales-order-status";
 
     private readonly ILogger<OrderStatusFunctions> _logger;
+    private readonly OrderPipelineConfigService _pipelineConfig;
 
-    public OrderStatusFunctions(ILogger<OrderStatusFunctions> logger)
+    public OrderStatusFunctions(ILogger<OrderStatusFunctions> logger, OrderPipelineConfigService pipelineConfig)
     {
         _logger = logger;
+        _pipelineConfig = pipelineConfig;
     }
 
     /// <summary>
@@ -65,15 +68,18 @@ public class OrderStatusFunctions
 
         var queueClient = await GetQueueClientAsync();
         var message = JsonSerializer.Serialize(new { SalesOrderID = salesOrderId, Status = 1 });
-        var visibilityMinutes = 5 + 55 * Random.Shared.NextDouble();
+        var cfg = await _pipelineConfig.GetConfigAsync();
+        var minMin = (double)cfg.ProcessingToApprovedMinMinutes;
+        var maxMin = (double)cfg.ProcessingToApprovedMaxMinutes;
+        var visibilityMinutes = minMin + (maxMin - minMin) * Random.Shared.NextDouble();
         await queueClient.SendMessageAsync(
             message,
             visibilityTimeout: TimeSpan.FromMinutes(visibilityMinutes),
             timeToLive: null);
 
         _logger.LogInformation(
-            "BeginProcessingOrder: enqueued SalesOrderID={SalesOrderId}, visibility={Minutes:F1} min",
-            salesOrderId, visibilityMinutes);
+            "BeginProcessingOrder: enqueued SalesOrderID={SalesOrderId}, visibility={Minutes:F1} min (config: {Min}-{Max} min)",
+            salesOrderId, visibilityMinutes, minMin, maxMin);
 
         var response = req.CreateResponse(System.Net.HttpStatusCode.Accepted);
         response.Headers.Add("Content-Type", "application/json");

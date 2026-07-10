@@ -1,10 +1,11 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Bike, ExternalLink } from "lucide-react";
-import { getAppUrl } from "@/lib/utils";
+import { getAppUrl, getManufacturingUrl } from "@/lib/utils";
 
 const Footer: React.FC = () => {
   const appUrl = getAppUrl() || "/";
+  const manufacturingUrl = getManufacturingUrl();
 
   return (
     <footer className="bg-doodle-text text-doodle-bg mt-16">
@@ -23,14 +24,25 @@ const Footer: React.FC = () => {
             </Link>
           </div>
 
-          {/* Customer Store Link */}
-          <a
-            href={appUrl}
-            className="flex items-center gap-1.5 font-doodle text-sm opacity-70 hover:opacity-100 hover:text-doodle-accent transition-colors"
-          >
-            <ExternalLink className="w-4 h-4" />
-            Customer Store
-          </a>
+          {/* Portal Links */}
+          <div className="flex items-center gap-4">
+            <a
+              href={appUrl}
+              className="flex items-center gap-1.5 font-doodle text-sm opacity-70 hover:opacity-100 hover:text-doodle-accent transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Customer Store
+            </a>
+            {manufacturingUrl && (
+              <a
+                href={manufacturingUrl}
+                className="flex items-center gap-1.5 font-doodle text-sm opacity-70 hover:opacity-100 hover:text-doodle-accent transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Manufacturing Portal
+              </a>
+            )}
+          </div>
 
           {/* Copyright */}
           <div className="flex items-center text-right">

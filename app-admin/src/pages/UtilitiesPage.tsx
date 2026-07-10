@@ -14,6 +14,7 @@ import {
   Package,
   Tag,
   FolderPlus,
+  Clock,
 } from "lucide-react";
 import { buildInspectorUrl, getApiMcpUrl, getDabMcpUrl } from "@/lib/utils";
 
@@ -140,6 +141,20 @@ const UtilitiesPage: React.FC = () => {
               </p>
               <p className="font-doodle text-sm text-doodle-text/60">
                 Manage abandoned cart recovery campaigns
+              </p>
+            </div>
+          </Link>
+          <Link
+            to="/order-pipeline"
+            className="doodle-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow"
+          >
+            <Clock className="w-8 h-8 text-doodle-purple shrink-0" />
+            <div>
+              <p className="font-doodle font-semibold text-doodle-text">
+                Order Processing Pipeline
+              </p>
+              <p className="font-doodle text-sm text-doodle-text/60">
+                Configure timing delays and bulk-promote orders
               </p>
             </div>
           </Link>

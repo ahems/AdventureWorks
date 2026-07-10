@@ -18,6 +18,7 @@ public class ProcessSalesOrderStatus
     private readonly OrderService _orderService;
     private readonly EmailService _emailService;
     private readonly BankService _bankService;
+    private readonly OrderPipelineConfigService _pipelineConfig;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -27,12 +28,14 @@ public class ProcessSalesOrderStatus
         ILogger<ProcessSalesOrderStatus> logger,
         OrderService orderService,
         EmailService emailService,
-        BankService bankService)
+        BankService bankService,
+        OrderPipelineConfigService pipelineConfig)
     {
         _logger = logger;
         _orderService = orderService;
         _emailService = emailService;
         _bankService = bankService;
+        _pipelineConfig = pipelineConfig;
     }
 
     /// <summary>
@@ -133,11 +136,14 @@ public class ProcessSalesOrderStatus
             return;
         }
 
-        // nextStatus == 2 (Approved): re-queue with visibility 1–12 hours, skewed toward lower
-        var delayHours = 1 + 11 * Math.Pow(Random.Shared.NextDouble(), 2);
-        var visibilityApproved = TimeSpan.FromHours(delayHours);
+        // nextStatus == 2 (Approved): re-queue with configurable visibility
+        var cfg = await _pipelineConfig.GetConfigAsync();
+        var minHours = (double)cfg.ApprovedToShippedMinHours;
+        var maxHours = (double)cfg.ApprovedToShippedMaxHours;
+        var delayHours = minHours + (maxHours - minHours) * Random.Shared.NextDouble();
+        var visibilityApproved = TimeSpan.FromHours(Math.Max(delayHours, 0));
         await RequeueAsync(salesOrderId, 2, visibilityApproved);
-        _logger.LogInformation("Order Approved for SalesOrderID={SalesOrderId}, re-queued with visibility {Hours:F1} h", salesOrderId, visibilityApproved.TotalHours);
+        _logger.LogInformation("Order Approved for SalesOrderID={SalesOrderId}, re-queued with visibility {Hours:F1} h (config: {Min}-{Max} h)", salesOrderId, visibilityApproved.TotalHours, minHours, maxHours);
     }
 
     private async Task RecordSaleBankCreditAsync(int salesOrderId)

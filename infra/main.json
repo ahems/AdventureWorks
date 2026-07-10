@@ -5,8 +5,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.41.2.15936",
-      "templateHash": "15185368592706840519"
+      "version": "0.44.1.10279",
+      "templateHash": "2707398349350420892"
     }
   },
   "parameters": {
@@ -189,8 +189,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "17408969339154657562"
+              "version": "0.44.1.10279",
+              "templateHash": "5334288490336284375"
             }
           },
           "parameters": {
@@ -310,8 +310,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "7768151245145988875"
+              "version": "0.44.1.10279",
+              "templateHash": "8420511453232891421"
             }
           },
           "parameters": {
@@ -6298,8 +6298,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "12657893414660186218"
+              "version": "0.44.1.10279",
+              "templateHash": "3424472907859798251"
             }
           },
           "parameters": {
@@ -6556,8 +6556,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "8776212575771775143"
+              "version": "0.44.1.10279",
+              "templateHash": "6025039632111071682"
             }
           },
           "parameters": {
@@ -6828,23 +6828,24 @@
               ]
             },
             {
-              "type": "Microsoft.CognitiveServices/accounts/projects/connections",
+              "type": "Microsoft.CognitiveServices/accounts/connections",
               "apiVersion": "2025-06-01",
-              "name": "[format('{0}/{1}/{2}', parameters('name'), parameters('projectName'), parameters('appInsightConnectionName'))]",
+              "name": "[format('{0}/{1}', parameters('name'), parameters('appInsightConnectionName'))]",
               "properties": {
                 "category": "AppInsights",
                 "authType": "ApiKey",
                 "isSharedToAll": true,
-                "target": "https://eastus2-3.in.applicationinsights.azure.com/",
+                "target": "[parameters('appInsightsId')]",
                 "credentials": {
                   "key": "[parameters('appInsightConnectionString')]"
                 },
                 "metadata": {
+                  "ApiType": "Azure",
                   "ResourceId": "[parameters('appInsightsId')]"
                 }
               },
               "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName'))]"
+                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]"
               ]
             },
             {
@@ -6922,6 +6923,104 @@
               },
               "dependsOn": [
                 "[resourceId('Microsoft.CognitiveServices/accounts', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2020-04-01-preview",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '64702f94-c441-49e6-a78b-ef80e0188fee')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '64702f94-c441-49e6-a78b-ef80e0188fee')]",
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName'))]"
+              ]
+            },
+            {
+              "condition": "[not(parameters('skipLocalDevRoleAssignments'))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2020-04-01-preview",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName')), parameters('aadAdminObjectId'), '64702f94-c441-49e6-a78b-ef80e0188fee')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '64702f94-c441-49e6-a78b-ef80e0188fee')]",
+                "principalId": "[parameters('aadAdminObjectId')]",
+                "principalType": "User"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName'))]"
+              ]
+            },
+            {
+              "condition": "[not(parameters('skipLocalDevRoleAssignments'))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2020-04-01-preview",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName')), parameters('aadAdminObjectId'), 'a001fd3d-188f-4b5d-821b-7da978bf7442')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a001fd3d-188f-4b5d-821b-7da978bf7442')]",
+                "principalId": "[parameters('aadAdminObjectId')]",
+                "principalType": "User"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleDefinitions",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(subscription().id, resourceGroup().id, 'foundry-agents-data-role')]",
+              "properties": {
+                "roleName": "[format('AdventureWorks Foundry Agents {0}', uniqueString(resourceGroup().id))]",
+                "description": "Grants full AIServices data-plane access for Azure AI Foundry agents, memory stores, and related operations.",
+                "type": "CustomRole",
+                "permissions": [
+                  {
+                    "actions": [],
+                    "notActions": [],
+                    "dataActions": [
+                      "Microsoft.CognitiveServices/accounts/AIServices/*"
+                    ],
+                    "notDataActions": []
+                  }
+                ],
+                "assignableScopes": [
+                  "[subscriptionResourceId('Microsoft.Resources/resourceGroups', resourceGroup().name)]"
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2020-04-01-preview",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), 'foundry-agents-data-role')]",
+              "properties": {
+                "roleDefinitionId": "[resourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, resourceGroup().id, 'foundry-agents-data-role'))]",
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName'))]",
+                "[resourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, resourceGroup().id, 'foundry-agents-data-role'))]"
+              ]
+            },
+            {
+              "condition": "[not(parameters('skipLocalDevRoleAssignments'))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2020-04-01-preview",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName')), parameters('aadAdminObjectId'), 'foundry-agents-data-role')]",
+              "properties": {
+                "roleDefinitionId": "[resourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, resourceGroup().id, 'foundry-agents-data-role'))]",
+                "principalId": "[parameters('aadAdminObjectId')]",
+                "principalType": "User"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName'))]",
+                "[resourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, resourceGroup().id, 'foundry-agents-data-role'))]"
               ]
             },
             {
@@ -7040,8 +7139,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "11346046588173327759"
+              "version": "0.44.1.10279",
+              "templateHash": "3688386595421927785"
             }
           },
           "parameters": {
@@ -13203,8 +13302,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "5672484325533895667"
+              "version": "0.44.1.10279",
+              "templateHash": "6128093237231057698"
             }
           },
           "parameters": {
@@ -16475,8 +16574,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "4919932441218691678"
+              "version": "0.44.1.10279",
+              "templateHash": "7382172177419193794"
             }
           },
           "parameters": {
@@ -20281,8 +20380,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "18044543230696177951"
+              "version": "0.44.1.10279",
+              "templateHash": "14403063098945964387"
             }
           },
           "parameters": {
@@ -20478,8 +20577,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "5718778750907918968"
+              "version": "0.44.1.10279",
+              "templateHash": "16770072261811419804"
             }
           },
           "parameters": {
@@ -20650,8 +20749,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "1094494656867515999"
+              "version": "0.44.1.10279",
+              "templateHash": "14696559242386203602"
             }
           },
           "parameters": {
@@ -20776,6 +20875,18 @@
                         "cpu": "[json('2.0')]",
                         "memory": "4Gi"
                       },
+                      "probes": [
+                        {
+                          "type": "Startup",
+                          "tcpSocket": {
+                            "port": 80
+                          },
+                          "initialDelaySeconds": 60,
+                          "periodSeconds": 10,
+                          "failureThreshold": 12,
+                          "timeoutSeconds": 5
+                        }
+                      ],
                       "env": [
                         {
                           "name": "DATABASE_CONNECTION_STRING",
@@ -20924,8 +21035,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "18318735213767907994"
+              "version": "0.44.1.10279",
+              "templateHash": "10555703639217127388"
             }
           },
           "parameters": {
@@ -21170,8 +21281,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "2010338314023700519"
+              "version": "0.44.1.10279",
+              "templateHash": "17808450793186451636"
             }
           },
           "parameters": {
@@ -21477,8 +21588,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "6842657032783590"
+              "version": "0.44.1.10279",
+              "templateHash": "13023914199392352543"
             }
           },
           "parameters": {
@@ -21666,8 +21777,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "7710596199534394800"
+              "version": "0.44.1.10279",
+              "templateHash": "5107891940501397237"
             }
           },
           "parameters": {
@@ -21838,8 +21949,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "13575133819413337195"
+              "version": "0.44.1.10279",
+              "templateHash": "3181625343001009800"
             }
           },
           "parameters": {
@@ -22061,6 +22172,9 @@
           "mcpInspectorUrl": {
             "value": "[reference('containerAppMcpInspector').outputs.mcpInspectorUrl.value]"
           },
+          "appManufacturingUrl": {
+            "value": "[reference('containerAppManufacturing').outputs.appManufacturingUrl.value]"
+          },
           "minReplica": {
             "value": 0
           },
@@ -22080,8 +22194,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "1716639471112709031"
+              "version": "0.44.1.10279",
+              "templateHash": "14502643631614509302"
             }
           },
           "parameters": {
@@ -22148,6 +22262,10 @@
               "defaultValue": ""
             },
             "mcpInspectorUrl": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "appManufacturingUrl": {
               "type": "string",
               "defaultValue": ""
             }
@@ -22226,6 +22344,10 @@
                           "value": "[parameters('mcpInspectorUrl')]"
                         },
                         {
+                          "name": "APP_MANUFACTURING_URL",
+                          "value": "[parameters('appManufacturingUrl')]"
+                        },
+                        {
                           "name": "AZURE_CLIENT_ID",
                           "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').clientId]"
                         }
@@ -22262,8 +22384,221 @@
         "containerAppApi",
         "containerAppApiFunctions",
         "containerAppApiMcp",
+        "containerAppManufacturing",
         "containerAppMcpInspector",
         "staticWebAppFrontend"
+      ]
+    },
+    "containerAppManufacturing": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "Deploy-Container-App-Manufacturing",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "appInsightsName": {
+            "value": "[parameters('appInsightsName')]"
+          },
+          "appManufacturingName": {
+            "value": "[format('av-app-manufactur-{0}', parameters('resourceToken'))]"
+          },
+          "containerRegistryName": {
+            "value": "[parameters('acrName')]"
+          },
+          "identityName": {
+            "value": "[parameters('identityName')]"
+          },
+          "apiUrl": {
+            "value": "[reference('containerAppApi').outputs.apiUrl.value]"
+          },
+          "apiFunctionsUrl": {
+            "value": "[reference('containerAppApiFunctions').outputs.apiFunctionsUrl.value]"
+          },
+          "appInsightsConnectionString": {
+            "value": "[reference('appinsights').outputs.connectionString.value]"
+          },
+          "minReplica": {
+            "value": 0
+          },
+          "maxReplica": {
+            "value": 3
+          },
+          "revisionSuffix": {
+            "value": "[parameters('revisionSuffix')]"
+          },
+          "containerAppEnvId": {
+            "value": "[reference('containerApp').outputs.containerAppEnvId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.44.1.10279",
+              "templateHash": "9820132617786337449"
+            }
+          },
+          "parameters": {
+            "appInsightsName": {
+              "type": "string",
+              "defaultValue": "[format('av-appinsights-{0}', toLower(uniqueString(resourceGroup().id)))]"
+            },
+            "appManufacturingName": {
+              "type": "string",
+              "defaultValue": "[format('av-app-manufactur-{0}', uniqueString(resourceGroup().id))]"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]"
+            },
+            "containerRegistryName": {
+              "type": "string",
+              "defaultValue": "[format('avacr{0}', toLower(uniqueString(resourceGroup().id)))]"
+            },
+            "identityName": {
+              "type": "string",
+              "defaultValue": "[format('av-identity-{0}', uniqueString(resourceGroup().id))]"
+            },
+            "containerAppEnvId": {
+              "type": "string"
+            },
+            "bootstrapImage": {
+              "type": "string",
+              "defaultValue": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
+            },
+            "minReplica": {
+              "type": "int",
+              "defaultValue": 0,
+              "minValue": 0,
+              "maxValue": 25
+            },
+            "maxReplica": {
+              "type": "int",
+              "defaultValue": 3,
+              "minValue": 0,
+              "maxValue": 25
+            },
+            "revisionSuffix": {
+              "type": "securestring"
+            },
+            "apiUrl": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "apiFunctionsUrl": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "appInsightsConnectionString": {
+              "type": "string",
+              "defaultValue": ""
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('appManufacturingName')]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')))]": {}
+                }
+              },
+              "tags": {
+                "azd-service-name": "app-manufacturing"
+              },
+              "properties": {
+                "managedEnvironmentId": "[parameters('containerAppEnvId')]",
+                "configuration": {
+                  "ingress": {
+                    "external": true,
+                    "targetPort": 80,
+                    "allowInsecure": false,
+                    "transport": "http",
+                    "clientCertificateMode": "ignore",
+                    "traffic": [
+                      {
+                        "latestRevision": true,
+                        "weight": 100
+                      }
+                    ]
+                  },
+                  "registries": [
+                    {
+                      "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName'))]",
+                      "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2023-07-01').loginServer]"
+                    }
+                  ]
+                },
+                "template": {
+                  "revisionSuffix": "[parameters('revisionSuffix')]",
+                  "containers": [
+                    {
+                      "name": "[parameters('appManufacturingName')]",
+                      "image": "[parameters('bootstrapImage')]",
+                      "resources": {
+                        "cpu": "[json('.25')]",
+                        "memory": ".5Gi"
+                      },
+                      "env": [
+                        {
+                          "name": "API_URL",
+                          "value": "[parameters('apiUrl')]"
+                        },
+                        {
+                          "name": "API_FUNCTIONS_URL",
+                          "value": "[parameters('apiFunctionsUrl')]"
+                        },
+                        {
+                          "name": "APPINSIGHTS_CONNECTIONSTRING",
+                          "value": "[parameters('appInsightsConnectionString')]"
+                        },
+                        {
+                          "name": "AZURE_CLIENT_ID",
+                          "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').clientId]"
+                        }
+                      ]
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": "[parameters('minReplica')]",
+                    "maxReplicas": "[parameters('maxReplica')]"
+                  }
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "appManufacturingUrl": {
+              "type": "string",
+              "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', parameters('appManufacturingName')), '2024-03-01').configuration.ingress.fqdn)]"
+            },
+            "appManufacturingFqdn": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('appManufacturingName')), '2024-03-01').configuration.ingress.fqdn]"
+            },
+            "appManufacturingName": {
+              "type": "string",
+              "value": "[parameters('appManufacturingName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "appinsights",
+        "containerApp",
+        "containerAppApi",
+        "containerAppApiFunctions"
       ]
     }
   },
@@ -22283,6 +22618,10 @@
     "APP_ADMIN_URL": {
       "type": "string",
       "value": "[reference('containerAppAdmin').outputs.appAdminUrl.value]"
+    },
+    "APP_MANUFACTURING_URL": {
+      "type": "string",
+      "value": "[reference('containerAppManufacturing').outputs.appManufacturingUrl.value]"
     },
     "APPLICATIONINSIGHTS_CONNECTION_STRING": {
       "type": "string",
@@ -22323,6 +22662,10 @@
     "SERVICE_APP_ADMIN_NAME": {
       "type": "string",
       "value": "[reference('containerAppAdmin').outputs.appAdminName.value]"
+    },
+    "SERVICE_APP_MANUFACTURING_NAME": {
+      "type": "string",
+      "value": "[reference('containerAppManufacturing').outputs.appManufacturingName.value]"
     },
     "SERVICE_API_NAME": {
       "type": "string",
@@ -22391,6 +22734,10 @@
     "AI_FOUNDRY_PROJECT_ENDPOINT": {
       "type": "string",
       "value": "[reference('aifoundry').outputs.projectEndpoint.value]"
+    },
+    "chatGptDeploymentName": {
+      "type": "string",
+      "value": "[parameters('chatGptDeploymentName')]"
     },
     "CONTAINER_APP_ENVIRONMENT_NAME": {
       "type": "string",

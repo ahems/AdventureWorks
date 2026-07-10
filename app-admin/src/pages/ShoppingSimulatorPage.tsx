@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import {
   Bot,
   Play,
@@ -8,6 +9,9 @@ import {
   Users,
   UserPlus,
   Trash2,
+  ShoppingCart,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +24,9 @@ import {
   startShoppingSimulator,
   stopShoppingSimulator,
   clearShoppingSimulatorQueue,
+  getShoppingSimulatorResults,
   type ShoppingSimulatorStatus,
+  type SimulationOrderResult,
 } from "@/services/utilityService";
 
 const POLL_INTERVAL_MS = 15_000;
@@ -59,6 +65,7 @@ export default function ShoppingSimulatorPage() {
   const [loading, setLoading] = React.useState(true);
   const [actionPending, setActionPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [results, setResults] = React.useState<SimulationOrderResult[]>([]);
 
   // Editable config — only applied on Start; locked while running
   const [rateOpm, setRateOpm] = React.useState(1);
@@ -75,6 +82,11 @@ export default function ShoppingSimulatorPage() {
       if (!s.isRunning) {
         setRateOpm(s.ordersPerMinute);
         setExistingPct(s.existingCustomerPercentage);
+      }
+      // Fetch recent results when running or queue still processing
+      if (s.isRunning || s.queueDepth > 0 || s.totalQueued > 0) {
+        const r = await getShoppingSimulatorResults(20);
+        setResults(r);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch status");
@@ -436,6 +448,115 @@ export default function ShoppingSimulatorPage() {
                   )}
                 </p>
               )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Recent Orders feed ──────────────────────────────────────── */}
+        {results.length > 0 && (
+          <Card className="doodle-card mb-6">
+            <CardHeader className="pb-3">
+              <CardTitle className="font-doodle text-lg text-doodle-text flex items-center gap-2">
+                <ShoppingCart className="w-5 h-5" />
+                Recent Orders
+                <Badge
+                  variant="outline"
+                  className="font-doodle text-xs ml-auto text-doodle-text/50"
+                >
+                  Last {results.length}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {results.map((r, i) => (
+                  <div
+                    key={`${r.salesOrderId}-${i}`}
+                    className={`doodle-card p-3 flex items-start gap-3 ${!r.success ? "border-doodle-accent" : ""}`}
+                  >
+                    {r.success ? (
+                      <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-doodle-accent mt-0.5 shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      {r.success ? (
+                        <>
+                          <div className="flex items-baseline gap-2 flex-wrap">
+                            <Link
+                              to={`/orders?orderId=${r.salesOrderId}`}
+                              className="font-doodle text-sm font-bold text-doodle-text hover:text-doodle-accent underline decoration-doodle-accent/30 hover:decoration-doodle-accent transition-colors"
+                            >
+                              Order #{r.salesOrderId}
+                            </Link>
+                            {r.customerId ? (
+                              <Link
+                                to={`/customers?customerId=${r.customerId}`}
+                                className="font-doodle text-sm text-doodle-text/70 hover:text-doodle-accent underline decoration-doodle-accent/30 hover:decoration-doodle-accent transition-colors"
+                              >
+                                {r.customerName}
+                              </Link>
+                            ) : (
+                              <span className="font-doodle text-sm text-doodle-text/70">
+                                {r.customerName}
+                              </span>
+                            )}
+                            {r.newCustomerCreated && (
+                              <Badge
+                                variant="outline"
+                                className="font-doodle text-[10px] py-0 px-1"
+                              >
+                                new
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-baseline gap-3 mt-0.5">
+                            <span className="font-doodle text-xs text-doodle-accent font-semibold">
+                              ${r.totalDue.toFixed(2)}
+                            </span>
+                            {r.personaType && (
+                              <span className="font-doodle text-xs text-doodle-text/50">
+                                {r.personaType}
+                              </span>
+                            )}
+                            <span className="font-doodle text-xs text-doodle-text/40 ml-auto">
+                              {new Date(r.completedAt).toLocaleTimeString(
+                                undefined,
+                                {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  second: "2-digit",
+                                },
+                              )}
+                            </span>
+                          </div>
+                          {r.aiReasoning && (
+                            <p className="font-doodle text-xs text-doodle-text/50 mt-1 line-clamp-2">
+                              {r.aiReasoning}
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <div>
+                          <span className="font-doodle text-sm font-bold text-doodle-accent">
+                            Failed
+                          </span>
+                          {r.personaType && (
+                            <span className="font-doodle text-xs text-doodle-text/50 ml-2">
+                              {r.personaType}
+                            </span>
+                          )}
+                          {r.errorMessage && (
+                            <p className="font-doodle text-xs text-doodle-text/60 mt-0.5 line-clamp-2">
+                              {r.errorMessage}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         )}

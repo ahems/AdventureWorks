@@ -8,13 +8,13 @@ import { getFunctionsApiUrl } from "@/lib/utils";
 
 // Full customer query via Person.Person (PersonType='IN') with phone and sales data.
 // Address is fetched separately via Azure Functions (DAB cannot expose Person.Address due to geography column).
-const GET_CUSTOMERS_ADMIN = gql`
+const buildCustomersQuery = (orderByField: string, orderByDir: string) => gql`
   query GetCustomersAdmin($after: String) {
     people(
       first: 100
       after: $after
       filter: { PersonType: { eq: "IN" } }
-      orderBy: { LastName: ASC }
+      orderBy: { ${orderByField}: ${orderByDir} }
     ) {
       items {
         BusinessEntityID
@@ -41,6 +41,39 @@ const GET_CUSTOMERS_ADMIN = gql`
       }
       hasNextPage
       endCursor
+    }
+  }
+`;
+
+// Single person lookup by BusinessEntityID (for direct-link navigation)
+const GET_PERSON_BY_ID = gql`
+  query GetPersonById($id: Int!) {
+    people(
+      filter: { BusinessEntityID: { eq: $id }, PersonType: { eq: "IN" } }
+    ) {
+      items {
+        BusinessEntityID
+        FirstName
+        LastName
+        emailAddresses {
+          items {
+            EmailAddress
+          }
+        }
+        phoneNumbers {
+          items {
+            PhoneNumber
+          }
+        }
+        salesCustomer {
+          CustomerID
+          salesOrderHeaders {
+            items {
+              TotalDue
+            }
+          }
+        }
+      }
     }
   }
 `;
@@ -136,10 +169,25 @@ const mapPersonToCustomer = (
   };
 };
 
-export const useAdminCustomers = (after?: string | null) =>
+type SortOption = "spend" | "newest" | "oldest" | "name-az" | "name-za";
+
+const SORT_TO_ORDER_BY: Record<SortOption, [string, string]> = {
+  newest: ["BusinessEntityID", "DESC"],
+  oldest: ["BusinessEntityID", "ASC"],
+  "name-az": ["LastName", "ASC"],
+  "name-za": ["LastName", "DESC"],
+  spend: ["BusinessEntityID", "DESC"],
+};
+
+export const useAdminCustomers = (
+  after?: string | null,
+  sortBy: SortOption = "spend",
+) =>
   useQuery<PagedCustomers>({
-    queryKey: ["admin", "customers", after ?? null],
+    queryKey: ["admin", "customers", after ?? null, sortBy],
     queryFn: async () => {
+      const [field, dir] = SORT_TO_ORDER_BY[sortBy] ?? SORT_TO_ORDER_BY.spend;
+      const query = buildCustomersQuery(field, dir);
       // Step 1: fetch people from DAB (no address data - Person.Address has unsupported geography column)
       const data = await graphqlClient.request<{
         people?: {
@@ -147,7 +195,7 @@ export const useAdminCustomers = (after?: string | null) =>
           hasNextPage?: boolean;
           endCursor?: string;
         };
-      }>(GET_CUSTOMERS_ADMIN, { after: after ?? null });
+      }>(query, { after: after ?? null });
 
       const people = data.people?.items ?? [];
 
@@ -177,6 +225,37 @@ export const useAdminCustomers = (after?: string | null) =>
         hasNextPage: data.people?.hasNextPage ?? false,
         endCursor: data.people?.endCursor ?? "",
       };
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+/** Fetch a single customer by BusinessEntityID (for direct-link navigation). */
+export const useCustomerById = (businessEntityId: number | null) =>
+  useQuery<Customer | null>({
+    queryKey: ["admin", "customer", businessEntityId],
+    enabled: businessEntityId !== null,
+    queryFn: async () => {
+      const data = await graphqlClient.request<{
+        people?: { items: RawPerson[] };
+      }>(GET_PERSON_BY_ID, { id: businessEntityId });
+      const person = data.people?.items?.[0];
+      if (!person) return null;
+
+      // Fetch address for this single person
+      let addr: PersonAddressResult | undefined;
+      try {
+        const res = await fetch(
+          `${getFunctionsApiUrl()}/api/person-addresses?businessEntityIds=${person.BusinessEntityID}`,
+        );
+        if (res.ok) {
+          const addresses: PersonAddressResult[] = await res.json();
+          addr = addresses[0];
+        }
+      } catch {
+        // best-effort
+      }
+
+      return mapPersonToCustomer(person, addr);
     },
     staleTime: 5 * 60 * 1000,
   });

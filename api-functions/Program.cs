@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.ApplicationInsights;
 using Azure.Identity;
 using Azure.Core.Serialization;
+using Azure.Storage.Queues;
 using AddressFunctions.Services;
 using api_functions.Services;
 using Microsoft.OpenApi.Models;
@@ -381,6 +382,13 @@ builder.Services.AddScoped<CustomerGenerationAgentService>(sp =>
         foundryClient);
 });
 
+// Register OrderPipelineConfigService for order processing timing configuration
+builder.Services.AddScoped<OrderPipelineConfigService>(sp =>
+{
+    var logger = sp.GetRequiredService<ILogger<OrderPipelineConfigService>>();
+    return new OrderPipelineConfigService(logger);
+});
+
 // Register BankService for the virtual bank simulator
 builder.Services.AddScoped<BankService>(sp =>
 {
@@ -440,4 +448,17 @@ builder.Services.AddScoped<EmailService>(sp =>
 
 var app = builder.Build();
 
-app.Run();
+// Ensure the simulation-order-queue exists before the QueueTrigger starts polling.
+// After a fresh deployment the queue may not exist yet, causing 404 errors.
+var config = app.Services.GetRequiredService<IConfiguration>();
+var storageAccountName = config["AzureWebJobsStorage:accountName"];
+if (!string.IsNullOrEmpty(storageAccountName))
+{
+    var queueUri = config["AzureWebJobsStorage:queueServiceUri"]
+        ?? $"https://{storageAccountName}.queue.core.windows.net";
+    var queueServiceClient = new Azure.Storage.Queues.QueueServiceClient(
+        new Uri(queueUri), new DefaultAzureCredential());
+    await queueServiceClient.GetQueueClient("simulation-order-queue").CreateIfNotExistsAsync();
+}
+
+await app.RunAsync();

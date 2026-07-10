@@ -133,7 +133,7 @@ public class AdventureWorksMcpTools
     }
 
     [McpServerTool]
-    [Description("Search for products by name, category, or attributes. Returns matching products with details. Supports multiple languages: ar, en (default), es, fr, he, th, zh-cht, en-gb, en-ca, en-au, ja, ko, de.")]
+    [Description("Search for products by name, category, or attributes. Returns matching products with details. Supports multiple languages: ar, de, en (default), en-au, en-ca, en-gb, en-ie, en-nz, es, fr, he, id, it, ja, ko, nl, pt, ru, th, tr, vi, zh, zh-cht.")]
     public async Task<string> SearchProducts(string searchTerm, string? cultureId = null, int? categoryId = null)
     {
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_SearchProducts");

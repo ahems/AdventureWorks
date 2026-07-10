@@ -19,6 +19,7 @@ param apiMcpUrl string = ''
 param appInsightsConnectionString string = ''
 param appUrl string = ''
 param mcpInspectorUrl string = ''
+param appManufacturingUrl string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -101,6 +102,10 @@ resource appAdmin 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'MCP_INSPECTOR_URL'
               value: mcpInspectorUrl
+            }
+            {
+              name: 'APP_MANUFACTURING_URL'
+              value: appManufacturingUrl
             }
             {
               name: 'AZURE_CLIENT_ID'

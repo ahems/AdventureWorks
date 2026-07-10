@@ -124,12 +124,31 @@ public class OrderGenerationService
                 new { BizEntityId = bizEntityId, AddressId = addressId },
                 transaction: tx);
 
-            // 6. Password (minimal hash so the customer could log in later)
-            await connection.ExecuteAsync(@"
-                INSERT INTO Person.Password (BusinessEntityID, PasswordHash, PasswordSalt, rowguid, ModifiedDate)
-                VALUES (@BizEntityId, 'L/Rlwxzp4w7RWmEgXX+/A7cXaePEPcp+KwQhl2fJL7w=', 'fs1ZGmY=', NEWID(), GETDATE())",
-                new { BizEntityId = bizEntityId },
-                transaction: tx);
+            // 6. Password (hash with PBKDF2 if provided, otherwise static placeholder)
+            if (!string.IsNullOrEmpty(req.Password))
+            {
+                var saltBytes = new byte[6];
+                System.Security.Cryptography.RandomNumberGenerator.Fill(saltBytes);
+                var salt = Convert.ToBase64String(saltBytes);
+
+                using var pbkdf2 = new System.Security.Cryptography.Rfc2898DeriveBytes(
+                    req.Password, saltBytes, 100000, System.Security.Cryptography.HashAlgorithmName.SHA256);
+                var hash = Convert.ToBase64String(pbkdf2.GetBytes(96));
+
+                await connection.ExecuteAsync(@"
+                    INSERT INTO Person.Password (BusinessEntityID, PasswordHash, PasswordSalt, rowguid, ModifiedDate)
+                    VALUES (@BizEntityId, @Hash, @Salt, NEWID(), GETDATE())",
+                    new { BizEntityId = bizEntityId, Hash = hash, Salt = salt },
+                    transaction: tx);
+            }
+            else
+            {
+                await connection.ExecuteAsync(@"
+                    INSERT INTO Person.Password (BusinessEntityID, PasswordHash, PasswordSalt, rowguid, ModifiedDate)
+                    VALUES (@BizEntityId, 'L/Rlwxzp4w7RWmEgXX+/A7cXaePEPcp+KwQhl2fJL7w=', 'fs1ZGmY=', NEWID(), GETDATE())",
+                    new { BizEntityId = bizEntityId },
+                    transaction: tx);
+            }
 
             // 7. Customer
             // AccountNumber is a computed column on Sales.Customer (derived from CustomerID
@@ -181,6 +200,44 @@ public class OrderGenerationService
             new { BizEntityId = bizEntityId, Phone = phoneNumber });
 
         _logger.LogInformation("Added phone for BusinessEntityID={BizEntityId}", bizEntityId);
+    }
+
+    /// <summary>
+    /// Add a credit card for a customer, looked up by their SalesCustomerID.
+    /// Creates the card in Sales.CreditCard and links it via Sales.PersonCreditCard.
+    /// Returns the CreditCardID, or 0 if the customer was not found.
+    /// </summary>
+    public async Task<int> AddCreditCardAsync(int salesCustomerId, string cardType, string cardNumber, byte expMonth, short expYear)
+    {
+        if (string.IsNullOrWhiteSpace(cardNumber)) return 0;
+
+        using var connection = await GetConnectionAsync();
+
+        // Resolve BusinessEntityID from Sales.Customer
+        var bizEntityId = await connection.ExecuteScalarAsync<int?>(
+            "SELECT PersonID FROM Sales.Customer WHERE CustomerID = @CustomerId",
+            new { CustomerId = salesCustomerId });
+
+        if (bizEntityId == null || bizEntityId == 0) return 0;
+
+        // Insert the credit card
+        var creditCardId = await connection.ExecuteScalarAsync<int>(@"
+            INSERT INTO Sales.CreditCard (CardType, CardNumber, ExpMonth, ExpYear, ModifiedDate)
+            OUTPUT INSERTED.CreditCardID
+            VALUES (@CardType, @CardNumber, @ExpMonth, @ExpYear, GETDATE())",
+            new { CardType = cardType, CardNumber = cardNumber, ExpMonth = expMonth, ExpYear = expYear });
+
+        // Link the card to the person
+        await connection.ExecuteAsync(@"
+            IF NOT EXISTS (SELECT 1 FROM Sales.PersonCreditCard WHERE BusinessEntityID = @BizEntityId AND CreditCardID = @CardId)
+            INSERT INTO Sales.PersonCreditCard (BusinessEntityID, CreditCardID, ModifiedDate)
+            VALUES (@BizEntityId, @CardId, GETDATE())",
+            new { BizEntityId = bizEntityId, CardId = creditCardId });
+
+        _logger.LogInformation("Added credit card {CardType} for BusinessEntityID={BizEntityId}, CreditCardID={CardId}",
+            cardType, bizEntityId, creditCardId);
+
+        return creditCardId;
     }
 
     /// <summary>
@@ -607,6 +664,33 @@ public class OrderGenerationService
     }
 
     /// <summary>
+    /// Returns a random selection of in-stock products suitable for order simulation.
+    /// Products are filtered to those with stock in Finished Goods locations and a non-zero ListPrice.
+    /// </summary>
+    public async Task<List<InStockProduct>> GetRandomInStockProductsAsync(int count = 5)
+    {
+        using var connection = await GetConnectionAsync();
+        var products = await connection.QueryAsync<InStockProduct>(@"
+            SELECT TOP (@Count)
+                p.ProductID,
+                p.Name,
+                p.ListPrice,
+                ISNULL(SUM(pi.Quantity), 0) AS Stock
+            FROM Production.Product p
+            INNER JOIN Production.ProductInventory pi ON p.ProductID = pi.ProductID
+            INNER JOIN Production.Location l ON pi.LocationID = l.LocationID
+            WHERE l.Name LIKE 'Finished Goods%'
+              AND p.ListPrice > 0
+              AND p.FinishedGoodsFlag = 1
+              AND p.SellEndDate IS NULL
+            GROUP BY p.ProductID, p.Name, p.ListPrice
+            HAVING SUM(pi.Quantity) > 0
+            ORDER BY NEWID()",
+            new { Count = count });
+        return products.ToList();
+    }
+
+    /// <summary>
     /// Returns top-spending customers who have placed at least one order, sorted by total spend descending.
     /// </summary>
     public async Task<List<TopSpenderInfo>> GetTopSpendersAsync(int limit = 100)
@@ -721,6 +805,11 @@ public class NewCustomerRequest
     public string? StateCode { get; set; }
     public int StateProvinceID { get; set; } = 0;
     public string PostalCode { get; set; } = "98101";
+    /// <summary>
+    /// Optional plaintext password. If provided, will be hashed with PBKDF2 before storing.
+    /// If null, a static placeholder hash is used.
+    /// </summary>
+    public string? Password { get; set; }
 }
 
 public class CreateOrderRequest
@@ -784,4 +873,12 @@ public class StoreOrderLineItem
     public short Quantity { get; set; } = 1;
     public decimal UnitPrice { get; set; } = 0; // 0 = use list price
     public decimal DiscountPct { get; set; } = 0; // 0 = no discount
+}
+
+public class InStockProduct
+{
+    public int ProductID { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public decimal ListPrice { get; set; }
+    public int Stock { get; set; }
 }

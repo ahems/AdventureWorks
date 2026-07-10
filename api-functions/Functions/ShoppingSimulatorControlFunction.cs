@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Web;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.ApplicationInsights;
@@ -155,6 +156,38 @@ public class ShoppingSimulatorControlFunction
             queueDepth,
             message = $"Shopping simulator stopped. {queueDepth} pending order{(queueDepth == 1 ? "" : "s")} will still be placed.",
         });
+        return resp;
+    }
+
+    // ── GET results ─────────────────────────────────────────────────────────
+
+    /// <summary>Returns recent simulation order results (most recent first).</summary>
+    [Function("ShoppingSimulator_Results")]
+    public async Task<HttpResponseData> GetResults(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "shopping-simulator/results")]
+        HttpRequestData req)
+    {
+        var limitStr = req.Url.Query?.Contains("limit=") == true
+            ? System.Web.HttpUtility.ParseQueryString(req.Url.Query)["limit"]
+            : null;
+        var limit = int.TryParse(limitStr, out var l) ? Math.Clamp(l, 1, 100) : 50;
+
+        var results = await _simulator.GetRecentResultsAsync(limit);
+
+        var resp = req.CreateResponse(HttpStatusCode.OK);
+        await resp.WriteAsJsonAsync(results.Select(r => new
+        {
+            r.Success,
+            r.SalesOrderId,
+            r.CustomerName,
+            r.NewCustomerCreated,
+            r.TotalDue,
+            r.ErrorMessage,
+            r.PersonaType,
+            r.AiReasoning,
+            r.ItemCount,
+            completedAt = r.CompletedAt.ToString("o"),
+        }));
         return resp;
     }
 

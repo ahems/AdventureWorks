@@ -815,8 +815,14 @@ const OrdersPage: React.FC = () => {
                             </span>
                           </div>
                           <p className="font-doodle text-sm text-doodle-text/70 mt-1">
-                            Customer #{order.CustomerID} •{" "}
-                            {new Date(order.OrderDate).toLocaleDateString()}
+                            <Link
+                              to={`/customers?customerId=${order.CustomerID}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="hover:text-doodle-accent underline decoration-doodle-accent/30 hover:decoration-doodle-accent transition-colors"
+                            >
+                              Customer #{order.CustomerID}
+                            </Link>{" "}
+                            • {new Date(order.OrderDate).toLocaleDateString()}
                           </p>
                           <p className="font-doodle text-xs text-doodle-text/50 mt-1">
                             {order.OrderItems.length} item(s)
@@ -1000,9 +1006,13 @@ const OrdersPage: React.FC = () => {
                               className="flex justify-between items-center p-2 bg-white border-2 border-dashed border-doodle-text/20"
                             >
                               <div>
-                                <span className="font-doodle text-doodle-text">
+                                <Link
+                                  to={`/product/${item.ProductID}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="font-doodle text-doodle-text hover:text-doodle-accent underline decoration-doodle-accent/30 hover:decoration-doodle-accent transition-colors"
+                                >
                                   {item.ProductName}
-                                </span>
+                                </Link>
                                 <span className="font-doodle text-xs text-doodle-text/50 ml-2">
                                   × {item.OrderQty}
                                 </span>

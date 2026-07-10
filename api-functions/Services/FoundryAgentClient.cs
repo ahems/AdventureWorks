@@ -303,7 +303,84 @@ public class FoundryAgentClient
             currentInput = approvals;
         }
 
-        return ParseResponse(lastResponseBody, agentId);
+        var parsedResponse = ParseResponse(lastResponseBody, agentId);
+
+        // ── Empty-text recovery ────────────────────────────────────────────────
+        // When tool_choice is "required", the model may consume all output tokens on
+        // tool-call arguments and never produce a final "message" output item.
+        // The response is valid (status=completed) but ResponseText is empty.
+        // Fix: send one more request via previous_response_id with tool_choice="none"
+        // to force the model to synthesise its text answer from the stored tool results.
+        if (string.IsNullOrWhiteSpace(parsedResponse.ResponseText)
+            && parsedResponse.ToolsUsed.Count > 0
+            && !string.IsNullOrEmpty(parsedResponse.ResponseId))
+        {
+            _logger.LogWarning(
+                "Foundry agent '{AgentId}' returned empty text after tool calls ({Tools}). " +
+                "Sending continuation request with tool_choice=none to elicit the final answer.",
+                agentId, string.Join(",", parsedResponse.ToolsUsed));
+
+            var continuationToken = await _credential.GetTokenAsync(
+                new TokenRequestContext([FoundryTokenScope]), cancellationToken);
+
+            var continuationBody = new FoundryResponsesRequest
+            {
+                Model = def.Model,
+                Instructions = resolvedInstructions,
+                Input = "Now produce your final answer based on the tool results above.",
+                Stream = false,
+                Store = true,
+                PreviousResponseId = parsedResponse.ResponseId,
+                Tools = def.Tools.Count > 0 ? def.Tools : null,
+                ToolChoice = "none"
+            };
+
+            var continuationJson = JsonSerializer.Serialize(continuationBody, _serializeOptions);
+            using var continuationRequest = new HttpRequestMessage(HttpMethod.Post, _responsesUrl)
+            {
+                Content = new StringContent(continuationJson, Encoding.UTF8, "application/json")
+            };
+            continuationRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", continuationToken.Token);
+            if (!string.IsNullOrEmpty(userId))
+                continuationRequest.Headers.TryAddWithoutValidation("x-memory-user-id", userId);
+
+            var continuationHttpResponse = await httpClient.SendAsync(continuationRequest, cancellationToken);
+            var continuationResponseBody = await continuationHttpResponse.Content.ReadAsStringAsync(cancellationToken);
+
+            if (continuationHttpResponse.IsSuccessStatusCode)
+            {
+                var continuationParsed = ParseResponse(continuationResponseBody, agentId);
+                if (!string.IsNullOrWhiteSpace(continuationParsed.ResponseText))
+                {
+                    _logger.LogInformation(
+                        "Continuation request produced text output ({Length} chars). ResponseId={Id}",
+                        continuationParsed.ResponseText.Length, continuationParsed.ResponseId ?? "?");
+
+                    // Merge: keep the original tools-used list, use continuation text & response ID
+                    continuationParsed.ToolsUsed = parsedResponse.ToolsUsed
+                        .Concat(continuationParsed.ToolsUsed)
+                        .Distinct()
+                        .ToList();
+                    continuationParsed.InputTokens += parsedResponse.InputTokens;
+                    continuationParsed.OutputTokens += parsedResponse.OutputTokens;
+                    parsedResponse = continuationParsed;
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "Continuation request also returned empty text for agent '{AgentId}'.", agentId);
+                }
+            }
+            else
+            {
+                _logger.LogError(
+                    "Continuation request failed for agent '{AgentId}': {Status} {Body}",
+                    agentId, (int)continuationHttpResponse.StatusCode,
+                    continuationResponseBody.Length > 300 ? continuationResponseBody[..300] : continuationResponseBody);
+            }
+        }
+
+        return parsedResponse;
     }
 
     // ── Response parsing ───────────────────────────────────────────────────────

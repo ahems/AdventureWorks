@@ -51,6 +51,9 @@ builder.Services.AddScoped<AIService>(sp =>
 	return new AIService(openAiEndpoint, logger, telemetryClient);
 });
 
+// Register CustomerGeneratorService for random fake customer data (Bogus)
+builder.Services.AddSingleton<CustomerGeneratorService>();
+
 // Register HttpClient factories for api-functions proxy services
 builder.Services.AddHttpClient<ManufacturingService>(client =>
 {
@@ -77,7 +80,8 @@ builder.Services
 	   .WithTools<ManufacturingMcpTools>()
 	   .WithTools<SupplyChainMcpTools>()
 	   .WithTools<BankMcpTools>()
-	   .WithTools<SimulatorMcpTools>();
+	   .WithTools<SimulatorMcpTools>()
+	   .WithTools<CustomerGeneratorMcpTools>();
 
 builder.AddServiceDefaults();
 

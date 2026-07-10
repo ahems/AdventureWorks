@@ -12,6 +12,7 @@ type AppWindow = Window & {
     API_MCP_URL?: string;
     APP_URL?: string;
     MCP_INSPECTOR_URL?: string;
+    APP_MANUFACTURING_URL?: string;
   };
 };
 
@@ -85,6 +86,15 @@ export function getAppUrl(): string {
   return (
     (window as AppWindow).APP_CONFIG?.APP_URL ||
     import.meta.env.VITE_APP_URL ||
+    ""
+  ).replace(/\/$/, "");
+}
+
+/** Returns the manufacturing portal base URL (no trailing slash). Empty string if not configured. */
+export function getManufacturingUrl(): string {
+  return (
+    (window as AppWindow).APP_CONFIG?.APP_MANUFACTURING_URL ||
+    import.meta.env.VITE_APP_MANUFACTURING_URL ||
     ""
   ).replace(/\/$/, "");
 }

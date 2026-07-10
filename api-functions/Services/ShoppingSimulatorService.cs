@@ -62,6 +62,7 @@ public class ShoppingSimulatorService
     {
         try
         {
+            await _tableClient.CreateIfNotExistsAsync();
             var response = await _tableClient.GetEntityAsync<ShoppingSimulatorState>(PARTITION_KEY, ROW_KEY);
             return response.Value;
         }
@@ -145,6 +146,69 @@ public class ShoppingSimulatorService
         state.StartedAt = null;
         await SaveStateAsync(state);
         await ClearQueueAsync();
+    }
+
+    // ── Results log ─────────────────────────────────────────────────────────
+
+    /// <summary>Persists a completed order result so the frontend can display it.</summary>
+    public async Task SaveResultAsync(SimulationOrderResultEntity entity)
+    {
+        try
+        {
+            await _tableClient.CreateIfNotExistsAsync();
+            await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Replace);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[ShoppingSimulator] Failed to persist order result — non-critical");
+        }
+    }
+
+    /// <summary>Returns the most recent simulation order results (up to <paramref name="limit"/>).</summary>
+    public async Task<List<SimulationOrderResultEntity>> GetRecentResultsAsync(int limit = 50)
+    {
+        var results = new List<SimulationOrderResultEntity>();
+        try
+        {
+            await _tableClient.CreateIfNotExistsAsync();
+            var query = _tableClient.QueryAsync<SimulationOrderResultEntity>(
+                filter: $"PartitionKey eq 'results'",
+                maxPerPage: limit);
+
+            await foreach (var page in query.AsPages(pageSizeHint: limit))
+            {
+                results.AddRange(page.Values);
+                if (results.Count >= limit) break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[ShoppingSimulator] Failed to query recent results");
+        }
+        return results.Take(limit).ToList();
+    }
+
+    /// <summary>Deletes all result entities from the table (used on reset).</summary>
+    public async Task ClearResultsAsync()
+    {
+        try
+        {
+            await _tableClient.CreateIfNotExistsAsync();
+            var entities = new List<SimulationOrderResultEntity>();
+            await foreach (var entity in _tableClient.QueryAsync<SimulationOrderResultEntity>(
+                filter: $"PartitionKey eq 'results'"))
+            {
+                entities.Add(entity);
+            }
+            foreach (var entity in entities)
+            {
+                await _tableClient.DeleteEntityAsync(entity.PartitionKey, entity.RowKey);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[ShoppingSimulator] Failed to clear results — non-critical");
+        }
     }
 
     // ── Top spender cache ────────────────────────────────────────────────────

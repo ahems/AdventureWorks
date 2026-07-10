@@ -30,15 +30,18 @@ public class OrderPlacedSqlTrigger
     private readonly ILogger<OrderPlacedSqlTrigger> _logger;
     private readonly OrderService _orderService;
     private readonly ManufacturingAgentService _manufacturingAgentService;
+    private readonly OrderPipelineConfigService _pipelineConfig;
 
     public OrderPlacedSqlTrigger(
         ILogger<OrderPlacedSqlTrigger> logger,
         OrderService orderService,
-        ManufacturingAgentService manufacturingAgentService)
+        ManufacturingAgentService manufacturingAgentService,
+        OrderPipelineConfigService pipelineConfig)
     {
         _logger = logger;
         _orderService = orderService;
         _manufacturingAgentService = manufacturingAgentService;
+        _pipelineConfig = pipelineConfig;
     }
 
     [Function(nameof(OrderPlacedSqlTrigger))]
@@ -109,20 +112,22 @@ public class OrderPlacedSqlTrigger
             salesOrderId, emailInfo.HasValue);
 
         // --- Order status pipeline queue ----------------------------------------
-        // Random 5–60 minute initial visibility matches the behaviour of the original
-        // BeginProcessingOrder HTTP trigger that this replaces.
+        // Read configurable timing from the pipeline config service.
         var statusQueueClient = queueServiceClient.GetQueueClient(StatusQueueName);
         await statusQueueClient.CreateIfNotExistsAsync();
 
         var statusMessage = JsonSerializer.Serialize(new { SalesOrderID = salesOrderId, Status = 1 });
-        var visibilityMinutes = 5 + (55 * Random.Shared.NextDouble());
+        var cfg = await _pipelineConfig.GetConfigAsync();
+        var minMin = (double)cfg.ProcessingToApprovedMinMinutes;
+        var maxMin = (double)cfg.ProcessingToApprovedMaxMinutes;
+        var visibilityMinutes = minMin + (maxMin - minMin) * Random.Shared.NextDouble();
         await statusQueueClient.SendMessageAsync(
             statusMessage,
             visibilityTimeout: TimeSpan.FromMinutes(visibilityMinutes),
             timeToLive: null);
         _logger.LogInformation(
-            "Enqueued order status pipeline for SalesOrderID={SalesOrderId}, visibility={Minutes:F1} min",
-            salesOrderId, visibilityMinutes);
+            "Enqueued order status pipeline for SalesOrderID={SalesOrderId}, visibility={Minutes:F1} min (config: {Min}-{Max} min)",
+            salesOrderId, visibilityMinutes, minMin, maxMin);
     }
 }
 
