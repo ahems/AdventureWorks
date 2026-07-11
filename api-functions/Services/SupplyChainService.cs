@@ -111,6 +111,7 @@ public class SupplyChainService
     private readonly ILogger<SupplyChainService> _logger;
     private readonly TelemetryClient _telemetry;
     private readonly BankService? _bank;
+    private readonly WarehouseService? _warehouse;
 
     // Vendor cache — loaded lazily from Purchasing.Vendor on first access
     private List<VendorInfo>? _vendorCache;
@@ -130,13 +131,15 @@ public class SupplyChainService
         double simTimeScale,
         ILogger<SupplyChainService> logger,
         TelemetryClient telemetry,
-        BankService? bank = null)
+        BankService? bank = null,
+        WarehouseService? warehouse = null)
     {
         _connectionString = connectionString;
         _simTimeScale     = simTimeScale;
         _logger           = logger;
         _telemetry        = telemetry;
         _bank             = bank;
+        _warehouse        = warehouse;
 
         var svc = new TableServiceClient(new Uri(tableServiceUri), new DefaultAzureCredential());
         _tableClient = svc.GetTableClient(TABLE_NAME);
@@ -1120,8 +1123,8 @@ public class SupplyChainService
         INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
         INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
         INNER JOIN Production.Product p ON pod.ProductID = p.ProductID
-        INNER JOIN Production.BillOfMaterials bom ON bom.ComponentID = p.ProductID AND bom.EndDate IS NULL
-        WHERE v.ActiveFlag = 1 AND p.MakeFlag = 0";
+        WHERE v.ActiveFlag = 1 AND p.MakeFlag = 0
+          AND EXISTS (SELECT 1 FROM Production.BillOfMaterials bom WHERE bom.ComponentID = p.ProductID AND bom.EndDate IS NULL)";
 
     public async Task<List<PurchaseOrder>> GetOrdersAsync(bool includeCompleted = false)
     {
@@ -1261,8 +1264,31 @@ public class SupplyChainService
 
     private async Task AddToSqlInventoryAsync(int productId, int qty, string vendorId, double unitCost, int purchaseOrderId = 0)
     {
+        // Route through warehouse simulation — goods must be put away by a warehouse worker
+        // before they appear in inventory at LocationID 7 (Finished Goods Storage).
+        if (_warehouse != null)
+        {
+            try
+            {
+                await _warehouse.EnqueueReceiveSupplierOperationAsync(purchaseOrderId, productId, qty);
+                // Still record TransactionHistory immediately for audit trail
+                await RecordPurchaseTransactionHistoryAsync(productId, qty, purchaseOrderId, unitCost, vendorId);
+                _logger.LogInformation("Warehouse receive op enqueued for ProductID={ProductId} qty={Qty} PO={POId}", productId, qty, purchaseOrderId);
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Warehouse] Failed to enqueue receive op for PO {PurchaseOrderId} — falling back to direct inventory insert.", purchaseOrderId);
+            }
+        }
+
+        // Fallback: direct SQL inventory insert (warehouse service unavailable)
+        await DirectInsertToSqlInventoryAsync(productId, qty, vendorId, unitCost, purchaseOrderId);
+    }
+
+    private async Task DirectInsertToSqlInventoryAsync(int productId, int qty, string vendorId, double unitCost, int purchaseOrderId)
+    {
         // Adds stock to the first bin (LocationID 7 = Finished Goods Storage)
-        // using the same Dapper pattern as the rest of the project.
         await using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
 
@@ -1280,7 +1306,6 @@ public class SupplyChainService
         }
         else
         {
-            // Insert new bin row — Shelf and Bin are nullable/have defaults
             await conn.ExecuteAsync(
                 "INSERT INTO Production.ProductInventory (ProductID, LocationID, Shelf, Bin, Quantity, rowguid, ModifiedDate) " +
                 "VALUES (@ProductId, 7, N'A', 1, @Qty, NEWID(), GETDATE())",
@@ -1288,6 +1313,13 @@ public class SupplyChainService
         }
 
         _logger.LogInformation("Added {Qty} units of ProductID={ProductId} to SQL inventory (LocationID=7)", qty, productId);
+        await RecordPurchaseTransactionHistoryAsync(productId, qty, purchaseOrderId, unitCost, vendorId);
+    }
+
+    private async Task RecordPurchaseTransactionHistoryAsync(int productId, int qty, int purchaseOrderId, double unitCost, string vendorId)
+    {
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
 
         // Record purchase receipt in TransactionHistory ('P' = Purchase Order, positive qty = received)
         await conn.ExecuteAsync(@"

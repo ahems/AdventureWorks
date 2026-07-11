@@ -124,6 +124,12 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
             description: 'Autonomous order simulation queue: each message carries a CustomerId (0 = new customer) and optional PersonaHint. The AI agent generates a realistic order for the specified customer or persona.'
           }
         }
+        {
+          name: 'warehouse-ops-queue'
+          metadata: {
+            description: 'Event-driven queue driving the warehouse simulation: each message represents one store/retrieve/receive operation phase for a warehouse worker at Finished Goods Storage (LocationID 7)'
+          }
+        }
       ]
     }
     
@@ -146,6 +152,9 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
         }
         {
           name: 'awBankTransactions'
+        }
+        {
+          name: 'awWarehouse'
         }
       ]
     }

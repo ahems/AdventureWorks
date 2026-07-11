@@ -267,9 +267,10 @@ builder.Services.AddScoped<WorkOrderSimulationService>(sp =>
         ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
     var simulationTimeScale = double.TryParse(configuration["SIMULATION_TIME_SCALE_FACTOR"], out var scale) ? scale : 60.0;
     var defaultScrapRate    = double.TryParse(configuration["SIMULATION_SCRAP_RATE"],        out var rate)  ? rate  : 0.05;
-    var logger = sp.GetRequiredService<ILogger<WorkOrderSimulationService>>();
-    var bank   = sp.GetRequiredService<BankService>();
-    return new WorkOrderSimulationService(connectionString, tableServiceUri, simulationTimeScale, defaultScrapRate, logger, bank);
+    var logger    = sp.GetRequiredService<ILogger<WorkOrderSimulationService>>();
+    var bank      = sp.GetRequiredService<BankService>();
+    var warehouse = sp.GetRequiredService<WarehouseService>();
+    return new WorkOrderSimulationService(connectionString, tableServiceUri, simulationTimeScale, defaultScrapRate, logger, bank, warehouse);
 });
 
 // Register SupplyChainService for the procurement simulation
@@ -284,7 +285,8 @@ builder.Services.AddScoped<SupplyChainService>(sp =>
     var logger    = sp.GetRequiredService<ILogger<SupplyChainService>>();
     var telemetry = sp.GetRequiredService<TelemetryClient>();
     var bank      = sp.GetRequiredService<BankService>();
-    return new SupplyChainService(connectionString, tableServiceUri, simulationTimeScale, logger, telemetry, bank);
+    var warehouse = sp.GetRequiredService<WarehouseService>();
+    return new SupplyChainService(connectionString, tableServiceUri, simulationTimeScale, logger, telemetry, bank, warehouse);
 });
 
 // Register ManufacturingPlanningService for planning intelligence endpoints
@@ -307,6 +309,22 @@ builder.Services.AddScoped<WorkforceService>(sp =>
         ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
     var logger = sp.GetRequiredService<ILogger<WorkforceService>>();
     return new WorkforceService(connectionString, tableServiceUri, logger);
+});
+
+// Register WarehouseService — always-on, event-driven warehouse simulation
+// Responds to Store/Retrieve/Receive ops enqueued by manufacturing, order pipeline, and supply chain.
+builder.Services.AddScoped<WarehouseService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
+    var queueServiceUri = configuration["AzureWebJobsStorage:queueEndpoint"]
+        ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.queue.core.windows.net";
+    var bank   = sp.GetRequiredService<BankService>();
+    var logger = sp.GetRequiredService<ILogger<WarehouseService>>();
+    return new WarehouseService(connectionString, tableServiceUri, queueServiceUri, bank, logger);
 });
 
 // Register ShoppingSimulatorService — manages Shopping Simulator state, queue depth, and

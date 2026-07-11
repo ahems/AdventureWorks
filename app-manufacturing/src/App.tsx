@@ -47,6 +47,10 @@ import ReceiveProductInventory from "@/pages/receive/ReceiveProductInventory";
 import ReceiveCosting from "@/pages/receive/ReceiveCosting";
 import ReceiveProductCost from "@/pages/receive/ReceiveProductCost";
 import SettingsPage from "@/pages/Settings";
+import WarehouseDashboard from "@/pages/warehouse/WarehouseDashboard";
+import WarehouseFloor from "@/pages/warehouse/WarehouseFloor";
+import WarehouseWorkforce from "@/pages/warehouse/WarehouseWorkforce";
+import WarehouseConfig from "@/pages/warehouse/WarehouseConfig";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -158,6 +162,14 @@ const App = () => (
                 />
 
                 <Route path="/settings" element={<SettingsPage />} />
+
+                <Route path="/warehouse" element={<WarehouseDashboard />} />
+                <Route path="/warehouse/floor" element={<WarehouseFloor />} />
+                <Route
+                  path="/warehouse/workforce"
+                  element={<WarehouseWorkforce />}
+                />
+                <Route path="/warehouse/config" element={<WarehouseConfig />} />
 
                 <Route path="*" element={<NotFound />} />
               </Route>

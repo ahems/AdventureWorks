@@ -31,6 +31,7 @@ import SlowMoversPage from "./pages/SlowMoversPage";
 import GenerateOrderPage from "./pages/GenerateOrderPage";
 import ShoppingSimulatorPage from "./pages/ShoppingSimulatorPage";
 import OrderPipelinePage from "./pages/OrderPipelinePage";
+import WarehousePage from "./pages/WarehousePage";
 
 const queryClient = new QueryClient();
 
@@ -77,8 +78,12 @@ const App = () => (
               <Route path="/loss-makers" element={<LossMakersPage />} />
               <Route path="/slow-movers" element={<SlowMoversPage />} />
               <Route path="/generate-order" element={<GenerateOrderPage />} />
-              <Route path="/shopping-simulator" element={<ShoppingSimulatorPage />} />
+              <Route
+                path="/shopping-simulator"
+                element={<ShoppingSimulatorPage />}
+              />
               <Route path="/order-pipeline" element={<OrderPipelinePage />} />
+              <Route path="/warehouse" element={<WarehousePage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

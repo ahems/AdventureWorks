@@ -21,6 +21,7 @@ import {
   FolderOpen,
   TrendingUp,
   TrendingDown,
+  Warehouse,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import AppBreadcrumb from "@/components/AppBreadcrumb";
@@ -48,6 +49,11 @@ const secondaryNavGroups = [
         to: "/inventory-transactions",
         label: "Inv. Transactions",
         icon: History,
+      },
+      {
+        to: "/warehouse",
+        label: "Warehouse",
+        icon: Warehouse,
       },
     ],
   },

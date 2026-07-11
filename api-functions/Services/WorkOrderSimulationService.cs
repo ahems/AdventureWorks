@@ -98,6 +98,7 @@ public class WorkOrderSimulationService
     private readonly double _defaultScrapRate;
     private readonly ILogger<WorkOrderSimulationService> _logger;
     private readonly BankService? _bank;
+    private readonly WarehouseService? _warehouse;
 
     public WorkOrderSimulationService(
         string connectionString,
@@ -105,13 +106,15 @@ public class WorkOrderSimulationService
         double simulationTimeScale,
         double defaultScrapRate,
         ILogger<WorkOrderSimulationService> logger,
-        BankService? bank = null)
+        BankService? bank = null,
+        WarehouseService? warehouse = null)
     {
         _connectionString = connectionString;
         _simulationTimeScale = simulationTimeScale;
         _defaultScrapRate = defaultScrapRate;
         _logger = logger;
         _bank = bank;
+        _warehouse = warehouse;
 
         var tableServiceClient = new TableServiceClient(
             new Uri(tableServiceUri),
@@ -369,18 +372,6 @@ public class WorkOrderSimulationService
 
         if (stocked > 0)
         {
-            // Upsert ProductInventory at Finished Goods Storage (LocationID=7)
-            await conn.ExecuteAsync(@"
-                IF EXISTS (SELECT 1 FROM Production.ProductInventory WHERE ProductID = @ProductId AND LocationID = 7)
-                    UPDATE Production.ProductInventory
-                    SET Quantity = Quantity + @Qty, ModifiedDate = GETDATE()
-                    WHERE ProductID = @ProductId AND LocationID = 7
-                ELSE
-                    INSERT INTO Production.ProductInventory
-                        (ProductID, LocationID, Shelf, Bin, Quantity, rowguid, ModifiedDate)
-                    VALUES (@ProductId, 7, 'A', 1, @Qty, NEWID(), GETDATE())",
-                new { ProductId = productId, Qty = stocked });
-
             totalActualCost = await conn.ExecuteScalarAsync<decimal>(
                 "SELECT ISNULL(SUM(ActualCost), 0) FROM Production.WorkOrderRouting WHERE WorkOrderID = @Id AND ActualEndDate IS NOT NULL",
                 new { Id = workOrderId });
@@ -392,6 +383,45 @@ public class WorkOrderSimulationService
                     (ProductID, ReferenceOrderID, ReferenceOrderLineID, TransactionDate, TransactionType, Quantity, ActualCost, ModifiedDate)
                 VALUES (@ProductId, @WorkOrderId, 0, GETDATE(), 'W', @Qty, @ActualCost, GETDATE())",
                 new { ProductId = productId, WorkOrderId = workOrderId, Qty = stocked, ActualCost = costPerUnit });
+
+            // Route through warehouse simulation instead of directly upserting inventory.
+            // Inventory only appears in LocationID 7 after a warehouse worker completes the store operation.
+            if (_warehouse != null)
+            {
+                try
+                {
+                    await _warehouse.EnqueueStoreOperationAsync(workOrderId, productId, stocked);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[Warehouse] Failed to enqueue store op for WO {WorkOrderId} — falling back to direct inventory upsert.", workOrderId);
+                    // Fallback: direct upsert so inventory is not lost if warehouse service is unavailable
+                    await conn.ExecuteAsync(@"
+                        IF EXISTS (SELECT 1 FROM Production.ProductInventory WHERE ProductID = @ProductId AND LocationID = 7)
+                            UPDATE Production.ProductInventory
+                            SET Quantity = Quantity + @Qty, ModifiedDate = GETDATE()
+                            WHERE ProductID = @ProductId AND LocationID = 7
+                        ELSE
+                            INSERT INTO Production.ProductInventory
+                                (ProductID, LocationID, Shelf, Bin, Quantity, rowguid, ModifiedDate)
+                            VALUES (@ProductId, 7, 'A', 1, @Qty, NEWID(), GETDATE())",
+                        new { ProductId = productId, Qty = stocked });
+                }
+            }
+            else
+            {
+                // Warehouse service not registered — fall back to direct inventory upsert
+                await conn.ExecuteAsync(@"
+                    IF EXISTS (SELECT 1 FROM Production.ProductInventory WHERE ProductID = @ProductId AND LocationID = 7)
+                        UPDATE Production.ProductInventory
+                        SET Quantity = Quantity + @Qty, ModifiedDate = GETDATE()
+                        WHERE ProductID = @ProductId AND LocationID = 7
+                    ELSE
+                        INSERT INTO Production.ProductInventory
+                            (ProductID, LocationID, Shelf, Bin, Quantity, rowguid, ModifiedDate)
+                        VALUES (@ProductId, 7, 'A', 1, @Qty, NEWID(), GETDATE())",
+                    new { ProductId = productId, Qty = stocked });
+            }
         }
 
         _logger.LogInformation("WorkOrder {WorkOrderId} (Product {ProductId}) completed. Stocked={Stocked}, Scrapped={Scrapped}",

@@ -1077,6 +1077,12 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         @{ Table='HumanResources.Shift'; File='Shift.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='HumanResources.EmployeeDepartmentHistory'; File='EmployeeDepartmentHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='HumanResources.EmployeePayHistory'; File='EmployeePayHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # Warehouse simulation employees (3 shifts, Shipping and Receiving dept, LocationID 7)
+        @{ Table='Person.BusinessEntity'; File='BusinessEntity-warehouse-ai.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$false }
+        @{ Table='Person.Person'; File='Person-warehouse-ai.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$false }
+        @{ Table='HumanResources.Employee'; File='Employee-warehouse-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='HumanResources.EmployeeDepartmentHistory'; File='EmployeeDepartmentHistory-warehouse-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        @{ Table='HumanResources.EmployeePayHistory'; File='EmployeePayHistory-warehouse-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         
         # ===== PERSON CONTACTS =====
         @{ Table='Person.BusinessEntityContact'; File='BusinessEntityContact.csv'; Delimiter='+|'; RowTerminator='&|'; IsWideChar=$false }
