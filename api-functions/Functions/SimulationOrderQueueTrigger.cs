@@ -88,24 +88,54 @@ public class SimulationOrderQueueTrigger
             return;
         }
 
+        // ── Resolve the effective OrderMode for routing ─────────────────────
+        var orderMode = msg.OrderMode;
+        if (string.IsNullOrWhiteSpace(orderMode))
+        {
+            // Legacy message: infer mode from CustomerId
+            orderMode = msg.CustomerId > 0 ? "existing-repeat" : "new-persona";
+        }
+
         // ── Determine persona and seed customer ─────────────────────────────
         string personaType;
         int? seedCustomerId = null;
+        string? orderType = "consumer";
 
-        if (msg.CustomerId > 0)
+        switch (orderMode)
         {
-            // Existing customer: agent analyses their history and simulates the next purchase
-            personaType = "existing-customer";
-            seedCustomerId = msg.CustomerId;
-            _logger.LogInformation("[simulation-order-queue] Processing EXISTING customer {CustomerId}", msg.CustomerId);
-        }
-        else
-        {
-            // New customer: use provided hint or pick a random persona
-            personaType = !string.IsNullOrWhiteSpace(msg.PersonaHint)
-                ? msg.PersonaHint.Trim()
-                : RandomPersonas[Random.Shared.Next(RandomPersonas.Length)];
-            _logger.LogInformation("[simulation-order-queue] Processing NEW customer persona={Persona}", personaType);
+            case "b2b-store":
+                personaType = "b2b-store";
+                orderType = "b2b-store";
+                _logger.LogInformation("[simulation-order-queue] Processing B2B STORE order for StoreId={StoreId}", msg.StoreId);
+                break;
+
+            case "no-order-customer":
+                personaType = "sale-seeker";
+                seedCustomerId = msg.CustomerId > 0 ? msg.CustomerId : null;
+                orderType = "no-order-customer";
+                _logger.LogInformation("[simulation-order-queue] Processing NO-ORDER customer {CustomerId} (drawn to sale items)", msg.CustomerId);
+                break;
+
+            case "cart-recovery":
+                personaType = "cart-recovery";
+                seedCustomerId = msg.CustomerId > 0 ? msg.CustomerId : null;
+                orderType = "cart-recovery";
+                _logger.LogInformation("[simulation-order-queue] Processing CART-RECOVERY for customer {CustomerId}", msg.CustomerId);
+                break;
+
+            case "existing-repeat":
+                personaType = "existing-customer";
+                seedCustomerId = msg.CustomerId > 0 ? msg.CustomerId : null;
+                _logger.LogInformation("[simulation-order-queue] Processing EXISTING customer {CustomerId}", msg.CustomerId);
+                break;
+
+            case "new-persona":
+            default:
+                personaType = !string.IsNullOrWhiteSpace(msg.PersonaHint)
+                    ? msg.PersonaHint.Trim()
+                    : RandomPersonas[Random.Shared.Next(RandomPersonas.Length)];
+                _logger.LogInformation("[simulation-order-queue] Processing NEW customer persona={Persona}", personaType);
+                break;
         }
 
         var trackProps = new Dictionary<string, string>
@@ -113,6 +143,8 @@ public class SimulationOrderQueueTrigger
             ["PersonaType"]    = personaType,
             ["CustomerId"]     = (seedCustomerId?.ToString() ?? "0"),
             ["PersonaHint"]    = msg.PersonaHint ?? "",
+            ["OrderMode"]      = orderMode,
+            ["StoreId"]        = (msg.StoreId?.ToString() ?? ""),
             ["QueueSource"]    = QUEUE_NAME
         };
 
@@ -121,7 +153,9 @@ public class SimulationOrderQueueTrigger
             var result = await _agentService.GenerateOrderAsync(
                 personaType,
                 customPersona: null,
-                seedCustomerId: seedCustomerId);
+                seedCustomerId: seedCustomerId,
+                orderMode: orderMode,
+                storeId: msg.StoreId);
 
             if (result.Success)
             {
@@ -150,6 +184,7 @@ public class SimulationOrderQueueTrigger
                         ?? result.Log.LastOrDefault()?.Message,
                     ItemCount = result.Log.Count(l => l.Message.Contains("product", StringComparison.OrdinalIgnoreCase)),
                     CompletedAt = DateTimeOffset.UtcNow,
+                    OrderType = orderType,
                 });
             }
             else
@@ -167,6 +202,7 @@ public class SimulationOrderQueueTrigger
                     ErrorMessage = result.ErrorMessage,
                     PersonaType = personaType,
                     CompletedAt = DateTimeOffset.UtcNow,
+                    OrderType = orderType,
                 });
             }
         }

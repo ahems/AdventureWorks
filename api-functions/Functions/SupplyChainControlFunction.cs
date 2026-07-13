@@ -221,6 +221,40 @@ public class SupplyChainControlFunction
         });
     }
 
+    // ── Supply Chain Config ────────────────────────────────────────────────────
+
+    [Function("SupplyChainGetConfig")]
+    public async Task<HttpResponseData> GetConfig(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "supply/config")] HttpRequestData req)
+    {
+        double multiplier = await _svc.GetSpeedMultiplierAsync();
+        return await OkAsync(req, new { supplyChainSpeedMultiplier = multiplier });
+    }
+
+    [Function("SupplyChainPutConfig")]
+    public async Task<HttpResponseData> PutConfig(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "supply/config")] HttpRequestData req)
+    {
+        JsonDocument? body;
+        try { body = await JsonDocument.ParseAsync(req.Body); }
+        catch { return await BadRequestAsync(req, "Invalid JSON body."); }
+
+        if (!body.RootElement.TryGetProperty("supplyChainSpeedMultiplier", out var valEl))
+            return await BadRequestAsync(req, "Body must include 'supplyChainSpeedMultiplier' (number 1–50).");
+
+        double value;
+        if (valEl.ValueKind == JsonValueKind.Number)
+            value = valEl.GetDouble();
+        else
+            return await BadRequestAsync(req, "'supplyChainSpeedMultiplier' must be a number.");
+
+        if (value < 1.0 || value > 50.0)
+            return await BadRequestAsync(req, "'supplyChainSpeedMultiplier' must be between 1 and 50.");
+
+        await _svc.SetSpeedMultiplierAsync(value);
+        return await OkAsync(req, new { supplyChainSpeedMultiplier = value, message = $"Speed multiplier updated to {value}×." });
+    }
+
 
     // ── Internal helpers ───────────────────────────────────────────────────────
 

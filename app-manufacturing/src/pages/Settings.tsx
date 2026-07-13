@@ -5,6 +5,7 @@ import SimulationControlCard from "@/components/settings/SimulationControlCard";
 import VendorRestockCard from "@/components/settings/VendorRestockCard";
 import ScrapConfigPanel from "@/components/settings/ScrapConfigPanel";
 import LocationConfigPanel from "@/components/settings/LocationConfigPanel";
+import SupplyChainTimingCard from "@/components/settings/SupplyChainTimingCard";
 
 const SettingsPage: React.FC = () => {
   return (
@@ -32,6 +33,7 @@ const SettingsPage: React.FC = () => {
         <h2 className="font-doodle text-lg text-doodle-text">
           Vendor Operations
         </h2>
+        <SupplyChainTimingCard />
         <VendorRestockCard />
       </section>
 

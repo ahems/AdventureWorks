@@ -26,6 +26,9 @@ public class SimulationOrderResultEntity : ITableEntity
     public int ItemCount { get; set; }
     public DateTimeOffset CompletedAt { get; set; }
 
+    /// <summary>Order type: "consumer", "b2b-store", "cart-recovery", "no-order-customer".</summary>
+    public string? OrderType { get; set; }
+
     /// <summary>Generates an inverted-tick row key so Table Storage returns most recent first.</summary>
     public static string GenerateRowKey(DateTimeOffset time)
         => $"{DateTimeOffset.MaxValue.Ticks - time.Ticks:D19}";

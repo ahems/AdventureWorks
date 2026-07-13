@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Filter,
   CalendarPlus,
+  Truck,
 } from "lucide-react";
 import {
   fetchAllProducts,
@@ -27,6 +28,7 @@ import {
 } from "@/services/salesApi";
 import { TableSkeleton } from "@/components/LoadingSkeletons";
 import ScheduleProductionDialog from "@/components/ScheduleProductionDialog";
+import ReorderFromSupplierDialog from "@/components/ReorderFromSupplierDialog";
 import { SALES_ORDER_STATUS, type Product } from "@/types/production";
 
 const fmtDate = (s: string) => new Date(s).toLocaleDateString();
@@ -75,6 +77,8 @@ const PlanDemand = () => {
   const [scheduleSource, setScheduleSource] = useState<
     "open-demand" | "history-30d"
   >("open-demand");
+  // Reorder dialog for purchased (non-manufactured) items with open demand
+  const [reorderProductId, setReorderProductId] = useState<number | null>(null);
 
   const { data: openData, isLoading: openLoading } = useQuery({
     queryKey: ["open-demand"],
@@ -433,20 +437,28 @@ const PlanDemand = () => {
                   const wip = openWipByProduct.get(row.productId) || 0;
                   const shortfall = row.openQty - stock - wip;
                   const isOpen = expandedProduct === row.productId;
+                  const isMfg = !!(
+                    p?.raw?.MakeFlag && p?.raw?.FinishedGoodsFlag
+                  );
+                  const hasShortfall = p?.raw && shortfall > 0;
                   return (
                     <Fragment key={row.productId}>
                       <tr
                         key={row.productId}
-                        className={`border-b border-doodle-text/10 hover:bg-secondary/30 ${p?.raw && shortfall > 0 ? "cursor-pointer" : ""}`}
+                        className={`border-b border-doodle-text/10 hover:bg-secondary/30 ${hasShortfall ? "cursor-pointer" : ""}`}
                         onClick={() => {
-                          if (p?.raw && shortfall > 0) {
+                          if (hasShortfall && isMfg) {
                             setScheduleSource("open-demand");
                             setScheduleProductId(row.productId);
+                          } else if (hasShortfall && !isMfg) {
+                            setReorderProductId(row.productId);
                           }
                         }}
                         title={
-                          p?.raw && shortfall > 0
-                            ? "Click to schedule production for this shortfall"
+                          hasShortfall
+                            ? isMfg
+                              ? "Click to schedule production for this shortfall"
+                              : "Click to re-order from supplier"
                             : undefined
                         }
                       >
@@ -506,7 +518,7 @@ const PlanDemand = () => {
                           />
                         </td>
                         <td className="text-right py-2.5 px-4">
-                          {p?.raw && shortfall > 0 ? (
+                          {hasShortfall && isMfg ? (
                             <div className="inline-flex flex-col items-end gap-1">
                               <SourceBadge source="open-demand" />
                               <button
@@ -519,6 +531,19 @@ const PlanDemand = () => {
                               >
                                 <CalendarPlus className="w-3.5 h-3.5" />{" "}
                                 Schedule
+                              </button>
+                            </div>
+                          ) : hasShortfall && !isMfg ? (
+                            <div className="inline-flex flex-col items-end gap-1">
+                              <SourceBadge source="open-demand" />
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setReorderProductId(row.productId);
+                                }}
+                                className="doodle-button doodle-button-primary text-xs inline-flex items-center gap-1 py-1 px-2"
+                              >
+                                <Truck className="w-3.5 h-3.5" /> Re-order
                               </button>
                             </div>
                           ) : (
@@ -847,6 +872,29 @@ const PlanDemand = () => {
             suggestionFormula={`30-day shortfall = max(1, Qty30d − OnHand − WIP)\n= max(1, ${hRow.qty30d} − ${stock} − ${wip}) = ${histShortfall}`}
             open
             onOpenChange={(v) => !v && setScheduleProductId(null)}
+            hideTrigger
+          />
+        );
+      })()}
+
+      {/* Reorder dialog for purchased (non-manufactured) items */}
+      {(() => {
+        if (reorderProductId === null) return null;
+        const p = productMap.get(reorderProductId);
+        if (!p?.raw) return null;
+        const stock = onHandByProduct.get(reorderProductId) || 0;
+        const wip = openWipByProduct.get(reorderProductId) || 0;
+        const row = openRows.find((r) => r.productId === reorderProductId);
+        const shortfall = row
+          ? Math.max(1, row.openQty - stock - wip)
+          : Math.max(1, p.raw.SafetyStockLevel - stock);
+        return (
+          <ReorderFromSupplierDialog
+            product={p.raw}
+            currentQty={stock}
+            suggestedQty={shortfall}
+            open
+            onOpenChange={(v) => !v && setReorderProductId(null)}
             hideTrigger
           />
         );

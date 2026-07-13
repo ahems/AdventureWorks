@@ -26,6 +26,21 @@ public class ShoppingSimulatorService
     private static DateTimeOffset _cacheExpiry = DateTimeOffset.MinValue;
     private const int CACHE_TTL_MINUTES = 10;
 
+    // No-order customer cache
+    private static readonly SemaphoreSlim _noOrderCacheLock = new(1, 1);
+    private static int[]? _noOrderCustomerCache;
+    private static DateTimeOffset _noOrderCacheExpiry = DateTimeOffset.MinValue;
+
+    // Abandoned-cart customer cache
+    private static readonly SemaphoreSlim _abandonedCartCacheLock = new(1, 1);
+    private static int[]? _abandonedCartCustomerCache;
+    private static DateTimeOffset _abandonedCartCacheExpiry = DateTimeOffset.MinValue;
+
+    // Store ID cache
+    private static readonly SemaphoreSlim _storeCacheLock = new(1, 1);
+    private static int[]? _storeIdCache;
+    private static DateTimeOffset _storeCacheExpiry = DateTimeOffset.MinValue;
+
     private readonly TableClient _tableClient;
     private readonly QueueClient _queueClient;
     private readonly string _connectionString;
@@ -116,14 +131,15 @@ public class ShoppingSimulatorService
     /// Increments the persona breakdown counters (read-modify-write).
     /// Non-critical stats — failures are logged and swallowed.
     /// </summary>
-    public async Task IncrementCountersAsync(long newCustomerCount, long existingCustomerCount)
+    public async Task IncrementCountersAsync(long newCustomerCount, long existingCustomerCount, long storeOrderCount = 0)
     {
         try
         {
             var state = await GetStateAsync();
-            state.TotalQueued += newCustomerCount + existingCustomerCount;
+            state.TotalQueued += newCustomerCount + existingCustomerCount + storeOrderCount;
             state.NewCustomerQueued += newCustomerCount;
             state.ExistingCustomerQueued += existingCustomerCount;
+            state.StoreOrderQueued += storeOrderCount;
             await SaveStateAsync(state);
         }
         catch (Exception ex)
@@ -260,6 +276,145 @@ public class ShoppingSimulatorService
         finally
         {
             _cacheLock.Release();
+        }
+    }
+
+    // ── No-order customer cache ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns customer IDs of registered individual customers who have zero orders.
+    /// These represent browsing users who registered but never purchased — ideal targets
+    /// for marketing re-engagement simulation. Cached for 10 minutes.
+    /// </summary>
+    public async Task<int[]> GetCachedNoOrderCustomerIdsAsync()
+    {
+        if (_noOrderCustomerCache != null && DateTimeOffset.UtcNow < _noOrderCacheExpiry)
+            return _noOrderCustomerCache;
+
+        await _noOrderCacheLock.WaitAsync();
+        try
+        {
+            if (_noOrderCustomerCache != null && DateTimeOffset.UtcNow < _noOrderCacheExpiry)
+                return _noOrderCustomerCache;
+
+            const string sql = @"
+                SELECT TOP 100 c.CustomerID
+                FROM Sales.Customer c
+                INNER JOIN Person.Person p ON c.PersonID = p.BusinessEntityID
+                WHERE c.StoreID IS NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM Sales.SalesOrderHeader soh
+                      WHERE soh.CustomerID = c.CustomerID
+                  )
+                ORDER BY NEWID()";
+
+            await using var conn = new SqlConnection(_connectionString);
+            var ids = (await conn.QueryAsync<int>(sql)).ToArray();
+            _noOrderCustomerCache = ids.Length > 0 ? ids : Array.Empty<int>();
+            _noOrderCacheExpiry = DateTimeOffset.UtcNow.AddMinutes(CACHE_TTL_MINUTES);
+
+            _logger.LogInformation("[ShoppingSimulator] No-order customer cache refreshed — {Count} customers cached", _noOrderCustomerCache.Length);
+            return _noOrderCustomerCache;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[ShoppingSimulator] Failed to refresh no-order customer cache");
+            _noOrderCustomerCache ??= Array.Empty<int>();
+            _noOrderCacheExpiry = DateTimeOffset.UtcNow.AddMinutes(1);
+            return _noOrderCustomerCache;
+        }
+        finally
+        {
+            _noOrderCacheLock.Release();
+        }
+    }
+
+    // ── Abandoned-cart customer cache ────────────────────────────────────────
+
+    /// <summary>
+    /// Returns customer IDs who have items in their shopping cart that are older than 24 hours.
+    /// These simulate cart abandoners who may return after a Smart Cart Recovery email.
+    /// Cached for 10 minutes.
+    /// </summary>
+    public async Task<int[]> GetCachedAbandonedCartCustomerIdsAsync()
+    {
+        if (_abandonedCartCustomerCache != null && DateTimeOffset.UtcNow < _abandonedCartCacheExpiry)
+            return _abandonedCartCustomerCache;
+
+        await _abandonedCartCacheLock.WaitAsync();
+        try
+        {
+            if (_abandonedCartCustomerCache != null && DateTimeOffset.UtcNow < _abandonedCartCacheExpiry)
+                return _abandonedCartCustomerCache;
+
+            const string sql = @"
+                SELECT DISTINCT c.CustomerID
+                FROM Sales.ShoppingCartItem sci
+                INNER JOIN Sales.Customer c ON c.PersonID = CAST(sci.ShoppingCartID AS INT)
+                WHERE sci.DateCreated < DATEADD(HOUR, -24, GETDATE())
+                  AND c.StoreID IS NULL";
+
+            await using var conn = new SqlConnection(_connectionString);
+            var ids = (await conn.QueryAsync<int>(sql)).ToArray();
+            _abandonedCartCustomerCache = ids.Length > 0 ? ids : Array.Empty<int>();
+            _abandonedCartCacheExpiry = DateTimeOffset.UtcNow.AddMinutes(CACHE_TTL_MINUTES);
+
+            _logger.LogInformation("[ShoppingSimulator] Abandoned-cart customer cache refreshed — {Count} customers cached", _abandonedCartCustomerCache.Length);
+            return _abandonedCartCustomerCache;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[ShoppingSimulator] Failed to refresh abandoned-cart customer cache");
+            _abandonedCartCustomerCache ??= Array.Empty<int>();
+            _abandonedCartCacheExpiry = DateTimeOffset.UtcNow.AddMinutes(1);
+            return _abandonedCartCustomerCache;
+        }
+        finally
+        {
+            _abandonedCartCacheLock.Release();
+        }
+    }
+
+    // ── Store ID cache ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns BusinessEntityIDs of all B2B stores that have at least one linked Sales.Customer record.
+    /// Cached for 10 minutes.
+    /// </summary>
+    public async Task<int[]> GetCachedStoreIdsAsync()
+    {
+        if (_storeIdCache != null && DateTimeOffset.UtcNow < _storeCacheExpiry)
+            return _storeIdCache;
+
+        await _storeCacheLock.WaitAsync();
+        try
+        {
+            if (_storeIdCache != null && DateTimeOffset.UtcNow < _storeCacheExpiry)
+                return _storeIdCache;
+
+            const string sql = @"
+                SELECT DISTINCT s.BusinessEntityID
+                FROM Sales.Store s
+                INNER JOIN Sales.Customer c ON c.StoreID = s.BusinessEntityID";
+
+            await using var conn = new SqlConnection(_connectionString);
+            var ids = (await conn.QueryAsync<int>(sql)).ToArray();
+            _storeIdCache = ids.Length > 0 ? ids : Array.Empty<int>();
+            _storeCacheExpiry = DateTimeOffset.UtcNow.AddMinutes(CACHE_TTL_MINUTES);
+
+            _logger.LogInformation("[ShoppingSimulator] Store ID cache refreshed — {Count} stores cached", _storeIdCache.Length);
+            return _storeIdCache;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[ShoppingSimulator] Failed to refresh store ID cache");
+            _storeIdCache ??= Array.Empty<int>();
+            _storeCacheExpiry = DateTimeOffset.UtcNow.AddMinutes(1);
+            return _storeIdCache;
+        }
+        finally
+        {
+            _storeCacheLock.Release();
         }
     }
 }

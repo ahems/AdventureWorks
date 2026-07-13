@@ -26,6 +26,33 @@ public class ShoppingSimulatorState : ITableEntity
     /// <summary>Percentage of enqueued orders that target existing customers (0–100).</summary>
     public int ExistingCustomerPercentage { get; set; } = 30;
 
+    /// <summary>Maximum duration in hours before the simulator auto-stops (1–72, default 24).</summary>
+    public int DurationHours { get; set; } = 24;
+
+    /// <summary>UTC timestamp when the simulator should automatically stop. Computed as StartedAt + DurationHours.</summary>
+    public DateTimeOffset? StopScheduledAt { get; set; }
+
+    /// <summary>
+    /// Percentage of new-customer slots allocated to registered customers who have no orders yet (0–100).
+    /// These customers are drawn to sale/discounted items (simulates marketing email re-engagement).
+    /// </summary>
+    public int NoOrderCustomerPercentage { get; set; } = 50;
+
+    /// <summary>
+    /// Percentage of existing-customer slots allocated to customers with abandoned carts (0–100).
+    /// Simulates Smart Cart Recovery emails prompting customers to complete their purchase.
+    /// </summary>
+    public int AbandonedCartPercentage { get; set; } = 10;
+
+    /// <summary>Whether to include consumer (B2C) orders in the simulation.</summary>
+    public bool IncludeConsumerOrders { get; set; } = true;
+
+    /// <summary>Whether to include B2B store orders in the simulation.</summary>
+    public bool IncludeStoreOrders { get; set; } = true;
+
+    /// <summary>Percentage of total messages allocated to B2B store orders when both consumer and store are enabled (5–50).</summary>
+    public int StoreOrderPercentage { get; set; } = 20;
+
     /// <summary>UTC timestamp when the simulator was last started.</summary>
     public DateTimeOffset? StartedAt { get; set; }
 
@@ -37,4 +64,7 @@ public class ShoppingSimulatorState : ITableEntity
 
     /// <summary>Cumulative orders enqueued targeting existing customers.</summary>
     public long ExistingCustomerQueued { get; set; }
+
+    /// <summary>Cumulative B2B store orders enqueued.</summary>
+    public long StoreOrderQueued { get; set; }
 }

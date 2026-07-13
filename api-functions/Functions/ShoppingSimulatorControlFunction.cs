@@ -50,10 +50,18 @@ public class ShoppingSimulatorControlFunction
             state.IsRunning,
             state.OrdersPerMinute,
             state.ExistingCustomerPercentage,
+            state.DurationHours,
+            state.StopScheduledAt,
+            state.NoOrderCustomerPercentage,
+            state.AbandonedCartPercentage,
+            state.IncludeConsumerOrders,
+            state.IncludeStoreOrders,
+            state.StoreOrderPercentage,
             state.StartedAt,
             state.TotalQueued,
             state.NewCustomerQueued,
             state.ExistingCustomerQueued,
+            state.StoreOrderQueued,
             queueDepth,
         });
         return resp;
@@ -79,23 +87,44 @@ public class ShoppingSimulatorControlFunction
         }
         catch { /* fall through — use defaults */ }
 
-        var ordersPerMinute      = Math.Clamp(input?.OrdersPerMinute      ?? 1,  1,   60);
-        var existingCustomerPct  = Math.Clamp(input?.ExistingCustomerPercentage ?? 30, 0, 100);
+        var ordersPerMinute          = Math.Clamp(input?.OrdersPerMinute          ?? 1,  1,   60);
+        var existingCustomerPct      = Math.Clamp(input?.ExistingCustomerPercentage ?? 30, 0, 100);
+        var durationHours            = Math.Clamp(input?.DurationHours              ?? 24, 1,  72);
+        var noOrderCustomerPct       = Math.Clamp(input?.NoOrderCustomerPercentage  ?? 50, 0, 100);
+        var abandonedCartPct         = Math.Clamp(input?.AbandonedCartPercentage    ?? 10, 0, 100);
+        var includeConsumerOrders    = input?.IncludeConsumerOrders ?? true;
+        var includeStoreOrders       = input?.IncludeStoreOrders   ?? true;
+        var storeOrderPct            = Math.Clamp(input?.StoreOrderPercentage       ?? 20, 5,  50);
+
+        // At least one order type must be enabled
+        if (!includeConsumerOrders && !includeStoreOrders)
+            includeConsumerOrders = true;
 
         var state = await _simulator.GetStateAsync();
         state.IsRunning                  = true;
         state.OrdersPerMinute            = ordersPerMinute;
         state.ExistingCustomerPercentage = existingCustomerPct;
+        state.DurationHours              = durationHours;
+        state.NoOrderCustomerPercentage  = noOrderCustomerPct;
+        state.AbandonedCartPercentage    = abandonedCartPct;
+        state.IncludeConsumerOrders      = includeConsumerOrders;
+        state.IncludeStoreOrders         = includeStoreOrders;
+        state.StoreOrderPercentage       = storeOrderPct;
         state.StartedAt                  = DateTimeOffset.UtcNow;
+        state.StopScheduledAt            = state.StartedAt.Value.AddHours(durationHours);
         await _simulator.SaveStateAsync(state);
 
-        _logger.LogInformation("[ShoppingSimulator] Started — {Rate} orders/min, {Pct}% existing customers",
-            ordersPerMinute, existingCustomerPct);
+        _logger.LogInformation("[ShoppingSimulator] Started — {Rate} orders/min, {Pct}% existing customers, auto-stop in {Duration}h",
+            ordersPerMinute, existingCustomerPct, durationHours);
 
         _telemetry.TrackEvent("ShoppingSimulator.Started", new Dictionary<string, string>
         {
             ["OrdersPerMinute"]           = ordersPerMinute.ToString(),
             ["ExistingCustomerPercentage"] = existingCustomerPct.ToString(),
+            ["DurationHours"]             = durationHours.ToString(),
+            ["IncludeConsumerOrders"]      = includeConsumerOrders.ToString(),
+            ["IncludeStoreOrders"]         = includeStoreOrders.ToString(),
+            ["StoreOrderPercentage"]       = storeOrderPct.ToString(),
         });
 
         var queueDepth = await _simulator.GetQueueDepthAsync();
@@ -105,12 +134,20 @@ public class ShoppingSimulatorControlFunction
             state.IsRunning,
             state.OrdersPerMinute,
             state.ExistingCustomerPercentage,
+            state.DurationHours,
+            state.StopScheduledAt,
+            state.NoOrderCustomerPercentage,
+            state.AbandonedCartPercentage,
+            state.IncludeConsumerOrders,
+            state.IncludeStoreOrders,
+            state.StoreOrderPercentage,
             state.StartedAt,
             state.TotalQueued,
             state.NewCustomerQueued,
             state.ExistingCustomerQueued,
+            state.StoreOrderQueued,
             queueDepth,
-            message = $"Shopping simulator started at {ordersPerMinute} order{(ordersPerMinute == 1 ? "" : "s")}/min.",
+            message = $"Shopping simulator started at {ordersPerMinute} order{(ordersPerMinute == 1 ? "" : "s")}/min. Auto-stop in {durationHours}h.",
         });
         return resp;
     }
@@ -149,10 +186,18 @@ public class ShoppingSimulatorControlFunction
             state.IsRunning,
             state.OrdersPerMinute,
             state.ExistingCustomerPercentage,
+            state.DurationHours,
+            state.StopScheduledAt,
+            state.NoOrderCustomerPercentage,
+            state.AbandonedCartPercentage,
+            state.IncludeConsumerOrders,
+            state.IncludeStoreOrders,
+            state.StoreOrderPercentage,
             state.StartedAt,
             state.TotalQueued,
             state.NewCustomerQueued,
             state.ExistingCustomerQueued,
+            state.StoreOrderQueued,
             queueDepth,
             message = $"Shopping simulator stopped. {queueDepth} pending order{(queueDepth == 1 ? "" : "s")} will still be placed.",
         });
@@ -186,6 +231,7 @@ public class ShoppingSimulatorControlFunction
             r.PersonaType,
             r.AiReasoning,
             r.ItemCount,
+            r.OrderType,
             completedAt = r.CompletedAt.ToString("o"),
         }));
         return resp;
@@ -217,10 +263,18 @@ public class ShoppingSimulatorControlFunction
             state.IsRunning,
             state.OrdersPerMinute,
             state.ExistingCustomerPercentage,
+            state.DurationHours,
+            state.StopScheduledAt,
+            state.NoOrderCustomerPercentage,
+            state.AbandonedCartPercentage,
+            state.IncludeConsumerOrders,
+            state.IncludeStoreOrders,
+            state.StoreOrderPercentage,
             state.StartedAt,
             state.TotalQueued,
             state.NewCustomerQueued,
             state.ExistingCustomerQueued,
+            state.StoreOrderQueued,
             queueDepth = 0L,
             message = "Queue cleared.",
         });
@@ -231,6 +285,12 @@ public class ShoppingSimulatorControlFunction
 /// <summary>Request body for <see cref="ShoppingSimulatorControlFunction.Start"/>.</summary>
 public class ShoppingSimulatorStartRequest
 {
-    public int OrdersPerMinute           { get; set; } = 1;
-    public int ExistingCustomerPercentage { get; set; } = 30;
+    public int OrdersPerMinute            { get; set; } = 1;
+    public int ExistingCustomerPercentage  { get; set; } = 30;
+    public int DurationHours               { get; set; } = 24;
+    public int NoOrderCustomerPercentage   { get; set; } = 50;
+    public int AbandonedCartPercentage     { get; set; } = 10;
+    public bool? IncludeConsumerOrders     { get; set; }
+    public bool? IncludeStoreOrders        { get; set; }
+    public int StoreOrderPercentage        { get; set; } = 20;
 }

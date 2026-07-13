@@ -706,6 +706,81 @@ These functions expose the virtual bank. See [BANK_SIMULATOR.md](./BANK_SIMULATO
 
 ---
 
+## Shopping Simulator Functions
+
+The Shopping Simulator continuously generates AI-driven orders to simulate realistic customer and B2B activity. It auto-stops after a configurable duration (default 24h, max 72h) to prevent runaway Azure costs.
+
+### `ShoppingSimulator_Status`
+
+- **Trigger / Route**: HTTP `GET /api/shopping-simulator/status`
+- **Purpose**: Returns the current simulator state including all configuration, queue depth, and cumulative counters.
+- **Response fields**: `isRunning`, `ordersPerMinute`, `existingCustomerPercentage`, `durationHours`, `stopScheduledAt`, `noOrderCustomerPercentage`, `abandonedCartPercentage`, `includeConsumerOrders`, `includeStoreOrders`, `storeOrderPercentage`, `startedAt`, `totalQueued`, `newCustomerQueued`, `existingCustomerQueued`, `storeOrderQueued`, `queueDepth`.
+
+### `ShoppingSimulator_Start`
+
+- **Trigger / Route**: HTTP `POST /api/shopping-simulator/start`
+- **Purpose**: Starts the simulator with the given configuration. Computes `stopScheduledAt` = `startedAt` + `durationHours`.
+- **Body**:
+  ```json
+  {
+    "ordersPerMinute": 1,
+    "existingCustomerPercentage": 30,
+    "durationHours": 24,
+    "noOrderCustomerPercentage": 50,
+    "abandonedCartPercentage": 10,
+    "includeConsumerOrders": true,
+    "includeStoreOrders": true,
+    "storeOrderPercentage": 20
+  }
+  ```
+- **Configuration details**:
+  - `ordersPerMinute` (1–60): Messages enqueued per timer tick (every minute).
+  - `durationHours` (1–72, default 24): Auto-stop duration. Simulator NEVER runs forever.
+  - `existingCustomerPercentage` (0–100): Split between existing customers and new customers for consumer orders.
+  - `noOrderCustomerPercentage` (0–100): % of new-customer slots given to registered customers who never ordered (drawn to sale items via marketing re-engagement).
+  - `abandonedCartPercentage` (0–100): % of existing-customer slots given to customers with abandoned shopping carts (Smart Cart Recovery).
+  - `includeConsumerOrders` / `includeStoreOrders`: Toggle consumer B2C and/or B2B store orders. At least one must be enabled.
+  - `storeOrderPercentage` (5–50): When both types enabled, this % of messages go to B2B stores.
+
+### `ShoppingSimulator_Stop`
+
+- **Trigger / Route**: HTTP `POST /api/shopping-simulator/stop`
+- **Purpose**: Stops the simulator. Messages already in the queue continue processing.
+
+### `ShoppingSimulator_ClearQueue`
+
+- **Trigger / Route**: HTTP `POST /api/shopping-simulator/clear-queue`
+- **Purpose**: Purges all pending messages from `simulation-order-queue`.
+
+### `ShoppingSimulator_Results`
+
+- **Trigger / Route**: HTTP `GET /api/shopping-simulator/results[?limit=50]`
+- **Purpose**: Returns recent simulation results (most recent first). Each result includes `orderType` (`"consumer"`, `"b2b-store"`, `"no-order-customer"`, `"cart-recovery"`).
+
+### `ShoppingSimulator_Timer`
+
+- **Trigger**: Timer `0 * * * * *` (every minute)
+- **Purpose**: If running, enqueues `ordersPerMinute` messages to `simulation-order-queue` with the configured routing:
+  1. Checks auto-stop: if `UtcNow >= stopScheduledAt`, stops the simulator and returns.
+  2. Splits messages between B2B store orders and consumer orders based on `storeOrderPercentage`.
+  3. Consumer orders split into existing-customer slots (top spenders + cart recovery) and new-customer slots (random personas + no-order sale-seekers).
+
+### Order Modes (queue message routing)
+
+Each queued message carries an `OrderMode` field that determines generation strategy:
+
+| OrderMode           | Description                                             | AI Required             |
+| ------------------- | ------------------------------------------------------- | ----------------------- |
+| `new-persona`       | Random persona (newbie, family-shopper, commuter, etc.) | No (fallback to Bogus)  |
+| `existing-repeat`   | Top-spender repeat purchase                             | No (fallback to random) |
+| `no-order-customer` | Registered customer with 0 orders, drawn to sale items  | **Yes** (hard fail)     |
+| `cart-recovery`     | Customer with abandoned cart, completes purchase        | **Yes** (hard fail)     |
+| `b2b-store`         | B2B store replenishment order based on history + stock  | **Yes** (hard fail)     |
+
+Modes marked "AI Required" will log full diagnostics and fail (message goes to poison queue) if `AI_AGENT_ORDER_ID` is not configured.
+
+---
+
 ## Simulation Queue & Background Functions
 
 ### `SimulationOrderStart`

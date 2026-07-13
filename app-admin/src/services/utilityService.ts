@@ -727,10 +727,18 @@ export interface ShoppingSimulatorStatus {
   isRunning: boolean;
   ordersPerMinute: number;
   existingCustomerPercentage: number;
+  durationHours: number;
+  stopScheduledAt: string | null;
+  noOrderCustomerPercentage: number;
+  abandonedCartPercentage: number;
+  includeConsumerOrders: boolean;
+  includeStoreOrders: boolean;
+  storeOrderPercentage: number;
   startedAt: string | null;
   totalQueued: number;
   newCustomerQueued: number;
   existingCustomerQueued: number;
+  storeOrderQueued: number;
   queueDepth: number;
   message?: string;
 }
@@ -738,6 +746,12 @@ export interface ShoppingSimulatorStatus {
 export interface ShoppingSimulatorStartConfig {
   ordersPerMinute: number;
   existingCustomerPercentage: number;
+  durationHours: number;
+  noOrderCustomerPercentage: number;
+  abandonedCartPercentage: number;
+  includeConsumerOrders: boolean;
+  includeStoreOrders: boolean;
+  storeOrderPercentage: number;
 }
 
 export const getShoppingSimulatorStatus =
@@ -808,6 +822,7 @@ export interface SimulationOrderResult {
   personaType: string | null;
   aiReasoning: string | null;
   itemCount: number;
+  orderType: string | null;
   completedAt: string;
 }
 

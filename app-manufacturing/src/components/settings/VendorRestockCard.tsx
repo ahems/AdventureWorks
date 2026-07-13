@@ -9,7 +9,11 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
-import { fetchVendors, restockVendor } from "@/services/supplyChainApi";
+import {
+  fetchVendors,
+  restockVendor,
+  type VendorSummary,
+} from "@/services/supplyChainApi";
 import {
   Select,
   SelectTrigger,
@@ -18,6 +22,36 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+
+/** Stock health ratio (0 = fully depleted, 1 = fully stocked) */
+function stockRatio(v: VendorSummary): number {
+  return v.totalComponents > 0 ? v.inStockComponents / v.totalComponents : 1;
+}
+
+/** Sort: most depleted first, then fewest active orders (no help coming) */
+function sortByNeed(a: VendorSummary, b: VendorSummary): number {
+  const ratioA = stockRatio(a);
+  const ratioB = stockRatio(b);
+  if (ratioA !== ratioB) return ratioA - ratioB;
+  // Same ratio — fewer active orders means more urgent
+  if (a.activeOrders !== b.activeOrders) return a.activeOrders - b.activeOrders;
+  return a.vendor.name.localeCompare(b.vendor.name);
+}
+
+/** Color class for the stock health dot */
+function healthColor(v: VendorSummary): string {
+  const ratio = stockRatio(v);
+  if (ratio === 0) return "bg-red-500"; // completely out
+  if (ratio < 0.5) return "bg-amber-500"; // low
+  return "bg-emerald-500"; // healthy
+}
+
+/** Label shown next to vendor name */
+function healthLabel(v: VendorSummary): string {
+  const stock = `${v.inStockComponents}/${v.totalComponents} in stock`;
+  if (v.activeOrders > 0) return `${stock} (${v.activeOrders} incoming)`;
+  return stock;
+}
 
 export function VendorRestockCard() {
   const qc = useQueryClient();
@@ -37,9 +71,7 @@ export function VendorRestockCard() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const sorted = (vendors ?? [])
-    .slice()
-    .sort((a, b) => a.vendor.name.localeCompare(b.vendor.name));
+  const sorted = (vendors ?? []).slice().sort(sortByNeed);
 
   return (
     <Card>
@@ -51,8 +83,8 @@ export function VendorRestockCard() {
             of the supply chain. Other vendors and order history are untouched.
           </p>
           <p className="mt-1 text-xs italic">
-            Use when one supplier has run dry during a demo and you want to keep
-            procurement flowing without a full reset.
+            Vendors are sorted by urgency — most depleted with no incoming
+            orders first.
           </p>
         </CardDescription>
       </CardHeader>
@@ -75,7 +107,15 @@ export function VendorRestockCard() {
               <SelectContent>
                 {sorted.map((v) => (
                   <SelectItem key={v.vendor.vendorId} value={v.vendor.vendorId}>
-                    {v.vendor.name}
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={`inline-block h-2 w-2 rounded-full shrink-0 ${healthColor(v)}`}
+                      />
+                      <span className="truncate">{v.vendor.name}</span>
+                      <span className="ml-auto text-xs text-muted-foreground whitespace-nowrap">
+                        {healthLabel(v)}
+                      </span>
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>

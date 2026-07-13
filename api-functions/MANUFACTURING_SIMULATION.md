@@ -510,6 +510,7 @@ See [BANK_SIMULATOR.md](./BANK_SIMULATOR.md) for the full financial reporting AP
 | `SIMULATION_TIME_SCALE_FACTOR`  | `60`    | 1 real second = N simulated minutes. Default: 1s real = 1 min simulated, so a 2-hour operation takes 2 minutes.              |
 | `SIMULATION_SCRAP_RATE`         | `0.05`  | Global fallback failure rate for any station not in the `DefaultScrapMap`. Per-location Table Storage config overrides this. |
 | `MATERIALS_RETRY_DELAY_SECONDS` | `30`    | How long to wait before retrying a stalled work order when inventory is insufficient.                                        |
+| `SUPPLY_CHAIN_SPEED_MULTIPLIER` | `15`    | Additional compression factor for supply chain delivery and restock delays. Effective scale = `TIME_SCALE × SPEED_MULTIPLIER`. Adjustable at runtime via `PUT /api/supply/config`. |
 
 ### Simulation Time Explained
 
@@ -960,12 +961,27 @@ pending(1) → approved(2) → complete(4)
                        rejected(3)
 ```
 
-Delivery times use the same `SIMULATION_TIME_SCALE_FACTOR` as manufacturing:
+Delivery times use `SIMULATION_TIME_SCALE_FACTOR` combined with the **Supply Chain Speed Multiplier** (`SUPPLY_CHAIN_SPEED_MULTIPLIER`, default **15×**). The multiplier compresses delivery and restock timings so the supply chain keeps pace with manufacturing operations (which typically complete in 2–8 real minutes):
 
-| Transition                     | Sim time                 | Real time at scale=60 |
-| ------------------------------ | ------------------------ | --------------------- |
-| pending → approved             | 5 min                    | 5 sec                 |
-| approved → complete / rejected | `leadDays × 24 × 60` min | `leadDays × 24` min   |
+```
+deliverySec = leadDays × 24 × 3600 / (SIMULATION_TIME_SCALE_FACTOR × SUPPLY_CHAIN_SPEED_MULTIPLIER)
+restockSec  = restockHrs × 3600 / (SIMULATION_TIME_SCALE_FACTOR × SUPPLY_CHAIN_SPEED_MULTIPLIER)
+```
+
+| Transition                     | Sim time                 | Real time (scale=60, multiplier=15) |
+| ------------------------------ | ------------------------ | ----------------------------------- |
+| pending → approved             | 5 min                    | 5 sec                               |
+| approved → complete / rejected | `leadDays × 24 × 60` min | 1-day → 1.6 min, 7-day → 11.2 min  |
+
+| Multiplier | 1-day delivery | 7-day delivery | Restock (rating 1) | Restock (rating 5) |
+| ---------- | -------------- | -------------- | ------------------ | ------------------ |
+| 1× (off)   | 24 min         | 168 min        | 4 min              | 48 min             |
+| 10×         | 2.4 min        | 16.8 min       | 24 sec             | 4.8 min            |
+| **15× (default)** | **1.6 min** | **11.2 min** | **16 sec**       | **3.2 min**        |
+| 30×         | 48 sec         | 5.6 min        | 8 sec              | 1.6 min            |
+| 50×         | 29 sec         | 3.4 min        | 5 sec              | 58 sec             |
+
+The multiplier is adjustable at runtime via `PUT /api/supply/config` or the **Settings → Supply Chain Timing** panel in the manufacturing app. Changes take effect on the next order/restock processed (no restart required).
 
 The reliability roll happens at the delivery step (`approved → complete`/`rejected`). A random value is compared against the vendor's `CreditRating`-derived `reliabilityPct`; failure transitions the order directly to `rejected` (Status=3) rather than `complete`.
 
@@ -1017,10 +1033,10 @@ LocationID 7 is Finished Goods Storage. This increment is picked up by the manuf
 After each delivery, a deferred restock message is automatically enqueued. The delay (in real seconds) is:
 
 ```
-restockDelaySec = vendor.RestockDelaySimHrs × 3600 / SIMULATION_TIME_SCALE_FACTOR
+restockDelaySec = vendor.RestockDelaySimHrs × 3600 / (SIMULATION_TIME_SCALE_FACTOR × SUPPLY_CHAIN_SPEED_MULTIPLIER)
 ```
 
-At `scale=60`: a CreditRating-1 vendor restocks in ~4 real minutes, a CreditRating-5 vendor in ~48 real minutes. The UI can surface this as "next restock in X minutes".
+At `scale=60, multiplier=15`: a CreditRating-1 vendor restocks in ~16 real seconds, a CreditRating-5 vendor in ~3.2 real minutes. The UI can surface this as "next restock in X minutes".
 
 Manual restock is also available via `POST /api/supply/restock/{vendorId}` for demo purposes.
 
@@ -1283,9 +1299,39 @@ Omit the body (or set `productId: 0`) to restock all components for this vendor.
 
 ---
 
+#### `GET /supply/config`
+
+Returns the current supply chain timing configuration.
+
+```json
+{ "supplyChainSpeedMultiplier": 15 }
+```
+
+---
+
+#### `PUT /supply/config`
+
+Updates the supply chain speed multiplier (persisted to Table Storage, takes effect immediately on next order/restock). Value must be between 1 and 50.
+
+```json
+// Request
+{ "supplyChainSpeedMultiplier": 20 }
+
+// Response
+{ "supplyChainSpeedMultiplier": 20, "message": "Speed multiplier updated to 20×." }
+```
+
+| Field | Type | Range | Default | Description |
+| ----- | ---- | ----- | ------- | ----------- |
+| `supplyChainSpeedMultiplier` | number | 1–50 | 15 | Additional compression factor applied on top of `SIMULATION_TIME_SCALE_FACTOR` for delivery and restock delays |
+
+**Environment variable fallback:** If no Table Storage config has been set, the value falls back to `SUPPLY_CHAIN_SPEED_MULTIPLIER` (env var, default `15`). Once a PUT is issued, the Table Storage value takes precedence.
+
+---
+
 #### `DELETE /supply/reset`
 
-Wipes all orders, tracking events, and stock, then re-seeds stock at randomised initial levels from `ProductVendor` data. Vendor definitions are reloaded from SQL.
+Wipes all orders, tracking events, and stock, then re-seeds stock at randomised initial levels from `ProductVendor` data. Vendor definitions are reloaded from SQL. The speed multiplier config is **not** cleared by reset.
 
 ```json
 { "message": "Supply chain simulation reset. Vendor stock re-seeded." }

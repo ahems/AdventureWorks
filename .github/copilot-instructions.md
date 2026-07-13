@@ -342,6 +342,19 @@ az monitor app-insights query --app <app-name> --analytics-query "requests | top
 7. **Build failures**: Functions require restore before build - use `restore (functions)` task first
 8. **Connection errors**: Ensure `az login` is fresh - tokens expire after hours
 9. **Missing env vars**: DAB reads from `@env()` placeholders - check azd environment with `azd env get-values`
+10. **Shopping Simulator AI requirement**: The `no-order-customer`, `cart-recovery`, and `b2b-store` order modes require `AI_AGENT_ORDER_ID` to be configured. Without it, those messages will hard-fail to the poison queue with full diagnostics. The `new-persona` and `existing-repeat` modes fall back to random generation if AI is unavailable.
+11. **Shopping Simulator auto-stop**: The simulator always auto-stops after the configured `durationHours` (default 24h, max 72h). It never runs forever — this is a cost protection feature checked every timer tick (1 minute).
+
+### Shopping Simulator
+
+The shopping simulator (`POST /api/shopping-simulator/start`) generates continuous AI-driven orders. Configuration:
+
+- **Duration**: 1–72 hours (default 24). Auto-stops to prevent runaway costs.
+- **Order types**: Consumer (B2C) and/or B2B store orders. At least one must be enabled.
+- **Consumer mix**: Existing top-spenders, new random personas, no-order customers drawn to sales, and abandoned-cart recoveries.
+- **B2B stores**: AI generates representative replenishment orders based on each store's purchase history and current inventory.
+- **State**: Persisted in Azure Table Storage (`shoppingSimulator` table). Queue: `simulation-order-queue`.
+- **Admin UI**: `app-admin/src/pages/ShoppingSimulatorPage.tsx` — sliders, toggles, live stats, and results feed.
 
 ## Documentation Map
 

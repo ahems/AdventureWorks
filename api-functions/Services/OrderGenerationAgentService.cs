@@ -74,8 +74,38 @@ public class OrderGenerationAgentService
         string? customPersona,
         int? seedCustomerId = null,
         Action<string, string>? onLog = null,
-        string? previousResponseId = null)
+        string? previousResponseId = null,
+        string? orderMode = null,
+        int? storeId = null)
     {
+        // ── AI-required modes: fail hard if agent is not available ───────────
+        var aiRequiredModes = new[] { "no-order-customer", "cart-recovery", "b2b-store" };
+        if (aiRequiredModes.Contains(orderMode) && !IsAgentAvailable)
+        {
+            var diagnostics = new Dictionary<string, string>
+            {
+                ["OrderMode"] = orderMode ?? "",
+                ["PersonaType"] = personaType,
+                ["CustomerId"] = seedCustomerId?.ToString() ?? "0",
+                ["StoreId"] = storeId?.ToString() ?? "",
+                ["AI_AGENT_ORDER_ID"] = _agentId ?? "(not configured)",
+                ["MCP_SERVICE_URL"] = _configuration["MCP_SERVICE_URL"] ?? "(not configured)",
+                ["AI_AGENT_OPENAI_ENDPOINT"] = _configuration["AI_AGENT_OPENAI_ENDPOINT"] ?? "(not configured)",
+            };
+
+            var diagMessage = string.Join("; ", diagnostics.Select(kv => $"{kv.Key}={kv.Value}"));
+            _logger.LogError(
+                "[OrderGen] AI REQUIRED but unavailable for mode={OrderMode}. " +
+                "This is semi-expected during setup but must be fixed. Diagnostics: {Diagnostics}",
+                orderMode, diagMessage);
+
+            _telemetryClient.TrackEvent("OrderGeneration.AiUnavailable", diagnostics);
+
+            throw new InvalidOperationException(
+                $"AI agent is required for order mode '{orderMode}' but is not configured. " +
+                $"Set AI_AGENT_ORDER_ID in app settings. Diagnostics: {diagMessage}");
+        }
+
         // When the AI agent is not configured, use direct random order generation
         if (!IsAgentAvailable)
         {
@@ -101,7 +131,7 @@ public class OrderGenerationAgentService
 
             // ── Resolve seed customer for "existing-customer" persona ─────────
             CustomerProfile? seedProfile = null;
-            if (personaType == "existing-customer")
+            if (personaType == "existing-customer" || orderMode == "no-order-customer" || orderMode == "cart-recovery")
             {
                 int resolvedCustomerId;
                 if (seedCustomerId.HasValue && seedCustomerId.Value > 0)
@@ -122,14 +152,22 @@ public class OrderGenerationAgentService
                 if (seedProfile == null)
                     throw new InvalidOperationException($"Customer {resolvedCustomerId} not found");
 
-                // Log name and order stats only — omit email to avoid PII in log traces.
-                // See: https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/tool-best-practice (Secure tool usage)
                 Log($"Loaded profile: {seedProfile.FirstName} {seedProfile.LastName} — CustomerID={resolvedCustomerId}, {seedProfile.OrderCount} orders, ${seedProfile.TotalSpend:N2} total spend", "info");
             }
 
-            var personaDescription = seedProfile != null
-                ? BuildExistingCustomerPersona(seedProfile)
-                : BuildPersonaDescription(personaType, customPersona);
+            var personaDescription = orderMode switch
+            {
+                "no-order-customer" => seedProfile != null
+                    ? $"Registered customer '{seedProfile.FirstName} {seedProfile.LastName}' (ID={seedProfile.CustomerID}) who browsed the site, registered an account, but never placed an order. They received a marketing email highlighting current sales and promotions. They are STRONGLY drawn to discounted/sale items — prioritise products with active SpecialOffers."
+                    : "A registered customer who browsed, never purchased, and is now returning after a marketing email. Strongly drawn to sale items.",
+                "cart-recovery" => seedProfile != null
+                    ? $"Customer '{seedProfile.FirstName} {seedProfile.LastName}' (ID={seedProfile.CustomerID}) who abandoned their shopping cart and has now returned after receiving a Smart Cart Recovery email. They should purchase the items that were in their cart (check ShoppingCartItem for their saved items). Place those exact items as an order."
+                    : "A customer returning to complete an abandoned cart purchase after a recovery email.",
+                "b2b-store" => $"B2B store order (StoreID={storeId}). Generate a representative purchase order for this store based on their previous order history and current available stock. This is a business replenishment order, not a consumer purchase.",
+                _ => seedProfile != null
+                    ? BuildExistingCustomerPersona(seedProfile)
+                    : BuildPersonaDescription(personaType, customPersona)
+            };
 
             Log($"Planning order for persona: {personaDescription}", "info");
 
@@ -143,7 +181,9 @@ public class OrderGenerationAgentService
             {
                 ["todayDate"]          = today,
                 ["personaDescription"] = personaDescription,
-                ["isExistingCustomer"] = seedProfile != null
+                ["isExistingCustomer"] = seedProfile != null,
+                ["orderMode"]          = orderMode ?? "new-persona",
+                ["storeId"]            = storeId ?? 0
             };
 
             if (seedProfile != null)
@@ -183,9 +223,9 @@ public class OrderGenerationAgentService
                 previousResponseId: string.IsNullOrEmpty(previousResponseId) ? null : previousResponseId,
                 structuredInputs: structuredInputs,
                 toolChoice: "required");
-            var rawResponse = agentResponse.ResponseText;
+            var rawResponse = agentResponse.ResponseText ?? string.Empty;
 
-            if (agentResponse.ToolsUsed.Count > 0)
+            if (agentResponse.ToolsUsed?.Count > 0)
                 Log($"Agent used tools: {string.Join(", ", agentResponse.ToolsUsed)}", "dim");
 
             _logger.LogInformation("AI order plan raw response length: {Length}", rawResponse.Length);
@@ -198,8 +238,18 @@ public class OrderGenerationAgentService
 
             // ── Resolve customer ─────────────────────────────────────────────
             int customerId;
+            // B2B store orders don't need a consumer customer — they resolve it from StoreID later
+            if (orderMode == "b2b-store")
+            {
+                // For B2B, we don't resolve a consumer customer here.
+                // The store's CustomerID is resolved inside CreateStoreOrderAsync.
+                customerId = 0; // placeholder — not used for B2B path
+                var storeInfo = await _orderGenService.GetStoreInfoAsync(storeId ?? 0);
+                result.CustomerName = storeInfo?.StoreName ?? $"Store #{storeId}";
+                Log($"B2B store order for: {result.CustomerName} (StoreID={storeId})", "success");
+            }
             // If we used a seed customer (existing-customer persona), always honour it
-            if (seedProfile != null)
+            else if (seedProfile != null)
             {
                 customerId = seedProfile.CustomerID;
                 result.CustomerName = $"{seedProfile.FirstName} {seedProfile.LastName}";
@@ -234,8 +284,9 @@ public class OrderGenerationAgentService
             // ── Validate items & check stock ─────────────────────────────────
             Log("Validating items and checking live inventory...", "info");
             var validItems = new List<OrderLineItem>();
+            var orderItems = plan.OrderItems ?? new List<PlannedOrderItem>();
 
-            foreach (var item in plan.OrderItems)
+            foreach (var item in orderItems)
             {
                 // Guard against out-of-range values in the AI-generated plan
                 // (treats agent output as untrusted input per tool best practices).
@@ -304,12 +355,35 @@ public class OrderGenerationAgentService
             }
 
             // ── Create the order ─────────────────────────────────────────────
-            Log("Creating order in database...", "info");
-            var salesOrderId = await _orderGenService.CreateOrderAsync(new CreateOrderRequest
+            int salesOrderId;
+            if (orderMode == "b2b-store" && storeId.HasValue && storeId.Value > 0)
             {
-                CustomerId = customerId,
-                Items = validItems
-            });
+                Log($"Creating B2B store order for StoreID={storeId.Value}...", "info");
+                var storeItems = validItems.Select(vi => new StoreOrderLineItem
+                {
+                    ProductId = vi.ProductId,
+                    Quantity = vi.Quantity,
+                    UnitPrice = vi.UnitPrice,
+                    DiscountPct = 0m
+                }).ToList();
+
+                salesOrderId = await _orderGenService.CreateStoreOrderAsync(new CreateStoreOrderRequest
+                {
+                    StoreBusinessEntityId = storeId.Value,
+                    Items = storeItems,
+                    PurchaseOrderNumber = $"SIM-{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
+                    Comment = "Simulated B2B replenishment order (AI-generated)"
+                });
+            }
+            else
+            {
+                Log("Creating order in database...", "info");
+                salesOrderId = await _orderGenService.CreateOrderAsync(new CreateOrderRequest
+                {
+                    CustomerId = customerId,
+                    Items = validItems
+                });
+            }
 
             Log($"Order created: SalesOrderID={salesOrderId}", "success");
             result.SalesOrderId = salesOrderId;
@@ -329,7 +403,8 @@ public class OrderGenerationAgentService
 
             var duration = DateTimeOffset.UtcNow - startTime;
             result.Success   = true;
-            result.TotalDue  = receiptData?.TotalDue ?? 0;
+            result.TotalDue  = receiptData?.TotalDue
+                ?? validItems.Sum(vi => vi.UnitPrice * vi.Quantity);
             result.CustomerId = customerId;
             result.ThreadId  = agentResponse.ResponseId;
             operation.Telemetry.Success = true;

@@ -5,8 +5,12 @@ namespace api_functions.Models;
 /// Each message represents one autonomous AI-driven order-generation request.
 ///
 /// Routing logic:
-///   CustomerId == 0  → the AI picks a random persona (optionally guided by PersonaHint)
-///   CustomerId  > 0  → the AI generates a realistic next-purchase for that specific customer
+///   OrderMode determines the generation strategy:
+///   - "new-persona"        → AI picks a random persona (default when CustomerId == 0 and no mode specified)
+///   - "no-order-customer"  → existing registered customer with no orders, drawn to sale items
+///   - "cart-recovery"      → customer with abandoned cart items, completes their purchase
+///   - "existing-repeat"    → existing top-spender, AI generates next purchase
+///   - "b2b-store"          → B2B store order based on store history and stock
 /// </summary>
 public class SimulationOrderMessage
 {
@@ -23,4 +27,15 @@ public class SimulationOrderMessage
     /// When null or empty the agent randomly selects a persona.
     /// </summary>
     public string? PersonaHint { get; set; }
+
+    /// <summary>
+    /// Determines the order generation strategy. When null, legacy routing applies
+    /// (CustomerId == 0 → new-persona, CustomerId > 0 → existing-repeat).
+    /// </summary>
+    public string? OrderMode { get; set; }
+
+    /// <summary>
+    /// Target store BusinessEntityID for B2B orders (when OrderMode == "b2b-store").
+    /// </summary>
+    public int? StoreId { get; set; }
 }

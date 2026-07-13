@@ -217,3 +217,28 @@ export async function resetSupplyChain(): Promise<{ message: string }> {
   if (!res.ok) throw new Error(`Reset error: ${res.status}`);
   return res.json();
 }
+
+// ── Supply Chain Config ─────────────────────────────────────────────────────
+
+export interface SupplyChainConfig {
+  supplyChainSpeedMultiplier: number;
+}
+
+export async function fetchSupplyChainConfig(): Promise<SupplyChainConfig> {
+  const res = await fetch(`${BASE}/supply/config`);
+  if (!res.ok) throw new Error(`Config fetch error: ${res.status}`);
+  return res.json();
+}
+
+export async function updateSupplyChainConfig(config: SupplyChainConfig): Promise<SupplyChainConfig & { message: string }> {
+  const res = await fetch(`${BASE}/supply/config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Config update failed: ${res.status} — ${text}`);
+  }
+  return res.json();
+}

@@ -142,8 +142,8 @@ public class PurchaseOrderProcessorFunction
             {
                 var vendorInfo   = await _svc.GetVendorAsync(order.VendorId);
                 int restockHrs   = vendorInfo?.RestockDelaySimHrs ?? 12;
-                double simScale  = GetSimTimeScale();
-                int restockSec   = (int)(restockHrs * 3600.0 / simScale);
+                double effScale  = await _svc.GetEffectiveTimeScaleAsync();
+                int restockSec   = Math.Max(1, (int)(restockHrs * 3600.0 / effScale));
 
                 await EnqueueMessageAsync(new PurchaseOrderMessage
                 {
@@ -170,8 +170,8 @@ public class PurchaseOrderProcessorFunction
 
         var vendor      = await _svc.GetVendorAsync(order.VendorId);
         int leadDays    = vendor?.DefaultLeadTimeDays ?? 2;
-        double simScale = GetSimTimeScale();
-        int deliverySec = (int)(leadDays * 24 * 60 * 60.0 / simScale);
+        double effScale = await _svc.GetEffectiveTimeScaleAsync();
+        int deliverySec = Math.Max(1, (int)(leadDays * 24 * 60 * 60.0 / effScale));
 
         await EnqueueMessageAsync(new PurchaseOrderMessage
         {
@@ -237,13 +237,5 @@ public class PurchaseOrderProcessorFunction
         }
         await client.CreateIfNotExistsAsync();
         return client;
-    }
-
-    private static double GetSimTimeScale()
-    {
-        if (double.TryParse(
-                Environment.GetEnvironmentVariable("SIMULATION_TIME_SCALE_FACTOR"),
-                out double f) && f > 0) return f;
-        return 60.0; // default: 1 sim-min = 1 real sec
     }
 }

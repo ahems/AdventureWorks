@@ -105,9 +105,13 @@ public class SupplyChainService
     // Initial stock fill ratio (fraction of MaxOrderQty at seed time)
     private static readonly double[] FillRatioByRating      = { 0, 0.90, 0.80, 0.68, 0.55, 0.45 };
 
+    private const string PART_CONFIG = "config";
+    private const string ROW_SPEED  = "speed-multiplier";
+
     private readonly string _connectionString;
     private readonly TableClient _tableClient;
     private readonly double _simTimeScale;
+    private readonly double _defaultSpeedMultiplier;
     private readonly ILogger<SupplyChainService> _logger;
     private readonly TelemetryClient _telemetry;
     private readonly BankService? _bank;
@@ -129,6 +133,7 @@ public class SupplyChainService
         string connectionString,
         string tableServiceUri,
         double simTimeScale,
+        double supplyChainSpeedMultiplier,
         ILogger<SupplyChainService> logger,
         TelemetryClient telemetry,
         BankService? bank = null,
@@ -136,6 +141,7 @@ public class SupplyChainService
     {
         _connectionString = connectionString;
         _simTimeScale     = simTimeScale;
+        _defaultSpeedMultiplier = supplyChainSpeedMultiplier;
         _logger           = logger;
         _telemetry        = telemetry;
         _bank             = bank;
@@ -1096,6 +1102,53 @@ public class SupplyChainService
         }
 
         _logger.LogInformation("Restocked vendor {VendorId}, {Count} SKUs", vendorId, toUpdate.Count);
+    }
+
+    // ── Speed multiplier config (Table Storage) ────────────────────────────────
+
+    /// <summary>
+    /// Returns the effective supply chain speed multiplier.
+    /// Reads from Table Storage config partition; falls back to the constructor default.
+    /// </summary>
+    public async Task<double> GetSpeedMultiplierAsync()
+    {
+        try
+        {
+            var entity = await _tableClient.GetEntityAsync<TableEntity>(PART_CONFIG, ROW_SPEED);
+            double val = entity.Value.GetDouble("Value") ?? _defaultSpeedMultiplier;
+            return val > 0 ? val : _defaultSpeedMultiplier;
+        }
+        catch (Azure.RequestFailedException ex) when (ex.Status == 404)
+        {
+            return _defaultSpeedMultiplier;
+        }
+    }
+
+    /// <summary>
+    /// Persists the supply chain speed multiplier to Table Storage.
+    /// </summary>
+    public async Task SetSpeedMultiplierAsync(double value)
+    {
+        if (value < 1.0) value = 1.0;
+        if (value > 50.0) value = 50.0;
+
+        var entity = new TableEntity(PART_CONFIG, ROW_SPEED)
+        {
+            ["Value"] = value,
+            ["UpdatedAtUtc"] = DateTime.UtcNow,
+        };
+        await _tableClient.UpsertEntityAsync(entity);
+        _logger.LogInformation("Supply chain speed multiplier updated to {Value}×", value);
+    }
+
+    /// <summary>
+    /// Returns the effective combined scale for converting sim-time to real seconds.
+    /// Used by PurchaseOrderProcessorFunction for delivery and restock delays.
+    /// </summary>
+    public async Task<double> GetEffectiveTimeScaleAsync()
+    {
+        double multiplier = await GetSpeedMultiplierAsync();
+        return _simTimeScale * multiplier;
     }
 
     // ── Order queries ──────────────────────────────────────────────────────────

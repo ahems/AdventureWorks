@@ -282,11 +282,12 @@ builder.Services.AddScoped<SupplyChainService>(sp =>
     var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
         ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
     var simulationTimeScale = double.TryParse(configuration["SIMULATION_TIME_SCALE_FACTOR"], out var scSupply) ? scSupply : 60.0;
+    var supplyChainSpeedMultiplier = double.TryParse(configuration["SUPPLY_CHAIN_SPEED_MULTIPLIER"], out var scMultiplier) ? scMultiplier : 15.0;
     var logger    = sp.GetRequiredService<ILogger<SupplyChainService>>();
     var telemetry = sp.GetRequiredService<TelemetryClient>();
     var bank      = sp.GetRequiredService<BankService>();
     var warehouse = sp.GetRequiredService<WarehouseService>();
-    return new SupplyChainService(connectionString, tableServiceUri, simulationTimeScale, logger, telemetry, bank, warehouse);
+    return new SupplyChainService(connectionString, tableServiceUri, simulationTimeScale, supplyChainSpeedMultiplier, logger, telemetry, bank, warehouse);
 });
 
 // Register ManufacturingPlanningService for planning intelligence endpoints

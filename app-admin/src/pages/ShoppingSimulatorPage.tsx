@@ -12,12 +12,17 @@ import {
   ShoppingCart,
   CheckCircle2,
   XCircle,
+  Store,
+  Clock,
+  Tag,
+  ShoppingBag,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import AdminHeader from "@/components/AdminHeader";
 import {
   getShoppingSimulatorStatus,
@@ -35,10 +40,18 @@ const DEFAULT_STATUS: ShoppingSimulatorStatus = {
   isRunning: false,
   ordersPerMinute: 1,
   existingCustomerPercentage: 30,
+  durationHours: 24,
+  stopScheduledAt: null,
+  noOrderCustomerPercentage: 50,
+  abandonedCartPercentage: 10,
+  includeConsumerOrders: true,
+  includeStoreOrders: true,
+  storeOrderPercentage: 20,
   startedAt: null,
   totalQueued: 0,
   newCustomerQueued: 0,
   existingCustomerQueued: 0,
+  storeOrderQueued: 0,
   queueDepth: 0,
 };
 
@@ -59,6 +72,59 @@ function formatTimestamp(iso: string | null): string {
   });
 }
 
+function formatRemaining(stopAt: string | null): string {
+  if (!stopAt) return "";
+  const remaining = new Date(stopAt).getTime() - Date.now();
+  if (remaining <= 0) return "stopping…";
+  const hours = Math.floor(remaining / 3_600_000);
+  const minutes = Math.floor((remaining % 3_600_000) / 60_000);
+  if (hours > 0) return `${hours}h ${minutes}m remaining`;
+  return `${minutes}m remaining`;
+}
+
+function durationLabel(h: number): string {
+  if (h === 1) return "1 hour";
+  if (h <= 12) return `${h} hours`;
+  if (h === 24) return "24 hours (1 day)";
+  if (h === 48) return "48 hours (2 days)";
+  if (h === 72) return "72 hours (3 days — max)";
+  return `${h} hours`;
+}
+
+function orderTypeBadge(orderType: string | null) {
+  switch (orderType) {
+    case "b2b-store":
+      return (
+        <Badge
+          variant="outline"
+          className="font-doodle text-[10px] py-0 px-1 border-blue-400 text-blue-600"
+        >
+          B2B
+        </Badge>
+      );
+    case "cart-recovery":
+      return (
+        <Badge
+          variant="outline"
+          className="font-doodle text-[10px] py-0 px-1 border-orange-400 text-orange-600"
+        >
+          cart
+        </Badge>
+      );
+    case "no-order-customer":
+      return (
+        <Badge
+          variant="outline"
+          className="font-doodle text-[10px] py-0 px-1 border-purple-400 text-purple-600"
+        >
+          sale
+        </Badge>
+      );
+    default:
+      return null;
+  }
+}
+
 export default function ShoppingSimulatorPage() {
   const [status, setStatus] =
     React.useState<ShoppingSimulatorStatus>(DEFAULT_STATUS);
@@ -70,6 +136,12 @@ export default function ShoppingSimulatorPage() {
   // Editable config — only applied on Start; locked while running
   const [rateOpm, setRateOpm] = React.useState(1);
   const [existingPct, setExistingPct] = React.useState(30);
+  const [durationHours, setDurationHours] = React.useState(24);
+  const [noOrderPct, setNoOrderPct] = React.useState(50);
+  const [abandonedCartPct, setAbandonedCartPct] = React.useState(10);
+  const [includeConsumer, setIncludeConsumer] = React.useState(true);
+  const [includeStore, setIncludeStore] = React.useState(true);
+  const [storeOrderPct, setStoreOrderPct] = React.useState(20);
 
   // ── Fetch status ────────────────────────────────────────────────────────
 
@@ -82,6 +154,12 @@ export default function ShoppingSimulatorPage() {
       if (!s.isRunning) {
         setRateOpm(s.ordersPerMinute);
         setExistingPct(s.existingCustomerPercentage);
+        setDurationHours(s.durationHours);
+        setNoOrderPct(s.noOrderCustomerPercentage);
+        setAbandonedCartPct(s.abandonedCartPercentage);
+        setIncludeConsumer(s.includeConsumerOrders);
+        setIncludeStore(s.includeStoreOrders);
+        setStoreOrderPct(s.storeOrderPercentage);
       }
       // Fetch recent results when running or queue still processing
       if (s.isRunning || s.queueDepth > 0 || s.totalQueued > 0) {
@@ -110,6 +188,12 @@ export default function ShoppingSimulatorPage() {
       const s = await startShoppingSimulator({
         ordersPerMinute: rateOpm,
         existingCustomerPercentage: existingPct,
+        durationHours,
+        noOrderCustomerPercentage: noOrderPct,
+        abandonedCartPercentage: abandonedCartPct,
+        includeConsumerOrders: includeConsumer,
+        includeStoreOrders: includeStore,
+        storeOrderPercentage: storeOrderPct,
       });
       setStatus(s);
     } catch (err) {
@@ -150,9 +234,17 @@ export default function ShoppingSimulatorPage() {
   // ── Derived values ──────────────────────────────────────────────────────
 
   const total = status.totalQueued;
+  const consumerTotal =
+    status.newCustomerQueued + status.existingCustomerQueued;
   const newPct =
     total > 0 ? Math.round((status.newCustomerQueued / total) * 100) : 0;
-  const existingPct2 = total > 0 ? 100 - newPct : 0;
+  const existingPct2 =
+    total > 0 ? Math.round((status.existingCustomerQueued / total) * 100) : 0;
+  const storePct =
+    total > 0 ? Math.round((status.storeOrderQueued / total) * 100) : 0;
+
+  // Validation: at least one order type must be enabled
+  const canStart = includeConsumer || includeStore;
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -234,6 +326,42 @@ export default function ShoppingSimulatorPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Duration slider */}
+            <div className="space-y-3">
+              <div className="flex justify-between items-baseline">
+                <Label className="font-doodle font-bold text-doodle-text flex items-center gap-1.5">
+                  <Clock className="w-4 h-4" />
+                  Duration
+                </Label>
+                <span className="font-doodle text-sm text-doodle-accent font-semibold">
+                  {durationLabel(durationHours)}
+                </span>
+              </div>
+              <Slider
+                min={1}
+                max={72}
+                step={1}
+                value={[durationHours]}
+                onValueChange={([v]) => setDurationHours(v)}
+                disabled={status.isRunning || actionPending}
+                className="w-full"
+              />
+              <div className="flex justify-between">
+                <span className="font-doodle text-xs text-doodle-text/50">
+                  1h
+                </span>
+                <span className="font-doodle text-xs text-doodle-text/50">
+                  72h (3 days)
+                </span>
+              </div>
+              {status.isRunning && status.stopScheduledAt && (
+                <p className="font-doodle text-xs text-doodle-accent font-semibold">
+                  ⏱ {formatRemaining(status.stopScheduledAt)} — auto-stops at{" "}
+                  {formatTimestamp(status.stopScheduledAt)}
+                </p>
+              )}
+            </div>
+
             {/* Orders per minute slider */}
             <div className="space-y-3">
               <div className="flex justify-between items-baseline">
@@ -263,34 +391,153 @@ export default function ShoppingSimulatorPage() {
               </div>
             </div>
 
-            {/* Existing customer % slider */}
-            <div className="space-y-3">
-              <div className="flex justify-between items-baseline">
-                <Label className="font-doodle font-bold text-doodle-text">
-                  Existing Customer Mix
-                </Label>
-                <span className="font-doodle text-sm text-doodle-accent font-semibold">
-                  {existingPct}% existing · {100 - existingPct}% new
-                </span>
+            {/* ── Order Type Toggles ─────────────────────────────────── */}
+            <div className="space-y-3 border-t border-doodle-text/10 pt-4">
+              <Label className="font-doodle font-bold text-doodle-text">
+                Order Types
+              </Label>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShoppingBag className="w-4 h-4 text-doodle-text/70" />
+                  <span className="font-doodle text-sm text-doodle-text">
+                    Consumer (B2C) orders
+                  </span>
+                </div>
+                <Switch
+                  checked={includeConsumer}
+                  onCheckedChange={(v) => {
+                    if (!v && !includeStore) return; // at least one must be on
+                    setIncludeConsumer(v);
+                  }}
+                  disabled={status.isRunning || actionPending}
+                />
               </div>
-              <Slider
-                min={0}
-                max={100}
-                step={5}
-                value={[existingPct]}
-                onValueChange={([v]) => setExistingPct(v)}
-                disabled={status.isRunning || actionPending}
-                className="w-full"
-              />
-              <div className="flex justify-between">
-                <span className="font-doodle text-xs text-doodle-text/50">
-                  All new customers
-                </span>
-                <span className="font-doodle text-xs text-doodle-text/50">
-                  All existing customers
-                </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Store className="w-4 h-4 text-doodle-text/70" />
+                  <span className="font-doodle text-sm text-doodle-text">
+                    B2B store orders
+                  </span>
+                </div>
+                <Switch
+                  checked={includeStore}
+                  onCheckedChange={(v) => {
+                    if (!v && !includeConsumer) return;
+                    setIncludeStore(v);
+                  }}
+                  disabled={status.isRunning || actionPending}
+                />
               </div>
+              {includeConsumer && includeStore && (
+                <div className="space-y-2 ml-6">
+                  <div className="flex justify-between items-baseline">
+                    <span className="font-doodle text-xs text-doodle-text/70">
+                      B2B store order share
+                    </span>
+                    <span className="font-doodle text-xs text-doodle-accent font-semibold">
+                      {storeOrderPct}% store · {100 - storeOrderPct}% consumer
+                    </span>
+                  </div>
+                  <Slider
+                    min={5}
+                    max={50}
+                    step={5}
+                    value={[storeOrderPct]}
+                    onValueChange={([v]) => setStoreOrderPct(v)}
+                    disabled={status.isRunning || actionPending}
+                    className="w-full"
+                  />
+                </div>
+              )}
             </div>
+
+            {/* ── Consumer Mix (only when consumer orders enabled) ──── */}
+            {includeConsumer && (
+              <div className="space-y-4 border-t border-doodle-text/10 pt-4">
+                <Label className="font-doodle font-bold text-doodle-text">
+                  Consumer Order Mix
+                </Label>
+
+                {/* Existing customer % slider */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-baseline">
+                    <span className="font-doodle text-sm text-doodle-text">
+                      Existing vs New Customers
+                    </span>
+                    <span className="font-doodle text-sm text-doodle-accent font-semibold">
+                      {existingPct}% existing · {100 - existingPct}% new
+                    </span>
+                  </div>
+                  <Slider
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={[existingPct]}
+                    onValueChange={([v]) => setExistingPct(v)}
+                    disabled={status.isRunning || actionPending}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between">
+                    <span className="font-doodle text-xs text-doodle-text/50">
+                      All new customers
+                    </span>
+                    <span className="font-doodle text-xs text-doodle-text/50">
+                      All existing customers
+                    </span>
+                  </div>
+                </div>
+
+                {/* No-order customer % slider (within new-customer slots) */}
+                <div className="space-y-2 ml-4 border-l-2 border-doodle-text/10 pl-4">
+                  <div className="flex justify-between items-baseline">
+                    <span className="font-doodle text-xs text-doodle-text/70 flex items-center gap-1">
+                      <Tag className="w-3 h-3" />
+                      Browsing customers drawn to sales
+                      <span className="text-doodle-text/40">
+                        (% of new slots)
+                      </span>
+                    </span>
+                    <span className="font-doodle text-xs text-doodle-accent font-semibold">
+                      {noOrderPct}%
+                    </span>
+                  </div>
+                  <Slider
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={[noOrderPct]}
+                    onValueChange={([v]) => setNoOrderPct(v)}
+                    disabled={status.isRunning || actionPending}
+                    className="w-full"
+                  />
+                </div>
+
+                {/* Abandoned cart % slider (within existing-customer slots) */}
+                <div className="space-y-2 ml-4 border-l-2 border-doodle-text/10 pl-4">
+                  <div className="flex justify-between items-baseline">
+                    <span className="font-doodle text-xs text-doodle-text/70 flex items-center gap-1">
+                      <ShoppingCart className="w-3 h-3" />
+                      Cart recovery orders
+                      <span className="text-doodle-text/40">
+                        (% of existing slots)
+                      </span>
+                    </span>
+                    <span className="font-doodle text-xs text-doodle-accent font-semibold">
+                      {abandonedCartPct}%
+                    </span>
+                  </div>
+                  <Slider
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={[abandonedCartPct]}
+                    onValueChange={([v]) => setAbandonedCartPct(v)}
+                    disabled={status.isRunning || actionPending}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Start / Stop button */}
             <div className="pt-2">
@@ -312,7 +559,7 @@ export default function ShoppingSimulatorPage() {
               ) : (
                 <Button
                   onClick={handleStart}
-                  disabled={actionPending}
+                  disabled={actionPending || !canStart}
                   className="doodle-button doodle-button-primary w-full flex items-center gap-2 justify-center py-3"
                 >
                   {actionPending ? (
@@ -388,7 +635,7 @@ export default function ShoppingSimulatorPage() {
               {total > 0 && (
                 <div>
                   <p className="font-doodle text-sm font-bold text-doodle-text mb-2">
-                    Persona Mix
+                    Order Mix
                   </p>
 
                   {/* Visual split bar */}
@@ -403,9 +650,14 @@ export default function ShoppingSimulatorPage() {
                       style={{ width: `${existingPct2}%` }}
                       title={`Existing customers: ${existingPct2}%`}
                     />
+                    <div
+                      className="bg-blue-500 transition-all duration-500"
+                      style={{ width: `${storePct}%` }}
+                      title={`B2B store: ${storePct}%`}
+                    />
                   </div>
 
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center flex-wrap gap-y-1">
                     <div className="flex items-center gap-1.5">
                       <span className="w-3 h-3 rounded-sm bg-doodle-green inline-block border border-doodle-text" />
                       <UserPlus className="w-3.5 h-3.5 text-doodle-text" />
@@ -432,6 +684,21 @@ export default function ShoppingSimulatorPage() {
                         </span>
                       </span>
                     </div>
+                    {status.storeOrderQueued > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-sm bg-blue-500 inline-block border border-doodle-text" />
+                        <Store className="w-3.5 h-3.5 text-doodle-text" />
+                        <span className="font-doodle text-xs text-doodle-text">
+                          B2B{" "}
+                          <strong>
+                            {status.storeOrderQueued.toLocaleString()}
+                          </strong>
+                          <span className="text-doodle-text/50 ml-1">
+                            ({storePct}%)
+                          </span>
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -509,6 +776,7 @@ export default function ShoppingSimulatorPage() {
                                 new
                               </Badge>
                             )}
+                            {orderTypeBadge(r.orderType)}
                           </div>
                           <div className="flex items-baseline gap-3 mt-0.5">
                             <span className="font-doodle text-xs text-doodle-accent font-semibold">
@@ -574,10 +842,15 @@ export default function ShoppingSimulatorPage() {
             <strong>manufacturing agent</strong> and supply-chain processes.
           </p>
           <p className="font-doodle text-sm text-doodle-text/70 leading-relaxed mt-2">
-            At <strong>60 orders/min</strong> the queue fills at ~1 message per
-            second. Because AI processing takes several seconds each, the
-            backlog grows quickly — ideal for stress-testing inventory depletion
-            and manufacturing scale-out.
+            <strong>Order types:</strong> Consumer orders include new-customer
+            personas, repeat top-spenders, browsing customers drawn to sales
+            (marketing re-engagement), and abandoned-cart recoveries. B2B store
+            orders generate representative replenishment orders based on each
+            store's purchase history and current stock levels.
+          </p>
+          <p className="font-doodle text-sm text-doodle-text/70 leading-relaxed mt-2">
+            The simulator <strong>auto-stops</strong> after the configured
+            duration (default 24h, max 72h) to prevent runaway Azure costs.
           </p>
           <p className="font-doodle text-xs text-doodle-text/40 mt-3">
             The global <em>Simulators Reset</em> will also stop this simulator
