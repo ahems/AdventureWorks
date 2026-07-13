@@ -83,8 +83,8 @@ const ReorderFromSupplierDialog = ({
         title: `✅ Purchase order placed — ${order.vendorName} × ${order.qty} units`,
       });
       qc.invalidateQueries({ queryKey: ["supply-orders"] });
-      qc.invalidateQueries({ queryKey: ["inventory-all"] });
-      qc.invalidateQueries({ queryKey: ["open-demand"] });
+      qc.refetchQueries({ queryKey: ["inventory-all"] });
+      qc.refetchQueries({ queryKey: ["open-demand"] });
       setOpen(false);
     },
     onError: (e) =>

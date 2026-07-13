@@ -541,7 +541,8 @@ const PlanDemand = () => {
                                   e.stopPropagation();
                                   setReorderProductId(row.productId);
                                 }}
-                                className="doodle-button doodle-button-primary text-xs inline-flex items-center gap-1 py-1 px-2"
+                                disabled={reorderProductId === row.productId}
+                                className="doodle-button doodle-button-primary text-xs inline-flex items-center gap-1 py-1 px-2 disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <Truck className="w-3.5 h-3.5" /> Re-order
                               </button>

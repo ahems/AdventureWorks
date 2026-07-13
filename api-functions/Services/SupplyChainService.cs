@@ -1233,6 +1233,7 @@ public class SupplyChainService
     public async Task ResetAsync()
     {
         _vendorCache = null;
+        _initComplete = false;   // Allow InitializeAsync to re-seed after stock rows are deleted
 
         await using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
