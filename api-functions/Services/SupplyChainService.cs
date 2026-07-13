@@ -1467,6 +1467,11 @@ public class SupplyChainService
     /// <summary>
     /// Loads all vendor-product pairs from Purchasing.ProductVendor for BOM purchased components.
     /// Used to seed Table Storage stock entities.
+    /// NOTE: The BOM filter (EXISTS ... BillOfMaterials) includes retail-only products
+    /// (MakeFlag=0, FinishedGoodsFlag=1) via top-level BOM entries (NULL ProductAssemblyID,
+    /// BOMLevel=0) added in BillOfMaterials-ai.csv. Without those entries, retail products
+    /// like helmets, gloves, and accessories would be excluded from the supply chain catalog
+    /// and could not be restocked when sold out.
     /// </summary>
     internal async Task<List<VendorStockItem>> GetVendorProductsFromSqlAsync()
     {

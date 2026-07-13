@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
+import { TableSkeleton } from "@/components/LoadingSkeletons";
 import ProductImageGallery from "@/components/ProductImageGallery";
 import AiImageGeneratorDialog from "@/components/AiImageGeneratorDialog";
 import CreateVariationsDialog from "@/components/CreateVariationsDialog";
@@ -113,10 +114,7 @@ const TransactionHistorySection: React.FC<TransactionHistorySectionProps> = ({
         </span>
       </div>
       {isLoading ? (
-        <div className="flex items-center justify-center p-8 gap-3">
-          <div className="w-6 h-6 border-4 border-doodle-accent border-t-transparent rounded-full animate-spin" />
-          <span className="font-doodle text-doodle-text/60">Loading…</span>
-        </div>
+        <TableSkeleton rows={5} cols={5} />
       ) : isError ? (
         <p className="font-doodle text-sm text-red-600 px-6 py-4">
           Failed to load transaction history.

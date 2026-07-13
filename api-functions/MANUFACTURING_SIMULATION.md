@@ -505,11 +505,11 @@ See [BANK_SIMULATOR.md](./BANK_SIMULATOR.md) for the full financial reporting AP
 
 ## Configuration (Environment Variables)
 
-| Variable                        | Default | Effect                                                                                                                       |
-| ------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `SIMULATION_TIME_SCALE_FACTOR`  | `60`    | 1 real second = N simulated minutes. Default: 1s real = 1 min simulated, so a 2-hour operation takes 2 minutes.              |
-| `SIMULATION_SCRAP_RATE`         | `0.05`  | Global fallback failure rate for any station not in the `DefaultScrapMap`. Per-location Table Storage config overrides this. |
-| `MATERIALS_RETRY_DELAY_SECONDS` | `30`    | How long to wait before retrying a stalled work order when inventory is insufficient.                                        |
+| Variable                        | Default | Effect                                                                                                                                                                             |
+| ------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SIMULATION_TIME_SCALE_FACTOR`  | `60`    | 1 real second = N simulated minutes. Default: 1s real = 1 min simulated, so a 2-hour operation takes 2 minutes.                                                                    |
+| `SIMULATION_SCRAP_RATE`         | `0.05`  | Global fallback failure rate for any station not in the `DefaultScrapMap`. Per-location Table Storage config overrides this.                                                       |
+| `MATERIALS_RETRY_DELAY_SECONDS` | `30`    | How long to wait before retrying a stalled work order when inventory is insufficient.                                                                                              |
 | `SUPPLY_CHAIN_SPEED_MULTIPLIER` | `15`    | Additional compression factor for supply chain delivery and restock delays. Effective scale = `TIME_SCALE × SPEED_MULTIPLIER`. Adjustable at runtime via `PUT /api/supply/config`. |
 
 ### Simulation Time Explained
@@ -951,6 +951,8 @@ Minimum and maximum order quantities are enforced from `ProductVendor.MinOrderQt
 
 The catalog is derived from `Production.BillOfMaterials` joined to `Purchasing.ProductVendor` — only purchased components (`MakeFlag = 0`) that have at least one active vendor are included. Each vendor maintains independent stock for every component it supplies.
 
+> **Retail products in the supply chain:** Retail-only products (e.g., helmets, gloves, jerseys — `MakeFlag=0`, `FinishedGoodsFlag=1`) are included in the supply chain catalog via top-level BOM entries (`NULL ProductAssemblyID`, `BOMLevel=0`) added by `BillOfMaterials-ai.csv` in the seed job. Without these entries, these products would be excluded from `GetVendorProductsFromSqlAsync()` because the query requires BOM membership. This ensures they can be restocked when sold out by the shopping simulator.
+
 #### Order State Machine
 
 When an order is placed the stock is deducted immediately (to prevent oversell), and a queue message drives the order through the following two-step state machine automatically:
@@ -971,15 +973,15 @@ restockSec  = restockHrs × 3600 / (SIMULATION_TIME_SCALE_FACTOR × SUPPLY_CHAIN
 | Transition                     | Sim time                 | Real time (scale=60, multiplier=15) |
 | ------------------------------ | ------------------------ | ----------------------------------- |
 | pending → approved             | 5 min                    | 5 sec                               |
-| approved → complete / rejected | `leadDays × 24 × 60` min | 1-day → 1.6 min, 7-day → 11.2 min  |
+| approved → complete / rejected | `leadDays × 24 × 60` min | 1-day → 1.6 min, 7-day → 11.2 min   |
 
-| Multiplier | 1-day delivery | 7-day delivery | Restock (rating 1) | Restock (rating 5) |
-| ---------- | -------------- | -------------- | ------------------ | ------------------ |
-| 1× (off)   | 24 min         | 168 min        | 4 min              | 48 min             |
-| 10×         | 2.4 min        | 16.8 min       | 24 sec             | 4.8 min            |
-| **15× (default)** | **1.6 min** | **11.2 min** | **16 sec**       | **3.2 min**        |
-| 30×         | 48 sec         | 5.6 min        | 8 sec              | 1.6 min            |
-| 50×         | 29 sec         | 3.4 min        | 5 sec              | 58 sec             |
+| Multiplier        | 1-day delivery | 7-day delivery | Restock (rating 1) | Restock (rating 5) |
+| ----------------- | -------------- | -------------- | ------------------ | ------------------ |
+| 1× (off)          | 24 min         | 168 min        | 4 min              | 48 min             |
+| 10×               | 2.4 min        | 16.8 min       | 24 sec             | 4.8 min            |
+| **15× (default)** | **1.6 min**    | **11.2 min**   | **16 sec**         | **3.2 min**        |
+| 30×               | 48 sec         | 5.6 min        | 8 sec              | 1.6 min            |
+| 50×               | 29 sec         | 3.4 min        | 5 sec              | 58 sec             |
 
 The multiplier is adjustable at runtime via `PUT /api/supply/config` or the **Settings → Supply Chain Timing** panel in the manufacturing app. Changes take effect on the next order/restock processed (no restart required).
 
@@ -1321,9 +1323,9 @@ Updates the supply chain speed multiplier (persisted to Table Storage, takes eff
 { "supplyChainSpeedMultiplier": 20, "message": "Speed multiplier updated to 20×." }
 ```
 
-| Field | Type | Range | Default | Description |
-| ----- | ---- | ----- | ------- | ----------- |
-| `supplyChainSpeedMultiplier` | number | 1–50 | 15 | Additional compression factor applied on top of `SIMULATION_TIME_SCALE_FACTOR` for delivery and restock delays |
+| Field                        | Type   | Range | Default | Description                                                                                                    |
+| ---------------------------- | ------ | ----- | ------- | -------------------------------------------------------------------------------------------------------------- |
+| `supplyChainSpeedMultiplier` | number | 1–50  | 15      | Additional compression factor applied on top of `SIMULATION_TIME_SCALE_FACTOR` for delivery and restock delays |
 
 **Environment variable fallback:** If no Table Storage config has been set, the value falls back to `SUPPLY_CHAIN_SPEED_MULTIPLIER` (env var, default `15`). Once a PUT is issued, the Table Storage value takes precedence.
 

@@ -115,6 +115,9 @@ Contains database initialization files:
   - Includes original AdventureWorks data and AI-augmented datasets
   - See [sql/README.md](sql/README.md) for complete data catalog
 
+  **Notable AI-enhanced files:**
+  - `BillOfMaterials-ai.csv` — Adds top-level BOM entries (NULL `ProductAssemblyID`, `BOMLevel=0`) for 54 retail-only products (helmets, gloves, jerseys, accessories, etc.). These entries are required so the supply chain system (`SupplyChainService.GetVendorProductsFromSqlAsync`) includes retail products in its reorder catalog. Without them, purchased retail products would sell out with no automatic restocking path.
+
 ### 4. `images/` Directory
 
 Product images for the catalog:

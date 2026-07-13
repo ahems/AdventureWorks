@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
+import { TableSkeleton } from "@/components/LoadingSkeletons";
 import { useAuth } from "@/context/AuthContext";
 import { Customer } from "@/types/customer";
 import {
@@ -398,9 +399,7 @@ const ExpandedCustomerView: React.FC<{
             No linked sales account for this person.
           </p>
         ) : isLoading ? (
-          <p className="font-doodle text-sm text-doodle-text/50 animate-pulse">
-            Loading orders…
-          </p>
+          <TableSkeleton rows={3} cols={4} />
         ) : orders.length === 0 ? (
           <p className="font-doodle text-doodle-text/60 text-sm">
             No orders found for this customer.

@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
+import { KpiSkeleton, TableSkeleton } from "@/components/LoadingSkeletons";
 import ChannelSelector from "@/components/ChannelSelector";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -341,11 +342,9 @@ const SlowMoversPage: React.FC = () => {
 
           {/* ── KPI cards ─────────────────────────────────────────────────── */}
           {isLoading ? (
-            <div className="flex items-center justify-center h-24">
-              <Loader2 className="w-6 h-6 animate-spin text-doodle-accent" />
-              <span className="ml-2 font-doodle text-sm text-doodle-text/60">
-                Loading data…
-              </span>
+            <div className="space-y-6">
+              <KpiSkeleton count={4} />
+              <TableSkeleton rows={6} cols={7} />
             </div>
           ) : isError ? (
             <div className="flex items-center justify-center h-24 gap-2 text-red-500">

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
+import { TableSkeleton } from "@/components/LoadingSkeletons";
 import { useAuth } from "@/context/AuthContext";
 import {
   useTransactionHistory,
@@ -317,12 +318,7 @@ const InventoryTransactionsPage: React.FC = () => {
         {/* Table */}
         <div className="doodle-card overflow-hidden">
           {isLoading ? (
-            <div className="p-8 text-center">
-              <div className="w-8 h-8 border-4 border-doodle-accent border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p className="font-doodle text-doodle-text/60">
-                Loading transactions…
-              </p>
-            </div>
+            <TableSkeleton rows={8} cols={6} />
           ) : isError ? (
             <div className="p-8 text-center">
               <p className="font-doodle text-red-600">

@@ -1095,6 +1095,9 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         
         # ===== PRODUCTION =====
         @{ Table='Production.BillOfMaterials'; File='BillOfMaterials.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # AI-generated top-level BOM entries for retail products (MakeFlag=0, FinishedGoodsFlag=1) so they
+        # appear in the supply chain catalog (GetVendorProductsFromSqlAsync requires BOM membership)
+        @{ Table='Production.BillOfMaterials'; File='BillOfMaterials-ai.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # ProductPhoto has ThumbNailPhoto and LargePhoto fields hex-encoded to handle varbinary data
         # Note: ProductPhoto.csv uses &| as row terminator (BCP export format)
         @{ Table='Production.ProductPhoto'; File='ProductPhoto.csv'; Delimiter="+|"; RowTerminator='&|'; IsWideChar=$false; HexColumns=@('ThumbNailPhoto', 'LargePhoto') }

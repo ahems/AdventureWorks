@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
+import { TableSkeleton } from "@/components/LoadingSkeletons";
 import { useAuth } from "@/context/AuthContext";
 import {
   useAdminReviews,
@@ -659,12 +660,7 @@ const ReviewsPage: React.FC = () => {
 
           <div className="space-y-4">
             {isLoading ? (
-              <div className="doodle-card p-8 text-center">
-                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-doodle-text/40" />
-                <p className="font-doodle text-doodle-text/60">
-                  Loading reviews…
-                </p>
-              </div>
+              <TableSkeleton rows={6} cols={4} />
             ) : filteredReviews.length === 0 ? (
               <div className="doodle-card p-8 text-center">
                 <p className="font-doodle text-doodle-text/60">

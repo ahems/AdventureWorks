@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { Link as RouterLink } from "react-router-dom";
+import { CardGridSkeleton } from "@/components/LoadingSkeletons";
 import {
   Plus,
   Search,
@@ -69,7 +70,8 @@ import {
 
 const PromotionsPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
-  const { data: apiPromotions = [] } = useAdminSpecialOffers();
+  const { data: apiPromotions = [], isLoading: promotionsLoading } =
+    useAdminSpecialOffers();
   const { data: apiOfferProducts = [] } = useAdminSpecialOfferProducts();
   const { data: products = [] } = useAdminAllProducts();
   const createOffer = useCreateSpecialOffer();
@@ -558,7 +560,9 @@ const PromotionsPage: React.FC = () => {
         </p>
 
         {/* Promotions Grid */}
-        {filteredPromotions.length === 0 ? (
+        {promotionsLoading ? (
+          <CardGridSkeleton count={6} />
+        ) : filteredPromotions.length === 0 ? (
           <div className="doodle-card p-8 text-center">
             <Tag className="w-12 h-12 text-doodle-text/30 mx-auto mb-4" />
             <p className="font-doodle text-doodle-text/60">

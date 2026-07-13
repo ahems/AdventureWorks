@@ -219,6 +219,49 @@ public AddressFunctions(ILogger<AddressFunctions> logger, AddressService service
 
 Connection string uses **Active Directory Default** authentication (Managed Identity in Azure, Azure CLI locally).
 
+### Loading Skeletons (app-manufacturing)
+
+**Every page that fetches async data must show a loading skeleton** while data is in-flight. This is a hard convention for the manufacturing app.
+
+**Available skeleton components** — import from `@/components/LoadingSkeletons`:
+
+| Component | Use for |
+|-----------|---------|
+| `TableSkeleton` | Any table/list view (configurable `rows`/`cols`) |
+| `CardGridSkeleton` | Grid of cards (configurable `count`) |
+| `KpiSkeleton` | KPI metric cards (configurable `count`) |
+| `DetailPageSkeleton` | Detail pages: header + stats + table |
+| `SidebarListSkeleton` | Sidebar navigation lists |
+| `ChartSkeleton` | Chart/graph containers |
+| `DashboardSkeleton` | Full dashboard layout |
+| `ScheduleSkeleton` | Schedule/calendar layouts |
+| `ShopFloorSkeleton` | Shop floor operation card grids |
+
+The base `Skeleton` primitive is also available from `@/components/ui/skeleton` for custom layouts.
+
+**Pattern to follow:**
+
+```tsx
+import { DetailPageSkeleton, TableSkeleton } from '@/components/LoadingSkeletons';
+
+const MyPage = () => {
+  const { data, isLoading } = useQuery({ ... });
+
+  // Early-return skeleton for full-page loading states
+  if (isLoading) return <DetailPageSkeleton />;
+
+  // For partial/panel loading states, use inline branches:
+  // {isLoading ? <TableSkeleton rows={6} cols={4} /> : <table>...</table>}
+  return (...);
+};
+```
+
+- **Full-page loads**: early-return the appropriate skeleton before the main JSX
+- **Panel/section loads**: use a ternary in the JSX — `{isLoading ? <Skeleton> : <Content>}`
+- **Multiple queries**: derive a combined flag — `const isLoading = queryA.isLoading || queryB.isLoading`
+- Static pages (login, 404, settings with no async data) do not need skeletons
+- Pages that only display a selection prompt before data loads (e.g. "select a product first") should show a skeleton only after the user has made a selection and data is actively loading
+
 ### Bicep Infrastructure Patterns
 
 Infrastructure uses **modular decomposition** in `infra/modules/`:

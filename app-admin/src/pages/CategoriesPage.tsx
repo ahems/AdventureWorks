@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
+import { TableSkeleton } from "@/components/LoadingSkeletons";
 import GenerateProductsWizardDialog from "@/components/GenerateProductsWizardDialog";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -618,11 +619,7 @@ const CategoriesPage: React.FC = () => {
 
         {/* Table */}
         {isLoading ? (
-          <div className="doodle-card p-8 text-center animate-pulse">
-            <div className="h-5 bg-doodle-text/10 rounded-md w-1/3 mx-auto mb-4" />
-            <div className="h-5 bg-doodle-text/10 rounded-md w-1/2 mx-auto mb-4" />
-            <div className="h-5 bg-doodle-text/10 rounded-md w-2/5 mx-auto" />
-          </div>
+          <TableSkeleton rows={8} cols={5} />
         ) : categories.length === 0 ? (
           <div className="text-center py-16">
             <FolderOpen className="w-12 h-12 text-doodle-text/30 mx-auto mb-3" />

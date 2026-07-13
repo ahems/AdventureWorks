@@ -32,6 +32,7 @@ import {
 } from "@/hooks/useAdminCatalog";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
+import { TableSkeleton } from "@/components/LoadingSkeletons";
 import { format } from "date-fns";
 
 const CurrenciesPage = () => {
@@ -51,7 +52,8 @@ const CurrenciesPage = () => {
     setRatesCursorStack([]);
   }, [filterCurrency]);
 
-  const { data: apiCurrencies = [] } = useAdminCurrencies();
+  const { data: apiCurrencies = [], isLoading: currenciesLoading } =
+    useAdminCurrencies();
   const { data: ratesData } = useAdminCurrencyRates(
     ratesCursor,
     filterCurrency || null,
@@ -198,61 +200,65 @@ const CurrenciesPage = () => {
                 />
               </div>
 
-              <Card>
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Code</TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Last Modified</TableHead>
-                        <TableHead className="text-right">
-                          Exchange Rates
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredCurrencies.length === 0 ? (
+              {currenciesLoading ? (
+                <TableSkeleton rows={8} cols={4} />
+              ) : (
+                <Card>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
                         <TableRow>
-                          <TableCell
-                            colSpan={4}
-                            className="text-center py-8 text-muted-foreground"
-                          >
-                            No currencies found.
-                          </TableCell>
+                          <TableHead>Code</TableHead>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Last Modified</TableHead>
+                          <TableHead className="text-right">
+                            Exchange Rates
+                          </TableHead>
                         </TableRow>
-                      ) : (
-                        filteredCurrencies.map((currency) => (
-                          <TableRow key={currency.CurrencyCode}>
-                            <TableCell className="font-mono font-bold">
-                              {currency.CurrencyCode}
-                            </TableCell>
-                            <TableCell>{currency.Name}</TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {format(
-                                new Date(currency.ModifiedDate),
-                                "MMM d, yyyy HH:mm",
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                  handleViewRates(currency.CurrencyCode)
-                                }
-                              >
-                                <ExternalLink className="h-3 w-3 mr-1" />
-                                View Rates
-                              </Button>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredCurrencies.length === 0 ? (
+                          <TableRow>
+                            <TableCell
+                              colSpan={4}
+                              className="text-center py-8 text-muted-foreground"
+                            >
+                              No currencies found.
                             </TableCell>
                           </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
+                        ) : (
+                          filteredCurrencies.map((currency) => (
+                            <TableRow key={currency.CurrencyCode}>
+                              <TableCell className="font-mono font-bold">
+                                {currency.CurrencyCode}
+                              </TableCell>
+                              <TableCell>{currency.Name}</TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {format(
+                                  new Date(currency.ModifiedDate),
+                                  "MMM d, yyyy HH:mm",
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleViewRates(currency.CurrencyCode)
+                                  }
+                                >
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  View Rates
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
 

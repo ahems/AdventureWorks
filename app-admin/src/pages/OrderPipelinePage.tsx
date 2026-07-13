@@ -13,6 +13,7 @@ import {
   Save,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TableSkeleton } from "@/components/LoadingSkeletons";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -54,30 +55,33 @@ const DEFAULT_CONFIG: OrderPipelineConfig = {
 };
 
 const EMPTY_STATUS: OrderPipelineStatus = {
-  inProcess:   { orderCount: 0, totalValue: 0 },
-  approved:    { orderCount: 0, totalValue: 0 },
+  inProcess: { orderCount: 0, totalValue: 0 },
+  approved: { orderCount: 0, totalValue: 0 },
   backordered: { orderCount: 0, totalValue: 0 },
-  rejected:    { orderCount: 0, totalValue: 0 },
-  shipped:     { orderCount: 0, totalValue: 0 },
-  cancelled:   { orderCount: 0, totalValue: 0 },
-  note:        "",
+  rejected: { orderCount: 0, totalValue: 0 },
+  shipped: { orderCount: 0, totalValue: 0 },
+  cancelled: { orderCount: 0, totalValue: 0 },
+  note: "",
 };
 
 // ── component ────────────────────────────────────────────────────────────────
 
 export default function OrderPipelinePage() {
   // ── state ─────────────────────────────────────────────────────────────────
-  const [config, setConfig]               = React.useState<OrderPipelineConfig>(DEFAULT_CONFIG);
-  const [savedConfig, setSavedConfig]     = React.useState<OrderPipelineConfig>(DEFAULT_CONFIG);
-  const [pipelineStatus, setPipelineStatus] = React.useState<OrderPipelineStatus>(EMPTY_STATUS);
+  const [config, setConfig] =
+    React.useState<OrderPipelineConfig>(DEFAULT_CONFIG);
+  const [savedConfig, setSavedConfig] =
+    React.useState<OrderPipelineConfig>(DEFAULT_CONFIG);
+  const [pipelineStatus, setPipelineStatus] =
+    React.useState<OrderPipelineStatus>(EMPTY_STATUS);
 
-  const [loadingConfig, setLoadingConfig]   = React.useState(true);
-  const [loadingStatus, setLoadingStatus]   = React.useState(true);
-  const [savingConfig, setSavingConfig]     = React.useState(false);
-  const [promotingPending, setPromotingPending]   = React.useState(false);
+  const [loadingConfig, setLoadingConfig] = React.useState(true);
+  const [loadingStatus, setLoadingStatus] = React.useState(true);
+  const [savingConfig, setSavingConfig] = React.useState(false);
+  const [promotingPending, setPromotingPending] = React.useState(false);
   const [promotingApproved, setPromotingApproved] = React.useState(false);
-  const [configError, setConfigError]       = React.useState<string | null>(null);
-  const [statusError, setStatusError]       = React.useState<string | null>(null);
+  const [configError, setConfigError] = React.useState<string | null>(null);
+  const [statusError, setStatusError] = React.useState<string | null>(null);
 
   // ── fetch helpers ─────────────────────────────────────────────────────────
 
@@ -88,7 +92,9 @@ export default function OrderPipelinePage() {
       setSavedConfig(cfg);
       setConfigError(null);
     } catch (err) {
-      setConfigError(err instanceof Error ? err.message : "Failed to load config.");
+      setConfigError(
+        err instanceof Error ? err.message : "Failed to load config.",
+      );
     } finally {
       setLoadingConfig(false);
     }
@@ -100,7 +106,9 @@ export default function OrderPipelinePage() {
       setPipelineStatus(s);
       setStatusError(null);
     } catch (err) {
-      setStatusError(err instanceof Error ? err.message : "Failed to load status.");
+      setStatusError(
+        err instanceof Error ? err.message : "Failed to load status.",
+      );
     } finally {
       setLoadingStatus(false);
     }
@@ -118,13 +126,17 @@ export default function OrderPipelinePage() {
   // ── derived ───────────────────────────────────────────────────────────────
 
   const isDirty =
-    config.processingToApprovedMinMinutes !== savedConfig.processingToApprovedMinMinutes ||
-    config.processingToApprovedMaxMinutes !== savedConfig.processingToApprovedMaxMinutes ||
-    config.approvedToShippedMinHours      !== savedConfig.approvedToShippedMinHours      ||
-    config.approvedToShippedMaxHours      !== savedConfig.approvedToShippedMaxHours;
+    config.processingToApprovedMinMinutes !==
+      savedConfig.processingToApprovedMinMinutes ||
+    config.processingToApprovedMaxMinutes !==
+      savedConfig.processingToApprovedMaxMinutes ||
+    config.approvedToShippedMinHours !==
+      savedConfig.approvedToShippedMinHours ||
+    config.approvedToShippedMaxHours !== savedConfig.approvedToShippedMaxHours;
 
-  const pendingCount  = pipelineStatus.inProcess.orderCount;
-  const approvedCount = pipelineStatus.approved.orderCount + pipelineStatus.backordered.orderCount;
+  const pendingCount = pipelineStatus.inProcess.orderCount;
+  const approvedCount =
+    pipelineStatus.approved.orderCount + pipelineStatus.backordered.orderCount;
 
   // ── handlers ──────────────────────────────────────────────────────────────
 
@@ -133,7 +145,10 @@ export default function OrderPipelinePage() {
     try {
       const saved = await saveOrderPipelineConfig(config);
       setSavedConfig(saved);
-      toast({ title: "Configuration saved", description: "Future orders will use the new timing." });
+      toast({
+        title: "Configuration saved",
+        description: "Future orders will use the new timing.",
+      });
     } catch (err) {
       toast({
         title: "Save failed",
@@ -208,8 +223,9 @@ export default function OrderPipelinePage() {
             Order Processing Pipeline
           </h1>
           <p className="font-doodle text-doodle-text/70">
-            Configure timing delays and view live order counts across each pipeline stage. Orders
-            automatically flow In Process → Approved → Shipped on the configured schedule.
+            Configure timing delays and view live order counts across each
+            pipeline stage. Orders automatically flow In Process → Approved →
+            Shipped on the configured schedule.
           </p>
         </div>
 
@@ -225,11 +241,13 @@ export default function OrderPipelinePage() {
               </div>
 
               {configError && (
-                <p className="font-doodle text-sm text-red-500 mb-4">{configError}</p>
+                <p className="font-doodle text-sm text-red-500 mb-4">
+                  {configError}
+                </p>
               )}
 
               {loadingConfig ? (
-                <p className="font-doodle text-doodle-text/60 text-sm">Loading…</p>
+                <TableSkeleton rows={4} cols={3} />
               ) : (
                 <div className="space-y-8">
                   {/* Stage 1: Processing → Approved */}
@@ -245,29 +263,38 @@ export default function OrderPipelinePage() {
                       </span>
                     </div>
                     <p className="font-doodle text-xs text-doodle-text/50 mb-3">
-                      Random delay before a new order is first picked up and moved to Approved.
+                      Random delay before a new order is first picked up and
+                      moved to Approved.
                     </p>
                     <div className="space-y-4">
                       <div>
                         <Label className="font-doodle text-xs text-doodle-text/70 mb-1 block">
-                          Minimum — {fmtMinutes(config.processingToApprovedMinMinutes)}
+                          Minimum —{" "}
+                          {fmtMinutes(config.processingToApprovedMinMinutes)}
                         </Label>
                         <Slider
                           min={1}
-                          max={Math.min(config.processingToApprovedMaxMinutes, 240)}
+                          max={Math.min(
+                            config.processingToApprovedMaxMinutes,
+                            240,
+                          )}
                           step={1}
                           value={[config.processingToApprovedMinMinutes]}
                           onValueChange={([v]) =>
                             setConfig((c) => ({
                               ...c,
-                              processingToApprovedMinMinutes: Math.min(v, c.processingToApprovedMaxMinutes),
+                              processingToApprovedMinMinutes: Math.min(
+                                v,
+                                c.processingToApprovedMaxMinutes,
+                              ),
                             }))
                           }
                         />
                       </div>
                       <div>
                         <Label className="font-doodle text-xs text-doodle-text/70 mb-1 block">
-                          Maximum — {fmtMinutes(config.processingToApprovedMaxMinutes)}
+                          Maximum —{" "}
+                          {fmtMinutes(config.processingToApprovedMaxMinutes)}
                         </Label>
                         <Slider
                           min={config.processingToApprovedMinMinutes}
@@ -277,7 +304,10 @@ export default function OrderPipelinePage() {
                           onValueChange={([v]) =>
                             setConfig((c) => ({
                               ...c,
-                              processingToApprovedMaxMinutes: Math.max(v, c.processingToApprovedMinMinutes),
+                              processingToApprovedMaxMinutes: Math.max(
+                                v,
+                                c.processingToApprovedMinMinutes,
+                              ),
                             }))
                           }
                         />
@@ -300,7 +330,8 @@ export default function OrderPipelinePage() {
                       </span>
                     </div>
                     <p className="font-doodle text-xs text-doodle-text/50 mb-3">
-                      Random delay after approval before the order ships (or is backordered).
+                      Random delay after approval before the order ships (or is
+                      backordered).
                     </p>
                     <div className="space-y-4">
                       <div>
@@ -315,7 +346,10 @@ export default function OrderPipelinePage() {
                           onValueChange={([v]) =>
                             setConfig((c) => ({
                               ...c,
-                              approvedToShippedMinHours: Math.min(v, c.approvedToShippedMaxHours),
+                              approvedToShippedMinHours: Math.min(
+                                v,
+                                c.approvedToShippedMaxHours,
+                              ),
                             }))
                           }
                         />
@@ -332,7 +366,10 @@ export default function OrderPipelinePage() {
                           onValueChange={([v]) =>
                             setConfig((c) => ({
                               ...c,
-                              approvedToShippedMaxHours: Math.max(v, c.approvedToShippedMinHours),
+                              approvedToShippedMaxHours: Math.max(
+                                v,
+                                c.approvedToShippedMinHours,
+                              ),
                             }))
                           }
                         />
@@ -351,12 +388,16 @@ export default function OrderPipelinePage() {
                     ) : (
                       <Save className="w-4 h-4 mr-2" />
                     )}
-                    {savingConfig ? "Saving…" : isDirty ? "Save Changes" : "No Changes"}
+                    {savingConfig
+                      ? "Saving…"
+                      : isDirty
+                        ? "Save Changes"
+                        : "No Changes"}
                   </Button>
 
                   <p className="font-doodle text-xs text-doodle-text/40 text-center">
-                    Changes apply to orders placed after saving. Orders already in the queue
-                    retain their original delay.
+                    Changes apply to orders placed after saving. Orders already
+                    in the queue retain their original delay.
                   </p>
                 </div>
               )}
@@ -381,13 +422,17 @@ export default function OrderPipelinePage() {
                   disabled={loadingStatus}
                   className="font-doodle text-xs"
                 >
-                  <RefreshCw className={`w-3 h-3 mr-1 ${loadingStatus ? "animate-spin" : ""}`} />
+                  <RefreshCw
+                    className={`w-3 h-3 mr-1 ${loadingStatus ? "animate-spin" : ""}`}
+                  />
                   Refresh
                 </Button>
               </div>
 
               {statusError && (
-                <p className="font-doodle text-sm text-red-500 mb-4">{statusError}</p>
+                <p className="font-doodle text-sm text-red-500 mb-4">
+                  {statusError}
+                </p>
               )}
 
               <div className="space-y-3">
@@ -408,7 +453,9 @@ export default function OrderPipelinePage() {
                   note="Awaiting fulfilment"
                 />
                 <StatusRow
-                  icon={<AlertTriangle className="w-4 h-4 text-doodle-orange" />}
+                  icon={
+                    <AlertTriangle className="w-4 h-4 text-doodle-orange" />
+                  }
                   label="Backordered"
                   badgeVariant="outline"
                   badgeClass="border-doodle-orange text-doodle-orange"
@@ -417,7 +464,9 @@ export default function OrderPipelinePage() {
                 />
 
                 <div className="border-t border-doodle-border border-dashed my-1" />
-                <p className="font-doodle text-xs text-doodle-text/40">{pipelineStatus.note}</p>
+                <p className="font-doodle text-xs text-doodle-text/40">
+                  {pipelineStatus.note}
+                </p>
 
                 <StatusRow
                   icon={<Truck className="w-4 h-4 text-doodle-green" />}
@@ -447,8 +496,9 @@ export default function OrderPipelinePage() {
                 </h2>
               </div>
               <p className="font-doodle text-sm text-doodle-text/60 mb-5">
-                Skip the normal queue delays and immediately advance all orders in a given stage
-                to the next. Useful for demos or clearing a backlog quickly.
+                Skip the normal queue delays and immediately advance all orders
+                in a given stage to the next. Useful for demos or clearing a
+                backlog quickly.
               </p>
 
               <div className="space-y-3">
@@ -510,8 +560,8 @@ export default function OrderPipelinePage() {
               </div>
 
               <p className="font-doodle text-xs text-doodle-text/40 mt-4">
-                Shipping an order triggers the shipped-notification email and records the sale
-                income in the bank simulator.
+                Shipping an order triggers the shipped-notification email and
+                records the sale income in the bank simulator.
               </p>
             </div>
           </div>
@@ -534,23 +584,40 @@ interface StatusRowProps {
   note: string;
 }
 
-function StatusRow({ icon, label, badgeVariant, badgeClass, entry, note }: StatusRowProps) {
+function StatusRow({
+  icon,
+  label,
+  badgeVariant,
+  badgeClass,
+  entry,
+  note,
+}: StatusRowProps) {
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="flex items-center gap-2 min-w-0">
         {icon}
         <div className="min-w-0">
-          <p className="font-doodle text-sm font-semibold text-doodle-text leading-tight">{label}</p>
-          <p className="font-doodle text-xs text-doodle-text/50 truncate">{note}</p>
+          <p className="font-doodle text-sm font-semibold text-doodle-text leading-tight">
+            {label}
+          </p>
+          <p className="font-doodle text-xs text-doodle-text/50 truncate">
+            {note}
+          </p>
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {entry.orderCount > 0 && (
           <span className="font-doodle text-xs text-doodle-text/60">
-            ${entry.totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            $
+            {entry.totalValue.toLocaleString(undefined, {
+              maximumFractionDigits: 0,
+            })}
           </span>
         )}
-        <Badge variant={badgeVariant} className={`font-doodle font-bold tabular-nums ${badgeClass}`}>
+        <Badge
+          variant={badgeVariant}
+          className={`font-doodle font-bold tabular-nums ${badgeClass}`}
+        >
           {entry.orderCount}
         </Badge>
       </div>

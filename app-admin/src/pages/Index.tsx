@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
+import { KpiSkeleton, ListSkeleton } from "@/components/LoadingSkeletons";
 import AiAgentChat from "@/components/AiAgentChat";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -94,70 +95,78 @@ const Index: React.FC = () => {
 
         {/* Stats Grid */}
         <section className="container mx-auto px-4 pb-8">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-            <Link
-              to="/category/1"
-              className="doodle-card p-4 md:p-6 hover:border-doodle-accent transition-colors group"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <Package className="w-8 h-8 text-doodle-accent group-hover:scale-110 transition-transform" />
-                <TrendingUp className="w-4 h-4 text-doodle-green" />
-              </div>
-              <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">
-                {totalProducts}
-              </p>
-              <p className="font-doodle text-sm text-doodle-text/60">
-                Total Products
-              </p>
-            </Link>
+          {statsLoading ? (
+            <KpiSkeleton count={4} />
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+              <Link
+                to="/category/1"
+                className="doodle-card p-4 md:p-6 hover:border-doodle-accent transition-colors group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <Package className="w-8 h-8 text-doodle-accent group-hover:scale-110 transition-transform" />
+                  <TrendingUp className="w-4 h-4 text-doodle-green" />
+                </div>
+                <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">
+                  {totalProducts}
+                </p>
+                <p className="font-doodle text-sm text-doodle-text/60">
+                  Total Products
+                </p>
+              </Link>
 
-            <Link
-              to="/customers"
-              className="doodle-card p-4 md:p-6 hover:border-doodle-accent transition-colors group"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <Users className="w-8 h-8 text-doodle-green group-hover:scale-110 transition-transform" />
-                <TrendingUp className="w-4 h-4 text-doodle-green" />
-              </div>
-              <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">
-                {totalCustomers}
-              </p>
-              <p className="font-doodle text-sm text-doodle-text/60">
-                Customers
-              </p>
-            </Link>
+              <Link
+                to="/customers"
+                className="doodle-card p-4 md:p-6 hover:border-doodle-accent transition-colors group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <Users className="w-8 h-8 text-doodle-green group-hover:scale-110 transition-transform" />
+                  <TrendingUp className="w-4 h-4 text-doodle-green" />
+                </div>
+                <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">
+                  {totalCustomers}
+                </p>
+                <p className="font-doodle text-sm text-doodle-text/60">
+                  Customers
+                </p>
+              </Link>
 
-            <Link
-              to="/orders"
-              className="doodle-card p-4 md:p-6 hover:border-doodle-accent transition-colors group"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <ShoppingBag className="w-8 h-8 text-doodle-blue group-hover:scale-110 transition-transform" />
-                {pendingOrders > 0 && (
-                  <span className="bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text">
-                    {pendingOrders} pending
-                  </span>
-                )}
-              </div>
-              <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">
-                {totalOrders}
-              </p>
-              <p className="font-doodle text-sm text-doodle-text/60">Orders</p>
-            </Link>
+              <Link
+                to="/orders"
+                className="doodle-card p-4 md:p-6 hover:border-doodle-accent transition-colors group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <ShoppingBag className="w-8 h-8 text-doodle-blue group-hover:scale-110 transition-transform" />
+                  {pendingOrders > 0 && (
+                    <span className="bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text">
+                      {pendingOrders} pending
+                    </span>
+                  )}
+                </div>
+                <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">
+                  {totalOrders}
+                </p>
+                <p className="font-doodle text-sm text-doodle-text/60">
+                  Orders
+                </p>
+              </Link>
 
-            <Link
-              to="/reviews"
-              className="doodle-card p-4 md:p-6 hover:border-doodle-accent transition-colors group"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <Star className="w-8 h-8 text-doodle-accent group-hover:scale-110 transition-transform" />
-              </div>
-              <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">
-                {totalReviews}
-              </p>
-              <p className="font-doodle text-sm text-doodle-text/60">Reviews</p>
-            </Link>
-          </div>
+              <Link
+                to="/reviews"
+                className="doodle-card p-4 md:p-6 hover:border-doodle-accent transition-colors group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <Star className="w-8 h-8 text-doodle-accent group-hover:scale-110 transition-transform" />
+                </div>
+                <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">
+                  {totalReviews}
+                </p>
+                <p className="font-doodle text-sm text-doodle-text/60">
+                  Reviews
+                </p>
+              </Link>
+            </div>
+          )}
         </section>
 
         {/* AI Agent Section */}
@@ -243,9 +252,7 @@ const Index: React.FC = () => {
                 Recent Orders
               </h2>
               {statsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-doodle-accent" />
-                </div>
+                <ListSkeleton count={5} />
               ) : (
                 <div className="space-y-3">
                   {recentOrders.map((order) => {

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
+import { TableSkeleton } from "@/components/LoadingSkeletons";
 import { useAuth } from "@/context/AuthContext";
 import {
   OrderStatus,
@@ -775,9 +776,7 @@ const OrdersPage: React.FC = () => {
         <section className="container mx-auto px-4 pb-12">
           <div className="space-y-4">
             {(isDirectLink ? directOrderLoading : ordersLoading) && (
-              <div className="doodle-card p-8 flex items-center justify-center">
-                <Loader2 className="w-6 h-6 animate-spin text-doodle-text/50" />
-              </div>
+              <TableSkeleton rows={5} cols={5} />
             )}
             {isDirectLink &&
               !directOrderLoading &&

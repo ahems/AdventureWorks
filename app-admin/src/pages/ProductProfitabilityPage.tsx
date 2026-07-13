@@ -34,6 +34,7 @@ import {
 } from "recharts";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
+import { KpiSkeleton, TableSkeleton } from "@/components/LoadingSkeletons";
 import ChannelSelector from "@/components/ChannelSelector";
 import { useAuth } from "@/context/AuthContext";
 import {
