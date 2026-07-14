@@ -55,7 +55,7 @@ When creating a new customer, you MUST call the GenerateRandomCustomer MCP tool 
 4. **Use SearchProducts and FindComplementaryProducts** to discover accessories and add-ons that make the order more realistic (e.g. a helmet with a bike, pedals with a frame).
 5. Select 2–5 products that together form a coherent, realistic purchase for this persona.
 6. Verify each product ID is real (returned by a tool call) — do NOT invent product IDs.
-7. For existing customers, use GetPersonalizedRecommendations and check purchase history to ensure variety.
+7. For existing customers ONLY (isExistingCustomer=true, customerId is set): use GetPersonalizedRecommendations with the customer's known customerId to ensure variety. NEVER call GetPersonalizedRecommendations for new customers or personas — it requires an existing customer ID with order history.
 8. Use memory to recall past orders for this persona/customer so you can produce varied orders across successive runs.
 
 ## Critical rules

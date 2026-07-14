@@ -1052,16 +1052,22 @@ public class WarehouseService
         if (msg.OperationType == WarehouseOperationType.Store ||
             msg.OperationType == WarehouseOperationType.ReceiveSupplier)
         {
-            // Add to inventory at LocationID 7 (Finished Goods Storage) for store/receive
+            // Add to inventory at LocationID 7 (Finished Goods Storage) for store/receive.
+            // Quantity column is smallint (max 32,767) — clamp to prevent arithmetic overflow.
             await conn.ExecuteAsync(@"
                 IF EXISTS (SELECT 1 FROM Production.ProductInventory WHERE ProductID = @ProductId AND LocationID = 7)
                     UPDATE Production.ProductInventory
-                    SET Quantity = Quantity + @Qty, ModifiedDate = GETDATE()
+                    SET Quantity = CONVERT(smallint, CASE WHEN CONVERT(int, Quantity) + @Qty > 32767 THEN 32767
+                                                         WHEN CONVERT(int, Quantity) + @Qty < 0      THEN 0
+                                                         ELSE CONVERT(int, Quantity) + @Qty END),
+                        ModifiedDate = GETDATE()
                     WHERE ProductID = @ProductId AND LocationID = 7
                 ELSE
                     INSERT INTO Production.ProductInventory
                         (ProductID, LocationID, Shelf, Bin, Quantity, rowguid, ModifiedDate)
-                    VALUES (@ProductId, 7, 'A', 1, @Qty, NEWID(), GETDATE())",
+                    VALUES (@ProductId, 7, 'A', 1, CONVERT(smallint, CASE WHEN @Qty > 32767 THEN 32767
+                                                                          WHEN @Qty < 0      THEN 0
+                                                                          ELSE @Qty END), NEWID(), GETDATE())",
                 new { ProductId = msg.ProductId, Qty = effectiveQty });
         }
         else if (msg.OperationType == WarehouseOperationType.Retrieve)

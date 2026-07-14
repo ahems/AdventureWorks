@@ -322,22 +322,25 @@ public class AdventureWorksMcpTools
     }
 
     [McpServerTool]
-    [Description("Get personalized product recommendations for a customer based on their purchase history, preferences, and buying patterns. Returns products the customer might like. Supports multiple languages.")]
-    public async Task<string> GetPersonalizedRecommendations(int customerId, int limit = 5, string? cultureId = null)
+    [Description("Get personalized product recommendations for a customer based on their purchase history, preferences, and buying patterns. Returns products the customer might like. Requires an existing customer ID with purchase history. Supports multiple languages.")]
+    public async Task<string> GetPersonalizedRecommendations(int? customerId = null, int limit = 5, string? cultureId = null)
     {
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetPersonalizedRecommendations");
-        operation.Telemetry.Properties["customerId"] = customerId.ToString();
+        operation.Telemetry.Properties["customerId"] = customerId?.ToString() ?? "null";
         operation.Telemetry.Properties["limit"] = limit.ToString();
         operation.Telemetry.Properties["cultureId"] = cultureId ?? "en";
 
+        if (!customerId.HasValue || customerId.Value <= 0)
+            return "get_personalized_recommendations requires a valid existing customer ID (customerId > 0). This tool is only useful for customers who have already placed orders. For new customers or personas without an ID, use search_products or get_categories_with_products instead.";
+
         try
         {
-            var result = await _orderService.GetPersonalizedRecommendationsAsync(customerId, limit, cultureId ?? "en");
+            var result = await _orderService.GetPersonalizedRecommendationsAsync(customerId.Value, limit, cultureId ?? "en");
             operation.Telemetry.Success = true;
             _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
             {
                 { "tool", "GetPersonalizedRecommendations" },
-                { "customerId", customerId.ToString() },
+                { "customerId", customerId.Value.ToString() },
                 { "resultLength", result.Length.ToString() }
             });
             return result;
@@ -348,7 +351,7 @@ public class AdventureWorksMcpTools
             _telemetryClient.TrackException(ex, new Dictionary<string, string>
             {
                 { "tool", "GetPersonalizedRecommendations" },
-                { "customerId", customerId.ToString() }
+                { "customerId", customerId.Value.ToString() }
             });
             throw;
         }
