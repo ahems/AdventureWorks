@@ -5,7 +5,7 @@ import { Order, OrderItem } from "@/types/order";
 import { getFunctionsApiUrl } from "@/lib/utils";
 
 // SalesOrderHeader.Status codes:
-// 1=In Process, 2=Approved, 3=Backordered, 4=Rejected, 5=Shipped, 6=Cancelled
+// 1=In Process, 2=Approved, 3=Backordered, 4=Rejected, 5=Shipped, 6=Cancelled, 7=Delivered
 export const DB_STATUS_TO_LABEL: Record<number, string> = {
   1: "Processing",
   2: "Approved",
@@ -13,6 +13,7 @@ export const DB_STATUS_TO_LABEL: Record<number, string> = {
   4: "Rejected",
   5: "Shipped",
   6: "Cancelled",
+  7: "Delivered",
 };
 
 // Map DB status to the OrderStatus union type used in the admin UI
@@ -24,6 +25,8 @@ export const dbStatusToOrderStatus = (status: number): Order["Status"] => {
       return "Shipped";
     case 6:
       return "Cancelled";
+    case 7:
+      return "Delivered";
     default:
       return "Pending";
   }
@@ -38,6 +41,8 @@ export const orderStatusToDbStatuses = (status: Order["Status"]): number[] => {
       return [5];
     case "Cancelled":
       return [6];
+    case "Delivered":
+      return [7];
     case "Pending":
       return [2, 3, 4]; // Approved, Backordered, Rejected
     default:

@@ -208,6 +208,10 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
               name: 'AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID'
               value: agentWorkflowHelpMeChooseId
             }
+            {
+              name: 'ORDER_NOTIFICATIONS_EMAIL_ENABLED'
+              value: 'false'
+            }
           ]
         }
       ]

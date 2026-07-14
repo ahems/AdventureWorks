@@ -50,6 +50,7 @@ public class OrderService
                     WHEN soh.Status = 4 THEN 'Rejected'
                     WHEN soh.Status = 5 THEN 'Shipped'
                     WHEN soh.Status = 6 THEN 'Cancelled'
+                    WHEN soh.Status = 7 THEN 'Delivered'
                     ELSE 'Unknown'
                 END AS StatusText,
                 c.FirstName,
@@ -122,6 +123,7 @@ public class OrderService
                     WHEN soh.Status = 4 THEN 'Rejected'
                     WHEN soh.Status = 5 THEN 'Shipped'
                     WHEN soh.Status = 6 THEN 'Cancelled'
+                    WHEN soh.Status = 7 THEN 'Delivered'
                     ELSE 'Unknown'
                 END AS StatusText,
                 c.FirstName + ' ' + c.LastName AS CustomerName,
@@ -271,6 +273,7 @@ public class OrderService
                     WHEN soh.Status = 4 THEN 'Rejected'
                     WHEN soh.Status = 5 THEN 'Shipped'
                     WHEN soh.Status = 6 THEN 'Cancelled'
+                    WHEN soh.Status = 7 THEN 'Delivered'
                     ELSE 'Unknown'
                 END AS StatusText,
                 c.FirstName + ' ' + c.LastName AS CustomerName
@@ -446,14 +449,18 @@ public class OrderService
     public async Task<int> UpdateOrderStatusAsync(int salesOrderId, byte status)
     {
         using var connection = await GetConnectionAsync();
-        // Guard: do not overwrite a terminal status (Rejected=4, Shipped=5, Cancelled=6).
-        // This prevents late-arriving queue messages from rolling back a manually-advanced
-        // order and ensures idempotency when the same status is applied twice.
+        // Guard: do not overwrite a terminal status (Rejected=4, Cancelled=6, Delivered=7).
+        // Shipped (5) is no longer guarded here — the delivery timer must be able to
+        // transition 5→7.  Rejected, Cancelled, and Delivered are true terminals.
+        // Also sets ShipDate when transitioning to Shipped (5) so the delivery timer
+        // has a reliable timestamp to base the delivery window on.
         const string sql = @"
             UPDATE Sales.SalesOrderHeader
-            SET Status = @Status, ModifiedDate = GETDATE()
-            WHERE SalesOrderID = @SalesOrderId
-              AND Status NOT IN (4, 5, 6)";
+            SET    Status       = @Status,
+                   ShipDate     = CASE WHEN @Status = 5 AND ShipDate IS NULL THEN GETDATE() ELSE ShipDate END,
+                   ModifiedDate = GETDATE()
+            WHERE  SalesOrderID = @SalesOrderId
+              AND  Status NOT IN (4, 6, 7)";
         return await connection.ExecuteAsync(sql, new { SalesOrderId = salesOrderId, Status = status });
     }
 
@@ -566,6 +573,32 @@ public class OrderService
             FreightUsd:            freight,
             FreeShippingDeductionUsd: freeShippingDeductionUsd,
             LineCount:             lineCount);
+    }
+
+    /// <summary>
+    /// Promotes all Shipped (Status=5) orders whose ship date has elapsed the configured
+    /// delivery window to Delivered (Status=7).  B2C and B2B orders use separate minimum
+    /// day thresholds.  Falls back to ModifiedDate when ShipDate is NULL so that orders
+    /// shipped before the ShipDate-on-ship fix are also handled correctly.
+    /// </summary>
+    /// <returns>SalesOrderIDs that were promoted to Delivered.</returns>
+    public async Task<IReadOnlyList<int>> MarkOrdersAsDeliveredAsync(int minDaysB2C, int minDaysB2B)
+    {
+        using var connection = await GetConnectionAsync();
+        const string sql = @"
+            UPDATE Sales.SalesOrderHeader
+            SET    Status       = 7,
+                   ModifiedDate = GETDATE()
+            OUTPUT INSERTED.SalesOrderID
+            WHERE  Status = 5
+              AND (
+                    (OnlineOrderFlag = 1
+                     AND ISNULL(ShipDate, ModifiedDate) <= DATEADD(day, -@MinDaysB2C, GETDATE()))
+                 OR (OnlineOrderFlag = 0
+                     AND ISNULL(ShipDate, ModifiedDate) <= DATEADD(day, -@MinDaysB2B, GETDATE()))
+              )";
+        var ids = await connection.QueryAsync<int>(sql, new { MinDaysB2C = minDaysB2C, MinDaysB2B = minDaysB2B });
+        return ids.ToList();
     }
 }
 

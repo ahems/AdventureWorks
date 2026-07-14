@@ -225,17 +225,17 @@ Connection string uses **Active Directory Default** authentication (Managed Iden
 
 **Available skeleton components** — import from `@/components/LoadingSkeletons`:
 
-| Component | Use for |
-|-----------|---------|
-| `TableSkeleton` | Any table/list view (configurable `rows`/`cols`) |
-| `CardGridSkeleton` | Grid of cards (configurable `count`) |
-| `KpiSkeleton` | KPI metric cards (configurable `count`) |
-| `DetailPageSkeleton` | Detail pages: header + stats + table |
-| `SidebarListSkeleton` | Sidebar navigation lists |
-| `ChartSkeleton` | Chart/graph containers |
-| `DashboardSkeleton` | Full dashboard layout |
-| `ScheduleSkeleton` | Schedule/calendar layouts |
-| `ShopFloorSkeleton` | Shop floor operation card grids |
+| Component             | Use for                                          |
+| --------------------- | ------------------------------------------------ |
+| `TableSkeleton`       | Any table/list view (configurable `rows`/`cols`) |
+| `CardGridSkeleton`    | Grid of cards (configurable `count`)             |
+| `KpiSkeleton`         | KPI metric cards (configurable `count`)          |
+| `DetailPageSkeleton`  | Detail pages: header + stats + table             |
+| `SidebarListSkeleton` | Sidebar navigation lists                         |
+| `ChartSkeleton`       | Chart/graph containers                           |
+| `DashboardSkeleton`   | Full dashboard layout                            |
+| `ScheduleSkeleton`    | Schedule/calendar layouts                        |
+| `ShopFloorSkeleton`   | Shop floor operation card grids                  |
 
 The base `Skeleton` primitive is also available from `@/components/ui/skeleton` for custom layouts.
 
@@ -387,6 +387,8 @@ az monitor app-insights query --app <app-name> --analytics-query "requests | top
 9. **Missing env vars**: DAB reads from `@env()` placeholders - check azd environment with `azd env get-values`
 10. **Shopping Simulator AI requirement**: The `no-order-customer`, `cart-recovery`, and `b2b-store` order modes require `AI_AGENT_ORDER_ID` to be configured. Without it, those messages will hard-fail to the poison queue with full diagnostics. The `new-persona` and `existing-repeat` modes fall back to random generation if AI is unavailable.
 11. **Shopping Simulator auto-stop**: The simulator always auto-stops after the configured `durationHours` (default 24h, max 72h). It never runs forever — this is a cost protection feature checked every timer tick (1 minute).
+12. **Order Status=7 is "Delivered"**: Orders are automatically promoted from Shipped (5) to Delivered (7) by the hourly `OrderDelivery_Timer` function. Terminal statuses are now 4 (Rejected), 6 (Cancelled), and 7 (Delivered) — Status=5 (Shipped) is no longer a terminal state. Delivery windows are configurable per order type via `PUT /api/orders/pipeline/config`.
+13. **Order notification emails disabled by default**: `ORDER_NOTIFICATIONS_EMAIL_ENABLED` must be explicitly set to `"true"` to send Shipped/Delivered emails via Azure Communication Services. When unset or `"false"`, the intended email content is logged at Info level instead (look for `[EmailNotifications disabled]` in Application Insights). This prevents the Shopping Simulator from generating email spam. The flag is hardcoded to `"false"` in the Bicep infra — enabling it requires a manual Azure Portal or CLI override. See [docs/features/email/ORDER_NOTIFICATIONS.md](docs/features/email/ORDER_NOTIFICATIONS.md).
 
 ### Shopping Simulator
 

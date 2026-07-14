@@ -12,13 +12,21 @@ public record OrderPipelineConfig(
     int ProcessingToApprovedMinMinutes,
     int ProcessingToApprovedMaxMinutes,
     int ApprovedToShippedMinHours,
-    int ApprovedToShippedMaxHours)
+    int ApprovedToShippedMaxHours,
+    int ShippedToDeliveredMinDaysB2C,
+    int ShippedToDeliveredMaxDaysB2C,
+    int ShippedToDeliveredMinDaysB2B,
+    int ShippedToDeliveredMaxDaysB2B)
 {
     public static readonly OrderPipelineConfig Defaults = new(
         ProcessingToApprovedMinMinutes: 5,
         ProcessingToApprovedMaxMinutes: 60,
         ApprovedToShippedMinHours: 1,
-        ApprovedToShippedMaxHours: 12);
+        ApprovedToShippedMaxHours: 12,
+        ShippedToDeliveredMinDaysB2C: 3,
+        ShippedToDeliveredMaxDaysB2C: 7,
+        ShippedToDeliveredMinDaysB2B: 5,
+        ShippedToDeliveredMaxDaysB2B: 10);
 }
 
 /// <summary>
@@ -65,7 +73,11 @@ public class OrderPipelineConfigService
                 e.ProcessingToApprovedMinMinutes,
                 e.ProcessingToApprovedMaxMinutes,
                 e.ApprovedToShippedMinHours,
-                e.ApprovedToShippedMaxHours);
+                e.ApprovedToShippedMaxHours,
+                e.ShippedToDeliveredMinDaysB2C,
+                e.ShippedToDeliveredMaxDaysB2C,
+                e.ShippedToDeliveredMinDaysB2B,
+                e.ShippedToDeliveredMaxDaysB2B);
         }
         catch (RequestFailedException ex) when (ex.Status == 404)
         {
@@ -90,6 +102,10 @@ public class OrderPipelineConfigService
             ProcessingToApprovedMaxMinutes  = config.ProcessingToApprovedMaxMinutes,
             ApprovedToShippedMinHours       = config.ApprovedToShippedMinHours,
             ApprovedToShippedMaxHours       = config.ApprovedToShippedMaxHours,
+            ShippedToDeliveredMinDaysB2C    = config.ShippedToDeliveredMinDaysB2C,
+            ShippedToDeliveredMaxDaysB2C    = config.ShippedToDeliveredMaxDaysB2C,
+            ShippedToDeliveredMinDaysB2B    = config.ShippedToDeliveredMinDaysB2B,
+            ShippedToDeliveredMaxDaysB2B    = config.ShippedToDeliveredMaxDaysB2B,
         };
         await table.UpsertEntityAsync(entity);
         _logger.LogInformation(
@@ -112,4 +128,8 @@ internal class OrderPipelineConfigEntity : ITableEntity
     public int ProcessingToApprovedMaxMinutes { get; set; } = 60;
     public int ApprovedToShippedMinHours      { get; set; } = 1;
     public int ApprovedToShippedMaxHours      { get; set; } = 12;
+    public int ShippedToDeliveredMinDaysB2C   { get; set; } = 3;
+    public int ShippedToDeliveredMaxDaysB2C   { get; set; } = 7;
+    public int ShippedToDeliveredMinDaysB2B   { get; set; } = 5;
+    public int ShippedToDeliveredMaxDaysB2B   { get; set; } = 10;
 }

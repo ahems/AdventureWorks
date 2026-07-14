@@ -58,10 +58,14 @@ public class OrderPipelineControlFunction
         resp.Headers.Add("Content-Type", "application/json; charset=utf-8");
         await resp.WriteStringAsync(JsonSerializer.Serialize(new
         {
-            processingToApprovedMinMinutes = cfg.ProcessingToApprovedMinMinutes,
-            processingToApprovedMaxMinutes = cfg.ProcessingToApprovedMaxMinutes,
-            approvedToShippedMinHours      = cfg.ApprovedToShippedMinHours,
-            approvedToShippedMaxHours      = cfg.ApprovedToShippedMaxHours,
+            processingToApprovedMinMinutes    = cfg.ProcessingToApprovedMinMinutes,
+            processingToApprovedMaxMinutes    = cfg.ProcessingToApprovedMaxMinutes,
+            approvedToShippedMinHours         = cfg.ApprovedToShippedMinHours,
+            approvedToShippedMaxHours         = cfg.ApprovedToShippedMaxHours,
+            shippedToDeliveredMinDaysB2C      = cfg.ShippedToDeliveredMinDaysB2C,
+            shippedToDeliveredMaxDaysB2C      = cfg.ShippedToDeliveredMaxDaysB2C,
+            shippedToDeliveredMinDaysB2B      = cfg.ShippedToDeliveredMinDaysB2B,
+            shippedToDeliveredMaxDaysB2B      = cfg.ShippedToDeliveredMaxDaysB2B,
         }, JsonOpts));
         return resp;
     }
@@ -91,11 +95,15 @@ public class OrderPipelineControlFunction
             input.ProcessingToApprovedMinMinutes < 1 || input.ProcessingToApprovedMaxMinutes > 1440 ||
             input.ProcessingToApprovedMinMinutes > input.ProcessingToApprovedMaxMinutes ||
             input.ApprovedToShippedMinHours < 0 || input.ApprovedToShippedMaxHours > 168 ||
-            input.ApprovedToShippedMinHours > input.ApprovedToShippedMaxHours)
+            input.ApprovedToShippedMinHours > input.ApprovedToShippedMaxHours ||
+            input.ShippedToDeliveredMinDaysB2C < 1 || input.ShippedToDeliveredMaxDaysB2C > 30 ||
+            input.ShippedToDeliveredMinDaysB2C > input.ShippedToDeliveredMaxDaysB2C ||
+            input.ShippedToDeliveredMinDaysB2B < 1 || input.ShippedToDeliveredMaxDaysB2B > 30 ||
+            input.ShippedToDeliveredMinDaysB2B > input.ShippedToDeliveredMaxDaysB2B)
         {
             var bad = req.CreateResponse(HttpStatusCode.BadRequest);
             await bad.WriteStringAsync(
-                "{\"error\":\"Invalid values. Min must be <= max. processingToApproved: 1–1440 min. approvedToShipped: 0–168 h.\"}");
+                "{\"error\":\"Invalid values. Min must be <= max. processingToApproved: 1\u20131440 min. approvedToShipped: 0\u2013168 h. shippedToDelivered: 1\u201330 days.\"}" );
             return bad;
         }
 
@@ -103,7 +111,11 @@ public class OrderPipelineControlFunction
             input.ProcessingToApprovedMinMinutes,
             input.ProcessingToApprovedMaxMinutes,
             input.ApprovedToShippedMinHours,
-            input.ApprovedToShippedMaxHours);
+            input.ApprovedToShippedMaxHours,
+            input.ShippedToDeliveredMinDaysB2C,
+            input.ShippedToDeliveredMaxDaysB2C,
+            input.ShippedToDeliveredMinDaysB2B,
+            input.ShippedToDeliveredMaxDaysB2B);
 
         await _config.SaveConfigAsync(cfg);
 
@@ -111,10 +123,14 @@ public class OrderPipelineControlFunction
         resp.Headers.Add("Content-Type", "application/json; charset=utf-8");
         await resp.WriteStringAsync(JsonSerializer.Serialize(new
         {
-            processingToApprovedMinMinutes = cfg.ProcessingToApprovedMinMinutes,
-            processingToApprovedMaxMinutes = cfg.ProcessingToApprovedMaxMinutes,
-            approvedToShippedMinHours      = cfg.ApprovedToShippedMinHours,
-            approvedToShippedMaxHours      = cfg.ApprovedToShippedMaxHours,
+            processingToApprovedMinMinutes    = cfg.ProcessingToApprovedMinMinutes,
+            processingToApprovedMaxMinutes    = cfg.ProcessingToApprovedMaxMinutes,
+            approvedToShippedMinHours         = cfg.ApprovedToShippedMinHours,
+            approvedToShippedMaxHours         = cfg.ApprovedToShippedMaxHours,
+            shippedToDeliveredMinDaysB2C      = cfg.ShippedToDeliveredMinDaysB2C,
+            shippedToDeliveredMaxDaysB2C      = cfg.ShippedToDeliveredMaxDaysB2C,
+            shippedToDeliveredMinDaysB2B      = cfg.ShippedToDeliveredMinDaysB2B,
+            shippedToDeliveredMaxDaysB2B      = cfg.ShippedToDeliveredMaxDaysB2B,
             message = "Configuration saved.",
         }, JsonOpts));
         return resp;
@@ -138,7 +154,7 @@ public class OrderPipelineControlFunction
                 SUM(TotalDue)  AS TotalValue
             FROM Sales.SalesOrderHeader
             WHERE Status IN (1, 2, 3)
-               OR (Status IN (4, 5, 6) AND OrderDate >= DATEADD(day, -7, GETDATE()))
+               OR (Status IN (4, 5, 6, 7) AND OrderDate >= DATEADD(day, -7, GETDATE()))
             GROUP BY Status
             ORDER BY Status", commandTimeout: 30);
 
@@ -156,7 +172,8 @@ public class OrderPipelineControlFunction
             rejected     = statusMap.TryGetValue(4, out var s4) ? s4 : new { orderCount = 0, totalValue = 0m },
             shipped      = statusMap.TryGetValue(5, out var s5) ? s5 : new { orderCount = 0, totalValue = 0m },
             cancelled    = statusMap.TryGetValue(6, out var s6) ? s6 : new { orderCount = 0, totalValue = 0m },
-            note         = "Rejected/Shipped/Cancelled counts reflect last 7 days only.",
+            delivered    = statusMap.TryGetValue(7, out var s7) ? s7 : new { orderCount = 0, totalValue = 0m },
+            note         = "Rejected/Shipped/Cancelled/Delivered counts reflect last 7 days only.",
         }, JsonOpts));
         return resp;
     }
@@ -264,4 +281,8 @@ file class OrderPipelineConfigRequest
     public int ProcessingToApprovedMaxMinutes { get; set; }
     public int ApprovedToShippedMinHours      { get; set; }
     public int ApprovedToShippedMaxHours      { get; set; }
+    public int ShippedToDeliveredMinDaysB2C   { get; set; } = 3;
+    public int ShippedToDeliveredMaxDaysB2C   { get; set; } = 7;
+    public int ShippedToDeliveredMinDaysB2B   { get; set; } = 5;
+    public int ShippedToDeliveredMaxDaysB2B   { get; set; } = 10;
 }

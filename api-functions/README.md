@@ -138,7 +138,14 @@ All AI Foundry agent calls share the `FoundryAgentClient` singleton, which lever
 
 ## Sales Order Status Processing
 
-Demo pipeline that simulates order lifecycle (In Process → Approved/Rejected → Shipped or Backordered) via the `sales-order-status` queue. Used to demonstrate queue‑driven workflows and optional “pretend‑shipped” email. The frontend calls `BeginProcessingOrder` when an order is placed so processing starts automatically.
+Demo pipeline that simulates the full order lifecycle via the `sales-order-status` queue:
+
+```
+In Process (1) → Approved (2) → Shipped (5) → Delivered (7)
+              ↘ Rejected (4)   ↘ Backordered (3) → Shipped (5)
+```
+
+Notification emails (Shipped, Delivered) are gated behind the `ORDER_NOTIFICATIONS_EMAIL_ENABLED` environment variable — see [docs/features/email/ORDER_NOTIFICATIONS.md](../docs/features/email/ORDER_NOTIFICATIONS.md) for details. **Emails are disabled by default** to prevent spam when the Shopping Simulator is running.
 
 **Seed script**: To enqueue messages for all existing orders that are still In Process (Status 1), use [scripts/utilities/seed-sales-order-status-queue.sh](../scripts/utilities/seed-sales-order-status-queue.sh). It reads configuration from `azd env` (DAB URL, storage account, resource group), queries the DAB REST API for orders with `Status = 1`, and sends one message per order to the `sales-order-status` queue so the Functions process them as if they had just been placed. Use `--dry-run` to list orders without sending messages. Requires `az login` and `jq`; optional `DAB_ACCESS_TOKEN` if the DAB API requires auth.
 
@@ -150,8 +157,12 @@ Demo pipeline that simulates order lifecycle (In Process → Approved/Rejected �
 ### `ProcessSalesOrderStatus_QueueTrigger`
 
 - **Trigger**: Queue `sales-order-status`
-- **Purpose**: Processes each message (JSON with `SalesOrderID` and `Status`). Implements a state machine over `Sales.SalesOrderHeader.Status`: from **1 (In Process)** moves to **2 (Approved)** (95%) or **4 (Rejected)** (5%); from **2 (Approved)** moves to **3 (Backordered)** (10%) or **5 (Shipped)** (90%); when a **3 (Backordered)** message is picked up after its visibility delay, the order is set to **5 (Shipped)**. For each transition the function updates the database, then either re‑queues the next step with a visibility timeout (1–12 hours for Approved, 2–4 days for Backordered) or stops (terminal statuses 4, 5, 6). When status becomes **5 (Shipped)**, it looks up the customer email via `OrderService.GetCustomerEmailInfoBySalesOrderIdAsync` and sends a “pretend‑shipped” demo email via `EmailService`. If the order no longer exists (e.g. removed by the seed job), the function logs “Order not found” and completes successfully so the message is removed without retry or poison queue.
+- **Purpose**: Processes each message (JSON with `SalesOrderID` and `Status`). Implements a state machine over `Sales.SalesOrderHeader.Status`: from **1 (In Process)** moves to **2 (Approved)** (95%) or **4 (Rejected)** (5%); from **2 (Approved)** moves to **3 (Backordered)** (10%) or **5 (Shipped)** (90%); when a **3 (Backordered)** message is picked up after its visibility delay, the order is set to **5 (Shipped)**. For each transition the function updates the database, then either re-queues the next step with a visibility timeout (1–12 hours for Approved, 2–4 days for Backordered) or stops (terminal statuses 4, 6, 7). When status becomes **5 (Shipped)**, `ShipDate` is stamped on the row and a notification email is conditionally sent (see `ORDER_NOTIFICATIONS_EMAIL_ENABLED`). Terminal statuses are **4** (Rejected), **6** (Cancelled), and **7** (Delivered). If the order no longer exists (e.g. removed by the seed job), the function logs "Order not found" and completes successfully so the message is removed without retry or poison queue.
 
+### `OrderDelivery_Timer` / `OrderDelivery_HttpTrigger`
+
+- **Trigger**: Timer (every hour at `:00`) + HTTP `GET /api/orders/delivery/trigger`
+- **Purpose**: Promotes Shipped (Status=5) orders to Delivered (Status=7) once the configured delivery window has elapsed since `ShipDate` (falls back to `ModifiedDate` when `ShipDate` is NULL). B2C orders (`OnlineOrderFlag=1`) and B2B store orders (`OnlineOrderFlag=0`) use separate minimum-day thresholds configured via `PUT /api/orders/pipeline/config`. Sends a "delivered" notification email per promoted order (gated by `ORDER_NOTIFICATIONS_EMAIL_ENABLED`). Emits a `OrderDelivery.BatchProcessed` Application Insights custom event with the count. The HTTP endpoint is useful for manual triggering during development — returns `{"delivered": N}`.
 ---
 
 ## Product Media Functions (Images & Thumbnails)
@@ -821,6 +832,7 @@ For examples of how these Functions are exercised, see the test scripts in the r
 - MCP server and tools: [api-mcp/README.md](../api-mcp/README.md)
 - Password hashing and reset flow: [docs/features/authentication/](../docs/features/authentication/)
 - Receipts, PDFs, and email: [docs/features/email/](../docs/features/email/)
+- Order lifecycle notifications and email flag: [docs/features/email/ORDER_NOTIFICATIONS.md](../docs/features/email/ORDER_NOTIFICATIONS.md)
 - AI agent and MCP integration: [docs/features/ai-agent/](../docs/features/ai-agent/)
 - Translations and localization flows: [docs/features/internationalization/](../docs/features/internationalization/)
 - Review generation and embeddings: [docs/features/reviews/](../docs/features/reviews/) and [docs/data-management/](../docs/data-management/)

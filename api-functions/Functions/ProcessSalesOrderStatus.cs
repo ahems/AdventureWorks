@@ -20,6 +20,7 @@ public class ProcessSalesOrderStatus
     private readonly BankService _bankService;
     private readonly OrderPipelineConfigService _pipelineConfig;
     private readonly WarehouseService? _warehouse;
+    private readonly bool _emailEnabled;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -39,6 +40,9 @@ public class ProcessSalesOrderStatus
         _bankService = bankService;
         _pipelineConfig = pipelineConfig;
         _warehouse = warehouse;
+        _emailEnabled = string.Equals(
+            Environment.GetEnvironmentVariable("ORDER_NOTIFICATIONS_EMAIL_ENABLED"),
+            "true", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -80,7 +84,7 @@ public class ProcessSalesOrderStatus
         }
 
         // Terminal statuses: update DB only, send email if Shipped, do not re-queue
-        if (status == 4 || status == 5 || status == 6)
+        if (status == 4 || status == 5 || status == 6 || status == 7)
         {
             var rows = await _orderService.UpdateOrderStatusAsync(salesOrderId, (byte)status);
             if (rows == 0)
@@ -220,6 +224,17 @@ public class ProcessSalesOrderStatus
 
     private async Task SendShippedEmailAsync(int salesOrderId)
     {
+        const string subject = "Your order has pretend-shipped – demo";
+        const string body = "This is a demo. Your order has been marked as shipped. Thank you for using Adventure Works.";
+
+        if (!_emailEnabled)
+        {
+            _logger.LogInformation(
+                "[EmailNotifications disabled] Shipped email suppressed for SalesOrderID={SalesOrderId}. Subject: '{Subject}' Body: '{Body}'",
+                salesOrderId, subject, body);
+            return;
+        }
+
         var emailInfo = await _orderService.GetCustomerEmailInfoBySalesOrderIdAsync(salesOrderId);
         if (emailInfo == null)
         {
@@ -227,8 +242,6 @@ public class ProcessSalesOrderStatus
             return;
         }
 
-        const string subject = "Your order has pretend-shipped – demo";
-        const string body = "This is a demo. Your order has been marked as shipped. Thank you for using Adventure Works.";
         var sent = await _emailService.SendCustomerEmailAsync(
             emailInfo.Value.CustomerId,
             emailInfo.Value.EmailAddressId,
