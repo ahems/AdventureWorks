@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
+import GenerateVerifiedReviewsWizardDialog from "@/components/GenerateVerifiedReviewsWizardDialog";
 
 import {
   Bot,
@@ -15,6 +16,7 @@ import {
   Tag,
   FolderPlus,
   Clock,
+  Star,
 } from "lucide-react";
 import { buildInspectorUrl, getApiMcpUrl, getDabMcpUrl } from "@/lib/utils";
 
@@ -123,6 +125,7 @@ const UtilitiesPage: React.FC = () => {
               </p>
             </div>
           </Link>
+          <GenerateVerifiedReviewsWizardDialog />
         </div>
 
         {/* Tools & Inspectors */}

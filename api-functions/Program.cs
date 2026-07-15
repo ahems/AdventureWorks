@@ -97,7 +97,9 @@ builder.Services.AddScoped<ReviewService>(sp =>
     var configuration = sp.GetRequiredService<IConfiguration>();
     var connectionString = configuration["SQL_CONNECTION_STRING"]
         ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
-    return new ReviewService(connectionString);
+    var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
+    return new ReviewService(connectionString, tableServiceUri);
 });
 
 // Register OrderService for MCP Server

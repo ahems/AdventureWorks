@@ -36,3 +36,57 @@ public class GeneratedReview
     public string Comments { get; set; } = string.Empty;
     public DateTime ReviewDate { get; set; }
 }
+
+/// <summary>Represents a customer who has at least one Delivered order containing a specific product.</summary>
+public class CustomerWithDeliveredOrder
+{
+    public int CustomerID { get; set; }
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string EmailAddress { get; set; } = string.Empty;
+    public DateTime DeliveryDate { get; set; }
+}
+
+/// <summary>Request body for POST /api/generate-verified-reviews/start (batch).</summary>
+public class BatchStartVerifiedReviewsRequest
+{
+    /// <summary>Number of qualifying products to generate reviews for. Defaults to all qualifying products.</summary>
+    public int ProductCount { get; set; } = 0;  // 0 = all
+
+    /// <summary>Reviews to generate per product (1 to max eligible customers for that product, default 1).</summary>
+    public int ReviewsPerProduct { get; set; } = 1;
+}
+
+/// <summary>Summary of products and customers eligible for verified-review generation.</summary>
+public class VerifiedReviewsSummary
+{
+    public int QualifyingProductCount { get; set; }
+    public int MaxEligibleCustomersPerProduct { get; set; }
+    /// <summary>ProductID of the product with the most unreviewed eligible customers.</summary>
+    public int TopProductId { get; set; }
+    /// <summary>Name of the product with the most unreviewed eligible customers.</summary>
+    public string TopProductName { get; set; } = string.Empty;
+}
+
+/// <summary>Internal Dapper projection used when selecting qualifying products for a batch run.</summary>
+public class QualifyingProductInfo
+{
+    public int ProductID { get; set; }
+    public int EligibleCount { get; set; }
+}
+
+/// <summary>Persisted state for the verified-reviews background job (Table Storage entity).</summary>
+public class VerifiedReviewsJobState
+{
+    public bool IsRunning { get; set; }
+    public int ProductId { get; set; }         // 0 for batch jobs
+    public string ProductName { get; set; } = string.Empty;  // current product name or job description
+    public int ProcessedCount { get; set; }    // reviews generated so far
+    public int TotalCount { get; set; }        // total reviews to generate
+    public int ProductsProcessed { get; set; } // products completed (for batch)
+    public int ProductsTotal { get; set; }     // total products in batch
+    public DateTimeOffset? StartedAt { get; set; }
+    /// <summary>Updated every time the job saves progress. Used to detect stuck/orphaned jobs.</summary>
+    public DateTimeOffset? LastProgressAt { get; set; }
+    public string? LastError { get; set; }
+}

@@ -737,6 +737,117 @@ Return the reviews as a JSON array.";
         return new List<GeneratedReview>();
     }
 
+    /// <summary>
+    /// Generates exactly one AI review for a specific product from the perspective of a specific
+    /// real customer. The ReviewerName and EmailAddress in the returned object are always
+    /// overridden with the customer's real details regardless of what the AI produces.
+    /// </summary>
+    public async Task<GeneratedReview?> GenerateReviewForCustomerAsync(
+        ProductForReviewGeneration product,
+        CustomerWithDeliveredOrder customer)
+    {
+        var credential = new DefaultAzureCredential();
+        var client = new AzureOpenAIClient(new Uri(_endpoint), credential);
+        var chatClient = client.GetChatClient(_deploymentName);
+
+        var random = new Random();
+
+        // Randomly select sentiment (skew positive since the customer bought and received the item)
+        var sentimentRatio = random.Next(1, 4);
+        var sentimentDescription = sentimentRatio switch
+        {
+            1 => "positive (4-5 stars)",
+            2 => "mixed (2-4 stars)",
+            3 => "mostly positive with one specific complaint (3-4 stars)",
+            _ => "positive"
+        };
+
+        var systemPrompt = @"You are a review generator for AdventureWorks, an outdoor adventure equipment retailer.
+Generate a single realistic product review written from the perspective of a real customer who purchased and received the product.
+
+The review must:
+1. Reflect the specified sentiment
+2. Reference the product's name and features naturally
+3. Sound like an authentic personal experience — not generic or templered
+4. Be between 2 and 5 sentences
+5. Have an appropriate star rating (1-5) matching the sentiment
+
+Return ONLY a valid JSON object (no markdown fences) with this exact structure:
+{
+  ""Rating"": 4,
+  ""Comments"": ""The review text here...""
+}";
+
+        var userPrompt = $@"Product: {product.Name}
+Description: {product.Description ?? "(no description)"}
+Customer first name: {customer.FirstName}
+Sentiment: {sentimentDescription}
+
+Write one review as if this customer just received and used this product. Return only the JSON object.";
+
+        var messages = new List<ChatMessage>
+        {
+            new SystemChatMessage(systemPrompt),
+            new UserChatMessage(userPrompt)
+        };
+
+        try
+        {
+            var response = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+            {
+                Temperature = 0.85f,
+                MaxOutputTokenCount = 500
+            });
+
+            var content = response.Value.Content[0].Text;
+
+            // Strip markdown fences if present
+            var jsonStart = content.IndexOf('{');
+            var jsonEnd = content.LastIndexOf('}') + 1;
+
+            if (jsonStart == -1 || jsonEnd <= jsonStart)
+            {
+                _logger.LogWarning("No valid JSON object in verified-review response for ProductID {ProductID}, CustomerID {CustomerID}",
+                    product.ProductID, customer.CustomerID);
+                return null;
+            }
+
+            var json = content.Substring(jsonStart, jsonEnd - jsonStart);
+
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            var rating = root.TryGetProperty("Rating", out var ratingEl) ? ratingEl.GetInt32() : 4;
+            var comments = root.TryGetProperty("Comments", out var commentsEl) ? commentsEl.GetString() ?? string.Empty : string.Empty;
+
+            // Clamp rating
+            rating = Math.Max(1, Math.Min(5, rating));
+
+            // Review date: random between delivery date and now
+            var deliveryDate = customer.DeliveryDate;
+            var now = DateTime.UtcNow;
+            var daysBetween = Math.Max(0, (int)(now - deliveryDate).TotalDays);
+            var randomDays = random.Next(0, daysBetween + 1);
+
+            return new GeneratedReview
+            {
+                ProductID = product.ProductID,
+                // Override with real customer details — do NOT use AI-generated name/email
+                ReviewerName = $"{customer.FirstName} {customer.LastName}".Trim(),
+                EmailAddress = customer.EmailAddress,
+                Rating = rating,
+                Comments = comments,
+                ReviewDate = deliveryDate.AddDays(randomDays)
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to generate verified review for ProductID {ProductID}, CustomerID {CustomerID}",
+                product.ProductID, customer.CustomerID);
+            return null;
+        }
+    }
+
     public async Task<List<ProductPhotoData>> GenerateProductImagesAsync(List<ProductImageData> products)
     {
         var credential = new DefaultAzureCredential();

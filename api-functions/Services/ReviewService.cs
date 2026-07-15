@@ -9,10 +9,12 @@ namespace api_functions.Services;
 public class ReviewService
 {
     private readonly string _connectionString;
+    private readonly string _tableServiceUri;
 
-    public ReviewService(string connectionString)
+    public ReviewService(string connectionString, string tableServiceUri)
     {
         _connectionString = connectionString;
+        _tableServiceUri = tableServiceUri;
     }
 
     private async Task<IDbConnection> GetConnectionAsync()
@@ -311,6 +313,225 @@ public class ReviewService
         return new string('⭐', fullStars) +
                (hasHalfStar ? "½" : "") +
                new string('☆', emptyStars);
+    }
+
+    /// <summary>
+    /// Returns distinct customers who have at least one Delivered (Status=7) order
+    /// containing the specified product AND who have NOT already reviewed that product,
+    /// ordered by most-recent delivery date.
+    /// </summary>
+    public async Task<List<CustomerWithDeliveredOrder>> GetCustomersWithDeliveredOrderForProductAsync(int productId)
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = @"
+            SELECT DISTINCT
+                c.CustomerID,
+                p.FirstName,
+                p.LastName,
+                COALESCE(ea.EmailAddress, '') AS EmailAddress,
+                MAX(soh.OrderDate) AS DeliveryDate
+            FROM Sales.SalesOrderHeader soh
+            INNER JOIN Sales.SalesOrderDetail sod
+                ON soh.SalesOrderID = sod.SalesOrderID
+            INNER JOIN Sales.Customer c
+                ON soh.CustomerID = c.CustomerID
+            INNER JOIN Person.Person p
+                ON c.PersonID = p.BusinessEntityID
+            LEFT JOIN Person.EmailAddress ea
+                ON p.BusinessEntityID = ea.BusinessEntityID
+            WHERE soh.Status = 7
+              AND sod.ProductID = @ProductId
+              AND c.StoreID IS NULL   -- eshop (individual) customers only; StoreID IS NOT NULL = B2B
+              AND NOT EXISTS (
+                  SELECT 1 FROM Production.ProductReview pr
+                  WHERE pr.ProductID = @ProductId
+                    AND pr.EmailAddress = COALESCE(ea.EmailAddress, '')
+                    AND COALESCE(ea.EmailAddress, '') <> ''
+              )
+            GROUP BY c.CustomerID, p.FirstName, p.LastName, ea.EmailAddress
+            ORDER BY MAX(soh.OrderDate) DESC";
+
+        var customers = await connection.QueryAsync<CustomerWithDeliveredOrder>(sql, new { ProductId = productId });
+        return customers.ToList();
+    }
+
+    /// <summary>
+    /// Returns a summary of how many unique products have at least one unreviewed customer
+    /// with a Delivered order, plus the maximum such customer count for any single product.
+    /// </summary>
+    public async Task<VerifiedReviewsSummary> GetVerifiedReviewsSummaryAsync()
+    {
+        using var connection = await GetConnectionAsync();
+
+        // CTE builds the eligible-count per product, then the outer query aggregates
+        // and picks the top product (most unreviewed eligible customers) in one round-trip.
+        var sql = @"
+            WITH EligibleCounts AS (
+                SELECT
+                    sod.ProductID,
+                    COUNT(DISTINCT c.CustomerID) AS EligibleCount
+                FROM Sales.SalesOrderHeader soh
+                INNER JOIN Sales.SalesOrderDetail sod ON soh.SalesOrderID = sod.SalesOrderID
+                INNER JOIN Sales.Customer c ON soh.CustomerID = c.CustomerID
+                INNER JOIN Person.Person p ON c.PersonID = p.BusinessEntityID
+                LEFT JOIN Person.EmailAddress ea ON p.BusinessEntityID = ea.BusinessEntityID
+                WHERE soh.Status = 7
+                  AND c.StoreID IS NULL   -- eshop (individual) customers only
+                  AND NOT EXISTS (
+                      SELECT 1 FROM Production.ProductReview pr
+                      WHERE pr.ProductID = sod.ProductID
+                        AND pr.EmailAddress = COALESCE(ea.EmailAddress, '')
+                        AND COALESCE(ea.EmailAddress, '') <> ''
+                  )
+                GROUP BY sod.ProductID
+                HAVING COUNT(DISTINCT c.CustomerID) > 0
+            )
+            SELECT
+                COUNT(*)                         AS QualifyingProductCount,
+                ISNULL(MAX(ec.EligibleCount), 0) AS MaxEligibleCustomersPerProduct,
+                ISNULL((
+                    SELECT TOP 1 ec2.ProductID
+                    FROM EligibleCounts ec2
+                    ORDER BY ec2.EligibleCount DESC
+                ), 0)                            AS TopProductId,
+                ISNULL((
+                    SELECT TOP 1 prod.Name
+                    FROM EligibleCounts ec3
+                    INNER JOIN Production.Product prod ON ec3.ProductID = prod.ProductID
+                    ORDER BY ec3.EligibleCount DESC
+                ), '')                           AS TopProductName
+            FROM EligibleCounts ec";
+
+        return await connection.QuerySingleAsync<VerifiedReviewsSummary>(sql);
+    }
+
+    /// <summary>
+    /// Returns a randomly-selected batch of qualifying (product, customers) pairs.
+    /// For each product, up to <paramref name="reviewsPerProduct"/> unreviewed customers are selected randomly.
+    /// </summary>
+    public async Task<List<(ProductForReviewGeneration Product, List<CustomerWithDeliveredOrder> Customers)>>
+        GetBatchVerifiedReviewsDataAsync(int productCount, int reviewsPerProduct)
+    {
+        // 1. Fetch all qualifying product IDs
+        using var connection = await GetConnectionAsync();
+        var idSql = @"
+            SELECT sod.ProductID, COUNT(DISTINCT c.CustomerID) AS EligibleCount
+            FROM Sales.SalesOrderHeader soh
+            INNER JOIN Sales.SalesOrderDetail sod ON soh.SalesOrderID = sod.SalesOrderID
+            INNER JOIN Sales.Customer c ON soh.CustomerID = c.CustomerID
+            INNER JOIN Person.Person p ON c.PersonID = p.BusinessEntityID
+            LEFT JOIN Person.EmailAddress ea ON p.BusinessEntityID = ea.BusinessEntityID
+            WHERE soh.Status = 7
+              AND c.StoreID IS NULL   -- eshop (individual) customers only
+              AND NOT EXISTS (
+                  SELECT 1 FROM Production.ProductReview pr
+                  WHERE pr.ProductID = sod.ProductID
+                    AND pr.EmailAddress = COALESCE(ea.EmailAddress, '')
+                    AND COALESCE(ea.EmailAddress, '') <> ''
+              )
+            GROUP BY sod.ProductID
+            HAVING COUNT(DISTINCT c.CustomerID) > 0";
+
+        var allQualifying = (await connection.QueryAsync<QualifyingProductInfo>(idSql)).ToList();
+
+        if (allQualifying.Count == 0)
+            return new List<(ProductForReviewGeneration, List<CustomerWithDeliveredOrder>)>();
+
+        // 2. Randomly select productCount products
+        var rng = new Random();
+        var effectiveCount = productCount <= 0 ? allQualifying.Count : Math.Min(productCount, allQualifying.Count);
+        var selectedInfos = allQualifying
+            .OrderBy(_ => rng.Next())
+            .Take(effectiveCount)
+            .ToList();
+
+        // 3. Fetch product details in one query
+        var selectedIds = selectedInfos.Select(x => x.ProductID).ToList();
+        var products = await GetProductsForReviewGenerationAsync(selectedIds);
+        var productDict = products.ToDictionary(p => p.ProductID);
+
+        // 4. For each selected product, fetch eligible customers and take reviewsPerProduct
+        var result = new List<(ProductForReviewGeneration, List<CustomerWithDeliveredOrder>)>();
+        foreach (var info in selectedInfos)
+        {
+            if (!productDict.TryGetValue(info.ProductID, out var product)) continue;
+            var customers = await GetCustomersWithDeliveredOrderForProductAsync(info.ProductID);
+            if (customers.Count == 0) continue;
+            var selected = customers.OrderBy(_ => rng.Next()).Take(reviewsPerProduct).ToList();
+            result.Add((product, selected));
+        }
+
+        return result;
+    }
+
+    // ── Verified-Reviews job state (Azure Table Storage) ──────────────────────
+
+    private const string _verifiedReviewsTableName = "verifiedReviewsJob";
+    private const string _verifiedReviewsPartitionKey = "verifiedreviews";
+    private const string _verifiedReviewsRowKey = "state";
+
+    private Azure.Data.Tables.TableClient? _tableClient;
+
+    private Azure.Data.Tables.TableClient GetTableClient()
+    {
+        if (_tableClient == null)
+        {
+            // Use the same managed-identity pattern as every other service
+            var tableService = new Azure.Data.Tables.TableServiceClient(
+                new Uri(_tableServiceUri),
+                new DefaultAzureCredential());
+            _tableClient = tableService.GetTableClient(_verifiedReviewsTableName);
+            _tableClient.CreateIfNotExists();
+        }
+        return _tableClient;
+    }
+
+    public async Task<VerifiedReviewsJobState> GetVerifiedReviewsJobStateAsync()
+    {
+        try
+        {
+            var client = GetTableClient();
+            var entity = await client.GetEntityAsync<Azure.Data.Tables.TableEntity>(
+                _verifiedReviewsPartitionKey, _verifiedReviewsRowKey);
+
+            return new VerifiedReviewsJobState
+            {
+                IsRunning = entity.Value.GetBoolean("IsRunning") ?? false,
+                ProductId = entity.Value.GetInt32("ProductId") ?? 0,
+                ProductName = entity.Value.GetString("ProductName") ?? string.Empty,
+                ProcessedCount = entity.Value.GetInt32("ProcessedCount") ?? 0,
+                TotalCount = entity.Value.GetInt32("TotalCount") ?? 0,
+                ProductsProcessed = entity.Value.GetInt32("ProductsProcessed") ?? 0,
+                ProductsTotal = entity.Value.GetInt32("ProductsTotal") ?? 0,
+                StartedAt = entity.Value.GetDateTimeOffset("StartedAt"),
+                LastProgressAt = entity.Value.GetDateTimeOffset("LastProgressAt"),
+                LastError = entity.Value.GetString("LastError")
+            };
+        }
+        catch (Azure.RequestFailedException ex) when (ex.Status == 404)
+        {
+            return new VerifiedReviewsJobState { IsRunning = false };
+        }
+    }
+
+    public async Task SaveVerifiedReviewsJobStateAsync(VerifiedReviewsJobState state)
+    {
+        var client = GetTableClient();
+        var entity = new Azure.Data.Tables.TableEntity(_verifiedReviewsPartitionKey, _verifiedReviewsRowKey)
+        {
+            ["IsRunning"] = state.IsRunning,
+            ["ProductId"] = state.ProductId,
+            ["ProductName"] = state.ProductName,
+            ["ProcessedCount"] = state.ProcessedCount,
+            ["TotalCount"] = state.TotalCount,
+            ["ProductsProcessed"] = state.ProductsProcessed,
+            ["ProductsTotal"] = state.ProductsTotal,
+            ["StartedAt"] = state.StartedAt,
+            ["LastProgressAt"] = state.LastProgressAt,
+            ["LastError"] = state.LastError
+        };
+        await client.UpsertEntityAsync(entity, Azure.Data.Tables.TableUpdateMode.Replace);
     }
 
 }

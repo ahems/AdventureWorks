@@ -125,6 +125,100 @@ export const generateProductReviews = (
       : {}),
   });
 
+// ── Verified Reviews (real customers with Delivered orders) ────────────────
+
+export interface CustomerWithDeliveredOrder {
+  customerID: number;
+  firstName: string;
+  lastName: string;
+  emailAddress: string;
+  deliveryDate: string;
+}
+
+export interface VerifiedReviewsJobState {
+  isRunning: boolean;
+  productId: number;
+  productName: string;
+  processedCount: number;
+  totalCount: number;
+  productsProcessed: number;
+  productsTotal: number;
+  startedAt: string | null;
+  lastProgressAt: string | null;
+  lastError: string | null;
+}
+
+export interface VerifiedReviewsSummary {
+  qualifyingProductCount: number;
+  maxEligibleCustomersPerProduct: number;
+  topProductId: number;
+  topProductName: string;
+}
+
+export interface CustomersWithDeliveredOrderResponse {
+  customers: CustomerWithDeliveredOrder[];
+  count: number;
+}
+
+/** Returns summary counts for the batch wizard: qualifying products and max eligible customers per product. */
+export const getVerifiedReviewsSummary =
+  async (): Promise<VerifiedReviewsSummary> => {
+    const url = `${getFunctionsApiUrl()}/api/generate-verified-reviews/summary`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ""}`);
+    }
+    return res.json();
+  };
+
+/**
+ * Starts a batch verified-reviews generation job.
+ * productCount: 0 = all qualifying products.
+ * reviewsPerProduct: 1..maxEligibleCustomersPerProduct (default 1).
+ * Returns 202 on success, throws on 409 Conflict or other errors.
+ */
+export const startBatchVerifiedReviews = async (
+  productCount: number,
+  reviewsPerProduct: number,
+): Promise<{ message: string; productsTotal: number; totalCount: number }> => {
+  const url = `${getFunctionsApiUrl()}/api/generate-verified-reviews/start`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ productCount, reviewsPerProduct }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ""}`);
+  }
+  return res.json();
+};
+
+export const getVerifiedReviewsJobStatus =
+  async (): Promise<VerifiedReviewsJobState> => {
+    const url = `${getFunctionsApiUrl()}/api/generate-verified-reviews/status`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ""}`);
+    }
+    return res.json();
+  };
+
+/** Diagnostic: returns unreviewed eligible customers for a specific product. */
+export const getCustomersWithDeliveredOrder = async (
+  productId: number,
+): Promise<CustomersWithDeliveredOrderResponse> => {
+  const url = `${getFunctionsApiUrl()}/api/products/${productId}/customers-with-delivered-orders`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ""}`);
+  }
+  return res.json();
+};
+
 // ── Promotion translation ──────────────────────────────────────────────────
 
 export interface PromotionTranslationPayload {
