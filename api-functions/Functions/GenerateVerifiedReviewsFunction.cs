@@ -33,6 +33,7 @@ public class GenerateVerifiedReviewsFunction
 {
     private readonly ILogger<GenerateVerifiedReviewsFunction> _logger;
     private readonly AIService _aiService;
+    private readonly ReviewAgentService _reviewAgentService;
     private readonly ReviewService _reviewService;
     private readonly TelemetryClient _telemetryClient;
 
@@ -42,11 +43,13 @@ public class GenerateVerifiedReviewsFunction
     public GenerateVerifiedReviewsFunction(
         ILogger<GenerateVerifiedReviewsFunction> logger,
         AIService aiService,
+        ReviewAgentService reviewAgentService,
         ReviewService reviewService,
         TelemetryClient telemetryClient)
     {
         _logger = logger;
         _aiService = aiService;
+        _reviewAgentService = reviewAgentService;
         _reviewService = reviewService;
         _telemetryClient = telemetryClient;
     }
@@ -260,7 +263,17 @@ public class GenerateVerifiedReviewsFunction
                 {
                     try
                     {
-                        var review = await _aiService.GenerateReviewForCustomerAsync(product, customer);
+                        // Use the Foundry agent when configured; fall back to direct OpenAI call.
+                        GeneratedReview? review;
+                        if (_reviewAgentService.IsConfigured)
+                        {
+                            review = await _reviewAgentService.GenerateReviewAsync(product, customer);
+                        }
+                        else
+                        {
+                            _logger.LogDebug("ReviewAgentService not configured — using direct AIService fallback");
+                            review = await _aiService.GenerateReviewForCustomerAsync(product, customer);
+                        }
                         if (review != null)
                         {
                             var reviewId = await _reviewService.SaveGeneratedReviewAndGetIdAsync(review);

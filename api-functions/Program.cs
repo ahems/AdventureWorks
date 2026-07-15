@@ -229,6 +229,22 @@ builder.Services.AddScoped<CartRecoveryAgentService>(sp =>
         telemetryClient);
 });
 
+// Register ReviewAgentService — Foundry agent for verified-review generation.
+// Graceful fallback to AIService.GenerateReviewForCustomerAsync when AI_AGENT_REVIEW_ID is absent.
+builder.Services.AddScoped<ReviewAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<ReviewAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new ReviewAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
 // Register Promotion Agent Service for single-shot AI promotion generation via Foundry
 builder.Services.AddScoped<PromotionAgentService>(sp =>
 {

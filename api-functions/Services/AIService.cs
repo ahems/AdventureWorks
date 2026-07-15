@@ -823,10 +823,13 @@ Write one review as if this customer just received and used this product. Return
             // Clamp rating
             rating = Math.Max(1, Math.Min(5, rating));
 
-            // Review date: random between delivery date and now
+            // Review date: random between delivery date and now.
+            // Guard against future delivery dates (simulator may create orders
+            // with future OrderDate values) — clamp to today.
             var deliveryDate = customer.DeliveryDate;
             var now = DateTime.UtcNow;
-            var daysBetween = Math.Max(0, (int)(now - deliveryDate).TotalDays);
+            var effectiveDelivery = deliveryDate > now ? now.Date : deliveryDate;
+            var daysBetween = Math.Max(0, (int)(now - effectiveDelivery).TotalDays);
             var randomDays = random.Next(0, daysBetween + 1);
 
             return new GeneratedReview
@@ -837,7 +840,7 @@ Write one review as if this customer just received and used this product. Return
                 EmailAddress = customer.EmailAddress,
                 Rating = rating,
                 Comments = comments,
-                ReviewDate = deliveryDate.AddDays(randomDays)
+                ReviewDate = effectiveDelivery.AddDays(randomDays)
             };
         }
         catch (Exception ex)

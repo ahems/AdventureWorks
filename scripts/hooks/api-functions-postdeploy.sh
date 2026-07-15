@@ -42,6 +42,7 @@ workflow_promotion_id=$(get_azd_value "AI_AGENT_WORKFLOW_PROMOTION_ID")
 workflow_order_id=$(get_azd_value "AI_AGENT_WORKFLOW_ORDER_ID")
 workflow_help_me_choose_id=$(get_azd_value "AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID")
 cart_recovery_id=$(get_azd_value "AI_AGENT_CART_RECOVERY_ID")
+review_id=$(get_azd_value "AI_AGENT_REVIEW_ID")
 product_content_id=$(get_azd_value "AI_AGENT_PRODUCT_CONTENT_ID")
 customer_id=$(get_azd_value "AI_AGENT_CUSTOMER_ID")
 admin_chat_id=$(get_azd_value "AI_AGENT_ADMIN_CHAT_ID")
@@ -75,6 +76,7 @@ if az functionapp config appsettings set \
     "AI_AGENT_WORKFLOW_ORDER_ID=${workflow_order_id:-}" \
     "AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID=${workflow_help_me_choose_id:-}" \
     "AI_AGENT_CART_RECOVERY_ID=$cart_recovery_id" \
+    ${review_id:+"AI_AGENT_REVIEW_ID=$review_id"} \
     "AI_AGENT_PRODUCT_CONTENT_ID=$product_content_id" \
     ${customer_id:+"AI_AGENT_CUSTOMER_ID=$customer_id"} \
     ${admin_chat_id:+"AI_AGENT_ADMIN_CHAT_ID=$admin_chat_id"} \
@@ -90,6 +92,7 @@ if az functionapp config appsettings set \
   [[ -n "$workflow_order_id" ]] && echo "  AI_AGENT_WORKFLOW_ORDER_ID            = $workflow_order_id" || true
   [[ -n "$workflow_help_me_choose_id" ]] && echo "  AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID   = $workflow_help_me_choose_id" || true
   echo "  AI_AGENT_CART_RECOVERY_ID             = $cart_recovery_id"
+  [[ -n "$review_id" ]] && echo "  AI_AGENT_REVIEW_ID                    = $review_id" || true
   echo "  AI_AGENT_PRODUCT_CONTENT_ID           = $product_content_id"
   [[ -n "$customer_id" ]] && echo "  AI_AGENT_CUSTOMER_ID                  = $customer_id" || true
   [[ -n "$admin_chat_id" ]] && echo "  AI_AGENT_ADMIN_CHAT_ID                = $admin_chat_id" || true
