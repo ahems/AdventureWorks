@@ -8,6 +8,7 @@ import { gql } from "graphql-request";
 export interface AdminReview {
   id: string;
   productId: number;
+  userId: number | null;
   userName: string;
   rating: number;
   title: string;
@@ -25,8 +26,16 @@ export interface AdminReview {
 }
 
 const GET_PRODUCT_REVIEWS_ADMIN = gql`
-  query GetProductReviewsAdmin($after: String) {
-    productReviews(first: 100, after: $after, orderBy: { ReviewDate: DESC }) {
+  query GetProductReviewsAdmin(
+    $after: String
+    $filter: ProductReviewFilterInput
+  ) {
+    productReviews(
+      first: 100
+      after: $after
+      filter: $filter
+      orderBy: { ReviewDate: DESC }
+    ) {
       items {
         ProductReviewID
         ProductID
@@ -35,6 +44,7 @@ const GET_PRODUCT_REVIEWS_ADMIN = gql`
         Rating
         Comments
         HelpfulVotes
+        UserID
         IsModerated
         productReviewReplies {
           items {
@@ -66,6 +76,7 @@ interface RawProductReview {
   Rating: number;
   Comments?: string;
   HelpfulVotes?: number;
+  UserID?: number | null;
   IsModerated?: boolean;
   productReviewReplies?: { items: RawReviewReply[] };
 }
@@ -75,6 +86,7 @@ const mapReview = (r: RawProductReview): AdminReview => {
   return {
     id: String(r.ProductReviewID),
     productId: r.ProductID,
+    userId: r.UserID ?? null,
     userName: r.ReviewerName ?? "Anonymous",
     rating: r.Rating,
     title: "",
@@ -137,17 +149,29 @@ export const useReviewTotalCount = () =>
     staleTime: 5 * 60 * 1000,
   });
 
-export const useAdminReviews = (after?: string | null) =>
+export const useAdminReviews = (
+  after?: string | null,
+  moderationFilter?: "all" | "moderated" | "unmoderated",
+) =>
   useQuery<PagedReviews>({
-    queryKey: ["admin", "reviews", after ?? null],
+    queryKey: ["admin", "reviews", after ?? null, moderationFilter ?? "all"],
     queryFn: async () => {
+      const filter =
+        moderationFilter === "unmoderated"
+          ? { IsModerated: { eq: false } }
+          : moderationFilter === "moderated"
+            ? { IsModerated: { eq: true } }
+            : undefined;
       const data = await graphqlClient.request<{
         productReviews?: {
           items: RawProductReview[];
           hasNextPage?: boolean;
           endCursor?: string;
         };
-      }>(GET_PRODUCT_REVIEWS_ADMIN, { after: after ?? null });
+      }>(GET_PRODUCT_REVIEWS_ADMIN, {
+        after: after ?? null,
+        filter: filter ?? null,
+      });
       return {
         items: (data.productReviews?.items ?? []).map(mapReview),
         hasNextPage: data.productReviews?.hasNextPage ?? false,
@@ -160,6 +184,7 @@ export const useAdminReviews = (after?: string | null) =>
 const GET_PRODUCT_REVIEWS_BY_PRODUCT = gql`
   query GetProductReviewsByProduct($productId: Int!) {
     productReviews(
+      first: 100
       filter: { ProductID: { eq: $productId } }
       orderBy: { ReviewDate: DESC }
     ) {
@@ -171,6 +196,7 @@ const GET_PRODUCT_REVIEWS_BY_PRODUCT = gql`
         Rating
         Comments
         HelpfulVotes
+        UserID
         IsModerated
         productReviewReplies {
           items {
@@ -247,6 +273,26 @@ export const submitReply = async (
   return (json.value?.[0] ?? json) as RawReviewReply;
 };
 
+/** PATCH an existing staff reply. Returns the updated reply record. */
+export const updateReply = async (
+  replyId: number,
+  replyText: string,
+): Promise<RawReviewReply> => {
+  const res = await fetch(
+    `${getRestApiUrl()}/ProductReviewReply/ProductReviewReplyID/${replyId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ Reply: replyText }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`updateReply failed: ${res.status}`);
+  }
+  const json = await res.json();
+  return (json.value?.[0] ?? json) as RawReviewReply;
+};
+
 /**
  * Delete a review and all its replies from the database.
  * Replies must be deleted first to satisfy the FK constraint.
@@ -282,3 +328,44 @@ export const deleteReview = async (id: string): Promise<void> => {
     throw new Error(`deleteReview failed: ${reviewRes.status}`);
   }
 };
+
+/** Lightweight count of pending (unmoderated) reviews. */
+export const useReviewPendingCount = () =>
+  useQuery<number | null>({
+    queryKey: ["admin", "reviews", "pendingCount"],
+    queryFn: async () => {
+      let total = 0;
+      let cursor: string | null = null;
+      do {
+        const data = await graphqlClient.request<{
+          productReviews?: {
+            items: { ProductReviewID: number }[];
+            hasNextPage?: boolean;
+            endCursor?: string;
+          };
+        }>(
+          gql`
+            query CountPendingReviews($after: String) {
+              productReviews(
+                first: 100
+                after: $after
+                filter: { IsModerated: { eq: false } }
+              ) {
+                items {
+                  ProductReviewID
+                }
+                hasNextPage
+                endCursor
+              }
+            }
+          `,
+          { after: cursor },
+        );
+        const page = data.productReviews;
+        total += page?.items?.length ?? 0;
+        cursor = page?.hasNextPage ? (page.endCursor ?? null) : null;
+      } while (cursor);
+      return total;
+    },
+    staleTime: 5 * 60 * 1000,
+  });

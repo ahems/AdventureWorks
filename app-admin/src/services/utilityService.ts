@@ -1074,3 +1074,57 @@ export const promoteOrdersApprovedToShipped =
     }
     return res.json();
   };
+
+// ── Review AI Analysis ─────────────────────────────────────────────────────
+
+export interface ReviewAnalysisInput {
+  productReviewId: number;
+  rating: number;
+  comments: string;
+  reviewerName: string;
+  productName: string;
+}
+
+export interface ReviewAnalysisResult {
+  productReviewId: number;
+  sentiment: "positive" | "neutral" | "negative";
+  flags: string[];
+  suggestedResponse: string | null;
+  error?: string;
+}
+
+/**
+ * Analyses reviews for sentiment, flags, and suggested responses.
+ * Automatically splits into batches of 50 (API max) and merges results.
+ */
+export const analyzeReviewsBatch = async (
+  reviews: ReviewAnalysisInput[],
+  onProgress?: (completed: number, total: number) => void,
+): Promise<ReviewAnalysisResult[]> => {
+  const BATCH_SIZE = 50;
+  const results: ReviewAnalysisResult[] = [];
+  const totalBatches = Math.ceil(reviews.length / BATCH_SIZE);
+
+  for (let i = 0; i < reviews.length; i += BATCH_SIZE) {
+    const batch = reviews.slice(i, i + BATCH_SIZE);
+    const res = await fetch(
+      `${getFunctionsApiUrl()}/api/reviews/analyze-batch`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviews: batch }),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `Review analysis HTTP ${res.status}${text ? `: ${text}` : ""}`,
+      );
+    }
+    const data: { analyses: ReviewAnalysisResult[] } = await res.json();
+    results.push(...data.analyses);
+    onProgress?.(Math.min(i + BATCH_SIZE, reviews.length), reviews.length);
+  }
+
+  return results;
+};
