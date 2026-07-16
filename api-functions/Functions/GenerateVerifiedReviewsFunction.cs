@@ -32,8 +32,8 @@ namespace api_functions.Functions;
 public class GenerateVerifiedReviewsFunction
 {
     private readonly ILogger<GenerateVerifiedReviewsFunction> _logger;
-    private readonly AIService _aiService;
     private readonly ReviewAgentService _reviewAgentService;
+    private readonly ReviewBatchAgentService _reviewBatchAgentService;
     private readonly ReviewService _reviewService;
     private readonly TelemetryClient _telemetryClient;
 
@@ -42,14 +42,14 @@ public class GenerateVerifiedReviewsFunction
 
     public GenerateVerifiedReviewsFunction(
         ILogger<GenerateVerifiedReviewsFunction> logger,
-        AIService aiService,
         ReviewAgentService reviewAgentService,
+        ReviewBatchAgentService reviewBatchAgentService,
         ReviewService reviewService,
         TelemetryClient telemetryClient)
     {
         _logger = logger;
-        _aiService = aiService;
         _reviewAgentService = reviewAgentService;
+        _reviewBatchAgentService = reviewBatchAgentService;
         _reviewService = reviewService;
         _telemetryClient = telemetryClient;
     }
@@ -136,12 +136,36 @@ public class GenerateVerifiedReviewsFunction
                 return conflict;
             }
 
-            var batchData = await _reviewService.GetBatchVerifiedReviewsDataAsync(productCount, reviewsPerProduct);
-            if (batchData.Count == 0)
+            var batchData = new List<(ProductForReviewGeneration Product, List<CustomerWithDeliveredOrder> Customers)>();
+
+            if (requestBody.SpecificProductId.HasValue)
             {
-                var noData = req.CreateResponse(HttpStatusCode.UnprocessableEntity);
-                await noData.WriteStringAsync("No qualifying products found. All eligible customers may have already reviewed their purchased products.");
-                return noData;
+                // Product-page path: target a single specific product
+                var single = await _reviewService.GetVerifiedReviewsDataForProductAsync(
+                    requestBody.SpecificProductId.Value, reviewsPerProduct);
+
+                if (single == null)
+                {
+                    var noData = req.CreateResponse(HttpStatusCode.UnprocessableEntity);
+                    await noData.WriteStringAsync(
+                        $"Product {requestBody.SpecificProductId.Value} has no eligible unreviewed customers " +
+                        "with a Delivered eshop order. Reviews can only be generated for customers who " +
+                        "purchased and received the product but have not yet reviewed it.");
+                    return noData;
+                }
+
+                batchData.Add(single.Value);
+            }
+            else
+            {
+                // Utilities-page batch path: randomly select qualifying products
+                batchData = await _reviewService.GetBatchVerifiedReviewsDataAsync(productCount, reviewsPerProduct);
+                if (batchData.Count == 0)
+                {
+                    var noData = req.CreateResponse(HttpStatusCode.UnprocessableEntity);
+                    await noData.WriteStringAsync("No qualifying products found. All eligible customers may have already reviewed their purchased products.");
+                    return noData;
+                }
             }
 
             var totalReviews = batchData.Sum(x => x.Customers.Count);
@@ -235,6 +259,27 @@ public class GenerateVerifiedReviewsFunction
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // GET /api/products/{productId}/eligible-reviewer-count  (product-page gate)
+    // Lightweight — returns only the count, not the full customer list.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Function("GetProductEligibleReviewerCount")]
+    public async Task<HttpResponseData> GetProductEligibleReviewerCount(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get",
+            Route = "products/{productId}/eligible-reviewer-count")]
+        HttpRequestData req,
+        int productId)
+    {
+        var count = await _reviewService.GetProductEligibleReviewerCountAsync(productId);
+        var response = req.CreateResponse(HttpStatusCode.OK);
+        response.Headers.Add("Content-Type", "application/json");
+        await response.WriteStringAsync(JsonSerializer.Serialize(
+            new { productId, count },
+            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+        return response;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Background batch job
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -263,17 +308,7 @@ public class GenerateVerifiedReviewsFunction
                 {
                     try
                     {
-                        // Use the Foundry agent when configured; fall back to direct OpenAI call.
-                        GeneratedReview? review;
-                        if (_reviewAgentService.IsConfigured)
-                        {
-                            review = await _reviewAgentService.GenerateReviewAsync(product, customer);
-                        }
-                        else
-                        {
-                            _logger.LogDebug("ReviewAgentService not configured — using direct AIService fallback");
-                            review = await _aiService.GenerateReviewForCustomerAsync(product, customer);
-                        }
+                        var review = await _reviewAgentService.GenerateReviewAsync(product, customer);
                         if (review != null)
                         {
                             var reviewId = await _reviewService.SaveGeneratedReviewAndGetIdAsync(review);
@@ -314,7 +349,7 @@ public class GenerateVerifiedReviewsFunction
 
                     try
                     {
-                        var replies = await _aiService.GenerateReviewRepliesAsync(replyInputs);
+                        var replies = await _reviewBatchAgentService.GenerateReviewRepliesAsync(replyInputs);
                         foreach (var (reviewId, reply) in replies)
                             await _reviewService.SaveReviewReplyAsync(reviewId, reply);
                         _logger.LogInformation("Saved {count} replies for productId={pid}", replies.Count, product.ProductID);

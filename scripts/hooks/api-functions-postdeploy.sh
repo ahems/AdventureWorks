@@ -46,6 +46,11 @@ review_id=$(get_azd_value "AI_AGENT_REVIEW_ID")
 product_content_id=$(get_azd_value "AI_AGENT_PRODUCT_CONTENT_ID")
 customer_id=$(get_azd_value "AI_AGENT_CUSTOMER_ID")
 admin_chat_id=$(get_azd_value "AI_AGENT_ADMIN_CHAT_ID")
+translation_id=$(get_azd_value "AI_AGENT_TRANSLATION_ID")
+review_batch_id=$(get_azd_value "AI_AGENT_REVIEW_BATCH_ID")
+review_analysis_id=$(get_azd_value "AI_AGENT_REVIEW_ANALYSIS_ID")
+email_content_id=$(get_azd_value "AI_AGENT_EMAIL_CONTENT_ID")
+catalog_suggestion_id=$(get_azd_value "AI_AGENT_CATALOG_SUGGESTION_ID")
 mcp_service_url=$(get_azd_value "MCP_SERVICE_URL")
 
 if [[ -z "$chat_id" ]] || [[ -z "$order_id" ]] || [[ -z "$promotion_id" ]] || [[ -z "$help_me_choose_id" ]] || [[ -z "$cart_recovery_id" ]] || [[ -z "$product_content_id" ]]; then
@@ -80,6 +85,11 @@ if az functionapp config appsettings set \
     "AI_AGENT_PRODUCT_CONTENT_ID=$product_content_id" \
     ${customer_id:+"AI_AGENT_CUSTOMER_ID=$customer_id"} \
     ${admin_chat_id:+"AI_AGENT_ADMIN_CHAT_ID=$admin_chat_id"} \
+    ${translation_id:+"AI_AGENT_TRANSLATION_ID=$translation_id"} \
+    ${review_batch_id:+"AI_AGENT_REVIEW_BATCH_ID=$review_batch_id"} \
+    ${review_analysis_id:+"AI_AGENT_REVIEW_ANALYSIS_ID=$review_analysis_id"} \
+    ${email_content_id:+"AI_AGENT_EMAIL_CONTENT_ID=$email_content_id"} \
+    ${catalog_suggestion_id:+"AI_AGENT_CATALOG_SUGGESTION_ID=$catalog_suggestion_id"} \
     ${mcp_service_url:+"MCP_SERVICE_URL=$mcp_service_url"} \
   --output none; then
   color_green "✓ Successfully injected agent IDs into $functions_service_name"
@@ -96,6 +106,11 @@ if az functionapp config appsettings set \
   echo "  AI_AGENT_PRODUCT_CONTENT_ID           = $product_content_id"
   [[ -n "$customer_id" ]] && echo "  AI_AGENT_CUSTOMER_ID                  = $customer_id" || true
   [[ -n "$admin_chat_id" ]] && echo "  AI_AGENT_ADMIN_CHAT_ID                = $admin_chat_id" || true
+  [[ -n "$translation_id" ]] && echo "  AI_AGENT_TRANSLATION_ID               = $translation_id" || true
+  [[ -n "$review_batch_id" ]] && echo "  AI_AGENT_REVIEW_BATCH_ID              = $review_batch_id" || true
+  [[ -n "$review_analysis_id" ]] && echo "  AI_AGENT_REVIEW_ANALYSIS_ID           = $review_analysis_id" || true
+  [[ -n "$email_content_id" ]] && echo "  AI_AGENT_EMAIL_CONTENT_ID             = $email_content_id" || true
+  [[ -n "$catalog_suggestion_id" ]] && echo "  AI_AGENT_CATALOG_SUGGESTION_ID        = $catalog_suggestion_id" || true
   [[ -n "$mcp_service_url" ]] && echo "  MCP_SERVICE_URL                       = $mcp_service_url" || true
 else
   color_red "✗ Failed to update Function App settings."

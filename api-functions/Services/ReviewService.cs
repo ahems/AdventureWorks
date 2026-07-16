@@ -465,6 +465,54 @@ public class ReviewService
         return result;
     }
 
+    /// <summary>
+    /// Returns the (product, customers) pair for a specific product, limited to
+    /// <paramref name="reviewsPerProduct"/> randomly-chosen unreviewed eligible customers.
+    /// Returns null if the product has no eligible customers.
+    /// </summary>
+    public async Task<(ProductForReviewGeneration Product, List<CustomerWithDeliveredOrder> Customers)?>
+        GetVerifiedReviewsDataForProductAsync(int productId, int reviewsPerProduct)
+    {
+        var products = await GetProductsForReviewGenerationAsync(new List<int> { productId });
+        if (products.Count == 0) return null;
+
+        var customers = await GetCustomersWithDeliveredOrderForProductAsync(productId);
+        if (customers.Count == 0) return null;
+
+        var rng = new Random();
+        var selected = customers.OrderBy(_ => rng.Next()).Take(reviewsPerProduct).ToList();
+        return (products[0], selected);
+    }
+
+    /// <summary>
+    /// Lightweight count of unreviewed eshop customers (StoreID IS NULL, Status=7)
+    /// who have a Delivered order for the specified product and have not yet reviewed it.
+    /// Used by the product-page eligibility gate — avoids fetching full customer rows.
+    /// </summary>
+    public async Task<int> GetProductEligibleReviewerCountAsync(int productId)
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = @"
+            SELECT COUNT(DISTINCT c.CustomerID)
+            FROM Sales.SalesOrderHeader soh
+            INNER JOIN Sales.SalesOrderDetail sod ON soh.SalesOrderID = sod.SalesOrderID
+            INNER JOIN Sales.Customer c ON soh.CustomerID = c.CustomerID
+            INNER JOIN Person.Person p ON c.PersonID = p.BusinessEntityID
+            LEFT JOIN Person.EmailAddress ea ON p.BusinessEntityID = ea.BusinessEntityID
+            WHERE soh.Status = 7
+              AND sod.ProductID = @ProductId
+              AND c.StoreID IS NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM Production.ProductReview pr
+                  WHERE pr.ProductID = @ProductId
+                    AND pr.EmailAddress = COALESCE(ea.EmailAddress, '')
+                    AND COALESCE(ea.EmailAddress, '') <> ''
+              )";
+
+        return await connection.ExecuteScalarAsync<int>(sql, new { ProductId = productId });
+    }
+
     // ── Verified-Reviews job state (Azure Table Storage) ──────────────────────
 
     private const string _verifiedReviewsTableName = "verifiedReviewsJob";

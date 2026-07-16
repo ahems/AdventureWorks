@@ -176,17 +176,23 @@ export const getVerifiedReviewsSummary =
  * Starts a batch verified-reviews generation job.
  * productCount: 0 = all qualifying products.
  * reviewsPerProduct: 1..maxEligibleCustomersPerProduct (default 1).
+ * specificProductId: when set, only generates for that product (product-page path).
  * Returns 202 on success, throws on 409 Conflict or other errors.
  */
 export const startBatchVerifiedReviews = async (
   productCount: number,
   reviewsPerProduct: number,
+  specificProductId?: number,
 ): Promise<{ message: string; productsTotal: number; totalCount: number }> => {
   const url = `${getFunctionsApiUrl()}/api/generate-verified-reviews/start`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ productCount, reviewsPerProduct }),
+    body: JSON.stringify({
+      productCount,
+      reviewsPerProduct,
+      ...(specificProductId !== undefined ? { specificProductId } : {}),
+    }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -194,6 +200,16 @@ export const startBatchVerifiedReviews = async (
   }
   return res.json();
 };
+
+/**
+ * Product-page helper: generates verified reviews for a single specific product.
+ * Only uses real eshop customers who received a delivery and haven't yet reviewed it.
+ * reviewsPerProduct: how many eligible customers to use (default 1).
+ */
+export const generateVerifiedReviewsForProduct = (
+  productId: number,
+  reviewsPerProduct = 1,
+) => startBatchVerifiedReviews(1, reviewsPerProduct, productId);
 
 export const getVerifiedReviewsJobStatus =
   async (): Promise<VerifiedReviewsJobState> => {
@@ -217,6 +233,24 @@ export const getCustomersWithDeliveredOrder = async (
     throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ""}`);
   }
   return res.json();
+};
+
+/**
+ * Lightweight: returns only the count of eligible unreviewed eshop customers
+ * for a specific product. Use this for the product-page eligibility gate
+ * instead of getCustomersWithDeliveredOrder (which fetches all rows).
+ */
+export const getProductEligibleReviewerCount = async (
+  productId: number,
+): Promise<number> => {
+  const url = `${getFunctionsApiUrl()}/api/products/${productId}/eligible-reviewer-count`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ""}`);
+  }
+  const data = await res.json();
+  return data.count as number;
 };
 
 // ── Promotion translation ──────────────────────────────────────────────────

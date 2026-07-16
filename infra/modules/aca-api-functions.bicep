@@ -28,6 +28,11 @@ param agentWorkflowChatId string = ''
 param agentWorkflowPromotionId string = ''
 param agentWorkflowOrderId string = ''
 param agentWorkflowHelpMeChooseId string = ''
+param agentTranslationId string = ''
+param agentReviewBatchId string = ''
+param agentReviewAnalysisId string = ''
+param agentEmailContentId string = ''
+param agentCatalogSuggestionId string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -207,6 +212,26 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
             {
               name: 'AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID'
               value: agentWorkflowHelpMeChooseId
+            }
+            {
+              name: 'AI_AGENT_TRANSLATION_ID'
+              value: agentTranslationId
+            }
+            {
+              name: 'AI_AGENT_REVIEW_BATCH_ID'
+              value: agentReviewBatchId
+            }
+            {
+              name: 'AI_AGENT_REVIEW_ANALYSIS_ID'
+              value: agentReviewAnalysisId
+            }
+            {
+              name: 'AI_AGENT_EMAIL_CONTENT_ID'
+              value: agentEmailContentId
+            }
+            {
+              name: 'AI_AGENT_CATALOG_SUGGESTION_ID'
+              value: agentCatalogSuggestionId
             }
             {
               name: 'ORDER_NOTIFICATIONS_EMAIL_ENABLED'

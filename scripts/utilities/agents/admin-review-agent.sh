@@ -65,7 +65,8 @@ DESCRIPTION="Generates a single realistic product review from a real customer's 
 
 STARTER_PROMPTS='[{"text":"Generate a review for this product"},{"text":"Write a positive review from this customer"},{"text":"Create a mixed-sentiment review"}]'
 
-AGENT_ID=$(upsert_agent "admin-review-agent" "Verified Review Generator" "$INSTRUCTIONS" "$MEMORY_STORE" "$DESCRIPTION" "$STARTER_PROMPTS" "{}")
+# arg 8: allowed_tools  arg 9: include_dabmcp=false (review agent is self-contained, no MCP tools needed)
+AGENT_ID=$(upsert_agent "admin-review-agent" "Verified Review Generator" "$INSTRUCTIONS" "$MEMORY_STORE" "$DESCRIPTION" "$STARTER_PROMPTS" "{}" "[]" "false")
 if [ -z "$AGENT_ID" ]; then error "Failed to create admin-review-agent"; exit 1; fi
 success "admin-review-agent created: $AGENT_ID"
 azd env set AI_AGENT_REVIEW_ID "$AGENT_ID"

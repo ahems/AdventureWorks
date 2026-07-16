@@ -17,7 +17,7 @@ namespace api_functions.Functions;
 public class TranslateLanguageFile
 {
     private readonly ILogger<TranslateLanguageFile> _logger;
-    private readonly AIService _aiService;
+    private readonly TranslationAgentService _translationAgentService;
 
     // Supported languages for translation
     private static readonly Dictionary<string, string> SupportedLanguages = new()
@@ -46,10 +46,10 @@ public class TranslateLanguageFile
         { "en-ie", "English (Ireland)" }
     };
 
-    public TranslateLanguageFile(ILogger<TranslateLanguageFile> logger, AIService aiService)
+    public TranslateLanguageFile(ILogger<TranslateLanguageFile> logger, TranslationAgentService translationAgentService)
     {
         _logger = logger;
-        _aiService = aiService;
+        _translationAgentService = translationAgentService;
     }
 
     [Function("TranslateLanguageFile_HttpStart")]
@@ -570,7 +570,7 @@ public class TranslateLanguageFile
         {
             try
             {
-                return await _aiService.TranslateTextAsync(
+                return await _translationAgentService.TranslateSingleTextAsync(
                     input.Value,
                     input.TargetLanguageCode,
                     input.TargetLanguageName);

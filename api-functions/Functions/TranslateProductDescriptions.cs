@@ -19,13 +19,15 @@ public class TranslateProductDescriptions
     private readonly ILogger<TranslateProductDescriptions> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IServiceProvider _serviceProvider;
+    private readonly TranslationAgentService _translationAgentService;
     private const string AI_JOB_QUEUE = "ai-job-chat-queue";
 
-    public TranslateProductDescriptions(ILogger<TranslateProductDescriptions> logger, ILoggerFactory loggerFactory, IServiceProvider serviceProvider)
+    public TranslateProductDescriptions(ILogger<TranslateProductDescriptions> logger, ILoggerFactory loggerFactory, IServiceProvider serviceProvider, TranslationAgentService translationAgentService)
     {
         _logger = logger;
         _loggerFactory = loggerFactory;
         _serviceProvider = serviceProvider;
+        _translationAgentService = translationAgentService;
     }
 
     [Function(nameof(TranslateProductDescriptions_HttpStart))]
@@ -320,15 +322,8 @@ public class TranslateProductDescriptions
         _logger.LogInformation("Translating product {ProductModelID} ({ProductName}) to {cultureCount} languages",
             product.ProductModelID, product.ProductName, input.Cultures.Count);
 
-        var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")
-            ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
-
-        var aiServiceLogger = _loggerFactory.CreateLogger<AIService>();
-        var telemetryClient = _serviceProvider.GetRequiredService<TelemetryClient>();
-        var aiService = new AIService(endpoint, aiServiceLogger, telemetryClient);
-
         // Translate description
-        var translations = await aiService.TranslateProductAsync(product, input.Cultures);
+        var translations = await _translationAgentService.TranslateProductAsync(product, input.Cultures);
 
         _logger.LogInformation("AI translated product {ProductModelID} to {count} languages",
             product.ProductModelID, translations.Count);
@@ -346,7 +341,7 @@ public class TranslateProductDescriptions
                 var nonEnglish = allCultures.Where(c => !c.CultureID.TrimEnd().Equals("en", StringComparison.OrdinalIgnoreCase) && !c.CultureID.TrimEnd().StartsWith("en-", StringComparison.OrdinalIgnoreCase)).ToList();
                 var enVariants = allCultures.Where(c => c.CultureID.TrimEnd().StartsWith("en-", StringComparison.OrdinalIgnoreCase)).ToList();
 
-                var nameTranslations = await aiService.TranslateTextAsync(
+                var nameTranslations = await _translationAgentService.TranslateTextAsync(
                     product.ProductName,
                     "Product name for an outdoor adventure sports equipment catalog",
                     nonEnglish);
@@ -391,13 +386,8 @@ public class TranslateProductDescriptions
         _logger.LogInformation("Translating {productCount} products to {cultureCount} languages",
             input.Products.Count, input.Cultures.Count);
 
-        var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")
-            ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
-
-        var aiServiceLogger = _loggerFactory.CreateLogger<AIService>();
-        var telemetryClient = _serviceProvider.GetRequiredService<TelemetryClient>();
-        var aiService = new AIService(endpoint, aiServiceLogger, telemetryClient);
-        var translations = await aiService.TranslateDescriptionsAsync(input.Products, input.Cultures);
+        var translationAgentService = _serviceProvider.GetRequiredService<TranslationAgentService>();
+        var translations = await translationAgentService.TranslateDescriptionsAsync(input.Products, input.Cultures);
 
         _logger.LogInformation("AI translated {count} descriptions", translations.Count);
         return translations;

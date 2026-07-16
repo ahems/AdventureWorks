@@ -15,16 +15,16 @@ namespace api_functions.Functions;
 public class GenerateEmailContentFunction
 {
     private readonly ILogger<GenerateEmailContentFunction> _logger;
-    private readonly AIService _aiService;
+    private readonly EmailContentAgentService _emailContentAgentService;
     private readonly TelemetryClient _telemetryClient;
 
     public GenerateEmailContentFunction(
         ILogger<GenerateEmailContentFunction> logger,
-        AIService aiService,
+        EmailContentAgentService emailContentAgentService,
         TelemetryClient telemetryClient)
     {
         _logger = logger;
-        _aiService = aiService;
+        _emailContentAgentService = emailContentAgentService;
         _telemetryClient = telemetryClient;
     }
 
@@ -67,8 +67,7 @@ public class GenerateEmailContentFunction
                 ["TemplateType"] = request.TemplateType
             });
 
-            // GenerateEmailContentAsync never throws — returns error field on failure
-            var content = await _aiService.GenerateEmailContentAsync(request);
+            var content = await _emailContentAgentService.GenerateEmailContentAsync(request);
 
             var ok = req.CreateResponse(HttpStatusCode.OK);
             await ok.WriteAsJsonAsync(content);

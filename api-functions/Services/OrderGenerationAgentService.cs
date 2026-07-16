@@ -32,10 +32,7 @@ public class OrderGenerationAgentService
     private readonly ReceiptService _receiptService;
     private readonly PdfReceiptGenerator _pdfGenerator;
     private readonly FoundryAgentClient _foundryClient;
-    private readonly string? _agentId;
-
-    /// <summary>True when AI_AGENT_ORDER_ID is configured and AI-driven generation is available.</summary>
-    public bool IsAgentAvailable => !string.IsNullOrEmpty(_agentId);
+    private readonly string _agentId;
 
     public OrderGenerationAgentService(
         ILogger<OrderGenerationAgentService> logger,
@@ -54,13 +51,9 @@ public class OrderGenerationAgentService
         _pdfGenerator = pdfGenerator;
         _foundryClient = foundryClient;
 
-        // Use the direct order-generation agent (AI_AGENT_ORDER_ID) for programmatic
-        // order creation when available. Falls back to direct random generation when not set.
-        _agentId = configuration["AI_AGENT_ORDER_ID"];
-        if (string.IsNullOrEmpty(_agentId))
-        {
-            logger.LogWarning("AI_AGENT_ORDER_ID is not configured — order generation will use direct random mode (no AI)");
-        }
+        _agentId = configuration["AI_AGENT_ORDER_ID"]
+            ?? throw new InvalidOperationException(
+                "AI_AGENT_ORDER_ID environment variable is not set");
     }
 
     /// <summary>
@@ -80,38 +73,6 @@ public class OrderGenerationAgentService
     {
         // ── AI-required modes: fail hard if agent is not available ───────────
         var aiRequiredModes = new[] { "no-order-customer", "cart-recovery", "b2b-store" };
-        if (aiRequiredModes.Contains(orderMode) && !IsAgentAvailable)
-        {
-            var diagnostics = new Dictionary<string, string>
-            {
-                ["OrderMode"] = orderMode ?? "",
-                ["PersonaType"] = personaType,
-                ["CustomerId"] = seedCustomerId?.ToString() ?? "0",
-                ["StoreId"] = storeId?.ToString() ?? "",
-                ["AI_AGENT_ORDER_ID"] = _agentId ?? "(not configured)",
-                ["MCP_SERVICE_URL"] = _configuration["MCP_SERVICE_URL"] ?? "(not configured)",
-                ["AI_AGENT_OPENAI_ENDPOINT"] = _configuration["AI_AGENT_OPENAI_ENDPOINT"] ?? "(not configured)",
-            };
-
-            var diagMessage = string.Join("; ", diagnostics.Select(kv => $"{kv.Key}={kv.Value}"));
-            _logger.LogError(
-                "[OrderGen] AI REQUIRED but unavailable for mode={OrderMode}. " +
-                "This is semi-expected during setup but must be fixed. Diagnostics: {Diagnostics}",
-                orderMode, diagMessage);
-
-            _telemetryClient.TrackEvent("OrderGeneration.AiUnavailable", diagnostics);
-
-            throw new InvalidOperationException(
-                $"AI agent is required for order mode '{orderMode}' but is not configured. " +
-                $"Set AI_AGENT_ORDER_ID in app settings. Diagnostics: {diagMessage}");
-        }
-
-        // When the AI agent is not configured, use direct random order generation
-        if (!IsAgentAvailable)
-        {
-            return await GenerateOrderDirectAsync(personaType, seedCustomerId, onLog);
-        }
-
         var result = new OrderGenerationResult();
         var startTime = DateTimeOffset.UtcNow;
 
@@ -441,233 +402,7 @@ public class OrderGenerationAgentService
 
     // ── Direct order generation (no AI agent) ────────────────────────────────
 
-    /// <summary>
-    /// Supported countries mapped to Bogus locale and phone prefix for random customer generation.
-    /// Only includes countries whose cultures are supported by the AdventureWorks site.
-    /// </summary>
-    private static readonly (string CountryCode, string BogusLocale, string PhonePrefix)[] SupportedCountries =
-    [
-        ("US", "en",     "+1"),
-        ("GB", "en_GB",  "+44"),
-        ("CA", "en",     "+1"),
-        ("AU", "en_AU",  "+61"),
-        ("NZ", "en",     "+64"),
-        ("IE", "en_IE",  "+353"),
-        ("ES", "es",     "+34"),
-        ("FR", "fr",     "+33"),
-        ("DE", "de",     "+49"),
-        ("PT", "pt_PT",  "+351"),
-        ("IT", "it",     "+39"),
-        ("NL", "nl",     "+31"),
-        ("RU", "ru",     "+7"),
-        ("JP", "ja",     "+81"),
-        ("KR", "ko",     "+82"),
-        ("TR", "tr",     "+90"),
-    ];
-
     private static readonly string[] CardTypes = ["Vista", "SuperiorCard", "Distinguish", "ColonialVoice"];
-
-    /// <summary>
-    /// Generates an order directly by picking random in-stock products — no AI agent required.
-    /// Used as a fallback when AI_AGENT_ORDER_ID is not configured.
-    /// </summary>
-    private async Task<OrderGenerationResult> GenerateOrderDirectAsync(
-        string personaType,
-        int? seedCustomerId,
-        Action<string, string>? onLog)
-    {
-        var result = new OrderGenerationResult();
-        var startTime = DateTimeOffset.UtcNow;
-
-        void Log(string msg, string type = "info")
-        {
-            result.Log.Add(new OrderGenLogEntry { Message = msg, Type = type });
-            onLog?.Invoke(msg, type);
-            _logger.LogInformation("[OrderGen-Direct] {Message}", msg);
-        }
-
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("OrderGeneration.Direct");
-        operation.Telemetry.Properties["PersonaType"] = personaType;
-
-        try
-        {
-            Log("Using direct order generation (AI agent not configured)...", "info");
-
-            // ── Resolve or create customer ───────────────────────────────────
-            int customerId;
-            if (personaType == "existing-customer" || (seedCustomerId.HasValue && seedCustomerId.Value > 0))
-            {
-                int resolvedId;
-                if (seedCustomerId.HasValue && seedCustomerId.Value > 0)
-                {
-                    resolvedId = seedCustomerId.Value;
-                }
-                else
-                {
-                    var ids = await _orderGenService.GetCustomerIdsWithOrdersAsync(200);
-                    if (ids.Count == 0)
-                        throw new InvalidOperationException("No customers with orders found");
-                    resolvedId = ids[Random.Shared.Next(ids.Count)];
-                }
-
-                var customer = await _orderGenService.GetCustomerAsync(resolvedId);
-                if (customer != null)
-                {
-                    customerId = customer.CustomerID;
-                    result.CustomerName = $"{customer.FirstName} {customer.LastName}";
-                    result.CustomerEmail = customer.Email;
-                    Log($"Using existing customer: {result.CustomerName} (ID={customerId})", "success");
-                }
-                else
-                {
-                    // Customer not found — create a new one instead
-                    customerId = await CreateRandomCustomer(result, Log);
-                }
-            }
-            else
-            {
-                // New customer persona
-                customerId = await CreateRandomCustomer(result, Log);
-            }
-
-            // ── Pick random products ─────────────────────────────────────────
-            var itemCount = Random.Shared.Next(1, 6); // 1–5 items per order
-            Log($"Selecting {itemCount} random in-stock products...", "info");
-            var products = await _orderGenService.GetRandomInStockProductsAsync(itemCount);
-
-            if (products.Count == 0)
-                throw new InvalidOperationException("No in-stock products available for order generation");
-
-            var validItems = new List<OrderLineItem>();
-            foreach (var product in products)
-            {
-                var qty = (short)Random.Shared.Next(1, 4); // 1–3 units
-                if (qty > product.Stock) qty = (short)Math.Max(1, product.Stock);
-
-                var offerId = await _orderGenService.GetBestSpecialOfferAsync(product.ProductID);
-
-                validItems.Add(new OrderLineItem
-                {
-                    ProductId = product.ProductID,
-                    Quantity = qty,
-                    UnitPrice = product.ListPrice,
-                    SpecialOfferID = offerId
-                });
-
-                var offerNote = offerId > 1 ? $" (promotion ID={offerId})" : "";
-                Log($"  ✓ {product.Name} × {qty} @ ${product.ListPrice:N2}{offerNote}", "success");
-            }
-
-            // ── Create the order ─────────────────────────────────────────────
-            Log("Creating order in database...", "info");
-            var salesOrderId = await _orderGenService.CreateOrderAsync(new CreateOrderRequest
-            {
-                CustomerId = customerId,
-                Items = validItems
-            });
-
-            Log($"Order created: SalesOrderID={salesOrderId}", "success");
-            result.SalesOrderId = salesOrderId;
-
-            // ── Generate receipt ─────────────────────────────────────────────
-            var receiptData = await _receiptService.GetReceiptDataBySalesOrderIDAsync(salesOrderId);
-            if (receiptData != null)
-            {
-                result.ReceiptPdfBase64 = await _pdfGenerator.GenerateReceiptPdfBase64Async(receiptData);
-                Log("Receipt generated", "success");
-            }
-
-            var duration = DateTimeOffset.UtcNow - startTime;
-            result.Success = true;
-            result.TotalDue = receiptData?.TotalDue ?? 0;
-            result.CustomerId = customerId;
-            operation.Telemetry.Success = true;
-
-            _telemetryClient.TrackEvent("OrderGeneration.Direct.Success", new Dictionary<string, string>
-            {
-                ["PersonaType"] = personaType,
-                ["CustomerId"] = customerId.ToString(),
-                ["SalesOrderId"] = salesOrderId.ToString(),
-                ["ItemCount"] = validItems.Count.ToString(),
-                ["DurationMs"] = duration.TotalMilliseconds.ToString("F0")
-            });
-
-            Log($"Done! Order #{salesOrderId} created for {result.CustomerName} — Total: ${result.TotalDue:N2}", "success");
-            return result;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Direct order generation failed for persona={Persona}", personaType);
-            operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex);
-            Log($"Error: {ex.Message}", "error");
-            result.ErrorMessage = ex.Message;
-            return result;
-        }
-    }
-
-    private async Task<int> CreateRandomCustomer(OrderGenerationResult result, Action<string, string> log)
-    {
-        // Pick a random supported country and generate a complete profile using Bogus
-        var country = SupportedCountries[Random.Shared.Next(SupportedCountries.Length)];
-        var faker = new Faker(country.BogusLocale);
-
-        var firstName = faker.Name.FirstName();
-        var lastName = faker.Name.LastName();
-
-        // Generate realistic email
-        var emailDomains = new[] { "gmail.com", "outlook.com", "yahoo.com", "hotmail.com", "protonmail.com", "icloud.com" };
-        var emailDomain = emailDomains[Random.Shared.Next(emailDomains.Length)];
-        var email = $"{firstName.ToLowerInvariant()}.{lastName.ToLowerInvariant()}{Random.Shared.Next(10, 999)}@{emailDomain}";
-
-        // Generate international phone number
-        var localPhone = faker.Phone.PhoneNumber();
-        var digits = new string(localPhone.Where(char.IsDigit).ToArray());
-        var localDigits = digits.Length > 10 ? digits[^10..] : digits.PadLeft(10, '0');
-        var phone = $"{country.PhonePrefix} {localDigits[..3]} {localDigits[3..6]} {localDigits[6..]}";
-
-        // Generate address
-        var addressLine1 = faker.Address.StreetAddress();
-        var city = faker.Address.City();
-        var stateCode = faker.Address.StateAbbr();
-        var postalCode = faker.Address.ZipCode();
-
-        // Generate password
-        var password = GenerateRandomPassword();
-
-        log($"Creating new customer: {firstName} {lastName} ({email}) from {country.CountryCode}", "info");
-
-        var customerId = await _orderGenService.CreateCustomerAsync(new NewCustomerRequest
-        {
-            FirstName = firstName,
-            LastName = lastName,
-            Email = email,
-            AddressLine1 = addressLine1,
-            City = city,
-            StateCode = stateCode,
-            PostalCode = postalCode,
-            Password = password,
-        });
-
-        // Save phone
-        await _orderGenService.AddPersonPhoneAsync(
-            new NewCustomerRequest { FirstName = firstName, LastName = lastName },
-            phone, customerId);
-
-        // Save credit card
-        var cardType = CardTypes[Random.Shared.Next(CardTypes.Length)];
-        var cardNumber = GenerateLuhnCardNumber();
-        var expMonth = (byte)Random.Shared.Next(1, 13);
-        var expYear = (short)(DateTime.UtcNow.Year + Random.Shared.Next(1, 6));
-        await _orderGenService.AddCreditCardAsync(customerId, cardType, cardNumber, expMonth, expYear);
-        log($"  Card saved: {cardType} ****{cardNumber[^4..]}, Phone: {phone}", "dim");
-
-        result.CustomerName = $"{firstName} {lastName}";
-        result.CustomerEmail = email;
-        result.NewCustomerCreated = true;
-        log($"New customer created with CustomerID={customerId}", "success");
-        return customerId;
-    }
 
     private static string GenerateRandomPassword()
     {

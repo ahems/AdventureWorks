@@ -14,7 +14,7 @@ public class TranslatePromotionDescriptions
     private readonly ILogger<TranslatePromotionDescriptions> _logger;
     private readonly ProductService _productService;
     private readonly SpecialOfferService _specialOfferService;
-    private readonly AIService _aiService;
+    private readonly TranslationAgentService _translationAgentService;
     private readonly TelemetryClient _telemetryClient;
 
     // CultureID prefix that indicates an English-variant culture (no translation needed)
@@ -24,13 +24,13 @@ public class TranslatePromotionDescriptions
         ILogger<TranslatePromotionDescriptions> logger,
         ProductService productService,
         SpecialOfferService specialOfferService,
-        AIService aiService,
+        TranslationAgentService translationAgentService,
         TelemetryClient telemetryClient)
     {
         _logger = logger;
         _productService = productService;
         _specialOfferService = specialOfferService;
-        _aiService = aiService;
+        _translationAgentService = translationAgentService;
         _telemetryClient = telemetryClient;
     }
 
@@ -92,7 +92,7 @@ public class TranslatePromotionDescriptions
                 nonEnglishCultures.Count, englishVariantCultures.Count);
 
             // Translate non-English cultures via AI (one batch call)
-            var aiTranslations = await _aiService.TranslateTextAsync(
+            var aiTranslations = await _translationAgentService.TranslateTextAsync(
                 request.Description,
                 "Sales promotion description for an outdoor adventure equipment retailer",
                 nonEnglishCultures);

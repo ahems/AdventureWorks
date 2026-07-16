@@ -37,6 +37,8 @@ public class AIJobProcessorFunction
     private readonly ProductService _productService;
     private readonly ReviewService _reviewService;
     private readonly AIService _aiService;
+    private readonly TranslationAgentService _translationAgentService;
+    private readonly ReviewBatchAgentService _reviewBatchAgentService;
     private readonly OrderGenerationAgentService _orderGenAgentService;
 
     public AIJobProcessorFunction(
@@ -46,6 +48,8 @@ public class AIJobProcessorFunction
         ProductService productService,
         ReviewService reviewService,
         AIService aiService,
+        TranslationAgentService translationAgentService,
+        ReviewBatchAgentService reviewBatchAgentService,
         OrderGenerationAgentService orderGenAgentService)
     {
         _logger = logger;
@@ -54,6 +58,8 @@ public class AIJobProcessorFunction
         _productService = productService;
         _reviewService = reviewService;
         _aiService = aiService;
+        _translationAgentService = translationAgentService;
+        _reviewBatchAgentService = reviewBatchAgentService;
         _orderGenAgentService = orderGenAgentService;
     }
 
@@ -245,15 +251,8 @@ public class AIJobProcessorFunction
         _logger.LogInformation("Translation job: translating ProductModelID {id} to {count} languages",
             productModelId, cultures.Count);
 
-        // Build AIService
-        var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")
-            ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
-        var aiServiceLogger = _loggerFactory.CreateLogger<AIService>();
-        var telemetryClient = _serviceProvider.GetRequiredService<TelemetryClient>();
-        var aiService = new AIService(endpoint, aiServiceLogger, telemetryClient);
-
         // Translate descriptions
-        var translations = await aiService.TranslateProductAsync(product, cultures);
+        var translations = await _translationAgentService.TranslateProductAsync(product, cultures);
         _logger.LogInformation("Translation job: AI translated ProductModelID {id} to {count} languages",
             productModelId, translations.Count);
 
@@ -271,7 +270,7 @@ public class AIJobProcessorFunction
                     .Where(c => c.CultureID.TrimEnd().StartsWith("en-", StringComparison.OrdinalIgnoreCase))
                     .ToList();
 
-                var nameTranslations = await aiService.TranslateTextAsync(
+                var nameTranslations = await _translationAgentService.TranslateTextAsync(
                     product.ProductName,
                     "Product name for an outdoor adventure sports equipment catalog",
                     nonEnglish);
@@ -345,7 +344,7 @@ public class AIJobProcessorFunction
             for (int i = 0; i < forEmbedding.Count; i += 10)
             {
                 var batch = forEmbedding.Skip(i).Take(10).ToList();
-                var embeddedBatch = await aiService.GenerateEmbeddingsAsync(batch);
+                var embeddedBatch = await _aiService.GenerateEmbeddingsAsync(batch);
                 foreach (var emb in embeddedBatch)
                     await productService.SaveEmbeddingAsync(emb);
             }
@@ -366,12 +365,6 @@ public class AIJobProcessorFunction
 
         _logger.LogInformation("Review job: generating reviews for {count} products", msg.ProductIds.Count);
 
-        var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")
-            ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT not configured");
-        var aiServiceLogger = _loggerFactory.CreateLogger<AIService>();
-        var telemetryClient = _serviceProvider.GetRequiredService<TelemetryClient>();
-        var aiService = new AIService(endpoint, aiServiceLogger, telemetryClient);
-
         var connectionString = Environment.GetEnvironmentVariable("SQL_CONNECTION_STRING")
             ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not configured");
         // tableServiceUri not needed here — Table Storage only used for verified-reviews job state
@@ -384,7 +377,7 @@ public class AIJobProcessorFunction
             return;
         }
 
-        var generatedReviews = await aiService.GenerateProductReviewsAsync(products);
+        var generatedReviews = await _reviewBatchAgentService.GenerateProductReviewsAsync(products);
         _logger.LogInformation("Review job: AI generated {count} reviews", generatedReviews.Count);
 
         foreach (var review in generatedReviews)

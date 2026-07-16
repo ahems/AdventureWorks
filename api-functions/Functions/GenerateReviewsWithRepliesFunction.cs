@@ -22,19 +22,19 @@ namespace api_functions.Functions;
 public class GenerateReviewsWithRepliesFunction
 {
     private readonly ILogger<GenerateReviewsWithRepliesFunction> _logger;
-    private readonly AIService _aiService;
+    private readonly ReviewBatchAgentService _reviewBatchAgentService;
     private readonly ReviewService _reviewService;
     private readonly TelemetryClient _telemetryClient;
     private const string EMBEDDINGS_QUEUE = "ai-job-embeddings-queue";
 
     public GenerateReviewsWithRepliesFunction(
         ILogger<GenerateReviewsWithRepliesFunction> logger,
-        AIService aiService,
+        ReviewBatchAgentService reviewBatchAgentService,
         ReviewService reviewService,
         TelemetryClient telemetryClient)
     {
         _logger = logger;
-        _aiService = aiService;
+        _reviewBatchAgentService = reviewBatchAgentService;
         _reviewService = reviewService;
         _telemetryClient = telemetryClient;
     }
@@ -62,7 +62,7 @@ public class GenerateReviewsWithRepliesFunction
             var product = products[0];
 
             // 2. Generate AI reviews for this product
-            var generatedReviews = await _aiService.GenerateProductReviewsAsync(new List<ProductForReviewGeneration> { product });
+            var generatedReviews = await _reviewBatchAgentService.GenerateProductReviewsAsync(new List<ProductForReviewGeneration> { product });
             if (generatedReviews.Count == 0)
             {
                 var emptyResponse = req.CreateResponse(HttpStatusCode.OK);
@@ -114,7 +114,7 @@ public class GenerateReviewsWithRepliesFunction
                 ))
                 .ToList();
 
-            var replies = await _aiService.GenerateReviewRepliesAsync(replyInputs);
+            var replies = await _reviewBatchAgentService.GenerateReviewRepliesAsync(replyInputs);
 
             // 5. Save the replies
             int repliesSaved = 0;

@@ -50,11 +50,17 @@ public class CustomerWithDeliveredOrder
 /// <summary>Request body for POST /api/generate-verified-reviews/start (batch).</summary>
 public class BatchStartVerifiedReviewsRequest
 {
-    /// <summary>Number of qualifying products to generate reviews for. Defaults to all qualifying products.</summary>
+    /// <summary>Number of qualifying products to generate reviews for. Defaults to all qualifying products. Ignored when SpecificProductId is set.</summary>
     public int ProductCount { get; set; } = 0;  // 0 = all
 
     /// <summary>Reviews to generate per product (1 to max eligible customers for that product, default 1).</summary>
     public int ReviewsPerProduct { get; set; } = 1;
+
+    /// <summary>
+    /// When set, restricts generation to a single specific product (e.g. from the product page).
+    /// ProductCount is ignored when this is provided.
+    /// </summary>
+    public int? SpecificProductId { get; set; }
 }
 
 /// <summary>Summary of products and customers eligible for verified-review generation.</summary>

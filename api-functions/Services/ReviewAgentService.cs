@@ -46,20 +46,10 @@ public class ReviewAgentService
         _foundryClient = foundryClient;
         _telemetryClient = telemetryClient;
 
-        // Nullable — if not configured the service signals fallback via IsConfigured
-        _agentId = configuration["AI_AGENT_REVIEW_ID"];
-
-        if (string.IsNullOrWhiteSpace(_agentId))
-            _logger.LogWarning("AI_AGENT_REVIEW_ID is not set — ReviewAgentService will not be used; " +
-                               "calls will fall back to direct OpenAI completion.");
+        _agentId = configuration["AI_AGENT_REVIEW_ID"]
+            ?? throw new InvalidOperationException(
+                "AI_AGENT_REVIEW_ID environment variable is not set");
     }
-
-    /// <summary>
-    /// Returns true when the Foundry agent is configured and can be invoked.
-    /// Callers should fall back to <see cref="AIService.GenerateReviewForCustomerAsync"/>
-    /// when this is false.
-    /// </summary>
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(_agentId);
 
     /// <summary>
     /// Generates a single product review anchored to the supplied customer identity.
@@ -69,10 +59,6 @@ public class ReviewAgentService
         ProductForReviewGeneration product,
         CustomerWithDeliveredOrder customer)
     {
-        if (!IsConfigured)
-            throw new InvalidOperationException(
-                "ReviewAgentService.GenerateReviewAsync called but AI_AGENT_REVIEW_ID is not configured.");
-
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("ReviewAgent.GenerateReview");
         operation.Telemetry.Properties["ProductID"] = product.ProductID.ToString();
         operation.Telemetry.Properties["CustomerID"] = customer.CustomerID.ToString();

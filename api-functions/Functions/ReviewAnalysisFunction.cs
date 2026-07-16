@@ -16,16 +16,16 @@ namespace api_functions.Functions;
 public class ReviewAnalysisFunction
 {
     private readonly ILogger<ReviewAnalysisFunction> _logger;
-    private readonly AIService _aiService;
+    private readonly ReviewAnalysisAgentService _reviewAnalysisAgentService;
     private readonly TelemetryClient _telemetryClient;
 
     public ReviewAnalysisFunction(
         ILogger<ReviewAnalysisFunction> logger,
-        AIService aiService,
+        ReviewAnalysisAgentService reviewAnalysisAgentService,
         TelemetryClient telemetryClient)
     {
         _logger = logger;
-        _aiService = aiService;
+        _reviewAnalysisAgentService = reviewAnalysisAgentService;
         _telemetryClient = telemetryClient;
     }
 
@@ -67,7 +67,7 @@ public class ReviewAnalysisFunction
                 ["ReviewCount"] = request.Reviews.Count.ToString()
             });
 
-            var analyses = await _aiService.AnalyzeReviewsAsync(request.Reviews);
+            var analyses = await _reviewAnalysisAgentService.AnalyzeReviewsAsync(request.Reviews);
 
             var ok = req.CreateResponse(HttpStatusCode.OK);
             await ok.WriteAsJsonAsync(new { analyses });

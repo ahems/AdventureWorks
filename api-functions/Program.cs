@@ -230,7 +230,6 @@ builder.Services.AddScoped<CartRecoveryAgentService>(sp =>
 });
 
 // Register ReviewAgentService — Foundry agent for verified-review generation.
-// Graceful fallback to AIService.GenerateReviewForCustomerAsync when AI_AGENT_REVIEW_ID is absent.
 builder.Services.AddScoped<ReviewAgentService>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
@@ -254,6 +253,81 @@ builder.Services.AddScoped<PromotionAgentService>(sp =>
     var telemetryClient = sp.GetRequiredService<TelemetryClient>();
 
     return new PromotionAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
+// Register Translation Agent Service for AI translation via Foundry
+builder.Services.AddScoped<TranslationAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<TranslationAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new TranslationAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
+// Register Review Batch Agent Service for batch review generation and replies via Foundry
+builder.Services.AddScoped<ReviewBatchAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<ReviewBatchAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new ReviewBatchAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
+// Register Review Analysis Agent Service for sentiment analysis and moderation via Foundry
+builder.Services.AddScoped<ReviewAnalysisAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<ReviewAnalysisAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new ReviewAnalysisAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
+// Register Email Content Agent Service for AI email generation via Foundry
+builder.Services.AddScoped<EmailContentAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<EmailContentAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new EmailContentAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
+// Register Catalog Suggestion Agent Service for AI category/subcategory suggestions via Foundry
+builder.Services.AddScoped<CatalogSuggestionAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<CatalogSuggestionAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new CatalogSuggestionAgentService(
         logger,
         configuration,
         foundryClient,
