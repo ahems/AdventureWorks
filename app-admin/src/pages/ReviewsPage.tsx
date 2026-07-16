@@ -1088,6 +1088,7 @@ const ReviewsPage: React.FC = () => {
           setCursorStack((s) => s.slice(0, -1));
           setDabCursor(prev);
           setSelectedReviews(new Set());
+          setAnalysisResults(new Map());
         }}
         disabled={cursorStack.length === 0}
         className="inline-flex items-center gap-1 p-2 font-doodle text-sm disabled:opacity-40"
@@ -1103,6 +1104,7 @@ const ReviewsPage: React.FC = () => {
           setCursorStack((s) => [...s, dabCursor ?? ""]);
           setDabCursor(apiData!.endCursor);
           setSelectedReviews(new Set());
+          setAnalysisResults(new Map());
         }}
         disabled={!apiData?.hasNextPage}
         className="inline-flex items-center gap-1 p-2 font-doodle text-sm disabled:opacity-40"
