@@ -203,3 +203,7 @@ tests/test-results-demo/
 # api-mcp .NET build outputs
 api-mcp/**/bin/
 api-mcp/**/obj/
+
+# .NET SDK runfile discovery cache
+dotnet/runfile-discovery/
+
