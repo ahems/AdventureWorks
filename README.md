@@ -42,7 +42,7 @@ Admin → Container App (app-admin) → Azure Functions → Azure SQL
   - Enforces DAB naming conventions and pagination limits (100 items per query).
 
 - **Serverless Functions** (`api-functions/`)
-  - .NET 8 **Azure Functions (isolated worker)** in Container Apps.
+  - .NET 10 **Azure Functions (isolated worker)** in Container Apps.
   - Implements custom business logic not suited for DAB, including:
     - AI agent endpoints (via Model Context Protocol).
     - Password & password‑reset workflows.
@@ -97,7 +97,7 @@ All services authenticate using **Managed Identity** and the `Authentication=Act
 - `app/` – React + TypeScript + Vite frontend (Azure Static Web App).
 - `app-admin/` – React + TypeScript + Vite admin portal (Azure Container App, scale-to-zero).
 - `api/` – Data API Builder (DAB) configuration, Dockerfile, and local start scripts.
-- `api-functions/` – .NET 8 isolated Azure Functions with AI, email, receipts, passwords, SEO, and translation workflows.
+- `api-functions/` – .NET 10 isolated Azure Functions with AI, email, receipts, passwords, SEO, and translation workflows.
 - `api-mcp/` – Model Context Protocol server providing AI agent tool capabilities.
 - `seed-job/` – Containerized database seeding job (Azure Container App Job) that loads SQL scripts, CSV data, and product images (~8 minute execution time). See [seed-job/README.md](seed-job/README.md).
 - `infra/` – Bicep infrastructure as code for Azure resource provisioning.

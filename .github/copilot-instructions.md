@@ -10,7 +10,7 @@ This is a **3-tier Azure application** demonstrating enterprise patterns with pa
 
 - **Frontend** (`app/`): React + TypeScript + Vite SPA deployed as Azure Static Web App
 - **Backend API** (`api/`): Microsoft Data API Builder (DAB) providing GraphQL + REST, running in Azure Container Apps
-- **Serverless Functions** (`api-functions/`): .NET 8 Azure Functions in Container Apps for custom business logic
+- **Serverless Functions** (`api-functions/`): .NET 10 Azure Functions in Container Apps for custom business logic
 - **Database**: Azure SQL with AdventureWorks schema using Entra ID authentication
 - **Infrastructure** (`infra/`): Bicep modules with modular service definitions
 

@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy csproj and restore dependencies
@@ -10,7 +10,7 @@ COPY . .
 RUN dotnet publish -c Release -o /app/publish
 
 # Build runtime image
-FROM mcr.microsoft.com/azure-functions/dotnet-isolated:4-dotnet-isolated8.0
+FROM mcr.microsoft.com/azure-functions/dotnet-isolated:4-dotnet-isolated10.0
 WORKDIR /home/site/wwwroot
 
 # Copy published app

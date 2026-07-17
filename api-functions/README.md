@@ -1,6 +1,6 @@
 # AdventureWorks Azure Functions (`api-functions`)
 
-This project contains the serverless backend for the AdventureWorks e‑commerce demo. It runs as .NET 8 isolated Azure Functions (usually hosted in Azure Container Apps) and complements the Data API Builder (`api/`) and Static Web App frontend (`app/`).
+This project contains the serverless backend for the AdventureWorks e‑commerce demo. It runs as .NET 10 isolated Azure Functions (usually hosted in Azure Container Apps) and complements the Data API Builder (`api/`) and Static Web App frontend (`app/`).
 
 High‑level responsibilities:
 
@@ -163,6 +163,7 @@ Notification emails (Shipped, Delivered) are gated behind the `ORDER_NOTIFICATIO
 
 - **Trigger**: Timer (every hour at `:00`) + HTTP `GET /api/orders/delivery/trigger`
 - **Purpose**: Promotes Shipped (Status=5) orders to Delivered (Status=7) once the configured delivery window has elapsed since `ShipDate` (falls back to `ModifiedDate` when `ShipDate` is NULL). B2C orders (`OnlineOrderFlag=1`) and B2B store orders (`OnlineOrderFlag=0`) use separate minimum-day thresholds configured via `PUT /api/orders/pipeline/config`. Sends a "delivered" notification email per promoted order (gated by `ORDER_NOTIFICATIONS_EMAIL_ENABLED`). Emits a `OrderDelivery.BatchProcessed` Application Insights custom event with the count. The HTTP endpoint is useful for manual triggering during development — returns `{"delivered": N}`.
+
 ---
 
 ## Product Media Functions (Images & Thumbnails)

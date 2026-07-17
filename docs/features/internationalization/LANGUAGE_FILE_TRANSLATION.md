@@ -311,7 +311,7 @@ The function uses a carefully crafted system prompt that:
 
 - Azure OpenAI endpoint configured in `AZURE_OPENAI_ENDPOINT` environment variable
 - Chat model deployment named "chat"
-- .NET 8 Azure Functions runtime
+- .NET 10 Azure Functions runtime
 - Managed Identity for Azure OpenAI authentication
 
 ## Performance

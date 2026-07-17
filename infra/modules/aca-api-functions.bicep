@@ -4,7 +4,7 @@ param location string = resourceGroup().location
 param containerRegistryName string = 'avacr${toLower(uniqueString(resourceGroup().id))}'
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param containerAppEnvId string
-param bootstrapImage string = 'mcr.microsoft.com/azure-functions/dotnet-isolated:4-dotnet-isolated8.0'
+param bootstrapImage string = 'mcr.microsoft.com/azure-functions/dotnet-isolated:4-dotnet-isolated10.0'
 @minValue(0)
 @maxValue(25)
 param minReplica int = 0
