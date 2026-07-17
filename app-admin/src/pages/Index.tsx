@@ -31,7 +31,7 @@ const Index: React.FC = () => {
   const totalCustomers = stats?.totalCustomers?.toLocaleString() ?? "—";
   const totalOrders = stats?.totalOrders?.toLocaleString() ?? "—";
   const pendingOrders = stats?.pendingOrders ?? 0;
-  const totalReviews = stats?.totalReviews?.toLocaleString() ?? "—";
+  const reviewsToModerate = stats?.reviewsToModerate ?? 0;
   const recentOrders = stats?.recentOrders ?? [];
 
   if (!isAuthenticated) {
@@ -157,12 +157,17 @@ const Index: React.FC = () => {
               >
                 <div className="flex items-center justify-between mb-3">
                   <Star className="w-8 h-8 text-doodle-accent group-hover:scale-110 transition-transform" />
+                  {reviewsToModerate > 0 && (
+                    <span className="bg-doodle-accent text-white font-doodle text-xs font-bold px-2 py-1 border-2 border-doodle-text">
+                      needs review
+                    </span>
+                  )}
                 </div>
                 <p className="font-doodle text-3xl md:text-4xl font-bold text-doodle-text">
-                  {totalReviews}
+                  {reviewsToModerate.toLocaleString()}
                 </p>
                 <p className="font-doodle text-sm text-doodle-text/60">
-                  Reviews
+                  Reviews to Moderate
                 </p>
               </Link>
             </div>
@@ -218,7 +223,7 @@ const Index: React.FC = () => {
                     Moderate Reviews
                   </span>
                   <span className="font-doodle text-sm text-doodle-accent">
-                    {totalReviews} to review
+                    {reviewsToModerate.toLocaleString()} to review
                   </span>
                 </Link>
                 <Link

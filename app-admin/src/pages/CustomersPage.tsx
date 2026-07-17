@@ -89,6 +89,12 @@ const DB_STATUS_LABELS: Record<
     bg: "bg-gray-100",
     icon: "🚫",
   },
+  7: {
+    label: "Delivered",
+    color: "text-green-700",
+    bg: "bg-green-100",
+    icon: "✅",
+  },
 };
 
 // ── Edit panel: profile + addresses ──────────────────────────────────────────

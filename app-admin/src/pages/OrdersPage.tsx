@@ -16,6 +16,7 @@ import {
   CalendarDays,
   X as XIcon,
   Filter,
+  Settings,
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
@@ -526,6 +527,13 @@ const OrdersPage: React.FC = () => {
                     )}
                     Generate Missing Receipts
                   </button>
+                  <Link
+                    to="/order-pipeline"
+                    className="doodle-button flex items-center gap-1.5 px-3 py-1.5 text-sm shrink-0"
+                    title="Order Pipeline Settings"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </Link>
                 </div>
               )}
             </div>

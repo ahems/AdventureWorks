@@ -16,6 +16,7 @@ import {
   Clock,
   Tag,
   ShoppingBag,
+  Settings,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -143,6 +144,10 @@ export default function ShoppingSimulatorPage() {
   const [includeStore, setIncludeStore] = React.useState(true);
   const [storeOrderPct, setStoreOrderPct] = React.useState(20);
 
+  // Track previous running state so we only sync sliders on initial load
+  // or when the simulator transitions from running → stopped
+  const prevRunningRef = React.useRef<boolean | null>(null);
+
   // ── Fetch status ────────────────────────────────────────────────────────
 
   const fetchStatus = React.useCallback(async () => {
@@ -150,8 +155,12 @@ export default function ShoppingSimulatorPage() {
       const s = await getShoppingSimulatorStatus();
       setStatus(s);
       setError(null);
-      // Keep sliders in sync with actual config when stopped
-      if (!s.isRunning) {
+      // Sync sliders only on initial load or running→stopped transition
+      const wasRunning = prevRunningRef.current;
+      const isFirstLoad = wasRunning === null;
+      const justStopped = wasRunning === true && !s.isRunning;
+      prevRunningRef.current = s.isRunning;
+      if (!s.isRunning && (isFirstLoad || justStopped)) {
         setRateOpm(s.ordersPerMinute);
         setExistingPct(s.existingCustomerPercentage);
         setDurationHours(s.durationHours);
@@ -287,6 +296,13 @@ export default function ShoppingSimulatorPage() {
                 Stopped
               </Badge>
             )}
+            <Link
+              to="/order-pipeline"
+              className="doodle-button p-1.5 inline-flex items-center"
+              title="Order Pipeline Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </Link>
             <Button
               variant="outline"
               size="sm"

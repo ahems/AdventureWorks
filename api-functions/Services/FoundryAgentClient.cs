@@ -167,6 +167,16 @@ public class FoundryAgentClient
         // "Return ONLY a valid JSON object") and returns prose instead.
         var resolvedInstructions = ResolveHandlebarsTemplate(def.Instructions, structuredInputs);
 
+        // --- Pre-warm MCP servers ------------------------------------------------
+        // Foundry connects to MCP server URLs during tool enumeration. If the Container
+        // App has scaled to zero, the first connection attempt may time out with
+        // "TaskCanceledException encountered while enumerating tools". Sending a
+        // lightweight request here wakes the server before Foundry's timeout applies.
+        if (def.Tools.Count > 0)
+        {
+            await WarmupMcpServersAsync(def.Tools, cancellationToken);
+        }
+
         // --- Approval loop -----------------------------------------------------
         // Foundry "kind: prompt" agents with MCP tools may require the client to
         // explicitly approve each tool call before the model can execute it.
@@ -180,6 +190,7 @@ public class FoundryAgentClient
         //
         // The final response contains the model's answer in a "message" output item.
         const int maxApprovalRounds = 10; // safety guard
+        const int maxToolRetries = 2; // retries for transient MCP tool enumeration failures
         string? currentPreviousId = string.IsNullOrEmpty(previousResponseId) ? null : previousResponseId;
         object currentInput = input;
         string lastResponseBody = string.Empty;
@@ -230,25 +241,47 @@ public class FoundryAgentClient
 
             var json = JsonSerializer.Serialize(requestBody, _serializeOptions);
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, _responsesUrl)
-            {
-                Content = new StringContent(json, Encoding.UTF8, "application/json")
-            };
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
-            if (!string.IsNullOrEmpty(userId))
-                request.Headers.TryAddWithoutValidation("x-memory-user-id", userId);
-
             _logger.LogInformation(
                 "Invoking Foundry agent '{AgentId}' model='{Model}' round={Round} (previousResponseId={Prev}, toolChoice={ToolChoice}, structuredInputKeys={Keys})",
                 agentId, def.Model, round, currentPreviousId ?? "none",
                 toolChoice ?? "auto",
                 structuredInputs?.Count > 0 ? string.Join(",", structuredInputs.Keys) : "none");
 
-            var httpResponse = await httpClient.SendAsync(request, cancellationToken);
-            var responseBody = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
-
-            if (!httpResponse.IsSuccessStatusCode)
+            // Retry loop for transient MCP tool enumeration failures (e.g. cold-start
+            // timeouts returning 400 "TaskCanceledException encountered while enumerating tools")
+            string responseBody = string.Empty;
+            for (int retry = 0; retry <= maxToolRetries; retry++)
             {
+                using var retryRequest = new HttpRequestMessage(HttpMethod.Post, _responsesUrl)
+                {
+                    Content = new StringContent(json, Encoding.UTF8, "application/json")
+                };
+                retryRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
+                if (!string.IsNullOrEmpty(userId))
+                    retryRequest.Headers.TryAddWithoutValidation("x-memory-user-id", userId);
+
+                var httpResponse = await httpClient.SendAsync(retryRequest, cancellationToken);
+                responseBody = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
+
+                if (httpResponse.IsSuccessStatusCode)
+                    break;
+
+                // Check if this is a retryable MCP tool enumeration error
+                var isToolEnumError = (int)httpResponse.StatusCode == 400
+                    && (responseBody.Contains("tool_user_error") || responseBody.Contains("enumerating tools"));
+
+                if (isToolEnumError && retry < maxToolRetries)
+                {
+                    var delayMs = (retry + 1) * 3000; // 3s, 6s
+                    _logger.LogWarning(
+                        "Foundry agent '{AgentId}' MCP tool enumeration failed (attempt {Attempt}/{Max}). " +
+                        "Retrying in {Delay}ms. Error: {Body}",
+                        agentId, retry + 1, maxToolRetries + 1, delayMs,
+                        responseBody.Length > 200 ? responseBody[..200] : responseBody);
+                    await Task.Delay(delayMs, cancellationToken);
+                    continue;
+                }
+
                 _logger.LogError("Foundry Responses API returned {Status}: {Body}",
                     (int)httpResponse.StatusCode,
                     responseBody.Length > 500 ? responseBody[..500] : responseBody);
@@ -647,6 +680,54 @@ public class FoundryAgentClient
             result = result.Replace($"{{{{{kvp.Key}}}}}", kvp.Value?.ToString() ?? string.Empty);
 
         return result;
+    }
+
+    /// <summary>
+    /// Pre-warms MCP servers referenced in the agent's tool definitions by sending a
+    /// lightweight HTTP POST. This ensures Container Apps are scaled up before Foundry
+    /// attempts to enumerate tools (which has an internal timeout that triggers
+    /// "TaskCanceledException encountered while enumerating tools" on cold starts).
+    /// </summary>
+    private async Task WarmupMcpServersAsync(IReadOnlyList<JsonElement> tools, CancellationToken cancellationToken)
+    {
+        var mcpUrls = new HashSet<string>();
+        foreach (var tool in tools)
+        {
+            if (tool.TryGetProperty("type", out var typeProp) && typeProp.GetString() == "mcp"
+                && tool.TryGetProperty("server_url", out var urlProp))
+            {
+                var url = urlProp.GetString();
+                if (!string.IsNullOrEmpty(url))
+                    mcpUrls.Add(url);
+            }
+        }
+
+        if (mcpUrls.Count == 0) return;
+
+        using var httpClient = _httpClientFactory.CreateClient();
+        httpClient.Timeout = TimeSpan.FromSeconds(15);
+
+        var warmupTasks = mcpUrls.Select(async url =>
+        {
+            try
+            {
+                // Send MCP initialize request — lightweight and wakes the Container App
+                var initPayload = """{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"warmup","version":"1.0"}}}""";
+                using var req = new HttpRequestMessage(HttpMethod.Post, url)
+                {
+                    Content = new StringContent(initPayload, Encoding.UTF8, "application/json")
+                };
+                var resp = await httpClient.SendAsync(req, cancellationToken);
+                _logger.LogDebug("MCP warmup for {Url}: {Status}", url, (int)resp.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                // Non-fatal: warmup is best-effort; the retry loop handles failures
+                _logger.LogDebug(ex, "MCP warmup failed for {Url} (non-fatal)", url);
+            }
+        });
+
+        await Task.WhenAll(warmupTasks);
     }
 
     /// <summary>

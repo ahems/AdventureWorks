@@ -29,7 +29,7 @@ export interface DashboardStats {
   totalCustomers: number;
   totalOrders: number;
   pendingOrders: number;
-  totalReviews: number;
+  reviewsToModerate: number;
   recentOrders: DashboardOrder[];
 }
 
@@ -52,7 +52,7 @@ interface DashboardCountsResponse {
   totalCustomers: number;
   totalOrders: number;
   pendingOrders: number;
-  totalReviews: number;
+  reviewsToModerate: number;
 }
 
 export const useDashboardStats = () => {
@@ -76,7 +76,7 @@ export const useDashboardStats = () => {
         totalCustomers: countsRes.totalCustomers,
         totalOrders: countsRes.totalOrders,
         pendingOrders: countsRes.pendingOrders,
-        totalReviews: countsRes.totalReviews,
+        reviewsToModerate: countsRes.reviewsToModerate,
         recentOrders: recentData.salesOrderHeaders?.items ?? [],
       };
     },

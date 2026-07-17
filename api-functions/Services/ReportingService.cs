@@ -23,7 +23,7 @@ public record DashboardCounts(
     int TotalCustomers,
     int TotalOrders,
     int PendingOrders,
-    int TotalReviews);
+    int ReviewsToModerate);
 
 public record ProductProfit(
     string ProductName,
@@ -239,7 +239,8 @@ public class ReportingService
                 (SELECT COUNT(*) FROM Sales.SalesOrderHeader) AS TotalOrders,
                 (SELECT COUNT(*) FROM Sales.SalesOrderHeader
                  WHERE Status IN (1, 2))                AS PendingOrders,
-                (SELECT COUNT(*) FROM Production.ProductReview) AS TotalReviews");
+                (SELECT COUNT(*) FROM Production.ProductReview
+                 WHERE IsModerated = 0)                 AS ReviewsToModerate");
     }
 
     /// <summary>
