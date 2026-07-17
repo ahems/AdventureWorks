@@ -99,9 +99,11 @@ azd env get-values | grep MCP_SERVICE_URL
 The app uses **azd lifecycle hooks** for automated deployment orchestration:
 
 ```bash
-azd up  # Full deploy: preup → provision → deploy → postdeploy
-        # Total time: ~29 minutes (21 min infrastructure + 8 min seed-job)
-````
+azd up --no-prompt  # Full deploy: preup → provision → deploy → postdeploy
+                    # Total time: ~29 minutes (21 min infrastructure + 8 min seed-job)
+```
+
+**Important:** Always use `--no-prompt` to prevent the deployment from stalling. The `azd` preflight validation may warn about AI model catalog entries and prompt for confirmation, which causes the process to hang. `--no-prompt` auto-accepts non-destructive warnings.`
 
 **Hook execution order:**
 

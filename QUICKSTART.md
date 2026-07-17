@@ -104,8 +104,10 @@ From the repo root inside the Codespace:
 
 ```bash
 cd /workspaces/AdventureWorks
-azd up
+azd up --no-prompt
 ```
+
+> **Important:** Always use `--no-prompt` to avoid interactive prompts that can stall the deployment. The `azd` preflight validation may warn about AI model catalog entries and prompt for confirmation — `--no-prompt` auto-accepts non-destructive warnings and ensures the deployment runs end-to-end without hanging.
 
 `azd up` will:
 

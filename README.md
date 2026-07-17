@@ -136,8 +136,10 @@ For testing and test scripts, see:
 Deploy the complete solution to Azure using:
 
 ```bash
-azd up
+azd up --no-prompt
 ```
+
+> **Important:** Always use `--no-prompt` to avoid interactive prompts (e.g. AI model catalog validation warnings) that can stall the deployment.
 
 This command will:
 
