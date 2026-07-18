@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Bogus;
 using Microsoft.Extensions.Configuration;
@@ -239,7 +240,9 @@ public class OrderGenerationAgentService
             }
             else
             {
-                throw new InvalidOperationException("AI plan did not specify a customer");
+                Log("AI plan did not include customer details; synthesizing a fallback customer profile.", "dim");
+                plan.NewCustomer = BuildFallbackCustomerPlan(personaType, result.Log);
+                customerId = await CreateNewCustomer(plan, result, Log);
             }
 
             // ── Validate items & check stock ─────────────────────────────────
@@ -447,21 +450,30 @@ public class OrderGenerationAgentService
         OrderGenerationResult result,
         Action<string, string> log)
     {
-        var nc = plan.NewCustomer!;
-        log($"Creating new customer: {nc.FirstName} {nc.LastName} ({nc.Email})", "info");
+        var fallback = BuildFallbackCustomerPlan("consumer", result.Log);
+        var nc = plan.NewCustomer ?? fallback;
+        var firstName = string.IsNullOrWhiteSpace(nc.FirstName) ? fallback.FirstName : nc.FirstName;
+        var lastName = string.IsNullOrWhiteSpace(nc.LastName) ? fallback.LastName : nc.LastName;
+        var email = string.IsNullOrWhiteSpace(nc.Email) ? fallback.Email : nc.Email;
+        var addressLine1 = string.IsNullOrWhiteSpace(nc.AddressLine1) ? fallback.AddressLine1 : nc.AddressLine1;
+        var city = string.IsNullOrWhiteSpace(nc.City) ? fallback.City : nc.City;
+        var stateCode = string.IsNullOrWhiteSpace(nc.StateCode) ? fallback.StateCode : nc.StateCode;
+        var postalCode = string.IsNullOrWhiteSpace(nc.PostalCode) ? fallback.PostalCode : nc.PostalCode;
+
+        log($"Creating new customer: {firstName} {lastName} ({email})", "info");
 
         // If the AI agent didn't provide a password, generate one
         var password = nc.Password ?? GenerateRandomPassword();
 
         var customerId = await _orderGenService.CreateCustomerAsync(new NewCustomerRequest
         {
-            FirstName = nc.FirstName,
-            LastName = nc.LastName,
-            Email = nc.Email,
-            AddressLine1 = nc.AddressLine1 ?? "1 Main St",
-            City = nc.City ?? "Seattle",
-            StateCode = nc.StateCode,
-            PostalCode = nc.PostalCode ?? "98101",
+            FirstName = firstName,
+            LastName = lastName,
+            Email = email,
+            AddressLine1 = addressLine1 ?? "1 Main St",
+            City = city ?? "Seattle",
+            StateCode = stateCode,
+            PostalCode = postalCode ?? "98101",
             Password = password,
         });
 
@@ -469,13 +481,10 @@ public class OrderGenerationAgentService
         var phone = nc.Phone;
         if (string.IsNullOrWhiteSpace(phone))
         {
-            var faker = new Faker("en");
-            var digits = new string(faker.Phone.PhoneNumber().Where(char.IsDigit).ToArray());
-            var localDigits = digits.Length > 10 ? digits[^10..] : digits.PadLeft(10, '0');
-            phone = $"+1 {localDigits[..3]} {localDigits[3..6]} {localDigits[6..]}";
+            phone = GenerateFallbackPhoneNumber();
         }
         await _orderGenService.AddPersonPhoneAsync(
-            new NewCustomerRequest { FirstName = nc.FirstName, LastName = nc.LastName },
+            new NewCustomerRequest { FirstName = firstName, LastName = lastName },
             phone, customerId);
         log($"  Phone saved: {phone}", "dim");
 
@@ -485,13 +494,57 @@ public class OrderGenerationAgentService
         var expMonth = nc.CreditCardExpMonth ?? (byte)Random.Shared.Next(1, 13);
         var expYear = nc.CreditCardExpYear ?? (short)(DateTime.UtcNow.Year + Random.Shared.Next(1, 6));
         await _orderGenService.AddCreditCardAsync(customerId, cardType, cardNumber, expMonth, expYear);
-        log($"  Credit card saved: {cardType} ****{cardNumber[^4..]}", "dim");
+        var last4 = cardNumber.Length >= 4 ? cardNumber[^4..] : cardNumber;
+        log($"  Credit card saved: {cardType} ****{last4}", "dim");
 
-        result.CustomerName = $"{nc.FirstName} {nc.LastName}";
-        result.CustomerEmail = nc.Email;
+        result.CustomerName = $"{firstName} {lastName}";
+        result.CustomerEmail = email;
         result.NewCustomerCreated = true;
         log($"New customer created with CustomerID={customerId}", "success");
         return customerId;
+    }
+
+    private static string GenerateFallbackPhoneNumber()
+    {
+        var faker = new Faker("en");
+        var rawPhone = faker.Phone.PhoneNumber() ?? string.Empty;
+        var digits = new string(rawPhone.Where(char.IsDigit).ToArray());
+        if (digits.Length == 0)
+        {
+            digits = string.Concat(Enumerable.Range(0, 10).Select(_ => Random.Shared.Next(10).ToString()));
+        }
+
+        var localDigits = digits.Length > 10 ? digits[^10..] : digits.PadLeft(10, '0');
+        return $"+1 {localDigits[..3]} {localDigits[3..6]} {localDigits[6..]}";
+    }
+
+    private static NewCustomerPlan BuildFallbackCustomerPlan(string personaType, List<OrderGenLogEntry> log)
+    {
+        var faker = new Faker("en");
+        var profile = faker.Person;
+
+        var firstName = string.IsNullOrWhiteSpace(profile.FirstName) ? "New" : profile.FirstName;
+        var lastName = string.IsNullOrWhiteSpace(profile.LastName) ? "Customer" : profile.LastName;
+        var slug = Regex.Replace($"{firstName}.{lastName}.{personaType}".ToLowerInvariant(), @"[^a-z0-9]+", ".").Trim('.');
+        if (string.IsNullOrWhiteSpace(slug)) slug = $"customer.{Guid.NewGuid():N}";
+
+        log.Add(new OrderGenLogEntry
+        {
+            Type = "dim",
+            Message = $"Synthesized fallback customer profile for persona '{personaType}'."
+        });
+
+        return new NewCustomerPlan
+        {
+            FirstName = firstName,
+            LastName = lastName,
+            Email = $"{slug}@example.test",
+            Phone = profile.Phone,
+            AddressLine1 = profile.Address.Street,
+            City = profile.Address.City,
+            StateCode = profile.Address.State,
+            PostalCode = profile.Address.ZipCode,
+        };
     }
 
     private static string BuildPersonaDescription(string personaType, string? customPersona)
@@ -524,22 +577,167 @@ public class OrderGenerationAgentService
     {
         var cleaned = Regex.Replace(rawResponse, @"^```(?:json)?\s*", "", RegexOptions.Multiline);
         cleaned = Regex.Replace(cleaned, @"```\s*$", "", RegexOptions.Multiline).Trim();
+        cleaned = NormalizeExistingCustomerIdValue(cleaned);
 
-        var start = cleaned.IndexOf('{');
-        var end = cleaned.LastIndexOf('}');
+        var jsonPayload = ExtractFirstJsonObject(cleaned);
 
-        if (start < 0 || end <= start)
+        if (string.IsNullOrWhiteSpace(jsonPayload))
         {
             var preview = cleaned.Length > 200 ? cleaned[..200] + "..." : cleaned;
             throw new InvalidOperationException(
                 $"AI returned text instead of a JSON order plan. Response preview: '{preview}'");
         }
 
-        cleaned = cleaned.Substring(start, end - start + 1);
-
-        return JsonSerializer.Deserialize<OrderPlan>(cleaned,
+        return JsonSerializer.Deserialize<OrderPlan>(jsonPayload,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException("AI returned unparseable JSON for order plan");
+    }
+
+    private static string? ExtractFirstJsonObject(string input)
+    {
+        var start = input.IndexOf('{');
+        if (start < 0)
+            return null;
+
+        var depth = 0;
+        var inString = false;
+        var escaping = false;
+
+        for (int i = start; i < input.Length; i++)
+        {
+            var ch = input[i];
+
+            if (inString)
+            {
+                if (escaping)
+                {
+                    escaping = false;
+                    continue;
+                }
+
+                if (ch == '\\')
+                {
+                    escaping = true;
+                    continue;
+                }
+
+                if (ch == '"')
+                    inString = false;
+
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                inString = true;
+                continue;
+            }
+
+            if (ch == '{')
+            {
+                depth++;
+                continue;
+            }
+
+            if (ch == '}')
+            {
+                depth--;
+                if (depth == 0)
+                    return input[start..(i + 1)];
+            }
+        }
+
+        return null;
+    }
+
+    private static string NormalizeExistingCustomerIdValue(string input)
+    {
+        const string quotedKey = "\"existingCustomerId\"";
+        const string bareKey = "existingCustomerId";
+
+        var keyIndex = input.IndexOf(quotedKey, StringComparison.Ordinal);
+        var keyLength = quotedKey.Length;
+
+        if (keyIndex < 0)
+        {
+            keyIndex = input.IndexOf(bareKey, StringComparison.Ordinal);
+            keyLength = bareKey.Length;
+        }
+
+        if (keyIndex < 0)
+            return input;
+
+        var colonIndex = input.IndexOf(':', keyIndex + keyLength);
+        if (colonIndex < 0)
+            return input;
+
+        var valueStart = colonIndex + 1;
+        while (valueStart < input.Length && char.IsWhiteSpace(input[valueStart])) valueStart++;
+        if (valueStart >= input.Length || input[valueStart] != '{')
+            return input;
+
+        var valueEnd = FindBalancedObjectEnd(input, valueStart);
+        if (valueEnd < valueStart)
+            return input;
+
+        var rawValue = input[valueStart..(valueEnd + 1)];
+        var numericMatch = Regex.Match(rawValue, @"\b\d+\b");
+        var replacement = numericMatch.Success ? numericMatch.Value : "null";
+
+        return string.Concat(input.AsSpan(0, valueStart), replacement, input.AsSpan(valueEnd + 1));
+    }
+
+    private static int FindBalancedObjectEnd(string input, int start)
+    {
+        var depth = 0;
+        var inString = false;
+        var escaping = false;
+
+        for (int i = start; i < input.Length; i++)
+        {
+            var ch = input[i];
+
+            if (inString)
+            {
+                if (escaping)
+                {
+                    escaping = false;
+                    continue;
+                }
+
+                if (ch == '\\')
+                {
+                    escaping = true;
+                    continue;
+                }
+
+                if (ch == '"')
+                    inString = false;
+
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                inString = true;
+                continue;
+            }
+
+            if (ch == '{')
+            {
+                depth++;
+                continue;
+            }
+
+            if (ch == '}')
+            {
+                depth--;
+                if (depth == 0)
+                    return i;
+            }
+        }
+
+        return -1;
     }
 
     // The system prompt and tool configuration are managed in Azure AI Foundry on the agent definition.
@@ -577,6 +775,7 @@ public class OrderGenLogEntry
 public class OrderPlan
 {
     public string PersonaSummary { get; set; } = string.Empty;
+    [JsonConverter(typeof(FlexibleNullableIntJsonConverter))]
     public int? ExistingCustomerId { get; set; }
     public NewCustomerPlan? NewCustomer { get; set; }
     public List<PlannedOrderItem> OrderItems { get; set; } = new();
@@ -609,4 +808,46 @@ public class PlannedOrderItem
     public decimal UnitPrice { get; set; }
     public int? SpecialOfferID { get; set; }
     public string Reason { get; set; } = string.Empty;
+}
+
+public sealed class FlexibleNullableIntJsonConverter : JsonConverter<int?>
+{
+    public override int? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Null)
+            return null;
+
+        if (reader.TokenType == JsonTokenType.Number)
+            return reader.TryGetInt32(out var numericValue) ? numericValue : null;
+
+        if (reader.TokenType == JsonTokenType.String)
+        {
+            var raw = reader.GetString();
+            if (string.IsNullOrWhiteSpace(raw))
+                return null;
+
+            raw = raw.Trim();
+            if (int.TryParse(raw, out var parsed))
+                return parsed;
+
+            var digits = Regex.Match(raw, @"\d+");
+            return digits.Success && int.TryParse(digits.Value, out parsed) ? parsed : null;
+        }
+
+        using var document = JsonDocument.ParseValue(ref reader);
+        return document.RootElement.ValueKind switch
+        {
+            JsonValueKind.Number when document.RootElement.TryGetInt32(out var numericValue) => numericValue,
+            JsonValueKind.String when int.TryParse(document.RootElement.GetString(), out var parsed) => parsed,
+            _ => null,
+        };
+    }
+
+    public override void Write(Utf8JsonWriter writer, int? value, JsonSerializerOptions options)
+    {
+        if (value.HasValue)
+            writer.WriteNumberValue(value.Value);
+        else
+            writer.WriteNullValue();
+    }
 }
