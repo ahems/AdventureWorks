@@ -324,6 +324,18 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
               identity: azidentity.id
             }
           }
+          {
+            name: 'review-moderation-queue'
+            custom: {
+              type: 'azure-queue'
+              metadata: {
+                accountName: storageAccountName
+                queueName: 'review-moderation-queue'
+                queueLength: '1'
+              }
+              identity: azidentity.id
+            }
+          }
         ]
       }
     }

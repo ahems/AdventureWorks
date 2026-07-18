@@ -130,6 +130,12 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
             description: 'Event-driven queue driving the warehouse simulation: each message represents one store/retrieve/receive operation phase for a warehouse worker at Finished Goods Storage (LocationID 7)'
           }
         }
+        {
+          name: 'review-moderation-queue'
+          metadata: {
+            description: 'Background queue for review auto-moderation: analyze pending unreplied reviews with AI, create staff reply, and approve.'
+          }
+        }
       ]
     }
     

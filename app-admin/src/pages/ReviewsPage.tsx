@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -44,6 +50,7 @@ import {
   useAdminReviewsByProduct,
   useReviewTotalCount,
   useReviewPendingCount,
+  useReviewPendingWithoutReplyCount,
   approveReview,
   deleteReview,
   submitReply,
@@ -71,7 +78,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   analyzeReviewsBatch,
+  startReviewModerationAnalyzeApproveAll,
+  getReviewModerationStatus,
   generateVerifiedReviewsForProduct,
   type ReviewAnalysisResult,
 } from "@/services/utilityService";
@@ -89,6 +108,8 @@ interface ReviewWithAI extends AdminReview {
 type ViewMode = "list" | "group-product" | "group-customer";
 type SortOption = "newest" | "oldest" | "highest" | "lowest" | "helpful";
 type GroupSort = "most-reviews" | "lowest-rating" | "most-negative";
+
+const REVIEW_MODERATION_POLL_INTERVAL_MS = 3000;
 
 // ─── Sentiment UI helpers ─────────────────────────────────────────────────────
 
@@ -141,6 +162,14 @@ const ReviewsPage: React.FC = () => {
   >(new Map());
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzeProgress, setAnalyzeProgress] = useState<string>("");
+  const [isAnalyzeApproveAllRunning, setIsAnalyzeApproveAllRunning] =
+    useState(false);
+  const [analyzeApproveAllProgress, setAnalyzeApproveAllProgress] =
+    useState<string>("");
+  const [isAnalyzeApproveAllConfirmOpen, setIsAnalyzeApproveAllConfirmOpen] =
+    useState(false);
+  const activeModerationJobIdRef = useRef<string | null>(null);
+  const notifyModerationCompletionRef = useRef(false);
 
   // ─── Reply state ───────────────────────────────────────────────────────
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
@@ -162,6 +191,8 @@ const ReviewsPage: React.FC = () => {
     dataNotYetArrived;
   const { data: totalReviewCount } = useReviewTotalCount();
   const { data: pendingCount } = useReviewPendingCount();
+  const { data: pendingWithoutReplyCount } =
+    useReviewPendingWithoutReplyCount();
   const { data: allProducts = [] } = useAdminAllProducts();
   const { data: allCategories = [] } = useAdminCategories();
   const { data: allSubcategories = [] } = useAdminAllSubcategories();
@@ -642,6 +673,117 @@ const ReviewsPage: React.FC = () => {
       setAnalyzeProgress("");
     }
   }, [filteredReviews, productMap]);
+
+  const pollReviewModerationStatus = useCallback(async () => {
+    try {
+      const status = await getReviewModerationStatus();
+      setIsAnalyzeApproveAllRunning(status.isRunning);
+
+      if (status.isRunning) {
+        setAnalyzeApproveAllProgress(
+          `Processing ${status.processedCount}/${status.queuedCount}...`,
+        );
+      } else {
+        setAnalyzeApproveAllProgress("");
+      }
+
+      if (!activeModerationJobIdRef.current && status.jobId) {
+        activeModerationJobIdRef.current = status.jobId;
+      }
+
+      if (
+        !status.isRunning &&
+        notifyModerationCompletionRef.current &&
+        activeModerationJobIdRef.current &&
+        status.jobId === activeModerationJobIdRef.current
+      ) {
+        notifyModerationCompletionRef.current = false;
+        queryClient.invalidateQueries({ queryKey: ["admin", "reviews"] });
+
+        toast({
+          title: "Analyze & Approve Complete",
+          description:
+            status.failedCount > 0
+              ? `${status.successCount} completed, ${status.failedCount} failed, ${status.skippedCount} skipped.`
+              : `${status.successCount} review${status.successCount === 1 ? "" : "s"} analyzed, replied, and approved.`,
+          variant: status.failedCount > 0 ? "destructive" : undefined,
+        });
+      }
+    } catch {
+      // Polling failures are transient; leave current status UI as-is.
+    }
+  }, [queryClient]);
+
+  useEffect(() => {
+    void pollReviewModerationStatus();
+    const id = setInterval(() => {
+      void pollReviewModerationStatus();
+    }, REVIEW_MODERATION_POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [pollReviewModerationStatus]);
+
+  const handleAnalyzeAndApproveAll = useCallback(async () => {
+    if (isAnalyzeApproveAllRunning) return;
+
+    setIsAnalyzeApproveAllRunning(true);
+    setAnalyzeApproveAllProgress("Queueing review moderation job...");
+
+    try {
+      const start = await startReviewModerationAnalyzeApproveAll();
+      setIsAnalyzeApproveAllRunning(start.state.isRunning);
+
+      if (start.httpStatus === 409) {
+        activeModerationJobIdRef.current = start.state.jobId || null;
+        notifyModerationCompletionRef.current = false;
+        setAnalyzeApproveAllProgress(
+          start.state.isRunning
+            ? `Processing ${start.state.processedCount}/${start.state.queuedCount}...`
+            : "",
+        );
+        toast({
+          title: "Job Already Running",
+          description:
+            "A background review moderation job is already in progress.",
+        });
+        return;
+      }
+
+      if (!start.started) {
+        setAnalyzeApproveAllProgress("");
+        setIsAnalyzeApproveAllRunning(false);
+        toast({
+          title: "No Action Needed",
+          description: start.message,
+        });
+        return;
+      }
+
+      activeModerationJobIdRef.current = start.state.jobId || null;
+      notifyModerationCompletionRef.current = true;
+
+      setAnalyzeApproveAllProgress(
+        `Processing ${start.state.processedCount}/${start.state.queuedCount}...`,
+      );
+
+      toast({
+        title: "Background Job Started",
+        description: start.message,
+      });
+    } catch (err) {
+      setIsAnalyzeApproveAllRunning(false);
+      setAnalyzeApproveAllProgress("");
+      toast({
+        title: "Analyze & Approve Failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  }, [isAnalyzeApproveAllRunning]);
+
+  const handleConfirmAnalyzeAndApproveAll = useCallback(async () => {
+    setIsAnalyzeApproveAllConfirmOpen(false);
+    await handleAnalyzeAndApproveAll();
+  }, [handleAnalyzeAndApproveAll]);
 
   // ─── Reply handlers ────────────────────────────────────────────────────
   const handleStartReply = (reviewId: string, editExisting = false) => {
@@ -1203,7 +1345,11 @@ const ReviewsPage: React.FC = () => {
                     <Button
                       size="sm"
                       onClick={handleAnalyze}
-                      disabled={isAnalyzing || filteredReviews.length === 0}
+                      disabled={
+                        isAnalyzing ||
+                        isAnalyzeApproveAllRunning ||
+                        filteredReviews.length === 0
+                      }
                       className="font-doodle gap-1 h-8"
                     >
                       {isAnalyzing ? (
@@ -1231,6 +1377,73 @@ const ReviewsPage: React.FC = () => {
                     </p>
                   </TooltipContent>
                 </Tooltip>
+                <AlertDialog
+                  open={isAnalyzeApproveAllConfirmOpen}
+                  onOpenChange={setIsAnalyzeApproveAllConfirmOpen}
+                >
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        onClick={() => setIsAnalyzeApproveAllConfirmOpen(true)}
+                        disabled={
+                          isAnalyzeApproveAllRunning ||
+                          isAnalyzing ||
+                          (pendingWithoutReplyCount ?? 0) === 0
+                        }
+                        className="font-doodle gap-1 h-8"
+                      >
+                        {isAnalyzeApproveAllRunning ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            {analyzeApproveAllProgress || "Running..."}
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="w-4 h-4" />
+                            Analyze and Approve All (
+                            {pendingWithoutReplyCount ?? 0})
+                          </>
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="top"
+                      sideOffset={8}
+                      className="max-w-xs text-center z-50"
+                    >
+                      <p>
+                        Analyzes every pending review without a staff reply in
+                        the database, posts an AI reply, then approves it.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        Analyze and approve all pending unreplied reviews?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will process {pendingWithoutReplyCount ?? 0} review
+                        {pendingWithoutReplyCount === 1 ? "" : "s"} across the
+                        database. Each review gets an AI reply and is then
+                        marked approved.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={isAnalyzeApproveAllRunning}>
+                        Cancel
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleConfirmAnalyzeAndApproveAll}
+                        disabled={isAnalyzeApproveAllRunning}
+                      >
+                        Continue
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </div>
           </div>

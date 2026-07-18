@@ -369,3 +369,42 @@ export const useReviewPendingCount = () =>
     },
     staleTime: 5 * 60 * 1000,
   });
+
+/** Fetch all pending (unmoderated) reviews that do not yet have a staff reply. */
+export const fetchAllPendingReviewsWithoutReply = async (): Promise<
+  AdminReview[]
+> => {
+  const allPending: AdminReview[] = [];
+  let cursor: string | null = null;
+
+  do {
+    const data = await graphqlClient.request<{
+      productReviews?: {
+        items: RawProductReview[];
+        hasNextPage?: boolean;
+        endCursor?: string;
+      };
+    }>(GET_PRODUCT_REVIEWS_ADMIN, {
+      after: cursor,
+      filter: { IsModerated: { eq: false } },
+    });
+
+    const page = data.productReviews;
+    const mapped = (page?.items ?? []).map(mapReview);
+    allPending.push(...mapped);
+    cursor = page?.hasNextPage ? (page.endCursor ?? null) : null;
+  } while (cursor);
+
+  return allPending.filter((r) => !r.existingReply);
+};
+
+/** Count pending (unmoderated) reviews that do not yet have a staff reply. */
+export const useReviewPendingWithoutReplyCount = () =>
+  useQuery<number | null>({
+    queryKey: ["admin", "reviews", "pendingWithoutReplyCount"],
+    queryFn: async () => {
+      const items = await fetchAllPendingReviewsWithoutReply();
+      return items.length;
+    },
+    staleTime: 5 * 60 * 1000,
+  });

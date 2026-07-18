@@ -96,3 +96,50 @@ public class VerifiedReviewsJobState
     public DateTimeOffset? LastProgressAt { get; set; }
     public string? LastError { get; set; }
 }
+
+/// <summary>Snapshot review record used for queue-based auto-moderation.</summary>
+public class PendingReviewModerationItem
+{
+    public int ProductReviewId { get; set; }
+    public int ProductId { get; set; }
+    public int Rating { get; set; }
+    public string ReviewerName { get; set; } = string.Empty;
+    public string Comments { get; set; } = string.Empty;
+    public string ProductName { get; set; } = string.Empty;
+}
+
+/// <summary>Queue payload for one review auto-moderation operation.</summary>
+public class ReviewModerationQueueMessage
+{
+    public string JobId { get; set; } = string.Empty;
+    public int ProductReviewId { get; set; }
+    public int Rating { get; set; }
+    public string ReviewerName { get; set; } = string.Empty;
+    public string Comments { get; set; } = string.Empty;
+    public string ProductName { get; set; } = string.Empty;
+    public DateTimeOffset EnqueuedAt { get; set; }
+}
+
+/// <summary>Persisted state for review auto-moderation background processing.</summary>
+public class ReviewModerationJobState
+{
+    public bool IsRunning { get; set; }
+    public string JobId { get; set; } = string.Empty;
+    public int QueuedCount { get; set; }
+    public int ProcessedCount { get; set; }
+    public int SuccessCount { get; set; }
+    public int FailedCount { get; set; }
+    public int SkippedCount { get; set; }
+    public DateTimeOffset? StartedAt { get; set; }
+    public DateTimeOffset? LastProgressAt { get; set; }
+    public DateTimeOffset? CompletedAt { get; set; }
+    public string? LastError { get; set; }
+}
+
+public enum ReviewModerationApplyOutcome
+{
+    Applied,
+    SkippedAlreadyModerated,
+    SkippedAlreadyReplied,
+    SkippedNotFound
+}

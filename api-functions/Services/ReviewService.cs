@@ -518,8 +518,12 @@ public class ReviewService
     private const string _verifiedReviewsTableName = "verifiedReviewsJob";
     private const string _verifiedReviewsPartitionKey = "verifiedreviews";
     private const string _verifiedReviewsRowKey = "state";
+    private const string _reviewModerationTableName = "reviewModerationJob";
+    private const string _reviewModerationPartitionKey = "reviewmoderation";
+    private const string _reviewModerationRowKey = "state";
 
     private Azure.Data.Tables.TableClient? _tableClient;
+    private Azure.Data.Tables.TableClient? _reviewModerationTableClient;
 
     private Azure.Data.Tables.TableClient GetTableClient()
     {
@@ -580,6 +584,244 @@ public class ReviewService
             ["LastError"] = state.LastError
         };
         await client.UpsertEntityAsync(entity, Azure.Data.Tables.TableUpdateMode.Replace);
+    }
+
+    // ── Review auto-moderation queue state + data access ────────────────────
+
+    private Azure.Data.Tables.TableClient GetReviewModerationTableClient()
+    {
+        if (_reviewModerationTableClient == null)
+        {
+            var tableService = new Azure.Data.Tables.TableServiceClient(
+                new Uri(_tableServiceUri),
+                new DefaultAzureCredential());
+            _reviewModerationTableClient = tableService.GetTableClient(_reviewModerationTableName);
+            _reviewModerationTableClient.CreateIfNotExists();
+        }
+        return _reviewModerationTableClient;
+    }
+
+    /// <summary>
+    /// Snapshot of unmoderated reviews with no existing staff reply.
+    /// </summary>
+    public async Task<List<PendingReviewModerationItem>> GetPendingReviewsWithoutReplySnapshotAsync()
+    {
+        using var connection = await GetConnectionAsync();
+
+        var sql = @"
+            SELECT
+                pr.ProductReviewID AS ProductReviewId,
+                pr.ProductID AS ProductId,
+                pr.Rating,
+                COALESCE(pr.ReviewerName, 'Anonymous') AS ReviewerName,
+                COALESCE(pr.Comments, '') AS Comments,
+                COALESCE(p.Name, 'Unknown') AS ProductName
+            FROM Production.ProductReview pr
+            LEFT JOIN Production.ProductReviewReply rr
+                ON rr.ProductReviewID = pr.ProductReviewID
+            LEFT JOIN Production.Product p
+                ON p.ProductID = pr.ProductID
+            WHERE ISNULL(pr.IsModerated, 0) = 0
+              AND rr.ProductReviewReplyID IS NULL
+            ORDER BY pr.ProductReviewID";
+
+        var rows = await connection.QueryAsync<PendingReviewModerationItem>(sql);
+        return rows.ToList();
+    }
+
+    /// <summary>
+    /// Writes reply + approval in an idempotent transaction.
+    /// </summary>
+    public async Task<ReviewModerationApplyOutcome> ApplyModerationReplyAndApproveAsync(
+        int reviewId,
+        string replyText,
+        string repliedBy = "AdventureWorks Team")
+    {
+        using var connection = await GetConnectionAsync();
+        using var tx = connection.BeginTransaction();
+
+        var state = await connection.QueryFirstOrDefaultAsync<ReviewModerationRowState>(@"
+            SELECT TOP 1
+                CAST(ISNULL(pr.IsModerated, 0) AS bit) AS IsModerated,
+                rr.ProductReviewReplyID AS ReplyId
+            FROM Production.ProductReview pr
+            LEFT JOIN Production.ProductReviewReply rr
+                ON rr.ProductReviewID = pr.ProductReviewID
+            WHERE pr.ProductReviewID = @ReviewId",
+            new { ReviewId = reviewId },
+            tx);
+
+        if (state == null)
+        {
+            tx.Commit();
+            return ReviewModerationApplyOutcome.SkippedNotFound;
+        }
+
+        if (state.ReplyId.HasValue)
+        {
+            if (!state.IsModerated)
+            {
+                await connection.ExecuteAsync(@"
+                    UPDATE Production.ProductReview
+                    SET IsModerated = 1,
+                        ModifiedDate = GETDATE()
+                    WHERE ProductReviewID = @ReviewId",
+                    new { ReviewId = reviewId }, tx);
+            }
+
+            tx.Commit();
+            return ReviewModerationApplyOutcome.SkippedAlreadyReplied;
+        }
+
+        if (state.IsModerated)
+        {
+            tx.Commit();
+            return ReviewModerationApplyOutcome.SkippedAlreadyModerated;
+        }
+
+        await connection.ExecuteAsync(@"
+            INSERT INTO Production.ProductReviewReply
+            (ProductReviewID, Reply, RepliedBy, ReplyDate)
+            VALUES
+            (@ReviewId, @Reply, @RepliedBy, GETDATE())",
+            new { ReviewId = reviewId, Reply = replyText, RepliedBy = repliedBy }, tx);
+
+        await connection.ExecuteAsync(@"
+            UPDATE Production.ProductReview
+            SET IsModerated = 1,
+                ModifiedDate = GETDATE()
+            WHERE ProductReviewID = @ReviewId",
+            new { ReviewId = reviewId }, tx);
+
+        tx.Commit();
+        return ReviewModerationApplyOutcome.Applied;
+    }
+
+    public async Task<ReviewModerationJobState> GetReviewModerationJobStateAsync()
+    {
+        try
+        {
+            var client = GetReviewModerationTableClient();
+            var entity = await client.GetEntityAsync<Azure.Data.Tables.TableEntity>(
+                _reviewModerationPartitionKey, _reviewModerationRowKey);
+
+            return new ReviewModerationJobState
+            {
+                IsRunning = entity.Value.GetBoolean("IsRunning") ?? false,
+                JobId = entity.Value.GetString("JobId") ?? string.Empty,
+                QueuedCount = entity.Value.GetInt32("QueuedCount") ?? 0,
+                ProcessedCount = entity.Value.GetInt32("ProcessedCount") ?? 0,
+                SuccessCount = entity.Value.GetInt32("SuccessCount") ?? 0,
+                FailedCount = entity.Value.GetInt32("FailedCount") ?? 0,
+                SkippedCount = entity.Value.GetInt32("SkippedCount") ?? 0,
+                StartedAt = entity.Value.GetDateTimeOffset("StartedAt"),
+                LastProgressAt = entity.Value.GetDateTimeOffset("LastProgressAt"),
+                CompletedAt = entity.Value.GetDateTimeOffset("CompletedAt"),
+                LastError = entity.Value.GetString("LastError")
+            };
+        }
+        catch (Azure.RequestFailedException ex) when (ex.Status == 404)
+        {
+            return new ReviewModerationJobState { IsRunning = false };
+        }
+    }
+
+    public async Task SaveReviewModerationJobStateAsync(ReviewModerationJobState state)
+    {
+        var client = GetReviewModerationTableClient();
+        var entity = new Azure.Data.Tables.TableEntity(_reviewModerationPartitionKey, _reviewModerationRowKey)
+        {
+            ["IsRunning"] = state.IsRunning,
+            ["JobId"] = state.JobId,
+            ["QueuedCount"] = state.QueuedCount,
+            ["ProcessedCount"] = state.ProcessedCount,
+            ["SuccessCount"] = state.SuccessCount,
+            ["FailedCount"] = state.FailedCount,
+            ["SkippedCount"] = state.SkippedCount,
+            ["StartedAt"] = state.StartedAt,
+            ["LastProgressAt"] = state.LastProgressAt,
+            ["CompletedAt"] = state.CompletedAt,
+            ["LastError"] = state.LastError
+        };
+        await client.UpsertEntityAsync(entity, Azure.Data.Tables.TableUpdateMode.Replace);
+    }
+
+    public async Task<ReviewModerationJobState> IncrementReviewModerationProgressAsync(
+        string jobId,
+        bool success,
+        bool skipped,
+        bool failed,
+        string? lastError)
+    {
+        var client = GetReviewModerationTableClient();
+        const int maxAttempts = 6;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            var current = await client.GetEntityAsync<Azure.Data.Tables.TableEntity>(
+                _reviewModerationPartitionKey,
+                _reviewModerationRowKey);
+
+            var entity = current.Value;
+            var currentJobId = entity.GetString("JobId") ?? string.Empty;
+            if (!string.Equals(currentJobId, jobId, StringComparison.Ordinal))
+            {
+                return await GetReviewModerationJobStateAsync();
+            }
+
+            var processed = (entity.GetInt32("ProcessedCount") ?? 0) + 1;
+            var queued = entity.GetInt32("QueuedCount") ?? 0;
+            var successCount = (entity.GetInt32("SuccessCount") ?? 0) + (success ? 1 : 0);
+            var skippedCount = (entity.GetInt32("SkippedCount") ?? 0) + (skipped ? 1 : 0);
+            var failedCount = (entity.GetInt32("FailedCount") ?? 0) + (failed ? 1 : 0);
+            var completed = processed >= queued && queued > 0;
+
+            entity["ProcessedCount"] = processed;
+            entity["SuccessCount"] = successCount;
+            entity["SkippedCount"] = skippedCount;
+            entity["FailedCount"] = failedCount;
+            entity["LastProgressAt"] = DateTimeOffset.UtcNow;
+            if (!string.IsNullOrWhiteSpace(lastError))
+            {
+                entity["LastError"] = lastError;
+            }
+            if (completed)
+            {
+                entity["IsRunning"] = false;
+                entity["CompletedAt"] = DateTimeOffset.UtcNow;
+            }
+
+            try
+            {
+                await client.UpdateEntityAsync(entity, current.Value.ETag, Azure.Data.Tables.TableUpdateMode.Replace);
+                return new ReviewModerationJobState
+                {
+                    IsRunning = (bool)(entity["IsRunning"] ?? false),
+                    JobId = entity.GetString("JobId") ?? string.Empty,
+                    QueuedCount = entity.GetInt32("QueuedCount") ?? 0,
+                    ProcessedCount = entity.GetInt32("ProcessedCount") ?? 0,
+                    SuccessCount = entity.GetInt32("SuccessCount") ?? 0,
+                    FailedCount = entity.GetInt32("FailedCount") ?? 0,
+                    SkippedCount = entity.GetInt32("SkippedCount") ?? 0,
+                    StartedAt = entity.GetDateTimeOffset("StartedAt"),
+                    LastProgressAt = entity.GetDateTimeOffset("LastProgressAt"),
+                    CompletedAt = entity.GetDateTimeOffset("CompletedAt"),
+                    LastError = entity.GetString("LastError")
+                };
+            }
+            catch (Azure.RequestFailedException ex) when (ex.Status == 412 && attempt < maxAttempts)
+            {
+                await Task.Delay(25 * attempt);
+            }
+        }
+
+        throw new InvalidOperationException("Could not update review moderation state due to concurrent updates.");
+    }
+
+    private sealed class ReviewModerationRowState
+    {
+        public bool IsModerated { get; set; }
+        public int? ReplyId { get; set; }
     }
 
 }

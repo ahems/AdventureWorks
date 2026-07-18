@@ -1128,3 +1128,83 @@ export const analyzeReviewsBatch = async (
 
   return results;
 };
+
+// ── Review Moderation Background Job ──────────────────────────────────────
+
+export interface ReviewModerationJobState {
+  isRunning: boolean;
+  jobId: string;
+  queuedCount: number;
+  processedCount: number;
+  successCount: number;
+  failedCount: number;
+  skippedCount: number;
+  startedAt: string | null;
+  lastProgressAt: string | null;
+  completedAt: string | null;
+  lastError: string | null;
+}
+
+export interface StartReviewModerationResponse {
+  started: boolean;
+  message: string;
+  state: ReviewModerationJobState;
+  error?: string;
+  httpStatus: number;
+}
+
+export const startReviewModerationAnalyzeApproveAll =
+  async (): Promise<StartReviewModerationResponse> => {
+    const res = await fetch(
+      `${getFunctionsApiUrl()}/api/reviews/moderation/start-analyze-approve-all`,
+      {
+        method: "POST",
+      },
+    );
+
+    const data = (await res.json().catch(() => ({}))) as Omit<
+      StartReviewModerationResponse,
+      "httpStatus"
+    >;
+
+    if (!res.ok && res.status !== 409) {
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `Review moderation start HTTP ${res.status}${text ? `: ${text}` : ""}`,
+      );
+    }
+
+    return {
+      started: data.started ?? false,
+      message: data.message ?? (data.error || "Unknown response"),
+      state: data.state ?? {
+        isRunning: false,
+        jobId: "",
+        queuedCount: 0,
+        processedCount: 0,
+        successCount: 0,
+        failedCount: 0,
+        skippedCount: 0,
+        startedAt: null,
+        lastProgressAt: null,
+        completedAt: null,
+        lastError: null,
+      },
+      error: data.error,
+      httpStatus: res.status,
+    };
+  };
+
+export const getReviewModerationStatus =
+  async (): Promise<ReviewModerationJobState> => {
+    const res = await fetch(
+      `${getFunctionsApiUrl()}/api/reviews/moderation/status`,
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `Review moderation status HTTP ${res.status}${text ? `: ${text}` : ""}`,
+      );
+    }
+    return res.json();
+  };
