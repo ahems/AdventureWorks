@@ -123,6 +123,25 @@ public class PromotionAgentService
 
             var suggestion = ParsePromotionSuggestion(rawResponse);
 
+            var requestedOfferCategory = NormalizeOfferCategory(offerCategory);
+            if (!string.IsNullOrWhiteSpace(requestedOfferCategory)
+                && !string.Equals(suggestion.Category, requestedOfferCategory, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "PromotionAgent returned mismatched category '{ActualCategory}' for requested '{RequestedCategory}'. Overriding suggestion category.",
+                    suggestion.Category,
+                    requestedOfferCategory);
+
+                _telemetryClient.TrackEvent("PromotionAgent.CategoryCorrected", new Dictionary<string, string>
+                {
+                    ["RequestedCategory"] = requestedOfferCategory,
+                    ["ModelCategory"] = suggestion.Category ?? string.Empty,
+                    ["PromotionType"] = promotionType
+                });
+
+                suggestion.Category = requestedOfferCategory;
+            }
+
             var duration = DateTimeOffset.UtcNow - startTime;
             operation.Telemetry.Success = true;
             _telemetryClient.TrackEvent("PromotionAgent.Success", new Dictionary<string, string>
@@ -167,6 +186,20 @@ public class PromotionAgentService
         return JsonSerializer.Deserialize<PromotionSuggestion>(cleaned,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException("AI returned unparseable JSON");
+    }
+
+    private static string? NormalizeOfferCategory(string? category)
+    {
+        if (string.IsNullOrWhiteSpace(category))
+            return null;
+
+        return category.Trim().ToLowerInvariant() switch
+        {
+            "customer" or "customers" => "Customer",
+            "reseller" or "resellers" => "Reseller",
+            "no discount" or "no-discount" or "nodiscount" => "No Discount",
+            _ => null
+        };
     }
 
     // The system prompt and tool configuration are managed in Azure AI Foundry on the agent definition.

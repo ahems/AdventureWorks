@@ -204,7 +204,9 @@ public class FoundryAgentClient
             var token = await _credential.GetTokenAsync(
                 new TokenRequestContext([FoundryTokenScope]), cancellationToken);
 
-            var hasTools = def.Tools.Count > 0;
+            var activeTools = def.Tools;
+            var usingFallbackTools = false;
+            var hasTools = activeTools.Count > 0;
 
             // Guard: "required" tool_choice is only valid when the agent actually has tools
             // registered. If the agent definition has no tools fall back to "auto" to avoid
@@ -232,7 +234,7 @@ public class FoundryAgentClient
                 Stream = false,
                 Store = true,
                 PreviousResponseId = currentPreviousId,
-                Tools = hasTools ? def.Tools : null,
+                Tools = hasTools ? activeTools : null,
                 // structured_inputs still sent for any future Foundry-native endpoint support,
                 // but the resolved instructions are the primary mechanism.
                 StructuredInputs = round == 0 && structuredInputs?.Count > 0 ? structuredInputs : null,
@@ -280,6 +282,34 @@ public class FoundryAgentClient
                         responseBody.Length > 200 ? responseBody[..200] : responseBody);
                     await Task.Delay(delayMs, cancellationToken);
                     continue;
+                }
+
+                // If all retries failed while enumerating tools, switch to the fallback
+                // MCP config (from MCP_SERVICE_URL) once and retry the round.
+                // This recovers from stale/broken MCP URLs in the agent definition.
+                if (isToolEnumError
+                    && !usingFallbackTools
+                    && !string.IsNullOrEmpty(_fallbackMcpServiceUrl))
+                {
+                    var fallbackTools = BuildFallbackDefinition().Tools;
+                    if (fallbackTools.Count > 0)
+                    {
+                        usingFallbackTools = true;
+                        activeTools = fallbackTools;
+                        hasTools = true;
+
+                        requestBody.Tools = activeTools;
+                        json = JsonSerializer.Serialize(requestBody, _serializeOptions);
+
+                        _logger.LogWarning(
+                            "Foundry agent '{AgentId}' MCP tool enumeration still failing after retries. " +
+                            "Switching to fallback MCP tool configuration and retrying.",
+                            agentId);
+
+                        await WarmupMcpServersAsync(activeTools, cancellationToken);
+                        retry = -1; // reset retry counter for fallback tool config
+                        continue;
+                    }
                 }
 
                 _logger.LogError("Foundry Responses API returned {Status}: {Body}",
