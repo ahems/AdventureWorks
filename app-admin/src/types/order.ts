@@ -17,6 +17,8 @@ export interface OrderItem {
 export interface Order {
   SalesOrderID: number;
   CustomerID: number;
+  PersonID: number | null;
+  CustomerName: string;
   OrderDate: string;
   DueDate: string;
   ShipDate: string | null;

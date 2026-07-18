@@ -14,6 +14,16 @@ public class OrderGenerationService
     private readonly string _connectionString;
     private readonly ILogger<OrderGenerationService> _logger;
 
+    private static readonly HashSet<string> PlaceholderValues = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "n/a",
+        "na",
+        "none",
+        "null",
+        "unknown",
+        "not applicable"
+    };
+
     public OrderGenerationService(string connectionString, ILogger<OrderGenerationService> logger)
     {
         _connectionString = connectionString;
@@ -25,6 +35,23 @@ public class OrderGenerationService
         var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
         return connection;
+    }
+
+    private static bool IsPlaceholderValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return true;
+
+        return PlaceholderValues.Contains(value.Trim());
+    }
+
+    private static string NormalizeRequiredValue(string? value, string fallback)
+    {
+        return IsPlaceholderValue(value) ? fallback : value!.Trim();
+    }
+
+    private static string? NormalizeOptionalValue(string? value)
+    {
+        return IsPlaceholderValue(value) ? null : value!.Trim();
     }
 
     /// <summary>
@@ -71,6 +98,13 @@ public class OrderGenerationService
         using var connection = await GetConnectionAsync();
         using var tx = connection.BeginTransaction();
 
+        var normalizedFirstName = NormalizeRequiredValue(req.FirstName, "New");
+        var normalizedLastName = NormalizeRequiredValue(req.LastName, "Customer");
+        var normalizedEmail = NormalizeOptionalValue(req.Email);
+        var normalizedAddressLine1 = NormalizeRequiredValue(req.AddressLine1, "1 Main St");
+        var normalizedCity = NormalizeRequiredValue(req.City, "Seattle");
+        var normalizedPostalCode = NormalizeRequiredValue(req.PostalCode, "98101");
+
         try
         {
             // 1. BusinessEntity
@@ -86,16 +120,16 @@ public class OrderGenerationService
                     (BusinessEntityID, PersonType, NameStyle, FirstName, LastName, EmailPromotion, rowguid, ModifiedDate)
                 VALUES
                     (@BizEntityId, 'IN', 0, @FirstName, @LastName, 0, NEWID(), GETDATE())",
-                new { BizEntityId = bizEntityId, req.FirstName, req.LastName },
+                new { BizEntityId = bizEntityId, FirstName = normalizedFirstName, LastName = normalizedLastName },
                 transaction: tx);
 
             // 3. EmailAddress (EmailAddressID is IDENTITY — omit it and let SQL Server auto-generate)
-            if (!string.IsNullOrEmpty(req.Email))
+            if (!string.IsNullOrEmpty(normalizedEmail))
             {
                 await connection.ExecuteAsync(@"
                     INSERT INTO Person.EmailAddress (BusinessEntityID, EmailAddress, rowguid, ModifiedDate)
                     VALUES (@BizEntityId, @Email, NEWID(), GETDATE())",
-                    new { BizEntityId = bizEntityId, req.Email },
+                    new { BizEntityId = bizEntityId, Email = normalizedEmail },
                     transaction: tx);
             }
 
@@ -114,7 +148,13 @@ public class OrderGenerationService
                 INSERT INTO Person.Address (AddressLine1, City, StateProvinceID, PostalCode, rowguid, ModifiedDate)
                 OUTPUT INSERTED.AddressID
                 VALUES (@AddressLine1, @City, @StateProvinceId, @PostalCode, NEWID(), GETDATE())",
-                new { req.AddressLine1, req.City, StateProvinceId = stateProvinceId, req.PostalCode },
+                new
+                {
+                    AddressLine1 = normalizedAddressLine1,
+                    City = normalizedCity,
+                    StateProvinceId = stateProvinceId,
+                    PostalCode = normalizedPostalCode
+                },
                 transaction: tx);
 
             // 5. BusinessEntityAddress (type 2 = home)
@@ -164,7 +204,7 @@ public class OrderGenerationService
 
             tx.Commit();
             _logger.LogInformation("Created new customer CustomerID={CustomerId} for {FirstName} {LastName}",
-                customerId, req.FirstName, req.LastName);
+                customerId, normalizedFirstName, normalizedLastName);
 
             return customerId;
         }
@@ -181,7 +221,8 @@ public class OrderGenerationService
     /// </summary>
     public async Task AddPersonPhoneAsync(NewCustomerRequest req, string phoneNumber, int salesCustomerId)
     {
-        if (string.IsNullOrWhiteSpace(phoneNumber)) return;
+        var normalizedPhone = NormalizeOptionalValue(phoneNumber);
+        if (string.IsNullOrWhiteSpace(normalizedPhone)) return;
 
         using var connection = await GetConnectionAsync();
 
@@ -197,7 +238,7 @@ public class OrderGenerationService
             IF NOT EXISTS (SELECT 1 FROM Person.PersonPhone WHERE BusinessEntityID = @BizEntityId AND PhoneNumber = @Phone)
             INSERT INTO Person.PersonPhone (BusinessEntityID, PhoneNumber, PhoneNumberTypeID, ModifiedDate)
             VALUES (@BizEntityId, @Phone, 1, GETDATE())",
-            new { BizEntityId = bizEntityId, Phone = phoneNumber });
+            new { BizEntityId = bizEntityId, Phone = normalizedPhone });
 
         _logger.LogInformation("Added phone for BusinessEntityID={BizEntityId}", bizEntityId);
     }

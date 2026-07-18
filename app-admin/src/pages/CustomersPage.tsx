@@ -97,6 +97,13 @@ const DB_STATUS_LABELS: Record<
   },
 };
 
+const getCustomerDisplayName = (customer: Customer): string => {
+  const fullName = `${customer.FirstName} ${customer.LastName}`.trim();
+  if (fullName) return fullName;
+  if (customer.SalesCustomerID) return `Customer #${customer.SalesCustomerID}`;
+  return `Customer #${customer.CustomerID}`;
+};
+
 // ── Edit panel: profile + addresses ──────────────────────────────────────────
 const CustomerEditSection: React.FC<{
   customer: Customer;
@@ -307,9 +314,7 @@ const ExpandedCustomerView: React.FC<{
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <p className="font-doodle text-sm text-doodle-text/60">Full Name</p>
-            <p className="font-doodle text-doodle-text">
-              {customer.FirstName} {customer.LastName}
-            </p>
+            <p className="font-doodle text-doodle-text">{getCustomerDisplayName(customer)}</p>
           </div>
           <div>
             <p className="font-doodle text-sm text-doodle-text/60">Email</p>
@@ -999,7 +1004,7 @@ const CustomersPage: React.FC = () => {
                           <div>
                             <h3 className="font-doodle text-lg font-bold text-doodle-text flex items-center gap-2">
                               <User className="w-5 h-5" />
-                              {customer.FirstName} {customer.LastName}
+                              {getCustomerDisplayName(customer)}
                             </h3>
                             <div className="flex flex-wrap gap-4 mt-2 text-sm">
                               {customer.EmailAddress && (

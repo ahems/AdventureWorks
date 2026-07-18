@@ -103,6 +103,16 @@ const GET_ORDERS_ADMIN = gql`
         TaxAmt
         Freight
         TotalDue
+        customer {
+          PersonID
+          person {
+            FirstName
+            LastName
+          }
+          store {
+            Name
+          }
+        }
         salesOrderDetails {
           items {
             SalesOrderDetailID
@@ -143,6 +153,11 @@ interface RawOrderHeader {
   TaxAmt?: number;
   Freight?: number;
   TotalDue?: number;
+  customer?: {
+    PersonID?: number | null;
+    person?: { FirstName?: string; LastName?: string } | null;
+    store?: { Name?: string } | null;
+  };
   salesOrderDetails?: { items: RawOrderDetail[] };
 }
 
@@ -155,20 +170,55 @@ const mapOrderItem = (detail: RawOrderDetail): OrderItem => ({
   LineTotal: detail.LineTotal,
 });
 
-const mapOrder = (header: RawOrderHeader): Order => ({
-  SalesOrderID: header.SalesOrderID,
-  CustomerID: header.CustomerID,
-  OrderDate: header.OrderDate,
-  DueDate: header.DueDate,
-  ShipDate: header.ShipDate,
-  Status: dbStatusToOrderStatus(header.Status),
-  OnlineOrderFlag: header.OnlineOrderFlag ?? true,
-  SubTotal: header.SubTotal,
-  TaxAmt: header.TaxAmt,
-  Freight: header.Freight,
-  TotalDue: header.TotalDue,
-  OrderItems: (header.salesOrderDetails?.items ?? []).map(mapOrderItem),
-});
+const normalizeDisplayValue = (value?: string | null): string => {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return "";
+
+  switch (trimmed.toLowerCase()) {
+    case "n/a":
+    case "na":
+    case "none":
+    case "null":
+    case "unknown":
+    case "not applicable":
+      return "";
+    default:
+      return trimmed;
+  }
+};
+
+const mapOrder = (header: RawOrderHeader): Order => {
+  // Build customer name from person or store
+  let customerName = `Customer #${header.CustomerID}`;
+  const personId = header.customer?.PersonID ?? null;
+
+  if (header.customer?.person) {
+    const firstName = normalizeDisplayValue(header.customer.person.FirstName);
+    const lastName = normalizeDisplayValue(header.customer.person.LastName);
+    if (firstName || lastName) {
+      customerName = `${firstName} ${lastName}`.trim();
+    }
+  } else if (header.customer?.store?.Name) {
+    customerName = header.customer.store.Name;
+  }
+
+  return {
+    SalesOrderID: header.SalesOrderID,
+    CustomerID: header.CustomerID,
+    PersonID: personId,
+    CustomerName: customerName,
+    OrderDate: header.OrderDate,
+    DueDate: header.DueDate,
+    ShipDate: header.ShipDate,
+    Status: dbStatusToOrderStatus(header.Status),
+    OnlineOrderFlag: header.OnlineOrderFlag ?? true,
+    SubTotal: header.SubTotal,
+    TaxAmt: header.TaxAmt,
+    Freight: header.Freight,
+    TotalDue: header.TotalDue,
+    OrderItems: (header.salesOrderDetails?.items ?? []).map(mapOrderItem),
+  };
+};
 
 const CANCEL_ORDER_MUTATION = gql`
   mutation CancelOrder($id: Int!) {
@@ -221,6 +271,16 @@ const GET_ORDER_BY_ID = gql`
         TaxAmt
         Freight
         TotalDue
+        customer {
+          PersonID
+          person {
+            FirstName
+            LastName
+          }
+          store {
+            Name
+          }
+        }
         salesOrderDetails {
           items {
             SalesOrderDetailID

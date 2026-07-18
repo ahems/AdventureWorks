@@ -145,6 +145,22 @@ export interface PagedCustomers {
   endCursor: string;
 }
 
+const PLACEHOLDER_VALUES = new Set([
+  "n/a",
+  "na",
+  "none",
+  "null",
+  "unknown",
+  "not applicable",
+]);
+
+const normalizeDisplayValue = (value?: string | null): string => {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return "";
+
+  return PLACEHOLDER_VALUES.has(trimmed.toLowerCase()) ? "" : trimmed;
+};
+
 /** Map a DAB person record + optional Function-fetched address to the Customer shape. */
 const mapPersonToCustomer = (
   person: RawPerson,
@@ -154,15 +170,17 @@ const mapPersonToCustomer = (
   return {
     CustomerID: person.BusinessEntityID,
     SalesCustomerID: person.salesCustomer?.CustomerID ?? null,
-    FirstName: person.FirstName ?? "",
-    LastName: person.LastName ?? "",
-    EmailAddress: person.emailAddresses?.items?.[0]?.EmailAddress ?? "",
-    Phone: person.phoneNumbers?.items?.[0]?.PhoneNumber ?? "",
-    AddressLine1: addr?.addressLine1 ?? "",
-    City: addr?.city ?? "",
-    StateProvince: addr?.stateProvinceName ?? "",
-    PostalCode: addr?.postalCode ?? "",
-    Country: addr?.countryName ?? "",
+    FirstName: normalizeDisplayValue(person.FirstName),
+    LastName: normalizeDisplayValue(person.LastName),
+    EmailAddress: normalizeDisplayValue(
+      person.emailAddresses?.items?.[0]?.EmailAddress,
+    ),
+    Phone: normalizeDisplayValue(person.phoneNumbers?.items?.[0]?.PhoneNumber),
+    AddressLine1: normalizeDisplayValue(addr?.addressLine1),
+    City: normalizeDisplayValue(addr?.city),
+    StateProvince: normalizeDisplayValue(addr?.stateProvinceName),
+    PostalCode: normalizeDisplayValue(addr?.postalCode),
+    Country: normalizeDisplayValue(addr?.countryName),
     CreatedAt: "",
     TotalOrders: orderItems.length,
     TotalSpent: orderItems.reduce((sum, o) => sum + (o.TotalDue ?? 0), 0),

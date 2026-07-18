@@ -923,13 +923,17 @@ const OrdersPage: React.FC = () => {
                             </span>
                           </div>
                           <p className="font-doodle text-sm text-doodle-text/70 mt-1">
-                            <Link
-                              to={`/customers?customerId=${order.CustomerID}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="hover:text-doodle-accent underline decoration-doodle-accent/30 hover:decoration-doodle-accent transition-colors"
-                            >
-                              Customer #{order.CustomerID}
-                            </Link>{" "}
+                            {order.PersonID !== null ? (
+                              <Link
+                                to={`/customers?customerId=${order.PersonID}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="hover:text-doodle-accent underline decoration-doodle-accent/30 hover:decoration-doodle-accent transition-colors"
+                              >
+                                {order.CustomerName}
+                              </Link>
+                            ) : (
+                              <span>{order.CustomerName}</span>
+                            )}{" "}
                             • {new Date(order.OrderDate).toLocaleDateString()}
                           </p>
                           <p className="font-doodle text-xs text-doodle-text/50 mt-1">
