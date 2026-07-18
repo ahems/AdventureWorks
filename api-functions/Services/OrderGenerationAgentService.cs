@@ -1,7 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
-using Bogus;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.ApplicationInsights;
@@ -26,6 +23,10 @@ namespace api_functions.Services;
 /// </summary>
 public class OrderGenerationAgentService
 {
+    private const string CustomerModeExisting = "existing";
+    private const string CustomerModeNew = "new";
+    private const string CustomerModeStore = "store";
+
     private readonly ILogger<OrderGenerationAgentService> _logger;
     private readonly IConfiguration _configuration;
     private readonly TelemetryClient _telemetryClient;
@@ -72,10 +73,9 @@ public class OrderGenerationAgentService
         string? orderMode = null,
         int? storeId = null)
     {
-        // ── AI-required modes: fail hard if agent is not available ───────────
-        var aiRequiredModes = new[] { "no-order-customer", "cart-recovery", "b2b-store" };
         var result = new OrderGenerationResult();
         var startTime = DateTimeOffset.UtcNow;
+        string rawResponse = string.Empty;
 
         void Log(string msg, string type = "info")
         {
@@ -117,6 +117,8 @@ public class OrderGenerationAgentService
                 Log($"Loaded profile: {seedProfile.FirstName} {seedProfile.LastName} — CustomerID={resolvedCustomerId}, {seedProfile.OrderCount} orders, ${seedProfile.TotalSpend:N2} total spend", "info");
             }
 
+            var expectedCustomerMode = ResolveExpectedCustomerMode(orderMode, seedProfile);
+
             var personaDescription = orderMode switch
             {
                 "no-order-customer" => seedProfile != null
@@ -145,7 +147,11 @@ public class OrderGenerationAgentService
                 ["personaDescription"] = personaDescription,
                 ["isExistingCustomer"] = seedProfile != null,
                 ["orderMode"]          = orderMode ?? "new-persona",
-                ["storeId"]            = storeId ?? 0
+                ["storeId"]            = storeId ?? 0,
+                ["expectedCustomerMode"] = expectedCustomerMode,
+                ["requiresExistingCustomer"] = expectedCustomerMode == CustomerModeExisting,
+                ["requiresNewCustomer"] = expectedCustomerMode == CustomerModeNew,
+                ["isB2BStore"] = expectedCustomerMode == CustomerModeStore
             };
 
             if (seedProfile != null)
@@ -185,7 +191,7 @@ public class OrderGenerationAgentService
                 previousResponseId: string.IsNullOrEmpty(previousResponseId) ? null : previousResponseId,
                 structuredInputs: structuredInputs,
                 toolChoice: "required");
-            var rawResponse = agentResponse.ResponseText ?? string.Empty;
+            rawResponse = agentResponse.ResponseText ?? string.Empty;
 
             if (agentResponse.ToolsUsed?.Count > 0)
                 Log($"Agent used tools: {string.Join(", ", agentResponse.ToolsUsed)}", "dim");
@@ -194,6 +200,7 @@ public class OrderGenerationAgentService
 
             Log("AI finished reasoning — parsing order plan...", "dim");
             var plan = ParseOrderPlan(rawResponse);
+            ValidateOrderPlan(plan, expectedCustomerMode, seedProfile);
 
             Log($"AI reasoning: {plan.AiReasoning}", "dim");
             Log($"Persona: {plan.PersonaSummary}", "info");
@@ -230,8 +237,9 @@ public class OrderGenerationAgentService
                 }
                 else
                 {
-                    Log($"Customer ID {plan.ExistingCustomerId.Value} not found — creating new customer", "info");
-                    customerId = await CreateNewCustomer(plan, result, Log);
+                    throw new OrderPlanValidationException(
+                        OrderPlanFailureCodes.ExistingCustomerNotFound,
+                        $"AI plan referenced CustomerID={plan.ExistingCustomerId.Value}, but that customer does not exist");
                 }
             }
             else if (plan.NewCustomer != null)
@@ -240,9 +248,9 @@ public class OrderGenerationAgentService
             }
             else
             {
-                Log("AI plan did not include customer details; synthesizing a fallback customer profile.", "dim");
-                plan.NewCustomer = BuildFallbackCustomerPlan(personaType, result.Log);
-                customerId = await CreateNewCustomer(plan, result, Log);
+                throw new OrderPlanValidationException(
+                    OrderPlanFailureCodes.MissingCustomerIdentity,
+                    "AI plan did not include required customer details");
             }
 
             // ── Validate items & check stock ─────────────────────────────────
@@ -293,30 +301,9 @@ public class OrderGenerationAgentService
             }
 
             if (!validItems.Any())
-            {
-                Log("All AI-planned items were out of stock — falling back to random in-stock products...", "dim");
-                var fallbackProducts = await _orderGenService.GetRandomInStockProductsAsync(Random.Shared.Next(1, 4));
-
-                if (fallbackProducts.Count == 0)
-                    throw new InvalidOperationException("No in-stock products available for order generation");
-
-                foreach (var product in fallbackProducts)
-                {
-                    var qty = (short)Math.Min(Random.Shared.Next(1, 4), Math.Max(1, product.Stock));
-                    var offerId = await _orderGenService.GetBestSpecialOfferAsync(product.ProductID);
-
-                    validItems.Add(new OrderLineItem
-                    {
-                        ProductId = product.ProductID,
-                        Quantity = qty,
-                        UnitPrice = product.ListPrice,
-                        SpecialOfferID = offerId
-                    });
-
-                    var offerNote = offerId > 1 ? $" (promotion ID={offerId})" : "";
-                    Log($"  ✓ {product.Name} × {qty} @ ${product.ListPrice:N2}{offerNote} (fallback)", "success");
-                }
-            }
+                throw new OrderPlanValidationException(
+                    OrderPlanFailureCodes.NoValidAiPlannedItems,
+                    "AI plan did not contain any valid in-stock items after inventory validation");
 
             // ── Create the order ─────────────────────────────────────────────
             int salesOrderId;
@@ -391,13 +378,28 @@ public class OrderGenerationAgentService
         {
             _logger.LogError(ex, "Order generation failed for persona={Persona}", personaType);
             operation.Telemetry.Success = false;
+            var failureCode = ex switch
+            {
+                OrderPlanValidationException validationEx => validationEx.FailureCode,
+                JsonException => OrderPlanFailureCodes.InvalidJson,
+                _ => OrderPlanFailureCodes.UnhandledError,
+            };
+            result.FailureCode = failureCode;
+
+            if (!string.IsNullOrWhiteSpace(rawResponse))
+            {
+                var preview = rawResponse.Length > 400 ? rawResponse[..400] + "..." : rawResponse;
+                _logger.LogWarning("AI order plan failure code={FailureCode}; raw response preview: {Preview}", failureCode, preview);
+            }
+
             _telemetryClient.TrackException(ex, new Dictionary<string, string>
             {
                 ["Operation"] = "OrderGeneration.Generate",
-                ["PersonaType"] = personaType
+                ["PersonaType"] = personaType,
+                ["FailureCode"] = failureCode
             });
 
-            Log($"Error: {ex.Message}", "error");
+            Log($"Error [{failureCode}]: {ex.Message}", "error");
             result.ErrorMessage = ex.Message;
             return result;
         }
@@ -405,146 +407,57 @@ public class OrderGenerationAgentService
 
     // ── Direct order generation (no AI agent) ────────────────────────────────
 
-    private static readonly string[] CardTypes = ["Vista", "SuperiorCard", "Distinguish", "ColonialVoice"];
-
-    private static string GenerateRandomPassword()
-    {
-        const string upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        const string lower = "abcdefghijklmnopqrstuvwxyz";
-        const string digits = "0123456789";
-        const string special = "!@#$%^&*";
-        const string all = upper + lower + digits + special;
-
-        var length = Random.Shared.Next(12, 17);
-        var password = new char[length];
-        password[0] = upper[Random.Shared.Next(upper.Length)];
-        password[1] = lower[Random.Shared.Next(lower.Length)];
-        password[2] = digits[Random.Shared.Next(digits.Length)];
-        password[3] = special[Random.Shared.Next(special.Length)];
-        for (int i = 4; i < length; i++)
-            password[i] = all[Random.Shared.Next(all.Length)];
-        Random.Shared.Shuffle(password);
-        return new string(password);
-    }
-
-    private static string GenerateLuhnCardNumber()
-    {
-        var prefixes = new[] { "4", "51", "52", "53", "54", "55", "37", "6011" };
-        var prefix = prefixes[Random.Shared.Next(prefixes.Length)];
-        var d = new int[16];
-        for (int i = 0; i < prefix.Length; i++) d[i] = prefix[i] - '0';
-        for (int i = prefix.Length; i < 15; i++) d[i] = Random.Shared.Next(10);
-        var sum = 0;
-        for (int i = 14; i >= 0; i--)
-        {
-            var v = d[i];
-            if ((15 - i) % 2 == 1) { v *= 2; if (v > 9) v -= 9; }
-            sum += v;
-        }
-        d[15] = (10 - (sum % 10)) % 10;
-        return string.Join("", d);
-    }
-
     private async Task<int> CreateNewCustomer(
         OrderPlan plan,
         OrderGenerationResult result,
         Action<string, string> log)
     {
-        var fallback = BuildFallbackCustomerPlan("consumer", result.Log);
-        var nc = plan.NewCustomer ?? fallback;
-        var firstName = string.IsNullOrWhiteSpace(nc.FirstName) ? fallback.FirstName : nc.FirstName;
-        var lastName = string.IsNullOrWhiteSpace(nc.LastName) ? fallback.LastName : nc.LastName;
-        var email = string.IsNullOrWhiteSpace(nc.Email) ? fallback.Email : nc.Email;
-        var addressLine1 = string.IsNullOrWhiteSpace(nc.AddressLine1) ? fallback.AddressLine1 : nc.AddressLine1;
-        var city = string.IsNullOrWhiteSpace(nc.City) ? fallback.City : nc.City;
-        var stateCode = string.IsNullOrWhiteSpace(nc.StateCode) ? fallback.StateCode : nc.StateCode;
-        var postalCode = string.IsNullOrWhiteSpace(nc.PostalCode) ? fallback.PostalCode : nc.PostalCode;
+        var nc = plan.NewCustomer
+            ?? throw new OrderPlanValidationException(
+                OrderPlanFailureCodes.MissingCustomerIdentity,
+                "AI plan did not provide a newCustomer payload");
+
+        var firstName = nc.FirstName;
+        var lastName = nc.LastName;
+        var email = nc.Email;
+        var addressLine1 = nc.AddressLine1;
+        var city = nc.City;
+        var stateCode = nc.StateCode;
+        var postalCode = nc.PostalCode;
 
         log($"Creating new customer: {firstName} {lastName} ({email})", "info");
 
-        // If the AI agent didn't provide a password, generate one
-        var password = nc.Password ?? GenerateRandomPassword();
-
         var customerId = await _orderGenService.CreateCustomerAsync(new NewCustomerRequest
         {
-            FirstName = firstName,
-            LastName = lastName,
+            FirstName = firstName!,
+            LastName = lastName!,
             Email = email,
-            AddressLine1 = addressLine1 ?? "1 Main St",
-            City = city ?? "Seattle",
+            AddressLine1 = addressLine1!,
+            City = city!,
             StateCode = stateCode,
-            PostalCode = postalCode ?? "98101",
-            Password = password,
+            PostalCode = postalCode!,
+            Password = nc.Password,
         });
 
-        // Save phone number — use agent-provided or generate one
-        var phone = nc.Phone;
-        if (string.IsNullOrWhiteSpace(phone))
-        {
-            phone = GenerateFallbackPhoneNumber();
-        }
         await _orderGenService.AddPersonPhoneAsync(
-            new NewCustomerRequest { FirstName = firstName, LastName = lastName },
-            phone, customerId);
-        log($"  Phone saved: {phone}", "dim");
+            new NewCustomerRequest { FirstName = firstName!, LastName = lastName! },
+            nc.Phone!, customerId);
+        log($"  Phone saved: {nc.Phone}", "dim");
 
-        // Save credit card — use agent-provided or generate one
-        var cardType = nc.CreditCardType ?? CardTypes[Random.Shared.Next(CardTypes.Length)];
-        var cardNumber = nc.CreditCardNumber ?? GenerateLuhnCardNumber();
-        var expMonth = nc.CreditCardExpMonth ?? (byte)Random.Shared.Next(1, 13);
-        var expYear = nc.CreditCardExpYear ?? (short)(DateTime.UtcNow.Year + Random.Shared.Next(1, 6));
-        await _orderGenService.AddCreditCardAsync(customerId, cardType, cardNumber, expMonth, expYear);
-        var last4 = cardNumber.Length >= 4 ? cardNumber[^4..] : cardNumber;
-        log($"  Credit card saved: {cardType} ****{last4}", "dim");
+        await _orderGenService.AddCreditCardAsync(
+            customerId,
+            nc.CreditCardType!,
+            nc.CreditCardNumber!,
+            nc.CreditCardExpMonth!.Value,
+            nc.CreditCardExpYear!.Value);
+        var last4 = nc.CreditCardNumber!.Length >= 4 ? nc.CreditCardNumber[^4..] : nc.CreditCardNumber;
+        log($"  Credit card saved: {nc.CreditCardType} ****{last4}", "dim");
 
         result.CustomerName = $"{firstName} {lastName}";
         result.CustomerEmail = email;
         result.NewCustomerCreated = true;
         log($"New customer created with CustomerID={customerId}", "success");
         return customerId;
-    }
-
-    private static string GenerateFallbackPhoneNumber()
-    {
-        var faker = new Faker("en");
-        var rawPhone = faker.Phone.PhoneNumber() ?? string.Empty;
-        var digits = new string(rawPhone.Where(char.IsDigit).ToArray());
-        if (digits.Length == 0)
-        {
-            digits = string.Concat(Enumerable.Range(0, 10).Select(_ => Random.Shared.Next(10).ToString()));
-        }
-
-        var localDigits = digits.Length > 10 ? digits[^10..] : digits.PadLeft(10, '0');
-        return $"+1 {localDigits[..3]} {localDigits[3..6]} {localDigits[6..]}";
-    }
-
-    private static NewCustomerPlan BuildFallbackCustomerPlan(string personaType, List<OrderGenLogEntry> log)
-    {
-        var faker = new Faker("en");
-        var profile = faker.Person;
-
-        var firstName = string.IsNullOrWhiteSpace(profile.FirstName) ? "New" : profile.FirstName;
-        var lastName = string.IsNullOrWhiteSpace(profile.LastName) ? "Customer" : profile.LastName;
-        var slug = Regex.Replace($"{firstName}.{lastName}.{personaType}".ToLowerInvariant(), @"[^a-z0-9]+", ".").Trim('.');
-        if (string.IsNullOrWhiteSpace(slug)) slug = $"customer.{Guid.NewGuid():N}";
-
-        log.Add(new OrderGenLogEntry
-        {
-            Type = "dim",
-            Message = $"Synthesized fallback customer profile for persona '{personaType}'."
-        });
-
-        return new NewCustomerPlan
-        {
-            FirstName = firstName,
-            LastName = lastName,
-            Email = $"{slug}@example.test",
-            Phone = profile.Phone,
-            AddressLine1 = profile.Address.Street,
-            City = profile.Address.City,
-            StateCode = profile.Address.State,
-            PostalCode = profile.Address.ZipCode,
-        };
     }
 
     private static string BuildPersonaDescription(string personaType, string? customPersona)
@@ -575,169 +488,116 @@ public class OrderGenerationAgentService
 
     private static OrderPlan ParseOrderPlan(string rawResponse)
     {
-        var cleaned = Regex.Replace(rawResponse, @"^```(?:json)?\s*", "", RegexOptions.Multiline);
-        cleaned = Regex.Replace(cleaned, @"```\s*$", "", RegexOptions.Multiline).Trim();
-        cleaned = NormalizeExistingCustomerIdValue(cleaned);
+        var cleaned = rawResponse.Trim();
+        if (string.IsNullOrWhiteSpace(cleaned))
+            throw new OrderPlanValidationException(OrderPlanFailureCodes.EmptyResponse, "AI returned an empty order plan response");
 
-        var jsonPayload = ExtractFirstJsonObject(cleaned);
+        using var document = JsonDocument.Parse(cleaned);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+            throw new OrderPlanValidationException(OrderPlanFailureCodes.InvalidJson, "AI order plan must be a single JSON object");
 
-        if (string.IsNullOrWhiteSpace(jsonPayload))
-        {
-            var preview = cleaned.Length > 200 ? cleaned[..200] + "..." : cleaned;
-            throw new InvalidOperationException(
-                $"AI returned text instead of a JSON order plan. Response preview: '{preview}'");
-        }
-
-        return JsonSerializer.Deserialize<OrderPlan>(jsonPayload,
+        return JsonSerializer.Deserialize<OrderPlan>(cleaned,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException("AI returned unparseable JSON for order plan");
     }
 
-    private static string? ExtractFirstJsonObject(string input)
+    private static string ResolveExpectedCustomerMode(string? orderMode, CustomerProfile? seedProfile)
     {
-        var start = input.IndexOf('{');
-        if (start < 0)
-            return null;
-
-        var depth = 0;
-        var inString = false;
-        var escaping = false;
-
-        for (int i = start; i < input.Length; i++)
-        {
-            var ch = input[i];
-
-            if (inString)
-            {
-                if (escaping)
-                {
-                    escaping = false;
-                    continue;
-                }
-
-                if (ch == '\\')
-                {
-                    escaping = true;
-                    continue;
-                }
-
-                if (ch == '"')
-                    inString = false;
-
-                continue;
-            }
-
-            if (ch == '"')
-            {
-                inString = true;
-                continue;
-            }
-
-            if (ch == '{')
-            {
-                depth++;
-                continue;
-            }
-
-            if (ch == '}')
-            {
-                depth--;
-                if (depth == 0)
-                    return input[start..(i + 1)];
-            }
-        }
-
-        return null;
+        if (orderMode == "b2b-store") return CustomerModeStore;
+        if (seedProfile != null) return CustomerModeExisting;
+        return CustomerModeNew;
     }
 
-    private static string NormalizeExistingCustomerIdValue(string input)
+    private static void ValidateOrderPlan(OrderPlan plan, string expectedCustomerMode, CustomerProfile? seedProfile)
     {
-        const string quotedKey = "\"existingCustomerId\"";
-        const string bareKey = "existingCustomerId";
+        if (string.IsNullOrWhiteSpace(plan.CustomerMode))
+            throw new OrderPlanValidationException(OrderPlanFailureCodes.MissingCustomerMode, "AI plan did not specify customerMode");
 
-        var keyIndex = input.IndexOf(quotedKey, StringComparison.Ordinal);
-        var keyLength = quotedKey.Length;
+        var customerMode = plan.CustomerMode.Trim().ToLowerInvariant();
+        if (!string.Equals(customerMode, expectedCustomerMode, StringComparison.Ordinal))
+            throw new OrderPlanValidationException(
+                OrderPlanFailureCodes.UnexpectedCustomerMode,
+                $"AI plan specified customerMode='{plan.CustomerMode}', expected '{expectedCustomerMode}'");
 
-        if (keyIndex < 0)
+        if (plan.OrderItems == null || plan.OrderItems.Count == 0)
+            throw new OrderPlanValidationException(OrderPlanFailureCodes.NoPlannedItems, "AI plan did not include any order items");
+
+        switch (customerMode)
         {
-            keyIndex = input.IndexOf(bareKey, StringComparison.Ordinal);
-            keyLength = bareKey.Length;
+            case CustomerModeStore:
+                if (plan.ExistingCustomerId.HasValue || plan.NewCustomer != null)
+                    throw new OrderPlanValidationException(
+                        OrderPlanFailureCodes.InvalidStoreCustomerPayload,
+                        "Store plans must not include existingCustomerId or newCustomer");
+                break;
+
+            case CustomerModeExisting:
+                if (!plan.ExistingCustomerId.HasValue || plan.ExistingCustomerId.Value <= 0)
+                    throw new OrderPlanValidationException(
+                        OrderPlanFailureCodes.MissingCustomerIdentity,
+                        "Existing-customer plans must include a positive existingCustomerId");
+
+                if (plan.NewCustomer != null)
+                    throw new OrderPlanValidationException(
+                        OrderPlanFailureCodes.BothCustomerModesPresent,
+                        "Existing-customer plans must not include a newCustomer payload");
+
+                if (seedProfile != null && plan.ExistingCustomerId.Value != seedProfile.CustomerID)
+                    throw new OrderPlanValidationException(
+                        OrderPlanFailureCodes.SeedCustomerMismatch,
+                        $"AI plan returned existingCustomerId={plan.ExistingCustomerId.Value}, expected {seedProfile.CustomerID}");
+                break;
+
+            case CustomerModeNew:
+                if (plan.ExistingCustomerId.HasValue)
+                    throw new OrderPlanValidationException(
+                        OrderPlanFailureCodes.BothCustomerModesPresent,
+                        "New-customer plans must not include existingCustomerId");
+
+                ValidateNewCustomerPlan(plan.NewCustomer);
+                break;
+
+            default:
+                throw new OrderPlanValidationException(
+                    OrderPlanFailureCodes.InvalidCustomerMode,
+                    $"AI plan returned unsupported customerMode='{plan.CustomerMode}'");
         }
-
-        if (keyIndex < 0)
-            return input;
-
-        var colonIndex = input.IndexOf(':', keyIndex + keyLength);
-        if (colonIndex < 0)
-            return input;
-
-        var valueStart = colonIndex + 1;
-        while (valueStart < input.Length && char.IsWhiteSpace(input[valueStart])) valueStart++;
-        if (valueStart >= input.Length || input[valueStart] != '{')
-            return input;
-
-        var valueEnd = FindBalancedObjectEnd(input, valueStart);
-        if (valueEnd < valueStart)
-            return input;
-
-        var rawValue = input[valueStart..(valueEnd + 1)];
-        var numericMatch = Regex.Match(rawValue, @"\b\d+\b");
-        var replacement = numericMatch.Success ? numericMatch.Value : "null";
-
-        return string.Concat(input.AsSpan(0, valueStart), replacement, input.AsSpan(valueEnd + 1));
     }
 
-    private static int FindBalancedObjectEnd(string input, int start)
+    private static void ValidateNewCustomerPlan(NewCustomerPlan? newCustomer)
     {
-        var depth = 0;
-        var inString = false;
-        var escaping = false;
+        if (newCustomer == null)
+            throw new OrderPlanValidationException(OrderPlanFailureCodes.MissingCustomerIdentity, "New-customer plans must include a newCustomer payload");
 
-        for (int i = start; i < input.Length; i++)
-        {
-            var ch = input[i];
+        RequireCustomerField(newCustomer.FirstName, nameof(newCustomer.FirstName));
+        RequireCustomerField(newCustomer.LastName, nameof(newCustomer.LastName));
+        RequireCustomerField(newCustomer.Email, nameof(newCustomer.Email));
+        RequireCustomerField(newCustomer.Phone, nameof(newCustomer.Phone));
+        RequireCustomerField(newCustomer.AddressLine1, nameof(newCustomer.AddressLine1));
+        RequireCustomerField(newCustomer.City, nameof(newCustomer.City));
+        RequireCustomerField(newCustomer.StateCode, nameof(newCustomer.StateCode));
+        RequireCustomerField(newCustomer.PostalCode, nameof(newCustomer.PostalCode));
+        RequireCustomerField(newCustomer.Password, nameof(newCustomer.Password));
+        RequireCustomerField(newCustomer.CreditCardType, nameof(newCustomer.CreditCardType));
+        RequireCustomerField(newCustomer.CreditCardNumber, nameof(newCustomer.CreditCardNumber));
 
-            if (inString)
-            {
-                if (escaping)
-                {
-                    escaping = false;
-                    continue;
-                }
+        if (newCustomer.CreditCardExpMonth is null || newCustomer.CreditCardExpMonth < 1 || newCustomer.CreditCardExpMonth > 12)
+            throw new OrderPlanValidationException(
+                OrderPlanFailureCodes.InvalidNewCustomerPayload,
+                "newCustomer.creditCardExpMonth must be between 1 and 12");
 
-                if (ch == '\\')
-                {
-                    escaping = true;
-                    continue;
-                }
+        if (newCustomer.CreditCardExpYear is null || newCustomer.CreditCardExpYear < DateTime.UtcNow.Year)
+            throw new OrderPlanValidationException(
+                OrderPlanFailureCodes.InvalidNewCustomerPayload,
+                "newCustomer.creditCardExpYear must be the current year or later");
+    }
 
-                if (ch == '"')
-                    inString = false;
-
-                continue;
-            }
-
-            if (ch == '"')
-            {
-                inString = true;
-                continue;
-            }
-
-            if (ch == '{')
-            {
-                depth++;
-                continue;
-            }
-
-            if (ch == '}')
-            {
-                depth--;
-                if (depth == 0)
-                    return i;
-            }
-        }
-
-        return -1;
+    private static void RequireCustomerField(string? value, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new OrderPlanValidationException(
+                OrderPlanFailureCodes.InvalidNewCustomerPayload,
+                $"AI plan omitted required field newCustomer.{fieldName}");
     }
 
     // The system prompt and tool configuration are managed in Azure AI Foundry on the agent definition.
@@ -756,6 +616,7 @@ public class OrderGenerationResult
     public bool NewCustomerCreated { get; set; }
     public decimal TotalDue { get; set; }
     public string? ReceiptPdfBase64 { get; set; }
+    public string? FailureCode { get; set; }
     public string? ErrorMessage { get; set; }
     public List<OrderGenLogEntry> Log { get; set; } = new();
     /// <summary>
@@ -775,7 +636,7 @@ public class OrderGenLogEntry
 public class OrderPlan
 {
     public string PersonaSummary { get; set; } = string.Empty;
-    [JsonConverter(typeof(FlexibleNullableIntJsonConverter))]
+    public string CustomerMode { get; set; } = string.Empty;
     public int? ExistingCustomerId { get; set; }
     public NewCustomerPlan? NewCustomer { get; set; }
     public List<PlannedOrderItem> OrderItems { get; set; } = new();
@@ -810,44 +671,31 @@ public class PlannedOrderItem
     public string Reason { get; set; } = string.Empty;
 }
 
-public sealed class FlexibleNullableIntJsonConverter : JsonConverter<int?>
+public sealed class OrderPlanValidationException : InvalidOperationException
 {
-    public override int? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public OrderPlanValidationException(string failureCode, string message)
+        : base(message)
     {
-        if (reader.TokenType == JsonTokenType.Null)
-            return null;
-
-        if (reader.TokenType == JsonTokenType.Number)
-            return reader.TryGetInt32(out var numericValue) ? numericValue : null;
-
-        if (reader.TokenType == JsonTokenType.String)
-        {
-            var raw = reader.GetString();
-            if (string.IsNullOrWhiteSpace(raw))
-                return null;
-
-            raw = raw.Trim();
-            if (int.TryParse(raw, out var parsed))
-                return parsed;
-
-            var digits = Regex.Match(raw, @"\d+");
-            return digits.Success && int.TryParse(digits.Value, out parsed) ? parsed : null;
-        }
-
-        using var document = JsonDocument.ParseValue(ref reader);
-        return document.RootElement.ValueKind switch
-        {
-            JsonValueKind.Number when document.RootElement.TryGetInt32(out var numericValue) => numericValue,
-            JsonValueKind.String when int.TryParse(document.RootElement.GetString(), out var parsed) => parsed,
-            _ => null,
-        };
+        FailureCode = failureCode;
     }
 
-    public override void Write(Utf8JsonWriter writer, int? value, JsonSerializerOptions options)
-    {
-        if (value.HasValue)
-            writer.WriteNumberValue(value.Value);
-        else
-            writer.WriteNullValue();
-    }
+    public string FailureCode { get; }
+}
+
+public static class OrderPlanFailureCodes
+{
+    public const string EmptyResponse = "empty_response";
+    public const string InvalidJson = "invalid_json";
+    public const string MissingCustomerMode = "missing_customer_mode";
+    public const string InvalidCustomerMode = "invalid_customer_mode";
+    public const string UnexpectedCustomerMode = "unexpected_customer_mode";
+    public const string MissingCustomerIdentity = "missing_customer_identity";
+    public const string BothCustomerModesPresent = "both_customer_modes_present";
+    public const string SeedCustomerMismatch = "seed_customer_mismatch";
+    public const string ExistingCustomerNotFound = "existing_customer_not_found";
+    public const string InvalidNewCustomerPayload = "invalid_new_customer_payload";
+    public const string InvalidStoreCustomerPayload = "invalid_store_customer_payload";
+    public const string NoPlannedItems = "no_planned_items";
+    public const string NoValidAiPlannedItems = "no_valid_ai_planned_items";
+    public const string UnhandledError = "unhandled_error";
 }

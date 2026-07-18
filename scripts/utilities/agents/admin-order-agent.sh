@@ -34,7 +34,14 @@ INSTRUCTIONS="You are an intelligent order generation agent for AdventureWorks. 
 ## Context
 - Today's date:   {{todayDate}}
 - Persona:        {{personaDescription}}
-{{#if isExistingCustomer}}
+{{#if isB2BStore}}
+## Store order
+- This is a B2B store replenishment order.
+- Return \"customerMode\": \"store\".
+- Do NOT return existingCustomerId.
+- Do NOT return newCustomer.
+{{else}}
+{{#if requiresExistingCustomer}}
 ## Existing customer
 - Name:              {{customerName}}
 - Customer ID:       {{customerId}}
@@ -43,9 +50,14 @@ INSTRUCTIONS="You are an intelligent order generation agent for AdventureWorks. 
 - Recent purchases:  {{recentProducts}}
 
 Design a complementary order that extends or refreshes this customer's existing gear. Avoid duplicating recently purchased items unless they are consumables (e.g. lubricant, tubes, nutrition).
+
+Return \"customerMode\": \"existing\" and \"existingCustomerId\": {{customerId}} exactly. Do NOT return newCustomer.
 {{else}}
 ## New customer
 When creating a new customer, you MUST call the GenerateRandomCustomer MCP tool to get a complete, realistic profile. Do NOT invent customer details yourself — always use the tool. The tool returns a full profile with name, email, phone, address, country, password, and credit card details. Include ALL of these fields in your newCustomer JSON output exactly as returned by the tool.
+
+Return \"customerMode\": \"new\". Do NOT return existingCustomerId.
+{{/if}}
 {{/if}}
 
 ## Workflow — simulate a real shopper
@@ -68,10 +80,16 @@ Return ONLY a valid JSON object (no markdown fences):
 {
   \"personaSummary\": \"<one sentence describing this order>\",
   \"aiReasoning\": \"<1-2 sentences explaining why these products were chosen>\",
-  {{#if isExistingCustomer}}
+  {{#if isB2BStore}}
+  \"customerMode\": \"store\",
+  {{else}}
+  {{#if requiresExistingCustomer}}
+  \"customerMode\": \"existing\",
   \"existingCustomerId\": {{customerId}},
   {{else}}
+  \"customerMode\": \"new\",
   \"newCustomer\": {\"firstName\": \"<name>\", \"lastName\": \"<name>\", \"email\": \"<email>\", \"phone\": \"<international phone>\", \"addressLine1\": \"<street address>\", \"city\": \"<city>\", \"stateCode\": \"<state/province code>\", \"postalCode\": \"<postal code>\", \"password\": \"<random password>\", \"creditCardType\": \"<Vista|SuperiorCard|Distinguish|ColonialVoice>\", \"creditCardNumber\": \"<16-digit number>\", \"creditCardExpMonth\": <1-12>, \"creditCardExpYear\": <future year>},
+  {{/if}}
   {{/if}}
   \"orderItems\": [
     {\"productId\": <number>, \"productName\": \"<name>\", \"quantity\": <1-5>, \"unitPrice\": <number>, \"specialOfferId\": <1 or valid offer ID>}
@@ -83,11 +101,17 @@ DESCRIPTION="Generates realistic AI-driven purchase orders for AdventureWorks. S
 STARTER_PROMPTS='[{"text":"Generate a beginner cyclist order"},{"text":"Create an order for an experienced mountain biker"},{"text":"Generate an order for a family buying bikes and helmets"},{"text":"Create a reorder for an existing road cyclist customer"}]'
 
 # Structured inputs resolve Handlebars templates in agent instructions.
-# todayDate, personaDescription, isExistingCustomer are always injected.
+# todayDate, personaDescription, orderMode, expectedCustomerMode, requiresExistingCustomer,
+# requiresNewCustomer, isB2BStore, and isExistingCustomer are always injected.
 # customerName, customerId, orderCount, totalSpend, recentProducts are only injected for existing customers.
 STRUCTURED_INPUTS='{
   "todayDate":          {"type": "string",  "description": "Today'\''s date (YYYY-MM-DD) for campaign and order date calculations.", "default_value": ""},
   "personaDescription": {"type": "string",  "description": "Description of the customer persona being simulated (e.g. beginner cyclist, family shopper).", "default_value": "A generic AdventureWorks customer"},
+  "orderMode":          {"type": "string",  "description": "The simulator order mode routing this request (for example new-persona, existing-repeat, no-order-customer, cart-recovery, b2b-store).", "default_value": "new-persona"},
+  "expectedCustomerMode": {"type": "string", "description": "The required customer mode for this plan: new, existing, or store.", "default_value": "new"},
+  "requiresExistingCustomer": {"type": "boolean", "description": "True when the response must return customerMode=existing and existingCustomerId only.", "default_value": false},
+  "requiresNewCustomer": {"type": "boolean", "description": "True when the response must return customerMode=new and a complete newCustomer payload.", "default_value": true},
+  "isB2BStore":        {"type": "boolean", "description": "True when generating a B2B store replenishment order that must return customerMode=store and no customer payload.", "default_value": false},
   "isExistingCustomer": {"type": "boolean", "description": "True when generating an order for an existing customer with purchase history; false for a new customer.", "default_value": false},
   "customerName":       {"type": "string",  "description": "Full name of the existing customer (only set when isExistingCustomer is true).", "default_value": ""},
   "customerId":         {"type": "string",  "description": "CustomerID of the existing customer (only set when isExistingCustomer is true).", "default_value": ""},

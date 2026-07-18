@@ -20,6 +20,7 @@ public class SimulationOrderResultEntity : ITableEntity
     public string? CustomerName { get; set; }
     public bool NewCustomerCreated { get; set; }
     public double TotalDue { get; set; }
+    public string? FailureCode { get; set; }
     public string? ErrorMessage { get; set; }
     public string? PersonaType { get; set; }
     public string? AiReasoning { get; set; }

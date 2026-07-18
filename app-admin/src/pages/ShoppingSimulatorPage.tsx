@@ -126,6 +126,15 @@ function orderTypeBadge(orderType: string | null) {
   }
 }
 
+function formatFailureCode(failureCode: string | null | undefined): string {
+  if (!failureCode) return "";
+  return failureCode
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export default function ShoppingSimulatorPage() {
   const [status, setStatus] =
     React.useState<ShoppingSimulatorStatus>(DEFAULT_STATUS);
@@ -829,6 +838,16 @@ export default function ShoppingSimulatorPage() {
                             <span className="font-doodle text-xs text-doodle-text/50 ml-2">
                               {r.personaType}
                             </span>
+                          )}
+                          {r.failureCode && (
+                            <div className="mt-1">
+                              <Badge
+                                variant="outline"
+                                className="font-doodle text-[10px] py-0 px-1 border-red-300 text-red-700"
+                              >
+                                {formatFailureCode(r.failureCode)}
+                              </Badge>
+                            </div>
                           )}
                           {r.errorMessage && (
                             <p className="font-doodle text-xs text-doodle-text/60 mt-0.5 line-clamp-2">

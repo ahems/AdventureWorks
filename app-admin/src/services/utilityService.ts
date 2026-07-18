@@ -946,6 +946,7 @@ export interface SimulationOrderResult {
   customerName: string | null;
   newCustomerCreated: boolean;
   totalDue: number;
+  failureCode?: string | null;
   errorMessage: string | null;
   personaType: string | null;
   aiReasoning: string | null;

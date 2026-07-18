@@ -655,20 +655,22 @@ public class FoundryAgentClient
         var result = template;
 
         // Multiple passes to resolve nested {{#if}} blocks (inner-most blocks first).
-        // Pattern matches {{#if variable}}content{{/if}} where content has NO nested {{#if.
+        // Pattern matches {{#if variable}}truthy{{else}}falsy{{/if}} where content has
+        // no nested {{#if}} blocks. The {{else}} section is optional.
         const string innerIfPattern =
-            @"\{\{#if\s+(\w+)\}\}((?:(?!\{\{#if)[\s\S])*?)\{\{/if\}\}";
+            @"\{\{#if\s+(\w+)\}\}((?:(?!\{\{#if)[\s\S])*?)(?:\{\{else\}\}((?:(?!\{\{#if)[\s\S])*?))?\{\{/if\}\}";
 
         for (var pass = 0; pass < 5; pass++)
         {
             var next = Regex.Replace(result, innerIfPattern, m =>
             {
                 var varName = m.Groups[1].Value;
-                var inner   = m.Groups[2].Value;
-                return inputs.TryGetValue(varName, out var val)
-                       && !string.IsNullOrEmpty(val?.ToString())
-                    ? inner
-                    : string.Empty;
+                var truthyBranch = m.Groups[2].Value;
+                var falsyBranch = m.Groups[3].Success ? m.Groups[3].Value : string.Empty;
+
+                return inputs.TryGetValue(varName, out var val) && IsTemplateTruthy(val)
+                    ? truthyBranch
+                    : falsyBranch;
             });
 
             if (next == result) break;   // converged — no more resolvable blocks
@@ -680,6 +682,36 @@ public class FoundryAgentClient
             result = result.Replace($"{{{{{kvp.Key}}}}}", kvp.Value?.ToString() ?? string.Empty);
 
         return result;
+    }
+
+    private static bool IsTemplateTruthy(object? value)
+    {
+        return value switch
+        {
+            null => false,
+            bool boolValue => boolValue,
+            string stringValue => !string.IsNullOrWhiteSpace(stringValue)
+                && !string.Equals(stringValue, "false", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(stringValue, "0", StringComparison.OrdinalIgnoreCase),
+            sbyte signedByte => signedByte != 0,
+            byte unsignedByte => unsignedByte != 0,
+            short shortValue => shortValue != 0,
+            ushort unsignedShort => unsignedShort != 0,
+            int intValue => intValue != 0,
+            uint unsignedInt => unsignedInt != 0,
+            long longValue => longValue != 0,
+            ulong unsignedLong => unsignedLong != 0,
+            JsonElement jsonElement => jsonElement.ValueKind switch
+            {
+                JsonValueKind.False => false,
+                JsonValueKind.True => true,
+                JsonValueKind.Null => false,
+                JsonValueKind.String => IsTemplateTruthy(jsonElement.GetString()),
+                JsonValueKind.Number => jsonElement.TryGetInt64(out var numericValue) && numericValue != 0,
+                _ => true,
+            },
+            _ => !string.IsNullOrWhiteSpace(value.ToString())
+        };
     }
 
     /// <summary>

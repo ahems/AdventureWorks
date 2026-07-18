@@ -199,6 +199,7 @@ public class SimulationOrderQueueTrigger
                 {
                     RowKey = Models.SimulationOrderResultEntity.GenerateRowKey(DateTimeOffset.UtcNow),
                     Success = false,
+                    FailureCode = result.FailureCode,
                     ErrorMessage = result.ErrorMessage,
                     PersonaType = personaType,
                     CompletedAt = DateTimeOffset.UtcNow,

@@ -227,6 +227,7 @@ public class ShoppingSimulatorControlFunction
             r.CustomerName,
             r.NewCustomerCreated,
             r.TotalDue,
+            r.FailureCode,
             r.ErrorMessage,
             r.PersonaType,
             r.AiReasoning,
