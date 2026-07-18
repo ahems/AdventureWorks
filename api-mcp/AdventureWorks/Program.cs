@@ -13,7 +13,8 @@ builder.Logging.AddConsole(consoleLogOptions =>
 // Add Application Insights telemetry
 builder.Services.AddApplicationInsightsTelemetry();
 
-// Configure localization
+// Configure localization (Microsoft.Extensions.Localization is actively used by services below)
+// Services inject IStringLocalizer<Strings> for multilingual message formatting in OrderService, ProductService, ReviewService, and others
 builder.Services.AddLocalization();
 
 // Get database connection string from configuration

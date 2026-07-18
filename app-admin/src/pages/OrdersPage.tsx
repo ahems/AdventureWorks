@@ -14,6 +14,7 @@ import {
   Mail,
   Download,
   CalendarDays,
+  Calendar as CalendarIcon,
   X as XIcon,
   Filter,
   Settings,
@@ -47,6 +48,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { getFunctionsApiUrl } from "@/lib/utils";
@@ -56,13 +59,6 @@ import { Sparkles } from "lucide-react";
 
 const ALL_STATUSES = Object.keys(ORDER_STATUS_CONFIG) as OrderStatus[];
 const DEFAULT_STATUS_FILTERS: OrderStatus[] = ["Processing"];
-
-const getDefaultDateFrom = (): string => {
-  const d = new Date();
-  d.setDate(d.getDate() - 7);
-  return d.toISOString().split("T")[0];
-};
-const getDefaultDateTo = (): string => new Date().toISOString().split("T")[0];
 
 interface ReceiptActionsProps {
   order: Order;
@@ -168,9 +164,10 @@ const OrdersPage: React.FC = () => {
   );
   const [missingReceiptsCooldown, setMissingReceiptsCooldown] = useState(false);
 
-  // Date filter state — default to last 7 days
-  const [dateFrom, setDateFrom] = useState(getDefaultDateFrom);
-  const [dateTo, setDateTo] = useState(getDefaultDateTo);
+  // Date filter state — derived from actual order data (default: latest date → one month back)
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
+  const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
+  const [dateInitialized, setDateInitialized] = useState(false);
 
   // Category / subcategory / product filter state
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
@@ -237,15 +234,54 @@ const OrdersPage: React.FC = () => {
     : null;
   const isDirectLink = directOrderId !== null && !isNaN(directOrderId);
 
+  // Helper: format Date to YYYY-MM-DD string for the API
+  const toDateString = (d: Date | undefined): string | undefined =>
+    d ? d.toISOString().split("T")[0] : undefined;
+
+  // Helper: format date for display in buttons
+  const formatDateShort = (d: Date) =>
+    d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+
   const dbStatuses = useMemo(
     () => statusFilters.flatMap(orderStatusToDbStatuses),
     [statusFilters],
   );
   const { data: apiOrders = [], isLoading: ordersLoading } = useAdminOrders({
-    dateFrom: dateFrom || undefined,
-    dateTo: dateTo || undefined,
+    dateFrom: toDateString(dateFrom),
+    dateTo: toDateString(dateTo),
     statuses: dbStatuses,
   });
+
+  // Derive date range from current order data and initialize defaults
+  const orderDateRange = useMemo(() => {
+    if (apiOrders.length === 0)
+      return { earliest: undefined, latest: undefined };
+    let earliest = new Date(apiOrders[0].OrderDate);
+    let latest = new Date(apiOrders[0].OrderDate);
+    for (const o of apiOrders) {
+      const d = new Date(o.OrderDate);
+      if (d < earliest) earliest = d;
+      if (d > latest) latest = d;
+    }
+    return { earliest, latest };
+  }, [apiOrders]);
+
+  // Set initial date range once data arrives: "to" = latest order date, "from" = one month before that
+  useEffect(() => {
+    if (!dateInitialized && orderDateRange.latest) {
+      const to = orderDateRange.latest;
+      const from = new Date(to);
+      from.setMonth(from.getMonth() - 1);
+      setDateTo(to);
+      setDateFrom(from);
+      setDateInitialized(true);
+    }
+  }, [dateInitialized, orderDateRange.latest]);
+
   const channelOrders = React.useMemo(
     () =>
       apiOrders.filter(
@@ -623,41 +659,106 @@ const OrdersPage: React.FC = () => {
                   <span className="flex items-center gap-1 font-doodle text-sm text-doodle-text/60 shrink-0">
                     <CalendarDays className="w-4 h-4" /> Date range:
                   </span>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <input
-                      type="date"
-                      value={dateFrom}
-                      onChange={(e) => {
-                        setDateFrom(e.target.value);
-                        setCurrentPage(1);
-                      }}
-                      className="font-doodle text-sm border-2 border-doodle-text bg-white px-2 py-1 focus:border-doodle-accent focus:outline-none"
-                    />
-                    <span className="font-doodle text-sm text-doodle-text/50">
-                      to
-                    </span>
-                    <input
-                      type="date"
-                      value={dateTo}
-                      onChange={(e) => {
-                        setDateTo(e.target.value);
-                        setCurrentPage(1);
-                      }}
-                      className="font-doodle text-sm border-2 border-doodle-text bg-white px-2 py-1 focus:border-doodle-accent focus:outline-none"
-                    />
-                    {(dateFrom || dateTo) && (
-                      <button
-                        onClick={() => {
-                          setDateFrom("");
-                          setDateTo("");
-                          setCurrentPage(1);
-                        }}
-                        className="inline-flex items-center gap-1 font-doodle text-xs text-doodle-text/50 hover:text-doodle-accent"
-                        title="Clear date filter"
-                      >
-                        <XIcon className="w-3.5 h-3.5" /> Clear
-                      </button>
-                    )}
+                  <div className="flex items-center gap-1">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={`w-[140px] font-doodle text-xs h-9 justify-start gap-1 ${dateFrom ? "" : "text-doodle-text/40"}`}
+                        >
+                          <CalendarIcon className="w-3 h-3" />
+                          {dateFrom
+                            ? formatDateShort(dateFrom)
+                            : orderDateRange.earliest
+                              ? formatDateShort(orderDateRange.earliest)
+                              : "From"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={dateFrom}
+                          onSelect={(d) => {
+                            setDateFrom(d);
+                            setCurrentPage(1);
+                          }}
+                          disabled={(d) =>
+                            (dateTo ? d > dateTo : false) ||
+                            (orderDateRange.latest
+                              ? d > orderDateRange.latest
+                              : false)
+                          }
+                          defaultMonth={dateFrom ?? orderDateRange.earliest}
+                          initialFocus
+                        />
+                        {dateFrom && (
+                          <div className="px-3 pb-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="w-full font-doodle text-xs h-7"
+                              onClick={() => {
+                                setDateFrom(undefined);
+                                setCurrentPage(1);
+                              }}
+                            >
+                              Clear
+                            </Button>
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                    <span className="text-doodle-text/40">–</span>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={`w-[140px] font-doodle text-xs h-9 justify-start gap-1 ${dateTo ? "" : "text-doodle-text/40"}`}
+                        >
+                          <CalendarIcon className="w-3 h-3" />
+                          {dateTo
+                            ? formatDateShort(dateTo)
+                            : orderDateRange.latest
+                              ? formatDateShort(orderDateRange.latest)
+                              : "To"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={dateTo}
+                          onSelect={(d) => {
+                            setDateTo(d);
+                            setCurrentPage(1);
+                          }}
+                          disabled={(d) =>
+                            (dateFrom ? d < dateFrom : false) ||
+                            (orderDateRange.latest
+                              ? d > orderDateRange.latest
+                              : false)
+                          }
+                          defaultMonth={dateTo ?? orderDateRange.latest}
+                          initialFocus
+                        />
+                        {dateTo && (
+                          <div className="px-3 pb-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="w-full font-doodle text-xs h-7"
+                              onClick={() => {
+                                setDateTo(undefined);
+                                setCurrentPage(1);
+                              }}
+                            >
+                              Clear
+                            </Button>
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 </div>
 
