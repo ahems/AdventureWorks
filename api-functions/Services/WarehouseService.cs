@@ -133,6 +133,12 @@ public class WarehouseService
 
     private const string ORDER_STATUS_QUEUE_NAME = "sales-order-status";
 
+    /// <summary>
+    /// Maximum units per SKU that Production.ProductInventory.Quantity (smallint) can hold.
+    /// All store/receive operations clamp to this ceiling.
+    /// </summary>
+    public const int INVENTORY_MAX_QTY = 32_767;
+
     private const int    WAREHOUSE_LOCATION_ID   = 7;
     private const double WEIGHT_THRESHOLD_KG     = 5.0; // Items heavier than this scale handling time
 
@@ -1053,20 +1059,20 @@ public class WarehouseService
             msg.OperationType == WarehouseOperationType.ReceiveSupplier)
         {
             // Add to inventory at LocationID 7 (Finished Goods Storage) for store/receive.
-            // Quantity column is smallint (max 32,767) — clamp to prevent arithmetic overflow.
-            await conn.ExecuteAsync(@"
+            // Quantity column is smallint (max INVENTORY_MAX_QTY) — clamp to prevent arithmetic overflow.
+            await conn.ExecuteAsync($@"
                 IF EXISTS (SELECT 1 FROM Production.ProductInventory WHERE ProductID = @ProductId AND LocationID = 7)
                     UPDATE Production.ProductInventory
-                    SET Quantity = CONVERT(smallint, CASE WHEN CONVERT(int, Quantity) + @Qty > 32767 THEN 32767
-                                                         WHEN CONVERT(int, Quantity) + @Qty < 0      THEN 0
+                    SET Quantity = CONVERT(smallint, CASE WHEN CONVERT(int, Quantity) + @Qty > {INVENTORY_MAX_QTY} THEN {INVENTORY_MAX_QTY}
+                                                         WHEN CONVERT(int, Quantity) + @Qty < 0                   THEN 0
                                                          ELSE CONVERT(int, Quantity) + @Qty END),
                         ModifiedDate = GETDATE()
                     WHERE ProductID = @ProductId AND LocationID = 7
                 ELSE
                     INSERT INTO Production.ProductInventory
                         (ProductID, LocationID, Shelf, Bin, Quantity, rowguid, ModifiedDate)
-                    VALUES (@ProductId, 7, 'A', 1, CONVERT(smallint, CASE WHEN @Qty > 32767 THEN 32767
-                                                                          WHEN @Qty < 0      THEN 0
+                    VALUES (@ProductId, 7, 'A', 1, CONVERT(smallint, CASE WHEN @Qty > {INVENTORY_MAX_QTY} THEN {INVENTORY_MAX_QTY}
+                                                                          WHEN @Qty < 0                   THEN 0
                                                                           ELSE @Qty END), NEWID(), GETDATE())",
                 new { ProductId = msg.ProductId, Qty = effectiveQty });
         }

@@ -96,10 +96,19 @@ const CreateWorkOrderDialog = () => {
               <input
                 type="number"
                 min="1"
+                max="32767"
                 value={form.OrderQty}
                 onChange={(e) => set("OrderQty", e.target.value)}
                 className="doodle-input w-full text-sm mt-1"
               />
+              {parseInt(form.OrderQty) > 32767 && (
+                <p
+                  className="font-doodle text-xs text-doodle-accent mt-1"
+                  role="alert"
+                >
+                  Max 32,767 units — warehouse smallint limit.
+                </p>
+              )}
             </div>
             <div>
               <label className="font-doodle text-xs font-bold text-doodle-text">
@@ -126,7 +135,12 @@ const CreateWorkOrderDialog = () => {
             </button>
             <button
               onClick={() => mutation.mutate()}
-              disabled={!form.ProductID || mutation.isPending}
+              disabled={
+                !form.ProductID ||
+                mutation.isPending ||
+                parseInt(form.OrderQty) > 32767 ||
+                parseInt(form.OrderQty) < 1
+              }
               className="doodle-button doodle-button-primary text-sm disabled:opacity-50"
             >
               {mutation.isPending ? "Starting..." : "Start Manufacturing Run"}

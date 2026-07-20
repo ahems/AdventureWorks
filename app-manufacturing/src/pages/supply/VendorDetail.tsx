@@ -456,7 +456,7 @@ const VendorDetailPage: React.FC = () => {
                       }}
                       className="w-24"
                       min={quote?.minOrderQty || 1}
-                      max={quote?.maxOrderQty || 9999}
+                      max={Math.min(quote?.maxOrderQty || 9999, 32767)}
                     />
                     {quote && (
                       <span className="text-xs text-muted-foreground">

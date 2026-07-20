@@ -95,7 +95,10 @@ const ReorderFromSupplierDialog = ({
       }),
   });
 
-  const orderQtyInvalid = !qty || parseInt(qty) < 1;
+  const orderQtyNum = parseInt(qty);
+  const orderQtyInvalid = !qty || orderQtyNum < 1 || orderQtyNum > 32767;
+  const orderQtyError =
+    orderQtyNum > 32767 ? "Max 32,767 units — warehouse smallint limit." : null;
   const canSubmit = !orderQtyInvalid && !!selectedVendor && !mutation.isPending;
 
   return (
@@ -153,13 +156,23 @@ const ReorderFromSupplierDialog = ({
               <input
                 type="number"
                 min="1"
+                max="32767"
                 value={qty}
                 onChange={(e) => setQty(e.target.value)}
-                className="doodle-input w-full text-sm mt-1"
+                className={`doodle-input w-full text-sm mt-1 ${orderQtyError ? "border-doodle-accent" : ""}`}
               />
-              <p className="font-doodle text-xs text-muted-foreground mt-1">
-                Suggested: {suggested} (covers open demand shortfall)
-              </p>
+              {orderQtyError ? (
+                <p
+                  className="font-doodle text-xs text-doodle-accent mt-1"
+                  role="alert"
+                >
+                  {orderQtyError}
+                </p>
+              ) : (
+                <p className="font-doodle text-xs text-muted-foreground mt-1">
+                  Suggested: {suggested} (covers open demand shortfall)
+                </p>
+              )}
             </div>
 
             <div>

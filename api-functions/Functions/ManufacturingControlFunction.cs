@@ -67,6 +67,10 @@ public class ManufacturingControlFunction
         if (body == null || body.ProductId <= 0 || body.OrderQty <= 0)
             return await BadRequestAsync(req, "productId and orderQty are required and must be > 0.");
 
+        if (body.OrderQty > WarehouseService.INVENTORY_MAX_QTY)
+            return await BadRequestAsync(req,
+                $"orderQty cannot exceed {WarehouseService.INVENTORY_MAX_QTY} — the maximum units the warehouse can hold per SKU (smallint limit).");
+
         // 1. Validate the root product is a finished good
         var productInfo = await _sim.ValidateFinishedGoodAsync(body.ProductId);
         if (productInfo == null)

@@ -127,6 +127,10 @@ public class SupplyChainControlFunction
         if (!pidEl.TryGetInt32(out int productId) || !qtyEl.TryGetInt32(out int qty) || qty <= 0)
             return await BadRequestAsync(req, "productId must be an integer; qty must be a positive integer.");
 
+        if (qty > WarehouseService.INVENTORY_MAX_QTY)
+            return await BadRequestAsync(req,
+                $"qty cannot exceed {WarehouseService.INVENTORY_MAX_QTY} — the maximum units the warehouse can hold per SKU (smallint limit).");
+
         var order = await _svc.PlaceOrderAsync(vendorId, productId, qty);
         if (order == null)
         {

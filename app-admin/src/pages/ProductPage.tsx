@@ -917,11 +917,15 @@ const ProductPage: React.FC = () => {
                         onChange={(e) => {
                           const v = Math.max(
                             0,
-                            Math.floor(Number(e.target.value) || 0),
+                            Math.min(
+                              32767,
+                              Math.floor(Number(e.target.value) || 0),
+                            ),
                           );
                           setStockQuantity(String(v));
                         }}
                         min="0"
+                        max="32767"
                         step="1"
                         className="doodle-input w-full"
                       />
