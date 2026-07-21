@@ -1,6 +1,6 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Bike } from 'lucide-react';
+import React from "react";
+import { Link } from "react-router-dom";
+import ManufacturingLogo from "@/components/ManufacturingLogo";
 
 const Footer: React.FC = () => {
   return (
@@ -9,8 +9,8 @@ const Footer: React.FC = () => {
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
             <Link to="/" className="flex items-center gap-2">
-              <div className="bg-doodle-bg p-1.5 border-2 border-doodle-bg">
-                <Bike className="w-5 h-5 text-doodle-text" />
+              <div>
+                <ManufacturingLogo className="w-7 h-7" />
               </div>
               <span className="font-doodle text-lg font-bold">
                 Adventure<span className="text-doodle-accent">Works</span>
@@ -21,7 +21,9 @@ const Footer: React.FC = () => {
 
           <div className="flex items-center gap-4 text-right">
             <span className="font-doodle text-xs opacity-50">v1.0.0</span>
-            <span className="font-doodle text-sm opacity-60">© {new Date().getFullYear()} Adventure Works</span>
+            <span className="font-doodle text-sm opacity-60">
+              © {new Date().getFullYear()} Adventure Works
+            </span>
           </div>
         </div>
       </div>

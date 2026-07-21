@@ -426,9 +426,28 @@ const SupplyChain: React.FC = () => {
                   ))}
                 </div>
               ) : !activeOrders.length ? (
-                <p className="text-muted-foreground text-sm text-center py-6">
-                  No active orders. Place orders from a vendor's detail page.
-                </p>
+                <div className="py-6 space-y-1 text-center">
+                  <p className="text-muted-foreground text-sm">
+                    No active orders. Place orders from a vendor's detail page.
+                  </p>
+                  <p className="text-xs text-muted-foreground/70">
+                    AI-placed orders progress quickly in the simulation — check
+                    the{" "}
+                    <button
+                      className="underline underline-offset-2 hover:text-foreground transition-colors"
+                      onClick={() =>
+                        (
+                          document.querySelector(
+                            '[value="history"]',
+                          ) as HTMLElement | null
+                        )?.click()
+                      }
+                    >
+                      History tab
+                    </button>{" "}
+                    to see recently completed orders.
+                  </p>
+                </div>
               ) : (
                 <Table>
                   <TableHeader>

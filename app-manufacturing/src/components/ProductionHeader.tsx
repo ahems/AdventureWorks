@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Menu,
   X,
-  Bike,
   ClipboardList,
   Cog,
   Calendar,
@@ -21,9 +20,11 @@ import {
   Settings as SettingsIcon,
   LogOut,
   Warehouse,
+  Bot,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import AppBreadcrumb from "@/components/AppBreadcrumb";
+import ManufacturingLogo from "@/components/ManufacturingLogo";
 import {
   Tooltip,
   TooltipTrigger,
@@ -106,7 +107,10 @@ const secondaryNavGroups = [
   },
   {
     label: "Admin",
-    items: [{ to: "/settings", label: "Settings", icon: SettingsIcon }],
+    items: [
+      { to: "/manufacturing-agent", label: "AI Agent", icon: Bot },
+      { to: "/settings", label: "Settings", icon: SettingsIcon },
+    ],
   },
 ];
 
@@ -145,8 +149,8 @@ const ProductionHeader: React.FC = () => {
         <div className="flex items-center justify-between h-16 md:h-20">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 group">
-            <div className="doodle-border-light p-1.5 group-hover:rotate-6 transition-transform">
-              <Bike className="w-6 h-6 md:w-8 md:h-8 text-doodle-text" />
+            <div className="group-hover:rotate-6 transition-transform">
+              <ManufacturingLogo className="w-8 h-8 md:w-10 md:h-10" />
             </div>
             <div className="flex flex-col">
               <span className="font-doodle text-lg md:text-2xl font-bold text-doodle-text leading-tight">

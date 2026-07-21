@@ -445,14 +445,24 @@ builder.Services.AddScoped<OrderGenerationService>(sp =>
     return new OrderGenerationService(connectionString, sp.GetRequiredService<ILogger<OrderGenerationService>>());
 });
 
-// Register ManufacturingAgentService: autonomous agent invoked by SQL change-tracking trigger
-builder.Services.AddScoped<ManufacturingAgentService>(sp =>
+// Register manufacturing agent infrastructure (replaces ManufacturingAgentService).
+// Orders are now queued to manufacturing-agent-queue; the queue trigger invokes the hosted agent.
+builder.Services.AddScoped<ManufacturingAgentConfigService>(sp =>
+    new ManufacturingAgentConfigService(sp.GetRequiredService<ILogger<ManufacturingAgentConfigService>>()));
+
+builder.Services.AddScoped<ManufacturingProposalService>(sp =>
+    new ManufacturingProposalService(sp.GetRequiredService<ILogger<ManufacturingProposalService>>()));
+
+builder.Services.AddScoped<ManufacturingAgentRunService>(sp =>
 {
-    var configuration = sp.GetRequiredService<IConfiguration>();
-    var logger = sp.GetRequiredService<ILogger<ManufacturingAgentService>>();
-    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
-    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
-    return new ManufacturingAgentService(logger, configuration, foundryClient, telemetryClient);
+    var configuration   = sp.GetRequiredService<IConfiguration>();
+    var accountName     = configuration["AzureWebJobsStorage:accountName"] ?? string.Empty;
+    var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{accountName}.table.core.windows.net";
+    var queueServiceUri = configuration["AzureWebJobsStorage:queueServiceUri"]
+        ?? $"https://{accountName}.queue.core.windows.net";
+    var logger = sp.GetRequiredService<ILogger<ManufacturingAgentRunService>>();
+    return new ManufacturingAgentRunService(logger, tableServiceUri, queueServiceUri);
 });
 
 // Register OrderGenerationAgentService: AI+Foundry orchestration for order generation wizard

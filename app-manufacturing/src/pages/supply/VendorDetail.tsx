@@ -74,8 +74,11 @@ import type {
 } from "@/types/production";
 import { toast } from "sonner";
 import BlockedWorkOrdersDialog from "@/components/BlockedWorkOrdersDialog";
+import AgentControlBanner from "@/components/AgentControlBanner";
+import { useManufacturingAgentMode } from "@/hooks/useManufacturingAgentMode";
 
 const VendorDetailPage: React.FC = () => {
+  const { isAgentActive } = useManufacturingAgentMode();
   const { vendorId } = useParams<{ vendorId: string }>();
   const qc = useQueryClient();
   const [searchParams] = useSearchParams();
@@ -309,6 +312,7 @@ const VendorDetailPage: React.FC = () => {
 
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-6">
+      <AgentControlBanner />
       <Link
         to="/supply"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary"
@@ -476,7 +480,16 @@ const VendorDetailPage: React.FC = () => {
                     </Button>
                     <Button
                       onClick={() => orderMutation.mutate()}
-                      disabled={orderMutation.isPending || !quote?.inStock}
+                      disabled={
+                        orderMutation.isPending ||
+                        !quote?.inStock ||
+                        isAgentActive
+                      }
+                      title={
+                        isAgentActive
+                          ? "Disabled — AI agent is controlling supply orders"
+                          : undefined
+                      }
                     >
                       {orderMutation.isPending ? (
                         <RefreshCw className="h-4 w-4 mr-1 animate-spin" />

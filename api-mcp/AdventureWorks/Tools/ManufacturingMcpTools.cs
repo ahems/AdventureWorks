@@ -514,4 +514,39 @@ public class ManufacturingMcpTools
             throw;
         }
     }
+
+    [McpServerTool]
+    [Description(
+        "Propose starting a manufacturing run for a product, pending human approval. " +
+        "Use this instead of BeginManufacturingRun when the agent mode is ProposePending. " +
+        "The proposal is saved and must be approved in the Manufacturing Agent Control page before production begins. " +
+        "Provide a clear rationale explaining why this run is recommended based on inventory levels.")]
+    public async Task<string> ProposeManufacturingRun(
+        [Description("ProductID of the finished good to manufacture. Must have MakeFlag=true.")] int productId,
+        [Description("Number of units to produce.")] int qty,
+        [Description("Rationale for the proposal — why is this production run recommended? Include inventory levels and demand context.")]
+        string rationale,
+        [Description("The SalesOrderID that triggered this analysis.")] int salesOrderId,
+        [Description("The agent RunID for this invocation (from the invocation payload).")] string runId)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_ProposeManufacturingRun");
+        operation.Telemetry.Properties["productId"] = productId.ToString();
+        operation.Telemetry.Properties["qty"] = qty.ToString();
+        try
+        {
+            var result = await _manufacturing.ProposeManufacturingRunAsync(
+                productId, qty, rationale, salesOrderId, runId);
+            operation.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
+                { { "tool", "ProposeManufacturingRun" }, { "productId", productId.ToString() } });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string>
+                { { "tool", "ProposeManufacturingRun" }, { "productId", productId.ToString() } });
+            throw;
+        }
+    }
 }

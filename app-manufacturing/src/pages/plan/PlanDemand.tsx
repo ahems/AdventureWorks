@@ -29,6 +29,8 @@ import {
 import { TableSkeleton } from "@/components/LoadingSkeletons";
 import ScheduleProductionDialog from "@/components/ScheduleProductionDialog";
 import ReorderFromSupplierDialog from "@/components/ReorderFromSupplierDialog";
+import AgentControlBanner from "@/components/AgentControlBanner";
+import { useManufacturingAgentMode } from "@/hooks/useManufacturingAgentMode";
 import { SALES_ORDER_STATUS, type Product } from "@/types/production";
 
 const fmtDate = (s: string) => new Date(s).toLocaleDateString();
@@ -62,6 +64,7 @@ const KpiTile = ({
 );
 
 const PlanDemand = () => {
+  const { isAgentActive } = useManufacturingAgentMode();
   const [expandedProduct, setExpandedProduct] = useState<number | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [channelFilter, setChannelFilter] = useState<"all" | "eshop" | "b2b">(
@@ -349,6 +352,7 @@ const PlanDemand = () => {
 
   return (
     <div className="container mx-auto px-4 py-8 space-y-8">
+      <AgentControlBanner />
       <div>
         <h1 className="font-doodle text-2xl font-bold text-doodle-text">
           3. Plan — Customer Demand
@@ -527,7 +531,13 @@ const PlanDemand = () => {
                                   setScheduleSource("open-demand");
                                   setScheduleProductId(row.productId);
                                 }}
-                                className="doodle-button doodle-button-primary text-xs inline-flex items-center gap-1 py-1 px-2"
+                                disabled={isAgentActive}
+                                title={
+                                  isAgentActive
+                                    ? "Disabled — AI agent is controlling production"
+                                    : undefined
+                                }
+                                className="doodle-button doodle-button-primary text-xs inline-flex items-center gap-1 py-1 px-2 disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <CalendarPlus className="w-3.5 h-3.5" />{" "}
                                 Schedule
@@ -541,7 +551,15 @@ const PlanDemand = () => {
                                   e.stopPropagation();
                                   setReorderProductId(row.productId);
                                 }}
-                                disabled={reorderProductId === row.productId}
+                                disabled={
+                                  reorderProductId === row.productId ||
+                                  isAgentActive
+                                }
+                                title={
+                                  isAgentActive
+                                    ? "Disabled — AI agent is controlling supply orders"
+                                    : undefined
+                                }
                                 className="doodle-button doodle-button-primary text-xs inline-flex items-center gap-1 py-1 px-2 disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <Truck className="w-3.5 h-3.5" /> Re-order

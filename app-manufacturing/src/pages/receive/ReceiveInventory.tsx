@@ -63,6 +63,8 @@ import type {
 } from "@/types/production";
 import { TableSkeleton } from "@/components/LoadingSkeletons";
 import { Badge } from "@/components/ui/badge";
+import AgentControlBanner from "@/components/AgentControlBanner";
+import { useManufacturingAgentMode } from "@/hooks/useManufacturingAgentMode";
 
 // ── helpers ──
 function collectComponentIds(
@@ -1091,6 +1093,7 @@ const ReorderComponentsDialog = ({
 };
 
 const ReceiveInventory = () => {
+  const { isAgentActive } = useManufacturingAgentMode();
   const [mode, setMode] = useState<"location" | "product" | "orders">(
     "location",
   );
@@ -1464,6 +1467,7 @@ const ReceiveInventory = () => {
 
   return (
     <div className="container mx-auto px-4 py-8 space-y-6">
+      <AgentControlBanner />
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -1556,7 +1560,13 @@ const ReceiveInventory = () => {
                         onClick={() =>
                           s.product && setReorderProduct(s.product)
                         }
-                        className="doodle-button doodle-button-primary text-xs py-1 px-2 shrink-0"
+                        disabled={isAgentActive}
+                        title={
+                          isAgentActive
+                            ? "Disabled — AI agent is controlling supply orders"
+                            : undefined
+                        }
+                        className="doodle-button doodle-button-primary text-xs py-1 px-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Plus className="w-3 h-3 inline mr-1" />
                         Reorder
@@ -1872,7 +1882,13 @@ const ReceiveInventory = () => {
                                     {prod && !prod.MakeFlag && (
                                       <button
                                         onClick={() => setReorderProduct(prod)}
-                                        className="doodle-button text-xs py-1 px-2"
+                                        disabled={isAgentActive}
+                                        title={
+                                          isAgentActive
+                                            ? "Disabled — AI agent is controlling supply orders"
+                                            : undefined
+                                        }
+                                        className="doodle-button text-xs py-1 px-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                       >
                                         <RefreshCw className="w-3 h-3 inline mr-1" />
                                         Reorder
@@ -2170,8 +2186,13 @@ const ReceiveInventory = () => {
                                     e.stopPropagation();
                                     setReorderComponentsProduct(fg);
                                   }}
-                                  className="doodle-button text-xs py-1 px-2 flex items-center gap-1"
-                                  title="Order missing components from supply chain"
+                                  disabled={isAgentActive}
+                                  title={
+                                    isAgentActive
+                                      ? "Disabled — AI agent is controlling supply orders"
+                                      : "Order missing components from supply chain"
+                                  }
+                                  className="doodle-button text-xs py-1 px-2 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   <ShoppingCart className="w-3 h-3" /> Reorder
                                   Parts

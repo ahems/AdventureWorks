@@ -104,11 +104,13 @@ interface CreateProductionOrderDialogProps {
   prefillQty?: number;
   /** Called when production is successfully initiated */
   onSuccess?: () => void;
+  /** When true, renders a disabled button — used when the AI agent is controlling production */
+  disabled?: boolean;
 }
 
 const CreateProductionOrderDialog: React.FC<
   CreateProductionOrderDialogProps
-> = ({ trigger, prefillProductId, prefillQty, onSuccess }) => {
+> = ({ trigger, prefillProductId, prefillQty, onSuccess, disabled }) => {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<Step>("category");
   const [categoryId, setCategoryId] = useState<number | null>(null);
@@ -380,8 +382,14 @@ const CreateProductionOrderDialog: React.FC<
         </span>
       ) : (
         <button
-          onClick={handleOpen}
-          className="doodle-button doodle-button-primary text-sm inline-flex items-center gap-1.5"
+          onClick={disabled ? undefined : handleOpen}
+          disabled={disabled}
+          title={
+            disabled
+              ? "Disabled — AI agent is controlling production"
+              : undefined
+          }
+          className="doodle-button doodle-button-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Plus className="w-4 h-4" /> New Production Order
         </button>

@@ -135,9 +135,15 @@ public class SupplyChainControlFunction
         if (order == null)
         {
             var quote = await _svc.GetQuoteAsync(vendorId, productId, qty);
-            string msg = quote == null
-                ? $"Vendor '{vendorId}' or ProductID {productId} not found."
-                : $"Insufficient stock. Available: {quote.StockAvailable}, requested: {qty}.";
+            string msg;
+            if (quote == null)
+                msg = $"Vendor '{vendorId}' or ProductID {productId} not found in the supply catalog.";
+            else if (qty < quote.MinOrderQty)
+                msg = $"Quantity too low. Minimum order for ProductID {productId} from vendor '{vendorId}' is {quote.MinOrderQty} units (requested: {qty}).";
+            else if (qty > quote.MaxOrderQty)
+                msg = $"Quantity too high. Maximum order is {quote.MaxOrderQty} units (requested: {qty}).";
+            else
+                msg = $"Insufficient stock. Available: {quote.StockAvailable}, requested: {qty}.";
             return await UnprocessableAsync(req, msg);
         }
 

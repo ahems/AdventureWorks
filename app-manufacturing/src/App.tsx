@@ -47,6 +47,7 @@ import ReceiveProductInventory from "@/pages/receive/ReceiveProductInventory";
 import ReceiveCosting from "@/pages/receive/ReceiveCosting";
 import ReceiveProductCost from "@/pages/receive/ReceiveProductCost";
 import SettingsPage from "@/pages/Settings";
+import ManufacturingAgentPage from "@/pages/ManufacturingAgentPage";
 import WarehouseDashboard from "@/pages/warehouse/WarehouseDashboard";
 import WarehouseFloor from "@/pages/warehouse/WarehouseFloor";
 import WarehouseWorkforce from "@/pages/warehouse/WarehouseWorkforce";
@@ -162,6 +163,10 @@ const App = () => (
                 />
 
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route
+                  path="/manufacturing-agent"
+                  element={<ManufacturingAgentPage />}
+                />
 
                 <Route path="/warehouse" element={<WarehouseDashboard />} />
                 <Route path="/warehouse/floor" element={<WarehouseFloor />} />

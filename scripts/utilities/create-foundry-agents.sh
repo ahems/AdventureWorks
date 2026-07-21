@@ -17,7 +17,6 @@
 #   bash scripts/utilities/agents/eshop-workflow-agent.sh
 #   bash scripts/utilities/agents/admin-promotion-workflow-agent.sh
 #   bash scripts/utilities/agents/admin-order-workflow-agent.sh
-#   bash scripts/utilities/agents/manufacturing-agent.sh
 #
 # Prerequisites:
 #   - azd environment populated (run after `azd provision`)
@@ -90,8 +89,10 @@ echo ""
 bash "$SCRIPT_DIR/agents/admin-promotion-workflow-agent.sh"
 echo ""
 bash "$SCRIPT_DIR/agents/admin-order-workflow-agent.sh"
-echo ""
-bash "$SCRIPT_DIR/agents/manufacturing-agent.sh"
+
+# NOTE: manufacturing-agent is a Foundry Hosted Agent deployed via:
+#   cd manufacturing-agent/mcp-tools && azd deploy
+# It is no longer a kind:prompt agent managed by this script.
 
 echo ""
 echo "=========================================="
@@ -106,10 +107,12 @@ echo "  AI_AGENT_HELP_ME_CHOOSE_ID         = $(get_azd_value AI_AGENT_HELP_ME_CH
 echo "  AI_AGENT_WORKFLOW_CHAT_ID          = $(get_azd_value AI_AGENT_WORKFLOW_CHAT_ID)"
 echo "  AI_AGENT_WORKFLOW_PROMOTION_ID     = $(get_azd_value AI_AGENT_WORKFLOW_PROMOTION_ID)"
 echo "  AI_AGENT_WORKFLOW_ORDER_ID         = $(get_azd_value AI_AGENT_WORKFLOW_ORDER_ID)"
-echo "  AI_AGENT_MANUFACTURING_ID          = $(get_azd_value AI_AGENT_MANUFACTURING_ID)"
 echo "  AI_AGENT_REVIEW_ID                 = $(get_azd_value AI_AGENT_REVIEW_ID)"
 echo "  AI_AGENT_TRANSLATION_ID            = $(get_azd_value AI_AGENT_TRANSLATION_ID)"
 echo "  AI_AGENT_REVIEW_BATCH_ID           = $(get_azd_value AI_AGENT_REVIEW_BATCH_ID)"
 echo "  AI_AGENT_REVIEW_ANALYSIS_ID        = $(get_azd_value AI_AGENT_REVIEW_ANALYSIS_ID)"
 echo "  AI_AGENT_EMAIL_CONTENT_ID          = $(get_azd_value AI_AGENT_EMAIL_CONTENT_ID)"
 echo "  AI_AGENT_CATALOG_SUGGESTION_ID     = $(get_azd_value AI_AGENT_CATALOG_SUGGESTION_ID)"
+echo ""
+echo "NOTE: manufacturing-agent is a Foundry Hosted Agent — deploy it separately:"
+echo "  cd manufacturing-agent/mcp-tools && azd deploy"

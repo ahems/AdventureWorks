@@ -287,4 +287,41 @@ public class SupplyChainMcpTools
             throw;
         }
     }
+
+    [McpServerTool]
+    [Description(
+        "Propose placing a supply order with a vendor, pending human approval. " +
+        "Use this instead of PlaceSupplyOrder when the agent mode is ProposePending. " +
+        "The proposal is saved and must be approved in the Manufacturing Agent Control page before the order is placed. " +
+        "Call GetSupplyQuote first to confirm availability and pricing, then include that context in the rationale.")]
+    public async Task<string> ProposeSupplyOrder(
+        [Description("The vendor ID to order from.")] string vendorId,
+        [Description("The ProductID of the component to order.")] int productId,
+        [Description("Quantity to order.")] int qty,
+        [Description("Rationale for the proposal — include stock levels, quote details, and why this vendor was chosen.")]
+        string rationale,
+        [Description("The SalesOrderID that triggered this analysis.")] int salesOrderId,
+        [Description("The agent RunID for this invocation (from the invocation payload).")] string runId)
+    {
+        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_ProposeSupplyOrder");
+        operation.Telemetry.Properties["vendorId"]  = vendorId;
+        operation.Telemetry.Properties["productId"] = productId.ToString();
+        operation.Telemetry.Properties["qty"]       = qty.ToString();
+        try
+        {
+            var result = await _supplyChain.ProposeSupplyOrderAsync(
+                vendorId, productId, qty, rationale, salesOrderId, runId);
+            operation.Telemetry.Success = true;
+            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
+                { { "tool", "ProposeSupplyOrder" }, { "vendorId", vendorId } });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            operation.Telemetry.Success = false;
+            _telemetryClient.TrackException(ex, new Dictionary<string, string>
+                { { "tool", "ProposeSupplyOrder" }, { "vendorId", vendorId } });
+            throw;
+        }
+    }
 }

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.ApplicationInsights;
@@ -491,6 +492,39 @@ public class OrderGenerationAgentService
         var cleaned = rawResponse.Trim();
         if (string.IsNullOrWhiteSpace(cleaned))
             throw new OrderPlanValidationException(OrderPlanFailureCodes.EmptyResponse, "AI returned an empty order plan response");
+
+        // Strip markdown code fences if the model added them
+        cleaned = Regex.Replace(cleaned, @"^```(?:json)?\s*", "", RegexOptions.Multiline);
+        cleaned = Regex.Replace(cleaned, @"```\s*$", "", RegexOptions.Multiline).Trim();
+
+        // Extract the first complete JSON object using brace-depth matching
+        var start = cleaned.IndexOf('{');
+        if (start < 0)
+            throw new OrderPlanValidationException(OrderPlanFailureCodes.InvalidJson, "AI order plan does not contain a JSON object");
+
+        int depth = 0;
+        bool inString = false;
+        bool escape = false;
+        int end = -1;
+        for (int i = start; i < cleaned.Length; i++)
+        {
+            char c = cleaned[i];
+            if (escape) { escape = false; continue; }
+            if (c == '\\' && inString) { escape = true; continue; }
+            if (c == '"') { inString = !inString; continue; }
+            if (inString) continue;
+            if (c == '{') depth++;
+            else if (c == '}')
+            {
+                depth--;
+                if (depth == 0) { end = i; break; }
+            }
+        }
+
+        if (end < 0)
+            throw new OrderPlanValidationException(OrderPlanFailureCodes.InvalidJson, "AI order plan contains an unclosed JSON object");
+
+        cleaned = cleaned[start..(end + 1)];
 
         using var document = JsonDocument.Parse(cleaned);
         if (document.RootElement.ValueKind != JsonValueKind.Object)

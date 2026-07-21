@@ -79,6 +79,8 @@ const MISSING_BOM_THRESHOLD = 1_000_000;
 const isMissingBom = (p: { maxProducibleNow: number }) =>
   p.maxProducibleNow >= MISSING_BOM_THRESHOLD;
 import CreateProductionOrderDialog from "@/components/CreateProductionOrderDialog";
+import AgentControlBanner from "@/components/AgentControlBanner";
+import { useManufacturingAgentMode } from "@/hooks/useManufacturingAgentMode";
 import {
   fetchPlanCatalog,
   fetchShortageForecast,
@@ -132,6 +134,7 @@ const urgencyBadge = (level: string) => {
 };
 
 const PlanningIntelligence: React.FC = () => {
+  const { isAgentActive } = useManufacturingAgentMode();
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState("catalog");
@@ -482,6 +485,7 @@ const PlanningIntelligence: React.FC = () => {
 
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-6">
+      <AgentControlBanner />
       <div>
         <h1 className="text-2xl md:text-3xl font-bold font-doodle flex items-center gap-2">
           <BarChart3 className="h-7 w-7 text-primary" /> Planning Intelligence
@@ -795,6 +799,7 @@ const PlanningIntelligence: React.FC = () => {
                                           </Badge>
                                         ) : (
                                           <CreateProductionOrderDialog
+                                            disabled={isAgentActive}
                                             prefillProductId={p.productId}
                                             prefillQty={Math.max(
                                               1,
@@ -1266,6 +1271,7 @@ const PlanningIntelligence: React.FC = () => {
                             </Table>
                             <div className="mt-3 flex justify-end">
                               <CreateProductionOrderDialog
+                                disabled={isAgentActive}
                                 prefillProductId={p.productId}
                                 prefillQty={feasibility?.requestedQty ?? 10}
                                 trigger={

@@ -52,6 +52,8 @@ review_analysis_id=$(get_azd_value "AI_AGENT_REVIEW_ANALYSIS_ID")
 email_content_id=$(get_azd_value "AI_AGENT_EMAIL_CONTENT_ID")
 catalog_suggestion_id=$(get_azd_value "AI_AGENT_CATALOG_SUGGESTION_ID")
 mcp_service_url=$(get_azd_value "MCP_SERVICE_URL")
+manufacturing_agent_endpoint=$(get_azd_value "MANUFACTURING_AGENT_ENDPOINT")
+api_functions_url=$(get_azd_value "API_FUNCTIONS_URL")
 
 if [[ -z "$chat_id" ]] || [[ -z "$order_id" ]] || [[ -z "$promotion_id" ]] || [[ -z "$help_me_choose_id" ]] || [[ -z "$cart_recovery_id" ]] || [[ -z "$product_content_id" ]]; then
   color_yellow "Warning: One or more agent IDs not found in azd environment."
@@ -91,6 +93,8 @@ if az functionapp config appsettings set \
     ${email_content_id:+"AI_AGENT_EMAIL_CONTENT_ID=$email_content_id"} \
     ${catalog_suggestion_id:+"AI_AGENT_CATALOG_SUGGESTION_ID=$catalog_suggestion_id"} \
     ${mcp_service_url:+"MCP_SERVICE_URL=$mcp_service_url"} \
+    ${manufacturing_agent_endpoint:+"MANUFACTURING_AGENT_ENDPOINT=$manufacturing_agent_endpoint"} \
+    ${api_functions_url:+"API_FUNCTIONS_URL=$api_functions_url"} \
   --output none; then
   color_green "✓ Successfully injected agent IDs into $functions_service_name"
   echo "  AI_AGENT_CHAT_ID                      = $chat_id"
@@ -112,6 +116,8 @@ if az functionapp config appsettings set \
   [[ -n "$email_content_id" ]] && echo "  AI_AGENT_EMAIL_CONTENT_ID             = $email_content_id" || true
   [[ -n "$catalog_suggestion_id" ]] && echo "  AI_AGENT_CATALOG_SUGGESTION_ID        = $catalog_suggestion_id" || true
   [[ -n "$mcp_service_url" ]] && echo "  MCP_SERVICE_URL                       = $mcp_service_url" || true
+  [[ -n "$manufacturing_agent_endpoint" ]] && echo "  MANUFACTURING_AGENT_ENDPOINT          = $manufacturing_agent_endpoint" || true
+  [[ -n "$api_functions_url" ]] && echo "  API_FUNCTIONS_URL                     = $api_functions_url" || true
 else
   color_red "✗ Failed to update Function App settings."
   exit 1

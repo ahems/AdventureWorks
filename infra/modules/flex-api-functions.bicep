@@ -73,7 +73,15 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
       scaleAndConcurrency: {
         maximumInstanceCount: 5
         instanceMemoryMB: 2048
-        alwaysReady: []
+        alwaysReady: [
+          {
+            // Keep a dedicated instance for the SQL Change Tracking trigger.
+            // Without this, Flex Consumption scales it to zero and assigns a
+            // NoOpListener, causing new orders to be silently missed.
+            name: 'function:OrderPlacedSqlTrigger'
+            instanceCount: 1
+          }
+        ]
       }
       runtime: {
         name: 'dotnet-isolated'
@@ -189,6 +197,12 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'AI_AGENT_CATALOG_SUGGESTION_ID'
           value: agentCatalogSuggestionId
+        }
+        {
+          // Self-referencing URL so the queue trigger can POST step callbacks
+          // back to the Functions API without needing an external env var.
+          name: 'API_FUNCTIONS_URL'
+          value: 'https://${apiFunctionsName}.azurewebsites.net'
         }
       ]
     }

@@ -611,6 +611,26 @@ public class ManufacturingService
 
         return sb.ToString();
     }
+
+    // ── Agent proposals ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Creates a manufacturing run proposal for human review (ProposePending mode).
+    /// Returns the proposal ID on success.
+    /// </summary>
+    public async Task<string> ProposeManufacturingRunAsync(
+        int productId, int qty, string rationale, int salesOrderId, string runId)
+    {
+        var body = new { type = "manufacturing", productId, qty, rationale, salesOrderId, runId };
+        var resp = await _http.PostAsJsonAsync("api/manufacturing/proposals", body, _json);
+        if (!resp.IsSuccessStatusCode)
+            return $"Error creating manufacturing proposal: {resp.StatusCode} — {await resp.Content.ReadAsStringAsync()}";
+
+        var json = await resp.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        var proposalId = doc.RootElement.GetStringOrDefault("proposalId") ?? "(unknown)";
+        return $"Manufacturing proposal created. ProposalID={proposalId}. A human operator must approve this before production begins.";
+    }
 }
 
 /// <summary>

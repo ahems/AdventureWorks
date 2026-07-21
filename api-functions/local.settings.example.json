@@ -32,6 +32,8 @@
     "EMAIL_SENDER_DOMAIN": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.azurecomm.net",
     "APPLICATIONINSIGHTS_CONNECTION_STRING": "InstrumentationKey=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx;IngestionEndpoint=https://eastus2-3.in.applicationinsights.azure.com/;LiveEndpoint=https://eastus2.livediagnostics.monitor.azure.com/;ApplicationId=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
     "chatGptDeploymentName": "gpt-4.1-mini",
-    "AZURE_CLIENT_ID": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    "AZURE_CLIENT_ID": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "MANUFACTURING_AGENT_ENDPOINT": "http://localhost:8088/",
+    "API_FUNCTIONS_URL": "https://av-functions-xxxxxxxxxxxx.azurecontainerapps.io"
   }
 }

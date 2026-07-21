@@ -4,6 +4,8 @@
 
 The **Manufacturing Agent** is an autonomous AI agent that fires when a new order is placed in the AdventureWorks eshop. Unlike the other agents (which are conversational and invoked by a user), this agent runs programmatically with no human in the loop.
 
+The agent is a **Foundry Hosted Agent** (`kind: hosted`) running .NET 10 code. It is controlled by a four-state autonomy mode that users configure from the Manufacturing app's Agent Control page.
+
 ## Architecture
 
 ```
@@ -16,39 +18,132 @@ Sales.SalesOrderHeader (INSERT)
 OrderPlacedSqlTrigger (Azure Function)
        ├── order-receipt-generation queue  ──► GenerateAndSendReceiptFunction
        ├── sales-order-status queue        ──► ProcessSalesOrderStatus_QueueTrigger
-       └── ManufacturingAgentService.InvokeFireAndForget()
-                  │
+       └── [mode check]
+            │  Off  → skip (no queue message, zero token consumption)
+            └► manufacturing-agent-queue
+                  │  ManufacturingAgentQueueTrigger
                   ▼
-         Azure AI Foundry (Responses API)
-                  │  uses MCP tools
+         Foundry Hosted Agent (manufacturing-agent)
+                  │  uses MCP tools (server-side via HostedMcpServerTool)
                   ├── ManufacturingMcpTools
                   └── SupplyChainMcpTools
 ```
 
+## Autonomy modes
+
+The agent supports four modes, configurable at runtime from the Agent Control page (`/manufacturing-agent`) in the manufacturing app:
+
+| Mode                  | Value | Behaviour                                                                                                      | Token cost         |
+| --------------------- | ----- | -------------------------------------------------------------------------------------------------------------- | ------------------ |
+| **Off**               | 0     | Agent is disabled. No queue messages enqueued, no AI tokens consumed. **Default.**                             | None               |
+| **Read-Only**         | 1     | Agent analyses inventory for each order and logs findings. No actions taken.                                   | ~1–3k tokens/order |
+| **Propose + Approve** | 2     | Agent proposes manufacturing runs and supply orders. Each proposal requires human approval before it executes. | ~2–5k tokens/order |
+| **Fully Autonomous**  | 3     | Agent executes manufacturing runs and supply orders directly. No human approval required.                      | ~2–5k tokens/order |
+
+### Switching modes
+
+1. Navigate to **Agent Control** in the manufacturing app sidebar.
+2. Select the desired mode from the four-option selector.
+3. Switching to Fully Autonomous requires confirmation.
+4. The mode takes effect immediately — the next order placed will use the new mode.
+
+> **Note:** Switching to Off clears the queue gate at the SQL trigger level. Any messages already in the queue will be discarded by the queue trigger without calling the hosted agent.
+
 ## How it works
 
 1. **SQL Change Tracking** watches `Sales.SalesOrderHeader` for INSERTs. Azure Functions polls for changes and fires `OrderPlacedSqlTrigger`.
-2. The trigger enqueues receipt generation and order status processing — replacing the two HTTP calls that `OrderConfirmationPage.tsx` used to make client-side.
-3. The trigger calls `ManufacturingAgentService.InvokeFireAndForget()` which posts a message to the Azure AI Foundry Responses API and returns immediately. The agent run continues asynchronously.
-4. The agent uses `ManufacturingMcpTools` and `SupplyChainMcpTools` exposed by the MCP server to inspect inventory levels, check manufacturing feasibility, and review supply chain options.
+2. The trigger enqueues receipt generation and order status processing.
+3. If the agent mode is **Off**, the trigger returns immediately — no queue message is created and no tokens are consumed.
+4. Otherwise, a pending run record is created in Azure Table Storage and a message is enqueued on `manufacturing-agent-queue`.
+5. `ManufacturingAgentQueueTrigger` dequeues one message at a time (`batchSize: 1`), reads the current mode, and calls the Foundry Hosted Agent via the Responses protocol.
+6. The agent uses `ManufacturingMcpTools` and `SupplyChainMcpTools` to inspect inventory, assess manufacturing feasibility, and (in Propose/Autonomous modes) take or propose actions.
+7. Results are written to the run record and visible in the Agent Control activity feed.
 
-## Current behaviour (stub phase)
+## Bottleneck model
 
-The agent:
+The queue trigger processes one order at a time. When the shopping simulator runs at high volume, orders back up in `manufacturing-agent-queue` — exactly like work orders backing up at an understaffed shop floor location. The Agent Control page shows:
 
-- Acknowledges the order trigger
-- Calls `GetOrderDetails` and `CheckInventoryAvailability` for ordered products
-- Logs findings and any concerns about stock levels
-- **Does not** place supply orders or start manufacturing runs yet
+- **Queue depth** with a colour-coded bar (green → amber → red)
+- **Estimated drain time** at the current processing rate
+- **Retrying** entries when the agent hits token rate limits (exponential backoff: 10s → 20s → 40s → 80s → … → poison queue after 8 attempts)
 
 ## Configuration
 
-| Environment variable          | Description                                                 |
-| ----------------------------- | ----------------------------------------------------------- |
-| `AI_AGENT_MANUFACTURING_ID`   | Foundry agent ID (set automatically by `postprovision.sh`)  |
-| `AI_FOUNDRY_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint                           |
-| `SQL_CONNECTION_STRING`       | Azure SQL connection string (Active Directory Default auth) |
-| `AzureWebJobsStorage`         | Azure Storage connection for queue output bindings          |
+| Environment variable           | Description                                                       |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `MANUFACTURING_AGENT_ENDPOINT` | Foundry hosted agent responses endpoint (set by postdeploy.sh)    |
+| `API_FUNCTIONS_URL`            | Functions base URL for step callbacks (set by Bicep + postdeploy) |
+| `AI_FOUNDRY_PROJECT_ENDPOINT`  | Azure AI Foundry project endpoint                                 |
+| `SQL_CONNECTION_STRING`        | Azure SQL connection string (Active Directory Default auth)       |
+| `AzureWebJobsStorage__*`       | Storage account connection (Table Storage for run records, Queue) |
+
+## Table Storage
+
+Three tables are used (all in the `AzureWebJobsStorage` account):
+
+| Table                        | Content                                                                    |
+| ---------------------------- | -------------------------------------------------------------------------- |
+| `awManufacturingAgentConfig` | Single row: current mode                                                   |
+| `awManufacturingAgentRuns`   | One row per agent invocation — status, findings, tools used, step progress |
+| `awManufacturingProposals`   | Proposals created in ProposePending mode, with approve/reject status       |
+
+## Deploying the hosted agent
+
+The agent lives in `manufacturing-agent/mcp-tools/` and is deployed independently from the main `azd` project:
+
+```bash
+cd manufacturing-agent/mcp-tools
+azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME chat
+azd env set MCP_SERVICE_URL $(azd env get-value MCP_SERVICE_URL --cwd ../..)
+azd deploy
+```
+
+After deploy, set the endpoint in the main environment:
+
+```bash
+cd ../..
+azd env set MANUFACTURING_AGENT_ENDPOINT \
+  "https://<account>.services.ai.azure.com/api/projects/<project>/agents/manufacturing-agent/endpoint/protocols/openai/responses?api-version=v1"
+bash scripts/hooks/api-functions-postdeploy.sh
+```
+
+## Local development
+
+The SQL trigger does not fire locally unless you have a direct connection to Azure SQL with Change Tracking enabled. To test the queue pipeline locally:
+
+1. Start the hosted agent: `cd manufacturing-agent/mcp-tools && azd ai agent run --no-client`
+2. Start Azure Functions: `cd api-functions && func host start`
+3. Manually enqueue a base64-encoded message:
+
+```bash
+MSG=$(echo -n '{"salesOrderId":71774,"customerId":29825,"runId":"test-001","retryCount":0}' | base64)
+az storage message put --account-name <storage> --queue-name manufacturing-agent-queue --content "$MSG" --auth-mode login
+```
+
+Alternatively run the existing end-to-end test script:
+
+```bash
+bash tests/scripts/test-manufacturing-trigger.sh
+```
+
+## Telemetry
+
+Each queue trigger invocation logs to Application Insights:
+
+- `[AgentQueue] Invoking hosted agent for RunId=..., SalesOrderId=..., Mode=...`
+- `[AgentQueue] RunId=... completed. Findings: ...`
+- `[AgentQueue] Agent is Off — discarding RunId=...` (when mode is Off)
+
+Query recent activity:
+
+```kusto
+traces
+| where timestamp > ago(1h)
+| where message contains "[AgentQueue]"
+| order by timestamp desc
+```
+
+| `AzureWebJobsStorage` | Azure Storage connection for queue output bindings |
 
 ## Creating the agent
 

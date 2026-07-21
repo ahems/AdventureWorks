@@ -1,11 +1,12 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Settings, Warehouse } from "lucide-react";
+import { Settings, Warehouse, Bot } from "lucide-react";
 import SimulationControlCard from "@/components/settings/SimulationControlCard";
 import VendorRestockCard from "@/components/settings/VendorRestockCard";
 import ScrapConfigPanel from "@/components/settings/ScrapConfigPanel";
 import LocationConfigPanel from "@/components/settings/LocationConfigPanel";
 import SupplyChainTimingCard from "@/components/settings/SupplyChainTimingCard";
+import { AgentQueueCard } from "@/components/settings/AgentQueueCard";
 
 const SettingsPage: React.FC = () => {
   return (
@@ -59,6 +60,19 @@ const SettingsPage: React.FC = () => {
         >
           <Warehouse className="h-4 w-4" /> Warehouse Configuration
         </Link>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-doodle text-lg text-doodle-text flex items-center gap-2">
+          <Bot className="h-5 w-5" /> AI Manufacturing Agent
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          The AI agent analyses each new order for inventory and manufacturing
+          impact. Use the controls below to drain the order queue or clear
+          permanently-failed items. To change the agent's autonomy mode, use the
+          Agent Control page.
+        </p>
+        <AgentQueueCard />
       </section>
     </div>
   );
