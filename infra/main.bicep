@@ -78,6 +78,18 @@ module communication 'modules/communication.bicep' = {
   ]
 }
 
+module webpubsub 'modules/webpubsub.bicep' = {
+  name: 'Deploy-Web-PubSub'
+  params: {
+    webPubSubName: 'av-wps-${resourceToken}'
+    location: location
+    identityName: identityName
+  }
+  dependsOn: [
+    identity
+  ]
+}
+
 module aifoundry 'modules/aiservices.bicep' = {
   name: 'Deploy-AI-Foundry'
   params: {
@@ -246,6 +258,7 @@ module containerAppApiFunctions 'modules/flex-api-functions.bicep' = {
     communicationServiceEndpoint: communication.outputs.communicationServiceEndpoint
     emailSenderDomain: communication.outputs.senderDomain
     foundryProjectEndpoint: aifoundry.outputs.projectEndpoint
+    webPubSubHostName: webpubsub.outputs.webPubSubHostName
   }
 }
 
@@ -282,6 +295,7 @@ module staticWebAppFrontend 'modules/swa-app.bicep' = {
     apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
     apiMcpUrl: containerAppApiMcp.outputs.apiMcpUrl
     appInsightsConnectionString: appinsights.outputs.connectionString
+    webPubSubHostName: webpubsub.outputs.webPubSubHostName
   }
 }
 
@@ -318,6 +332,7 @@ module containerAppAdmin 'modules/aca-app-admin.bicep' = {
     appUrl: staticWebAppFrontend.outputs.appRedirectUri
     mcpInspectorUrl: containerAppMcpInspector.outputs.mcpInspectorUrl
     appManufacturingUrl: containerAppManufacturing.outputs.appManufacturingUrl
+    webPubSubHostName: webpubsub.outputs.webPubSubHostName
     minReplica: 0
     maxReplica: 3
     revisionSuffix: revisionSuffix
@@ -336,6 +351,7 @@ module containerAppManufacturing 'modules/aca-app-manufacturing.bicep' = {
     apiUrl: containerAppApi.outputs.apiUrl
     apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
     appInsightsConnectionString: appinsights.outputs.connectionString
+    webPubSubHostName: webpubsub.outputs.webPubSubHostName
     minReplica: 0
     maxReplica: 3
     revisionSuffix: revisionSuffix
@@ -401,6 +417,9 @@ output PROJECT_RESOURCE_ID string = aifoundry.outputs.projectResourceId
 output AI_FOUNDRY_PROJECT_ENDPOINT string = aifoundry.outputs.projectEndpoint
 output chatGptDeploymentName string = chatGptDeploymentName
 output CONTAINER_APP_ENVIRONMENT_NAME string = containerApp.outputs.containerAppEnvName
+
+// Web PubSub outputs (real-time push notifications)
+output WEB_PUBSUB_HOST_NAME string = webpubsub.outputs.webPubSubHostName
 
 // Playwright Workspaces outputs (Azure LoadTest Service)
 output PLAYWRIGHT_WORKSPACE_ID string = playwright.outputs.playwrightWorkspaceId

@@ -11,7 +11,7 @@ export const useShoppingCart = (shoppingCartId: string | null) => {
     staleTime: 0, // Always fetch fresh data
     refetchOnMount: "always", // Force refetch when component mounts
     refetchOnWindowFocus: true, // Refetch when window gains focus
-    refetchInterval: 1000, // Poll every 1 second to catch updates quickly
+    refetchInterval: 60_000, // Slow fallback — Web PubSub handles real-time
     retry: 3, // Retry failed requests
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
   });

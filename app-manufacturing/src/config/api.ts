@@ -15,6 +15,8 @@ type AppWindow = Window & {
   APP_CONFIG?: {
     ODATA_BASE?: string;
     MANUFACTURING_BASE?: string;
+    API_FUNCTIONS_URL?: string;
+    WEB_PUBSUB_HOST_NAME?: string;
   };
 };
 
@@ -33,3 +35,13 @@ export const MANUFACTURING_BASE: string =
   runtimeConfig?.MANUFACTURING_BASE ||
   (import.meta.env.VITE_MANUFACTURING_BASE as string | undefined) ||
   DEFAULT_MANUFACTURING_BASE;
+
+/** Negotiate URL for Web PubSub real-time push. Empty string = disabled. */
+export const WEB_PUBSUB_NEGOTIATE_URL: string = (() => {
+  const functionsBase =
+    runtimeConfig?.API_FUNCTIONS_URL ||
+    runtimeConfig?.MANUFACTURING_BASE?.replace(/\/api\/?$/, "") ||
+    (import.meta.env.VITE_API_FUNCTIONS_URL as string | undefined) ||
+    "http://localhost:7071";
+  return functionsBase.replace(/\/$/, "") + "/api/webpubsub/negotiate";
+})();

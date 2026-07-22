@@ -24,13 +24,16 @@ public class ManufacturingAgentRunFunctions
 
     private readonly ILogger<ManufacturingAgentRunFunctions> _logger;
     private readonly ManufacturingAgentRunService _runService;
+    private readonly WebPubSubService _webPubSub;
 
     public ManufacturingAgentRunFunctions(
         ILogger<ManufacturingAgentRunFunctions> logger,
-        ManufacturingAgentRunService runService)
+        ManufacturingAgentRunService runService,
+        WebPubSubService webPubSub)
     {
         _logger     = logger;
         _runService = runService;
+        _webPubSub  = webPubSub;
     }
 
     // ── GET /api/manufacturing/agent-runs ─────────────────────────────────────
@@ -91,6 +94,14 @@ public class ManufacturingAgentRunFunctions
         else if (update.Status == "completed")
             await _runService.CompleteStepAsync(id, update.Key);
 
+        await _webPubSub.SendToGroupAsync("manufacturing-agent", new
+        {
+            @event = "step-updated",
+            runId = id,
+            key = update.Key,
+            status = update.Status
+        });
+
         return req.CreateResponse(HttpStatusCode.NoContent);
     }
 
@@ -116,6 +127,7 @@ public class ManufacturingAgentRunFunctions
     {
         await _runService.ClearQueueAsync();
         _logger.LogInformation("[AgentRun] Main agent queue cleared via API.");
+        await _webPubSub.SendToGroupAsync("manufacturing-agent", new { @event = "queue-cleared" });
         return req.CreateResponse(HttpStatusCode.NoContent);
     }
 
@@ -128,6 +140,7 @@ public class ManufacturingAgentRunFunctions
     {
         await _runService.ClearPoisonQueueAsync();
         _logger.LogInformation("[AgentRun] Poison queue cleared via API.");
+        await _webPubSub.SendToGroupAsync("manufacturing-agent", new { @event = "poison-queue-cleared" });
         return req.CreateResponse(HttpStatusCode.NoContent);
     }
 

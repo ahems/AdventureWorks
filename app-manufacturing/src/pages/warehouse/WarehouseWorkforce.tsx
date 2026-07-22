@@ -39,13 +39,13 @@ const WarehouseWorkforce: React.FC = () => {
   const { data: snapshot, isLoading: snapshotLoading } = useQuery({
     queryKey: ["warehouse-workforce"],
     queryFn: fetchWarehouseWorkforce,
-    refetchInterval: 5000,
+    refetchInterval: 60_000,
   });
 
   const { data: workers, isLoading: workersLoading } = useQuery({
     queryKey: ["warehouse-workforce-detail"],
     queryFn: fetchWarehouseWorkforceDetail,
-    refetchInterval: 5000,
+    refetchInterval: 60_000,
   });
 
   const groupedByShift = React.useMemo(() => {

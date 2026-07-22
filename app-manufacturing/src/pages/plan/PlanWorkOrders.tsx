@@ -231,11 +231,11 @@ const PlanWorkOrders = () => {
     queryKey: ["active-bom"],
     queryFn: fetchActiveBOM,
   });
-  // Poll active ops from simulation to know which WOs are truly in progress
+  // Active ops from simulation — real-time via Web PubSub, 60s fallback
   const { data: activeOps } = useQuery({
     queryKey: ["active-operations"],
     queryFn: fetchActiveOperations,
-    refetchInterval: 5000,
+    refetchInterval: 60_000,
   });
 
   const productMap = useMemo(() => {

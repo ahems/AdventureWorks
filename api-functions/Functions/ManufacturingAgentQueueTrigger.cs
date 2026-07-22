@@ -50,6 +50,7 @@ public class ManufacturingAgentQueueTrigger
     private readonly ManufacturingAgentRunService            _runService;
     private readonly IHttpClientFactory                      _httpClientFactory;
     private readonly TokenCredential                         _credential;
+    private readonly WebPubSubService                        _webPubSub;
     private readonly string                                  _agentEndpoint;
     private readonly string                                  _functionsBaseUrl;
     private readonly string                                  _queueServiceUri;
@@ -63,6 +64,7 @@ public class ManufacturingAgentQueueTrigger
         ManufacturingAgentRunService runService,
         IHttpClientFactory httpClientFactory,
         DefaultAzureCredential credential,
+        WebPubSubService webPubSub,
         IConfiguration configuration)
     {
         _logger            = logger;
@@ -70,6 +72,7 @@ public class ManufacturingAgentQueueTrigger
         _runService        = runService;
         _httpClientFactory = httpClientFactory;
         _credential        = credential;
+        _webPubSub         = webPubSub;
 
         _agentEndpoint  = configuration["MANUFACTURING_AGENT_ENDPOINT"] ?? string.Empty;
         _functionsBaseUrl = (configuration["API_FUNCTIONS_URL"] ?? string.Empty).TrimEnd('/');
@@ -133,6 +136,13 @@ public class ManufacturingAgentQueueTrigger
 
         await _runService.StartRunAsync(msg.RunId);
 
+        await _webPubSub.SendToGroupAsync("manufacturing-agent", new
+        {
+            @event = "run-started",
+            runId = msg.RunId,
+            salesOrderId = msg.SalesOrderId
+        });
+
         _logger.LogInformation(
             "[AgentQueue] Invoking hosted agent for RunId={RunId}, SalesOrderId={SalesOrderId}, Mode={Mode}, Attempt={Attempt}",
             msg.RunId, msg.SalesOrderId, mode, msg.RetryCount + 1);
@@ -165,6 +175,14 @@ public class ManufacturingAgentQueueTrigger
                 result.FindingsSummary?.Length > 120
                     ? result.FindingsSummary[..120] + "…"
                     : result.FindingsSummary ?? "(none)");
+
+            await _webPubSub.SendToGroupAsync("manufacturing-agent", new
+            {
+                @event = "run-completed",
+                runId = msg.RunId,
+                salesOrderId = msg.SalesOrderId,
+                status = "completed"
+            });
         }
         catch (ManufacturingAgentThrottledException ex)
         {

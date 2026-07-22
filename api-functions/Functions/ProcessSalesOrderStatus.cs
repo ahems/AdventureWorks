@@ -20,6 +20,7 @@ public class ProcessSalesOrderStatus
     private readonly BankService _bankService;
     private readonly OrderPipelineConfigService _pipelineConfig;
     private readonly WarehouseService? _warehouse;
+    private readonly WebPubSubService _webPubSub;
     private readonly bool _emailEnabled;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -32,6 +33,7 @@ public class ProcessSalesOrderStatus
         EmailService emailService,
         BankService bankService,
         OrderPipelineConfigService pipelineConfig,
+        WebPubSubService webPubSub,
         WarehouseService? warehouse = null)
     {
         _logger = logger;
@@ -39,6 +41,7 @@ public class ProcessSalesOrderStatus
         _emailService = emailService;
         _bankService = bankService;
         _pipelineConfig = pipelineConfig;
+        _webPubSub = webPubSub;
         _warehouse = warehouse;
         _emailEnabled = string.Equals(
             Environment.GetEnvironmentVariable("ORDER_NOTIFICATIONS_EMAIL_ENABLED"),
@@ -98,6 +101,7 @@ public class ProcessSalesOrderStatus
                 await RecordSaleBankCreditAsync(salesOrderId);
             }
             _logger.LogInformation("Terminal status {Status} applied for SalesOrderID={SalesOrderId}", status, salesOrderId);
+            await _webPubSub.SendToGroupAsync("orders", new { @event = "order-status-changed", salesOrderId, newStatus = status });
             return;
         }
 
@@ -113,6 +117,7 @@ public class ProcessSalesOrderStatus
             await SendShippedEmailAsync(salesOrderId);
             await RecordSaleBankCreditAsync(salesOrderId);
             _logger.LogInformation("Backordered order moved to Shipped for SalesOrderID={SalesOrderId}", salesOrderId);
+            await _webPubSub.SendToGroupAsync("orders", new { @event = "order-status-changed", salesOrderId, newStatus = 5 });
             return;
         }
 
@@ -140,6 +145,7 @@ public class ProcessSalesOrderStatus
             await SendShippedEmailAsync(salesOrderId);
             await RecordSaleBankCreditAsync(salesOrderId);
             _logger.LogInformation("Order Shipped for SalesOrderID={SalesOrderId}", salesOrderId);
+            await _webPubSub.SendToGroupAsync("orders", new { @event = "order-status-changed", salesOrderId, newStatus = 5 });
             return;
         }
 

@@ -567,6 +567,16 @@ builder.Services.AddScoped<EmailService>(sp =>
         sp.GetRequiredService<ILogger<EmailService>>());
 });
 
+// Register WebPubSubService for real-time push notifications to browser clients
+builder.Services.AddSingleton<WebPubSubService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var hostName = configuration["WEB_PUBSUB_HOST_NAME"];
+    var credential = sp.GetRequiredService<DefaultAzureCredential>();
+    var logger = sp.GetRequiredService<ILogger<WebPubSubService>>();
+    return new WebPubSubService(hostName, credential, logger);
+});
+
 var app = builder.Build();
 
 // Ensure the simulation-order-queue exists before the QueueTrigger starts polling.

@@ -37,10 +37,10 @@ interface FinishedGoodRun {
 }
 
 const FinishedGoodTracker = () => {
-  const { data: workOrders, isLoading } = useQuery({ queryKey: ['work-orders'], queryFn: fetchWorkOrders, refetchInterval: 10000 });
+  const { data: workOrders, isLoading } = useQuery({ queryKey: ['work-orders'], queryFn: fetchWorkOrders, refetchInterval: 120_000 });
   const { data: products } = useQuery({ queryKey: ['manufactured-products'], queryFn: fetchManufacturedProducts });
   const { data: bom } = useQuery({ queryKey: ['active-bom'], queryFn: fetchActiveBOM });
-  const { data: activeOps } = useQuery({ queryKey: ['active-operations'], queryFn: fetchActiveOperations, refetchInterval: 5000 });
+  const { data: activeOps } = useQuery({ queryKey: ['active-operations'], queryFn: fetchActiveOperations, refetchInterval: 60_000 });
 
   const [expandedRun, setExpandedRun] = useState<number | null>(null);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('active');
@@ -152,7 +152,7 @@ const FinishedGoodTracker = () => {
     queries: (expandedRun_?.allWos || []).map(wo => ({
       queryKey: ['wo-routing', wo.WorkOrderID],
       queryFn: () => fetchWorkOrderRouting(wo.WorkOrderID),
-      refetchInterval: 5000,
+      refetchInterval: 60_000,
       staleTime: 3000,
     })),
   });

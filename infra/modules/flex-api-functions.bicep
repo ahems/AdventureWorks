@@ -22,6 +22,7 @@ param agentReviewBatchId string = ''
 param agentReviewAnalysisId string = ''
 param agentEmailContentId string = ''
 param agentCatalogSuggestionId string = ''
+param webPubSubHostName string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -203,6 +204,10 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
           // back to the Functions API without needing an external env var.
           name: 'API_FUNCTIONS_URL'
           value: 'https://${apiFunctionsName}.azurewebsites.net'
+        }
+        {
+          name: 'WEB_PUBSUB_HOST_NAME'
+          value: webPubSubHostName
         }
       ]
     }

@@ -22,16 +22,19 @@ public class PurchaseOrderProcessorFunction
 {
     private readonly SupplyChainService _svc;
     private readonly ILogger<PurchaseOrderProcessorFunction> _logger;
+    private readonly WebPubSubService _webPubSub;
 
     // Delay from pending → approved (sim minutes).
     private const int PendingToApprovedSimMin = 5;
 
     public PurchaseOrderProcessorFunction(
         SupplyChainService service,
-        ILogger<PurchaseOrderProcessorFunction> logger)
+        ILogger<PurchaseOrderProcessorFunction> logger,
+        WebPubSubService webPubSub)
     {
         _svc    = service;
         _logger = logger;
+        _webPubSub = webPubSub;
     }
 
     [Function("PurchaseOrderProcessor")]
@@ -129,6 +132,8 @@ public class PurchaseOrderProcessorFunction
         }
 
         _logger.LogInformation("Order {OrderId} → {Status}", msg.OrderId, resolvedTarget);
+
+        await _webPubSub.SendToGroupAsync("supply-chain", new { @event = "po-status-changed", purchaseOrderId = msg.OrderId, newStatus = resolvedTarget });
 
         // Schedule next step (only if we reached "approved" — complete/rejected are terminal)
         if (resolvedTarget == "approved")

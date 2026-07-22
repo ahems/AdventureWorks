@@ -32,7 +32,7 @@ const EngineerLocations = () => {
   const { data: warehouseStatus } = useQuery({
     queryKey: ["warehouse-status"],
     queryFn: fetchWarehouseStatus,
-    refetchInterval: 10000,
+    refetchInterval: 120_000,
   });
 
   const locationCounts = useMemo(() => {

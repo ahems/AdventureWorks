@@ -13,6 +13,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { AuthProvider } from "@/context/AuthContext";
 import { useAuth } from "@/context/AuthContext";
+import { useRealTimeUpdates } from "@/hooks/useRealTimeUpdates";
 import ProductionHeader from "@/components/ProductionHeader";
 import Footer from "@/components/Footer";
 import LoginPage from "@/pages/LoginPage";
@@ -58,6 +59,7 @@ const queryClient = new QueryClient();
 
 const AuthGuard: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  useRealTimeUpdates();
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }

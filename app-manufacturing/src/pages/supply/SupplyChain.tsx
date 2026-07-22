@@ -93,7 +93,7 @@ const SupplyChain: React.FC = () => {
   const { data: orders, isLoading: ordersLoading } = useQuery({
     queryKey: ["supply-orders"],
     queryFn: fetchOrders,
-    refetchInterval: 5000,
+    refetchInterval: 60_000,
   });
   const { data: orderHistory } = useQuery({
     queryKey: ["supply-orders-history"],
@@ -415,7 +415,7 @@ const SupplyChain: React.FC = () => {
                 Active Purchase Orders
               </CardTitle>
               <CardDescription>
-                Live order tracking — auto-refreshes every 5 seconds
+                Live order tracking — real-time updates
               </CardDescription>
             </CardHeader>
             <CardContent>

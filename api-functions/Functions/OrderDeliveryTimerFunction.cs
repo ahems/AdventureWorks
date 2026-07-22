@@ -29,6 +29,7 @@ public class OrderDeliveryTimerFunction
     private readonly EmailService _emailService;
     private readonly OrderPipelineConfigService _pipelineConfig;
     private readonly TelemetryClient _telemetry;
+    private readonly WebPubSubService _webPubSub;
     private readonly bool _emailEnabled;
 
     public OrderDeliveryTimerFunction(
@@ -36,13 +37,15 @@ public class OrderDeliveryTimerFunction
         OrderService orderService,
         EmailService emailService,
         OrderPipelineConfigService pipelineConfig,
-        TelemetryClient telemetry)
+        TelemetryClient telemetry,
+        WebPubSubService webPubSub)
     {
         _logger        = logger;
         _orderService  = orderService;
         _emailService  = emailService;
         _pipelineConfig = pipelineConfig;
         _telemetry     = telemetry;
+        _webPubSub     = webPubSub;
         _emailEnabled  = string.Equals(
             Environment.GetEnvironmentVariable("ORDER_NOTIFICATIONS_EMAIL_ENABLED"),
             "true", StringComparison.OrdinalIgnoreCase);
@@ -91,6 +94,8 @@ public class OrderDeliveryTimerFunction
         }
 
         _logger.LogInformation("[OrderDelivery] Promoted {Count} order(s) to Delivered (Status=7).", deliveredIds.Count);
+
+        await _webPubSub.SendToGroupAsync("orders", new { @event = "orders-delivered", count = deliveredIds.Count });
 
         _telemetry.TrackEvent("OrderDelivery.BatchProcessed", new Dictionary<string, string>
         {

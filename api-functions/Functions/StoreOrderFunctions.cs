@@ -19,15 +19,18 @@ public class StoreOrderFunctions
 {
     private readonly ILogger<StoreOrderFunctions> _logger;
     private readonly OrderGenerationService _orderService;
+    private readonly WebPubSubService _webPubSub;
     private readonly string _connectionString;
 
     public StoreOrderFunctions(
         ILogger<StoreOrderFunctions> logger,
         OrderGenerationService orderService,
+        WebPubSubService webPubSub,
         IConfiguration configuration)
     {
         _logger = logger;
         _orderService = orderService;
+        _webPubSub = webPubSub;
         _connectionString = configuration["SQL_CONNECTION_STRING"]
             ?? throw new InvalidOperationException("SQL_CONNECTION_STRING is not set");
     }
@@ -315,6 +318,8 @@ public class StoreOrderFunctions
             };
 
             var salesOrderId = await _orderService.CreateStoreOrderAsync(createReq);
+
+            await _webPubSub.SendToGroupAsync("orders", new { @event = "order-placed", salesOrderId });
 
             var response = req.CreateResponse(HttpStatusCode.Created);
             await response.WriteAsJsonAsync(new

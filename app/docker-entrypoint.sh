@@ -11,7 +11,8 @@ cat > /usr/share/nginx/html/config.js << EOF
 window.APP_CONFIG = {
   API_URL: "${API_URL}",
   API_FUNCTIONS_URL: "${API_FUNCTIONS_URL}",
-  API_MCP_URL: "${API_MCP_URL}"
+  API_MCP_URL: "${API_MCP_URL}",
+  WEB_PUBSUB_HOST_NAME: "${WEB_PUBSUB_HOST_NAME}"
 };
 EOF
 

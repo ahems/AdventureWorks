@@ -13,6 +13,7 @@ type AppWindow = Window & {
     APP_URL?: string;
     MCP_INSPECTOR_URL?: string;
     APP_MANUFACTURING_URL?: string;
+    WEB_PUBSUB_HOST_NAME?: string;
   };
 };
 
@@ -79,6 +80,10 @@ export function buildInspectorUrl(serverUrl: string): string {
 
 export function getRestApiUrl(): string {
   return getGraphQLApiUrl().replace(/\/graphql\/?$/, "/api");
+}
+
+export function getWebPubSubNegotiateUrl(): string {
+  return getFunctionsApiUrl().replace(/\/$/, "") + "/api/webpubsub/negotiate";
 }
 
 /** Returns the customer-facing app base URL (no trailing slash). Empty string if not configured. */

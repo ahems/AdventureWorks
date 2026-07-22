@@ -173,7 +173,7 @@ const QueueStatusCard: React.FC = () => {
   const { data } = useQuery({
     queryKey: ["agent-queue-status"],
     queryFn: fetchAgentQueueStatus,
-    refetchInterval: 15_000,
+    refetchInterval: 120_000,
   });
 
   const pending = data?.pending ?? 0;
@@ -244,7 +244,7 @@ const ModeSelector: React.FC = () => {
   const { data: config, refetch } = useQuery({
     queryKey: ["manufacturing-agent-config"],
     queryFn: fetchAgentConfig,
-    // Re-poll every minute so the countdown stays current
+    // Slow fallback poll so the countdown stays current
     refetchInterval: 60_000,
   });
   const currentMode = config?.mode ?? 0;
@@ -651,7 +651,7 @@ const ProposalsPanel: React.FC = () => {
   const { data: proposals = [], isLoading } = useQuery({
     queryKey: ["agent-proposals"],
     queryFn: fetchAgentProposals,
-    refetchInterval: 10_000,
+    refetchInterval: 120_000,
   });
 
   const approveMutation = useMutation({
@@ -826,19 +826,12 @@ const ManufacturingAgentPage: React.FC = () => {
   const isOff = (config?.mode ?? 0) === 0;
   const isProposePending = config?.mode === 2;
 
-  // Runs: poll every 5 s when active, every 30 s when idle, disabled when Off
+  // Runs: real-time via Web PubSub, 120s fallback poll, disabled when Off
   const { data: runs = [] } = useQuery({
     queryKey: ["agent-runs"],
     queryFn: () => fetchAgentRuns(30),
     enabled: !isOff,
-    refetchInterval: (query) => {
-      if (isOff) return false;
-      const data = query.state.data as AgentRun[] | undefined;
-      const hasActive = data?.some(
-        (r) => r.status === "running" || r.status === "retrying",
-      );
-      return hasActive ? 5_000 : 30_000;
-    },
+    refetchInterval: isOff ? false : 120_000,
   });
 
   const hasActiveRun = runs.some(
@@ -898,7 +891,7 @@ const ManufacturingAgentPage: React.FC = () => {
               Activity Feed
             </CardTitle>
             <span className="text-xs text-muted-foreground">
-              {hasActiveRun ? "Updating every 5s" : "Updating every 30s"}
+              {hasActiveRun ? "Live updates" : "Real-time"}
             </span>
           </div>
         </CardHeader>

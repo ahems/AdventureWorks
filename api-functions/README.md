@@ -822,6 +822,25 @@ Modes marked "AI Required" will log full diagnostics and fail (message goes to p
 - **Frontend (`app/`)** calls these Functions for operations that need server‑side processing, long‑running workloads, or integration with external services (OpenAI, email, blob storage).
 - **Database access** is handled via services such as `ProductService`, `ReviewService`, `AddressService`, and `ReceiptService`, all using managed identity to reach Azure SQL.
 - **Durable Functions** orchestrate multi‑step AI workflows (embellishment, translations, embeddings) and expose simple HTTP entrypoints that the frontend and scripts can call.
+- **Real-time push** — the `WebPubSubService` singleton sends fire-and-forget JSON events to Azure Web PubSub after each mutation. All three frontends subscribe via the `useWebPubSub` hook and invalidate React Query caches on receipt.
+
+### Web PubSub Negotiate Endpoint
+
+`GET /api/webpubsub/negotiate?groups=manufacturing-agent,warehouse,...`
+
+Returns a client access URL with a short-lived JWT token for opening a WebSocket connection.
+
+### Real-Time Push Groups
+
+| Group                 | Events                                                                  | Source Functions                                                                                  |
+| --------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `manufacturing-agent` | run-started, run-completed, step-updated, config-changed, queue-cleared | ManufacturingAgentQueueTrigger, ManufacturingAgentRunFunctions, ManufacturingAgentConfigFunctions |
+| `manufacturing-ops`   | wo-completed, simulation-stopped, config-changed                        | WorkOrderOperationProcessorFunction, ManufacturingControlFunction                                 |
+| `warehouse`           | operation-completed, config-changed                                     | WarehouseOperationProcessorFunction, WarehouseFunction                                            |
+| `supply-chain`        | po-status-changed                                                       | PurchaseOrderProcessorFunction                                                                    |
+| `orders`              | order-placed, order-status-changed, orders-delivered                    | OrderPlacedSqlTrigger, ProcessSalesOrderStatus, OrderDeliveryTimerFunction, StoreOrderFunctions   |
+| `shopping-simulator`  | simulator-started, simulator-stopped                                    | ShoppingSimulatorControlFunction                                                                  |
+| `reviews`             | moderation-progress, generation-progress                                | ReviewModerationQueueFunction, GenerateVerifiedReviewsFunction                                    |
 
 For examples of how these Functions are exercised, see the test scripts in the repo root (e.g. `test-receipt-generation.sh`, `test-send-email.sh`, `test-ai-and-mcp-complete.sh`) and the utilities in [scripts/utilities/](../scripts/utilities/) (e.g. `seed-sales-order-status-queue.sh` for the sales order status pipeline).
 

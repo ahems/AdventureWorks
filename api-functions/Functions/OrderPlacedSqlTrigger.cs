@@ -33,19 +33,22 @@ public class OrderPlacedSqlTrigger
     private readonly ManufacturingAgentConfigService  _agentConfig;
     private readonly ManufacturingAgentRunService     _runService;
     private readonly OrderPipelineConfigService       _pipelineConfig;
+    private readonly WebPubSubService                 _webPubSub;
 
     public OrderPlacedSqlTrigger(
         ILogger<OrderPlacedSqlTrigger> logger,
         OrderService orderService,
         ManufacturingAgentConfigService agentConfig,
         ManufacturingAgentRunService runService,
-        OrderPipelineConfigService pipelineConfig)
+        OrderPipelineConfigService pipelineConfig,
+        WebPubSubService webPubSub)
     {
         _logger         = logger;
         _orderService   = orderService;
         _agentConfig    = agentConfig;
         _runService     = runService;
         _pipelineConfig = pipelineConfig;
+        _webPubSub      = webPubSub;
     }
 
     [Function(nameof(OrderPlacedSqlTrigger))]
@@ -177,6 +180,9 @@ public class OrderPlacedSqlTrigger
         _logger.LogInformation(
             "Enqueued manufacturing agent job for SalesOrderID={SalesOrderId}, RunId={RunId}, Mode={Mode}",
             salesOrderId, runId, mode);
+
+        await _webPubSub.SendToGroupAsync("orders", new { @event = "order-placed", salesOrderId, customerId });
+        await _webPubSub.SendToGroupAsync("manufacturing-agent", new { @event = "run-created", runId, salesOrderId });
     }
 }
 

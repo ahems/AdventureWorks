@@ -97,11 +97,11 @@ const ManufacturingDashboard: React.FC = () => {
   } = useAutoRefresh<ManufacturingStatus>(
     ["manufacturing-status"],
     fetchManufacturingStatus,
-    3000,
+    120_000,
   );
   const { data: active, isLoading: activeLoading } = useAutoRefresh<
     ActiveOperation[]
-  >(["manufacturing-active"], fetchActiveOperations, 3000);
+  >(["manufacturing-active"], fetchActiveOperations, 120_000);
 
   // Purchase orders for shortage cross-reference
   const { data: supplyOrders } = useQuery<PurchaseOrder[]>({
@@ -174,7 +174,7 @@ const ManufacturingDashboard: React.FC = () => {
             Manufacturing Dashboard
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Live production status — auto-refreshes every 3 seconds
+            Live production status — real-time updates
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -794,7 +794,7 @@ function CustomerDemandCard() {
   const { data, isLoading } = useQuery({
     queryKey: ["open-demand"],
     queryFn: loadOpenDemand,
-    refetchInterval: 30_000,
+    refetchInterval: 120_000,
   });
   const { data: products, isLoading: productsLoading } = useQuery({
     queryKey: ["manufactured-products"],

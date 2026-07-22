@@ -19,9 +19,12 @@ This is a **3-tier Azure application** demonstrating enterprise patterns with pa
 ```
 User → Static Web App → GraphQL (DAB) → Azure SQL
                      ↘ Azure Functions → Azure SQL
+                     ↕ Web PubSub (real-time push)
 ```
 
 All services authenticate via **Managed Identity** (passwordless). No connection strings in code.
+
+**Real-time push**: Azure Web PubSub (Free tier) pushes events from Azure Functions to all three frontends via WebSocket. The `WebPubSubService` singleton fires events after each mutation. Clients use the `useWebPubSub` hook + `useRealTimeUpdates` dispatcher to invalidate React Query caches. Slow fallback polling (60–120s) handles reconnection gaps.
 
 ## Critical Development Workflows
 
@@ -72,6 +75,7 @@ Testin is done against the Azure-hosted services, so the following environment v
 - USER_MANAGED_IDENTITY_NAME - the User Managed Identity name
 - VITE_API_FUNCTIONS_URL - the Azure Functions URL
 - VITE_API_URL - the GraphQL API URL
+- WEB_PUBSUB_HOST_NAME - the Azure Web PubSub host name (e.g. av-wps-xxx.webpubsub.azure.com)
 - chatGptDeploymentVersion - the ChatGPT deployment version
 - chatGptModelName - the ChatGPT model name
 - chatGptSkuName - the ChatGPT SKU name
@@ -264,6 +268,21 @@ const MyPage = () => {
 - Static pages (login, 404, settings with no async data) do not need skeletons
 - Pages that only display a selection prompt before data loads (e.g. "select a product first") should show a skeleton only after the user has made a selection and data is actively loading
 
+### Real-Time Push Pattern (Web PubSub)
+
+All three frontends connect to Azure Web PubSub via the `useWebPubSub` hook. When server-side mutations occur, the `WebPubSubService` singleton pushes JSON events to topic groups. The `useRealTimeUpdates` dispatcher hook maps events to `queryClient.invalidateQueries()` calls, triggering React Query to refetch.
+
+**Server-side pattern** — inject `WebPubSubService`, call `SendToGroupAsync` after mutations:
+```csharp
+await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "wo-completed", workOrderId });
+```
+
+**Client-side pattern** — `useRealTimeUpdates()` is mounted in each app's root component. Individual pages keep a slow `refetchInterval` (60–120s) as a fallback.
+
+**Groups**: `manufacturing-agent`, `manufacturing-ops`, `warehouse`, `supply-chain`, `orders`, `shopping-simulator`, `reviews`
+
+**Negotiate endpoint**: `GET /api/webpubsub/negotiate?groups=manufacturing-agent,warehouse,...`
+
 ### Bicep Infrastructure Patterns
 
 Infrastructure uses **modular decomposition** in `infra/modules/`:
@@ -391,6 +410,7 @@ az monitor app-insights query --app <app-name> --analytics-query "requests | top
 11. **Shopping Simulator auto-stop**: The simulator always auto-stops after the configured `durationHours` (default 24h, max 72h). It never runs forever — this is a cost protection feature checked every timer tick (1 minute).
 12. **Order Status=7 is "Delivered"**: Orders are automatically promoted from Shipped (5) to Delivered (7) by the hourly `OrderDelivery_Timer` function. Terminal statuses are now 4 (Rejected), 6 (Cancelled), and 7 (Delivered) — Status=5 (Shipped) is no longer a terminal state. Delivery windows are configurable per order type via `PUT /api/orders/pipeline/config`.
 13. **Order notification emails disabled by default**: `ORDER_NOTIFICATIONS_EMAIL_ENABLED` must be explicitly set to `"true"` to send Shipped/Delivered emails via Azure Communication Services. When unset or `"false"`, the intended email content is logged at Info level instead (look for `[EmailNotifications disabled]` in Application Insights). This prevents the Shopping Simulator from generating email spam. The flag is hardcoded to `"false"` in the Bicep infra — enabling it requires a manual Azure Portal or CLI override. See [docs/features/email/ORDER_NOTIFICATIONS.md](docs/features/email/ORDER_NOTIFICATIONS.md).
+14. **Web PubSub Free tier limits**: 20 concurrent connections, 20K messages/day — sufficient for a single-user demo. All three frontend apps share one instance via groups. If `WEB_PUBSUB_HOST_NAME` is empty or the negotiate endpoint fails, apps fall back to slow polling (60–120s) automatically.
 
 ### Shopping Simulator
 

@@ -36,13 +36,16 @@ public class WarehouseFunction
 
     private readonly ILogger<WarehouseFunction> _logger;
     private readonly WarehouseService _warehouse;
+    private readonly WebPubSubService _webPubSub;
 
     public WarehouseFunction(
         ILogger<WarehouseFunction> logger,
-        WarehouseService warehouse)
+        WarehouseService warehouse,
+        WebPubSubService webPubSub)
     {
         _logger    = logger;
         _warehouse = warehouse;
+        _webPubSub = webPubSub;
     }
 
     // ── POST /api/warehouse/initialize ────────────────────────────────────────
@@ -238,6 +241,7 @@ public class WarehouseFunction
                 body.RetrieveMinMinutes, body.RetrieveMaxMinutes,
                 body.BaseWeightKgThreshold > 0 ? body.BaseWeightKgThreshold : 5.0,
                 body.Note);
+            await _webPubSub.SendToGroupAsync("warehouse", new { @event = "config-changed", configType = "subcategory", subcategoryId = id });
             return await OkJsonAsync(req, updated);
         }
         catch (ArgumentException ex)

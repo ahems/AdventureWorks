@@ -26,19 +26,19 @@ const WorkforcePage: React.FC = () => {
   const { data: snapshot, isLoading: snapshotLoading } = useQuery({
     queryKey: ['workforce'],
     queryFn: fetchWorkforce,
-    refetchInterval: 5000,
+    refetchInterval: 60_000,
   });
 
   const { data: workers, isLoading: workersLoading } = useQuery({
     queryKey: ['workforce-detail'],
     queryFn: fetchWorkforceDetail,
-    refetchInterval: 5000,
+    refetchInterval: 60_000,
   });
 
   const { data: activeOps } = useQuery({
     queryKey: ['active-operations'],
     queryFn: fetchActiveOperations,
-    refetchInterval: 5000,
+    refetchInterval: 60_000,
   });
 
   const workersWithLiveAssignments = useMemo(() => {

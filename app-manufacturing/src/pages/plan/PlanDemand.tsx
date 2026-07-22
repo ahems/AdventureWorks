@@ -86,7 +86,7 @@ const PlanDemand = () => {
   const { data: openData, isLoading: openLoading } = useQuery({
     queryKey: ["open-demand"],
     queryFn: loadOpenDemand,
-    refetchInterval: 30_000,
+    refetchInterval: 120_000,
   });
 
   const { data: anchorISO } = useQuery({
@@ -369,7 +369,7 @@ const PlanDemand = () => {
           <h2 className="font-doodle text-lg font-bold text-doodle-text flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-doodle-accent" /> Open Demand
             <span className="font-normal text-xs text-muted-foreground">
-              live · refreshes every 30s
+              live · real-time updates
             </span>
           </h2>
         </div>

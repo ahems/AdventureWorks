@@ -129,7 +129,7 @@ const VendorDetailPage: React.FC = () => {
   const { data: mfgStatus } = useQuery({
     queryKey: ["manufacturing-status-vendor-detail"],
     queryFn: fetchManufacturingStatus,
-    refetchInterval: 5_000,
+    refetchInterval: 60_000,
   });
 
   const shortageByProduct = useMemo(() => {

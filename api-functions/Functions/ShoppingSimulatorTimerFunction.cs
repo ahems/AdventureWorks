@@ -23,15 +23,18 @@ public class ShoppingSimulatorTimerFunction
     private readonly ILogger<ShoppingSimulatorTimerFunction> _logger;
     private readonly ShoppingSimulatorService _simulator;
     private readonly TelemetryClient _telemetry;
+    private readonly WebPubSubService _webPubSub;
 
     public ShoppingSimulatorTimerFunction(
         ILogger<ShoppingSimulatorTimerFunction> logger,
         ShoppingSimulatorService simulator,
-        TelemetryClient telemetry)
+        TelemetryClient telemetry,
+        WebPubSubService webPubSub)
     {
         _logger    = logger;
         _simulator = simulator;
         _telemetry = telemetry;
+        _webPubSub = webPubSub;
     }
 
     [Function("ShoppingSimulator_Timer")]

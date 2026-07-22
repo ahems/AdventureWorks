@@ -16,6 +16,7 @@ param revisionSuffix string
 param apiUrl string = ''
 param apiFunctionsUrl string = ''
 param appInsightsConnectionString string = ''
+param webPubSubHostName string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -90,6 +91,10 @@ resource appManufacturing 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'AZURE_CLIENT_ID'
               value: azidentity.properties.clientId
+            }
+            {
+              name: 'WEB_PUBSUB_HOST_NAME'
+              value: webPubSubHostName
             }
           ]
         }

@@ -164,7 +164,7 @@ const PlanningIntelligence: React.FC = () => {
   const { data: workOrders } = useQuery({
     queryKey: ["work-orders-active"],
     queryFn: () => fetchWorkOrders(),
-    refetchInterval: 15000,
+    refetchInterval: 120_000,
   });
 
   // Map productId → total qty currently being manufactured (no EndDate = in progress)

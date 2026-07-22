@@ -13,6 +13,7 @@
     "post-build-config": "node scripts/update-config.js && cp public/config.js dist/config.js"
   },
   "dependencies": {
+    "@azure/web-pubsub-client": "^1.1.0",
     "@hookform/resolvers": "^3.10.0",
     "@microsoft/applicationinsights-react-js": "^19.3.8",
     "@microsoft/applicationinsights-web": "^3.3.10",

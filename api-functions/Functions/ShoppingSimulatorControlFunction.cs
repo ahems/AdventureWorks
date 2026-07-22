@@ -22,15 +22,18 @@ public class ShoppingSimulatorControlFunction
     private readonly ILogger<ShoppingSimulatorControlFunction> _logger;
     private readonly ShoppingSimulatorService _simulator;
     private readonly TelemetryClient _telemetry;
+    private readonly WebPubSubService _webPubSub;
 
     public ShoppingSimulatorControlFunction(
         ILogger<ShoppingSimulatorControlFunction> logger,
         ShoppingSimulatorService simulator,
-        TelemetryClient telemetry)
+        TelemetryClient telemetry,
+        WebPubSubService webPubSub)
     {
         _logger    = logger;
         _simulator = simulator;
         _telemetry = telemetry;
+        _webPubSub = webPubSub;
     }
 
     // ── GET status ───────────────────────────────────────────────────────────
@@ -117,6 +120,8 @@ public class ShoppingSimulatorControlFunction
         _logger.LogInformation("[ShoppingSimulator] Started — {Rate} orders/min, {Pct}% existing customers, auto-stop in {Duration}h",
             ordersPerMinute, existingCustomerPct, durationHours);
 
+        await _webPubSub.SendToGroupAsync("shopping-simulator", new { @event = "simulator-started" });
+
         _telemetry.TrackEvent("ShoppingSimulator.Started", new Dictionary<string, string>
         {
             ["OrdersPerMinute"]           = ordersPerMinute.ToString(),
@@ -171,6 +176,8 @@ public class ShoppingSimulatorControlFunction
 
         _logger.LogInformation("[ShoppingSimulator] Stopped — {Pending} messages still in queue. Total queued this session: {Total}",
             queueDepth, state.TotalQueued);
+
+        await _webPubSub.SendToGroupAsync("shopping-simulator", new { @event = "simulator-stopped" });
 
         _telemetry.TrackEvent("ShoppingSimulator.Stopped", new Dictionary<string, string>
         {

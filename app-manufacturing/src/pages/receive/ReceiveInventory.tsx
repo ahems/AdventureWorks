@@ -1145,7 +1145,7 @@ const ReceiveInventory = () => {
   const { data: inventory, isLoading } = useQuery({
     queryKey: ["product-inventory"],
     queryFn: () => fetchProductInventory(),
-    refetchInterval: 15000,
+    refetchInterval: 120_000,
   });
   const { data: locations } = useQuery({
     queryKey: ["locations"],
@@ -1162,12 +1162,12 @@ const ReceiveInventory = () => {
   const { data: mfgStatus } = useQuery({
     queryKey: ["manufacturing-status"],
     queryFn: fetchManufacturingStatus,
-    refetchInterval: 10000,
+    refetchInterval: 120_000,
   });
   const { data: workOrders } = useQuery({
     queryKey: ["work-orders"],
     queryFn: fetchWorkOrders,
-    refetchInterval: 15000,
+    refetchInterval: 120_000,
   });
   const { data: categories } = useQuery({
     queryKey: ["product-categories"],
@@ -1180,12 +1180,12 @@ const ReceiveInventory = () => {
   const { data: supplyOrders } = useQuery({
     queryKey: ["supply-orders"],
     queryFn: fetchOrders,
-    refetchInterval: 15000,
+    refetchInterval: 120_000,
   });
   const { data: poHeaders } = useQuery({
     queryKey: ["po-headers-all"],
     queryFn: () => fetchPurchaseOrderHeaders(),
-    refetchInterval: 30000,
+    refetchInterval: 120_000,
   });
   const { data: vendors } = useQuery({
     queryKey: ["vendors"],

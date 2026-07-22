@@ -36,109 +36,121 @@ import ComparePage from "./pages/ComparePage";
 import HealthCheckPage from "./pages/HealthCheckPage";
 import NotFound from "./pages/NotFound";
 import HelpMeChoosePage from "./pages/HelpMeChoosePage";
+import { useRealTimeUpdates } from "./hooks/useRealTimeUpdates";
 
 const queryClient = new QueryClient();
 
 // Initialize Application Insights
 initAppInsights();
 
+/** Wrapper component inside QueryClientProvider so hooks work. */
+const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  useRealTimeUpdates();
+  return <>{children}</>;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <AppInsightsContext.Provider value={reactPlugin}>
-      <TooltipProvider>
-        <LanguageProvider>
-          <CurrencyProvider>
-            <UnitMeasureProvider>
-              <ProductNamesProvider>
-                <AuthProvider>
-                  <WishlistProvider>
-                    <RecentlyViewedProvider>
-                      <CompareProvider>
-                        <CartProvider>
-                          <Toaster />
-                          <Sonner />
-                          <BrowserRouter
-                            future={{
-                              v7_startTransition: true,
-                              v7_relativeSplatPath: true,
-                            }}
-                          >
-                            <CompareBar />
-                            <AIChatOverlay />
-                            <Routes>
-                              <Route path="/" element={<Index />} />
-                              <Route
-                                path="/category/:categoryId"
-                                element={<CategoryPage />}
-                              />
-                              <Route
-                                path="/product/:productId"
-                                element={<ProductPage />}
-                              />
-                              <Route path="/cart" element={<CartPage />} />
-                              <Route
-                                path="/checkout"
-                                element={<CheckoutPage />}
-                              />
-                              <Route
-                                path="/order-confirmation"
-                                element={<OrderConfirmationPage />}
-                              />
-                              <Route path="/auth" element={<AuthPage />} />
-                              <Route
-                                path="/reset-password"
-                                element={<ResetPasswordPage />}
-                              />
-                              <Route
-                                path="/account"
-                                element={<AccountPage />}
-                              />
-                              <Route path="/sale" element={<SalePage />} />
-                              <Route path="/search" element={<SearchPage />} />
-                              <Route
-                                path="/wishlist"
-                                element={<WishlistPage />}
-                              />
-                              <Route
-                                path="/order-tracking"
-                                element={<OrderTrackingPage />}
-                              />
-                              <Route
-                                path="/order-tracking/:orderId"
-                                element={<OrderTrackingPage />}
-                              />
-                              <Route
-                                path="/returns"
-                                element={<ReturnsPage />}
-                              />
-                              <Route path="/faq" element={<FAQPage />} />
-                              <Route
-                                path="/compare"
-                                element={<ComparePage />}
-                              />
-                              <Route
-                                path="/health"
-                                element={<HealthCheckPage />}
-                              />
-                              <Route
-                                path="/help-me-choose"
-                                element={<HelpMeChoosePage />}
-                              />
-                              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                              <Route path="*" element={<NotFound />} />
-                            </Routes>
-                          </BrowserRouter>
-                        </CartProvider>
-                      </CompareProvider>
-                    </RecentlyViewedProvider>
-                  </WishlistProvider>
-                </AuthProvider>
-              </ProductNamesProvider>
-            </UnitMeasureProvider>
-          </CurrencyProvider>
-        </LanguageProvider>
-      </TooltipProvider>
-    </AppInsightsContext.Provider>
+    <AppShell>
+      <AppInsightsContext.Provider value={reactPlugin}>
+        <TooltipProvider>
+          <LanguageProvider>
+            <CurrencyProvider>
+              <UnitMeasureProvider>
+                <ProductNamesProvider>
+                  <AuthProvider>
+                    <WishlistProvider>
+                      <RecentlyViewedProvider>
+                        <CompareProvider>
+                          <CartProvider>
+                            <Toaster />
+                            <Sonner />
+                            <BrowserRouter
+                              future={{
+                                v7_startTransition: true,
+                                v7_relativeSplatPath: true,
+                              }}
+                            >
+                              <CompareBar />
+                              <AIChatOverlay />
+                              <Routes>
+                                <Route path="/" element={<Index />} />
+                                <Route
+                                  path="/category/:categoryId"
+                                  element={<CategoryPage />}
+                                />
+                                <Route
+                                  path="/product/:productId"
+                                  element={<ProductPage />}
+                                />
+                                <Route path="/cart" element={<CartPage />} />
+                                <Route
+                                  path="/checkout"
+                                  element={<CheckoutPage />}
+                                />
+                                <Route
+                                  path="/order-confirmation"
+                                  element={<OrderConfirmationPage />}
+                                />
+                                <Route path="/auth" element={<AuthPage />} />
+                                <Route
+                                  path="/reset-password"
+                                  element={<ResetPasswordPage />}
+                                />
+                                <Route
+                                  path="/account"
+                                  element={<AccountPage />}
+                                />
+                                <Route path="/sale" element={<SalePage />} />
+                                <Route
+                                  path="/search"
+                                  element={<SearchPage />}
+                                />
+                                <Route
+                                  path="/wishlist"
+                                  element={<WishlistPage />}
+                                />
+                                <Route
+                                  path="/order-tracking"
+                                  element={<OrderTrackingPage />}
+                                />
+                                <Route
+                                  path="/order-tracking/:orderId"
+                                  element={<OrderTrackingPage />}
+                                />
+                                <Route
+                                  path="/returns"
+                                  element={<ReturnsPage />}
+                                />
+                                <Route path="/faq" element={<FAQPage />} />
+                                <Route
+                                  path="/compare"
+                                  element={<ComparePage />}
+                                />
+                                <Route
+                                  path="/health"
+                                  element={<HealthCheckPage />}
+                                />
+                                <Route
+                                  path="/help-me-choose"
+                                  element={<HelpMeChoosePage />}
+                                />
+                                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                                <Route path="*" element={<NotFound />} />
+                              </Routes>
+                            </BrowserRouter>
+                          </CartProvider>
+                        </CompareProvider>
+                      </RecentlyViewedProvider>
+                    </WishlistProvider>
+                  </AuthProvider>
+                </ProductNamesProvider>
+              </UnitMeasureProvider>
+            </CurrencyProvider>
+          </LanguageProvider>
+        </TooltipProvider>
+      </AppInsightsContext.Provider>
+    </AppShell>
   </QueryClientProvider>
 );
 

@@ -53,6 +53,7 @@ public class WorkOrderOperationProcessorFunction
     private readonly WorkOrderSimulationService _sim;
     private readonly WorkforceService _workforce;
     private readonly BankService _bank;
+    private readonly WebPubSubService _webPubSub;
     private readonly IConfiguration _config;
 
     public WorkOrderOperationProcessorFunction(
@@ -60,12 +61,14 @@ public class WorkOrderOperationProcessorFunction
         WorkOrderSimulationService sim,
         WorkforceService workforce,
         BankService bank,
+        WebPubSubService webPubSub,
         IConfiguration config)
     {
         _logger    = logger;
         _sim       = sim;
         _workforce = workforce;
         _bank      = bank;
+        _webPubSub = webPubSub;
         _config    = config;
     }
 
@@ -432,6 +435,9 @@ public class WorkOrderOperationProcessorFunction
 
         // ── All ops done — complete the WorkOrder ─────────────────────────────
         await _sim.CompleteWorkOrderAsync(msg.WorkOrderId);
+
+        await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "wo-completed", workOrderId = msg.WorkOrderId, productId = msg.ProductId });
+        await _webPubSub.SendToGroupAsync("warehouse", new { @event = "inventory-updated", productId = msg.ProductId });
 
         // ── Unblock parent assemblies via BOM chain ────────────────────────────
         if (!string.IsNullOrEmpty(msg.RunId))

@@ -21,13 +21,16 @@ public class ManufacturingAgentConfigFunctions
 
     private readonly ILogger<ManufacturingAgentConfigFunctions> _logger;
     private readonly ManufacturingAgentConfigService _configService;
+    private readonly WebPubSubService _webPubSub;
 
     public ManufacturingAgentConfigFunctions(
         ILogger<ManufacturingAgentConfigFunctions> logger,
-        ManufacturingAgentConfigService configService)
+        ManufacturingAgentConfigService configService,
+        WebPubSubService webPubSub)
     {
         _logger        = logger;
         _configService = configService;
+        _webPubSub     = webPubSub;
     }
 
     // ── GET /api/manufacturing/agent-config ───────────────────────────────────
@@ -92,6 +95,14 @@ public class ManufacturingAgentConfigFunctions
             isAgentActive = savedMode > ManufacturingAgentMode.Off,
             autoShutoffAt = shutoffAt?.ToString("O")
         });
+
+        await _webPubSub.SendToGroupAsync("manufacturing-agent", new
+        {
+            @event = "config-changed",
+            mode = (int)savedMode,
+            modeLabel = savedMode.ToString()
+        });
+
         return response;
     }
 

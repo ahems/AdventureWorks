@@ -2,83 +2,83 @@
 
 name: adventureworks
 services:
-    api:
-        project: ./api
-        host: containerapp
-        language: python
-        docker:
-            path: dockerfile
-            remoteBuild: true
-        hooks:
-            postdeploy:
-                shell: sh
-                run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/api-postdeploy.sh"
-    api-functions:
-        project: ./api-functions
-        host: function
-        language: csharp
-        hooks:
-            postdeploy:
-                shell: sh
-                run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/api-functions-postdeploy.sh"
-    api-mcp:
-        project: ./api-mcp
-        host: containerapp
-        language: docker
-        docker:
-            path: Dockerfile
-            remoteBuild: true
-    app:
-        project: ./app
-        host: staticwebapp
-        language: js
-        dist: dist
-        hooks:
-            postdeploy:
-                shell: sh
-                run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/app-postdeploy.sh"
-            predeploy:
-                shell: sh
-                run: npm install && bash scripts/build-with-env.sh
-        config:
-            buildCommand: bash scripts/build-with-env.sh
-            outputLocation: dist
-    app-admin:
-        project: ./app-admin
-        host: containerapp
-        language: docker
-        docker:
-            path: Dockerfile
-            remoteBuild: true
-    app-manufacturing:
-        project: ./app-manufacturing
-        host: containerapp
-        language: docker
-        docker:
-            path: Dockerfile
-            remoteBuild: true
-    mcp-inspector:
-        project: ./mcp-inspector
-        host: containerapp
-        language: docker
-        docker:
-            path: Dockerfile
-            remoteBuild: true
+  api:
+    project: ./api
+    host: containerapp
+    language: python
+    docker:
+      path: dockerfile
+      remoteBuild: true
+    hooks:
+      postdeploy:
+        shell: sh
+        run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/api-postdeploy.sh"
+  api-functions:
+    project: ./api-functions
+    host: function
+    language: csharp
+    hooks:
+      postdeploy:
+        shell: sh
+        run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/api-functions-postdeploy.sh"
+  api-mcp:
+    project: ./api-mcp
+    host: containerapp
+    language: docker
+    docker:
+      path: Dockerfile
+      remoteBuild: true
+  app:
+    project: ./app
+    host: staticwebapp
+    language: js
+    dist: dist
+    hooks:
+      postdeploy:
+        shell: sh
+        run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/app-postdeploy.sh"
+      predeploy:
+        shell: sh
+        run: npm install && bash scripts/build-with-env.sh
+    config:
+      buildCommand: bash scripts/build-with-env.sh
+      outputLocation: dist
+  app-admin:
+    project: ./app-admin
+    host: containerapp
+    language: docker
+    docker:
+      path: Dockerfile
+      remoteBuild: true
+  app-manufacturing:
+    project: ./app-manufacturing
+    host: containerapp
+    language: docker
+    docker:
+      path: Dockerfile
+      remoteBuild: true
+  mcp-inspector:
+    project: ./mcp-inspector
+    host: containerapp
+    language: docker
+    docker:
+      path: Dockerfile
+      remoteBuild: true
 infra:
-    provider: microsoft.foundry
+  provider: microsoft.foundry
 hooks:
-    postprovision:
-        shell: sh
-        run: bash scripts/hooks/postprovision.sh
-        interactive: true
-    postup:
-        shell: sh
-        run: bash scripts/hooks/postup.sh
-        interactive: true
-    predeploy:
-        shell: sh
-        run: bash scripts/hooks/predeploy.sh
-    preup:
-        shell: sh
-        run: bash scripts/hooks/preup.sh
-        interactive: true
+  postprovision:
+    shell: sh
+    run: bash scripts/hooks/postprovision.sh
+    interactive: true
+  postup:
+    shell: sh
+    run: bash scripts/hooks/postup.sh
+    interactive: true
+  predeploy:
+    shell: sh
+    run: bash scripts/hooks/predeploy.sh
+  preup:
+    shell: sh
+    run: bash scripts/hooks/preup.sh
+    interactive: true

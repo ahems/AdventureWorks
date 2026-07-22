@@ -121,7 +121,7 @@ const WarehouseFloor: React.FC = () => {
   const { data: status } = useQuery({
     queryKey: ["warehouse-status"],
     queryFn: fetchWarehouseStatus,
-    refetchInterval: 5000,
+    refetchInterval: 60_000,
   });
 
   const {
@@ -132,7 +132,7 @@ const WarehouseFloor: React.FC = () => {
   } = useQuery({
     queryKey: ["warehouse-active"],
     queryFn: fetchWarehouseActive,
-    refetchInterval: 5000,
+    refetchInterval: 60_000,
   });
 
   const filtered = useMemo(() => {
@@ -165,7 +165,7 @@ const WarehouseFloor: React.FC = () => {
             <Warehouse className="h-6 w-6 text-doodle-text" /> Warehouse Floor
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Live operations in progress — auto-refreshes every 5 seconds.
+            Live operations in progress — real-time updates.
           </p>
         </div>
         <div className="flex items-center gap-3">

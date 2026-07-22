@@ -36,6 +36,7 @@ public class GenerateVerifiedReviewsFunction
     private readonly ReviewBatchAgentService _reviewBatchAgentService;
     private readonly ReviewService _reviewService;
     private readonly TelemetryClient _telemetryClient;
+    private readonly WebPubSubService _webPubSub;
 
     // In-process guard. Table Storage IsRunning flag provides cross-instance persistence.
     private static readonly SemaphoreSlim _startLock = new(1, 1);
@@ -45,13 +46,15 @@ public class GenerateVerifiedReviewsFunction
         ReviewAgentService reviewAgentService,
         ReviewBatchAgentService reviewBatchAgentService,
         ReviewService reviewService,
-        TelemetryClient telemetryClient)
+        TelemetryClient telemetryClient,
+        WebPubSubService webPubSub)
     {
         _logger = logger;
         _reviewAgentService = reviewAgentService;
         _reviewBatchAgentService = reviewBatchAgentService;
         _reviewService = reviewService;
         _telemetryClient = telemetryClient;
+        _webPubSub = webPubSub;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -329,6 +332,8 @@ public class GenerateVerifiedReviewsFunction
                     state.ProcessedCount++;
                     state.LastProgressAt = DateTimeOffset.UtcNow;
                     await _reviewService.SaveVerifiedReviewsJobStateAsync(state);
+
+                    await _webPubSub.SendToGroupAsync("reviews", new { @event = "generation-progress", processed = state.ProcessedCount, total = state.TotalCount });
                 }
 
                 // Generate staff replies for 33-60% of saved reviews for this product

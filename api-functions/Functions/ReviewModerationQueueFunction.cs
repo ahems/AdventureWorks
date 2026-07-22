@@ -25,17 +25,20 @@ public class ReviewModerationQueueFunction
     private readonly ReviewService _reviewService;
     private readonly ReviewAnalysisAgentService _reviewAnalysisAgentService;
     private readonly TelemetryClient _telemetryClient;
+    private readonly WebPubSubService _webPubSub;
 
     public ReviewModerationQueueFunction(
         ILogger<ReviewModerationQueueFunction> logger,
         ReviewService reviewService,
         ReviewAnalysisAgentService reviewAnalysisAgentService,
-        TelemetryClient telemetryClient)
+        TelemetryClient telemetryClient,
+        WebPubSubService webPubSub)
     {
         _logger = logger;
         _reviewService = reviewService;
         _reviewAnalysisAgentService = reviewAnalysisAgentService;
         _telemetryClient = telemetryClient;
+        _webPubSub = webPubSub;
     }
 
     [Function("ReviewModeration_StartAnalyzeApproveAll")]
@@ -253,6 +256,8 @@ public class ReviewModerationQueueFunction
                 failed: true,
                 lastError: ex.Message);
         }
+
+        await _webPubSub.SendToGroupAsync("reviews", new { @event = "moderation-progress", jobId = message.JobId });
     }
 
     private async Task<ReviewModerationJobState> ResetIfStaleAsync(ReviewModerationJobState state)

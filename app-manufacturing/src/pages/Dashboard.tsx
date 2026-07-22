@@ -80,13 +80,13 @@ const Dashboard = () => {
   const { data: mfgStatus } = useQuery<ManufacturingStatus>({
     queryKey: ["manufacturing-status"],
     queryFn: fetchManufacturingStatus,
-    refetchInterval: 5000,
+    refetchInterval: 60_000,
     retry: 1,
   });
   const { data: activeOps } = useQuery<ActiveOperation[]>({
     queryKey: ["manufacturing-active"],
     queryFn: fetchActiveOperations,
-    refetchInterval: 5000,
+    refetchInterval: 60_000,
     retry: 1,
   });
 
@@ -94,7 +94,7 @@ const Dashboard = () => {
   const { data: workforce } = useQuery<WorkforceSnapshot>({
     queryKey: ["workforce-snapshot"],
     queryFn: fetchWorkforce,
-    refetchInterval: 10000,
+    refetchInterval: 120_000,
     retry: 1,
   });
 
@@ -104,7 +104,7 @@ const Dashboard = () => {
   const { data: supplyOrders } = useQuery<PurchaseOrder[]>({
     queryKey: ["supply-orders-dashboard"],
     queryFn: fetchOrders,
-    refetchInterval: 15000,
+    refetchInterval: 120_000,
     retry: 1,
   });
 
@@ -112,7 +112,7 @@ const Dashboard = () => {
   const { data: agentQueue } = useQuery({
     queryKey: ["agent-queue-status"],
     queryFn: fetchAgentQueueStatus,
-    refetchInterval: 15000,
+    refetchInterval: 120_000,
     retry: 1,
   });
 

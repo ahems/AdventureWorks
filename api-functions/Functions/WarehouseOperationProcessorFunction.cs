@@ -39,13 +39,16 @@ public class WarehouseOperationProcessorFunction
 
     private readonly ILogger<WarehouseOperationProcessorFunction> _logger;
     private readonly WarehouseService _warehouse;
+    private readonly WebPubSubService _webPubSub;
 
     public WarehouseOperationProcessorFunction(
         ILogger<WarehouseOperationProcessorFunction> logger,
-        WarehouseService warehouse)
+        WarehouseService warehouse,
+        WebPubSubService webPubSub)
     {
         _logger    = logger;
         _warehouse = warehouse;
+        _webPubSub = webPubSub;
     }
 
     [Function(nameof(WarehouseOperationProcessor))]
@@ -89,6 +92,8 @@ public class WarehouseOperationProcessorFunction
                     msg.OperationType, msg.OperationId, msg.ProductId);
 
                 await _warehouse.ProcessCompletionPhaseAsync(msg);
+
+                await _webPubSub.SendToGroupAsync("warehouse", new { @event = "operation-completed", operationType = msg.OperationType, productId = msg.ProductId });
             }
         }
         catch (Exception ex)

@@ -34,6 +34,7 @@
     "chatGptDeploymentName": "gpt-4.1-mini",
     "AZURE_CLIENT_ID": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
     "MANUFACTURING_AGENT_ENDPOINT": "http://localhost:8088/",
-    "API_FUNCTIONS_URL": "https://av-functions-xxxxxxxxxxxx.azurecontainerapps.io"
+    "API_FUNCTIONS_URL": "https://av-functions-xxxxxxxxxxxx.azurecontainerapps.io",
+    "WEB_PUBSUB_HOST_NAME": ""
   }
 }

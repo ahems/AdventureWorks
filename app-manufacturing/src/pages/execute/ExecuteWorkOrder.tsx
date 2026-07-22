@@ -11,13 +11,13 @@ const ExecuteWorkOrder = () => {
   const woId = Number(id);
 
   const { data: wo, isLoading } = useQuery({ queryKey: ['work-order', woId], queryFn: () => fetchWorkOrder(woId) });
-  const { data: routing } = useQuery({ queryKey: ['wo-routing', woId], queryFn: () => fetchWorkOrderRouting(woId), enabled: !!wo, refetchInterval: 5000 });
+  const { data: routing } = useQuery({ queryKey: ['wo-routing', woId], queryFn: () => fetchWorkOrderRouting(woId), enabled: !!wo, refetchInterval: 60_000 });
   const { data: product } = useQuery({ queryKey: ['product', wo?.ProductID], queryFn: () => fetchProduct(wo!.ProductID), enabled: !!wo });
   const { data: locations } = useQuery({ queryKey: ['locations'], queryFn: fetchLocations });
   const { data: scrapReasons } = useQuery({ queryKey: ['scrap-reasons'], queryFn: fetchScrapReasons });
   const { data: bom } = useQuery({ queryKey: ['active-bom'], queryFn: fetchActiveBOM });
   const { data: allProducts } = useQuery({ queryKey: ['all-products'], queryFn: () => fetchAllProducts() });
-  const { data: activeOps } = useQuery({ queryKey: ['active-operations'], queryFn: fetchActiveOperations, refetchInterval: 5000 });
+  const { data: activeOps } = useQuery({ queryKey: ['active-operations'], queryFn: fetchActiveOperations, refetchInterval: 60_000 });
   const { data: inventory } = useQuery({ queryKey: ['product-inventory'], queryFn: () => fetchProductInventory() });
 
   const locationMap = useMemo(() => {
