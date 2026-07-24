@@ -593,10 +593,11 @@ export async function fetchVendorQuality(): Promise<VendorQualityData[]> {
 
 export async function fetchVendorQualityDetail(
   vendorId: number,
-): Promise<VendorQualityData> {
+): Promise<VendorQualityData | null> {
   const res = await fetch(
     `${MANUFACTURING_BASE}/manufacturing/vendor-quality/${vendorId}`,
   );
+  if (res.status === 404) return null;
   if (!res.ok)
     throw new Error(`Vendor quality detail API error: ${res.status}`);
   return res.json();

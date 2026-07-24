@@ -147,11 +147,10 @@ const VendorDetailPage: React.FC = () => {
     return m;
   }, [mfgStatus]);
   // Vendor quality data (scrap attributed to this vendor)
-  const { data: vendorQualityData } = useQuery<VendorQualityData>({
+  const { data: vendorQualityData } = useQuery<VendorQualityData | null>({
     queryKey: ["vendor-quality-detail", vendorId],
     queryFn: () => fetchVendorQualityDetail(parseInt(vendorId!)),
     enabled: !!vendorId,
-    retry: false, // 404 if no events
   });
   // Auto-scroll to highlighted product row
   useEffect(() => {
