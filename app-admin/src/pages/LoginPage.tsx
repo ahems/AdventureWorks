@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Loader2, Eye, EyeOff, Bike, Shield } from "lucide-react";
+import { Loader2, Eye, EyeOff, Shield } from "lucide-react";
+import AdminLogo from "@/components/AdminLogo";
 import { useAuth } from "@/context/AuthContext";
 import { z } from "zod";
 
@@ -48,8 +49,8 @@ const LoginPage: React.FC = () => {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             <Link to="/" className="flex items-center gap-2 group">
-              <div className="doodle-border-light p-1.5 group-hover:rotate-6 transition-transform">
-                <Bike className="w-6 h-6 text-doodle-text" />
+              <div className="group-hover:rotate-6 transition-transform">
+                <AdminLogo className="w-8 h-8" />
               </div>
               <div className="flex flex-col">
                 <span className="font-doodle text-xl font-bold text-doodle-text leading-tight">

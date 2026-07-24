@@ -45,10 +45,12 @@ public record FinancialSummary(
     decimal TotalManufacturingCost,
     decimal TotalPayroll,
     decimal TotalScrapWriteOffs,
+    decimal TotalRevenue,
     int     ProcurementCount,
     int     ManufacturingCount,
     int     PayrollCount,
     int     ScrapCount,
+    int     SalesCount,
     DateTimeOffset GeneratedAtUtc)
 {
     public decimal TotalOperatingCost => TotalManufacturingCost + TotalPayroll + TotalScrapWriteOffs;
@@ -102,15 +104,19 @@ public class BankService
     private int _initialized = 0;
     private readonly SemaphoreSlim _initLock = new(1, 1);
 
+    private readonly WebPubSubService? _webPubSub;
+
     public BankService(
         string connectionString,
         string tableServiceUri,
         ILogger<BankService> logger,
-        TelemetryClient telemetry)
+        TelemetryClient telemetry,
+        WebPubSubService? webPubSub = null)
     {
         _connectionString = connectionString;
         _logger           = logger;
         _telemetry        = telemetry;
+        _webPubSub        = webPubSub;
 
         var svc = new TableServiceClient(new Uri(tableServiceUri), new DefaultAzureCredential());
         _accountsTable      = svc.GetTableClient(ACCOUNTS_TABLE);
@@ -384,6 +390,19 @@ public class BankService
                     { "balanceAfter", newBalance.ToString("N4") }
                 });
 
+                // Push real-time finance event to connected browser clients
+                if (_webPubSub != null)
+                {
+                    _ = _webPubSub.SendToGroupAsync("finance", new
+                    {
+                        @event = "transaction",
+                        currencyCode = code,
+                        amount = request.Amount,
+                        transactionType = request.TransactionType,
+                        referenceId = request.ReferenceId,
+                    });
+                }
+
                 return txn;
             }
             catch (RequestFailedException ex) when (ex.Status == 412) // Precondition Failed (ETag conflict)
@@ -439,7 +458,7 @@ public class BankService
             var code = currencyCode.Trim().ToUpperInvariant();
             await foreach (var entity in _transactionsTable.QueryAsync<BankTransactionEntity>(
                 e => e.PartitionKey == code,
-                maxPerPage: maxCount))
+                maxPerPage: Math.Min(maxCount, 1000)))
             {
                 results.Add(ToTransaction(entity));
                 if (results.Count >= maxCount) break;
@@ -449,9 +468,10 @@ public class BankService
         {
             // Scan all partitions — less efficient but useful for a summary
             await foreach (var entity in _transactionsTable.QueryAsync<BankTransactionEntity>(
-                maxPerPage: maxCount * 5))
+                maxPerPage: Math.Min(maxCount, 1000)))
             {
                 results.Add(ToTransaction(entity));
+                if (results.Count >= maxCount) break;
             }
             // Sort by descending time and cap
             results = results
@@ -504,6 +524,7 @@ public class BankService
         var manufacturingTxns  = all.Where(t => t.ReferenceId?.StartsWith("WO-",     StringComparison.OrdinalIgnoreCase) == true && t.TransactionType == "purchase").ToList();
         var payrollTxns        = all.Where(t => t.TransactionType == "payroll").ToList();
         var scrapTxns          = all.Where(t => t.ReferenceId?.StartsWith("SCRAP-",  StringComparison.OrdinalIgnoreCase) == true).ToList();
+        var saleTxns           = all.Where(t => t.TransactionType == "sale" || (t.ReferenceId?.StartsWith("SO-", StringComparison.OrdinalIgnoreCase) == true && t.Amount > 0)).ToList();
 
         return new FinancialSummary(
             TotalProcurementSpend:  Math.Abs(procurementTxns.Sum(t => t.Amount)),
@@ -511,10 +532,12 @@ public class BankService
             TotalManufacturingCost: Math.Abs(manufacturingTxns.Sum(t => t.Amount)),
             TotalPayroll:           Math.Abs(payrollTxns.Sum(t => t.Amount)),
             TotalScrapWriteOffs:    Math.Abs(scrapTxns.Sum(t => t.Amount)),
+            TotalRevenue:           saleTxns.Sum(t => t.Amount),
             ProcurementCount:       procurementTxns.Count,
             ManufacturingCount:     manufacturingTxns.Count,
             PayrollCount:           payrollTxns.Count,
             ScrapCount:             scrapTxns.Count,
+            SalesCount:             saleTxns.Count,
             GeneratedAtUtc:         DateTimeOffset.UtcNow);
     }
 

@@ -24,7 +24,16 @@ User → Static Web App → GraphQL (DAB) → Azure SQL
 
 All services authenticate via **Managed Identity** (passwordless). No connection strings in code.
 
-**Real-time push**: Azure Web PubSub (Free tier) pushes events from Azure Functions to all three frontends via WebSocket. The `WebPubSubService` singleton fires events after each mutation. Clients use the `useWebPubSub` hook + `useRealTimeUpdates` dispatcher to invalidate React Query caches. Slow fallback polling (60–120s) handles reconnection gaps.
+**Real-time push**: Azure Web PubSub (Free tier) pushes events from Azure Functions to all three frontends via WebSocket. The `WebPubSubService` singleton fires events after each mutation. Clients use the `useWebPubSub` hook + `useRealTimeUpdates` dispatcher to invalidate React Query caches.
+
+### No Polling / No Manual Refresh Policy
+
+**Do NOT use `refetchInterval` or manual polling on any page where Web PubSub real-time updates apply.** All data freshness must come from server-pushed cache invalidation via the `useRealTimeUpdates` hook. React Query's default window-focus refetch provides a natural fallback when users return to the tab.
+
+When adding a new query that needs live updates:
+1. Register the query key in the appropriate group handler in `app-manufacturing/src/hooks/useRealTimeUpdates.ts` (or the equivalent hook in `app/` or `app-admin/`)
+2. Ensure the server-side mutation calls `WebPubSubService.SendToGroupAsync` for the relevant group
+3. Do NOT add `refetchInterval` — the Web PubSub event-driven invalidation replaces polling entirely
 
 ## Critical Development Workflows
 

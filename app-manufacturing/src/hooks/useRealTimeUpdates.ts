@@ -8,6 +8,7 @@ const GROUPS = [
   "supply-chain",
   "orders",
   "shopping-simulator",
+  "finance",
 ];
 
 /**
@@ -38,11 +39,22 @@ export function useRealTimeUpdates() {
         qc.invalidateQueries({ queryKey: ["manufacturing-active"] });
         qc.invalidateQueries({ queryKey: ["active-operations"] });
         qc.invalidateQueries({ queryKey: ["work-orders"] });
+        qc.invalidateQueries({ queryKey: ["work-order"] });
+        qc.invalidateQueries({ queryKey: ["work-orders-active"] });
         qc.invalidateQueries({ queryKey: ["all-recent-wos"] });
         qc.invalidateQueries({ queryKey: ["recent-routings"] });
+        qc.invalidateQueries({ queryKey: ["wo-routing"] });
+        qc.invalidateQueries({ queryKey: ["all-routing"] });
         qc.invalidateQueries({ queryKey: ["workforce-snapshot"] });
         qc.invalidateQueries({ queryKey: ["workforce"] });
         qc.invalidateQueries({ queryKey: ["workforce-detail"] });
+        qc.invalidateQueries({ queryKey: ["vendor-quality"] });
+        qc.invalidateQueries({ queryKey: ["scrap-events"] });
+        qc.invalidateQueries({ queryKey: ["supply-orders-shortages"] });
+        qc.invalidateQueries({ queryKey: ["shortage-forecast"] });
+        qc.invalidateQueries({ queryKey: ["reorder-recs"] });
+        qc.invalidateQueries({ queryKey: ["plan-catalog"] });
+        qc.invalidateQueries({ queryKey: ["overstock"] });
         break;
 
       case "warehouse":
@@ -53,6 +65,7 @@ export function useRealTimeUpdates() {
         qc.invalidateQueries({ queryKey: ["warehouse-workforce-detail"] });
         qc.invalidateQueries({ queryKey: ["all-product-inventory"] });
         qc.invalidateQueries({ queryKey: ["product-inventory"] });
+        qc.invalidateQueries({ queryKey: ["plan-catalog"] });
         break;
 
       case "supply-chain":
@@ -62,6 +75,7 @@ export function useRealTimeUpdates() {
         qc.invalidateQueries({ queryKey: ["open-purchase-orders"] });
         qc.invalidateQueries({ queryKey: ["po-headers-all"] });
         qc.invalidateQueries({ queryKey: ["supply-catalog-all"] });
+        qc.invalidateQueries({ queryKey: ["supply-catalog"] });
         break;
 
       case "orders":
@@ -70,6 +84,14 @@ export function useRealTimeUpdates() {
 
       case "shopping-simulator":
         qc.invalidateQueries({ queryKey: ["manufacturing-status"] });
+        break;
+
+      case "finance":
+        qc.invalidateQueries({ queryKey: ["bank-status"] });
+        qc.invalidateQueries({ queryKey: ["financial-summary"] });
+        qc.invalidateQueries({ queryKey: ["recent-transactions"] });
+        qc.invalidateQueries({ queryKey: ["procurement-transactions"] });
+        qc.invalidateQueries({ queryKey: ["manufacturing-transactions"] });
         break;
     }
   });

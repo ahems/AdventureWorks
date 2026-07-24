@@ -11,7 +11,7 @@ const ExecuteWorkOrder = () => {
   const woId = Number(id);
 
   const { data: wo, isLoading } = useQuery({ queryKey: ['work-order', woId], queryFn: () => fetchWorkOrder(woId) });
-  const { data: routing } = useQuery({ queryKey: ['wo-routing', woId], queryFn: () => fetchWorkOrderRouting(woId), enabled: !!wo, refetchInterval: 60_000 });
+  const { data: routing } = useQuery({ queryKey: ['wo-routing', woId], queryFn: () => fetchWorkOrderRouting(woId), enabled: !!wo, refetchInterval: 120_000 });
   const { data: product } = useQuery({ queryKey: ['product', wo?.ProductID], queryFn: () => fetchProduct(wo!.ProductID), enabled: !!wo });
   const { data: locations } = useQuery({ queryKey: ['locations'], queryFn: fetchLocations });
   const { data: scrapReasons } = useQuery({ queryKey: ['scrap-reasons'], queryFn: fetchScrapReasons });

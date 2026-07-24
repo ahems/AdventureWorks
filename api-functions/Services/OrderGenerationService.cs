@@ -195,11 +195,18 @@ public class OrderGenerationService
             // by the scalar function dbo.ufnLeadingZeros) — it cannot be INSERT-targeted.
             // Sales.SalesOrderNumber does not exist as a SEQUENCE; SalesOrderNumber is a
             // computed column on Sales.SalesOrderHeader.  Both are omitted from the INSERT.
+            // Resolve TerritoryID from the customer's StateProvinceID so international
+            // customers are assigned to the correct sales territory.
+            var territoryId = await connection.ExecuteScalarAsync<int?>(@"
+                SELECT TerritoryID FROM Person.StateProvince WHERE StateProvinceID = @StateProvinceId",
+                new { StateProvinceId = stateProvinceId },
+                transaction: tx) ?? 1; // fallback to territory 1 (Northwest)
+
             var customerId = await connection.ExecuteScalarAsync<int>(@"
                 INSERT INTO Sales.Customer (PersonID, TerritoryID, rowguid, ModifiedDate)
                 OUTPUT INSERTED.CustomerID
-                VALUES (@BizEntityId, 1, NEWID(), GETDATE())",
-                new { BizEntityId = bizEntityId },
+                VALUES (@BizEntityId, @TerritoryId, NEWID(), GETDATE())",
+                new { BizEntityId = bizEntityId, TerritoryId = territoryId },
                 transaction: tx);
 
             tx.Commit();
@@ -385,19 +392,42 @@ public class OrderGenerationService
             var orderDate = DateTime.UtcNow;
             var dueDate = orderDate.AddDays(7);
 
+            // Resolve CurrencyRateID from the ship-to address so international orders
+            // record the applicable exchange rate (Address → StateProvince → Country → CurrencyRate).
+            var currencyRateId = await connection.ExecuteScalarAsync<int?>(@"
+                SELECT TOP 1 cr.CurrencyRateID
+                FROM Person.Address addr
+                INNER JOIN Person.StateProvince sp    ON sp.StateProvinceID    = addr.StateProvinceID
+                INNER JOIN Sales.CountryRegionCurrency crc
+                                                      ON crc.CountryRegionCode = sp.CountryRegionCode
+                INNER JOIN (
+                    SELECT RTRIM(ToCurrencyCode) AS ToCurrencyCode, MAX(CurrencyRateDate) AS LatestDate
+                    FROM   Sales.CurrencyRate
+                    WHERE  RTRIM(FromCurrencyCode) = 'USD'
+                    GROUP  BY ToCurrencyCode
+                ) latest ON latest.ToCurrencyCode = RTRIM(crc.CurrencyCode)
+                INNER JOIN Sales.CurrencyRate cr
+                           ON RTRIM(cr.ToCurrencyCode)   = latest.ToCurrencyCode
+                          AND cr.CurrencyRateDate          = latest.LatestDate
+                          AND RTRIM(cr.FromCurrencyCode)  = 'USD'
+                WHERE addr.AddressID = @AddressId
+                  AND RTRIM(crc.CurrencyCode) <> 'USD'",
+                new { AddressId = addressId },
+                transaction: tx);
+
             // Insert SalesOrderHeader (Status 1 = Pending / In Process)
             // TotalDue is a computed column (SubTotal + TaxAmt + Freight) — do not include it
             var salesOrderId = await connection.ExecuteScalarAsync<int>(@"
                 INSERT INTO Sales.SalesOrderHeader
                     (RevisionNumber, OrderDate, DueDate, Status, OnlineOrderFlag,
                      CustomerID, ShipToAddressID, BillToAddressID,
-                     ShipMethodID, SubTotal, TaxAmt, Freight,
+                     ShipMethodID, CurrencyRateID, SubTotal, TaxAmt, Freight,
                      rowguid, ModifiedDate)
                 OUTPUT INSERTED.SalesOrderID
                 VALUES
                     (1, @OrderDate, @DueDate, 1, 1,
                      @CustomerId, @AddressId, @AddressId,
-                     @ShipMethodId, 0, 0, 0,
+                     @ShipMethodId, @CurrencyRateId, 0, 0, 0,
                      NEWID(), GETDATE())",
                 new
                 {
@@ -405,7 +435,8 @@ public class OrderGenerationService
                     DueDate = dueDate,
                     req.CustomerId,
                     AddressId = addressId,
-                    ShipMethodId = shipMethodId
+                    ShipMethodId = shipMethodId,
+                    CurrencyRateId = currencyRateId.HasValue ? (object)currencyRateId.Value : DBNull.Value
                 },
                 transaction: tx);
 
@@ -590,20 +621,42 @@ public class OrderGenerationService
             var orderDate = DateTime.UtcNow;
             var dueDate = req.DueDate?.ToUniversalTime() ?? orderDate.AddDays(14); // B2B default: 14-day terms
 
+            // Resolve CurrencyRateID from the store's ship-to address for international stores.
+            var currencyRateId = await connection.ExecuteScalarAsync<int?>(@"
+                SELECT TOP 1 cr.CurrencyRateID
+                FROM Person.Address addr
+                INNER JOIN Person.StateProvince sp    ON sp.StateProvinceID    = addr.StateProvinceID
+                INNER JOIN Sales.CountryRegionCurrency crc
+                                                      ON crc.CountryRegionCode = sp.CountryRegionCode
+                INNER JOIN (
+                    SELECT RTRIM(ToCurrencyCode) AS ToCurrencyCode, MAX(CurrencyRateDate) AS LatestDate
+                    FROM   Sales.CurrencyRate
+                    WHERE  RTRIM(FromCurrencyCode) = 'USD'
+                    GROUP  BY ToCurrencyCode
+                ) latest ON latest.ToCurrencyCode = RTRIM(crc.CurrencyCode)
+                INNER JOIN Sales.CurrencyRate cr
+                           ON RTRIM(cr.ToCurrencyCode)   = latest.ToCurrencyCode
+                          AND cr.CurrencyRateDate          = latest.LatestDate
+                          AND RTRIM(cr.FromCurrencyCode)  = 'USD'
+                WHERE addr.AddressID = @AddressId
+                  AND RTRIM(crc.CurrencyCode) <> 'USD'",
+                new { AddressId = addressId },
+                transaction: tx);
+
             // Insert SalesOrderHeader — OnlineOrderFlag=0 for manually placed orders
             var salesOrderId = await connection.ExecuteScalarAsync<int>(@"
                 INSERT INTO Sales.SalesOrderHeader
                     (RevisionNumber, OrderDate, DueDate, Status, OnlineOrderFlag,
                      PurchaseOrderNumber, AccountNumber,
                      CustomerID, ShipToAddressID, BillToAddressID,
-                     ShipMethodID, SubTotal, TaxAmt, Freight, Comment,
+                     ShipMethodID, CurrencyRateID, SubTotal, TaxAmt, Freight, Comment,
                      rowguid, ModifiedDate)
                 OUTPUT INSERTED.SalesOrderID
                 VALUES
                     (1, @OrderDate, @DueDate, 1, 0,
                      @PurchaseOrderNumber, @AccountNumber,
                      @CustomerId, @AddressId, @AddressId,
-                     @ShipMethodId, 0, 0, 0, @Comment,
+                     @ShipMethodId, @CurrencyRateId, 0, 0, 0, @Comment,
                      NEWID(), GETDATE())",
                 new
                 {
@@ -614,6 +667,7 @@ public class OrderGenerationService
                     CustomerId = storeInfo.CustomerID,
                     AddressId = addressId,
                     ShipMethodId = shipMethodId,
+                    CurrencyRateId = currencyRateId.HasValue ? (object)currencyRateId.Value : DBNull.Value,
                     Comment = req.Comment ?? (object)DBNull.Value
                 },
                 transaction: tx);

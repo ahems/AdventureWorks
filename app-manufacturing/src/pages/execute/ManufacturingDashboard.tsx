@@ -30,7 +30,6 @@ import {
   Package,
   Pause,
   Play,
-  RefreshCw,
   Skull,
   Timer,
   Zap,
@@ -108,6 +107,7 @@ const ManufacturingDashboard: React.FC = () => {
     queryKey: ["supply-orders-shortages"],
     queryFn: fetchOrders,
     staleTime: 15_000,
+    refetchInterval: 120_000,
   });
 
   // Build lookup: productId → active orders with ETA
@@ -130,6 +130,7 @@ const ManufacturingDashboard: React.FC = () => {
     queryKey: ["vendor-quality"],
     queryFn: fetchVendorQuality,
     staleTime: 30_000,
+    refetchInterval: 120_000,
     enabled: activeTab === "supplier-quality",
   });
 
@@ -140,6 +141,7 @@ const ManufacturingDashboard: React.FC = () => {
     queryKey: ["scrap-events", qualityVendorFilter],
     queryFn: () => fetchScrapEvents(qualityVendorFilter ?? undefined),
     staleTime: 30_000,
+    refetchInterval: 120_000,
     enabled: activeTab === "supplier-quality" && qualityVendorFilter !== null,
   });
 

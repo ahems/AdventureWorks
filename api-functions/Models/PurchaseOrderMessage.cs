@@ -35,4 +35,7 @@ public record PurchaseOrderMessage
 
     /// <summary>ProductID to restock. 0 = restock all components for this vendor.</summary>
     public int ProductId { get; set; }
+
+    /// <summary>Qty from the PO that triggered this restock. Used for demand-scaled restocking.</summary>
+    public int OrderedQty { get; set; }
 }

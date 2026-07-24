@@ -152,6 +152,8 @@ public class WorkOrderOperationProcessorFunction
                         msg.WorkOrderId, requiredQty, componentProductId, componentName,
                         available, msg.MaterialRetryCount + 1, retryDelaySec);
 
+                    await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "shortage-updated", productId = componentProductId, workOrderId = msg.WorkOrderId });
+
                     var retryMsg = msg with { MaterialRetryCount = msg.MaterialRetryCount + 1 };
                     await RequeueAsync(queueClient, retryMsg, TimeSpan.FromSeconds(retryDelaySec));
                     return;
@@ -159,6 +161,10 @@ public class WorkOrderOperationProcessorFunction
 
                 // Consumption succeeded — remove any pending shortage record
                 await _sim.ClearShortageAsync(msg.WorkOrderId, componentProductId);
+                if (msg.MaterialRetryCount > 0)
+                {
+                    await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "shortage-updated", productId = componentProductId, workOrderId = msg.WorkOrderId });
+                }
                 _logger.LogDebug("Consumed {Qty} units of ProductID={ComponentId} for WO={WorkOrderId}",
                     requiredQty, componentProductId, msg.WorkOrderId);
             }
@@ -301,6 +307,9 @@ public class WorkOrderOperationProcessorFunction
             }
         }
 
+        // Notify clients that a routing operation completed (distinct from wo-completed which fires only on final op)
+        await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "routing-updated", workOrderId = msg.WorkOrderId, operationSequence = msg.OperationSequence });
+
         // Bank: payroll charge for this routing operation
         if (msg.AssignedEmployeeId.HasValue && msg.AssignedHourlyRate > 0)
         {
@@ -395,6 +404,8 @@ public class WorkOrderOperationProcessorFunction
                 "[Scrap] WO={WorkOrderId} Location={LocationId} Reason={Reason} TotalFailure={Total}{VendorNote}",
                 msg.WorkOrderId, msg.LocationId, reasonName, isTotalFailure,
                 suppVendorId.HasValue ? $" AttributedVendor={suppVendorId}({suppVendorName})" : "");
+
+            await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "scrap-event", workOrderId = msg.WorkOrderId, productId = msg.ProductId, locationId = msg.LocationId, scrappedQty = 1 });
 
             if (isTotalFailure)
             {

@@ -9,7 +9,7 @@ import { ScheduleSkeleton } from '@/components/LoadingSkeletons';
 type TimePhase = 'upcoming' | 'inprogress' | 'completed';
 
 const PlanSchedule = () => {
-  const { data: routing, isLoading } = useQuery({ queryKey: ['all-routing'], queryFn: () => fetchWorkOrderRouting() });
+  const { data: routing, isLoading } = useQuery({ queryKey: ['all-routing'], queryFn: () => fetchWorkOrderRouting(), refetchInterval: 120_000 });
   const { data: locations } = useQuery({ queryKey: ['locations'], queryFn: fetchLocations });
   const { data: products } = useQuery({ queryKey: ['manufactured-products'], queryFn: fetchManufacturedProducts });
 

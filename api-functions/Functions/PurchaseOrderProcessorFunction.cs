@@ -138,30 +138,6 @@ public class PurchaseOrderProcessorFunction
         // Schedule next step (only if we reached "approved" — complete/rejected are terminal)
         if (resolvedTarget == "approved")
             await ScheduleDeliveryAsync(msg.OrderId);
-
-        // Schedule deferred vendor restock after successful delivery
-        if (resolvedTarget == "complete")
-        {
-            var order = await _svc.GetOrderAsync(msg.OrderId);
-            if (order != null)
-            {
-                var vendorInfo   = await _svc.GetVendorAsync(order.VendorId);
-                int restockHrs   = vendorInfo?.RestockDelaySimHrs ?? 12;
-                double effScale  = await _svc.GetEffectiveTimeScaleAsync();
-                int restockSec   = Math.Max(1, (int)(restockHrs * 3600.0 / effScale));
-
-                await EnqueueMessageAsync(new PurchaseOrderMessage
-                {
-                    MessageType    = "vendor-restock",
-                    VendorId       = order.VendorId,
-                    ProductId      = order.ProductId,
-                    ScheduledAtUtc = DateTime.UtcNow.AddSeconds(restockSec),
-                }, visibilityDelaySec: restockSec);
-
-                _logger.LogDebug("Scheduled restock for vendor {VendorId} ProductID={ProductId} in {Sec}s",
-                    order.VendorId, order.ProductId, restockSec);
-            }
-        }
     }
 
     /// <summary>
@@ -207,8 +183,9 @@ public class PurchaseOrderProcessorFunction
             return;
         }
 
-        await _svc.RestockVendorAsync(msg.VendorId, msg.ProductId);
-        _logger.LogInformation("Restocked vendor {VendorId} productId={ProductId}", msg.VendorId, msg.ProductId);
+        await _svc.RestockVendorScaledAsync(msg.VendorId, msg.ProductId, msg.OrderedQty);
+        _logger.LogInformation("Demand-scaled restock for vendor {VendorId} productId={ProductId} (triggeredByQty={Qty})",
+            msg.VendorId, msg.ProductId, msg.OrderedQty);
     }
 
     // ── Queue helper ──────────────────────────────────────────────────────────

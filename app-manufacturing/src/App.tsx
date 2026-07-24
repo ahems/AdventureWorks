@@ -32,6 +32,7 @@ import PlanWorkOrders from "@/pages/plan/PlanWorkOrders";
 import PlanWorkOrderDetail from "@/pages/plan/PlanWorkOrderDetail";
 import PlanSchedule from "@/pages/plan/PlanSchedule";
 import PlanningIntelligence from "@/pages/plan/PlanningIntelligence";
+import FinanceManager from "@/pages/plan/FinanceManager";
 import PlanDemand from "@/pages/plan/PlanDemand";
 import ManufacturingDashboard from "@/pages/execute/ManufacturingDashboard";
 import ExecuteShopFloor from "@/pages/execute/ExecuteShopFloor";
@@ -124,6 +125,7 @@ const App = () => (
                   path="/plan/intelligence"
                   element={<PlanningIntelligence />}
                 />
+                <Route path="/plan/finance" element={<FinanceManager />} />
                 <Route path="/plan/demand" element={<PlanDemand />} />
                 <Route path="/execute" element={<ManufacturingDashboard />} />
                 <Route

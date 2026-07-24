@@ -153,6 +153,25 @@ public class SupplyChainControlFunction
             targetStatus: "approved",
             delaySec: 5);          // 5 sim-min = 5 real sec at scale 60
 
+        // Schedule vendor restock at placement time (supplier knows to replenish when PO arrives)
+        var vendor = await _svc.GetVendorAsync(vendorId);
+        int restockHrs  = vendor?.RestockDelaySimHrs ?? 12;
+        double effScale = await _svc.GetEffectiveTimeScaleAsync();
+        int restockSec  = Math.Max(1, (int)(restockHrs * 3600.0 / effScale));
+
+        var restockMsg = new Models.PurchaseOrderMessage
+        {
+            MessageType    = "vendor-restock",
+            VendorId       = vendorId,
+            ProductId      = productId,
+            OrderedQty     = qty,
+            ScheduledAtUtc = DateTime.UtcNow.AddSeconds(restockSec),
+        };
+        string restockJson    = JsonSerializer.Serialize(restockMsg);
+        string restockEncoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(restockJson));
+        await queueClient.SendMessageAsync(restockEncoded,
+            visibilityTimeout: TimeSpan.FromSeconds(restockSec));
+
         return await CreatedAsync(req, order);
     }
 
@@ -204,6 +223,16 @@ public class SupplyChainControlFunction
             return await UnprocessableAsync(req, $"Order '{orderId}' not found or cannot be cancelled (must be in 'pending' status).");
 
         return await OkAsync(req, new { message = $"Order {orderId} cancelled.", reason });
+    }
+
+    // ── Initialize ──────────────────────────────────────────────────────────
+
+    [Function("SupplyChainInitialize")]
+    public async Task<HttpResponseData> Initialize(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "supply/initialize")] HttpRequestData req)
+    {
+        await _svc.ForceReinitializeAsync();
+        return await OkAsync(req, new { message = "Supply chain re-initialized with updated stock levels." });
     }
 
     // ── Restock ───────────────────────────────────────────────────────────────

@@ -81,7 +81,7 @@ const ExecuteShopFloor = () => {
     queries: activeOrders.map(wo => ({
       queryKey: ['wo-routing', wo.WorkOrderID],
       queryFn: () => fetchWorkOrderRouting(wo.WorkOrderID),
-      refetchInterval: 60_000,
+      refetchInterval: 120_000,
     })),
   });
 

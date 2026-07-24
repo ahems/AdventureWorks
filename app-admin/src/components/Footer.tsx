@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Bike, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
+import AdminLogo from "@/components/AdminLogo";
 import { getAppUrl, getManufacturingUrl } from "@/lib/utils";
 
 const Footer: React.FC = () => {
@@ -14,8 +15,8 @@ const Footer: React.FC = () => {
           {/* Brand */}
           <div className="flex items-center gap-3">
             <Link to="/" className="flex items-center gap-2">
-              <div className="bg-doodle-bg p-1.5 border-2 border-doodle-bg">
-                <Bike className="w-5 h-5 text-doodle-text" />
+              <div>
+                <AdminLogo className="w-7 h-7" />
               </div>
               <span className="font-doodle text-lg font-bold">
                 Adventure<span className="text-doodle-accent">Works</span>

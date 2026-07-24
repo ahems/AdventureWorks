@@ -62,7 +62,6 @@ import {
   Clock,
   ArrowRight,
   Lightbulb,
-  RefreshCw,
   ExternalLink,
   Factory,
   ChevronRight,
@@ -164,7 +163,6 @@ const PlanningIntelligence: React.FC = () => {
   const { data: workOrders } = useQuery({
     queryKey: ["work-orders-active"],
     queryFn: () => fetchWorkOrders(),
-    refetchInterval: 120_000,
   });
 
   // Map productId → total qty currently being manufactured (no EndDate = in progress)
@@ -539,18 +537,22 @@ const PlanningIntelligence: React.FC = () => {
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <DollarSign className="h-5 w-5 text-primary" />
-            <div>
-              <p className="text-2xl font-bold font-doodle">
-                {reorder
-                  ? `$${reorder.estimatedTotalProcurementCost.toFixed(0)}`
-                  : "—"}
-              </p>
-              <p className="text-xs text-muted-foreground">Reorder Cost Est.</p>
-            </div>
-          </CardContent>
+        <Card className="cursor-pointer hover:ring-2 hover:ring-primary/30 transition-shadow">
+          <Link to="/plan/finance">
+            <CardContent className="p-4 flex items-center gap-3">
+              <DollarSign className="h-5 w-5 text-primary" />
+              <div>
+                <p className="text-2xl font-bold font-doodle">
+                  {reorder
+                    ? `$${reorder.estimatedTotalProcurementCost.toFixed(0)}`
+                    : "—"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Reorder Cost Est.
+                </p>
+              </div>
+            </CardContent>
+          </Link>
         </Card>
       </div>
 
@@ -813,14 +815,25 @@ const PlanningIntelligence: React.FC = () => {
                                               )
                                             }
                                             trigger={
-                                              <Button
-                                                variant="default"
-                                                size="sm"
-                                                className="text-xs"
-                                              >
-                                                <Factory className="h-3 w-3 mr-1" />{" "}
-                                                Produce
-                                              </Button>
+                                              p.maxProducibleNow === 0 ? (
+                                                <Button
+                                                  variant="secondary"
+                                                  size="sm"
+                                                  className="text-xs"
+                                                >
+                                                  <Clock className="h-3 w-3 mr-1" />{" "}
+                                                  Schedule
+                                                </Button>
+                                              ) : (
+                                                <Button
+                                                  variant="default"
+                                                  size="sm"
+                                                  className="text-xs"
+                                                >
+                                                  <Factory className="h-3 w-3 mr-1" />{" "}
+                                                  Produce
+                                                </Button>
+                                              )
                                             }
                                           />
                                         ))

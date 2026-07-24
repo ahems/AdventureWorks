@@ -21,6 +21,7 @@ import {
   LogOut,
   Warehouse,
   Bot,
+  DollarSign,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import AppBreadcrumb from "@/components/AppBreadcrumb";
@@ -99,6 +100,7 @@ const secondaryNavGroups = [
     items: [
       { to: "/plan/demand", label: "Demand", icon: ShoppingCart },
       { to: "/plan/intelligence", label: "Planning", icon: BarChart3 },
+      { to: "/plan/finance", label: "Finance", icon: DollarSign },
     ],
   },
   {

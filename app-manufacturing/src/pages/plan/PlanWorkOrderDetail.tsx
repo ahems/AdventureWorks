@@ -17,8 +17,8 @@ const PlanWorkOrderDetail = () => {
   const { id } = useParams();
   const woId = Number(id);
 
-  const { data: wo, isLoading } = useQuery({ queryKey: ['work-order', woId], queryFn: () => fetchWorkOrder(woId) });
-  const { data: routing } = useQuery({ queryKey: ['wo-routing', woId], queryFn: () => fetchWorkOrderRouting(woId), enabled: !!wo });
+  const { data: wo, isLoading } = useQuery({ queryKey: ['work-order', woId], queryFn: () => fetchWorkOrder(woId), refetchInterval: 120_000 });
+  const { data: routing } = useQuery({ queryKey: ['wo-routing', woId], queryFn: () => fetchWorkOrderRouting(woId), enabled: !!wo, refetchInterval: 120_000 });
   const { data: productRouting } = useQuery({ queryKey: ['product-routing', wo?.ProductID], queryFn: () => fetchRoutingByProduct(wo!.ProductID), enabled: !!wo });
   const { data: product } = useQuery({ queryKey: ['product', wo?.ProductID], queryFn: () => fetchProduct(wo!.ProductID), enabled: !!wo });
   const { data: locations } = useQuery({ queryKey: ['locations'], queryFn: fetchLocations });

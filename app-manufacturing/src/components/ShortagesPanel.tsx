@@ -47,6 +47,9 @@ import {
   Pencil,
   Ban,
   X,
+  PackagePlus,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { ManufacturingStatus } from "@/services/api";
@@ -57,6 +60,7 @@ import {
 } from "@/services/api";
 import {
   fetchCatalog,
+  placeOrder,
   formatIncomingEta,
   formatUtcTime,
   type SupplyQuote,
@@ -285,6 +289,153 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
     return { units, dollars };
   }, [selected, shortages, quotesByProduct]);
 
+  // ── Re-Order All logic ──────────────────────────────────────────────────────
+  const [reorderAllConfirm, setReorderAllConfirm] = useState(false);
+  const [reorderAllInProgress, setReorderAllInProgress] = useState(false);
+
+  // Compute what needs ordering across all shortage groups
+  const reorderAllPlan = useMemo(() => {
+    const items: {
+      productId: number;
+      productName: string;
+      remainingToOrder: number;
+      quotes: SupplyQuote[];
+      estCost: number;
+      fulfillableQty: number;
+      fulfillable: boolean;
+    }[] = [];
+    for (const g of grouped) {
+      const orders = ordersByProduct.get(g.productId) || [];
+      const totalOnOrder = orders.reduce((sum, o) => sum + o.qty, 0);
+      const remainingToOrder = Math.max(0, g.totalShortfall - totalOnOrder);
+      if (remainingToOrder <= 0) continue;
+      const quotes = quotesByProduct.get(g.productId) || [];
+      if (quotes.length === 0) continue;
+      const best = quotes[0];
+      // Calculate how much can actually be fulfilled from vendors with stock
+      const availableVendors = quotes.filter((q) => q.stockAvailable > 0);
+      const fulfillableQty = Math.min(
+        remainingToOrder,
+        availableVendors.reduce((sum, v) => {
+          const maxQty = v.maxOrderQty || v.stockAvailable;
+          return sum + Math.min(v.stockAvailable, maxQty);
+        }, 0),
+      );
+      items.push({
+        productId: g.productId,
+        productName: g.productName,
+        remainingToOrder,
+        quotes,
+        estCost: best.unitCost * remainingToOrder,
+        fulfillableQty,
+        fulfillable: fulfillableQty > 0,
+      });
+    }
+    return items;
+  }, [grouped, ordersByProduct, quotesByProduct]);
+
+  const reorderAllFulfillable = useMemo(
+    () => reorderAllPlan.filter((item) => item.fulfillable),
+    [reorderAllPlan],
+  );
+  const reorderAllUnfulfillable = useMemo(
+    () => reorderAllPlan.filter((item) => !item.fulfillable),
+    [reorderAllPlan],
+  );
+  const reorderAllFulfillableCost = useMemo(
+    () =>
+      reorderAllPlan.reduce((sum, item) => {
+        if (!item.fulfillable) return sum;
+        const best = item.quotes.find((q) => q.stockAvailable > 0);
+        return sum + (best ? best.unitCost * item.fulfillableQty : 0);
+      }, 0),
+    [reorderAllPlan],
+  );
+
+  const submitReorderAll = async () => {
+    setReorderAllInProgress(true);
+    let totalOrders = 0;
+    let totalFailed = 0;
+    const failedProducts: string[] = [];
+
+    for (const item of reorderAllFulfillable) {
+      try {
+        // Multi-vendor order splitting: sort by cheapest with stock first
+        const available = item.quotes
+          .filter((v) => v.stockAvailable > 0)
+          .sort((a, b) => a.unitCost - b.unitCost);
+
+        if (available.length === 0) {
+          failedProducts.push(item.productName);
+          totalFailed++;
+          continue;
+        }
+
+        let remaining = item.remainingToOrder;
+        let productOrderPlaced = false;
+
+        for (const vendor of available) {
+          if (remaining <= 0) break;
+          const minQty = vendor.minOrderQty || 1;
+          const maxQty = vendor.maxOrderQty || vendor.stockAvailable;
+          const desired = Math.min(remaining, vendor.stockAvailable, maxQty);
+          const orderQty = Math.max(desired, minQty);
+          // Skip vendor if min order exceeds their available stock
+          if (orderQty > vendor.stockAvailable) continue;
+          try {
+            await placeOrder(vendor.vendorId, item.productId, orderQty);
+            totalOrders++;
+            remaining -= orderQty;
+            productOrderPlaced = true;
+          } catch (e: unknown) {
+            // If vendor rejects (422 / insufficient stock), try next
+            if (
+              e instanceof Error &&
+              (e.message?.includes("422") ||
+                e.message?.includes("Insufficient stock"))
+            ) {
+              continue;
+            }
+            // Other errors — log and try next vendor
+            console.error(
+              `Re-Order All: failed for ${item.productName} at ${vendor.vendorName}`,
+              e,
+            );
+            continue;
+          }
+        }
+        if (!productOrderPlaced) {
+          failedProducts.push(item.productName);
+          totalFailed++;
+        }
+      } catch (e) {
+        console.error(
+          `Re-Order All: unexpected error for ${item.productName}`,
+          e,
+        );
+        failedProducts.push(item.productName);
+        totalFailed++;
+      }
+    }
+
+    setReorderAllInProgress(false);
+    setReorderAllConfirm(false);
+
+    if (totalFailed === 0) {
+      toast.success(
+        `Placed ${totalOrders} purchase order${totalOrders !== 1 ? "s" : ""} across ${reorderAllFulfillable.length} product${reorderAllFulfillable.length !== 1 ? "s" : ""}`,
+      );
+    } else if (totalOrders > 0) {
+      toast.warning(
+        `Placed ${totalOrders} order${totalOrders !== 1 ? "s" : ""}, but ${totalFailed} product${totalFailed !== 1 ? "s" : ""} could not be fulfilled: ${failedProducts.join(", ")}`,
+      );
+    } else {
+      toast.error("No orders could be placed — all vendors out of stock");
+    }
+    invalidate();
+    qc.invalidateQueries({ queryKey: ["supply-orders"] });
+  };
+
   if (!shortages.length) {
     return (
       <Card>
@@ -307,11 +458,30 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
     <>
       <Card>
         <CardHeader>
-          <CardTitle className="font-doodle">Material Shortages</CardTitle>
-          <CardDescription>
-            Grouped by missing component. Use Reduce to scale a WO down, or
-            Cancel to remove it entirely.
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="font-doodle">Material Shortages</CardTitle>
+              <CardDescription>
+                Grouped by missing component. Use Reduce to scale a WO down, or
+                Cancel to remove it entirely.
+              </CardDescription>
+            </div>
+            {reorderAllPlan.length > 0 && (
+              <Button
+                onClick={() => setReorderAllConfirm(true)}
+                className="gap-2"
+                disabled={reorderAllFulfillable.length === 0}
+              >
+                <PackagePlus className="h-4 w-4" />
+                Re-Order All
+                {reorderAllFulfillable.length > 0 && (
+                  <span className="font-mono text-xs opacity-90">
+                    {fmtMoney(reorderAllFulfillableCost)}
+                  </span>
+                )}
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <Accordion type="multiple" className="space-y-1">
@@ -326,9 +496,22 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
               const quotes = quotesByProduct.get(g.productId) || [];
               const best = quotes[0];
               const next = quotes[1];
-              const estCost = best?.unitCost
-                ? best.unitCost * remainingToOrder
-                : null;
+              // Calculate how much vendors can actually supply
+              const availableVendors = quotes.filter(
+                (q) => q.stockAvailable > 0,
+              );
+              const totalVendorStock = availableVendors.reduce((sum, v) => {
+                const maxQty = v.maxOrderQty || v.stockAvailable;
+                return sum + Math.min(v.stockAvailable, maxQty);
+              }, 0);
+              const orderableQty = Math.min(remainingToOrder, totalVendorStock);
+              const hasStockShortage =
+                remainingToOrder > 0 && orderableQty < remainingToOrder;
+              const noVendorStock = remainingToOrder > 0 && orderableQty === 0;
+              const estCost =
+                best?.unitCost && orderableQty > 0
+                  ? best.unitCost * orderableQty
+                  : null;
               const woIds = g.workOrders.map((w) => w.workOrderId);
               const allSelected =
                 woIds.length > 0 && woIds.every((id) => selected.has(id));
@@ -369,7 +552,7 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
                           incoming {totalOnOrder.toLocaleString()}
                         </Badge>
                       )}
-                      {estCost !== null && remainingToOrder > 0 && (
+                      {estCost !== null && (
                         <Badge
                           variant="secondary"
                           className="text-xs gap-1"
@@ -378,10 +561,39 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
                           <DollarSign className="h-3 w-3" />~{fmtMoney(estCost)}
                         </Badge>
                       )}
+                      {noVendorStock && !covered && (
+                        <Badge
+                          variant="outline"
+                          className="text-xs gap-1 border-destructive/40 text-destructive"
+                        >
+                          <AlertTriangle className="h-3 w-3" />
+                          No vendor stock
+                        </Badge>
+                      )}
+                      {hasStockShortage && !noVendorStock && !covered && (
+                        <Badge
+                          variant="outline"
+                          className="text-xs gap-1 border-amber-500/40 text-amber-600"
+                        >
+                          <AlertTriangle className="h-3 w-3" />
+                          Vendors can supply {orderableQty.toLocaleString()}/
+                          {remainingToOrder.toLocaleString()}
+                        </Badge>
+                      )}
                       {covered ? (
                         <Badge className="text-[10px] bg-green-100 text-green-800 ml-auto mr-4">
                           ✓ Covered by {totalOnOrder.toLocaleString()} on order
                         </Badge>
+                      ) : noVendorStock ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="ml-auto mr-4 h-7 gap-1 text-muted-foreground"
+                          disabled
+                        >
+                          <ShoppingCart className="h-3 w-3" />
+                          Out of stock
+                        </Button>
                       ) : (
                         <Button
                           size="sm"
@@ -390,12 +602,17 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
                           onClick={(e) => {
                             e.stopPropagation();
                             navigate(
-                              `/supply?product=${g.productId}&qty=${remainingToOrder}`,
+                              `/supply?product=${g.productId}&qty=${orderableQty}`,
                             );
                           }}
                         >
                           <ShoppingCart className="h-3 w-3" />
-                          Order {remainingToOrder.toLocaleString()}
+                          Order {orderableQty.toLocaleString()}
+                          {hasStockShortage && (
+                            <span className="text-[10px] opacity-75">
+                              /{remainingToOrder.toLocaleString()}
+                            </span>
+                          )}
                         </Button>
                       )}
                     </div>
@@ -403,42 +620,65 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
                   <AccordionContent>
                     {/* Cost preview */}
                     {best && remainingToOrder > 0 && (
-                      <div className="mb-3 p-2 bg-muted/40 rounded text-xs space-y-0.5">
+                      <div
+                        className={`mb-3 p-2 rounded text-xs space-y-0.5 ${noVendorStock ? "bg-destructive/5 border border-destructive/20" : "bg-muted/40"}`}
+                      >
                         <p className="font-medium text-muted-foreground">
-                          Cost preview
+                          {noVendorStock
+                            ? "⚠ No vendors have stock"
+                            : "Cost preview"}
                         </p>
-                        <p>
-                          <span className="font-mono">
-                            ${best.unitCost.toFixed(2)}/ea
-                          </span>
-                          {" × "}
-                          <span className="font-mono">
-                            {remainingToOrder.toLocaleString()}
-                          </span>
-                          {" = "}
-                          <span className="font-mono font-bold">
-                            {fmtMoney(best.unitCost * remainingToOrder)}
-                          </span>
-                          {" — "}
-                          <span className="text-muted-foreground">
-                            {best.vendorName}
-                          </span>
-                          {(best.stockAvailable ?? 0) < remainingToOrder && (
-                            <span className="ml-2 text-destructive">
-                              (only {best.stockAvailable} in stock)
-                            </span>
-                          )}
-                        </p>
-                        {next && (
-                          <p className="text-muted-foreground">
-                            Next:{" "}
-                            <span className="font-mono">
-                              ${next.unitCost.toFixed(2)}/ea
-                            </span>{" "}
-                            — {next.vendorName}
-                            {(next.stockAvailable ?? 0) > 0 &&
-                              ` (${next.stockAvailable} in stock)`}
+                        {noVendorStock ? (
+                          <p className="text-destructive">
+                            All {quotes.length} vendor
+                            {quotes.length !== 1 ? "s" : ""} are out of stock
+                            for this component. Stock will need to be
+                            replenished before ordering.
                           </p>
+                        ) : (
+                          <>
+                            <p>
+                              <span className="font-mono">
+                                ${best.unitCost.toFixed(2)}/ea
+                              </span>
+                              {" × "}
+                              <span className="font-mono">
+                                {orderableQty.toLocaleString()}
+                              </span>
+                              {" = "}
+                              <span className="font-mono font-bold">
+                                {fmtMoney(best.unitCost * orderableQty)}
+                              </span>
+                              {" — "}
+                              <span className="text-muted-foreground">
+                                {best.vendorName}
+                              </span>
+                              {(best.stockAvailable ?? 0) < orderableQty && (
+                                <span className="ml-2 text-amber-600">
+                                  (only {best.stockAvailable} in stock — will
+                                  split across vendors)
+                                </span>
+                              )}
+                            </p>
+                            {hasStockShortage && (
+                              <p className="text-amber-600">
+                                ⚠ Vendors can only supply{" "}
+                                {orderableQty.toLocaleString()} of{" "}
+                                {remainingToOrder.toLocaleString()} needed
+                              </p>
+                            )}
+                            {next && (
+                              <p className="text-muted-foreground">
+                                Next:{" "}
+                                <span className="font-mono">
+                                  ${next.unitCost.toFixed(2)}/ea
+                                </span>{" "}
+                                — {next.vendorName}
+                                {(next.stockAvailable ?? 0) > 0 &&
+                                  ` (${next.stockAvailable} in stock)`}
+                              </p>
+                            )}
+                          </>
                         )}
                       </div>
                     )}
@@ -724,6 +964,129 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
               disabled={cancelMutation.isPending}
             >
               Cancel {selected.size} WOs
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Re-Order All confirmation dialog */}
+      <Dialog
+        open={reorderAllConfirm}
+        onOpenChange={(o) =>
+          !o && !reorderAllInProgress && setReorderAllConfirm(false)
+        }
+      >
+        <DialogContent className="doodle-dialog max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-doodle">
+              Re-Order All Shortages
+            </DialogTitle>
+            <DialogDescription>
+              {reorderAllFulfillable.length > 0
+                ? `Place purchase orders for ${reorderAllFulfillable.length} product${reorderAllFulfillable.length !== 1 ? "s" : ""}. Orders will be split across multiple vendors when a single supplier cannot fulfil the full quantity.`
+                : "No products can be ordered — all vendors are out of stock."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-64 overflow-y-auto space-y-1">
+            {reorderAllFulfillable.length > 0 && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Component</TableHead>
+                    <TableHead className="text-right">Qty</TableHead>
+                    <TableHead className="text-right">Vendors</TableHead>
+                    <TableHead className="text-right">Est. Cost</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {reorderAllFulfillable.map((item) => (
+                    <TableRow key={item.productId}>
+                      <TableCell className="text-sm">
+                        {item.productName}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {item.fulfillableQty.toLocaleString()}
+                        {item.fulfillableQty < item.remainingToOrder && (
+                          <span className="text-muted-foreground text-xs">
+                            /{item.remainingToOrder.toLocaleString()}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {item.quotes.filter((q) => q.stockAvailable > 0).length}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {fmtMoney(
+                          (item.quotes.find((q) => q.stockAvailable > 0)
+                            ?.unitCost ?? 0) * item.fulfillableQty,
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            {reorderAllUnfulfillable.length > 0 && (
+              <div className="mt-3 p-3 bg-destructive/5 border border-destructive/20 rounded-md">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                  <span className="text-sm font-medium text-destructive">
+                    Cannot order — no vendor stock available
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  {reorderAllUnfulfillable.map((item) => (
+                    <div
+                      key={item.productId}
+                      className="flex items-center justify-between text-sm text-muted-foreground"
+                    >
+                      <span>{item.productName}</span>
+                      <span className="font-mono">
+                        {item.remainingToOrder.toLocaleString()} needed
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          {reorderAllFulfillable.length > 0 && (
+            <div className="flex justify-between items-center pt-2 border-t text-sm">
+              <span className="text-muted-foreground">
+                Total ({reorderAllFulfillable.length} product
+                {reorderAllFulfillable.length !== 1 ? "s" : ""})
+              </span>
+              <span className="font-mono font-bold text-base">
+                {fmtMoney(reorderAllFulfillableCost)}
+              </span>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setReorderAllConfirm(false)}
+              disabled={reorderAllInProgress}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={submitReorderAll}
+              disabled={
+                reorderAllInProgress || reorderAllFulfillable.length === 0
+              }
+              className="gap-2"
+            >
+              {reorderAllInProgress ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Placing orders…
+                </>
+              ) : (
+                <>
+                  <PackagePlus className="h-4 w-4" />
+                  Confirm — {fmtMoney(reorderAllFulfillableCost)}
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

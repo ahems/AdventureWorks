@@ -102,8 +102,12 @@ public class SupplyChainService
     // ── Reliability & restock tables keyed by CreditRating (1=best, 5=worst) ──
     private static readonly double[] ReliabilityByRating    = { 0, 0.97, 0.90, 0.83, 0.73, 0.65 };
     private static readonly int[]    RestockHoursByRating   = { 0,    4,    8,   16,   30,   48 };
-    // Initial stock fill ratio (fraction of MaxOrderQty at seed time)
+    // Initial stock fill ratio applied to MaxOrderQty × multiplier at seed time
     private static readonly double[] FillRatioByRating      = { 0, 0.90, 0.80, 0.68, 0.55, 0.45 };
+    // Demand multiplier: supplier restocks this multiple of recent demand to build safety buffer
+    private const int DemandRestockMultiplier = 2;
+    // Vendor warehouse capacity per product (smallint max — represents physical warehouse limits)
+    internal const int VENDOR_MAX_STOCK = 32_767;
 
     private const string PART_CONFIG = "config";
     private const string ROW_SPEED  = "speed-multiplier";
@@ -323,23 +327,25 @@ public class SupplyChainService
                     if (!vendorDict.TryGetValue(vp.VendorId, out var vendor)) continue;
 
                     var rowKey   = StockRowKey(vp.VendorId, vp.ProductId);
-                    int maxStock = Math.Max(vp.MaxOrderQty, 10);
+                    int maxStock = VENDOR_MAX_STOCK;
 
                     int initStock;
                     if (historicalStock.TryGetValue((vp.VendorId, vp.ProductId), out int histQty))
                     {
                         // Seed from the average stocked qty on completed POs for this vendor+product,
-                        // randomised ±20 % to give a realistic spread across runs.
-                        initStock = (int)Math.Round(histQty * (0.8 + 0.4 * Random.Shared.NextDouble()));
+                        // scaled up 5× to give vendors a healthy starting buffer, randomised ±20%.
+                        initStock = (int)Math.Round(histQty * 5.0 * (0.8 + 0.4 * Random.Shared.NextDouble()));
                         initStock = Math.Clamp(initStock, 0, maxStock);
                         seededFromHistory++;
                     }
                     else
                     {
                         // No purchase history for this pair — fall back to credit-rating fill ratio
+                        // applied to MaxOrderQty × 5 (several orders' worth of starting stock)
                         double fillRatio = vendor.CreditRating >= 1 && vendor.CreditRating <= 5
                             ? FillRatioByRating[vendor.CreditRating] : 0.70;
-                        initStock = (int)Math.Round(maxStock * fillRatio
+                        int baseStock = vp.MaxOrderQty * 5;
+                        initStock = (int)Math.Round(baseStock * fillRatio
                             * (0.7 + 0.6 * Random.Shared.NextDouble()));
                         initStock = Math.Clamp(initStock, 0, maxStock);
                         seededFromFormula++;
@@ -382,6 +388,43 @@ public class SupplyChainService
         {
             _initLock.Release();
         }
+    }
+
+    /// <summary>
+    /// Force re-initialization: deletes all vendor stock rows from Table Storage and re-seeds
+    /// with the current logic (new MaxStock, initial stock formulas). Resets the in-process
+    /// init guard so subsequent calls to InitializeAsync will run the full seeding path.
+    /// </summary>
+    public async Task ForceReinitializeAsync()
+    {
+        await _initLock.WaitAsync();
+        try
+        {
+            // Delete all stock rows
+            await _tableClient.CreateIfNotExistsAsync();
+            var toDelete = new List<TableEntity>();
+            await foreach (var e in _tableClient.QueryAsync<TableEntity>(
+                filter: $"PartitionKey eq '{PART_STOCK}'",
+                select: new[] { "PartitionKey", "RowKey" }))
+            {
+                toDelete.Add(e);
+            }
+            foreach (var e in toDelete)
+                await _tableClient.DeleteEntityAsync(e.PartitionKey, e.RowKey);
+
+            _logger.LogInformation("Deleted {Count} stock rows from Table Storage for re-initialization.", toDelete.Count);
+
+            // Reset init flag so InitializeAsync runs full seeding on next call
+            _initComplete = false;
+            _vendorCache = null;
+        }
+        finally
+        {
+            _initLock.Release();
+        }
+
+        // Run full initialization with fresh seeding
+        await InitializeAsync();
     }
 
     /// <summary>
@@ -513,6 +556,28 @@ public class SupplyChainService
             string encoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
             await queueClient.SendMessageAsync(encoded,
                 visibilityTimeout: TimeSpan.FromSeconds(approvalDelaySec));
+
+            // Also enqueue vendor restock (supplier knows to replenish when PO is placed)
+            string vendorId = (string)r.VendorId;
+            int prodId      = (int)r.ProductID;
+            int qty         = (int)r.Qty;
+            var vendorInfo  = (await GetVendorsAsync()).FirstOrDefault(v => v.VendorId == vendorId);
+            int restockHrs  = vendorInfo?.RestockDelaySimHrs ?? 12;
+            double effScale = await GetEffectiveTimeScaleAsync();
+            int restockSec  = Math.Max(1, (int)(restockHrs * 3600.0 / effScale)) + i; // stagger
+
+            var restockMsg = new PurchaseOrderMessage
+            {
+                MessageType    = "vendor-restock",
+                VendorId       = vendorId,
+                ProductId      = prodId,
+                OrderedQty     = qty,
+                ScheduledAtUtc = DateTime.UtcNow.AddSeconds(restockSec),
+            };
+            string restockJson    = System.Text.Json.JsonSerializer.Serialize(restockMsg);
+            string restockEncoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(restockJson));
+            await queueClient.SendMessageAsync(restockEncoded,
+                visibilityTimeout: TimeSpan.FromSeconds(restockSec));
 
             // Mark this PO as recently injected so subsequent calls within 10 min skip it.
             var trackEntity = new TableEntity(PART_PENDING_INJECTED, poId.ToString())
@@ -1083,6 +1148,10 @@ public class SupplyChainService
 
     // ── Vendor restock ────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Manual full-fill restock (for demo resets via POST /api/supply/restock/{vendorId}).
+    /// Sets CurrentStock = MaxStock for the specified vendor (and optionally product).
+    /// </summary>
     public async Task RestockVendorAsync(string vendorId, int productId = 0)
     {
         await _tableClient.CreateIfNotExistsAsync();
@@ -1096,12 +1165,91 @@ public class SupplyChainService
 
         foreach (var e in toUpdate)
         {
-            int maxStock = e.GetInt32("MaxStock") ?? 100;
+            int maxStock = e.GetInt32("MaxStock") ?? VENDOR_MAX_STOCK;
             e["CurrentStock"] = maxStock;
             await _tableClient.UpdateEntityAsync(e, e.ETag);
         }
 
-        _logger.LogInformation("Restocked vendor {VendorId}, {Count} SKUs", vendorId, toUpdate.Count);
+        _logger.LogInformation("Restocked vendor {VendorId}, {Count} SKUs (full fill)", vendorId, toUpdate.Count);
+    }
+
+    /// <summary>
+    /// Demand-scaled restock triggered at PO placement time. The supplier replenishes
+    /// proportionally to recent order volume (× <see cref="DemandRestockMultiplier"/>),
+    /// capped by <see cref="VENDOR_MAX_STOCK"/>.
+    /// </summary>
+    public async Task RestockVendorScaledAsync(string vendorId, int productId, int orderedQty = 0)
+    {
+        await _tableClient.CreateIfNotExistsAsync();
+
+        string filter = $"PartitionKey eq '{PART_STOCK}' and VendorId eq '{vendorId}'";
+        if (productId > 0)
+            filter += $" and ProductId eq {productId}";
+
+        var toUpdate = new List<TableEntity>();
+        await foreach (var e in _tableClient.QueryAsync<TableEntity>(filter: filter))
+            toUpdate.Add(e);
+
+        foreach (var e in toUpdate)
+        {
+            int pid      = e.GetInt32("ProductId") ?? 0;
+            int current  = e.GetInt32("CurrentStock") ?? 0;
+            int maxStock = e.GetInt32("MaxStock") ?? VENDOR_MAX_STOCK;
+            int maxOrder = e.GetInt32("MaxOrderQty") ?? 1000;
+
+            // Demand sensing: look at recent PO volume for this vendor+product
+            int recentDemand = await GetRecentDemandAsync(vendorId, pid);
+            int demandSignal = Math.Max(recentDemand, orderedQty);
+
+            int restockQty;
+            if (demandSignal > 0)
+            {
+                // Scale to demand: restock demandMultiplier × the demand signal
+                restockQty = demandSignal * DemandRestockMultiplier;
+            }
+            else
+            {
+                // No recent demand (cold start / idle) — restock one MaxOrderQty batch as baseline
+                restockQty = maxOrder;
+            }
+
+            int newStock = Math.Min(current + restockQty, maxStock);
+            e["CurrentStock"] = newStock;
+            await _tableClient.UpdateEntityAsync(e, e.ETag);
+
+            _logger.LogDebug(
+                "Demand-scaled restock vendor {VendorId} ProductID={ProductId}: {Old}→{New} (demand={Demand}, orderedQty={Ordered}, added={Added})",
+                vendorId, pid, current, newStock, recentDemand, orderedQty, newStock - current);
+        }
+    }
+
+    /// <summary>
+    /// Returns the total qty ordered from this vendor for the given product within the last
+    /// 24 sim-hours (converted to real time using effective time scale).
+    /// </summary>
+    private async Task<int> GetRecentDemandAsync(string vendorId, int productId)
+    {
+        if (!int.TryParse(vendorId, out int vendorBusinessId)) return 0;
+
+        // Lookback window: 24 sim-hours converted to real seconds
+        double effScale       = await GetEffectiveTimeScaleAsync();
+        double lookbackRealSec = 24.0 * 3600.0 / effScale;
+        // Clamp to at least 60 seconds and at most 1 hour of real time
+        lookbackRealSec = Math.Clamp(lookbackRealSec, 60, 3600);
+
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        var result = await conn.ExecuteScalarAsync<int?>(
+            @"SELECT ISNULL(SUM(CAST(pod.OrderQty AS INT)), 0)
+              FROM Purchasing.PurchaseOrderHeader poh
+              INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
+              WHERE poh.VendorID = @VendorId
+                AND pod.ProductID = @ProductId
+                AND poh.OrderDate >= DATEADD(SECOND, -@LookbackSec, GETUTCDATE())",
+            new { VendorId = vendorBusinessId, ProductId = productId, LookbackSec = (int)lookbackRealSec });
+
+        return result ?? 0;
     }
 
     // ── Speed multiplier config (Table Storage) ────────────────────────────────
@@ -1311,7 +1459,7 @@ public class SupplyChainService
 
         var stock    = stockResp.Value!;
         int current  = stock.GetInt32("CurrentStock") ?? 0;
-        int maxStock = stock.GetInt32("MaxStock") ?? 999;
+        int maxStock = stock.GetInt32("MaxStock") ?? VENDOR_MAX_STOCK;
         stock["CurrentStock"] = Math.Min(current + qty, maxStock);
         await _tableClient.UpdateEntityAsync(stock, stock.ETag);
     }
@@ -1507,7 +1655,7 @@ public class SupplyChainService
             MinOrderQty:   (int)r.MinOrderQty,
             MaxOrderQty:   (int)r.MaxOrderQty,
             CurrentStock:  0,
-            MaxStock:      Math.Max((int)r.MaxOrderQty, 10),
+            MaxStock:      VENDOR_MAX_STOCK,
             WeightKg:      (double)r.WeightKg)).ToList();
     }
 

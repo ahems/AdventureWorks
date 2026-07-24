@@ -25,6 +25,7 @@ public class WebPubSubService
         "orders",
         "shopping-simulator",
         "reviews",
+        "finance",
     };
 
     private readonly WebPubSubServiceClient? _client;

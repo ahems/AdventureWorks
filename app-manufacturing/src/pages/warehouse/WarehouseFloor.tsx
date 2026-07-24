@@ -16,7 +16,6 @@ import {
   PackagePlus,
   PackageMinus,
   Truck,
-  RefreshCw,
 } from "lucide-react";
 import {
   fetchWarehouseActive,
@@ -128,7 +127,6 @@ const WarehouseFloor: React.FC = () => {
     data: active,
     isLoading,
     dataUpdatedAt,
-    refetch,
   } = useQuery({
     queryKey: ["warehouse-active"],
     queryFn: fetchWarehouseActive,
@@ -175,14 +173,6 @@ const WarehouseFloor: React.FC = () => {
               {status?.queueDepth ?? "—"}
             </span>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refetch()}
-            className="gap-1"
-          >
-            <RefreshCw className="h-3 w-3" /> Refresh
-          </Button>
         </div>
       </div>
 

@@ -520,7 +520,8 @@ builder.Services.AddScoped<BankService>(sp =>
         ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
     var logger = sp.GetRequiredService<ILogger<BankService>>();
     var telemetry = sp.GetRequiredService<TelemetryClient>();
-    return new BankService(connectionString, tableServiceUri, logger, telemetry);
+    var webPubSub = sp.GetRequiredService<WebPubSubService>();
+    return new BankService(connectionString, tableServiceUri, logger, telemetry, webPubSub);
 });
 
 // Register AIService with Azure OpenAI endpoint

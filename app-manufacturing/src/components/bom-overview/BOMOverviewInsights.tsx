@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ArrowRight, Layers, Wrench, DollarSign, Search, RefreshCw } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { AlertTriangle, ArrowRight, Layers, Wrench, DollarSign, Search } from 'lucide-react';
 import {
   fetchWorkOrders,
   fetchActiveOperations,
@@ -136,75 +136,6 @@ export const InspectButton: React.FC<{ onClick: () => void; label?: string }> = 
   </button>
 );
 
-const AUTO_REFRESH_OPTIONS: { label: string; ms: number }[] = [
-  { label: 'Off', ms: 0 },
-  { label: '15s', ms: 15_000 },
-  { label: '30s', ms: 30_000 },
-  { label: '1m', ms: 60_000 },
-  { label: '5m', ms: 300_000 },
-];
-
-const LiveControls: React.FC<{
-  autoMs: number;
-  onChangeAutoMs: (ms: number) => void;
-  onRefresh: () => void;
-  isFetching: boolean;
-  lastUpdatedAt: number;
-}> = ({ autoMs, onChangeAutoMs, onRefresh, isFetching, lastUpdatedAt }) => {
-  // Tick once a second so the "x ago" label stays current
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const ago = lastUpdatedAt ? Math.max(0, Math.floor((Date.now() - lastUpdatedAt) / 1000)) : null;
-  const agoLabel =
-    ago === null ? 'never'
-      : ago < 5 ? 'just now'
-        : ago < 60 ? `${ago}s ago`
-          : ago < 3600 ? `${Math.floor(ago / 60)}m ago`
-            : `${Math.floor(ago / 3600)}h ago`;
-
-  return (
-    <div className="flex flex-wrap items-center gap-2 px-3 py-2 rounded border-2 border-dashed border-doodle-text/15 bg-secondary/20">
-      <button
-        onClick={onRefresh}
-        disabled={isFetching}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded font-doodle text-xs font-bold border-2 border-dashed border-doodle-accent/40 text-doodle-accent hover:bg-doodle-accent/15 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        title="Refresh now"
-      >
-        <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-        Refresh
-      </button>
-
-      <div className="flex items-center gap-1 ml-1">
-        <span className="font-doodle text-[11px] text-muted-foreground">Auto:</span>
-        {AUTO_REFRESH_OPTIONS.map(opt => {
-          const active = autoMs === opt.ms;
-          return (
-            <button
-              key={opt.ms}
-              onClick={() => onChangeAutoMs(opt.ms)}
-              className={`px-2 py-0.5 rounded font-doodle text-[11px] border border-dashed transition-colors ${
-                active
-                  ? 'bg-doodle-accent/15 text-doodle-accent border-doodle-accent/40 font-bold'
-                  : 'border-transparent text-muted-foreground hover:text-doodle-text hover:border-doodle-text/20'
-              }`}
-            >
-              {opt.label}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="ml-auto font-doodle text-[11px] text-muted-foreground">
-        {isFetching ? 'Refreshing…' : `Updated ${agoLabel}`}
-      </div>
-    </div>
-  );
-};
-
 type WIPSummary = { planned: number; released: number; completed30: number; scrapped: number; remaining: number; dueSoon: number };
 
 const WIPStat: React.FC<{ label: string; value: React.ReactNode; tone?: 'default' | 'accent' | 'warn' | 'muted'; hint?: string }> = ({
@@ -269,65 +200,54 @@ const BOMOverviewInsights: React.FC<Props> = ({ bom, products }) => {
   const wantWoData = wantOps || wantCost;
   const wantInventory = wantOps || wantCost;
 
-  // Auto-refresh controls (per-lens, ops/cost only)
-  const queryClient = useQueryClient();
-  const [autoMsByLens, setAutoMsByLens] = useState<Record<'ops' | 'cost', number>>({
-    ops: 0,
-    cost: 0,
-  });
-  const liveLens: 'ops' | 'cost' | null = wantOps ? 'ops' : wantCost ? 'cost' : null;
-  const autoMs = liveLens ? autoMsByLens[liveLens] : 0;
-  const opsInterval = wantOps && autoMs > 0 ? autoMs : false;
-  const costInterval = wantCost && autoMs > 0 ? autoMs : false;
-
   const woQ = useQuery({
     queryKey: ['all-recent-wos'],
     queryFn: fetchWorkOrders,
     enabled: wantWoData,
     staleTime: 60_000,
-    refetchInterval: wantWoData && autoMs > 0 ? autoMs : false,
+    refetchInterval: 120_000,
   });
   const aoQ = useQuery({
     queryKey: ['active-operations'],
     queryFn: fetchActiveOperations,
     enabled: wantWoData,
     staleTime: 30_000,
-    refetchInterval: wantWoData && autoMs > 0 ? autoMs : false,
+    refetchInterval: 120_000,
   });
   const invQ = useQuery({
     queryKey: ['all-product-inventory'],
     queryFn: () => fetchProductInventory(),
     enabled: wantInventory,
     staleTime: 60_000,
-    refetchInterval: wantInventory && autoMs > 0 ? autoMs : false,
+    refetchInterval: 120_000,
   });
   const rtQ = useQuery({
     queryKey: ['recent-routings'],
     queryFn: () => fetchWorkOrderRouting(),
     enabled: wantOps,
     staleTime: 60_000,
-    refetchInterval: opsInterval,
+    refetchInterval: 120_000,
   });
   const poQ = useQuery({
     queryKey: ['open-purchase-orders'],
     queryFn: fetchOrders,
     enabled: wantOps,
     staleTime: 60_000,
-    refetchInterval: opsInterval,
+    refetchInterval: 120_000,
   });
   const catQ = useQuery({
     queryKey: ['supply-catalog-all'],
     queryFn: () => fetchCatalog(),
     enabled: wantCost,
     staleTime: 60_000,
-    refetchInterval: costInterval,
+    refetchInterval: 120_000,
   });
   const chQ = useQuery({
     queryKey: ['all-cost-history'],
     queryFn: () => fetchProductCostHistory(),
     enabled: wantCost,
     staleTime: 60_000,
-    refetchInterval: costInterval,
+    refetchInterval: 120_000,
   });
 
   const { data: workOrders, isLoading: woLoading } = woQ;
@@ -337,24 +257,6 @@ const BOMOverviewInsights: React.FC<Props> = ({ bom, products }) => {
   const { data: openPOs } = poQ;
   const { data: catalog, isLoading: catalogLoading } = catQ;
   const { data: costHistory, isLoading: chLoading } = chQ;
-
-  // Lens-specific live state
-  const lensQueries = wantOps
-    ? [woQ, aoQ, invQ, rtQ, poQ]
-    : wantCost
-      ? [woQ, aoQ, invQ, catQ, chQ]
-      : [];
-  const lensQueryKeys = wantOps
-    ? [['all-recent-wos'], ['active-operations'], ['all-product-inventory'], ['recent-routings'], ['open-purchase-orders']]
-    : wantCost
-      ? [['all-recent-wos'], ['active-operations'], ['all-product-inventory'], ['supply-catalog-all'], ['all-cost-history']]
-      : [];
-  const lastUpdatedAt = lensQueries.reduce((max, q) => Math.max(max, q.dataUpdatedAt || 0), 0);
-  const isFetching = lensQueries.some(q => q.isFetching);
-
-  const handleManualRefresh = () => {
-    lensQueryKeys.forEach(k => queryClient.invalidateQueries({ queryKey: k }));
-  };
 
 
   return (
@@ -380,18 +282,6 @@ const BOMOverviewInsights: React.FC<Props> = ({ bom, products }) => {
           );
         })}
       </div>
-
-      {liveLens && (
-        <LiveControls
-          autoMs={autoMs}
-          onChangeAutoMs={(ms) =>
-            setAutoMsByLens(prev => ({ ...prev, [liveLens]: ms }))
-          }
-          onRefresh={handleManualRefresh}
-          isFetching={isFetching}
-          lastUpdatedAt={lastUpdatedAt}
-        />
-      )}
 
       {section === 'cross' && (
         <CrossBOMSection
