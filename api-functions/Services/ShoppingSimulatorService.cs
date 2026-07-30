@@ -112,16 +112,14 @@ public class ShoppingSimulatorService
     }
 
     /// <summary>Returns the underlying queue client for message enqueue operations.</summary>
-    public async Task<QueueClient> GetQueueClientAsync()
+    public Task<QueueClient> GetQueueClientAsync()
     {
-        await _queueClient.CreateIfNotExistsAsync();
-        return _queueClient;
+        return Task.FromResult(_queueClient);
     }
 
     /// <summary>Clears all pending messages from the simulation-order-queue.</summary>
     public async Task ClearQueueAsync()
     {
-        await _queueClient.CreateIfNotExistsAsync();
         await _queueClient.ClearMessagesAsync();
     }
 

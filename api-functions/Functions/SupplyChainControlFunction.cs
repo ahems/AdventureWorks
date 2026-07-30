@@ -15,6 +15,7 @@ public class SupplyChainControlFunction
 {
     private readonly SupplyChainService _svc;
     private readonly ILogger<SupplyChainControlFunction> _logger;
+    private readonly WebPubSubService _webPubSub;
 
     private static readonly JsonSerializerOptions _json = new()
     {
@@ -24,10 +25,12 @@ public class SupplyChainControlFunction
 
     public SupplyChainControlFunction(
         SupplyChainService service,
-        ILogger<SupplyChainControlFunction> logger)
+        ILogger<SupplyChainControlFunction> logger,
+        WebPubSubService webPubSub)
     {
         _svc    = service;
         _logger = logger;
+        _webPubSub = webPubSub;
     }
 
     // ── Vendors ───────────────────────────────────────────────────────────────
@@ -172,6 +175,8 @@ public class SupplyChainControlFunction
         await queueClient.SendMessageAsync(restockEncoded,
             visibilityTimeout: TimeSpan.FromSeconds(restockSec));
 
+        await _webPubSub.SendToGroupAsync("supply-chain", new { @event = "po-created", productId, vendorId, qty });
+
         return await CreatedAsync(req, order);
     }
 
@@ -295,31 +300,273 @@ public class SupplyChainControlFunction
     }
 
 
+    // ── Bulk Reorder ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Accepts a bulk reorder plan and places all orders server-side with staggered
+    /// delivery timing per vendor. Returns HTTP 202 immediately; orders are placed
+    /// in the background with real-time Web PubSub events after each one.
+    /// </summary>
+    [Function("SupplyChainReorderAll")]
+    public async Task<HttpResponseData> ReorderAll(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "supply/reorder-all")] HttpRequestData req)
+    {
+        await _svc.InitializeAsync();
+
+        JsonDocument? body;
+        try { body = await JsonDocument.ParseAsync(req.Body); }
+        catch { return await BadRequestAsync(req, "Invalid JSON body."); }
+
+        if (!body.RootElement.TryGetProperty("items", out var itemsEl) || itemsEl.ValueKind != JsonValueKind.Array)
+            return await BadRequestAsync(req, "Body must include 'items' array.");
+
+        // Parse the plan
+        var plan = new List<ReorderItem>();
+        foreach (var itemEl in itemsEl.EnumerateArray())
+        {
+            if (!itemEl.TryGetProperty("productId", out var pidEl) || !pidEl.TryGetInt32(out int productId))
+                continue;
+            if (!itemEl.TryGetProperty("remainingToOrder", out var rtoEl) || !rtoEl.TryGetInt32(out int remainingToOrder))
+                continue;
+            if (!itemEl.TryGetProperty("quotes", out var quotesEl) || quotesEl.ValueKind != JsonValueKind.Array)
+                continue;
+
+            var quotes = new List<ReorderQuote>();
+            foreach (var qEl in quotesEl.EnumerateArray())
+            {
+                quotes.Add(new ReorderQuote
+                {
+                    VendorId       = qEl.TryGetProperty("vendorId", out var v) ? v.GetString() ?? "" : "",
+                    StockAvailable = qEl.TryGetProperty("stockAvailable", out var sa) && sa.TryGetInt32(out int saVal) ? saVal : 0,
+                    MinOrderQty    = qEl.TryGetProperty("minOrderQty", out var mn) && mn.TryGetInt32(out int mnVal) ? mnVal : 1,
+                    MaxOrderQty    = qEl.TryGetProperty("maxOrderQty", out var mx) && mx.TryGetInt32(out int mxVal) ? mxVal : 0,
+                    UnitCost       = qEl.TryGetProperty("unitCost", out var uc) && uc.TryGetDouble(out double ucVal) ? ucVal : 0,
+                });
+            }
+
+            plan.Add(new ReorderItem { ProductId = productId, RemainingToOrder = remainingToOrder, Quotes = quotes });
+        }
+
+        if (plan.Count == 0)
+            return await BadRequestAsync(req, "No valid items in the reorder plan.");
+
+        // Count total orders we expect to place (for the response)
+        int totalPlanned = 0;
+        foreach (var item in plan)
+        {
+            int remaining = item.RemainingToOrder;
+            foreach (var q in item.Quotes.Where(q => q.StockAvailable > 0).OrderBy(q => q.UnitCost))
+            {
+                if (remaining <= 0) break;
+                int minQty = Math.Max(1, q.MinOrderQty);
+                int maxQty = q.MaxOrderQty > 0 ? q.MaxOrderQty : q.StockAvailable;
+                int vendorStock = q.StockAvailable;
+                while (remaining > 0 && vendorStock >= minQty)
+                {
+                    int desired = Math.Min(Math.Min(remaining, vendorStock), maxQty);
+                    int orderQty = Math.Max(desired, minQty);
+                    if (orderQty > vendorStock) break;
+                    totalPlanned++;
+                    remaining -= orderQty;
+                    vendorStock -= orderQty;
+                }
+            }
+        }
+
+        // Fire-and-forget: start placing orders in the background
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await ExecuteBulkReorderAsync(plan);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Bulk reorder background task failed.");
+            }
+        });
+
+        var response = req.CreateResponse(HttpStatusCode.Accepted);
+        response.Headers.Add("Content-Type", "application/json");
+        await response.WriteStringAsync(JsonSerializer.Serialize(
+            new { accepted = true, totalOrdersPlanned = totalPlanned }, _json));
+        return response;
+    }
+
+    private async Task ExecuteBulkReorderAsync(List<ReorderItem> plan)
+    {
+        var queueClient = await GetQueueClientAsync();
+        double effScale = await _svc.GetEffectiveTimeScaleAsync();
+
+        // Pre-cache vendor info to avoid repeated lookups
+        var vendorCache = new System.Collections.Concurrent.ConcurrentDictionary<string, VendorInfo?>(
+            StringComparer.OrdinalIgnoreCase);
+
+        // Global counters (thread-safe)
+        int totalPlaced = 0;
+        int totalFailed = 0;
+
+        // Global per-vendor stagger index (thread-safe)
+        var vendorOrderIndex = new System.Collections.Concurrent.ConcurrentDictionary<string, int>(
+            StringComparer.OrdinalIgnoreCase);
+
+        // Web PubSub throttle: push every N orders per product instead of every 1
+        const int PUB_SUB_BATCH_SIZE = 50;
+
+        // Process products in parallel (each product's orders are independent)
+        await Parallel.ForEachAsync(plan,
+            new ParallelOptions { MaxDegreeOfParallelism = 8 },
+            async (item, ct) =>
+        {
+            var available = item.Quotes
+                .Where(q => q.StockAvailable > 0)
+                .OrderBy(q => q.UnitCost)
+                .ToList();
+
+            int remaining = item.RemainingToOrder;
+            int productOrderCount = 0;
+
+            foreach (var quote in available)
+            {
+                if (remaining <= 0) break;
+                int minQty = Math.Max(1, quote.MinOrderQty);
+                int maxQty = quote.MaxOrderQty > 0 ? quote.MaxOrderQty : quote.StockAvailable;
+                int vendorStock = quote.StockAvailable;
+
+                // Cache vendor info
+                if (!vendorCache.TryGetValue(quote.VendorId, out var vendor))
+                {
+                    vendor = await _svc.GetVendorAsync(quote.VendorId);
+                    vendorCache.TryAdd(quote.VendorId, vendor);
+                }
+
+                int restockHrs = vendor?.RestockDelaySimHrs ?? 12;
+                int restockSec = Math.Max(1, (int)(restockHrs * 3600.0 / effScale));
+
+                while (remaining > 0 && vendorStock >= minQty)
+                {
+                    int desired = Math.Min(Math.Min(remaining, vendorStock), maxQty);
+                    int orderQty = Math.Max(desired, minQty);
+                    if (orderQty > vendorStock) break;
+
+                    var orderId = await _svc.PlaceOrderFastAsync(quote.VendorId, item.ProductId, orderQty);
+                    if (orderId == null)
+                    {
+                        Interlocked.Increment(ref totalFailed);
+                        break; // vendor can't fulfill — try next
+                    }
+
+                    // Stagger: each successive PO to the same vendor gets +3s delay
+                    int idx = vendorOrderIndex.AddOrUpdate(quote.VendorId, 0, (_, v) => v + 1);
+                    int staggerDelay = 5 + (idx * 3);
+
+                    // Fire transition + restock queue messages concurrently
+                    var transitionTask = EnqueueTransitionAsync(queueClient, orderId,
+                        targetStatus: "approved",
+                        delaySec: staggerDelay);
+
+                    var restockMsg = new Models.PurchaseOrderMessage
+                    {
+                        MessageType    = "vendor-restock",
+                        VendorId       = quote.VendorId,
+                        ProductId      = item.ProductId,
+                        OrderedQty     = orderQty,
+                        ScheduledAtUtc = DateTime.UtcNow.AddSeconds(restockSec),
+                    };
+                    string restockJson    = JsonSerializer.Serialize(restockMsg);
+                    string restockEncoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(restockJson));
+                    var restockTask = queueClient.SendMessageAsync(restockEncoded,
+                        visibilityTimeout: TimeSpan.FromSeconds(restockSec));
+
+                    await Task.WhenAll(transitionTask, restockTask);
+
+                    Interlocked.Increment(ref totalPlaced);
+                    productOrderCount++;
+                    remaining -= orderQty;
+                    vendorStock -= orderQty;
+
+                    // Throttled Web PubSub: push every N orders
+                    if (productOrderCount % PUB_SUB_BATCH_SIZE == 0)
+                    {
+                        await _webPubSub.SendToGroupAsync("supply-chain", new
+                        {
+                            @event = "po-created",
+                            productId = item.ProductId,
+                            vendorId = quote.VendorId,
+                            qty = orderQty,
+                            batchCount = PUB_SUB_BATCH_SIZE,
+                        });
+                    }
+                }
+            }
+
+            // Final push for any remaining orders not yet notified
+            if (productOrderCount % PUB_SUB_BATCH_SIZE != 0)
+            {
+                await _webPubSub.SendToGroupAsync("supply-chain", new
+                {
+                    @event = "po-created",
+                    productId = item.ProductId,
+                    batchCount = productOrderCount % PUB_SUB_BATCH_SIZE,
+                });
+            }
+        });
+
+        _logger.LogInformation("Bulk reorder complete: placed {Placed} orders, {Failed} failed.", totalPlaced, totalFailed);
+    }
+
+    private sealed class ReorderItem
+    {
+        public int ProductId { get; set; }
+        public int RemainingToOrder { get; set; }
+        public List<ReorderQuote> Quotes { get; set; } = [];
+    }
+
+    private sealed class ReorderQuote
+    {
+        public string VendorId { get; set; } = "";
+        public int StockAvailable { get; set; }
+        public int MinOrderQty { get; set; }
+        public int MaxOrderQty { get; set; }
+        public double UnitCost { get; set; }
+    }
+
     // ── Internal helpers ───────────────────────────────────────────────────────
+
+    private static Azure.Storage.Queues.QueueClient? _cachedQueueClient;
+    private static readonly SemaphoreSlim _queueInitLock = new(1, 1);
 
     private static async Task<Azure.Storage.Queues.QueueClient> GetQueueClientAsync()
     {
-        string? queueUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
-        Azure.Storage.Queues.QueueClient client;
-        if (!string.IsNullOrEmpty(queueUri))
+        if (_cachedQueueClient != null) return _cachedQueueClient;
+        await _queueInitLock.WaitAsync();
+        try
         {
-            var svc = new Azure.Storage.Queues.QueueServiceClient(
-                new Uri(queueUri),
-                new Azure.Identity.DefaultAzureCredential());
-            client = svc.GetQueueClient(SupplyChainService.QUEUE_NAME);
+            if (_cachedQueueClient != null) return _cachedQueueClient;
+            string? queueUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
+            Azure.Storage.Queues.QueueClient client;
+            if (!string.IsNullOrEmpty(queueUri))
+            {
+                var svc = new Azure.Storage.Queues.QueueServiceClient(
+                    new Uri(queueUri),
+                    new Azure.Identity.DefaultAzureCredential());
+                client = svc.GetQueueClient(SupplyChainService.QUEUE_NAME);
+            }
+            else
+            {
+                string connStr = Environment.GetEnvironmentVariable("AzureWebJobsStorage") ?? "UseDevelopmentStorage=true";
+                client = new Azure.Storage.Queues.QueueClient(
+                    connStr, SupplyChainService.QUEUE_NAME,
+                    new Azure.Storage.Queues.QueueClientOptions
+                    {
+                        MessageEncoding = Azure.Storage.Queues.QueueMessageEncoding.Base64
+                    });
+            }
+            await client.CreateIfNotExistsAsync();
+            _cachedQueueClient = client;
+            return client;
         }
-        else
-        {
-            string connStr = Environment.GetEnvironmentVariable("AzureWebJobsStorage") ?? "UseDevelopmentStorage=true";
-            client = new Azure.Storage.Queues.QueueClient(
-                connStr, SupplyChainService.QUEUE_NAME,
-                new Azure.Storage.Queues.QueueClientOptions
-                {
-                    MessageEncoding = Azure.Storage.Queues.QueueMessageEncoding.Base64
-                });
-        }
-        await client.CreateIfNotExistsAsync();
-        return client;
+        finally { _queueInitLock.Release(); }
     }
 
     private static async Task EnqueueTransitionAsync(

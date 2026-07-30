@@ -1,10 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import {
-  useQuery,
-  useQueries,
-  useMutation,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   Card,
@@ -94,7 +89,6 @@ import {
   type FeasibilityComponent,
 } from "@/services/planningApi";
 import {
-  placeOrder,
   fetchCatalog as fetchSupplyCatalog,
   fetchOrders,
   type PurchaseOrder,
@@ -387,42 +381,6 @@ const PlanningIntelligence: React.FC = () => {
       })
       .filter((d) => d.shortfalls.length > 0 || d.isLoading);
   }, [materialBlockedProducts, feasibilityQueries]);
-
-  const orderMutation = useMutation({
-    mutationFn: async (rec: {
-      vendorId: string;
-      productId: number;
-      qty: number;
-      minOrderQty: number;
-      maxOrderQty: number;
-      stockAvailable: number;
-    }) => {
-      const actualQty = Math.min(
-        Math.max(rec.qty, rec.minOrderQty),
-        rec.maxOrderQty,
-        rec.stockAvailable,
-      );
-      if (actualQty > rec.stockAvailable || rec.stockAvailable <= 0) {
-        throw new Error(
-          `Vendor has insufficient stock (${rec.stockAvailable} available, min order: ${rec.minOrderQty})`,
-        );
-      }
-      return placeOrder(rec.vendorId, rec.productId, actualQty);
-    },
-    onSuccess: (order) => {
-      toast.success(
-        `Ordered ${order.productName} x${order.qty} from ${order.vendorName}`,
-      );
-      qc.invalidateQueries({ queryKey: ["reorder-recs"] });
-      qc.invalidateQueries({ queryKey: ["supply-orders"] });
-      qc.invalidateQueries({ queryKey: ["feasibility-blocked"] });
-      qc.invalidateQueries({ queryKey: ["supply-catalog-blocked"] });
-      qc.invalidateQueries({ queryKey: ["supply-catalog"] });
-      qc.invalidateQueries({ queryKey: ["supply-orders-blocked"] });
-    },
-    onError: (e: Error) =>
-      toast.error("Order failed", { description: e.message }),
-  });
 
   // Summary counts
   const outOfStock =
@@ -1222,49 +1180,16 @@ const PlanningIntelligence: React.FC = () => {
                                             On Order
                                           </Badge>
                                         ) : bestVendor ? (
-                                          (() => {
-                                            const orderQty = Math.min(
-                                              Math.max(
-                                                effectiveShortfall,
-                                                bestVendor.minOrderQty,
-                                              ),
-                                              bestVendor.maxOrderQty,
-                                              bestVendor.stockAvailable,
-                                            );
-                                            const canOrder =
-                                              bestVendor.stockAvailable >=
-                                              bestVendor.minOrderQty;
-                                            return (
-                                              <Button
-                                                size="sm"
-                                                variant="default"
-                                                className="text-xs"
-                                                disabled={
-                                                  orderMutation.isPending ||
-                                                  !canOrder
-                                                }
-                                                onClick={() =>
-                                                  orderMutation.mutate({
-                                                    vendorId:
-                                                      bestVendor.vendorId,
-                                                    productId: comp.productId,
-                                                    qty: orderQty,
-                                                    minOrderQty:
-                                                      bestVendor.minOrderQty,
-                                                    maxOrderQty:
-                                                      bestVendor.maxOrderQty,
-                                                    stockAvailable:
-                                                      bestVendor.stockAvailable,
-                                                  })
-                                                }
-                                              >
-                                                <ShoppingCart className="h-3 w-3 mr-1" />
-                                                {canOrder
-                                                  ? `Order ${orderQty}${orderQty > effectiveShortfall ? " (min)" : ""}`
-                                                  : "No stock"}
-                                              </Button>
-                                            );
-                                          })()
+                                          <Link to="/execute?tab=shortages">
+                                            <Button
+                                              size="sm"
+                                              variant="default"
+                                              className="text-xs"
+                                            >
+                                              <ArrowRight className="h-3 w-3 mr-1" />
+                                              Resolve
+                                            </Button>
+                                          </Link>
                                         ) : (
                                           <Link to="/supply">
                                             <Button
@@ -1370,28 +1295,12 @@ const PlanningIntelligence: React.FC = () => {
                                 )}
                                 % reliable
                               </p>
-                              <Button
-                                size="sm"
-                                className="mt-2"
-                                disabled={
-                                  !rec.bestVendor.canFulfillOrder ||
-                                  orderMutation.isPending
-                                }
-                                onClick={() =>
-                                  orderMutation.mutate({
-                                    vendorId: rec.bestVendor!.vendorId,
-                                    productId: rec.componentProductId,
-                                    qty: rec.suggestedOrderQty,
-                                    minOrderQty: 1,
-                                    maxOrderQty: rec.suggestedOrderQty,
-                                    stockAvailable:
-                                      rec.bestVendor!.stockAvailable,
-                                  })
-                                }
-                              >
-                                <ShoppingCart className="h-3.5 w-3.5 mr-1" />{" "}
-                                Order Now
-                              </Button>
+                              <Link to="/execute?tab=shortages">
+                                <Button size="sm" className="mt-2">
+                                  <ArrowRight className="h-3.5 w-3.5 mr-1" />{" "}
+                                  Resolve
+                                </Button>
+                              </Link>
                             </div>
                           )}
                         </div>

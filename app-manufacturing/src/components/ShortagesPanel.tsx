@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import {
   useQuery,
   useQueries,
@@ -60,7 +60,7 @@ import {
 } from "@/services/api";
 import {
   fetchCatalog,
-  placeOrder,
+  submitBulkReorder,
   formatIncomingEta,
   formatUtcTime,
   type SupplyQuote,
@@ -293,6 +293,104 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
   const [reorderAllConfirm, setReorderAllConfirm] = useState(false);
   const [reorderAllInProgress, setReorderAllInProgress] = useState(false);
 
+  // Persist submitted product IDs in sessionStorage so the state survives
+  // tab navigation (component unmount/remount). Expires after 10 minutes.
+  const STORAGE_KEY = "reorderAllSubmitted";
+  const readSubmitted = useCallback((): {
+    ids: Set<number>;
+    totalOrdersPlanned: number;
+    baselineOrderCount: number;
+  } => {
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      if (!raw)
+        return { ids: new Set(), totalOrdersPlanned: 0, baselineOrderCount: 0 };
+      const parsed = JSON.parse(raw) as {
+        ids: number[];
+        totalOrdersPlanned: number;
+        baselineOrderCount: number;
+        ts: number;
+      };
+      // Expire after 10 minutes
+      if (Date.now() - parsed.ts > 10 * 60 * 1000) {
+        sessionStorage.removeItem(STORAGE_KEY);
+        return { ids: new Set(), totalOrdersPlanned: 0, baselineOrderCount: 0 };
+      }
+      return {
+        ids: new Set(parsed.ids),
+        totalOrdersPlanned: parsed.totalOrdersPlanned ?? 0,
+        baselineOrderCount: parsed.baselineOrderCount ?? 0,
+      };
+    } catch {
+      return { ids: new Set(), totalOrdersPlanned: 0, baselineOrderCount: 0 };
+    }
+  }, []);
+  const writeSubmitted = useCallback(
+    (
+      ids: Set<number>,
+      totalOrdersPlanned: number,
+      baselineOrderCount: number,
+    ) => {
+      if (ids.size === 0) {
+        sessionStorage.removeItem(STORAGE_KEY);
+      } else {
+        sessionStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            ids: Array.from(ids),
+            totalOrdersPlanned,
+            baselineOrderCount,
+            ts: Date.now(),
+          }),
+        );
+      }
+    },
+    [],
+  );
+  const initialSubmitted = readSubmitted();
+  const [reorderAllSubmitted, setReorderAllSubmittedRaw] = useState<
+    Set<number>
+  >(initialSubmitted.ids);
+  const [reorderAllTotalOrders, setReorderAllTotalOrdersRaw] = useState<number>(
+    initialSubmitted.totalOrdersPlanned,
+  );
+  const [reorderAllBaselineOrders, setReorderAllBaselineOrdersRaw] =
+    useState<number>(initialSubmitted.baselineOrderCount);
+  const setReorderAllSubmitted = useCallback(
+    (
+      ids: Set<number>,
+      totalOrdersPlanned?: number,
+      baselineOrderCount?: number,
+    ) => {
+      const totalOrd = totalOrdersPlanned ?? reorderAllTotalOrders;
+      const baseOrd = baselineOrderCount ?? reorderAllBaselineOrders;
+      writeSubmitted(ids, totalOrd, baseOrd);
+      setReorderAllSubmittedRaw(ids);
+      if (totalOrdersPlanned !== undefined)
+        setReorderAllTotalOrdersRaw(totalOrdersPlanned);
+      if (baselineOrderCount !== undefined)
+        setReorderAllBaselineOrdersRaw(baselineOrderCount);
+    },
+    [writeSubmitted, reorderAllTotalOrders, reorderAllBaselineOrders],
+  );
+
+  // Order-level progress: count current orders for submitted products vs planned
+  const reorderAllProgress = useMemo(() => {
+    if (reorderAllTotalOrders === 0 || reorderAllSubmitted.size === 0) return 0;
+    let currentOrderCount = 0;
+    reorderAllSubmitted.forEach((pid) => {
+      const orders = ordersByProduct.get(pid) || [];
+      currentOrderCount += orders.length;
+    });
+    const newOrders = Math.max(0, currentOrderCount - reorderAllBaselineOrders);
+    return Math.min(100, Math.round((newOrders / reorderAllTotalOrders) * 100));
+  }, [
+    reorderAllSubmitted,
+    reorderAllTotalOrders,
+    reorderAllBaselineOrders,
+    ordersByProduct,
+  ]);
+
   // Compute what needs ordering across all shortage groups
   const reorderAllPlan = useMemo(() => {
     const items: {
@@ -316,10 +414,7 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
       const availableVendors = quotes.filter((q) => q.stockAvailable > 0);
       const fulfillableQty = Math.min(
         remainingToOrder,
-        availableVendors.reduce((sum, v) => {
-          const maxQty = v.maxOrderQty || v.stockAvailable;
-          return sum + Math.min(v.stockAvailable, maxQty);
-        }, 0),
+        availableVendors.reduce((sum, v) => sum + v.stockAvailable, 0),
       );
       items.push({
         productId: g.productId,
@@ -354,87 +449,67 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
 
   const submitReorderAll = async () => {
     setReorderAllInProgress(true);
-    let totalOrders = 0;
-    let totalFailed = 0;
-    const failedProducts: string[] = [];
+    try {
+      const items = reorderAllFulfillable.map((item) => ({
+        productId: item.productId,
+        remainingToOrder: item.remainingToOrder,
+        quotes: item.quotes
+          .filter((q) => q.stockAvailable > 0)
+          .sort((a, b) => a.unitCost - b.unitCost)
+          .map((q) => ({
+            vendorId: q.vendorId,
+            stockAvailable: q.stockAvailable,
+            minOrderQty: q.minOrderQty || 1,
+            maxOrderQty: q.maxOrderQty || q.stockAvailable,
+            unitCost: q.unitCost,
+          })),
+      }));
 
-    for (const item of reorderAllFulfillable) {
-      try {
-        // Multi-vendor order splitting: sort by cheapest with stock first
-        const available = item.quotes
-          .filter((v) => v.stockAvailable > 0)
-          .sort((a, b) => a.unitCost - b.unitCost);
+      const result = await submitBulkReorder(items);
+      // Snapshot how many orders already exist for these products (baseline)
+      let baselineCount = 0;
+      for (const item of reorderAllFulfillable) {
+        baselineCount += (ordersByProduct.get(item.productId) || []).length;
+      }
+      setReorderAllSubmitted(
+        new Set(reorderAllFulfillable.map((i) => i.productId)),
+        result.totalOrdersPlanned,
+        baselineCount,
+      );
+      setReorderAllConfirm(false);
+      toast.success(
+        `Reordering ${reorderAllFulfillable.length} product${reorderAllFulfillable.length !== 1 ? "s" : ""} in background (${result.totalOrdersPlanned} POs planned)`,
+      );
+    } catch (e) {
+      console.error("Bulk reorder failed:", e);
+      toast.error("Failed to submit bulk reorder — please try again.");
+    } finally {
+      setReorderAllInProgress(false);
+    }
+  };
 
-        if (available.length === 0) {
-          failedProducts.push(item.productName);
-          totalFailed++;
-          continue;
-        }
-
-        let remaining = item.remainingToOrder;
-        let productOrderPlaced = false;
-
-        for (const vendor of available) {
-          if (remaining <= 0) break;
-          const minQty = vendor.minOrderQty || 1;
-          const maxQty = vendor.maxOrderQty || vendor.stockAvailable;
-          const desired = Math.min(remaining, vendor.stockAvailable, maxQty);
-          const orderQty = Math.max(desired, minQty);
-          // Skip vendor if min order exceeds their available stock
-          if (orderQty > vendor.stockAvailable) continue;
-          try {
-            await placeOrder(vendor.vendorId, item.productId, orderQty);
-            totalOrders++;
-            remaining -= orderQty;
-            productOrderPlaced = true;
-          } catch (e: unknown) {
-            // If vendor rejects (422 / insufficient stock), try next
-            if (
-              e instanceof Error &&
-              (e.message?.includes("422") ||
-                e.message?.includes("Insufficient stock"))
-            ) {
-              continue;
-            }
-            // Other errors — log and try next vendor
-            console.error(
-              `Re-Order All: failed for ${item.productName} at ${vendor.vendorName}`,
-              e,
-            );
-            continue;
-          }
-        }
-        if (!productOrderPlaced) {
-          failedProducts.push(item.productName);
-          totalFailed++;
-        }
-      } catch (e) {
-        console.error(
-          `Re-Order All: unexpected error for ${item.productName}`,
-          e,
-        );
-        failedProducts.push(item.productName);
-        totalFailed++;
+  // Clear submitted tracking when shortages resolve (real-time updates).
+  // A product is considered resolved when either:
+  // - its shortage disappears entirely, OR
+  // - pending/approved orders already cover the shortfall (remainingToOrder ≤ 0)
+  React.useEffect(() => {
+    if (reorderAllSubmitted.size === 0) return;
+    const unresolvedProducts = new Set<number>();
+    for (const g of grouped) {
+      const orders = ordersByProduct.get(g.productId) || [];
+      const totalOnOrder = orders.reduce((sum, o) => sum + o.qty, 0);
+      if (g.totalShortfall - totalOnOrder > 0) {
+        unresolvedProducts.add(g.productId);
       }
     }
-
-    setReorderAllInProgress(false);
-    setReorderAllConfirm(false);
-
-    if (totalFailed === 0) {
-      toast.success(
-        `Placed ${totalOrders} purchase order${totalOrders !== 1 ? "s" : ""} across ${reorderAllFulfillable.length} product${reorderAllFulfillable.length !== 1 ? "s" : ""}`,
-      );
-    } else if (totalOrders > 0) {
-      toast.warning(
-        `Placed ${totalOrders} order${totalOrders !== 1 ? "s" : ""}, but ${totalFailed} product${totalFailed !== 1 ? "s" : ""} could not be fulfilled: ${failedProducts.join(", ")}`,
-      );
-    } else {
-      toast.error("No orders could be placed — all vendors out of stock");
+    const updated = new Set<number>();
+    reorderAllSubmitted.forEach((pid) => {
+      if (unresolvedProducts.has(pid)) updated.add(pid);
+    });
+    if (updated.size < reorderAllSubmitted.size) {
+      setReorderAllSubmitted(updated);
     }
-    invalidate();
-    qc.invalidateQueries({ queryKey: ["supply-orders"] });
-  };
+  }, [grouped, ordersByProduct, reorderAllSubmitted, setReorderAllSubmitted]);
 
   if (!shortages.length) {
     return (
@@ -470,14 +545,26 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
               <Button
                 onClick={() => setReorderAllConfirm(true)}
                 className="gap-2"
-                disabled={reorderAllFulfillable.length === 0}
+                disabled={
+                  reorderAllFulfillable.length === 0 ||
+                  reorderAllSubmitted.size > 0
+                }
               >
-                <PackagePlus className="h-4 w-4" />
-                Re-Order All
-                {reorderAllFulfillable.length > 0 && (
-                  <span className="font-mono text-xs opacity-90">
-                    {fmtMoney(reorderAllFulfillableCost)}
-                  </span>
+                {reorderAllSubmitted.size > 0 ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Reordering — {reorderAllProgress}% complete
+                  </>
+                ) : (
+                  <>
+                    <PackagePlus className="h-4 w-4" />
+                    Re-Order All
+                    {reorderAllFulfillable.length > 0 && (
+                      <span className="font-mono text-xs opacity-90">
+                        {fmtMoney(reorderAllFulfillableCost)}
+                      </span>
+                    )}
+                  </>
                 )}
               </Button>
             )}

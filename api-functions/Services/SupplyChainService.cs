@@ -961,6 +961,65 @@ public class SupplyChainService
         return await GetOrderAsync(purchaseOrderId.ToString());
     }
 
+    /// <summary>
+    /// Lightweight variant of <see cref="PlaceOrderAsync"/> that returns only the
+    /// SQL PurchaseOrderID (as a string) instead of re-reading the full order.
+    /// Used by the bulk reorder loop where the full order details are not needed.
+    /// Returns null on failure (same semantics as <see cref="PlaceOrderAsync"/>).
+    /// </summary>
+    public async Task<string?> PlaceOrderFastAsync(string vendorId, int productId, int qty)
+    {
+        var vendors = await GetVendorsAsync();
+        var vendor  = vendors.FirstOrDefault(v => v.VendorId == vendorId);
+        if (vendor == null || qty <= 0) return null;
+
+        var stockResp = await _tableClient.GetEntityIfExistsAsync<TableEntity>(
+            PART_STOCK, StockRowKey(vendorId, productId));
+        if (!stockResp.HasValue) return null;
+
+        var stock  = stockResp.Value!;
+        int minQty = stock.GetInt32("MinOrderQty") ?? 1;
+        int maxQty = stock.GetInt32("MaxOrderQty") ?? int.MaxValue;
+        if (qty < minQty || qty > maxQty) return null;
+
+        int current = stock.GetInt32("CurrentStock") ?? 0;
+        if (current < qty) return null;
+
+        stock["CurrentStock"] = current - qty;
+        try
+        {
+            await _tableClient.UpdateEntityAsync(stock, stock.ETag);
+        }
+        catch (Azure.RequestFailedException ex) when (ex.Status == 412 || ex.Status == 409)
+        {
+            stockResp = await _tableClient.GetEntityIfExistsAsync<TableEntity>(
+                PART_STOCK, StockRowKey(vendorId, productId));
+            if (!stockResp.HasValue) return null;
+            stock   = stockResp.Value!;
+            current = stock.GetInt32("CurrentStock") ?? 0;
+            if (current < qty) return null;
+            stock["CurrentStock"] = current - qty;
+            await _tableClient.UpdateEntityAsync(stock, stock.ETag);
+        }
+
+        double standardPrice = stock.GetDouble("StandardPrice") ?? stock.GetDouble("UnitCostBase") ?? 1.0;
+        int    leadTime      = stock.GetInt32("AverageLeadTime") ?? vendor.DefaultLeadTimeDays;
+        double weight        = stock.GetDouble("WeightKg") ?? 0.5;
+        double unitCost      = Math.Round(standardPrice, 2);
+        double shipping      = Math.Round(vendor.ShipBase + weight * vendor.ShipRate * qty, 2);
+        double simHrs        = leadTime * 24.0;
+        DateTime placed      = DateTime.UtcNow;
+        DateTime eta         = placed.AddSeconds(simHrs * 3600.0 / _simTimeScale);
+
+        if (!int.TryParse(vendorId, out int vendorBusinessId)) return null;
+
+        int purchaseOrderId = await InsertSqlPurchaseOrderAsync(
+            vendorBusinessId, vendor.ShipMethodId, placed, eta,
+            productId, qty, unitCost, shipping);
+
+        return purchaseOrderId.ToString();
+    }
+
     // ── Order state transitions ────────────────────────────────────────────────
 
     /// <summary>
@@ -1193,7 +1252,6 @@ public class SupplyChainService
         foreach (var e in toUpdate)
         {
             int pid      = e.GetInt32("ProductId") ?? 0;
-            int current  = e.GetInt32("CurrentStock") ?? 0;
             int maxStock = e.GetInt32("MaxStock") ?? VENDOR_MAX_STOCK;
             int maxOrder = e.GetInt32("MaxOrderQty") ?? 1000;
 
@@ -1201,25 +1259,62 @@ public class SupplyChainService
             int recentDemand = await GetRecentDemandAsync(vendorId, pid);
             int demandSignal = Math.Max(recentDemand, orderedQty);
 
-            int restockQty;
-            if (demandSignal > 0)
+            // Retry loop for ETag conflicts (concurrent restocks from bulk reorder)
+            for (int attempt = 0; attempt < 5; attempt++)
             {
-                // Scale to demand: restock demandMultiplier × the demand signal
-                restockQty = demandSignal * DemandRestockMultiplier;
-            }
-            else
-            {
-                // No recent demand (cold start / idle) — restock one MaxOrderQty batch as baseline
-                restockQty = maxOrder;
-            }
+                TableEntity entity;
+                if (attempt == 0)
+                {
+                    entity = e;
+                }
+                else
+                {
+                    // Re-fetch the entity to get the latest ETag and stock value
+                    try
+                    {
+                        var resp = await _tableClient.GetEntityAsync<TableEntity>(e.PartitionKey, e.RowKey);
+                        entity = resp.Value;
+                    }
+                    catch
+                    {
+                        break; // entity gone — nothing to update
+                    }
+                }
 
-            int newStock = Math.Min(current + restockQty, maxStock);
-            e["CurrentStock"] = newStock;
-            await _tableClient.UpdateEntityAsync(e, e.ETag);
+                int current = entity.GetInt32("CurrentStock") ?? 0;
 
-            _logger.LogDebug(
-                "Demand-scaled restock vendor {VendorId} ProductID={ProductId}: {Old}→{New} (demand={Demand}, orderedQty={Ordered}, added={Added})",
-                vendorId, pid, current, newStock, recentDemand, orderedQty, newStock - current);
+                int restockQty;
+                if (demandSignal > 0)
+                {
+                    // Scale to demand: restock demandMultiplier × the demand signal
+                    restockQty = demandSignal * DemandRestockMultiplier;
+                }
+                else
+                {
+                    // No recent demand (cold start / idle) — restock one MaxOrderQty batch as baseline
+                    restockQty = maxOrder;
+                }
+
+                int newStock = Math.Min(current + restockQty, maxStock);
+                entity["CurrentStock"] = newStock;
+
+                try
+                {
+                    await _tableClient.UpdateEntityAsync(entity, entity.ETag);
+
+                    _logger.LogDebug(
+                        "Demand-scaled restock vendor {VendorId} ProductID={ProductId}: {Old}→{New} (demand={Demand}, orderedQty={Ordered}, added={Added})",
+                        vendorId, pid, current, newStock, recentDemand, orderedQty, newStock - current);
+                    break; // success
+                }
+                catch (Azure.RequestFailedException ex) when (ex.Status == 412)
+                {
+                    _logger.LogDebug("ETag conflict restocking vendor {VendorId} ProductID={ProductId}, attempt {Attempt}. Retrying.",
+                        vendorId, pid, attempt + 1);
+                    if (attempt == 4)
+                        _logger.LogWarning("Restock ETag conflict not resolved after 5 attempts for vendor {VendorId} ProductID={ProductId}.", vendorId, pid);
+                }
+            }
         }
     }
 

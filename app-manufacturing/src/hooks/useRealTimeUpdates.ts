@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useRef } from "react";
 import { useWebPubSub } from "./useWebPubSub";
 
 const GROUPS = [
@@ -20,6 +21,8 @@ const GROUPS = [
  */
 export function useRealTimeUpdates() {
   const qc = useQueryClient();
+  const supplyChainTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const supplyChainHasPoCreated = useRef(false);
 
   useWebPubSub(GROUPS, (group, data) => {
     switch (group) {
@@ -69,13 +72,29 @@ export function useRealTimeUpdates() {
         break;
 
       case "supply-chain":
-        qc.invalidateQueries({ queryKey: ["supply-orders"] });
-        qc.invalidateQueries({ queryKey: ["supply-orders-dashboard"] });
-        qc.invalidateQueries({ queryKey: ["supply-order"] });
-        qc.invalidateQueries({ queryKey: ["open-purchase-orders"] });
-        qc.invalidateQueries({ queryKey: ["po-headers-all"] });
-        qc.invalidateQueries({ queryKey: ["supply-catalog-all"] });
-        qc.invalidateQueries({ queryKey: ["supply-catalog"] });
+        // Debounce supply-chain events: during bulk reorder, hundreds of
+        // po-created events arrive in rapid succession. Invalidating on each
+        // one overwhelms the browser connection pool. Batch them into a single
+        // invalidation after a 2s quiet window.
+        if ((data.event as string) === "po-created") {
+          supplyChainHasPoCreated.current = true;
+        }
+        if (supplyChainTimer.current) clearTimeout(supplyChainTimer.current);
+        supplyChainTimer.current = setTimeout(() => {
+          qc.invalidateQueries({ queryKey: ["supply-orders"] });
+          qc.invalidateQueries({ queryKey: ["supply-orders-dashboard"] });
+          qc.invalidateQueries({ queryKey: ["supply-order"] });
+          qc.invalidateQueries({ queryKey: ["open-purchase-orders"] });
+          qc.invalidateQueries({ queryKey: ["po-headers-all"] });
+          qc.invalidateQueries({ queryKey: ["supply-catalog-all"] });
+          qc.invalidateQueries({ queryKey: ["supply-catalog"] });
+          if (supplyChainHasPoCreated.current) {
+            qc.invalidateQueries({ queryKey: ["supply-orders-shortages"] });
+            qc.invalidateQueries({ queryKey: ["manufacturing-status"] });
+            supplyChainHasPoCreated.current = false;
+          }
+          supplyChainTimer.current = null;
+        }, 2000);
         break;
 
       case "orders":

@@ -200,24 +200,35 @@ public class PurchaseOrderProcessorFunction
             visibilityTimeout: TimeSpan.FromSeconds(Math.Max(0, visibilityDelaySec)));
     }
 
+    private static QueueClient? _cachedQueueClient;
+    private static readonly SemaphoreSlim _queueInitLock = new(1, 1);
+
     private static async Task<QueueClient> GetQueueClientAsync()
     {
-        string? queueUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
-        QueueClient client;
-        if (!string.IsNullOrEmpty(queueUri))
+        if (_cachedQueueClient != null) return _cachedQueueClient;
+        await _queueInitLock.WaitAsync();
+        try
         {
-            var svc = new QueueServiceClient(
-                new Uri(queueUri),
-                new Azure.Identity.DefaultAzureCredential());
-            client = svc.GetQueueClient(SupplyChainService.QUEUE_NAME);
+            if (_cachedQueueClient != null) return _cachedQueueClient;
+            string? queueUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
+            QueueClient client;
+            if (!string.IsNullOrEmpty(queueUri))
+            {
+                var svc = new QueueServiceClient(
+                    new Uri(queueUri),
+                    new Azure.Identity.DefaultAzureCredential());
+                client = svc.GetQueueClient(SupplyChainService.QUEUE_NAME);
+            }
+            else
+            {
+                string connStr = Environment.GetEnvironmentVariable("AzureWebJobsStorage") ?? "UseDevelopmentStorage=true";
+                client = new QueueClient(connStr, SupplyChainService.QUEUE_NAME,
+                    new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
+            }
+            await client.CreateIfNotExistsAsync();
+            _cachedQueueClient = client;
+            return client;
         }
-        else
-        {
-            string connStr = Environment.GetEnvironmentVariable("AzureWebJobsStorage") ?? "UseDevelopmentStorage=true";
-            client = new QueueClient(connStr, SupplyChainService.QUEUE_NAME,
-                new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
-        }
-        await client.CreateIfNotExistsAsync();
-        return client;
+        finally { _queueInitLock.Release(); }
     }
 }

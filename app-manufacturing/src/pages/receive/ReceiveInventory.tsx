@@ -6,6 +6,7 @@ import {
   Package,
   ChevronRight,
   ArrowLeft,
+  ArrowRight,
   Activity,
   AlertTriangle,
   RefreshCw,
@@ -128,32 +129,38 @@ async function placeMultiVendorOrders(
     // Respect vendor min/max order qty constraints
     const minQty = vendor.minOrderQty || 1;
     const maxQty = vendor.maxOrderQty || vendor.stockAvailable;
-    const desired = Math.min(remaining, vendor.stockAvailable, maxQty);
-    const orderQty = Math.max(desired, minQty);
-    // Don't exceed vendor stock even if minOrderQty is higher
-    if (orderQty > vendor.stockAvailable) {
-      console.warn(
-        `Vendor ${vendor.vendorName}: min order ${minQty} exceeds stock ${vendor.stockAvailable}, skipping`,
-      );
-      continue;
-    }
-    try {
-      const order = await placeOrder(vendor.vendorId, productId, orderQty);
-      orders.push(order);
-      remaining -= orderQty;
-    } catch (e: unknown) {
-      // If vendor rejects (422), try next vendor
-      if (
-        e instanceof Error &&
-        (e.message?.includes("422") ||
-          e.message?.includes("Insufficient stock"))
-      ) {
+    let vendorStock = vendor.stockAvailable;
+
+    // Place multiple minimum-sized orders from the same vendor if needed
+    while (remaining > 0 && vendorStock >= minQty) {
+      const desired = Math.min(remaining, vendorStock, maxQty);
+      const orderQty = Math.max(desired, minQty);
+      // Don't exceed vendor stock even if minOrderQty is higher
+      if (orderQty > vendorStock) {
         console.warn(
-          `Vendor ${vendor.vendorName} rejected order, trying next…`,
+          `Vendor ${vendor.vendorName}: min order ${minQty} exceeds remaining stock ${vendorStock}, skipping`,
         );
-        continue;
+        break;
       }
-      throw e;
+      try {
+        const order = await placeOrder(vendor.vendorId, productId, orderQty);
+        orders.push(order);
+        remaining -= orderQty;
+        vendorStock -= orderQty;
+      } catch (e: unknown) {
+        // If vendor rejects (422), try next vendor
+        if (
+          e instanceof Error &&
+          (e.message?.includes("422") ||
+            e.message?.includes("Insufficient stock"))
+        ) {
+          console.warn(
+            `Vendor ${vendor.vendorName} rejected order, trying next…`,
+          );
+          break;
+        }
+        throw e;
+      }
     }
   }
 
@@ -1556,21 +1563,13 @@ const ReceiveInventory = () => {
                       </span>
                     </button>
                     {adjustedShortfall > 0 ? (
-                      <button
-                        onClick={() =>
-                          s.product && setReorderProduct(s.product)
-                        }
-                        disabled={isAgentActive}
-                        title={
-                          isAgentActive
-                            ? "Disabled — AI agent is controlling supply orders"
-                            : undefined
-                        }
-                        className="doodle-button doodle-button-primary text-xs py-1 px-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                      <Link
+                        to="/execute?tab=shortages"
+                        className="doodle-button doodle-button-primary text-xs py-1 px-2 shrink-0 inline-flex items-center gap-1"
                       >
-                        <Plus className="w-3 h-3 inline mr-1" />
-                        Reorder
-                      </button>
+                        <ArrowRight className="w-3 h-3" />
+                        Resolve
+                      </Link>
                     ) : (
                       <span className="font-doodle text-xs text-green-600 shrink-0">
                         ✓ Ordered
