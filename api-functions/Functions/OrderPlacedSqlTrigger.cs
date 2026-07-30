@@ -98,7 +98,6 @@ public class OrderPlacedSqlTrigger
         var emailInfo = await _orderService.GetCustomerEmailInfoBySalesOrderIdAsync(salesOrderId);
 
         var receiptQueueClient = queueServiceClient.GetQueueClient(ReceiptQueueName);
-        await receiptQueueClient.CreateIfNotExistsAsync();
 
         var salesOrderNumber = $"SO{salesOrderId}";
         var receiptMessage = JsonSerializer.Serialize(new
@@ -121,7 +120,6 @@ public class OrderPlacedSqlTrigger
         // --- Order status pipeline queue ----------------------------------------
         // Read configurable timing from the pipeline config service.
         var statusQueueClient = queueServiceClient.GetQueueClient(StatusQueueName);
-        await statusQueueClient.CreateIfNotExistsAsync();
 
         var statusMessage = JsonSerializer.Serialize(new { SalesOrderID = salesOrderId, Status = 1 });
         var cfg = await _pipelineConfig.GetConfigAsync();
@@ -169,7 +167,6 @@ public class OrderPlacedSqlTrigger
         var queueSvcClient = new QueueServiceClient(new Uri(queueServiceUri), new DefaultAzureCredential(),
             new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
         var agentQueue     = queueSvcClient.GetQueueClient(ManufacturingAgentRunService.QueueName);
-        await agentQueue.CreateIfNotExistsAsync();
 
         var msgPayload = JsonSerializer.Serialize(
             new ManufacturingAgentQueueMessage(salesOrderId, customerId, runId, RetryCount: 0),

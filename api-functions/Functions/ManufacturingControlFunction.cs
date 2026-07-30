@@ -385,7 +385,6 @@ public class ManufacturingControlFunction
             new DefaultAzureCredential(),
             new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
         var client = svc.GetQueueClient(QUEUE_NAME);
-        await client.CreateIfNotExistsAsync();
         return client;
     }
 

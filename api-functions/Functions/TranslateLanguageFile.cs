@@ -745,7 +745,6 @@ public class TranslateLanguageFile
         // Create or get container (locales mirror)
         var containerName = "locales";
         var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
-        await containerClient.CreateIfNotExistsAsync();
 
         // Create blob path matching local structure: {languageCode}/{filename}.json
         var filename = string.IsNullOrEmpty(input.SourceFilename) ? "translation" : input.SourceFilename;

@@ -152,7 +152,6 @@ public class GenerateReviewsWithRepliesFunction
                         new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
 
                     var embeddingsQueue = queueClient.GetQueueClient(EMBEDDINGS_QUEUE);
-                    await embeddingsQueue.CreateIfNotExistsAsync();
                     var embMsg = JsonSerializer.Serialize(new AiJobMessage { JobType = "review-embeddings" });
                     await embeddingsQueue.SendMessageAsync(embMsg);
                 }

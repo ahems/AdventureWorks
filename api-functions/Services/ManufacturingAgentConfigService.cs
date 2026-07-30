@@ -34,7 +34,6 @@ public class ManufacturingAgentConfigService
         }
 
         var serviceClient = new TableServiceClient(new Uri(tableServiceUri), new DefaultAzureCredential());
-        await serviceClient.CreateTableIfNotExistsAsync(TableName);
         return serviceClient.GetTableClient(TableName);
     }
 

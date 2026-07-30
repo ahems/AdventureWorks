@@ -51,7 +51,6 @@ public class GenerateProductEmbeddings
                 new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
 
             var aiJobQueueClient = queueServiceClient.GetQueueClient(AI_JOB_QUEUE);
-            await aiJobQueueClient.CreateIfNotExistsAsync();
 
             var message = JsonSerializer.Serialize(new AiJobMessage { JobType = "product-embeddings" });
             await aiJobQueueClient.SendMessageAsync(message);

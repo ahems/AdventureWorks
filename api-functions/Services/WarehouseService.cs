@@ -303,9 +303,6 @@ public class WarehouseService
         {
             if (_initComplete) return;
 
-            await _tableClient.CreateIfNotExistsAsync();
-            await _queueClient.CreateIfNotExistsAsync();
-
             await Task.WhenAll(
                 InitializeSubcategoryConfigAsync(),
                 InitializeSupplierReceiveConfigAsync(),
@@ -648,7 +645,6 @@ public class WarehouseService
     {
         var payload = System.Text.Json.JsonSerializer.Serialize(new { SalesOrderID = salesOrderId, Status = 5 });
         var bytes   = System.Text.Encoding.UTF8.GetBytes(payload);
-        await _orderStatusQueueClient.CreateIfNotExistsAsync();
         await _orderStatusQueueClient.SendMessageAsync(Convert.ToBase64String(bytes));
         _logger.LogInformation("Warehouse: all picks complete for SalesOrder-{SalesOrderId} — enqueued Status=5", salesOrderId);
     }
@@ -657,7 +653,6 @@ public class WarehouseService
 
     public async Task<List<SubcategoryHandlingConfig>> GetSubcategoryConfigsAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var result = new List<SubcategoryHandlingConfig>();
         await foreach (var e in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_SUBCAT_CONFIG}'"))
@@ -696,7 +691,6 @@ public class WarehouseService
 
     public async Task<List<SupplierReceiveConfig>> GetSupplierReceiveConfigsAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var result = new List<SupplierReceiveConfig>();
         await foreach (var e in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_SUPPLIER_CONFIG}'"))
@@ -728,7 +722,6 @@ public class WarehouseService
 
     public async Task<List<WarehouseDamageConfig>> GetDamageConfigsAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var result = new List<WarehouseDamageConfig>();
         await foreach (var e in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_DAMAGE_CONFIG}'"))
@@ -762,8 +755,6 @@ public class WarehouseService
 
     public async Task<WarehouseMetricsData> GetStatusAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
-
         // Queue depth
         var props = await _queueClient.GetPropertiesAsync();
         long queueDepth = props.Value?.ApproximateMessagesCount ?? 0;
@@ -800,7 +791,6 @@ public class WarehouseService
 
     public async Task<List<WarehouseActiveOperation>> GetActiveOperationsAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var result = new List<WarehouseActiveOperation>();
         await foreach (var e in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_ACTIVE_OP}'"))
@@ -827,7 +817,6 @@ public class WarehouseService
 
     public async Task<List<WarehouseDamageEvent>> GetDamageEventsAsync(string? operationType = null, int maxCount = 50)
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var result = new List<WarehouseDamageEvent>();
         string filter = $"PartitionKey eq '{PART_DAMAGE_EVENT}'";
         if (!string.IsNullOrEmpty(operationType))
@@ -855,7 +844,6 @@ public class WarehouseService
 
     public async Task<WarehouseWorkerSnapshot> GetWorkerSnapshotAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var byShift = new Dictionary<int, (string name, int total, int avail, int working, int offShift)>();
         int total = 0, working = 0, available = 0, offShift = 0, unavailable = 0;
 
@@ -893,7 +881,6 @@ public class WarehouseService
 
     public async Task<List<WarehouseWorkerStatus>> GetWorkersDetailAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var result = new List<WarehouseWorkerStatus>();
         await foreach (var e in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_WORKFORCE}'"))

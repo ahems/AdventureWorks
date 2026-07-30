@@ -562,7 +562,6 @@ public class SupplyChainControlFunction
                         MessageEncoding = Azure.Storage.Queues.QueueMessageEncoding.Base64
                     });
             }
-            await client.CreateIfNotExistsAsync();
             _cachedQueueClient = client;
             return client;
         }

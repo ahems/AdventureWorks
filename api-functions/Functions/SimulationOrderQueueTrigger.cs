@@ -301,7 +301,6 @@ public class SimulationOrderQueueTrigger
             new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
 
         var queueClient = client.GetQueueClient(QUEUE_NAME);
-        await queueClient.CreateIfNotExistsAsync();
         return queueClient;
     }
 }

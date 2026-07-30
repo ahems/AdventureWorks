@@ -305,7 +305,6 @@ public class ProcessSalesOrderStatus
             new DefaultAzureCredential(),
             new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
         var queueClient = queueServiceClient.GetQueueClient(QueueName);
-        await queueClient.CreateIfNotExistsAsync();
         return queueClient;
     }
 

@@ -534,7 +534,6 @@ public class ReviewService
                 new Uri(_tableServiceUri),
                 new DefaultAzureCredential());
             _tableClient = tableService.GetTableClient(_verifiedReviewsTableName);
-            _tableClient.CreateIfNotExists();
         }
         return _tableClient;
     }
@@ -596,7 +595,6 @@ public class ReviewService
                 new Uri(_tableServiceUri),
                 new DefaultAzureCredential());
             _reviewModerationTableClient = tableService.GetTableClient(_reviewModerationTableName);
-            _reviewModerationTableClient.CreateIfNotExists();
         }
         return _reviewModerationTableClient;
     }

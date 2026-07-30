@@ -135,7 +135,6 @@ public class WorkOrderSimulationService
 
     public async Task InitializeTablesAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         await InitializeLocationConfigAsync();
         await InitializeScrapConfigAsync();
     }
@@ -730,7 +729,6 @@ public class WorkOrderSimulationService
 
     public async Task<List<LocationConfigData>> GetAllLocationConfigsAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var results = new List<LocationConfigData>();
         await foreach (var entity in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_LOCATION_CONFIG}'"))
@@ -846,7 +844,6 @@ public class WorkOrderSimulationService
 
     public async Task<List<LocationLoadData>> GetLocationLoadsAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var loads = new List<LocationLoadData>();
         await foreach (var entity in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_LOCATION_SLOTS}'"))
@@ -934,7 +931,6 @@ public class WorkOrderSimulationService
 
     public async Task<List<ScrapConfigData>> GetAllScrapConfigsAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var results = new List<ScrapConfigData>();
         await foreach (var entity in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_SCRAP_CONFIG}'"))
@@ -980,7 +976,6 @@ public class WorkOrderSimulationService
 
     public async Task<List<ShortageData>> GetAllShortagesAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var results = new List<ShortageData>();
         await foreach (var entity in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_SHORTAGE}'"))
@@ -1031,7 +1026,6 @@ public class WorkOrderSimulationService
 
     public async Task<List<ScrapEventData>> GetRecentScrapEventsAsync(int count = 10)
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var results = new List<ScrapEventData>();
         await foreach (var entity in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_SCRAP_EVENT}'",
@@ -1049,7 +1043,6 @@ public class WorkOrderSimulationService
     /// </summary>
     public async Task<List<ScrapEventData>> GetAllScrapEventsAsync(int? vendorId = null)
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var results = new List<ScrapEventData>();
         string filter = $"PartitionKey eq '{PART_SCRAP_EVENT}'";
         if (vendorId.HasValue)

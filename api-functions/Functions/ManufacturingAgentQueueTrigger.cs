@@ -464,7 +464,6 @@ public class ManufacturingAgentQueueTrigger
         var queueSvcClient = new QueueServiceClient(new Uri(_queueServiceUri), new DefaultAzureCredential(),
             new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
         var queueClient    = queueSvcClient.GetQueueClient(QueueName);
-        await queueClient.CreateIfNotExistsAsync();
         await queueClient.SendMessageAsync(
             BinaryData.FromString(newMsgJson),
             visibilityTimeout: backoffDelay);

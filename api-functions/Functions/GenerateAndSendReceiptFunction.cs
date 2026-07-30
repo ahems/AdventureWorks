@@ -167,7 +167,6 @@ public class GenerateAndSendReceiptFunction
 
             // Step 1: Enqueue receipt generation with email metadata (reuse existing infrastructure)
             var receiptQueueClient = queueServiceClient.GetQueueClient(RECEIPT_QUEUE_NAME);
-            await receiptQueueClient.CreateIfNotExistsAsync();
 
             var salesOrderNumber = $"SO{salesOrderId}";
             var receiptMessage = JsonSerializer.Serialize(new

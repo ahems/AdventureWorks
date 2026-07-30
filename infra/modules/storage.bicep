@@ -136,6 +136,12 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
             description: 'Background queue for review auto-moderation: analyze pending unreplied reviews with AI, create staff reply, and approve.'
           }
         }
+        {
+          name: 'manufacturing-agent-queue'
+          metadata: {
+            description: 'Queue for manufacturing AI agent invocations triggered by new sales orders'
+          }
+        }
       ]
     }
     
@@ -161,6 +167,21 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
         }
         {
           name: 'awWarehouse'
+        }
+        {
+          name: 'awManufacturingAgentConfig'
+        }
+        {
+          name: 'awManufacturingAgentRuns'
+        }
+        {
+          name: 'awManufacturingProposals'
+        }
+        {
+          name: 'verifiedReviewsJob'
+        }
+        {
+          name: 'reviewModerationJob'
         }
       ]
     }

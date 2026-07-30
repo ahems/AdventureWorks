@@ -93,7 +93,6 @@ public class TranslateProductDescriptions
                 new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
 
             var aiJobQueueClient = queueServiceClient.GetQueueClient(AI_JOB_QUEUE);
-            await aiJobQueueClient.CreateIfNotExistsAsync();
 
             // Enqueue one translation job per product model
             int enqueued = 0;

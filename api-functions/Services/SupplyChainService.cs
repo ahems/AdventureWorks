@@ -294,7 +294,6 @@ public class SupplyChainService
             await ProcessHistoricalApprovedOrdersAsync();
 
             // Table Storage used only for vendor stock levels
-            await _tableClient.CreateIfNotExistsAsync();
 
             // Fast path: if stock rows already exist, skip all seeding work.
             // We still need to run ProcessHistoricalPendingOrdersAsync even when already seeded
@@ -401,7 +400,6 @@ public class SupplyChainService
         try
         {
             // Delete all stock rows
-            await _tableClient.CreateIfNotExistsAsync();
             var toDelete = new List<TableEntity>();
             await foreach (var e in _tableClient.QueryAsync<TableEntity>(
                 filter: $"PartitionKey eq '{PART_STOCK}'",
@@ -504,7 +502,6 @@ public class SupplyChainService
             queueClient = new QueueClient(connStr, QUEUE_NAME,
                 new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
         }
-        await queueClient.CreateIfNotExistsAsync();
 
         // Load recently-injected PO tracking rows to prevent duplicate queue messages.
         // Any PO injected within the last 10 minutes is considered "in flight" and skipped.
@@ -702,7 +699,6 @@ public class SupplyChainService
 
     public async Task<List<VendorSummary>> GetVendorSummariesAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var vendors = await GetVendorsAsync();
 
         // Count active and delivered-today orders per vendor from SQL
@@ -798,7 +794,6 @@ public class SupplyChainService
 
     public async Task<List<SupplyQuote>> GetCatalogAsync(int? filterProductId = null)
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var vendors = await GetVendorsAsync();
         var vendorDict = vendors.ToDictionary(v => v.VendorId);
 
@@ -851,7 +846,6 @@ public class SupplyChainService
 
     public async Task<SupplyQuote?> GetQuoteAsync(string vendorId, int productId, int qty)
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var vendors = await GetVendorsAsync();
         var vendor  = vendors.FirstOrDefault(v => v.VendorId == vendorId);
         if (vendor == null) return null;
@@ -1213,7 +1207,6 @@ public class SupplyChainService
     /// </summary>
     public async Task RestockVendorAsync(string vendorId, int productId = 0)
     {
-        await _tableClient.CreateIfNotExistsAsync();
         string filter = $"PartitionKey eq '{PART_STOCK}' and VendorId eq '{vendorId}'";
         if (productId > 0)
             filter += $" and ProductId eq {productId}";
@@ -1239,8 +1232,6 @@ public class SupplyChainService
     /// </summary>
     public async Task RestockVendorScaledAsync(string vendorId, int productId, int orderedQty = 0)
     {
-        await _tableClient.CreateIfNotExistsAsync();
-
         string filter = $"PartitionKey eq '{PART_STOCK}' and VendorId eq '{vendorId}'";
         if (productId > 0)
             filter += $" and ProductId eq {productId}";

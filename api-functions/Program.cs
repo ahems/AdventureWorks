@@ -580,17 +580,58 @@ builder.Services.AddSingleton<WebPubSubService>(sp =>
 
 var app = builder.Build();
 
-// Ensure the simulation-order-queue exists before the QueueTrigger starts polling.
-// After a fresh deployment the queue may not exist yet, causing 404 errors.
+// Verify that all expected storage resources exist (provisioned by infra/modules/storage.bicep via azd up).
+// Logs warnings to App Insights for any missing resource but does not block startup.
 var config = app.Services.GetRequiredService<IConfiguration>();
 var storageAccountName = config["AzureWebJobsStorage:accountName"];
 if (!string.IsNullOrEmpty(storageAccountName))
 {
+    var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+    var credential = new DefaultAzureCredential();
+
     var queueUri = config["AzureWebJobsStorage:queueServiceUri"]
         ?? $"https://{storageAccountName}.queue.core.windows.net";
-    var queueServiceClient = new Azure.Storage.Queues.QueueServiceClient(
-        new Uri(queueUri), new DefaultAzureCredential());
-    await queueServiceClient.GetQueueClient("simulation-order-queue").CreateIfNotExistsAsync();
+    var tableUri = config["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{storageAccountName}.table.core.windows.net";
+    var blobUri = config["AzureWebJobsStorage:blobServiceUri"]
+        ?? $"https://{storageAccountName}.blob.core.windows.net";
+
+    var queueSvc = new Azure.Storage.Queues.QueueServiceClient(new Uri(queueUri), credential);
+    var tableSvc = new Azure.Data.Tables.TableServiceClient(new Uri(tableUri), credential);
+    var blobSvc  = new Azure.Storage.Blobs.BlobServiceClient(new Uri(blobUri), credential);
+
+    string[] expectedQueues = [
+        "order-receipt-generation", "order-email-generation",
+        "ai-job-image-queue", "ai-job-chat-queue", "ai-job-embeddings-queue",
+        "product-thumbnail-generation", "sales-order-status", "production-wo-queue",
+        "supply-chain-orders-queue", "simulation-order-queue", "warehouse-ops-queue",
+        "review-moderation-queue", "manufacturing-agent-queue"
+    ];
+    string[] expectedTables = [
+        "shoppingSimulator", "awOrderPipelineConfig", "awSupplyChain", "awManufacturing",
+        "awBankAccounts", "awBankTransactions", "awWarehouse",
+        "awManufacturingAgentConfig", "awManufacturingAgentRuns", "awManufacturingProposals",
+        "verifiedReviewsJob", "reviewModerationJob"
+    ];
+    string[] expectedContainers = [
+        "adventureworks-receipts", "locales", "function-releases"
+    ];
+
+    foreach (var q in expectedQueues)
+    {
+        try { await queueSvc.GetQueueClient(q).GetPropertiesAsync(); }
+        catch { startupLogger.LogWarning("Missing storage queue '{Queue}' — run 'azd provision' to create infrastructure", q); }
+    }
+    foreach (var t in expectedTables)
+    {
+        try { await tableSvc.GetTableClient(t).GetAccessPoliciesAsync(); }
+        catch { startupLogger.LogWarning("Missing storage table '{Table}' — run 'azd provision' to create infrastructure", t); }
+    }
+    foreach (var c in expectedContainers)
+    {
+        try { await blobSvc.GetBlobContainerClient(c).GetPropertiesAsync(); }
+        catch { startupLogger.LogWarning("Missing blob container '{Container}' — run 'azd provision' to create infrastructure", c); }
+    }
 }
 
 await app.RunAsync();

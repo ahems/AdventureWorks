@@ -124,8 +124,6 @@ public class WorkforceService
             // Double-check after acquiring lock.
             if (_initComplete) return;
 
-            await _tableClient.CreateIfNotExistsAsync();
-
             // Check if already initialized
             bool alreadySeeded = false;
             await foreach (var _ in _tableClient.QueryAsync<TableEntity>(
@@ -192,8 +190,6 @@ public class WorkforceService
 
     public async Task<WorkforceSnapshot> GetSnapshotAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
-
         var byLocation = new Dictionary<int, (int total, int avail, int working, int offShift)>();
         int totalWorkers = 0, currentlyWorking = 0, availableNow = 0, offShift = 0, unavailable = 0;
 
@@ -236,7 +232,6 @@ public class WorkforceService
 
     public async Task<List<WorkerStatus>> GetDetailAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var result = new List<WorkerStatus>();
 
         await foreach (var e in _tableClient.QueryAsync<TableEntity>(
@@ -261,8 +256,6 @@ public class WorkforceService
     /// </summary>
     public async Task<WorkerAssignment?> AssignOperatorAsync(int locationId, int workOrderId, string operationDescription)
     {
-        await _tableClient.CreateIfNotExistsAsync();
-
         var candidates = new List<TableEntity>();
         await foreach (var e in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_WORKFORCE}' and LocationId eq {locationId}"))

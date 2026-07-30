@@ -46,7 +46,6 @@ public class ManufacturingAgentRunService
     private async Task<TableClient> GetTableClientAsync()
     {
         var serviceClient = new TableServiceClient(new Uri(_tableServiceUri), new DefaultAzureCredential());
-        await serviceClient.CreateTableIfNotExistsAsync(TableName);
         return serviceClient.GetTableClient(TableName);
     }
 
@@ -193,7 +192,6 @@ public class ManufacturingAgentRunService
 
         try
         {
-            await mainQueue.CreateIfNotExistsAsync();
             var props  = await mainQueue.GetPropertiesAsync();
             pending    = props.Value.ApproximateMessagesCount;
         }
@@ -204,7 +202,6 @@ public class ManufacturingAgentRunService
 
         try
         {
-            await poisonQueue.CreateIfNotExistsAsync();
             var props   = await poisonQueue.GetPropertiesAsync();
             poisonDepth = props.Value.ApproximateMessagesCount;
         }

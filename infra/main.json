@@ -5,8 +5,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.44.1.10279",
-      "templateHash": "2707398349350420892"
+      "version": "0.45.15.27210",
+      "templateHash": "7323098665369549255"
     }
   },
   "parameters": {
@@ -189,8 +189,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "5334288490336284375"
+              "version": "0.45.15.27210",
+              "templateHash": "6999132434655485989"
             }
           },
           "parameters": {
@@ -310,8 +310,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "8420511453232891421"
+              "version": "0.45.15.27210",
+              "templateHash": "6367746675453539079"
             }
           },
           "parameters": {
@@ -479,13 +479,68 @@
                           "metadata": {
                             "description": "Autonomous order simulation queue: each message carries a CustomerId (0 = new customer) and optional PersonaHint. The AI agent generates a realistic order for the specified customer or persona."
                           }
+                        },
+                        {
+                          "name": "warehouse-ops-queue",
+                          "metadata": {
+                            "description": "Event-driven queue driving the warehouse simulation: each message represents one store/retrieve/receive operation phase for a warehouse worker at Finished Goods Storage (LocationID 7)"
+                          }
+                        },
+                        {
+                          "name": "review-moderation-queue",
+                          "metadata": {
+                            "description": "Background queue for review auto-moderation: analyze pending unreplied reviews with AI, create staff reply, and approve."
+                          }
+                        },
+                        {
+                          "name": "manufacturing-agent-queue",
+                          "metadata": {
+                            "description": "Queue for manufacturing AI agent invocations triggered by new sales orders"
+                          }
                         }
                       ]
                     }
                   },
                   "tableServices": {
                     "value": {
-                      "tables": []
+                      "tables": [
+                        {
+                          "name": "shoppingSimulator"
+                        },
+                        {
+                          "name": "awOrderPipelineConfig"
+                        },
+                        {
+                          "name": "awSupplyChain"
+                        },
+                        {
+                          "name": "awManufacturing"
+                        },
+                        {
+                          "name": "awBankAccounts"
+                        },
+                        {
+                          "name": "awBankTransactions"
+                        },
+                        {
+                          "name": "awWarehouse"
+                        },
+                        {
+                          "name": "awManufacturingAgentConfig"
+                        },
+                        {
+                          "name": "awManufacturingAgentRuns"
+                        },
+                        {
+                          "name": "awManufacturingProposals"
+                        },
+                        {
+                          "name": "verifiedReviewsJob"
+                        },
+                        {
+                          "name": "reviewModerationJob"
+                        }
+                      ]
                     }
                   },
                   "fileServices": {
@@ -6298,8 +6353,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "3424472907859798251"
+              "version": "0.45.15.27210",
+              "templateHash": "13223120787574541563"
             }
           },
           "parameters": {
@@ -6443,6 +6498,101 @@
         "identity"
       ]
     },
+    "webpubsub": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "Deploy-Web-PubSub",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "webPubSubName": {
+            "value": "[format('av-wps-{0}', parameters('resourceToken'))]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "identityName": {
+            "value": "[parameters('identityName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "5476368709642498998"
+            }
+          },
+          "parameters": {
+            "webPubSubName": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]"
+            },
+            "identityName": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.SignalRService/webPubSub",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('webPubSubName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Free_F1",
+                "tier": "Free",
+                "capacity": 1
+              },
+              "properties": {
+                "tls": {
+                  "clientCertEnabled": false
+                },
+                "publicNetworkAccess": "Enabled"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.SignalRService/webPubSub', parameters('webPubSubName'))]",
+              "name": "[guid(resourceId('Microsoft.SignalRService/webPubSub', parameters('webPubSubName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '12cf5a90-567b-43ae-8102-96cf46c7d9b4')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '12cf5a90-567b-43ae-8102-96cf46c7d9b4')]",
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.SignalRService/webPubSub', parameters('webPubSubName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "webPubSubHostName": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.SignalRService/webPubSub', parameters('webPubSubName')), '2024-03-01').hostName]"
+            },
+            "webPubSubId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.SignalRService/webPubSub', parameters('webPubSubName'))]"
+            },
+            "webPubSubName": {
+              "type": "string",
+              "value": "[parameters('webPubSubName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "identity"
+      ]
+    },
     "aifoundry": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
@@ -6556,8 +6706,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "6025039632111071682"
+              "version": "0.45.15.27210",
+              "templateHash": "14986085228362006029"
             }
           },
           "parameters": {
@@ -7139,8 +7289,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "3688386595421927785"
+              "version": "0.45.15.27210",
+              "templateHash": "13255219892727585617"
             }
           },
           "parameters": {
@@ -13302,8 +13452,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "6128093237231057698"
+              "version": "0.45.15.27210",
+              "templateHash": "15895117552752567338"
             }
           },
           "parameters": {
@@ -16565,6 +16715,15 @@
           },
           "location": {
             "value": "[parameters('location')]"
+          },
+          "identityName": {
+            "value": "[parameters('identityName')]"
+          },
+          "aadAdminObjectId": {
+            "value": "[parameters('aadAdminObjectId')]"
+          },
+          "skipLocalDevRoleAssignments": {
+            "value": "[parameters('skipLocalDevRoleAssignments')]"
           }
         },
         "template": {
@@ -16574,8 +16733,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "7382172177419193794"
+              "version": "0.45.15.27210",
+              "templateHash": "7893334067048515735"
             }
           },
           "parameters": {
@@ -16590,9 +16749,65 @@
             "location": {
               "type": "string",
               "defaultValue": "[resourceGroup().location]"
+            },
+            "identityName": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "aadAdminObjectId": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "skipLocalDevRoleAssignments": {
+              "type": "bool",
+              "defaultValue": false
             }
           },
           "resources": {
+            "appInsightsResource": {
+              "existing": true,
+              "type": "Microsoft.Insights/components",
+              "apiVersion": "2020-02-02",
+              "name": "[parameters('appName')]"
+            },
+            "azidentity": {
+              "condition": "[not(empty(parameters('identityName')))]",
+              "existing": true,
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[parameters('identityName')]"
+            },
+            "appInsightsReaderRoleAssignment": {
+              "condition": "[not(empty(parameters('identityName')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2020-04-01-preview",
+              "scope": "[resourceId('Microsoft.Insights/components', parameters('appName'))]",
+              "name": "[guid(resourceId('Microsoft.Insights/components', parameters('appName')), parameters('identityName'), 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
+                "principalId": "[reference('azidentity').principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "appInsights",
+                "azidentity"
+              ]
+            },
+            "appInsightsReaderLocalRoleAssignment": {
+              "condition": "[and(not(parameters('skipLocalDevRoleAssignments')), not(empty(parameters('aadAdminObjectId'))))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2020-04-01-preview",
+              "scope": "[resourceId('Microsoft.Insights/components', parameters('appName'))]",
+              "name": "[guid(resourceId('Microsoft.Insights/components', parameters('appName')), parameters('aadAdminObjectId'), 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
+                "principalId": "[parameters('aadAdminObjectId')]",
+                "principalType": "User"
+              },
+              "dependsOn": [
+                "appInsights"
+              ]
+            },
             "workspace": {
               "type": "Microsoft.Resources/deployments",
               "apiVersion": "2025-04-01",
@@ -20380,8 +20595,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "14403063098945964387"
+              "version": "0.45.15.27210",
+              "templateHash": "18282449069446797992"
             }
           },
           "parameters": {
@@ -20577,8 +20792,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "16770072261811419804"
+              "version": "0.45.15.27210",
+              "templateHash": "7625874132658260688"
             }
           },
           "parameters": {
@@ -20749,8 +20964,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "14696559242386203602"
+              "version": "0.45.15.27210",
+              "templateHash": "12745659126412732316"
             }
           },
           "parameters": {
@@ -21035,8 +21250,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "10555703639217127388"
+              "version": "0.45.15.27210",
+              "templateHash": "7154007883298033186"
             }
           },
           "parameters": {
@@ -21065,7 +21280,7 @@
             },
             "bootstrapImage": {
               "type": "string",
-              "defaultValue": "mcr.microsoft.com/dotnet/aspnet:8.0"
+              "defaultValue": "mcr.microsoft.com/dotnet/aspnet:10.0"
             },
             "apiFunctionsUrl": {
               "type": "string"
@@ -21273,6 +21488,9 @@
           },
           "foundryProjectEndpoint": {
             "value": "[reference('aifoundry').outputs.projectEndpoint.value]"
+          },
+          "webPubSubHostName": {
+            "value": "[reference('webpubsub').outputs.webPubSubHostName.value]"
           }
         },
         "template": {
@@ -21281,8 +21499,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "17808450793186451636"
+              "version": "0.45.15.27210",
+              "templateHash": "4611779755395904322"
             }
           },
           "parameters": {
@@ -21356,6 +21574,30 @@
             "agentWorkflowHelpMeChooseId": {
               "type": "string",
               "defaultValue": ""
+            },
+            "agentTranslationId": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "agentReviewBatchId": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "agentReviewAnalysisId": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "agentEmailContentId": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "agentCatalogSuggestionId": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "webPubSubHostName": {
+              "type": "string",
+              "defaultValue": ""
             }
           },
           "resources": [
@@ -21404,11 +21646,16 @@
                   "scaleAndConcurrency": {
                     "maximumInstanceCount": 5,
                     "instanceMemoryMB": 2048,
-                    "alwaysReady": []
+                    "alwaysReady": [
+                      {
+                        "name": "function:OrderPlacedSqlTrigger",
+                        "instanceCount": 1
+                      }
+                    ]
                   },
                   "runtime": {
                     "name": "dotnet-isolated",
-                    "version": "8.0"
+                    "version": "10.0"
                   }
                 },
                 "siteConfig": {
@@ -21500,6 +21747,34 @@
                     {
                       "name": "AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID",
                       "value": "[parameters('agentWorkflowHelpMeChooseId')]"
+                    },
+                    {
+                      "name": "AI_AGENT_TRANSLATION_ID",
+                      "value": "[parameters('agentTranslationId')]"
+                    },
+                    {
+                      "name": "AI_AGENT_REVIEW_BATCH_ID",
+                      "value": "[parameters('agentReviewBatchId')]"
+                    },
+                    {
+                      "name": "AI_AGENT_REVIEW_ANALYSIS_ID",
+                      "value": "[parameters('agentReviewAnalysisId')]"
+                    },
+                    {
+                      "name": "AI_AGENT_EMAIL_CONTENT_ID",
+                      "value": "[parameters('agentEmailContentId')]"
+                    },
+                    {
+                      "name": "AI_AGENT_CATALOG_SUGGESTION_ID",
+                      "value": "[parameters('agentCatalogSuggestionId')]"
+                    },
+                    {
+                      "name": "API_FUNCTIONS_URL",
+                      "value": "[format('https://{0}.azurewebsites.net', parameters('apiFunctionsName'))]"
+                    },
+                    {
+                      "name": "WEB_PUBSUB_HOST_NAME",
+                      "value": "[parameters('webPubSubHostName')]"
                     }
                   ]
                 }
@@ -21544,7 +21819,8 @@
         "aifoundry",
         "communication",
         "database",
-        "storage"
+        "storage",
+        "webpubsub"
       ]
     },
     "containerAppSeedJob": {
@@ -21588,8 +21864,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "13023914199392352543"
+              "version": "0.45.15.27210",
+              "templateHash": "17287136801107821388"
             }
           },
           "parameters": {
@@ -21768,6 +22044,9 @@
           },
           "appInsightsConnectionString": {
             "value": "[reference('appinsights').outputs.connectionString.value]"
+          },
+          "webPubSubHostName": {
+            "value": "[reference('webpubsub').outputs.webPubSubHostName.value]"
           }
         },
         "template": {
@@ -21777,8 +22056,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "5107891940501397237"
+              "version": "0.45.15.27210",
+              "templateHash": "8335343415856599050"
             }
           },
           "parameters": {
@@ -21811,6 +22090,10 @@
               "defaultValue": ""
             },
             "appInsightsConnectionString": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "webPubSubHostName": {
               "type": "string",
               "defaultValue": ""
             }
@@ -21862,7 +22145,8 @@
                 "API_URL": "[parameters('apiUrl')]",
                 "API_FUNCTIONS_URL": "[parameters('apiFunctionsUrl')]",
                 "API_MCP_URL": "[parameters('apiMcpUrl')]",
-                "APPINSIGHTS_CONNECTIONSTRING": "[parameters('appInsightsConnectionString')]"
+                "APPINSIGHTS_CONNECTIONSTRING": "[parameters('appInsightsConnectionString')]",
+                "WEB_PUBSUB_HOST_NAME": "[parameters('webPubSubHostName')]"
               },
               "dependsOn": [
                 "staticWebApp"
@@ -21893,7 +22177,8 @@
         "appinsights",
         "containerAppApi",
         "containerAppApiFunctions",
-        "containerAppApiMcp"
+        "containerAppApiMcp",
+        "webpubsub"
       ]
     },
     "containerAppMcpInspector": {
@@ -21949,8 +22234,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "3181625343001009800"
+              "version": "0.45.15.27210",
+              "templateHash": "10900945022132105995"
             }
           },
           "parameters": {
@@ -22175,6 +22460,9 @@
           "appManufacturingUrl": {
             "value": "[reference('containerAppManufacturing').outputs.appManufacturingUrl.value]"
           },
+          "webPubSubHostName": {
+            "value": "[reference('webpubsub').outputs.webPubSubHostName.value]"
+          },
           "minReplica": {
             "value": 0
           },
@@ -22194,8 +22482,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "14502643631614509302"
+              "version": "0.45.15.27210",
+              "templateHash": "12339850627667353712"
             }
           },
           "parameters": {
@@ -22266,6 +22554,10 @@
               "defaultValue": ""
             },
             "appManufacturingUrl": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "webPubSubHostName": {
               "type": "string",
               "defaultValue": ""
             }
@@ -22350,6 +22642,10 @@
                         {
                           "name": "AZURE_CLIENT_ID",
                           "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').clientId]"
+                        },
+                        {
+                          "name": "WEB_PUBSUB_HOST_NAME",
+                          "value": "[parameters('webPubSubHostName')]"
                         }
                       ]
                     }
@@ -22386,7 +22682,8 @@
         "containerAppApiMcp",
         "containerAppManufacturing",
         "containerAppMcpInspector",
-        "staticWebAppFrontend"
+        "staticWebAppFrontend",
+        "webpubsub"
       ]
     },
     "containerAppManufacturing": {
@@ -22423,6 +22720,9 @@
           "appInsightsConnectionString": {
             "value": "[reference('appinsights').outputs.connectionString.value]"
           },
+          "webPubSubHostName": {
+            "value": "[reference('webpubsub').outputs.webPubSubHostName.value]"
+          },
           "minReplica": {
             "value": 0
           },
@@ -22442,8 +22742,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "9820132617786337449"
+              "version": "0.45.15.27210",
+              "templateHash": "5748944026988859458"
             }
           },
           "parameters": {
@@ -22498,6 +22798,10 @@
               "defaultValue": ""
             },
             "appInsightsConnectionString": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "webPubSubHostName": {
               "type": "string",
               "defaultValue": ""
             }
@@ -22566,6 +22870,10 @@
                         {
                           "name": "AZURE_CLIENT_ID",
                           "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').clientId]"
+                        },
+                        {
+                          "name": "WEB_PUBSUB_HOST_NAME",
+                          "value": "[parameters('webPubSubHostName')]"
                         }
                       ]
                     }
@@ -22598,7 +22906,8 @@
         "appinsights",
         "containerApp",
         "containerAppApi",
-        "containerAppApiFunctions"
+        "containerAppApiFunctions",
+        "webpubsub"
       ]
     }
   },
@@ -22742,6 +23051,10 @@
     "CONTAINER_APP_ENVIRONMENT_NAME": {
       "type": "string",
       "value": "[reference('containerApp').outputs.containerAppEnvName.value]"
+    },
+    "WEB_PUBSUB_HOST_NAME": {
+      "type": "string",
+      "value": "[reference('webpubsub').outputs.webPubSubHostName.value]"
     },
     "PLAYWRIGHT_WORKSPACE_ID": {
       "type": "string",

@@ -520,7 +520,6 @@ public class AIJobProcessorFunction
             new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
 
         var queueClient = client.GetQueueClient(queueName);
-        await queueClient.CreateIfNotExistsAsync();
         return queueClient;
     }
 }

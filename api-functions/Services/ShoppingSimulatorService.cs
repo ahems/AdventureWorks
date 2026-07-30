@@ -77,7 +77,6 @@ public class ShoppingSimulatorService
     {
         try
         {
-            await _tableClient.CreateIfNotExistsAsync();
             var response = await _tableClient.GetEntityAsync<ShoppingSimulatorState>(PARTITION_KEY, ROW_KEY);
             return response.Value;
         }
@@ -90,7 +89,6 @@ public class ShoppingSimulatorService
     /// <summary>Persists simulator state to Table Storage (upsert / replace).</summary>
     public async Task SaveStateAsync(ShoppingSimulatorState state)
     {
-        await _tableClient.CreateIfNotExistsAsync();
         await _tableClient.UpsertEntityAsync(state, TableUpdateMode.Replace);
     }
 
@@ -169,7 +167,6 @@ public class ShoppingSimulatorService
     {
         try
         {
-            await _tableClient.CreateIfNotExistsAsync();
             await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Replace);
         }
         catch (Exception ex)
@@ -184,7 +181,6 @@ public class ShoppingSimulatorService
         var results = new List<SimulationOrderResultEntity>();
         try
         {
-            await _tableClient.CreateIfNotExistsAsync();
             var query = _tableClient.QueryAsync<SimulationOrderResultEntity>(
                 filter: $"PartitionKey eq 'results'",
                 maxPerPage: limit);
@@ -207,7 +203,6 @@ public class ShoppingSimulatorService
     {
         try
         {
-            await _tableClient.CreateIfNotExistsAsync();
             var entities = new List<SimulationOrderResultEntity>();
             await foreach (var entity in _tableClient.QueryAsync<SimulationOrderResultEntity>(
                 filter: $"PartitionKey eq 'results'"))

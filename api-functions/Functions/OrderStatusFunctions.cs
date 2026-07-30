@@ -140,7 +140,6 @@ public class OrderStatusFunctions
             new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
 
         var queueClient = queueServiceClient.GetQueueClient(StatusQueueName);
-        await queueClient.CreateIfNotExistsAsync();
         return queueClient;
     }
 }

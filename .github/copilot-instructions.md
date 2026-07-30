@@ -31,6 +31,7 @@ All services authenticate via **Managed Identity** (passwordless). No connection
 **Do NOT use `refetchInterval` or manual polling on any page where Web PubSub real-time updates apply.** All data freshness must come from server-pushed cache invalidation via the `useRealTimeUpdates` hook. React Query's default window-focus refetch provides a natural fallback when users return to the tab.
 
 When adding a new query that needs live updates:
+
 1. Register the query key in the appropriate group handler in `app-manufacturing/src/hooks/useRealTimeUpdates.ts` (or the equivalent hook in `app/` or `app-admin/`)
 2. Ensure the server-side mutation calls `WebPubSubService.SendToGroupAsync` for the relevant group
 3. Do NOT add `refetchInterval` — the Web PubSub event-driven invalidation replaces polling entirely
@@ -308,6 +309,15 @@ module database 'modules/database.bicep' = { params: { identityId: identity.outp
 - `chatGptModelName`, `embeddingModelName` - discovered in preup.ps1
 - `aadAdminObjectId` - current user's Entra ID for SQL admin
 
+### Infrastructure-as-Code Policy
+
+All Azure Storage resources (queues, tables, blob containers) are provisioned **exclusively** by `infra/modules/storage.bicep` via `azd up`. Application code must **never** call `CreateIfNotExistsAsync`, `CreateIfNotExists`, or `CreateTableIfNotExistsAsync` — it must assume all infrastructure already exists at runtime.
+
+- **New queue or table needed?** Add it to the `queueServices.queues` or `tableServices.tables` array in `storage.bicep`.
+- **New blob container needed?** Add it to `blobServices.containers` in `storage.bicep`.
+- **Startup health check**: `Program.cs` verifies all expected storage resources exist at cold-start using lightweight `GetPropertiesAsync()` calls and logs `ILogger.LogWarning` to App Insights for any missing resource. It does not block startup or create resources.
+- **Why**: Each `CreateIfNotExistsAsync` adds an unnecessary HTTP round-trip (HEAD + conditional PUT). During simulation workloads that send hundreds of queue messages per minute, this overhead is significant.
+
 ## Common Integration Points
 
 ### Frontend ↔ GraphQL API
@@ -420,6 +430,7 @@ az monitor app-insights query --app <app-name> --analytics-query "requests | top
 12. **Order Status=7 is "Delivered"**: Orders are automatically promoted from Shipped (5) to Delivered (7) by the hourly `OrderDelivery_Timer` function. Terminal statuses are now 4 (Rejected), 6 (Cancelled), and 7 (Delivered) — Status=5 (Shipped) is no longer a terminal state. Delivery windows are configurable per order type via `PUT /api/orders/pipeline/config`.
 13. **Order notification emails disabled by default**: `ORDER_NOTIFICATIONS_EMAIL_ENABLED` must be explicitly set to `"true"` to send Shipped/Delivered emails via Azure Communication Services. When unset or `"false"`, the intended email content is logged at Info level instead (look for `[EmailNotifications disabled]` in Application Insights). This prevents the Shopping Simulator from generating email spam. The flag is hardcoded to `"false"` in the Bicep infra — enabling it requires a manual Azure Portal or CLI override. See [docs/features/email/ORDER_NOTIFICATIONS.md](docs/features/email/ORDER_NOTIFICATIONS.md).
 14. **Web PubSub Free tier limits**: 20 concurrent connections, 20K messages/day — sufficient for a single-user demo. All three frontend apps share one instance via groups. If `WEB_PUBSUB_HOST_NAME` is empty or the negotiate endpoint fails, apps fall back to slow polling (60–120s) automatically.
+15. **No runtime infra creation**: Application code must not call `CreateIfNotExistsAsync` or `CreateIfNotExists` on storage resources (queues, tables, containers). All storage infrastructure is provisioned by `infra/modules/storage.bicep` via `azd up`. If you need a new queue or table, add it to the Bicep file. A startup health check in `Program.cs` logs App Insights warnings for any missing resources.
 
 ### Shopping Simulator
 
@@ -439,3 +450,4 @@ The shopping simulator (`POST /api/shopping-simulator/start`) generates continuo
 - [api/README.md](api/README.md) - DAB deployment details
 - [MIGRATION_SUMMARY.md](MIGRATION_SUMMARY.md) - GraphQL integration history
 - [docs/DAB_NAMING_CONVENTIONS.md](docs/DAB_NAMING_CONVENTIONS.md) - GraphQL schema rules
+````

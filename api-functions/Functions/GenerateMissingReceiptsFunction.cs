@@ -133,7 +133,6 @@ public class GenerateMissingReceiptsFunction
         );
 
         var queueClient = queueServiceClient.GetQueueClient(QUEUE_NAME);
-        await queueClient.CreateIfNotExistsAsync();
 
         foreach (var orderNumber in missing)
         {

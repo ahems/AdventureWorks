@@ -225,7 +225,6 @@ public class PurchaseOrderProcessorFunction
                 client = new QueueClient(connStr, SupplyChainService.QUEUE_NAME,
                     new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
             }
-            await client.CreateIfNotExistsAsync();
             _cachedQueueClient = client;
             return client;
         }

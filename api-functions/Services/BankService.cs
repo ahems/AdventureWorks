@@ -138,10 +138,6 @@ public class BankService
         {
             if (_initialized == 2) return; // already seeded
 
-            _logger.LogInformation("[Bank] Creating Table Storage tables if not present…");
-            await _accountsTable.CreateIfNotExistsAsync();
-            await _transactionsTable.CreateIfNotExistsAsync();
-
             // Only seed if the USD account does not yet exist
             try
             {

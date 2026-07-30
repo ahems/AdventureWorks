@@ -306,7 +306,6 @@ public class ReviewModerationQueueFunction
             new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
 
         var queueClient = serviceClient.GetQueueClient(QueueName);
-        await queueClient.CreateIfNotExistsAsync();
         return queueClient;
     }
 }

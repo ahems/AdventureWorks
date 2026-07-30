@@ -82,7 +82,6 @@ public class GenerateProductReviewsUsingAI
                 new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
 
             var aiJobQueueClient = queueServiceClient.GetQueueClient(AI_JOB_QUEUE);
-            await aiJobQueueClient.CreateIfNotExistsAsync();
 
             // Enqueue one message per batch of 5 products.
             // The chat-queue processor will auto-enqueue review-embeddings when the queue drains.
