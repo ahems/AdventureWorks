@@ -456,9 +456,8 @@ public class SupplyChainControlFunction
                         break; // vendor can't fulfill — try next
                     }
 
-                    // Stagger: each successive PO to the same vendor gets +3s delay
                     int idx = vendorOrderIndex.AddOrUpdate(quote.VendorId, 0, (_, v) => v + 1);
-                    int staggerDelay = 5 + (idx * 3);
+                    int staggerDelay = 2 + (idx / 4);
 
                     // Fire transition + restock queue messages concurrently
                     var transitionTask = EnqueueTransitionAsync(queueClient, orderId,

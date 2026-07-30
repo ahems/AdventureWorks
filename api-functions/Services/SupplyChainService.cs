@@ -1219,7 +1219,18 @@ public class SupplyChainService
         {
             int maxStock = e.GetInt32("MaxStock") ?? VENDOR_MAX_STOCK;
             e["CurrentStock"] = maxStock;
-            await _tableClient.UpdateEntityAsync(e, e.ETag);
+            try
+            {
+                await _tableClient.UpdateEntityAsync(e, e.ETag);
+            }
+            catch (Azure.RequestFailedException ex) when (ex.Status is 412 or 409)
+            {
+                // Re-read and retry once for concurrent conflict
+                var fresh = await _tableClient.GetEntityIfExistsAsync<TableEntity>(e.PartitionKey, e.RowKey);
+                if (!fresh.HasValue) continue;
+                fresh.Value!["CurrentStock"] = fresh.Value.GetInt32("MaxStock") ?? VENDOR_MAX_STOCK;
+                await _tableClient.UpdateEntityAsync(fresh.Value, fresh.Value.ETag);
+            }
         }
 
         _logger.LogInformation("Restocked vendor {VendorId}, {Count} SKUs (full fill)", vendorId, toUpdate.Count);
@@ -1539,15 +1550,29 @@ public class SupplyChainService
     {
         if (vendorId == "" || productId == 0 || qty == 0) return;
 
-        var stockResp = await _tableClient.GetEntityIfExistsAsync<TableEntity>(
-            PART_STOCK, StockRowKey(vendorId, productId));
-        if (!stockResp.HasValue) return;
+        const int maxRetries = 5;
+        for (int attempt = 0; attempt < maxRetries; attempt++)
+        {
+            var stockResp = await _tableClient.GetEntityIfExistsAsync<TableEntity>(
+                PART_STOCK, StockRowKey(vendorId, productId));
+            if (!stockResp.HasValue) return;
 
-        var stock    = stockResp.Value!;
-        int current  = stock.GetInt32("CurrentStock") ?? 0;
-        int maxStock = stock.GetInt32("MaxStock") ?? VENDOR_MAX_STOCK;
-        stock["CurrentStock"] = Math.Min(current + qty, maxStock);
-        await _tableClient.UpdateEntityAsync(stock, stock.ETag);
+            var stock    = stockResp.Value!;
+            int current  = stock.GetInt32("CurrentStock") ?? 0;
+            int maxStock = stock.GetInt32("MaxStock") ?? VENDOR_MAX_STOCK;
+            stock["CurrentStock"] = Math.Min(current + qty, maxStock);
+
+            try
+            {
+                await _tableClient.UpdateEntityAsync(stock, stock.ETag);
+                return;
+            }
+            catch (Azure.RequestFailedException ex) when (ex.Status is 412 or 409 && attempt < maxRetries - 1)
+            {
+                // ETag conflict from concurrent refunds — retry with fresh read
+                await Task.Delay(20 * (attempt + 1));
+            }
+        }
     }
 
     private async Task AddToSqlInventoryAsync(int productId, int qty, string vendorId, double unitCost, int purchaseOrderId = 0)

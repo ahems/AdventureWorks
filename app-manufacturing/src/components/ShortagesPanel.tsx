@@ -42,7 +42,6 @@ import {
 import {
   Package,
   Truck,
-  ShoppingCart,
   DollarSign,
   Pencil,
   Ban,
@@ -115,7 +114,7 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
       byProduct.set(s.productId, e);
     }
     return Array.from(byProduct.values()).sort(
-      (a, b) => b.totalShortfall - a.totalShortfall,
+      (a, b) => b.workOrders.length - a.workOrders.length,
     );
   }, [shortages]);
 
@@ -180,6 +179,24 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
       return next;
     });
   const clearSelection = () => setSelected(new Set());
+
+  // Product-level selection for re-ordering
+  const [selectedProducts, setSelectedProducts] = useState<Set<number>>(
+    new Set(),
+  );
+  const toggleProduct = (id: number) =>
+    setSelectedProducts((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const allProductsSelected =
+    grouped.length > 0 &&
+    grouped.every((g) => selectedProducts.has(g.productId));
+  const someProductsSelected = grouped.some((g) =>
+    selectedProducts.has(g.productId),
+  );
 
   // Mutations
   const cancelMutation = useMutation({
@@ -447,10 +464,51 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
     [reorderAllPlan],
   );
 
+  // Filtered plan for selected products only
+  const selectedFulfillable = useMemo(
+    () =>
+      reorderAllFulfillable.filter((item) =>
+        selectedProducts.has(item.productId),
+      ),
+    [reorderAllFulfillable, selectedProducts],
+  );
+  const selectedUnfulfillable = useMemo(
+    () =>
+      reorderAllUnfulfillable.filter((item) =>
+        selectedProducts.has(item.productId),
+      ),
+    [reorderAllUnfulfillable, selectedProducts],
+  );
+  const estimatedPOCount = useMemo(() => {
+    let count = 0;
+    for (const item of selectedFulfillable) {
+      let remaining = item.fulfillableQty;
+      const vendors = item.quotes
+        .filter((q) => q.stockAvailable > 0)
+        .sort((a, b) => a.unitCost - b.unitCost);
+      for (const v of vendors) {
+        if (remaining <= 0) break;
+        const maxQty = v.maxOrderQty || v.stockAvailable;
+        const canFulfill = Math.min(remaining, v.stockAvailable);
+        count += Math.ceil(canFulfill / maxQty);
+        remaining -= canFulfill;
+      }
+    }
+    return count;
+  }, [selectedFulfillable]);
+  const selectedFulfillableCost = useMemo(
+    () =>
+      selectedFulfillable.reduce((sum, item) => {
+        const best = item.quotes.find((q) => q.stockAvailable > 0);
+        return sum + (best ? best.unitCost * item.fulfillableQty : 0);
+      }, 0),
+    [selectedFulfillable],
+  );
+
   const submitReorderAll = async () => {
     setReorderAllInProgress(true);
     try {
-      const items = reorderAllFulfillable.map((item) => ({
+      const items = selectedFulfillable.map((item) => ({
         productId: item.productId,
         remainingToOrder: item.remainingToOrder,
         quotes: item.quotes
@@ -466,19 +524,19 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
       }));
 
       const result = await submitBulkReorder(items);
-      // Snapshot how many orders already exist for these products (baseline)
       let baselineCount = 0;
-      for (const item of reorderAllFulfillable) {
+      for (const item of selectedFulfillable) {
         baselineCount += (ordersByProduct.get(item.productId) || []).length;
       }
       setReorderAllSubmitted(
-        new Set(reorderAllFulfillable.map((i) => i.productId)),
+        new Set(selectedFulfillable.map((i) => i.productId)),
         result.totalOrdersPlanned,
         baselineCount,
       );
       setReorderAllConfirm(false);
+      setSelectedProducts(new Set());
       toast.success(
-        `Reordering ${reorderAllFulfillable.length} product${reorderAllFulfillable.length !== 1 ? "s" : ""} in background (${result.totalOrdersPlanned} POs planned)`,
+        `Reordering ${selectedFulfillable.length} product${selectedFulfillable.length !== 1 ? "s" : ""} in background (${result.totalOrdersPlanned} POs planned)`,
       );
     } catch (e) {
       console.error("Bulk reorder failed:", e);
@@ -494,6 +552,8 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
   // - pending/approved orders already cover the shortfall (remainingToOrder ≤ 0)
   React.useEffect(() => {
     if (reorderAllSubmitted.size === 0) return;
+    // Don't clear state while data is still loading after navigation
+    if (!status || grouped.length === 0) return;
     const unresolvedProducts = new Set<number>();
     for (const g of grouped) {
       const orders = ordersByProduct.get(g.productId) || [];
@@ -509,7 +569,13 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
     if (updated.size < reorderAllSubmitted.size) {
       setReorderAllSubmitted(updated);
     }
-  }, [grouped, ordersByProduct, reorderAllSubmitted, setReorderAllSubmitted]);
+  }, [
+    status,
+    grouped,
+    ordersByProduct,
+    reorderAllSubmitted,
+    setReorderAllSubmitted,
+  ]);
 
   if (!shortages.length) {
     return (
@@ -534,40 +600,59 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="font-doodle">Material Shortages</CardTitle>
-              <CardDescription>
-                Grouped by missing component. Use Reduce to scale a WO down, or
-                Cancel to remove it entirely.
-              </CardDescription>
-            </div>
-            {reorderAllPlan.length > 0 && (
-              <Button
-                onClick={() => setReorderAllConfirm(true)}
-                className="gap-2"
-                disabled={
-                  reorderAllFulfillable.length === 0 ||
-                  reorderAllSubmitted.size > 0
+            <div className="flex items-center gap-3">
+              <Checkbox
+                checked={
+                  allProductsSelected
+                    ? true
+                    : someProductsSelected
+                      ? "indeterminate"
+                      : false
                 }
-              >
-                {reorderAllSubmitted.size > 0 ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Reordering — {reorderAllProgress}% complete
-                  </>
-                ) : (
-                  <>
-                    <PackagePlus className="h-4 w-4" />
-                    Re-Order All
-                    {reorderAllFulfillable.length > 0 && (
-                      <span className="font-mono text-xs opacity-90">
-                        {fmtMoney(reorderAllFulfillableCost)}
-                      </span>
-                    )}
-                  </>
-                )}
-              </Button>
-            )}
+                onCheckedChange={(v) =>
+                  setSelectedProducts(
+                    v ? new Set(grouped.map((g) => g.productId)) : new Set(),
+                  )
+                }
+                aria-label="Select all products"
+              />
+              <div>
+                <CardTitle className="font-doodle">
+                  Material Shortages
+                </CardTitle>
+                <CardDescription>
+                  Grouped by missing component. Use Reduce to scale a WO down,
+                  or Cancel to remove it entirely.
+                </CardDescription>
+              </div>
+            </div>
+            <Button
+              onClick={() => setReorderAllConfirm(true)}
+              className="gap-2"
+              disabled={
+                (selectedFulfillable.length === 0 &&
+                  reorderAllSubmitted.size === 0) ||
+                reorderAllInProgress
+              }
+            >
+              {reorderAllSubmitted.size > 0 ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Reordering — {reorderAllProgress}% complete
+                </>
+              ) : (
+                <>
+                  <PackagePlus className="h-4 w-4" />
+                  Re-Order Selected
+                  {estimatedPOCount > 0 && (
+                    <span className="font-mono text-xs opacity-90">
+                      ({estimatedPOCount} PO{estimatedPOCount !== 1 ? "'s" : ""}
+                      )
+                    </span>
+                  )}
+                </>
+              )}
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -587,10 +672,10 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
               const availableVendors = quotes.filter(
                 (q) => q.stockAvailable > 0,
               );
-              const totalVendorStock = availableVendors.reduce((sum, v) => {
-                const maxQty = v.maxOrderQty || v.stockAvailable;
-                return sum + Math.min(v.stockAvailable, maxQty);
-              }, 0);
+              const totalVendorStock = availableVendors.reduce(
+                (sum, v) => sum + v.stockAvailable,
+                0,
+              );
               const orderableQty = Math.min(remainingToOrder, totalVendorStock);
               const hasStockShortage =
                 remainingToOrder > 0 && orderableQty < remainingToOrder;
@@ -612,6 +697,12 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
                 >
                   <AccordionTrigger className="py-3 hover:no-underline">
                     <div className="flex items-center gap-3 text-left flex-1 flex-wrap">
+                      <Checkbox
+                        checked={selectedProducts.has(g.productId)}
+                        onCheckedChange={() => toggleProduct(g.productId)}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`Select ${g.productName}`}
+                      />
                       <Package className="h-4 w-4 text-muted-foreground shrink-0" />
                       <span className="font-medium text-sm">
                         {g.productName}
@@ -667,40 +758,19 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
                           {remainingToOrder.toLocaleString()}
                         </Badge>
                       )}
-                      {covered ? (
+                      {covered && (
                         <Badge className="text-[10px] bg-green-100 text-green-800 ml-auto mr-4">
                           ✓ Covered by {totalOnOrder.toLocaleString()} on order
                         </Badge>
-                      ) : noVendorStock ? (
-                        <Button
-                          size="sm"
+                      )}
+                      {!covered && noVendorStock && (
+                        <Badge
                           variant="outline"
-                          className="ml-auto mr-4 h-7 gap-1 text-muted-foreground"
-                          disabled
+                          className="text-[10px] ml-auto mr-4 gap-1 border-destructive/40 text-destructive"
                         >
-                          <ShoppingCart className="h-3 w-3" />
+                          <AlertTriangle className="h-3 w-3" />
                           Out of stock
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="default"
-                          className="ml-auto mr-4 h-7 gap-1"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(
-                              `/supply?product=${g.productId}&qty=${orderableQty}`,
-                            );
-                          }}
-                        >
-                          <ShoppingCart className="h-3 w-3" />
-                          Order {orderableQty.toLocaleString()}
-                          {hasStockShortage && (
-                            <span className="text-[10px] opacity-75">
-                              /{remainingToOrder.toLocaleString()}
-                            </span>
-                          )}
-                        </Button>
+                        </Badge>
                       )}
                     </div>
                   </AccordionTrigger>
@@ -1066,16 +1136,16 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
         <DialogContent className="doodle-dialog max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-doodle">
-              Re-Order All Shortages
+              Re-Order Selected Shortages
             </DialogTitle>
             <DialogDescription>
-              {reorderAllFulfillable.length > 0
-                ? `Place purchase orders for ${reorderAllFulfillable.length} product${reorderAllFulfillable.length !== 1 ? "s" : ""}. Orders will be split across multiple vendors when a single supplier cannot fulfil the full quantity.`
-                : "No products can be ordered — all vendors are out of stock."}
+              {selectedFulfillable.length > 0
+                ? `Place purchase orders for ${selectedFulfillable.length} product${selectedFulfillable.length !== 1 ? "s" : ""}. Orders will be split across multiple vendors when a single supplier cannot fulfil the full quantity.`
+                : "No selected products can be ordered — all vendors are out of stock."}
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-64 overflow-y-auto space-y-1">
-            {reorderAllFulfillable.length > 0 && (
+            {selectedFulfillable.length > 0 && (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1086,7 +1156,7 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {reorderAllFulfillable.map((item) => (
+                  {selectedFulfillable.map((item) => (
                     <TableRow key={item.productId}>
                       <TableCell className="text-sm">
                         {item.productName}
@@ -1113,7 +1183,7 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
                 </TableBody>
               </Table>
             )}
-            {reorderAllUnfulfillable.length > 0 && (
+            {selectedUnfulfillable.length > 0 && (
               <div className="mt-3 p-3 bg-destructive/5 border border-destructive/20 rounded-md">
                 <div className="flex items-center gap-2 mb-2">
                   <AlertTriangle className="h-4 w-4 text-destructive" />
@@ -1122,7 +1192,7 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
                   </span>
                 </div>
                 <div className="space-y-1">
-                  {reorderAllUnfulfillable.map((item) => (
+                  {selectedUnfulfillable.map((item) => (
                     <div
                       key={item.productId}
                       className="flex items-center justify-between text-sm text-muted-foreground"
@@ -1137,14 +1207,14 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
               </div>
             )}
           </div>
-          {reorderAllFulfillable.length > 0 && (
+          {selectedFulfillable.length > 0 && (
             <div className="flex justify-between items-center pt-2 border-t text-sm">
               <span className="text-muted-foreground">
-                Total ({reorderAllFulfillable.length} product
-                {reorderAllFulfillable.length !== 1 ? "s" : ""})
+                Total ({selectedFulfillable.length} product
+                {selectedFulfillable.length !== 1 ? "s" : ""})
               </span>
               <span className="font-mono font-bold text-base">
-                {fmtMoney(reorderAllFulfillableCost)}
+                {fmtMoney(selectedFulfillableCost)}
               </span>
             </div>
           )}
@@ -1159,7 +1229,7 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
             <Button
               onClick={submitReorderAll}
               disabled={
-                reorderAllInProgress || reorderAllFulfillable.length === 0
+                reorderAllInProgress || selectedFulfillable.length === 0
               }
               className="gap-2"
             >
@@ -1171,7 +1241,8 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
               ) : (
                 <>
                   <PackagePlus className="h-4 w-4" />
-                  Confirm — {fmtMoney(reorderAllFulfillableCost)}
+                  Confirm — {estimatedPOCount} PO
+                  {estimatedPOCount !== 1 ? "'s" : ""}
                 </>
               )}
             </Button>

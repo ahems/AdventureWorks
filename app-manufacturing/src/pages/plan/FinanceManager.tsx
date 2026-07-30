@@ -38,6 +38,7 @@ import {
   fetchManufacturingTransactions,
   type BankTransaction,
 } from "@/services/financeApi";
+import { fetchOpenSalesOrders } from "@/services/salesApi";
 
 const COLORS = {
   procurement: "#ef4444",
@@ -117,6 +118,12 @@ const FinanceManager: React.FC = () => {
     queryFn: () => fetchManufacturingTransactions(50, "all"),
     refetchInterval: 60_000,
     enabled: txnTab === "manufacturing",
+  });
+
+  const { data: openOrders } = useQuery({
+    queryKey: ["open-sales-orders"],
+    queryFn: fetchOpenSalesOrders,
+    refetchInterval: 60_000,
   });
 
   const isLoading = statusLoading || summaryLoading;
@@ -381,7 +388,23 @@ const FinanceManager: React.FC = () => {
                           colSpan={6}
                           className="text-center text-muted-foreground py-8"
                         >
-                          No transactions yet.
+                          {openOrders && openOrders.length > 0 ? (
+                            <>
+                              No transactions yet &mdash; {openOrders.length}{" "}
+                              order{openOrders.length !== 1 ? "s" : ""}{" "}
+                              currently being processed (
+                              {formatCurrency(
+                                openOrders.reduce(
+                                  (sum, o) => sum + o.TotalDue,
+                                  0,
+                                ),
+                                true,
+                              )}
+                              )
+                            </>
+                          ) : (
+                            "No transactions yet, and no orders currently awaiting processing."
+                          )}
                         </TableCell>
                       </TableRow>
                     ) : (

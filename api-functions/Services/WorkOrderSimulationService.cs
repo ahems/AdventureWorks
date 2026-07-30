@@ -977,11 +977,36 @@ public class WorkOrderSimulationService
     public async Task<List<ShortageData>> GetAllShortagesAsync()
     {
         var results = new List<ShortageData>();
+        var entities = new List<TableEntity>();
         await foreach (var entity in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_SHORTAGE}'"))
         {
+            entities.Add(entity);
+        }
+        if (entities.Count == 0) return results;
+
+        // Validate against SQL — prune stale records referencing deleted work orders
+        var woIds = entities.Select(e => e.GetInt32("WorkOrderId") ?? 0).Where(id => id > 0).Distinct().ToList();
+        var validIds = new HashSet<int>();
+        using var conn = await GetConnectionAsync();
+        foreach (var batch in woIds.Chunk(500))
+        {
+            var ids = string.Join(",", batch);
+            var rows = await conn.QueryAsync<int>($"SELECT WorkOrderID FROM Production.WorkOrder WHERE WorkOrderID IN ({ids})");
+            foreach (var id in rows) validIds.Add(id);
+        }
+
+        foreach (var entity in entities)
+        {
+            var woId = entity.GetInt32("WorkOrderId") ?? 0;
+            if (!validIds.Contains(woId))
+            {
+                // Stale record — delete from Table Storage
+                _ = _tableClient.DeleteEntityAsync(entity.PartitionKey, entity.RowKey);
+                continue;
+            }
             results.Add(new ShortageData(
-                entity.GetInt32("WorkOrderId") ?? 0,
+                woId,
                 entity.GetInt32("ProductId") ?? 0,
                 entity.GetString("ProductName") ?? "",
                 entity.GetInt32("Needed") ?? 0,
