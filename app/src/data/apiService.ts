@@ -193,7 +193,7 @@ const attachDiscountsToProducts = async (
     );
     const now = new Date();
     const specialOffers = offersData.specialOffers.items.filter((offer) => {
-      if (!offer.StartDate || !offer.EndDate) return true;
+      if (!offer.StartDate || !offer.EndDate) return false;
       return new Date(offer.StartDate) <= now && new Date(offer.EndDate) >= now;
     });
 
@@ -235,6 +235,7 @@ const attachDiscountsToProducts = async (
             SpecialOfferID: offer.SpecialOfferID,
             DiscountPct: offer.DiscountPct,
             SpecialOfferDescription: offer.Description,
+            SpecialOfferEndDate: offer.EndDate,
           };
         }
       }
@@ -777,9 +778,9 @@ export const getSaleProducts = async (
     // Load products WITHOUT photos first, with discount descriptions in the given culture
     const products = await getProducts(false, cultureId);
 
-    // Filter to only products with discounts
+    // Filter to only products with active discounts that are in stock
     const saleProducts = products.filter(
-      (p) => p.DiscountPct && p.DiscountPct > 0,
+      (p) => p.DiscountPct && p.DiscountPct > 0 && p.inStock,
     );
 
     // NOW attach photos only to the sale products
