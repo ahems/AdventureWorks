@@ -25,6 +25,11 @@ docs/
 
 **Location:** `architecture/`
 
+![AdventureWorks Azure Reference Architecture](AdventureWorks-Reference-Architecture.svg)
+
+_Production reference architecture showing all Azure components with enterprise networking (VNet, private endpoints, WAF, Firewall). Based on the [Baseline Microsoft Foundry Chat Reference Architecture](https://learn.microsoft.com/en-us/azure/architecture/ai-ml/architecture/baseline-openai-e2e-chat)._
+
+- [AdventureWorks-Reference-Architecture.svg](AdventureWorks-Reference-Architecture.svg) - Full Azure architecture diagram (ideal production state)
 - [DAB_NAMING_CONVENTIONS.md](architecture/DAB_NAMING_CONVENTIONS.md) - Data API Builder naming patterns and GraphQL schema generation
 
 ## ✨ Features

@@ -372,6 +372,29 @@ public class OrderGenerationService
     }
 
     /// <summary>
+    /// Look up the best active Reseller-category SpecialOffer for a product.
+    /// Returns the offer ID and discount percentage. Falls back to (1, 0) if none.
+    /// </summary>
+    public async Task<(int SpecialOfferId, decimal DiscountPct)> GetBestResellerOfferAsync(int productId)
+    {
+        using var connection = await GetConnectionAsync();
+        var row = await connection.QueryFirstOrDefaultAsync(""" 
+            SELECT TOP 1 sop.SpecialOfferID AS Id, so.DiscountPct / 100.0 AS Pct
+            FROM Sales.SpecialOfferProduct sop
+            INNER JOIN Sales.SpecialOffer so ON sop.SpecialOfferID = so.SpecialOfferID
+            WHERE sop.ProductID = @ProductId
+              AND so.StartDate <= GETDATE()
+              AND so.EndDate >= GETDATE()
+              AND so.DiscountPct > 0
+              AND so.Category = 'Reseller'
+            ORDER BY so.DiscountPct DESC
+            """,
+            new { ProductId = productId });
+        if (row == null) return (1, 0m);
+        return ((int)row.Id, (decimal)row.Pct);
+    }
+
+    /// <summary>
     /// Create a complete sales order with details and decrement inventory.
     /// Returns the new SalesOrderID.
     /// </summary>
@@ -685,6 +708,7 @@ public class OrderGenerationService
                 var lineTotal = Math.Round(discountedPrice * item.Quantity, 2);
                 subTotal += lineTotal;
 
+                // Prefer Reseller-category offers for B2B orders; fall back to any active offer
                 var specialOfferId = await connection.ExecuteScalarAsync<int?>(@"
                     SELECT TOP 1 sop.SpecialOfferID
                     FROM Sales.SpecialOfferProduct sop
@@ -693,7 +717,8 @@ public class OrderGenerationService
                       AND so.StartDate <= GETDATE()
                       AND so.EndDate >= GETDATE()
                       AND so.DiscountPct > 0
-                    ORDER BY so.DiscountPct DESC",
+                    ORDER BY CASE WHEN so.Category = 'Reseller' THEN 0 ELSE 1 END,
+                             so.DiscountPct DESC",
                     new { item.ProductId }, transaction: tx) ?? 1;
 
                 var salesOrderDetailId = await connection.ExecuteScalarAsync<int>(@"

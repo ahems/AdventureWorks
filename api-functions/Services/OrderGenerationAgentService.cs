@@ -128,7 +128,7 @@ public class OrderGenerationAgentService
                 "cart-recovery" => seedProfile != null
                     ? $"Customer '{seedProfile.FirstName} {seedProfile.LastName}' (ID={seedProfile.CustomerID}) who abandoned their shopping cart and has now returned after receiving a Smart Cart Recovery email. They should purchase the items that were in their cart (check ShoppingCartItem for their saved items). Place those exact items as an order."
                     : "A customer returning to complete an abandoned cart purchase after a recovery email.",
-                "b2b-store" => $"B2B store order (StoreID={storeId}). Generate a representative purchase order for this store based on their previous order history and current available stock. This is a business replenishment order, not a consumer purchase.",
+                "b2b-store" => $"B2B store order (StoreID={storeId}). Generate a representative purchase order for this store based on their previous order history and current available stock. This is a business replenishment order, not a consumer purchase. IMPORTANT: Strongly prefer products that have active Reseller promotions (SpecialOffer with Category='Reseller'). These represent negotiated trade discounts — prioritise promoted products when they are in stock.",
                 _ => seedProfile != null
                     ? BuildExistingCustomerPersona(seedProfile)
                     : BuildPersonaDescription(personaType, customPersona)
@@ -311,13 +311,18 @@ public class OrderGenerationAgentService
             if (orderMode == "b2b-store" && storeId.HasValue && storeId.Value > 0)
             {
                 Log($"Creating B2B store order for StoreID={storeId.Value}...", "info");
-                var storeItems = validItems.Select(vi => new StoreOrderLineItem
+                var storeItems = new List<StoreOrderLineItem>();
+                foreach (var vi in validItems)
                 {
-                    ProductId = vi.ProductId,
-                    Quantity = vi.Quantity,
-                    UnitPrice = vi.UnitPrice,
-                    DiscountPct = 0m
-                }).ToList();
+                    var resellerOffer = await _orderGenService.GetBestResellerOfferAsync(vi.ProductId);
+                    storeItems.Add(new StoreOrderLineItem
+                    {
+                        ProductId = vi.ProductId,
+                        Quantity = vi.Quantity,
+                        UnitPrice = vi.UnitPrice,
+                        DiscountPct = resellerOffer.DiscountPct
+                    });
+                }
 
                 salesOrderId = await _orderGenService.CreateStoreOrderAsync(new CreateStoreOrderRequest
                 {

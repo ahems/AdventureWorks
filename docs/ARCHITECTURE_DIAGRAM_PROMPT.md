@@ -1,7 +1,5 @@
 # Prompt: Generate Azure Architecture Diagram for AdventureWorks E-Commerce Platform
 
-> **Generated output:** [docs/AdventureWorks-Reference-Architecture.svg](docs/AdventureWorks-Reference-Architecture.svg)
-
 ## Objective
 
 Create a detailed Azure architecture diagram for the **AdventureWorks E-Commerce & Manufacturing Platform**, modeled after the **[Baseline Microsoft Foundry Chat Reference Architecture](https://learn.microsoft.com/en-us/azure/architecture/ai-ml/architecture/baseline-openai-e2e-chat)** on Microsoft Learn. This diagram represents the **ideal production state** of the solution — as if it were a real enterprise deployment with full security, networking, and reliability best practices — not the current demo deployment.

@@ -2,6 +2,8 @@
 
 This folder contains the Infrastructure‑as‑Code for the AdventureWorks e‑commerce solution, written in **Azure Bicep** and orchestrated by **Azure Developer CLI (azd)**.
 
+For a visual overview of all Azure components and their network topology, see the [architecture diagram](../docs/AdventureWorks-Reference-Architecture.svg).
+
 At a high level, these templates provision:
 
 - An Azure Container Apps environment hosting:

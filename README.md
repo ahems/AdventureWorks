@@ -16,7 +16,17 @@ _[Watch full video](docs/adventureworks-demo.webm) (25 seconds)_
 
 ## High‑Level Architecture
 
-This repo implements a **3‑tier Azure application** with passwordless authentication and managed identities:
+This repo implements a **3‑tier Azure application** with passwordless authentication and managed identities.
+
+### Production Reference Architecture
+
+The diagram below shows the **ideal production state** of this solution, modeled on the [Baseline Microsoft Foundry Chat Reference Architecture](https://learn.microsoft.com/en-us/azure/architecture/ai-ml/architecture/baseline-openai-e2e-chat). It includes enterprise security features (VNet, private endpoints, Application Gateway + WAF, Azure Firewall) that the current demo deployment omits for simplicity.
+
+![AdventureWorks Azure Reference Architecture](docs/AdventureWorks-Reference-Architecture.svg)
+
+_See [ARCHITECTURE_DIAGRAM_PROMPT.md](ARCHITECTURE_DIAGRAM_PROMPT.md) for the detailed prompt used to generate this diagram._
+
+### Simplified Data Flow
 
 ```text
 User → Static Web App → GraphQL (DAB) → Azure SQL
