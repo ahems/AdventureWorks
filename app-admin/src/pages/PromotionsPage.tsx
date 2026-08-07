@@ -14,6 +14,7 @@ import {
   Filter,
   Link,
   ExternalLink,
+  Bot,
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
@@ -416,6 +417,13 @@ const PromotionsPage: React.FC = () => {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <RouterLink
+              to="/auto-promotions"
+              className="doodle-button doodle-button-accent flex items-center gap-2 px-3 py-2 text-sm font-doodle"
+            >
+              <Bot className="w-4 h-4" />
+              Automate with AI
+            </RouterLink>
             <GeneratePromotionWizardDialog existingOffers={apiPromotions} />
             <Button
               onClick={openCreateDialog}

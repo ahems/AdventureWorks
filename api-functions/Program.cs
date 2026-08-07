@@ -450,6 +450,9 @@ builder.Services.AddScoped<OrderGenerationService>(sp =>
 builder.Services.AddScoped<ManufacturingAgentConfigService>(sp =>
     new ManufacturingAgentConfigService(sp.GetRequiredService<ILogger<ManufacturingAgentConfigService>>()));
 
+builder.Services.AddScoped<AutoPromotionConfigService>(sp =>
+    new AutoPromotionConfigService(sp.GetRequiredService<ILogger<AutoPromotionConfigService>>()));
+
 builder.Services.AddScoped<ManufacturingProposalService>(sp =>
     new ManufacturingProposalService(sp.GetRequiredService<ILogger<ManufacturingProposalService>>()));
 
@@ -605,13 +608,13 @@ if (!string.IsNullOrEmpty(storageAccountName))
         "ai-job-image-queue", "ai-job-chat-queue", "ai-job-embeddings-queue",
         "product-thumbnail-generation", "sales-order-status", "production-wo-queue",
         "supply-chain-orders-queue", "simulation-order-queue", "warehouse-ops-queue",
-        "review-moderation-queue", "manufacturing-agent-queue"
+        "review-moderation-queue", "manufacturing-agent-queue", "auto-promotion-queue"
     ];
     string[] expectedTables = [
         "shoppingSimulator", "awOrderPipelineConfig", "awSupplyChain", "awManufacturing",
         "awBankAccounts", "awBankTransactions", "awWarehouse",
         "awManufacturingAgentConfig", "awManufacturingAgentRuns", "awManufacturingProposals",
-        "verifiedReviewsJob", "reviewModerationJob"
+        "verifiedReviewsJob", "reviewModerationJob", "awAutoPromotionConfig"
     ];
     string[] expectedContainers = [
         "adventureworks-receipts", "locales", "function-releases"

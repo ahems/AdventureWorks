@@ -17,6 +17,7 @@ import {
   Tag,
   ShoppingBag,
   Settings,
+  Sparkles,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -325,6 +326,28 @@ export default function ShoppingSimulatorPage() {
               />
             </Button>
           </div>
+        </div>
+
+        {/* ── Auto-Promotion tip ────────────────────────────────────── */}
+        <div className="mb-6 flex items-start gap-3 p-4 rounded border border-dashed border-doodle-blue bg-blue-50/50 dark:bg-blue-900/10">
+          <Sparkles className="w-5 h-5 text-doodle-blue mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="font-doodle text-sm font-semibold text-doodle-blue">
+              Auto-Promotions
+            </p>
+            <p className="font-doodle text-xs text-doodle-text/60 mt-0.5">
+              Enable automatic AI-generated promotions triggered by order
+              volume. When the simulator generates enough orders, the system
+              will automatically create targeted promotions and expire
+              out-of-stock offers.
+            </p>
+          </div>
+          <Link
+            to="/auto-promotions"
+            className="doodle-button doodle-button-primary text-xs font-doodle px-3 py-1.5 shrink-0"
+          >
+            Configure →
+          </Link>
         </div>
 
         {/* ── Error banner ─────────────────────────────────────────── */}

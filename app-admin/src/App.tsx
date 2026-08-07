@@ -30,6 +30,7 @@ import LossMakersPage from "./pages/LossMakersPage";
 import SlowMoversPage from "./pages/SlowMoversPage";
 import GenerateOrderPage from "./pages/GenerateOrderPage";
 import ShoppingSimulatorPage from "./pages/ShoppingSimulatorPage";
+import AutoPromotionsPage from "./pages/AutoPromotionsPage";
 import OrderPipelinePage from "./pages/OrderPipelinePage";
 import WarehousePage from "./pages/WarehousePage";
 import { useRealTimeUpdates } from "./hooks/useRealTimeUpdates";
@@ -92,6 +93,10 @@ const App = () => (
                 <Route
                   path="/shopping-simulator"
                   element={<ShoppingSimulatorPage />}
+                />
+                <Route
+                  path="/auto-promotions"
+                  element={<AutoPromotionsPage />}
                 />
                 <Route path="/order-pipeline" element={<OrderPipelinePage />} />
                 <Route path="/warehouse" element={<WarehousePage />} />

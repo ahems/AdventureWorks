@@ -27,6 +27,7 @@ public class OrderPlacedSqlTrigger
 {
     private const string ReceiptQueueName = "order-receipt-generation";
     private const string StatusQueueName  = "sales-order-status";
+    private const string AutoPromotionQueueName = "auto-promotion-queue";
 
     private readonly ILogger<OrderPlacedSqlTrigger>  _logger;
     private readonly OrderService                     _orderService;
@@ -34,6 +35,7 @@ public class OrderPlacedSqlTrigger
     private readonly ManufacturingAgentRunService     _runService;
     private readonly OrderPipelineConfigService       _pipelineConfig;
     private readonly WebPubSubService                 _webPubSub;
+    private readonly AutoPromotionConfigService       _autoPromoConfig;
 
     public OrderPlacedSqlTrigger(
         ILogger<OrderPlacedSqlTrigger> logger,
@@ -41,14 +43,16 @@ public class OrderPlacedSqlTrigger
         ManufacturingAgentConfigService agentConfig,
         ManufacturingAgentRunService runService,
         OrderPipelineConfigService pipelineConfig,
-        WebPubSubService webPubSub)
+        WebPubSubService webPubSub,
+        AutoPromotionConfigService autoPromoConfig)
     {
-        _logger         = logger;
-        _orderService   = orderService;
-        _agentConfig    = agentConfig;
-        _runService     = runService;
-        _pipelineConfig = pipelineConfig;
-        _webPubSub      = webPubSub;
+        _logger          = logger;
+        _orderService    = orderService;
+        _agentConfig     = agentConfig;
+        _runService      = runService;
+        _pipelineConfig  = pipelineConfig;
+        _webPubSub       = webPubSub;
+        _autoPromoConfig = autoPromoConfig;
     }
 
     [Function(nameof(OrderPlacedSqlTrigger))]
@@ -67,6 +71,7 @@ public class OrderPlacedSqlTrigger
             {
                 await EnqueueReceiptAndStatusAsync(order.SalesOrderID);
                 await EnqueueManufacturingAgentAsync(order.SalesOrderID, order.CustomerID);
+                await CheckAutoPromotionThresholdAsync(order.OnlineOrderFlag);
             }
             catch (Exception ex)
             {
@@ -181,14 +186,41 @@ public class OrderPlacedSqlTrigger
         await _webPubSub.SendToGroupAsync("orders", new { @event = "order-placed", salesOrderId, customerId });
         await _webPubSub.SendToGroupAsync("manufacturing-agent", new { @event = "run-created", runId, salesOrderId });
     }
+
+    private async Task CheckAutoPromotionThresholdAsync(bool onlineOrderFlag)
+    {
+        try
+        {
+            var (triggered, orderType) = await _autoPromoConfig.IncrementCounterAndCheckThresholdAsync(onlineOrderFlag);
+            if (!triggered) return;
+
+            var queueServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
+            if (string.IsNullOrEmpty(queueServiceUri))
+            {
+                var accountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
+                    ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
+                queueServiceUri = $"https://{accountName}.queue.core.windows.net";
+            }
+
+            var queueSvcClient = new QueueServiceClient(new Uri(queueServiceUri), new DefaultAzureCredential(),
+                new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
+            var queue = queueSvcClient.GetQueueClient(AutoPromotionQueueName);
+
+            var msg = JsonSerializer.Serialize(new { orderType });
+            await queue.SendMessageAsync(Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(msg)));
+
+            _logger.LogInformation("[AutoPromotion] Threshold met for {OrderType} — enqueued generation job.", orderType);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[AutoPromotion] Failed to check/enqueue auto-promotion threshold.");
+        }
+    }
 }
 
-/// <summary>
-/// Minimal column projection of <c>Sales.SalesOrderHeader</c> for the SQL trigger payload.
-/// Only columns declared here are deserialized; all others are ignored.
-/// </summary>
 public class SalesOrderHeaderRow
 {
     public int SalesOrderID { get; set; }
     public int CustomerID { get; set; }
+    public bool OnlineOrderFlag { get; set; }
 }

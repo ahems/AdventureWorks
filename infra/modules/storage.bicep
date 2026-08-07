@@ -142,6 +142,12 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
             description: 'Queue for manufacturing AI agent invocations triggered by new sales orders'
           }
         }
+        {
+          name: 'auto-promotion-queue'
+          metadata: {
+            description: 'Queue for automatic AI promotion generation triggered by order volume thresholds'
+          }
+        }
       ]
     }
     
@@ -182,6 +188,9 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
         }
         {
           name: 'reviewModerationJob'
+        }
+        {
+          name: 'awAutoPromotionConfig'
         }
       ]
     }

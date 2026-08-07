@@ -1,6 +1,12 @@
 import { useWebPubSub } from "./useWebPubSub";
 
-const GROUPS = ["orders", "warehouse", "shopping-simulator", "reviews"];
+const GROUPS = [
+  "orders",
+  "warehouse",
+  "shopping-simulator",
+  "reviews",
+  "promotions",
+];
 
 /**
  * Subscribes to Web PubSub groups and dispatches custom events that

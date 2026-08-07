@@ -1209,3 +1209,59 @@ export const getReviewModerationStatus =
     }
     return res.json();
   };
+
+// ── Auto-Promotion Configuration ─────────────────────────────────────────────
+
+export interface AutoPromotionConfig {
+  isEnabled: boolean;
+  triggerOnConsumerOrders: boolean;
+  triggerOnStoreOrders: boolean;
+  consumerOrderThreshold: number;
+  storeOrderThreshold: number;
+  consumerOrderCounter: number;
+  storeOrderCounter: number;
+  lastConsumerTriggerAt: string | null;
+  lastStoreTriggerAt: string | null;
+  totalAutoPromotionsCreated: number;
+}
+
+export const getAutoPromotionConfig =
+  async (): Promise<AutoPromotionConfig> => {
+    const res = await fetch(
+      `${getFunctionsApiUrl()}/api/auto-promotion/config`,
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  };
+
+export const updateAutoPromotionConfig = async (
+  update: Partial<
+    Pick<
+      AutoPromotionConfig,
+      | "isEnabled"
+      | "triggerOnConsumerOrders"
+      | "triggerOnStoreOrders"
+      | "consumerOrderThreshold"
+      | "storeOrderThreshold"
+    >
+  >,
+): Promise<AutoPromotionConfig> => {
+  const res = await fetch(`${getFunctionsApiUrl()}/api/auto-promotion/config`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(update),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+};
+
+export const resetAutoPromotionCounters = async (): Promise<{
+  message: string;
+}> => {
+  const res = await fetch(
+    `${getFunctionsApiUrl()}/api/auto-promotion/reset-counters`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+};
