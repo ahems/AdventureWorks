@@ -773,11 +773,11 @@ public class FoundryAgentClient
         {
             try
             {
-                // Send MCP initialize request — lightweight and wakes the Container App
-                var initPayload = """{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"warmup","version":"1.0"}}}""";
+                // Send tools/list — lightweight JSON-RPC call that wakes the Container App
+                var listPayload = """{"jsonrpc":"2.0","id":0,"method":"tools/list","params":{}}""";
                 using var req = new HttpRequestMessage(HttpMethod.Post, url)
                 {
-                    Content = new StringContent(initPayload, Encoding.UTF8, "application/json")
+                    Content = new StringContent(listPayload, Encoding.UTF8, "application/json")
                 };
                 var resp = await httpClient.SendAsync(req, cancellationToken);
                 _logger.LogDebug("MCP warmup for {Url}: {Status}", url, (int)resp.StatusCode);

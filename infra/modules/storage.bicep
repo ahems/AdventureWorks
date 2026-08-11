@@ -192,6 +192,9 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
         {
           name: 'awAutoPromotionConfig'
         }
+        {
+          name: 'awMcpTasks'
+        }
       ]
     }
     

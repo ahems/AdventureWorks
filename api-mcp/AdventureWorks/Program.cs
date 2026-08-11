@@ -1,7 +1,7 @@
-using AdventureWorks.Tools;
 using AdventureWorks.Services;
 using Microsoft.ApplicationInsights;
 using Microsoft.Extensions.Localization;
+using ModelContextProtocol.Extensions.Tasks;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.AddConsole(consoleLogOptions =>
@@ -73,16 +73,19 @@ builder.Services.AddHttpClient<SimulatorService>(client =>
 	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
 });
 
-// Register MCP server with SSE transport and AdventureWorks tools
+// Resolve task store: durable Azure Table Storage when a storage account is configured, else in-memory
+var storageAccountName = builder.Configuration["AzureWebJobsStorage:accountName"]
+	?? Environment.GetEnvironmentVariable("STORAGE_ACCOUNT_NAME");
+IMcpTaskStore taskStore = !string.IsNullOrEmpty(storageAccountName)
+	? new AzureTableMcpTaskStore(storageAccountName)
+	: new InMemoryMcpTaskStore();
+
+// Register MCP server (v2.0 — stateless by default, assembly-level tool discovery)
 builder.Services
 	   .AddMcpServer()
-	   .WithHttpTransport(o => o.Stateless = true) // Stateless mode: no session IDs required, compatible with Azure AI Foundry agents
-	   .WithTools<AdventureWorksMcpTools>()
-	   .WithTools<ManufacturingMcpTools>()
-	   .WithTools<SupplyChainMcpTools>()
-	   .WithTools<BankMcpTools>()
-	   .WithTools<SimulatorMcpTools>()
-	   .WithTools<CustomerGeneratorMcpTools>();
+	   .WithHttpTransport()
+	   .WithToolsFromAssembly()
+	   .WithTasks(taskStore);
 
 builder.AddServiceDefaults();
 

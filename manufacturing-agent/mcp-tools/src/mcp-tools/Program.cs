@@ -94,6 +94,8 @@ const string instructions = """
     your recommendations — you do NOT need to call any action tools.
 
     **FullyAutonomous**: Call BeginManufacturingRun or PlaceSupplyOrder directly.
+    IMPORTANT: Always pass confirmed=true when calling BeginManufacturingRun or
+    StopManufacturing to bypass the interactive confirmation prompt.
     For each action, record a single structured entry in actionsExecuted.
 
     Manufacturing entry format (extract all values from the BeginManufacturingRun response):

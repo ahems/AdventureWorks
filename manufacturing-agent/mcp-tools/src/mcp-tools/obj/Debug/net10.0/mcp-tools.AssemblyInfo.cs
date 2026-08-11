@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("mcp-tools")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2e7f70e5b08b878edab557ec01a5fd86fb51da45")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2a0121c6db570d3c2e2018db29f435143357a3c4")]
 [assembly: System.Reflection.AssemblyProductAttribute("mcp-tools")]
 [assembly: System.Reflection.AssemblyTitleAttribute("mcp-tools")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

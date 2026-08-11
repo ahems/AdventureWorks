@@ -35,7 +35,7 @@ public class AdventureWorksMcpTools
 
     [McpServerTool]
     [Description("Get order history and status for a customer by their CustomerID. Returns up to 10 most recent orders with status information. Supports multiple languages.")]
-    public async Task<string> GetCustomerOrders(int customerId, string? cultureId = null)
+    public async Task<string> GetCustomerOrders(int customerId, [McpHeader("Culture")] string? cultureId = null)
     {
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetCustomerOrders");
         operation.Telemetry.Properties["customerId"] = customerId.ToString();
@@ -67,7 +67,7 @@ public class AdventureWorksMcpTools
 
     [McpServerTool]
     [Description("Get detailed information about a specific order including items, pricing, and shipping status. Optional: Validates order belongs to customer. Supports multiple languages.")]
-    public async Task<string> GetOrderDetails(int orderId, int? customerId = null, string? cultureId = null)
+    public async Task<string> GetOrderDetails(int orderId, int? customerId = null, [McpHeader("Culture")] string? cultureId = null)
     {
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetOrderDetails");
         operation.Telemetry.Properties["orderId"] = orderId.ToString();
@@ -101,7 +101,7 @@ public class AdventureWorksMcpTools
 
     [McpServerTool]
     [Description("Find products that are frequently purchased together with a specific product. Great for product recommendations. Supports multiple languages.")]
-    public async Task<string> FindComplementaryProducts(int productId, int limit = 5, string? cultureId = null)
+    public async Task<string> FindComplementaryProducts(int productId, int limit = 5, [McpHeader("Culture")] string? cultureId = null)
     {
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_FindComplementaryProducts");
         operation.Telemetry.Properties["productId"] = productId.ToString();
@@ -134,7 +134,7 @@ public class AdventureWorksMcpTools
 
     [McpServerTool]
     [Description("Search for products by name, category, or attributes. Returns matching products with details. Supports multiple languages: ar, de, en (default), en-au, en-ca, en-gb, en-ie, en-nz, es, fr, he, id, it, ja, ko, nl, pt, ru, th, tr, vi, zh, zh-cht.")]
-    public async Task<string> SearchProducts(string searchTerm, string? cultureId = null, int? categoryId = null)
+    public async Task<string> SearchProducts(string searchTerm, [McpHeader("Culture")] string? cultureId = null, int? categoryId = null)
     {
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_SearchProducts");
         operation.Telemetry.Properties["searchTerm"] = searchTerm;
@@ -323,7 +323,7 @@ public class AdventureWorksMcpTools
 
     [McpServerTool]
     [Description("Get personalized product recommendations for a customer based on their purchase history, preferences, and buying patterns. Returns products the customer might like. Requires an existing customer ID with purchase history. Supports multiple languages.")]
-    public async Task<string> GetPersonalizedRecommendations(int? customerId = null, int limit = 5, string? cultureId = null)
+    public async Task<string> GetPersonalizedRecommendations(int? customerId = null, int limit = 5, [McpHeader("Culture")] string? cultureId = null)
     {
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetPersonalizedRecommendations");
         operation.Telemetry.Properties["customerId"] = customerId?.ToString() ?? "null";
@@ -359,7 +359,7 @@ public class AdventureWorksMcpTools
 
     [McpServerTool]
     [Description("Analyze and summarize customer reviews for a product. Returns average rating, review count, sentiment analysis, and common themes from customer feedback. Supports multiple languages.")]
-    public async Task<string> AnalyzeProductReviews(int productId, string? cultureId = null)
+    public async Task<string> AnalyzeProductReviews(int productId, [McpHeader("Culture")] string? cultureId = null)
     {
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_AnalyzeProductReviews");
         operation.Telemetry.Properties["productId"] = productId.ToString();
@@ -391,7 +391,7 @@ public class AdventureWorksMcpTools
 
     [McpServerTool]
     [Description("Check real-time inventory availability for a product in finished goods locations. Returns stock levels, finished goods storage locations, and availability status. Supports multiple languages.")]
-    public async Task<string> CheckInventoryAvailability(int productId, string? cultureId = null)
+    public async Task<string> CheckInventoryAvailability(int productId, [McpHeader("Culture")] string? cultureId = null)
     {
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_CheckInventoryAvailability");
         operation.Telemetry.Properties["productId"] = productId.ToString();

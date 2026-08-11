@@ -2,6 +2,7 @@ using System.ComponentModel;
 using AdventureWorks.Services;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 namespace AdventureWorks.Tools;
@@ -67,10 +68,49 @@ public class ManufacturingMcpTools
     [McpServerTool]
     [Description("Start a new manufacturing production run for a finished good. Explodes the bill of materials, creates work orders for all components, and queues routing operations. The productId must be a finished good with MakeFlag=true. Use GetProductionFeasibility first to verify sufficient component stock.")]
     public async Task<string> BeginManufacturingRun(
+        McpServer server,
+        RequestContext<CallToolRequestParams> context,
         [Description("ProductID of the finished good to manufacture. Must have MakeFlag=true.")] int productId,
         [Description("Number of units to produce.")] int orderQty,
-        [Description("Optional due date in ISO 8601 format (e.g. 2026-04-30). Defaults to 7 days from now.")] string? dueDate = null)
+        [Description("Optional due date in ISO 8601 format (e.g. 2026-04-30). Defaults to 7 days from now.")] string? dueDate = null,
+        [Description("Set to true to skip confirmation (for programmatic/autonomous callers).")] bool confirmed = false)
     {
+        if (!confirmed)
+        {
+            if (context.Params?.InputResponses?.TryGetValue("confirm", out var response) is true)
+            {
+                var elicit = response.Deserialize(InputResponse.ElicitResultJsonTypeInfo);
+                if (elicit?.IsAccepted is not true)
+                    return "Manufacturing run cancelled.";
+            }
+            else if (server.IsMrtrSupported)
+            {
+                throw new InputRequiredException(
+                    inputRequests: new Dictionary<string, InputRequest>
+                    {
+                        ["confirm"] = InputRequest.ForElicitation(new ElicitRequestParams
+                        {
+                            Message = $"Start manufacturing run: {orderQty}x Product #{productId}, due {dueDate ?? "7 days from now"}. This will create work orders and consume components. Proceed?",
+                            RequestedSchema = new()
+                            {
+                                Properties =
+                                {
+                                    ["confirm"] = new ElicitRequestParams.StringSchema
+                                    {
+                                        Title = "Confirm production run",
+                                    },
+                                },
+                            },
+                        })
+                    },
+                    requestState: $"{productId}:{orderQty}:{dueDate}");
+            }
+            else
+            {
+                return "This is a destructive operation. Resend with confirmed=true to proceed.";
+            }
+        }
+
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_BeginManufacturingRun");
         operation.Telemetry.Properties["productId"] = productId.ToString();
         operation.Telemetry.Properties["orderQty"] = orderQty.ToString();
@@ -100,8 +140,47 @@ public class ManufacturingMcpTools
 
     [McpServerTool]
     [Description("Stop the manufacturing simulation by clearing the production queue. In-flight operations will finish but no new ones will be started. Use this when you need to pause manufacturing, for example to reconfigure scrap rates or location capacity before restarting.")]
-    public async Task<string> StopManufacturing()
+    public async Task<string> StopManufacturing(
+        McpServer server,
+        RequestContext<CallToolRequestParams> context,
+        [Description("Set to true to skip confirmation (for programmatic/autonomous callers).")] bool confirmed = false)
     {
+        if (!confirmed)
+        {
+            if (context.Params?.InputResponses?.TryGetValue("confirm", out var response) is true)
+            {
+                var elicit = response.Deserialize(InputResponse.ElicitResultJsonTypeInfo);
+                if (elicit?.IsAccepted is not true)
+                    return "Stop manufacturing cancelled.";
+            }
+            else if (server.IsMrtrSupported)
+            {
+                throw new InputRequiredException(
+                    inputRequests: new Dictionary<string, InputRequest>
+                    {
+                        ["confirm"] = InputRequest.ForElicitation(new ElicitRequestParams
+                        {
+                            Message = "This will clear the production queue. In-flight operations will complete but no new work will be started. Proceed?",
+                            RequestedSchema = new()
+                            {
+                                Properties =
+                                {
+                                    ["confirm"] = new ElicitRequestParams.StringSchema
+                                    {
+                                        Title = "Confirm stop",
+                                    },
+                                },
+                            },
+                        })
+                    },
+                    requestState: "stop");
+            }
+            else
+            {
+                return "This is a destructive operation. Resend with confirmed=true to proceed.";
+            }
+        }
+
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_StopManufacturing");
         try
         {
@@ -217,11 +296,50 @@ public class ManufacturingMcpTools
     [McpServerTool]
     [Description("Update the scrap failure rate for a specific production location. Used to simulate quality improvements or degradation. failureRatePct must be between 0.0 (no failures) and 1.0 (100% failure). Optionally provide scrapReasonIds (array of ints) to restrict which scrap reasons apply.")]
     public async Task<string> UpdateScrapConfiguration(
+        McpServer server,
+        RequestContext<CallToolRequestParams> context,
         [Description("The LocationID of the production station to update.")] int locationId,
         [Description("Failure rate as a decimal between 0.0 and 1.0 (e.g. 0.05 = 5% scrap rate).")] double failureRatePct,
         [Description("Optional comma-separated list of scrap reason IDs to apply at this location (e.g. '2,7,14').")] string? scrapReasonIds = null,
-        [Description("Optional note describing why this configuration was changed.")] string? note = null)
+        [Description("Optional note describing why this configuration was changed.")] string? note = null,
+        [Description("Set to true to skip confirmation (for programmatic/autonomous callers).")] bool confirmed = false)
     {
+        if (!confirmed)
+        {
+            if (context.Params?.InputResponses?.TryGetValue("confirm", out var response) is true)
+            {
+                var elicit = response.Deserialize(InputResponse.ElicitResultJsonTypeInfo);
+                if (elicit?.IsAccepted is not true)
+                    return "Scrap configuration update cancelled.";
+            }
+            else if (server.IsMrtrSupported)
+            {
+                throw new InputRequiredException(
+                    inputRequests: new Dictionary<string, InputRequest>
+                    {
+                        ["confirm"] = InputRequest.ForElicitation(new ElicitRequestParams
+                        {
+                            Message = $"Update scrap rate for Location #{locationId} to {failureRatePct:P0}. This changes the quality failure simulation for this station. Proceed?",
+                            RequestedSchema = new()
+                            {
+                                Properties =
+                                {
+                                    ["confirm"] = new ElicitRequestParams.StringSchema
+                                    {
+                                        Title = "Confirm scrap configuration change",
+                                    },
+                                },
+                            },
+                        })
+                    },
+                    requestState: $"{locationId}:{failureRatePct}");
+            }
+            else
+            {
+                return "This is a destructive operation. Resend with confirmed=true to proceed.";
+            }
+        }
+
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_UpdateScrapConfiguration");
         operation.Telemetry.Properties["locationId"] = locationId.ToString();
         try
@@ -276,13 +394,52 @@ public class ManufacturingMcpTools
     [McpServerTool]
     [Description("Update the capacity and shift settings for a specific production location. Use to simulate overtime, shift changes, or capacity expansions. speedFactor > 1.0 means faster than normal, < 1.0 means slower.")]
     public async Task<string> UpdateLocationConfiguration(
+        McpServer server,
+        RequestContext<CallToolRequestParams> context,
         [Description("The LocationID of the production station to update.")] int locationId,
         [Description("Number of parallel work units the station can handle (minimum 1).")] int capacityUnits,
         [Description("Hours per day the station operates (e.g. 8.0, 12.0, 16.0). Defaults to 8.")] double dailyOperatingHours = 8.0,
         [Description("Processing speed multiplier relative to standard routing time (e.g. 1.5 = 50% faster). Defaults to 1.0.")] double speedFactor = 1.0,
         [Description("Hour of day (0-23) when the shift starts. Defaults to 6.")] int shiftStartHour = 6,
-        [Description("Optional note describing the reason for this configuration change.")] string? note = null)
+        [Description("Optional note describing the reason for this configuration change.")] string? note = null,
+        [Description("Set to true to skip confirmation (for programmatic/autonomous callers).")] bool confirmed = false)
     {
+        if (!confirmed)
+        {
+            if (context.Params?.InputResponses?.TryGetValue("confirm", out var response) is true)
+            {
+                var elicit = response.Deserialize(InputResponse.ElicitResultJsonTypeInfo);
+                if (elicit?.IsAccepted is not true)
+                    return "Location configuration update cancelled.";
+            }
+            else if (server.IsMrtrSupported)
+            {
+                throw new InputRequiredException(
+                    inputRequests: new Dictionary<string, InputRequest>
+                    {
+                        ["confirm"] = InputRequest.ForElicitation(new ElicitRequestParams
+                        {
+                            Message = $"Update Location #{locationId}: capacity={capacityUnits}, hours={dailyOperatingHours}, speed={speedFactor}x, shift start={shiftStartHour}:00. This changes production capacity. Proceed?",
+                            RequestedSchema = new()
+                            {
+                                Properties =
+                                {
+                                    ["confirm"] = new ElicitRequestParams.StringSchema
+                                    {
+                                        Title = "Confirm location configuration change",
+                                    },
+                                },
+                            },
+                        })
+                    },
+                    requestState: $"{locationId}");
+            }
+            else
+            {
+                return "This is a destructive operation. Resend with confirmed=true to proceed.";
+            }
+        }
+
         using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_UpdateLocationConfiguration");
         operation.Telemetry.Properties["locationId"] = locationId.ToString();
         try
