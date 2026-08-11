@@ -1,7 +1,5 @@
 using System.ComponentModel;
 using AdventureWorks.Services;
-using Microsoft.ApplicationInsights;
-using Microsoft.ApplicationInsights.DataContracts;
 using ModelContextProtocol.Server;
 
 namespace AdventureWorks.Tools;
@@ -14,12 +12,10 @@ namespace AdventureWorks.Tools;
 public class SupplyChainMcpTools
 {
     private readonly SupplyChainService _supplyChain;
-    private readonly TelemetryClient _telemetryClient;
 
-    public SupplyChainMcpTools(SupplyChainService supplyChain, TelemetryClient telemetryClient)
+    public SupplyChainMcpTools(SupplyChainService supplyChain)
     {
         _supplyChain = supplyChain;
-        _telemetryClient = telemetryClient;
     }
 
     // ── Vendors ───────────────────────────────────────────────────────────────
@@ -28,20 +24,7 @@ public class SupplyChainMcpTools
     [Description("List all active supply chain vendors with their credit rating, preferred status, number of unique products supplied, and total stock available. Use this to understand the supplier base before placing orders.")]
     public async Task<string> GetSupplyChainVendors()
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetSupplyChainVendors");
-        try
-        {
-            var result = await _supplyChain.GetVendorsAsync();
-            operation.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", "GetSupplyChainVendors" } });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetSupplyChainVendors" } });
-            throw;
-        }
+        return await _supplyChain.GetVendorsAsync();
     }
 
     [McpServerTool]
@@ -49,25 +32,7 @@ public class SupplyChainMcpTools
     public async Task<string> GetVendorDetails(
         [Description("The vendor ID to retrieve details for.")] string vendorId)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetVendorDetails");
-        operation.Telemetry.Properties["vendorId"] = vendorId;
-        try
-        {
-            var result = await _supplyChain.GetVendorAsync(vendorId);
-            operation.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
-            {
-                { "tool", "GetVendorDetails" },
-                { "vendorId", vendorId }
-            });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetVendorDetails" }, { "vendorId", vendorId } });
-            throw;
-        }
+        return await _supplyChain.GetVendorAsync(vendorId);
     }
 
     // ── Catalog ───────────────────────────────────────────────────────────────
@@ -77,25 +42,7 @@ public class SupplyChainMcpTools
     public async Task<string> GetSupplyCatalog(
         [Description("Optional ProductID to filter the catalog to offerings for a single component.")] int? productId = null)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetSupplyCatalog");
-        operation.Telemetry.Properties["productId"] = productId?.ToString() ?? "all";
-        try
-        {
-            var result = await _supplyChain.GetSupplyCatalogAsync(productId);
-            operation.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
-            {
-                { "tool", "GetSupplyCatalog" },
-                { "productId", productId?.ToString() ?? "all" }
-            });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetSupplyCatalog" } });
-            throw;
-        }
+        return await _supplyChain.GetSupplyCatalogAsync(productId);
     }
 
     // ── Quotes ────────────────────────────────────────────────────────────────
@@ -107,28 +54,7 @@ public class SupplyChainMcpTools
         [Description("The ProductID of the component to quote.")] int productId,
         [Description("The quantity to quote. Larger quantities may attract volume discounts. Defaults to 1.")] int qty = 1)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetSupplyQuote");
-        operation.Telemetry.Properties["vendorId"] = vendorId;
-        operation.Telemetry.Properties["productId"] = productId.ToString();
-        try
-        {
-            var result = await _supplyChain.GetQuoteAsync(vendorId, productId, qty);
-            operation.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
-            {
-                { "tool", "GetSupplyQuote" },
-                { "vendorId", vendorId },
-                { "productId", productId.ToString() },
-                { "qty", qty.ToString() }
-            });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetSupplyQuote" }, { "vendorId", vendorId } });
-            throw;
-        }
+        return await _supplyChain.GetQuoteAsync(vendorId, productId, qty);
     }
 
     // ── Orders ────────────────────────────────────────────────────────────────
@@ -140,69 +66,21 @@ public class SupplyChainMcpTools
         [Description("The ProductID of the component to order.")] int productId,
         [Description("The quantity to order. Must be positive and within vendor's available stock.")] int qty)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_PlaceSupplyOrder");
-        operation.Telemetry.Properties["vendorId"] = vendorId;
-        operation.Telemetry.Properties["productId"] = productId.ToString();
-        operation.Telemetry.Properties["qty"] = qty.ToString();
-        try
-        {
-            var result = await _supplyChain.PlaceOrderAsync(vendorId, productId, qty);
-            operation.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
-            {
-                { "tool", "PlaceSupplyOrder" },
-                { "vendorId", vendorId },
-                { "productId", productId.ToString() },
-                { "qty", qty.ToString() }
-            });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "PlaceSupplyOrder" }, { "vendorId", vendorId } });
-            throw;
-        }
+        return await _supplyChain.PlaceOrderAsync(vendorId, productId, qty);
     }
 
     [McpServerTool]
     [Description("List all currently active (non-completed) supply chain purchase orders showing order ID, vendor, product, quantity, cost, status, and expected delivery date. Use GetSupplyOrderHistory to see completed orders.")]
     public async Task<string> GetActiveSupplyOrders()
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetActiveSupplyOrders");
-        try
-        {
-            var result = await _supplyChain.GetOrdersAsync(includeHistory: false);
-            operation.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", "GetActiveSupplyOrders" } });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetActiveSupplyOrders" } });
-            throw;
-        }
+        return await _supplyChain.GetOrdersAsync(includeHistory: false);
     }
 
     [McpServerTool]
     [Description("Get the full historical log of all supply chain purchase orders including delivered and cancelled orders. Useful for analysing purchasing patterns, vendor performance, and total procurement spend.")]
     public async Task<string> GetSupplyOrderHistory()
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetSupplyOrderHistory");
-        try
-        {
-            var result = await _supplyChain.GetOrdersAsync(includeHistory: true);
-            operation.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", "GetSupplyOrderHistory" } });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetSupplyOrderHistory" } });
-            throw;
-        }
+        return await _supplyChain.GetOrdersAsync(includeHistory: true);
     }
 
     [McpServerTool]
@@ -210,25 +88,7 @@ public class SupplyChainMcpTools
     public async Task<string> GetSupplyOrderDetails(
         [Description("The order ID to look up (e.g. 'ORD-ABC123').")] string orderId)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetSupplyOrderDetails");
-        operation.Telemetry.Properties["orderId"] = orderId;
-        try
-        {
-            var result = await _supplyChain.GetOrderAsync(orderId);
-            operation.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
-            {
-                { "tool", "GetSupplyOrderDetails" },
-                { "orderId", orderId }
-            });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetSupplyOrderDetails" }, { "orderId", orderId } });
-            throw;
-        }
+        return await _supplyChain.GetOrderAsync(orderId);
     }
 
     [McpServerTool]
@@ -237,25 +97,7 @@ public class SupplyChainMcpTools
         [Description("The order ID to cancel.")] string orderId,
         [Description("The reason for cancellation. Defaults to 'Cancelled by agent'.")] string reason = "Cancelled by agent")
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_CancelSupplyOrder");
-        operation.Telemetry.Properties["orderId"] = orderId;
-        try
-        {
-            var result = await _supplyChain.CancelOrderAsync(orderId, reason);
-            operation.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
-            {
-                { "tool", "CancelSupplyOrder" },
-                { "orderId", orderId }
-            });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "CancelSupplyOrder" }, { "orderId", orderId } });
-            throw;
-        }
+        return await _supplyChain.CancelOrderAsync(orderId, reason);
     }
 
     // ── Restock & Maintenance ─────────────────────────────────────────────────
@@ -266,26 +108,7 @@ public class SupplyChainMcpTools
         [Description("The vendor ID to restock.")] string vendorId,
         [Description("Optional ProductID to restock only that product for this vendor. Omit to restock all products.")] int? productId = null)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_RestockVendorInventory");
-        operation.Telemetry.Properties["vendorId"] = vendorId;
-        try
-        {
-            var result = await _supplyChain.RestockVendorAsync(vendorId, productId);
-            operation.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
-            {
-                { "tool", "RestockVendorInventory" },
-                { "vendorId", vendorId },
-                { "productId", productId?.ToString() ?? "all" }
-            });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "RestockVendorInventory" }, { "vendorId", vendorId } });
-            throw;
-        }
+        return await _supplyChain.RestockVendorAsync(vendorId, productId);
     }
 
     [McpServerTool]
@@ -303,25 +126,7 @@ public class SupplyChainMcpTools
         [Description("The SalesOrderID that triggered this analysis.")] int salesOrderId,
         [Description("The agent RunID for this invocation (from the invocation payload).")] string runId)
     {
-        using var operation = _telemetryClient.StartOperation<RequestTelemetry>("MCP_ProposeSupplyOrder");
-        operation.Telemetry.Properties["vendorId"]  = vendorId;
-        operation.Telemetry.Properties["productId"] = productId.ToString();
-        operation.Telemetry.Properties["qty"]       = qty.ToString();
-        try
-        {
-            var result = await _supplyChain.ProposeSupplyOrderAsync(
-                vendorId, productId, qty, rationale, salesOrderId, runId);
-            operation.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
-                { { "tool", "ProposeSupplyOrder" }, { "vendorId", vendorId } });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            operation.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string>
-                { { "tool", "ProposeSupplyOrder" }, { "vendorId", vendorId } });
-            throw;
-        }
+        return await _supplyChain.ProposeSupplyOrderAsync(
+            vendorId, productId, qty, rationale, salesOrderId, runId);
     }
 }

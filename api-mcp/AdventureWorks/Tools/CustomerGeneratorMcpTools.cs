@@ -1,8 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
 using AdventureWorks.Services;
-using Microsoft.ApplicationInsights;
-using Microsoft.ApplicationInsights.DataContracts;
 using ModelContextProtocol.Server;
 
 namespace AdventureWorks.Tools;
@@ -16,12 +14,10 @@ namespace AdventureWorks.Tools;
 public class CustomerGeneratorMcpTools
 {
     private readonly CustomerGeneratorService _generator;
-    private readonly TelemetryClient _telemetryClient;
 
-    public CustomerGeneratorMcpTools(CustomerGeneratorService generator, TelemetryClient telemetryClient)
+    public CustomerGeneratorMcpTools(CustomerGeneratorService generator)
     {
         _generator = generator;
-        _telemetryClient = telemetryClient;
     }
 
     [McpServerTool]
@@ -34,25 +30,9 @@ public class CustomerGeneratorMcpTools
         "Use this tool whenever you need to create a new customer for order simulation instead of inventing customer details yourself.")]
     public string GenerateRandomCustomer()
     {
-        using var op = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GenerateRandomCustomer");
-        try
-        {
-            var profile = _generator.GenerateRandomCustomer();
-            op.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
-            {
-                { "tool", "GenerateRandomCustomer" },
-                { "country", profile.CountryCode }
-            });
+        var profile = _generator.GenerateRandomCustomer();
 
-            return JsonSerializer.Serialize(profile, new JsonSerializerOptions { WriteIndented = true });
-        }
-        catch (Exception ex)
-        {
-            op.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GenerateRandomCustomer" } });
-            throw;
-        }
+        return JsonSerializer.Serialize(profile, new JsonSerializerOptions { WriteIndented = true });
     }
 
     [McpServerTool]
@@ -64,26 +44,8 @@ public class CustomerGeneratorMcpTools
         "Use this when you need a customer from a specific country/culture for the shopping simulator.")]
     public string GenerateRandomCustomerForLocale(string locale)
     {
-        using var op = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GenerateRandomCustomerForLocale");
-        op.Telemetry.Properties["locale"] = locale;
-        try
-        {
-            var profile = _generator.GenerateRandomCustomerForLocale(locale);
-            op.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
-            {
-                { "tool", "GenerateRandomCustomerForLocale" },
-                { "locale", locale },
-                { "country", profile.CountryCode }
-            });
+        var profile = _generator.GenerateRandomCustomerForLocale(locale);
 
-            return JsonSerializer.Serialize(profile, new JsonSerializerOptions { WriteIndented = true });
-        }
-        catch (Exception ex)
-        {
-            op.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GenerateRandomCustomerForLocale" } });
-            throw;
-        }
+        return JsonSerializer.Serialize(profile, new JsonSerializerOptions { WriteIndented = true });
     }
 }

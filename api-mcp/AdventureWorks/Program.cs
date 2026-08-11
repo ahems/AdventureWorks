@@ -1,7 +1,9 @@
 using AdventureWorks.Services;
 using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.Extensions.Localization;
 using ModelContextProtocol.Extensions.Tasks;
+using ModelContextProtocol.Protocol;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.AddConsole(consoleLogOptions =>
@@ -85,7 +87,37 @@ builder.Services
 	   .AddMcpServer()
 	   .WithHttpTransport()
 	   .WithToolsFromAssembly()
-	   .WithTasks(taskStore);
+	   .WithTasks(taskStore)
+	   .WithRequestFilters(filters =>
+	   {
+		   // Centralized Application Insights telemetry for every tool call
+		   filters.AddCallToolFilter(next => async (context, ct) =>
+		   {
+			   var telemetry = context.Services.GetRequiredService<TelemetryClient>();
+			   var toolName = context.Params?.Name ?? "unknown";
+			   using var operation = telemetry.StartOperation<RequestTelemetry>($"MCP_{toolName}");
+
+			   if (context.Params?.Arguments is { } args)
+			   {
+				   foreach (var kvp in args)
+					   operation.Telemetry.Properties[kvp.Key] = kvp.Value.ToString()[..Math.Min(kvp.Value.ToString().Length, 200)];
+			   }
+
+			   try
+			   {
+				   var result = await next(context, ct);
+				   operation.Telemetry.Success = true;
+				   telemetry.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", toolName } });
+				   return result;
+			   }
+			   catch (Exception ex) when (ex is not InputRequiredException)
+			   {
+				   operation.Telemetry.Success = false;
+				   telemetry.TrackException(ex, new Dictionary<string, string> { { "tool", toolName } });
+				   throw;
+			   }
+		   });
+	   });
 
 builder.AddServiceDefaults();
 

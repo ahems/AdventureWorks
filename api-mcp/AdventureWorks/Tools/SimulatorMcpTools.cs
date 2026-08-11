@@ -1,7 +1,5 @@
 using System.ComponentModel;
 using AdventureWorks.Services;
-using Microsoft.ApplicationInsights;
-using Microsoft.ApplicationInsights.DataContracts;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
@@ -11,12 +9,10 @@ namespace AdventureWorks.Tools;
 public class SimulatorMcpTools
 {
     private readonly SimulatorService _simulator;
-    private readonly TelemetryClient _telemetryClient;
 
-    public SimulatorMcpTools(SimulatorService simulator, TelemetryClient telemetryClient)
+    public SimulatorMcpTools(SimulatorService simulator)
     {
         _simulator       = simulator;
-        _telemetryClient = telemetryClient;
     }
 
     [McpServerTool]
@@ -64,19 +60,6 @@ public class SimulatorMcpTools
             }
         }
 
-        using var op = _telemetryClient.StartOperation<RequestTelemetry>("MCP_ResetAllSimulators");
-        try
-        {
-            var result = await _simulator.ResetAllSimulatorsAsync();
-            op.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", "ResetAllSimulators" } });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            op.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "ResetAllSimulators" } });
-            throw;
-        }
+        return await _simulator.ResetAllSimulatorsAsync();
     }
 }
