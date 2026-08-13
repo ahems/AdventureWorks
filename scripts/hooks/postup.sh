@@ -58,13 +58,13 @@ echo ""
 static_web_url=$(get_azd_value "SERVICE_APP_URL")
 api_url=$(get_azd_value "API_URL")
 admin_url=$(get_azd_value "APP_ADMIN_REDIRECT_URI")
+manufacturing_url=$(get_azd_value "APP_MANUFACTURING_URL")
+mcp_inspector_url=$(get_azd_value "MCP_INSPECTOR_URL")
 
 # Fallback: try to construct static web app URL from service name
 if [[ -z "$static_web_url" ]]; then
   app_name=$(get_azd_value "SERVICE_APP_NAME")
   if [[ -n "$app_name" ]]; then
-    # Azure Static Web Apps follow pattern: https://<name>.<random>.azurestaticapps.net
-    # We'll need to query Azure to get the actual URL
     resource_group=$(get_azd_value "AZURE_RESOURCE_GROUP")
     subscription_id=$(get_azd_value "AZURE_SUBSCRIPTION_ID")
     
@@ -82,35 +82,50 @@ if [[ -z "$static_web_url" ]]; then
   fi
 fi
 
-color_green "Your AdventureWorks Demo e-commerce application is now live!"
+color_green "Your AdventureWorks Demo is now live!"
 echo ""
 color_cyan "📋 Next Steps:"
 echo ""
 
+step=1
+
 if [[ -n "$static_web_url" ]]; then
-  color_yellow "1. Verify all services are healthy, and awake:"
+  color_yellow "$step. Verify all services are healthy, and awake:"
   echo "   🔍 $static_web_url/health"
   echo ""
-  color_yellow "2. Once everything is healthy, explore the site:"
+  ((step++))
+  color_yellow "$step. E-Shop (Static Web App):"
   echo "   🛒 $static_web_url"
   echo ""
-  if [[ -n "$admin_url" ]]; then
-    color_yellow "3. Access the Admin Portal (Container App — scales to zero):"
-    echo "   🔧 $admin_url"
-    echo ""
-  fi
-else
-  color_yellow "1. Check your static web app URL in the Azure Portal"
-  color_yellow "2. Visit <your-app-url>/health to verify services"
-  color_yellow "3. Explore the site at <your-app-url>"
+  ((step++))
+fi
+
+if [[ -n "$admin_url" ]]; then
+  color_yellow "$step. Admin Portal (Container App — scales to zero):"
+  echo "   🔧 $admin_url"
   echo ""
+  ((step++))
+fi
+
+if [[ -n "$manufacturing_url" ]]; then
+  color_yellow "$step. Manufacturing Dashboard (Container App — scales to zero):"
+  echo "   🏭 $manufacturing_url"
+  echo ""
+  ((step++))
+fi
+
+if [[ -n "$mcp_inspector_url" ]]; then
+  color_yellow "$step. MCP Inspector (Container App):"
+  echo "   🔬 $mcp_inspector_url"
+  echo ""
+  ((step++))
 fi
 
 if [[ -n "$api_url" ]]; then
   # Strip /graphql and any trailing slashes to get base URL
   api_base_url="${api_url%/graphql*}"
   api_base_url="${api_base_url%/}"
-  color_yellow "3. Browse the REST API:"
+  color_yellow "$step. Browse the REST API:"
   echo "   📚 $api_base_url/swagger/index.html"
   echo ""
 fi
