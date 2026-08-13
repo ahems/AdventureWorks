@@ -65,7 +65,7 @@ services:
       path: Dockerfile
       remoteBuild: true
 infra:
-  provider: microsoft.foundry
+  provider: bicep
 hooks:
   postprovision:
     shell: sh
