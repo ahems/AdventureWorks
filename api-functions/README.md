@@ -10,6 +10,21 @@ High‑level responsibilities:
 
 > **Note**: Function _names_ below refer to the `[Function("...")]` attribute and may differ from class or method names.
 
+## SQL connection and idle-cost behavior
+
+Most Functions open SQL connections only while handling an HTTP request, queue message, or scheduled job. `OrderPlacedSqlTrigger` is different: it is an Azure SQL Change Tracking trigger on `Sales.SalesOrderHeader`, and the binding continuously polls SQL for changes. The infrastructure intentionally keeps one Flex Consumption instance always ready for this listener so that new orders are not missed. Consequently, the deployed Functions app can keep the serverless Azure SQL Database online even when all user-facing Container Apps have scaled to zero.
+
+The SQL Database still has serverless auto-pause enabled, but auto-pause requires zero sessions and zero user-workload CPU for the configured delay. The hourly `OrderDelivery_Timer` and weekly `ArchiveTransactionHistoryTimer` are additional scheduled SQL callers that can wake the database periodically. `ShoppingSimulator_Timer` does not query SQL when the simulator is stopped; it checks state in Table Storage and returns.
+
+For the demo's normal intermittent usage, the no-code workaround is to delete the environment when finished and redeploy it before the next session:
+
+```bash
+azd down --no-prompt
+azd up --no-prompt
+```
+
+See [infra/README.md](../infra/README.md) for the lifecycle guidance and the future queue/outbox, separate-function-app, and timer-disable options. Removing the always-ready setting without replacing the trigger is unsafe because new order events can be missed when the listener scales to zero.
+
 ---
 
 ## AI Agent Functions

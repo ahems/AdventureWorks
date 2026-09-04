@@ -59,6 +59,14 @@ The agent supports four modes, configurable at runtime from the Agent Control pa
 6. The agent uses `ManufacturingMcpTools` and `SupplyChainMcpTools` to inspect inventory, assess manufacturing feasibility, and (in Propose/Autonomous modes) take or propose actions.
 7. Results are written to the run record and visible in the Agent Control activity feed.
 
+### Idle SQL behavior and demo cost
+
+The SQL Change Tracking listener is not dormant when there are no orders. It polls the database to detect new rows. The infrastructure therefore keeps one Flex Consumption instance always ready for `OrderPlacedSqlTrigger`; otherwise Flex Consumption may scale the listener to zero and assign a `NoOpListener`, which can cause new orders to be missed.
+
+This reliability choice also explains an apparent serverless SQL cost anomaly. Although the database is configured for serverless compute and auto-pause, the listener can maintain a SQL session, so the database does not meet the zero-session requirement for auto-pause. Switching the agent autonomy mode to **Off** prevents AI work and token usage, but it does not disable the SQL trigger or its polling connection. For an unused demo, delete the deployment with `azd down --no-prompt` and run `azd up --no-prompt` when it is needed again.
+
+Possible future implementations include writing an order event to a queue or transactional outbox as part of order creation, hosting the SQL-trigger component separately and starting it only for active demonstrations, or accepting manual/delayed order processing and removing the listener. These require deliberate reliability and deployment changes; simply removing `alwaysReady` is not an equivalent fix.
+
 ## Bottleneck model
 
 The queue trigger processes one order at a time. When the shopping simulator runs at high volume, orders back up in `manufacturing-agent-queue` — exactly like work orders backing up at an understaffed shop floor location. The Agent Control page shows:

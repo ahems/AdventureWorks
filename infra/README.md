@@ -19,6 +19,36 @@ At a high level, these templates provision:
 - Application Insights and related monitoring
 - Managed identities for passwordless authentication
 
+## Serverless SQL and idle cost behavior
+
+`modules/database.bicep` provisions Azure SQL Database as General Purpose serverless with `autoPauseDelay: 60` minutes and a minimum capacity of `0.5` vCores. Auto-pause is therefore enabled, but it requires no active sessions and no user-workload CPU during the delay.
+
+The `api-functions` module has an important exception to the otherwise scale-to-zero demo design. `modules/flex-api-functions.bicep` configures one always-ready Flex Consumption instance for `function:OrderPlacedSqlTrigger`. This Azure SQL trigger polls Change Tracking on `Sales.SalesOrderHeader` so that new orders reliably start receipt, order-status, and manufacturing-agent processing. Because the listener polls SQL while the environment is deployed, it can keep the SQL Database from auto-pausing even when the Container Apps show zero replicas and no one is using the frontends.
+
+The hourly `OrderDelivery_Timer` and weekly `ArchiveTransactionHistoryTimer` also open SQL connections when their schedules fire. They are periodic wake-ups rather than the continuous cause. The shopping simulator timer is stopped by default and reads its idle state from Table Storage before doing any SQL work.
+
+### Recommended lifecycle for this demo
+
+The deployment is intended to be used intermittently. To avoid paying for an idle deployed environment, delete it when the demo is not needed and recreate it for the next session:
+
+```bash
+azd down --no-prompt
+azd up --no-prompt
+```
+
+This is a resource-lifecycle workaround, not a change to the application. Do not run `azd down` during local development that depends on the deployed Azure resources. The seed job and deployment hooks will run again during `azd up`.
+
+### Possible future code or architecture changes
+
+If retaining the environment while idle becomes important, possible designs include:
+
+- Replace the SQL Change Tracking trigger with an order-creation outbox or queue write in the order transaction, allowing the Functions app and SQL listener to scale down.
+- Move the SQL-trigger function into a separate Function App and start that component only during demonstrations that require automatic order processing.
+- Disable the hourly delivery and weekly archive timers when the demo is idle, while retaining manual administrative endpoints.
+- Accept delayed or manually initiated order processing and remove the always-ready listener entirely.
+
+These alternatives require code, reliability, or operational changes. Removing the always-ready setting alone is not sufficient: Flex Consumption can assign a `NoOpListener`, and new orders may be missed.
+
 ---
 
 ## Top‑Level Templates

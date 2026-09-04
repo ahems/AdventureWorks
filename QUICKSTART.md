@@ -126,6 +126,19 @@ At the end, `azd` will print out key endpoints such as the Static Web App URL, A
 
 > **Tip:** After deployment completes, visit `https://<your-static-web-app-url>/health` to verify all services are running and the database is fully loaded. The health check will show the status of the API, Functions, and database connectivity.
 
+### Important: what happens when the demo is idle
+
+The SQL Database is configured as General Purpose serverless with a 60-minute auto-pause delay. This does not mean the database will pause whenever the frontends and Container Apps are idle. `api-functions` keeps one Flex Consumption instance always ready for `OrderPlacedSqlTrigger`, which polls SQL Change Tracking on `Sales.SalesOrderHeader` so new orders can be processed reliably. That listener maintains SQL activity and prevents the zero-session condition required for auto-pause. The hourly delivery timer and weekly transaction-history archive are additional, intermittent SQL callers.
+
+For a demo that is unused most of the time, the recommended no-code workaround is to delete the Azure environment after use and redeploy it when needed:
+
+```bash
+azd down --no-prompt
+azd up --no-prompt
+```
+
+`azd down` deletes the deployed resources, so do not run it while using the local-development workflow in this guide if that workflow needs the Azure-hosted database, authentication, or APIs. See [infra/README.md](infra/README.md) for the design trade-off and possible future alternatives.
+
 ---
 
 ## 5. Files Used by `azd`

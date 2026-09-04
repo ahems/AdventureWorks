@@ -164,6 +164,20 @@ This command will:
 
 Once deployed, you can access the application via the Static Web App URL shown in the deployment output.
 
+### Demo idle behavior and Azure SQL cost
+
+The SQL Database is provisioned on the General Purpose serverless tier with a 60-minute auto-pause delay. Most Container Apps are configured to scale to zero when idle, but the deployment also keeps one Flex Consumption Functions instance always ready for `OrderPlacedSqlTrigger`. That function uses Azure SQL Change Tracking and polls `Sales.SalesOrderHeader` for new orders. The listener's SQL session means the database normally does not reach the zero-session condition required for auto-pause, even when no user is using the demo.
+
+This is intentional: allowing the Functions app to scale fully to zero would make the SQL trigger unreliable and could miss new orders. The hourly order-delivery timer and weekly transaction-history archive can also briefly wake SQL when they run, although they are not the continuous idle connection.
+
+For this demo, the simplest cost control is to remove the deployment when it is not needed:
+
+```bash
+azd down --no-prompt
+```
+
+Run `azd up --no-prompt` when the demo is needed again. Do not use `azd down` while following the local-development steps that depend on the deployed Azure services. A future code change could replace the SQL trigger with an explicit queue/outbox workflow, disable the background timers when idle, or isolate the SQL-trigger function in a separately managed Function App; those options trade lower idle cost for more implementation and operational complexity.
+
 ---
 
 ## Documentation Map
