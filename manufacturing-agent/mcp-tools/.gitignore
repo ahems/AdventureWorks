@@ -1,1 +1,10 @@
 .azure
+
+# .NET build output
+**/bin/
+**/obj/
+
+# Local IDE state
+.vs/
+*.user
+*.suo

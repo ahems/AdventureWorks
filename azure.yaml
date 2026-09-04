@@ -2,83 +2,120 @@
 
 name: adventureworks
 services:
-  api:
-    project: ./api
-    host: containerapp
-    language: python
-    docker:
-      path: dockerfile
-      remoteBuild: true
-    hooks:
-      postdeploy:
-        shell: sh
-        run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/api-postdeploy.sh"
-  api-functions:
-    project: ./api-functions
-    host: function
-    language: csharp
-    hooks:
-      postdeploy:
-        shell: sh
-        run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/api-functions-postdeploy.sh"
-  api-mcp:
-    project: ./api-mcp
-    host: containerapp
-    language: docker
-    docker:
-      path: Dockerfile
-      remoteBuild: true
-  app:
-    project: ./app
-    host: staticwebapp
-    language: js
-    dist: dist
-    hooks:
-      postdeploy:
-        shell: sh
-        run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/app-postdeploy.sh"
-      predeploy:
-        shell: sh
-        run: npm install && bash scripts/build-with-env.sh
-    config:
-      buildCommand: bash scripts/build-with-env.sh
-      outputLocation: dist
-  app-admin:
-    project: ./app-admin
-    host: containerapp
-    language: docker
-    docker:
-      path: Dockerfile
-      remoteBuild: true
-  app-manufacturing:
-    project: ./app-manufacturing
-    host: containerapp
-    language: docker
-    docker:
-      path: Dockerfile
-      remoteBuild: true
-  mcp-inspector:
-    project: ./mcp-inspector
-    host: containerapp
-    language: docker
-    docker:
-      path: Dockerfile
-      remoteBuild: true
+    api:
+        project: ./api
+        host: containerapp
+        language: python
+        docker:
+            path: dockerfile
+            remoteBuild: true
+        hooks:
+            postdeploy:
+                shell: sh
+                run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/api-postdeploy.sh"
+    api-functions:
+        project: ./api-functions
+        host: function
+        language: csharp
+        hooks:
+            postdeploy:
+                shell: sh
+                run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/api-functions-postdeploy.sh"
+    api-mcp:
+        project: ./api-mcp
+        host: containerapp
+        language: docker
+        docker:
+            path: Dockerfile
+            remoteBuild: true
+    app:
+        project: ./app
+        host: staticwebapp
+        language: js
+        dist: dist
+        hooks:
+            postdeploy:
+                shell: sh
+                run: bash "$(git rev-parse --show-toplevel)/scripts/hooks/app-postdeploy.sh"
+            predeploy:
+                shell: sh
+                run: npm install && bash scripts/build-with-env.sh
+        config:
+            buildCommand: bash scripts/build-with-env.sh
+            outputLocation: dist
+    app-admin:
+        project: ./app-admin
+        host: containerapp
+        language: docker
+        docker:
+            path: Dockerfile
+            remoteBuild: true
+    app-manufacturing:
+        project: ./app-manufacturing
+        host: containerapp
+        language: docker
+        docker:
+            path: Dockerfile
+            remoteBuild: true
+    manufacturing-agent:
+        project: ./manufacturing-agent/mcp-tools/src/mcp-tools
+        host: azure.ai.agent
+        language: csharp
+        codeConfiguration:
+            entryPoint: mcp-tools.dll
+            runtime: dotnet_10
+        container:
+            resources:
+                cpu: "0.5"
+                memory: 1Gi
+        description: |
+            Autonomous manufacturing and supply chain agent. Triggered when new sales orders are placed.
+            Analyses inventory levels, assesses manufacturing feasibility, and takes action based on the
+            configured autonomy mode (ReadOnly / ProposePending / FullyAutonomous).
+        displayName: Manufacturing Agent
+        environmentVariables:
+            - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
+              value: ${chatGptDeploymentName}
+            - name: MCP_SERVICE_URL
+              value: ${MCP_SERVICE_URL}
+        kind: hosted
+        metadata:
+            tags:
+                - AI Agent Hosting
+                - Azure AI AgentServer
+                - Responses Protocol
+                - Agent Framework
+                - MCP
+                - Manufacturing
+        name: manufacturing-agent
+        protocols:
+            - protocol: responses
+              version: 2.0.0
+    mcp-inspector:
+        project: ./mcp-inspector
+        host: containerapp
+        language: docker
+        docker:
+            path: Dockerfile
+            remoteBuild: true
 infra:
-  provider: bicep
+    provider: bicep
 hooks:
-  postprovision:
-    shell: sh
-    run: bash scripts/hooks/postprovision.sh
-    interactive: true
-  postup:
-    shell: sh
-    run: bash scripts/hooks/postup.sh
-    interactive: true
-  predeploy:
-    shell: sh
-    run: bash scripts/hooks/predeploy.sh
-  preup:
-    shell: sh
-    run: bash scripts/hooks/preup.sh
-    interactive: true
+    postdeploy:
+        shell: sh
+        run: bash scripts/hooks/postdeploy.sh
+    postprovision:
+        shell: sh
+        run: bash scripts/hooks/postprovision.sh
+        interactive: true
+    postup:
+        shell: sh
+        run: bash scripts/hooks/postup.sh
+        interactive: true
+    predeploy:
+        shell: sh
+        run: bash scripts/hooks/predeploy.sh
+    preup:
+        shell: sh
+        run: bash scripts/hooks/preup.sh
+        interactive: true
