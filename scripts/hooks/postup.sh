@@ -47,6 +47,16 @@ get_azd_value() {
 #############################################
 
 echo ""
+agent_endpoint=$(get_azd_value "AGENT_MANUFACTURING_AGENT_RESPONSES_ENDPOINT")
+if [[ -z "$agent_endpoint" ]]; then
+  color_cyan "Deploying the Manufacturing Hosted Agent..."
+  AZURE_DEV_USER_AGENT=microsoft_foundry_skill azd deploy manufacturing-agent --no-prompt
+  color_green "Manufacturing Hosted Agent deployed successfully."
+else
+  color_green "Manufacturing Hosted Agent already deployed; skipping fallback deployment."
+fi
+
+echo ""
 color_bold "╔════════════════════════════════════════════════════════════════════╗"
 color_bold "║                                                                    ║"
 color_bold "║          🎉  AdventureWorks Demo Deployment Complete!  🎉          ║"

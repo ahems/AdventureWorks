@@ -114,5 +114,4 @@ echo "  AI_AGENT_REVIEW_ANALYSIS_ID        = $(get_azd_value AI_AGENT_REVIEW_ANA
 echo "  AI_AGENT_EMAIL_CONTENT_ID          = $(get_azd_value AI_AGENT_EMAIL_CONTENT_ID)"
 echo "  AI_AGENT_CATALOG_SUGGESTION_ID     = $(get_azd_value AI_AGENT_CATALOG_SUGGESTION_ID)"
 echo ""
-echo "NOTE: manufacturing-agent is a Foundry Hosted Agent — deploy it separately:"
-echo "  cd manufacturing-agent/mcp-tools && azd deploy"
+echo "NOTE: manufacturing-agent is a Foundry Hosted Agent — it will be deployed by the postup hook after application services finish."

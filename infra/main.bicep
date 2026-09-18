@@ -414,7 +414,9 @@ output COMMUNICATION_SERVICE_ENDPOINT string = communication.outputs.communicati
 output EMAIL_SENDER_DOMAIN string = communication.outputs.senderDomain
 output PROJECT_NAME string = aifoundry.outputs.projectName
 output PROJECT_RESOURCE_ID string = aifoundry.outputs.projectResourceId
+output AZURE_AI_PROJECT_ID string = aifoundry.outputs.projectResourceId
 output AI_FOUNDRY_PROJECT_ENDPOINT string = aifoundry.outputs.projectEndpoint
+output FOUNDRY_PROJECT_ENDPOINT string = aifoundry.outputs.projectEndpoint
 output chatGptDeploymentName string = chatGptDeploymentName
 output CONTAINER_APP_ENVIRONMENT_NAME string = containerApp.outputs.containerAppEnvName
 
