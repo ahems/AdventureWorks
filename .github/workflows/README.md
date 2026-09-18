@@ -9,6 +9,7 @@ A manually triggered workflow that deploys the entire AdventureWorks application
 ### Purpose
 
 This workflow automates the full deployment process (`azd up`) including all lifecycle hooks:
+
 - `preup.sh` - Creates Entra ID app registrations, discovers OpenAI models
 - `azd provision` - Deploys Bicep infrastructure
 - `postprovision.sh` - Configures SQL database roles, deploys seed-job
@@ -21,12 +22,13 @@ This workflow automates the full deployment process (`azd up`) including all lif
 Before running this workflow, you must:
 
 1. **Create a Service Principal** with appropriate permissions:
+
    ```bash
    az ad sp create-for-rbac --name "AdventureWorks-GitHub-Actions" \
      --role Contributor \
      --scopes /subscriptions/{subscription-id}
    ```
-   
+
    Save the output which contains:
    - `appId` (AZURE_CLIENT_ID)
    - `password` (AZURE_CLIENT_SECRET)
@@ -35,7 +37,7 @@ Before running this workflow, you must:
 2. **Grant additional permissions** to the service principal:
    - **Microsoft Graph API**: `Application.ReadWrite.All` (for creating Entra ID app registrations)
    - **SQL Database**: Admin access on the target SQL server (for database role assignments)
-   
+
    You may also need to add the service principal to the "Directory Readers" role in Entra ID.
 
 3. **Configure GitHub Secrets** in your repository:
@@ -53,7 +55,6 @@ Before running this workflow, you must:
    - **AZURE_RESOURCE_GROUP** (required): Name of the Azure resource group to create/use
    - **AZURE_LOCATION** (optional, default: eastus2): Azure region for main resources
    - **FOUNDRY_LOCATION** (optional, default: swedencentral): Azure region for AI Foundry/Cognitive Services
-   - **PLAYWRIGHT_LOCATION** (optional, default: westeurope): Azure region for Playwright browser automation
 5. Click **Run workflow** to start the deployment
 
 ### What the Workflow Does
@@ -86,11 +87,13 @@ Before running this workflow, you must:
 ### Expected Duration
 
 Total deployment time is approximately **29 minutes**:
+
 - Infrastructure provisioning: ~21 minutes
 - Container builds and deployments: varies based on service complexity
 - Database seeding: ~8 minutes (starts during postprovision and continues asynchronously in the background)
 
 Note: The seed job starts during the postprovision phase and continues asynchronously in the background, so it may still be running after `azd up` completes. You can monitor its progress with:
+
 ```bash
 az containerapp job execution list --name <seed-job-name> --resource-group <resource-group-name>
 ```
@@ -98,21 +101,25 @@ az containerapp job execution list --name <seed-job-name> --resource-group <reso
 ### Troubleshooting
 
 **Authentication Errors**:
+
 - Verify all GitHub secrets are set correctly
 - Ensure the service principal has not expired
 - Check that the service principal has the required permissions
 
 **Permission Errors**:
+
 - The service principal needs "Directory Readers" role in Entra ID for preup hook
 - The service principal needs SQL admin access for postprovision hook
 - Verify the service principal has Contributor role on the subscription
 
 **Hook Failures**:
+
 - Check the workflow logs for specific error messages
 - The `postprovision.sh` hook requires PowerShell and Azure CLI access
 - The `preup.sh` hook requires jq and Python to be available
 
 **Timeout Issues**:
+
 - The default GitHub Actions timeout is 6 hours
 - If deployment takes longer, you may need to adjust the timeout
 - Consider running steps separately if needed
@@ -122,6 +129,7 @@ az containerapp job execution list --name <seed-job-name> --resource-group <reso
 After the workflow completes:
 
 1. Check the seed-job status:
+
    ```bash
    az containerapp job execution list \
      --name <seed-job-name> \
@@ -135,6 +143,7 @@ After the workflow completes:
 ### Differences from Interactive `azd up`
 
 When using a service principal in GitHub Actions:
+
 - All hooks run non-interactively (`--no-prompt` flag)
 - Service principal object ID is used instead of user object ID
 - PowerShell authentication uses credential objects instead of interactive login

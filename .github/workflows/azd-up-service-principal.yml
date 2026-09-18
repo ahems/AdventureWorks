@@ -17,11 +17,6 @@ on:
         required: false
         default: "swedencentral"
         type: string
-      PLAYWRIGHT_LOCATION:
-        description: "Azure location for Playwright browser automation"
-        required: false
-        default: "westeurope"
-        type: string
 
 jobs:
   deploy:
@@ -86,7 +81,6 @@ jobs:
           azd env set AZURE_RESOURCE_GROUP "${{ inputs.AZURE_RESOURCE_GROUP }}"
           azd env set AZURE_LOCATION "${{ inputs.AZURE_LOCATION }}"
           azd env set FOUNDRY_LOCATION "${{ inputs.FOUNDRY_LOCATION }}"
-          azd env set PLAYWRIGHT_LOCATION "${{ inputs.PLAYWRIGHT_LOCATION }}"
 
           # Set tenant ID for hook scripts
           azd env set TENANT_ID "${{ secrets.AZURE_TENANT_ID }}"

@@ -227,7 +227,6 @@ Add numbered workflow annotations matching the reference architecture style:
 ## Additional Notes
 
 - This is an **ideal production state** diagram. The current demo deployment does NOT use private endpoints, VNet integration, Application Gateway, Firewall, Bastion, or Key Vault. The diagram should show what the architecture **would** look like with full enterprise security.
-- The **Playwright Testing** workspace (`pw{token}`) used for E2E testing is NOT a production runtime component and should be **omitted** from the diagram.
 - The **MCP Inspector** (`av-mcp-inspector`) is a development/debugging tool. Include it in the Container Apps environment but mark it as optional/dev-only if the diagram format supports it.
 - All services authenticate via **Managed Identity** — no connection strings with secrets. Show this with identity arrows or annotations.
 - The Azure Functions use **Flex Consumption** plan (serverless, Linux), not the traditional Consumption plan.

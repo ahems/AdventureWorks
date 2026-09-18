@@ -79,7 +79,6 @@ Set the Azure regions you want to deploy services to:
 ```bash
 azd env set AZURE_LOCATION "eastus2"
 azd env set FOUNDRY_LOCATION "swedencentral"
-azd env set PLAYWRIGHT_LOCATION "westeurope"
 ```
 
 Optional: Set the OpenAI model parameters to use for chat, embeddings and image generation (example values shown):

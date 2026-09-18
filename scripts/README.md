@@ -70,7 +70,6 @@ See [../docs/data-management/](../docs/data-management/) for:
 Scripts for generating AI content and test data:
 
 - **generate-reviews-with-embeddings.sh** - Generate product reviews with vector embeddings
-- **generate-telemetry.sh** - Generate sample telemetry data for Application Insights
 
 These are typically used during development or for populating demo environments.
 
@@ -89,7 +88,6 @@ Development and maintenance utilities:
 - **check-product-photo-duplicates.sh** - Detect duplicate product photos in database
 - **dab-seed-comparison.sh** - Compare Known Good vs Clean (seed) DAB deployment; cross-check discrepancies with seed CSVs
 - **download-large-images.ps1** - Download large product images from Azure
-- **playwright-quick-ref.sh** - Quick reference commands for Playwright tests
 
 ## 🗄️ SQL Scripts
 
@@ -134,8 +132,6 @@ Required locales are taken from `seed-job/sql/Culture.csv` and `Culture-ai.csv`.
 # Generate product reviews
 ./scripts/generators/generate-reviews-with-embeddings.sh
 
-# Generate telemetry for testing
-./scripts/generators/generate-telemetry.sh
 ```
 
 ### Running Utilities

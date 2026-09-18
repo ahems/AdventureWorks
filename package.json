@@ -1,22 +1,10 @@
 {
-  "scripts": {
-    "test:e2e:warmup": "tsx tests/utils/warmup.ts",
-    "test:e2e": "npm run test:e2e:warmup && playwright test -c tests/playwright.config.ts",
-    "test:e2e:azure": "PLAYWRIGHT_SERVICE_URL=$(azd env get-value PLAYWRIGHT_SERVICE_URL 2>/dev/null) playwright test -c tests/playwright.azure.config.ts",
-    "test:admin": "playwright test -c tests/playwright.admin.config.ts",
-    "test:admin:azure": "PLAYWRIGHT_SERVICE_URL=$(azd env get-value PLAYWRIGHT_SERVICE_URL 2>/dev/null) playwright test -c tests/playwright.admin.config.ts"
-  },
+  "scripts": {},
   "dependencies": {
     "mssql": "^12.2.0",
-    "node-fetch": "^3.3.2",
     "typescript": "^5.9.3"
   },
   "devDependencies": {
-    "@azure/identity": "^4.0.0",
-    "@azure/playwright": "^1.0.0",
-    "@faker-js/faker": "^9.0.0",
-    "@playwright/test": "^1.41.2",
-    "@types/node": "^20.11.30",
-    "tsx": "^4.7.0"
+    "@types/node": "^20.11.30"
   }
 }

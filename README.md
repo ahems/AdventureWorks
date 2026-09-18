@@ -116,7 +116,7 @@ All services authenticate using **Managed Identity** and the `Authentication=Act
   - `scripts/data-management/` – Data export and orchestration monitoring scripts
   - `scripts/generators/` – Content generation scripts (reviews, telemetry)
   - `scripts/utilities/` – Helper tools (translations, image downloads, duplicate checking)
-- `tests/` – Playwright E2E tests and test scripts (see [tests/README.md](tests/README.md))
+- `tests/` – API and integration test scripts (see [tests/README.md](tests/README.md))
 - `docs/` – Comprehensive documentation organized by feature area (see [docs/README.md](docs/README.md))
 
 For function‑level details (routes, triggers, and responsibilities), see:
@@ -200,7 +200,7 @@ The `docs/` folder contains comprehensive documentation organized by feature are
   - [docs/features/email/](docs/features/email/) – Email and PDF receipt generation
 
 - **Testing**
-  - [tests/README.md](tests/README.md) – Playwright E2E tests
+  - [tests/README.md](tests/README.md) – API and integration test scripts
   - [tests/scripts/README.md](tests/scripts/README.md) – API and integration test scripts
   - [docs/testing/](docs/testing/) – Testing guides and telemetry validation
 
@@ -221,9 +221,6 @@ The test suite uses **dynamic product selection** to ensure comprehensive covera
 **Quick Commands:**
 
 ```bash
-# Run E2E tests
-npx playwright test
-
 # API and integration tests (see tests/scripts/README.md for all available tests)
 cd tests/scripts
 ./test-telemetry.sh              # Validate telemetry
@@ -231,37 +228,6 @@ cd tests/scripts
 ./test-password-reset-flow.sh    # Test password reset flow
 ./test-ai-and-mcp-complete.sh    # Test AI agent and MCP integration
 ```
-
-**Product Helper Utility** (`tests/utils/productHelper.ts`):
-
-- Fetches all products from the database (handles DAB's 100-item pagination)
-- Provides random product selection functions with optional filtering
-- Caches results for 5 minutes to optimize performance
-
-**Usage in tests:**
-
-```typescript
-import {
-  getRandomProductIds,
-  getInStockProductIds,
-} from "../utils/productHelper";
-
-// Get any random products
-const productIds = await getRandomProductIds(5);
-
-// Get products likely to be in stock
-const inStockIds = await getInStockProductIds(10);
-
-// Navigate to a random product
-await page.goto(`${testEnv.webBaseUrl}/product/${productIds[0]}`);
-```
-
-**Benefits:**
-
-- Tests exercise 100% of product catalog over multiple runs (vs. 1-2% with hardcoded IDs)
-- Automatically adapts to product database changes
-- Catches edge cases with different product characteristics
-- More realistic simulation of user behavior
 
 See [docs/testing/TEST_DATA_RANDOMIZATION_ANALYSIS.md](docs/testing/TEST_DATA_RANDOMIZATION_ANALYSIS.md) for detailed analysis and implementation details.
 

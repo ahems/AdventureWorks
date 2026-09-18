@@ -109,8 +109,6 @@ _Production reference architecture showing all Azure components with enterprise 
 
 - [AI_AND_MCP_TESTING_GUIDE.md](testing/AI_AND_MCP_TESTING_GUIDE.md) - Comprehensive AI and MCP testing guide
 - [AI_CHAT_MCP_TESTING.md](testing/AI_CHAT_MCP_TESTING.md) - AI chat testing procedures
-- [AZURE_PLAYWRIGHT_TESTING.md](testing/AZURE_PLAYWRIGHT_TESTING.md) - Playwright testing guide
-- [AZURE_PLAYWRIGHT_TESTING_IMPLEMENTATION.md](testing/AZURE_PLAYWRIGHT_TESTING_IMPLEMENTATION.md) - Implementation details
 - Test results and analysis documents
 
 ## 📊 Data Management
@@ -158,4 +156,3 @@ When adding new documentation:
 - [Quick Start Guide](../QUICKSTART.md) - Local development setup
 - [Scripts Documentation](../scripts/README.md) - Automation scripts
 - [Test Scripts](../tests/scripts/README.md) - API and integration tests
-- [Playwright Tests](../tests/README.md) - E2E testing

@@ -5,8 +5,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.45.15.27210",
-      "templateHash": "7323098665369549255"
+      "version": "0.47.16.16243",
+      "templateHash": "59048533278351162"
     }
   },
   "parameters": {
@@ -145,19 +145,6 @@
     "skipLocalDevRoleAssignments": {
       "type": "bool",
       "defaultValue": false
-    },
-    "playwrightLocation": {
-      "type": "string",
-      "defaultValue": "westeurope",
-      "allowedValues": [
-        "eastus",
-        "westus3",
-        "westeurope",
-        "eastasia"
-      ],
-      "metadata": {
-        "description": "Location for Playwright Testing workspace. Must be one of: eastus, westus3, westeurope, eastasia. Defaults to resource group location."
-      }
     }
   },
   "variables": {
@@ -189,8 +176,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "6999132434655485989"
+              "version": "0.47.16.16243",
+              "templateHash": "9239900501522382895"
             }
           },
           "parameters": {
@@ -310,8 +297,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "6367746675453539079"
+              "version": "0.47.16.16243",
+              "templateHash": "306124859540674868"
             }
           },
           "parameters": {
@@ -497,6 +484,12 @@
                           "metadata": {
                             "description": "Queue for manufacturing AI agent invocations triggered by new sales orders"
                           }
+                        },
+                        {
+                          "name": "auto-promotion-queue",
+                          "metadata": {
+                            "description": "Queue for automatic AI promotion generation triggered by order volume thresholds"
+                          }
                         }
                       ]
                     }
@@ -539,6 +532,12 @@
                         },
                         {
                           "name": "reviewModerationJob"
+                        },
+                        {
+                          "name": "awAutoPromotionConfig"
+                        },
+                        {
+                          "name": "awMcpTasks"
                         }
                       ]
                     }
@@ -6353,8 +6352,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "13223120787574541563"
+              "version": "0.47.16.16243",
+              "templateHash": "6455891539550953524"
             }
           },
           "parameters": {
@@ -6524,8 +6523,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "5476368709642498998"
+              "version": "0.47.16.16243",
+              "templateHash": "10860554919529235929"
             }
           },
           "parameters": {
@@ -6706,8 +6705,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "14986085228362006029"
+              "version": "0.47.16.16243",
+              "templateHash": "15282231467800219338"
             }
           },
           "parameters": {
@@ -7289,8 +7288,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "13255219892727585617"
+              "version": "0.47.16.16243",
+              "templateHash": "7730974996821554002"
             }
           },
           "parameters": {
@@ -13452,8 +13451,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "15895117552752567338"
+              "version": "0.47.16.16243",
+              "templateHash": "3509946893525360579"
             }
           },
           "parameters": {
@@ -16733,8 +16732,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "7893334067048515735"
+              "version": "0.47.16.16243",
+              "templateHash": "17533276712343193574"
             }
           },
           "parameters": {
@@ -20563,197 +20562,6 @@
         "identity"
       ]
     },
-    "playwright": {
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
-      "name": "Deploy-Playwright-Testing-Workspace",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "playwrightWorkspaceName": {
-            "value": "[format('pw{0}', parameters('resourceToken'))]"
-          },
-          "location": {
-            "value": "[parameters('playwrightLocation')]"
-          },
-          "identityName": {
-            "value": "[parameters('identityName')]"
-          },
-          "aadAdminObjectId": {
-            "value": "[parameters('aadAdminObjectId')]"
-          },
-          "storageAccountName": {
-            "value": "[reference('storage').outputs.storageAccountName.value]"
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "18282449069446797992"
-            }
-          },
-          "parameters": {
-            "playwrightWorkspaceName": {
-              "type": "string",
-              "defaultValue": "[format('pw{0}', toLower(uniqueString(resourceGroup().id)))]"
-            },
-            "location": {
-              "type": "string",
-              "allowedValues": [
-                "eastus",
-                "westus3",
-                "westeurope",
-                "eastasia"
-              ],
-              "metadata": {
-                "description": "Location for Playwright Workspaces in Azure LoadTest Service. Supported: eastus, westus3, westeurope, eastasia"
-              }
-            },
-            "identityName": {
-              "type": "string"
-            },
-            "aadAdminObjectId": {
-              "type": "string"
-            },
-            "storageAccountName": {
-              "type": "string"
-            }
-          },
-          "resources": [
-            {
-              "type": "Microsoft.Storage/storageAccounts/blobServices",
-              "apiVersion": "2023-01-01",
-              "name": "[format('{0}/{1}', parameters('storageAccountName'), 'default')]",
-              "properties": {
-                "cors": {
-                  "corsRules": [
-                    {
-                      "allowedOrigins": [
-                        "https://trace.playwright.dev"
-                      ],
-                      "allowedMethods": [
-                        "GET",
-                        "OPTIONS"
-                      ],
-                      "maxAgeInSeconds": 86400,
-                      "exposedHeaders": [
-                        "*"
-                      ],
-                      "allowedHeaders": [
-                        "*"
-                      ]
-                    }
-                  ]
-                }
-              }
-            },
-            {
-              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
-              "apiVersion": "2023-01-01",
-              "name": "[format('{0}/{1}/{2}', parameters('storageAccountName'), 'default', 'playwright-reports')]",
-              "properties": {
-                "publicAccess": "None",
-                "metadata": {
-                  "description": "Container for Playwright test reports, traces, and artifacts",
-                  "createdBy": "Bicep deployment"
-                }
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccountName'), 'default')]"
-              ]
-            },
-            {
-              "type": "Microsoft.LoadTestService/playwrightWorkspaces",
-              "apiVersion": "2026-01-01-preview",
-              "name": "[parameters('playwrightWorkspaceName')]",
-              "location": "[parameters('location')]",
-              "properties": {
-                "regionalAffinity": "Disabled",
-                "localAuth": "Disabled",
-                "storageUri": "[reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').primaryEndpoints.blob]"
-              },
-              "tags": {
-                "Environment": "Development",
-                "Purpose": "E2E Testing",
-                "Service": "Playwright Workspaces (Azure LoadTest Service)"
-              }
-            },
-            {
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName'))]",
-              "name": "[guid(resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName')), parameters('aadAdminObjectId'), 'LoadTestOwner')]",
-              "properties": {
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '45bb0b16-2f0c-4e78-afaa-a07599b003f6')]",
-                "principalId": "[parameters('aadAdminObjectId')]",
-                "principalType": "User"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName'))]"
-              ]
-            },
-            {
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName'))]",
-              "name": "[guid(resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName')), parameters('identityName'), 'LoadTestContributor')]",
-              "properties": {
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '749a398d-560b-491b-bb21-08924219302e')]",
-                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').principalId]",
-                "principalType": "ServicePrincipal"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName'))]"
-              ]
-            }
-          ],
-          "outputs": {
-            "playwrightWorkspaceId": {
-              "type": "string",
-              "value": "[resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName'))]"
-            },
-            "playwrightWorkspaceName": {
-              "type": "string",
-              "value": "[parameters('playwrightWorkspaceName')]"
-            },
-            "playwrightWorkspaceGuid": {
-              "type": "string",
-              "value": "[reference(resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName')), '2026-01-01-preview').workspaceId]"
-            },
-            "playwrightDashboardUrl": {
-              "type": "string",
-              "value": "[format('https://portal.azure.com/#resource{0}', resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName')))]"
-            },
-            "playwrightServiceUrl": {
-              "type": "string",
-              "value": "[format('{0}/browsers', replace(reference(resourceId('Microsoft.LoadTestService/playwrightWorkspaces', parameters('playwrightWorkspaceName')), '2026-01-01-preview').dataplaneUri, 'https://', 'wss://'))]"
-            },
-            "storageAccountName": {
-              "type": "string",
-              "value": "[parameters('storageAccountName')]"
-            },
-            "reportsContainerName": {
-              "type": "string",
-              "value": "playwright-reports"
-            },
-            "reportsContainerUrl": {
-              "type": "string",
-              "value": "[format('{0}playwright-reports', reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').primaryEndpoints.blob)]"
-            }
-          }
-        }
-      },
-      "dependsOn": [
-        "storage"
-      ]
-    },
     "containerApp": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
@@ -20792,8 +20600,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "7625874132658260688"
+              "version": "0.47.16.16243",
+              "templateHash": "8407102450684763321"
             }
           },
           "parameters": {
@@ -20964,8 +20772,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "12745659126412732316"
+              "version": "0.47.16.16243",
+              "templateHash": "4117054622421922461"
             }
           },
           "parameters": {
@@ -21250,8 +21058,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "7154007883298033186"
+              "version": "0.47.16.16243",
+              "templateHash": "980004695842396499"
             }
           },
           "parameters": {
@@ -21499,8 +21307,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "4611779755395904322"
+              "version": "0.47.16.16243",
+              "templateHash": "17976053837122481582"
             }
           },
           "parameters": {
@@ -21864,8 +21672,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "17287136801107821388"
+              "version": "0.47.16.16243",
+              "templateHash": "5935199726157942168"
             }
           },
           "parameters": {
@@ -22056,8 +21864,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "8335343415856599050"
+              "version": "0.47.16.16243",
+              "templateHash": "5247877801635725312"
             }
           },
           "parameters": {
@@ -22234,8 +22042,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "10900945022132105995"
+              "version": "0.47.16.16243",
+              "templateHash": "1029480156585650318"
             }
           },
           "parameters": {
@@ -22482,8 +22290,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "12339850627667353712"
+              "version": "0.47.16.16243",
+              "templateHash": "14737904743309205715"
             }
           },
           "parameters": {
@@ -22742,8 +22550,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "5748944026988859458"
+              "version": "0.47.16.16243",
+              "templateHash": "6167207995150037142"
             }
           },
           "parameters": {
@@ -23040,7 +22848,15 @@
       "type": "string",
       "value": "[reference('aifoundry').outputs.projectResourceId.value]"
     },
+    "AZURE_AI_PROJECT_ID": {
+      "type": "string",
+      "value": "[reference('aifoundry').outputs.projectResourceId.value]"
+    },
     "AI_FOUNDRY_PROJECT_ENDPOINT": {
+      "type": "string",
+      "value": "[reference('aifoundry').outputs.projectEndpoint.value]"
+    },
+    "FOUNDRY_PROJECT_ENDPOINT": {
       "type": "string",
       "value": "[reference('aifoundry').outputs.projectEndpoint.value]"
     },
@@ -23055,38 +22871,6 @@
     "WEB_PUBSUB_HOST_NAME": {
       "type": "string",
       "value": "[reference('webpubsub').outputs.webPubSubHostName.value]"
-    },
-    "PLAYWRIGHT_WORKSPACE_ID": {
-      "type": "string",
-      "value": "[reference('playwright').outputs.playwrightWorkspaceId.value]"
-    },
-    "PLAYWRIGHT_WORKSPACE_NAME": {
-      "type": "string",
-      "value": "[reference('playwright').outputs.playwrightWorkspaceName.value]"
-    },
-    "PLAYWRIGHT_WORKSPACE_GUID": {
-      "type": "string",
-      "value": "[reference('playwright').outputs.playwrightWorkspaceGuid.value]"
-    },
-    "PLAYWRIGHT_DASHBOARD_URL": {
-      "type": "string",
-      "value": "[reference('playwright').outputs.playwrightDashboardUrl.value]"
-    },
-    "PLAYWRIGHT_SERVICE_URL": {
-      "type": "string",
-      "value": "[reference('playwright').outputs.playwrightServiceUrl.value]"
-    },
-    "PLAYWRIGHT_STORAGE_ACCOUNT": {
-      "type": "string",
-      "value": "[reference('playwright').outputs.storageAccountName.value]"
-    },
-    "PLAYWRIGHT_REPORTS_CONTAINER": {
-      "type": "string",
-      "value": "[reference('playwright').outputs.reportsContainerName.value]"
-    },
-    "PLAYWRIGHT_REPORTS_URL": {
-      "type": "string",
-      "value": "[reference('playwright').outputs.reportsContainerUrl.value]"
     }
   }
 }

@@ -4,7 +4,7 @@ This directory contains shell-based API and integration tests for the AdventureW
 
 ## Overview
 
-These scripts test the AdventureWorks APIs and Azure Functions directly using curl and jq. They complement the Playwright E2E tests found in the parent `tests/` directory.
+These scripts test the AdventureWorks APIs and Azure Functions directly using curl and jq.
 
 ## Prerequisites
 
@@ -37,15 +37,6 @@ These scripts test the AdventureWorks APIs and Azure Functions directly using cu
 - **test-product-reviews.sh** - Product review creation and retrieval
 - **test-telemetry.sh** - Application Insights telemetry generation
 - **test-robots-sitemap.sh** - SEO robots.txt and sitemap.xml generation
-
-### Azure Playwright Tests
-
-- **run-tests-on-azure-playwright.sh** - Runs Playwright E2E tests against Azure deployment
-  
-  **Note:** Ensure Playwright browsers are installed first:
-  ```bash
-  npx playwright install
-  ```
 
 ## Usage
 
@@ -148,5 +139,5 @@ When adding new test scripts:
 ## Related Documentation
 
 - [Main Testing Guide](../../docs/testing/AI_AND_MCP_TESTING_GUIDE.md)
-- [Playwright Tests](../README.md)
+- [Test scripts](../README.md)
 - [API Documentation](../../api/README.md)

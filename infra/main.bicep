@@ -38,9 +38,6 @@ param AIServicesKind string = 'AIServices'
 param publicNetworkAccess string = 'Enabled'
 param sqlDatabaseName string
 param skipLocalDevRoleAssignments bool = false
-@description('Location for Playwright Testing workspace. Must be one of: eastus, westus3, westeurope, eastasia. Defaults to resource group location.')
-@allowed(['eastus', 'westus3', 'westeurope', 'eastasia'])
-param playwrightLocation string = 'westeurope'
 
 var chatGptDeploymentCapacity = availableChatGptDeploymentCapacity / 10
 var embeddingDeploymentCapacity = availableEmbeddingDeploymentCapacity / 10
@@ -178,17 +175,6 @@ module appinsights 'modules/applicationinsights.bicep' = {
   dependsOn: [
     identity
   ]
-}
-
-module playwright 'modules/playwright.bicep' = {
-  name: 'Deploy-Playwright-Testing-Workspace'
-  params: {
-    playwrightWorkspaceName: 'pw${resourceToken}'
-    location: playwrightLocation
-    identityName: identityName
-    aadAdminObjectId: aadAdminObjectId
-    storageAccountName: storage.outputs.storageAccountName
-  }
 }
 
 module containerApp 'modules/aca.bicep' = {
@@ -422,13 +408,3 @@ output CONTAINER_APP_ENVIRONMENT_NAME string = containerApp.outputs.containerApp
 
 // Web PubSub outputs (real-time push notifications)
 output WEB_PUBSUB_HOST_NAME string = webpubsub.outputs.webPubSubHostName
-
-// Playwright Workspaces outputs (Azure LoadTest Service)
-output PLAYWRIGHT_WORKSPACE_ID string = playwright.outputs.playwrightWorkspaceId
-output PLAYWRIGHT_WORKSPACE_NAME string = playwright.outputs.playwrightWorkspaceName
-output PLAYWRIGHT_WORKSPACE_GUID string = playwright.outputs.playwrightWorkspaceGuid
-output PLAYWRIGHT_DASHBOARD_URL string = playwright.outputs.playwrightDashboardUrl
-output PLAYWRIGHT_SERVICE_URL string = playwright.outputs.playwrightServiceUrl
-output PLAYWRIGHT_STORAGE_ACCOUNT string = playwright.outputs.storageAccountName
-output PLAYWRIGHT_REPORTS_CONTAINER string = playwright.outputs.reportsContainerName
-output PLAYWRIGHT_REPORTS_URL string = playwright.outputs.reportsContainerUrl

@@ -67,7 +67,7 @@ echo ""
 # Get URLs from azd environment
 static_web_url=$(get_azd_value "SERVICE_APP_URL")
 api_url=$(get_azd_value "API_URL")
-admin_url=$(get_azd_value "APP_ADMIN_REDIRECT_URI")
+admin_url=$(get_azd_value "APP_ADMIN_URL")
 manufacturing_url=$(get_azd_value "APP_MANUFACTURING_URL")
 mcp_inspector_url=$(get_azd_value "MCP_INSPECTOR_URL")
 
