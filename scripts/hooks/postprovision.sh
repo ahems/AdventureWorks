@@ -54,11 +54,23 @@ if [ -n "$CONTAINER_APP_ENV_NAME" ] && [ "$CONTAINER_APP_ENV_NAME" != "ERROR: ke
                 --scope "$ENV_RESOURCE_ID" \
                 --assignee "$CURRENT_USER_OBJECT_ID" \
                 --role "Contributor" \
-                --output none 2>/dev/null || echo "Note: Role assignment may already exist or failed (this is OK)"
+                --output none
             echo "  Aspire Dashboard access configured successfully"
         else
             echo "  Aspire Dashboard access already configured"
         fi
+
+        # Do not continue if the exact user assignment is not visible yet.
+        VERIFIED_ASSIGNMENT=$(az role assignment list \
+            --scope "$ENV_RESOURCE_ID" \
+            --assignee "$CURRENT_USER_OBJECT_ID" \
+            --role "Contributor" \
+            --query "[?principalId=='$CURRENT_USER_OBJECT_ID'].id" -o tsv)
+        if [ -z "$VERIFIED_ASSIGNMENT" ]; then
+            echo "ERROR: Could not verify the explicit Contributor assignment required by the Aspire Dashboard."
+            exit 1
+        fi
+        echo "  Verified explicit Contributor assignment for the signed-in user"
     else
         echo "  WARNING: Could not determine current user or resource group. Skipping Aspire Dashboard role assignment."
     fi
