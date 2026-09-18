@@ -80,6 +80,11 @@ public class FinancialReportingFunction
                     totalWriteOffs   = summary.TotalScrapWriteOffs,
                     transactionCount = summary.ScrapCount,
                 },
+                revenue = new
+                {
+                    totalRevenue     = summary.TotalRevenue,
+                    transactionCount = summary.SalesCount,
+                },
                 totals = new
                 {
                     totalOperatingCost    = summary.TotalOperatingCost,

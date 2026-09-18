@@ -149,6 +149,8 @@ public class SupplyChainService
         sb.AppendLine($"Vendor: {root.GetStringOrDefault("vendorName")} (ID: {root.GetStringOrDefault("vendorId")})");
         sb.AppendLine($"Product: {root.GetStringOrDefault("productName")} (ID: {root.GetIntOrDefault("productId")})");
         sb.AppendLine($"Requested qty: {qty}");
+        sb.AppendLine($"Min order qty: {root.GetIntOrDefault("minOrderQty")}");  // MUST order at least this many
+        sb.AppendLine($"Max order qty: {root.GetIntOrDefault("maxOrderQty")}");
         sb.AppendLine($"Unit price: ${root.GetDecimalOrDefault("unitPrice"):N4}");
         sb.AppendLine($"Total cost: ${root.GetDecimalOrDefault("totalCost"):N2}");
         sb.AppendLine($"Stock available: {root.GetIntOrDefault("stockAvailable")}");
@@ -286,5 +288,25 @@ public class SupplyChainService
         var json = await resp.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
         return doc.RootElement.GetStringOrDefault("message") ?? $"Vendor '{vendorId}' restocked.";
+    }
+
+    // ── Agent proposals ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Creates a supply order proposal for human review (ProposePending mode).
+    /// Returns the proposal ID on success.
+    /// </summary>
+    public async Task<string> ProposeSupplyOrderAsync(
+        string vendorId, int productId, int qty, string rationale, int salesOrderId, string runId)
+    {
+        var body = new { type = "supply", productId, qty, vendorId, rationale, salesOrderId, runId };
+        var resp = await _http.PostAsJsonAsync("api/manufacturing/proposals", body, _json);
+        if (!resp.IsSuccessStatusCode)
+            return $"Error creating supply proposal: {resp.StatusCode} — {await resp.Content.ReadAsStringAsync()}";
+
+        var json = await resp.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        var proposalId = doc.RootElement.GetStringOrDefault("proposalId") ?? "(unknown)";
+        return $"Supply order proposal created. ProposalID={proposalId}. A human operator must approve this before the order is placed.";
     }
 }

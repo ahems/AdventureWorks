@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { Link as RouterLink } from "react-router-dom";
+import { CardGridSkeleton } from "@/components/LoadingSkeletons";
 import {
   Plus,
   Search,
@@ -13,6 +14,7 @@ import {
   Filter,
   Link,
   ExternalLink,
+  Bot,
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
@@ -69,7 +71,8 @@ import {
 
 const PromotionsPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
-  const { data: apiPromotions = [] } = useAdminSpecialOffers();
+  const { data: apiPromotions = [], isLoading: promotionsLoading } =
+    useAdminSpecialOffers();
   const { data: apiOfferProducts = [] } = useAdminSpecialOfferProducts();
   const { data: products = [] } = useAdminAllProducts();
   const createOffer = useCreateSpecialOffer();
@@ -414,6 +417,13 @@ const PromotionsPage: React.FC = () => {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <RouterLink
+              to="/auto-promotions"
+              className="doodle-button doodle-button-accent flex items-center gap-2 px-3 py-2 text-sm font-doodle"
+            >
+              <Bot className="w-4 h-4" />
+              Automate with AI
+            </RouterLink>
             <GeneratePromotionWizardDialog existingOffers={apiPromotions} />
             <Button
               onClick={openCreateDialog}
@@ -558,7 +568,9 @@ const PromotionsPage: React.FC = () => {
         </p>
 
         {/* Promotions Grid */}
-        {filteredPromotions.length === 0 ? (
+        {promotionsLoading ? (
+          <CardGridSkeleton count={6} />
+        ) : filteredPromotions.length === 0 ? (
           <div className="doodle-card p-8 text-center">
             <Tag className="w-12 h-12 text-doodle-text/30 mx-auto mb-4" />
             <p className="font-doodle text-doodle-text/60">

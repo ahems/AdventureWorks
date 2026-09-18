@@ -22,16 +22,19 @@ public class PurchaseOrderProcessorFunction
 {
     private readonly SupplyChainService _svc;
     private readonly ILogger<PurchaseOrderProcessorFunction> _logger;
+    private readonly WebPubSubService _webPubSub;
 
     // Delay from pending → approved (sim minutes).
     private const int PendingToApprovedSimMin = 5;
 
     public PurchaseOrderProcessorFunction(
         SupplyChainService service,
-        ILogger<PurchaseOrderProcessorFunction> logger)
+        ILogger<PurchaseOrderProcessorFunction> logger,
+        WebPubSubService webPubSub)
     {
         _svc    = service;
         _logger = logger;
+        _webPubSub = webPubSub;
     }
 
     [Function("PurchaseOrderProcessor")]
@@ -130,33 +133,11 @@ public class PurchaseOrderProcessorFunction
 
         _logger.LogInformation("Order {OrderId} → {Status}", msg.OrderId, resolvedTarget);
 
+        await _webPubSub.SendToGroupAsync("supply-chain", new { @event = "po-status-changed", purchaseOrderId = msg.OrderId, newStatus = resolvedTarget });
+
         // Schedule next step (only if we reached "approved" — complete/rejected are terminal)
         if (resolvedTarget == "approved")
             await ScheduleDeliveryAsync(msg.OrderId);
-
-        // Schedule deferred vendor restock after successful delivery
-        if (resolvedTarget == "complete")
-        {
-            var order = await _svc.GetOrderAsync(msg.OrderId);
-            if (order != null)
-            {
-                var vendorInfo   = await _svc.GetVendorAsync(order.VendorId);
-                int restockHrs   = vendorInfo?.RestockDelaySimHrs ?? 12;
-                double simScale  = GetSimTimeScale();
-                int restockSec   = (int)(restockHrs * 3600.0 / simScale);
-
-                await EnqueueMessageAsync(new PurchaseOrderMessage
-                {
-                    MessageType    = "vendor-restock",
-                    VendorId       = order.VendorId,
-                    ProductId      = order.ProductId,
-                    ScheduledAtUtc = DateTime.UtcNow.AddSeconds(restockSec),
-                }, visibilityDelaySec: restockSec);
-
-                _logger.LogDebug("Scheduled restock for vendor {VendorId} ProductID={ProductId} in {Sec}s",
-                    order.VendorId, order.ProductId, restockSec);
-            }
-        }
     }
 
     /// <summary>
@@ -170,8 +151,8 @@ public class PurchaseOrderProcessorFunction
 
         var vendor      = await _svc.GetVendorAsync(order.VendorId);
         int leadDays    = vendor?.DefaultLeadTimeDays ?? 2;
-        double simScale = GetSimTimeScale();
-        int deliverySec = (int)(leadDays * 24 * 60 * 60.0 / simScale);
+        double effScale = await _svc.GetEffectiveTimeScaleAsync();
+        int deliverySec = Math.Max(1, (int)(leadDays * 24 * 60 * 60.0 / effScale));
 
         await EnqueueMessageAsync(new PurchaseOrderMessage
         {
@@ -202,8 +183,9 @@ public class PurchaseOrderProcessorFunction
             return;
         }
 
-        await _svc.RestockVendorAsync(msg.VendorId, msg.ProductId);
-        _logger.LogInformation("Restocked vendor {VendorId} productId={ProductId}", msg.VendorId, msg.ProductId);
+        await _svc.RestockVendorScaledAsync(msg.VendorId, msg.ProductId, msg.OrderedQty);
+        _logger.LogInformation("Demand-scaled restock for vendor {VendorId} productId={ProductId} (triggeredByQty={Qty})",
+            msg.VendorId, msg.ProductId, msg.OrderedQty);
     }
 
     // ── Queue helper ──────────────────────────────────────────────────────────
@@ -218,32 +200,34 @@ public class PurchaseOrderProcessorFunction
             visibilityTimeout: TimeSpan.FromSeconds(Math.Max(0, visibilityDelaySec)));
     }
 
+    private static QueueClient? _cachedQueueClient;
+    private static readonly SemaphoreSlim _queueInitLock = new(1, 1);
+
     private static async Task<QueueClient> GetQueueClientAsync()
     {
-        string? queueUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
-        QueueClient client;
-        if (!string.IsNullOrEmpty(queueUri))
+        if (_cachedQueueClient != null) return _cachedQueueClient;
+        await _queueInitLock.WaitAsync();
+        try
         {
-            var svc = new QueueServiceClient(
-                new Uri(queueUri),
-                new Azure.Identity.DefaultAzureCredential());
-            client = svc.GetQueueClient(SupplyChainService.QUEUE_NAME);
+            if (_cachedQueueClient != null) return _cachedQueueClient;
+            string? queueUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
+            QueueClient client;
+            if (!string.IsNullOrEmpty(queueUri))
+            {
+                var svc = new QueueServiceClient(
+                    new Uri(queueUri),
+                    new Azure.Identity.DefaultAzureCredential());
+                client = svc.GetQueueClient(SupplyChainService.QUEUE_NAME);
+            }
+            else
+            {
+                string connStr = Environment.GetEnvironmentVariable("AzureWebJobsStorage") ?? "UseDevelopmentStorage=true";
+                client = new QueueClient(connStr, SupplyChainService.QUEUE_NAME,
+                    new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
+            }
+            _cachedQueueClient = client;
+            return client;
         }
-        else
-        {
-            string connStr = Environment.GetEnvironmentVariable("AzureWebJobsStorage") ?? "UseDevelopmentStorage=true";
-            client = new QueueClient(connStr, SupplyChainService.QUEUE_NAME,
-                new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
-        }
-        await client.CreateIfNotExistsAsync();
-        return client;
-    }
-
-    private static double GetSimTimeScale()
-    {
-        if (double.TryParse(
-                Environment.GetEnvironmentVariable("SIMULATION_TIME_SCALE_FACTOR"),
-                out double f) && f > 0) return f;
-        return 60.0; // default: 1 sim-min = 1 real sec
+        finally { _queueInitLock.Release(); }
     }
 }

@@ -67,6 +67,7 @@ export interface Product {
   SpecialOfferID?: number;
   DiscountPct?: number; // Decimal format (e.g., 0.5 for 50% off)
   SpecialOfferDescription?: string;
+  SpecialOfferEndDate?: string;
   // Photo data (single photo - legacy support)
   ThumbNailPhoto?: string | null;
   LargePhoto?: string | null;
@@ -100,7 +101,7 @@ export const getSalePrice = (product: Product): number | null => {
 export const isVariantAvailable = (
   product: Product,
   selectedSize?: string,
-  selectedColor?: string
+  selectedColor?: string,
 ): boolean => {
   if (
     !product.unavailableVariants ||

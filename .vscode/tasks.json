@@ -128,22 +128,6 @@
       }
     },
     {
-      "label": "test:admin",
-      "type": "shell",
-      "command": "npx",
-      "args": [
-        "playwright",
-        "test",
-        "-c",
-        "tests/playwright.admin.config.ts",
-        "--reporter=list"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "problemMatcher": []
-    },
-    {
       "label": "deploy app-admin",
       "type": "shell",
       "command": "azd",

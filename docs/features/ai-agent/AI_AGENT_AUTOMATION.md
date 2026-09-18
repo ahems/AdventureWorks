@@ -4,7 +4,7 @@ This document describes the automated AI Agent creation process integrated into 
 
 ## Overview
 
-During `azd provision`, the deployment automatically creates **fifteen Azure AI Foundry Agents** across the eshop and admin portal surfaces. This eliminates the need for manual agent setup and ensures agents are always configured correctly with the latest deployment.
+During the root `azd up` or `azd deploy` lifecycle, the deployment automatically creates the Azure AI Foundry agents used by the eshop, admin portal, and manufacturing surfaces. This eliminates the need for manual agent setup and ensures agents are configured against the active Foundry project.
 
 ## Automated Process
 
@@ -18,7 +18,7 @@ When you run `azd up` or `azd provision`, the system automatically:
    - Azure Container Apps (api-functions, api-mcp, DAB)
    - All supporting Azure resources
 
-2. **Creates Foundry Agents** (`scripts/utilities/create-foundry-agents.sh`, called from `postprovision.sh`)
+2. **Creates prompt agents** (`scripts/utilities/create-foundry-agents.sh`, called from `postprovision.sh`)
 
    **Eshop agents** (customer-facing):
    - **Eshop Chat Agent** (`AI_AGENT_CHAT_ID`) — customer service chat, product recommendations, order tracking
@@ -38,15 +38,16 @@ When you run `azd up` or `azd provision`, the system automatically:
    - **Admin Promotion Intent Agent** — classifies promotion campaign generation requests
    - **Admin Promotion Workflow Agent** (`AI_AGENT_WORKFLOW_PROMOTION_ID`) — gathers promo parameters, invokes promotion agent
 
-   **Autonomous (fire-and-forget) agents:**
-   - **Manufacturing Agent** (`AI_AGENT_MANUFACTURING_ID`) — triggered on new order placement via SQL Change Tracking; checks inventory and manufacturing feasibility without human interaction
+     **Autonomous hosted agent:**
+
+   - **Manufacturing Agent** (`manufacturing-agent` service in the root `azure.yaml`) — deployed by root `azd deploy`, then wired to Functions through `MANUFACTURING_AGENT_ENDPOINT`; triggered on new order placement via SQL Change Tracking
 
    Each agent that requires live data is registered with two MCP tool servers:
    - `api-mcp` service (semantic product/catalog tools)
    - DAB `/mcp` endpoint (raw entity data tools)
 
-3. **Injects Agent IDs** (`scripts/hooks/api-functions-postdeploy.sh`)
-   - After `azd deploy`, patches the `api-functions` Container App with all agent IDs as environment variables
+3. **Injects Agent IDs and hosted-agent endpoint** (`scripts/hooks/api-functions-postdeploy.sh` and root `scripts/hooks/postdeploy.sh`)
+   - After all services deploy, patches the `api-functions` app with prompt-agent IDs and the hosted Manufacturing agent endpoint
 
 4. **Environment Variables** (available in azd environment)
    - `AI_FOUNDRY_PROJECT_ENDPOINT`: Azure AI Foundry project endpoint
@@ -59,7 +60,7 @@ When you run `azd up` or `azd provision`, the system automatically:
    - `AI_AGENT_WORKFLOW_CHAT_ID`: Eshop workflow routing agent
    - `AI_AGENT_WORKFLOW_PROMOTION_ID`: Admin promotion workflow agent
    - `AI_AGENT_WORKFLOW_ORDER_ID`: Admin order workflow agent
-   - `AI_AGENT_MANUFACTURING_ID`: Autonomous manufacturing agent
+   - `MANUFACTURING_AGENT_ENDPOINT`: Hosted Manufacturing agent Responses endpoint
    - `MCP_SERVICE_URL`: api-mcp service endpoint
 
 ## Agent Configuration

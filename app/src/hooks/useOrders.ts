@@ -98,6 +98,7 @@ export const getOrderStatusText = (status: number): string => {
     4: "Rejected",
     5: "Shipped",
     6: "Cancelled",
+    7: "Delivered",
   };
   return statusMap[status] || "Unknown";
 };
@@ -110,6 +111,7 @@ export const getOrderStatusColor = (status: number): string => {
     4: "text-red-600 bg-red-50 border-red-200",
     5: "text-green-600 bg-green-50 border-green-200",
     6: "text-gray-600 bg-gray-50 border-gray-200",
+    7: "text-teal-600 bg-teal-50 border-teal-200",
   };
   return colorMap[status] || "text-gray-600 bg-gray-50 border-gray-200";
 };

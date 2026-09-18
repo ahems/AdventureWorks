@@ -184,21 +184,25 @@ resource storageAccountConnection 'Microsoft.CognitiveServices/accounts/projects
   }
 }
 
-// Connects the project to Application Insights for the Foundry portal Tracing experience.
+// Connects the Foundry resource to Application Insights for the portal Tracing experience.
+// Must be at the ACCOUNT level (not project) per Microsoft docs: "Associate a resource once per Foundry resource"
+// so tracing is available in all projects within the resource.
 // Requires the account to have a SystemAssigned identity so Foundry can store the ApiKey in
 // its internally managed Key Vault workspace identity.
-resource appInsightsConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-06-01' = {
+// Reference: https://github.com/microsoft-foundry/foundry-samples/blob/main/infrastructure/infrastructure-setup-bicep/01-connections/connection-application-insights.bicep
+resource appInsightsConnection 'Microsoft.CognitiveServices/accounts/connections@2025-06-01' = {
   name: appInsightConnectionName
-  parent: aiProject
+  parent: account
   properties: {
     category: 'AppInsights'
     authType: 'ApiKey'
     isSharedToAll: true
-    target: 'https://eastus2-3.in.applicationinsights.azure.com/'
+    target: appInsightsId
     credentials: {
       key: appInsightConnectionString
     }
     metadata: {
+      ApiType: 'Azure'
       ResourceId: appInsightsId
     }
   }
@@ -270,6 +274,91 @@ resource openAiUserLocalRoleAssignment 'Microsoft.Authorization/roleAssignments@
   scope: account
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a001fd3d-188f-4b5d-821b-7da978bf7442') // Cognitive Services OpenAI Contributor
+    principalId: aadAdminObjectId
+    principalType: 'User'
+  }
+}
+
+// ── Project-scoped role assignments ──────────────────────────────────────────
+// The Agents data-plane API (AIServices/agents/write) requires roles at the project scope.
+// Account-level roles do NOT cascade to project data-plane operations.
+
+// Grant Azure AI Developer on the project to the managed identity (for runtime agent invocation)
+resource aiDeveloperProjectRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = {
+  name: guid(aiProject.id, azidentity.id, '64702f94-c441-49e6-a78b-ef80e0188fee')
+  scope: aiProject
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '64702f94-c441-49e6-a78b-ef80e0188fee') // Azure AI Developer
+    principalId: azidentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Grant Azure AI Developer on the project to the local dev user (for agent creation scripts)
+resource aiDeveloperLocalProjectRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = if (!skipLocalDevRoleAssignments) {
+  name: guid(aiProject.id, aadAdminObjectId, '64702f94-c441-49e6-a78b-ef80e0188fee')
+  scope: aiProject
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '64702f94-c441-49e6-a78b-ef80e0188fee') // Azure AI Developer
+    principalId: aadAdminObjectId
+    principalType: 'User'
+  }
+}
+
+// Grant Cognitive Services OpenAI Contributor on the project to the local dev user
+resource openAiUserLocalProjectRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = if (!skipLocalDevRoleAssignments) {
+  name: guid(aiProject.id, aadAdminObjectId, 'a001fd3d-188f-4b5d-821b-7da978bf7442')
+  scope: aiProject
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a001fd3d-188f-4b5d-821b-7da978bf7442') // Cognitive Services OpenAI Contributor
+    principalId: aadAdminObjectId
+    principalType: 'User'
+  }
+}
+
+// ── Custom role: AIServices data-plane access ────────────────────────────────
+// The built-in "Azure AI Developer" role does NOT include the AIServices/* data actions
+// needed for agent creation, invocation, and memory store operations.
+// This custom role grants the broad AIServices/* data action at the subscription level.
+resource foundryAgentsRoleDefinition 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
+  name: guid(subscription().id, resourceGroup().id, 'foundry-agents-data-role')
+  properties: {
+    roleName: 'AdventureWorks Foundry Agents ${uniqueString(resourceGroup().id)}'
+    description: 'Grants full AIServices data-plane access for Azure AI Foundry agents, memory stores, and related operations.'
+    type: 'CustomRole'
+    permissions: [
+      {
+        actions: []
+        notActions: []
+        dataActions: [
+          'Microsoft.CognitiveServices/accounts/AIServices/*'
+        ]
+        notDataActions: []
+      }
+    ]
+    assignableScopes: [
+      subscriptionResourceId('Microsoft.Resources/resourceGroups', resourceGroup().name)
+    ]
+  }
+}
+
+// Assign the custom AIServices role to the managed identity at project scope
+resource foundryAgentsProjectMiRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = {
+  name: guid(aiProject.id, azidentity.id, 'foundry-agents-data-role')
+  scope: aiProject
+  properties: {
+    roleDefinitionId: foundryAgentsRoleDefinition.id
+    principalId: azidentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Assign the custom AIServices role to the local dev user at project scope
+resource foundryAgentsProjectUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = if (!skipLocalDevRoleAssignments) {
+  name: guid(aiProject.id, aadAdminObjectId, 'foundry-agents-data-role')
+  scope: aiProject
+  properties: {
+    roleDefinitionId: foundryAgentsRoleDefinition.id
     principalId: aadAdminObjectId
     principalType: 'User'
   }

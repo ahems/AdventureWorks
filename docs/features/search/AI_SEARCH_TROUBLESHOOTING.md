@@ -32,14 +32,6 @@ AI search tests are failing because the semantic search API endpoint (`/api/sear
    # Returns: HTTP/2 500
    ```
 
-2. **Test failures**:
-   ```
-   tests/specs/ai-features.spec.ts:51:29
-   Error: expect(received).toBeGreaterThan(expected)
-   Expected: > 0
-   Received:   0
-   ```
-
 ### ⚠️ Additional Observations
 
 - ProductReview table is empty (0 records) - review search will return no results but shouldn't cause a 500 error
@@ -250,12 +242,6 @@ curl -X POST "https://av-func-ewphuc52etkbc.purplesky-9d5d92b9.eastus2.azurecont
 # }
 ```
 
-Then run the Playwright test:
-
-```bash
-npx playwright test ai-features -g "AI search with embeddings"
-```
-
 ## Next Steps
 
 1. **Immediate**: Verify embedding deployment name and update if needed
@@ -267,9 +253,8 @@ npx playwright test ai-features -g "AI search with embeddings"
 ## Related Files
 
 - `api-functions/Services/AIService.cs` - AI service with embedding generation
-- `api-functions/Services/ProductService.cs` - Product embedding search (line 439+)
-- `api-functions/Services/ReviewService.cs` - Review embedding search (line 120+)
+- `api-functions/Services/ProductService.cs` - Product embedding search
+- `api-functions/Services/ReviewService.cs` - Review embedding search
 - `api-functions/Functions/SemanticSearchFunction.cs` - HTTP endpoint
 - `app/src/hooks/useSemanticSearch.ts` - Frontend hook
 - `app/src/pages/SearchPage.tsx` - Search UI
-- `tests/specs/ai-features.spec.ts` - Test that's failing

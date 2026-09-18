@@ -1,7 +1,5 @@
 using System.ComponentModel;
 using AdventureWorks.Services;
-using Microsoft.ApplicationInsights;
-using Microsoft.ApplicationInsights.DataContracts;
 using ModelContextProtocol.Server;
 
 namespace AdventureWorks.Tools;
@@ -16,12 +14,10 @@ namespace AdventureWorks.Tools;
 public class BankMcpTools
 {
     private readonly BankService _bank;
-    private readonly TelemetryClient _telemetryClient;
 
-    public BankMcpTools(BankService bank, TelemetryClient telemetryClient)
+    public BankMcpTools(BankService bank)
     {
         _bank            = bank;
-        _telemetryClient = telemetryClient;
     }
 
     // ── Status ────────────────────────────────────────────────────────────────
@@ -30,20 +26,7 @@ public class BankMcpTools
     [Description("Get the current virtual bank status: all currency account balances and a USD-equivalent total calculated using live exchange rates. The USD account is seeded from total historical AdventureWorks profit on first use. Use this to understand the current financial position of the simulation.")]
     public async Task<string> GetBankStatus()
     {
-        using var op = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetBankStatus");
-        try
-        {
-            var result = await _bank.GetBankStatusAsync();
-            op.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", "GetBankStatus" } });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            op.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetBankStatus" } });
-            throw;
-        }
+        return await _bank.GetBankStatusAsync();
     }
 
     // ── Specific account ──────────────────────────────────────────────────────
@@ -53,25 +36,7 @@ public class BankMcpTools
     public async Task<string> GetBankAccount(
         [Description("ISO 4217 currency code (e.g. USD, EUR, GBP, CAD). Case insensitive.")] string currencyCode)
     {
-        using var op = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetBankAccount");
-        op.Telemetry.Properties["currencyCode"] = currencyCode;
-        try
-        {
-            var result = await _bank.GetAccountAsync(currencyCode);
-            op.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
-            {
-                { "tool", "GetBankAccount" },
-                { "currencyCode", currencyCode }
-            });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            op.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetBankAccount" }, { "currencyCode", currencyCode } });
-            throw;
-        }
+        return await _bank.GetAccountAsync(currencyCode);
     }
 
     // ── Transactions ──────────────────────────────────────────────────────────
@@ -82,26 +47,7 @@ public class BankMcpTools
         [Description("Optional ISO 4217 currency code to filter transactions (e.g. EUR). Leave empty or null to see all currencies.")] string? currencyCode = null,
         [Description("Maximum number of transactions to return (1–200). Defaults to 20.")] int maxCount = 20)
     {
-        using var op = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetBankTransactions");
-        op.Telemetry.Properties["currencyCode"] = currencyCode ?? "all";
-        op.Telemetry.Properties["maxCount"]     = maxCount.ToString();
-        try
-        {
-            var result = await _bank.GetTransactionsAsync(currencyCode, maxCount);
-            op.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
-            {
-                { "tool", "GetBankTransactions" },
-                { "currencyCode", currencyCode ?? "all" }
-            });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            op.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetBankTransactions" } });
-            throw;
-        }
+        return await _bank.GetTransactionsAsync(currencyCode, maxCount);
     }
 
     // ── Deposit ───────────────────────────────────────────────────────────────
@@ -115,28 +61,7 @@ public class BankMcpTools
         [Description("Optional reference ID linking to the originating event (e.g. sales order number, invoice ID).")] string? referenceId = null,
         [Description("Transaction type for categorisation. Use 'sale' for customer revenue, 'other' for miscellaneous credits.")] string transactionType = "sale")
     {
-        using var op = _telemetryClient.StartOperation<RequestTelemetry>("MCP_BankDeposit");
-        op.Telemetry.Properties["currencyCode"] = currencyCode;
-        op.Telemetry.Properties["amount"]       = amount.ToString("N4");
-        op.Telemetry.Properties["type"]         = transactionType;
-        try
-        {
-            var result = await _bank.DepositAsync(currencyCode, amount, description, referenceId, transactionType);
-            op.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
-            {
-                { "tool", "BankDeposit" },
-                { "currencyCode", currencyCode },
-                { "amount", amount.ToString("N4") }
-            });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            op.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "BankDeposit" } });
-            throw;
-        }
+        return await _bank.DepositAsync(currencyCode, amount, description, referenceId, transactionType);
     }
 
     // ── Withdrawal ────────────────────────────────────────────────────────────
@@ -150,28 +75,7 @@ public class BankMcpTools
         [Description("Optional reference ID linking to the originating event (e.g. purchase order number, payroll run ID).")] string? referenceId = null,
         [Description("Transaction type for reporting. Use 'purchase' for vendor payments, 'payroll' for worker wages, 'other' for miscellaneous debits.")] string transactionType = "purchase")
     {
-        using var op = _telemetryClient.StartOperation<RequestTelemetry>("MCP_BankWithdraw");
-        op.Telemetry.Properties["currencyCode"] = currencyCode;
-        op.Telemetry.Properties["amount"]       = amount.ToString("N4");
-        op.Telemetry.Properties["type"]         = transactionType;
-        try
-        {
-            var result = await _bank.WithdrawAsync(currencyCode, amount, description, referenceId, transactionType);
-            op.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string>
-            {
-                { "tool", "BankWithdraw" },
-                { "currencyCode", currencyCode },
-                { "amount", amount.ToString("N4") }
-            });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            op.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "BankWithdraw" } });
-            throw;
-        }
+        return await _bank.WithdrawAsync(currencyCode, amount, description, referenceId, transactionType);
     }
 
     // ── Currencies ────────────────────────────────────────────────────────────
@@ -180,20 +84,7 @@ public class BankMcpTools
     [Description("List all currencies supported by this virtual bank. Currency accounts are automatically created for every currency in the AdventureWorks Sales.Currency database table. New transactions in any of these currencies are accepted.")]
     public async Task<string> GetSupportedCurrencies()
     {
-        using var op = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetSupportedCurrencies");
-        try
-        {
-            var result = await _bank.GetCurrenciesAsync();
-            op.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", "GetSupportedCurrencies" } });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            op.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetSupportedCurrencies" } });
-            throw;
-        }
+        return await _bank.GetCurrenciesAsync();
     }
 
     // ── Financial reporting ───────────────────────────────────────────────────
@@ -202,20 +93,7 @@ public class BankMcpTools
     [Description("Get a financial summary across all simulators showing procurement spend (PO approvals and refunds), manufacturing WO overhead costs, payroll charges per routing operation, and scrap write-offs. Provides totals and transaction counts for each category.")]
     public async Task<string> GetFinancialSummary()
     {
-        using var op = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetFinancialSummary");
-        try
-        {
-            var result = await _bank.GetFinancialSummaryAsync();
-            op.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", "GetFinancialSummary" } });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            op.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetFinancialSummary" } });
-            throw;
-        }
+        return await _bank.GetFinancialSummaryAsync();
     }
 
     [McpServerTool]
@@ -223,20 +101,7 @@ public class BankMcpTools
     public async Task<string> GetProcurementTransactions(
         [Description("Maximum number of transactions to return (1–500). Default 20.")] int maxCount = 20)
     {
-        using var op = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetProcurementTransactions");
-        try
-        {
-            var result = await _bank.GetProcurementTransactionsAsync(maxCount);
-            op.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", "GetProcurementTransactions" } });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            op.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetProcurementTransactions" } });
-            throw;
-        }
+        return await _bank.GetProcurementTransactionsAsync(maxCount);
     }
 
     [McpServerTool]
@@ -245,19 +110,6 @@ public class BankMcpTools
         [Description("Filter type: 'all' (default), 'completions', 'payroll', or 'scrap'.")] string? type = null,
         [Description("Maximum number of transactions to return (1–500). Default 20.")] int maxCount = 20)
     {
-        using var op = _telemetryClient.StartOperation<RequestTelemetry>("MCP_GetManufacturingFinancials");
-        try
-        {
-            var result = await _bank.GetManufacturingFinancialsAsync(type, maxCount);
-            op.Telemetry.Success = true;
-            _telemetryClient.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", "GetManufacturingFinancials" }, { "type", type ?? "all" } });
-            return result;
-        }
-        catch (Exception ex)
-        {
-            op.Telemetry.Success = false;
-            _telemetryClient.TrackException(ex, new Dictionary<string, string> { { "tool", "GetManufacturingFinancials" } });
-            throw;
-        }
+        return await _bank.GetManufacturingFinancialsAsync(type, maxCount);
     }
 }

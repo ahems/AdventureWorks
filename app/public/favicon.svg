@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Doodle-style bicycle favicon for the e-shop -->
+  <!-- Rear wheel -->
+  <circle cx="145" cy="330" r="95" fill="none" stroke="#2d2d2d" stroke-width="22" stroke-linecap="round"/>
+  <!-- Front wheel -->
+  <circle cx="370" cy="330" r="95" fill="none" stroke="#2d2d2d" stroke-width="22" stroke-linecap="round"/>
+  <!-- Rear hub -->
+  <circle cx="145" cy="330" r="16" fill="none" stroke="#2d2d2d" stroke-width="12"/>
+  <!-- Frame - seat tube -->
+  <line x1="200" y1="165" x2="145" y2="330" stroke="#2d2d2d" stroke-width="18" stroke-linecap="round"/>
+  <!-- Frame - top tube -->
+  <line x1="200" y1="165" x2="330" y2="165" stroke="#2d2d2d" stroke-width="18" stroke-linecap="round"/>
+  <!-- Frame - down tube -->
+  <line x1="200" y1="165" x2="255" y2="330" stroke="#2d2d2d" stroke-width="18" stroke-linecap="round"/>
+  <!-- Frame - chain stay -->
+  <line x1="145" y1="330" x2="255" y2="330" stroke="#2d2d2d" stroke-width="14" stroke-linecap="round"/>
+  <!-- Frame - head tube / fork -->
+  <line x1="330" y1="165" x2="370" y2="330" stroke="#2d2d2d" stroke-width="18" stroke-linecap="round"/>
+  <!-- Frame - seat stay -->
+  <line x1="145" y1="330" x2="255" y2="330" stroke="#2d2d2d" stroke-width="14" stroke-linecap="round"/>
+  <!-- Seat -->
+  <ellipse cx="185" cy="148" rx="32" ry="14" fill="none" stroke="#2d2d2d" stroke-width="14" stroke-linecap="round"/>
+  <!-- Seat post -->
+  <line x1="195" y1="162" x2="200" y2="165" stroke="#2d2d2d" stroke-width="14" stroke-linecap="round"/>
+  <!-- Handlebar -->
+  <path d="M320 140 Q340 130 355 140 Q365 148 360 160" fill="none" stroke="#2d2d2d" stroke-width="14" stroke-linecap="round"/>
+  <!-- Pedal crank -->
+  <circle cx="255" cy="330" r="20" fill="none" stroke="#2d2d2d" stroke-width="12"/>
+</svg>

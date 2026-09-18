@@ -102,19 +102,33 @@ public class SupplyChainService
     // ── Reliability & restock tables keyed by CreditRating (1=best, 5=worst) ──
     private static readonly double[] ReliabilityByRating    = { 0, 0.97, 0.90, 0.83, 0.73, 0.65 };
     private static readonly int[]    RestockHoursByRating   = { 0,    4,    8,   16,   30,   48 };
-    // Initial stock fill ratio (fraction of MaxOrderQty at seed time)
+    // Initial stock fill ratio applied to MaxOrderQty × multiplier at seed time
     private static readonly double[] FillRatioByRating      = { 0, 0.90, 0.80, 0.68, 0.55, 0.45 };
+    // Demand multiplier: supplier restocks this multiple of recent demand to build safety buffer
+    private const int DemandRestockMultiplier = 2;
+    // Vendor warehouse capacity per product (smallint max — represents physical warehouse limits)
+    internal const int VENDOR_MAX_STOCK = 32_767;
+
+    private const string PART_CONFIG = "config";
+    private const string ROW_SPEED  = "speed-multiplier";
 
     private readonly string _connectionString;
     private readonly TableClient _tableClient;
     private readonly double _simTimeScale;
+    private readonly double _defaultSpeedMultiplier;
     private readonly ILogger<SupplyChainService> _logger;
     private readonly TelemetryClient _telemetry;
     private readonly BankService? _bank;
+    private readonly WarehouseService? _warehouse;
 
     // Vendor cache — loaded lazily from Purchasing.Vendor on first access
     private List<VendorInfo>? _vendorCache;
     private readonly SemaphoreSlim _vendorLoadLock = new(1, 1);
+
+    // Static initialization guard — ensures InitializeAsync body runs only once per process
+    // even when multiple scoped instances are created concurrently (e.g. parallel useQueries).
+    private static readonly SemaphoreSlim _initLock = new(1, 1);
+    private static volatile bool _initComplete = false;
 
     // Cached default purchasing employee ID for new PurchaseOrderHeader rows
     private int? _defaultEmployeeId;
@@ -123,15 +137,19 @@ public class SupplyChainService
         string connectionString,
         string tableServiceUri,
         double simTimeScale,
+        double supplyChainSpeedMultiplier,
         ILogger<SupplyChainService> logger,
         TelemetryClient telemetry,
-        BankService? bank = null)
+        BankService? bank = null,
+        WarehouseService? warehouse = null)
     {
         _connectionString = connectionString;
         _simTimeScale     = simTimeScale;
+        _defaultSpeedMultiplier = supplyChainSpeedMultiplier;
         _logger           = logger;
         _telemetry        = telemetry;
         _bank             = bank;
+        _warehouse        = warehouse;
 
         var svc = new TableServiceClient(new Uri(tableServiceUri), new DefaultAzureCredential());
         _tableClient = svc.GetTableClient(TABLE_NAME);
@@ -262,96 +280,149 @@ public class SupplyChainService
     /// </summary>
     public async Task InitializeAsync()
     {
-        // Process any existing Approved (Status=2) BOM vendor POs from the AdventureWorks data.
-        // Runs every call but is idempotent — POs already at Status=3/4 will not match.
-        await ProcessHistoricalApprovedOrdersAsync();
+        // Fast path: already initialized in this process — skip all work.
+        if (_initComplete) return;
 
-        // Table Storage used only for vendor stock levels
-        await _tableClient.CreateIfNotExistsAsync();
-
-        // Fast path: if stock rows already exist, skip all seeding work.
-        // We still need to run ProcessHistoricalPendingOrdersAsync even when already seeded
-        // because it is idempotent (guarded by SimOrderState) and handles the queue injection.
-        bool alreadySeeded = false;
-        await foreach (var _ in _tableClient.QueryAsync<TableEntity>(
-            filter: $"PartitionKey eq '{PART_STOCK}'",
-            maxPerPage: 1,
-            select: new[] { "RowKey" }))
+        await _initLock.WaitAsync();
+        try
         {
-            alreadySeeded = true;
-            break;
-        }
+            // Double-check after acquiring lock in case another request just finished.
+            if (_initComplete) return;
 
-        // Fetch pending BOM orders before seeding so stock accounts for already-committed qty.
-        // Returns (VendorId, ProductId) → total OrderQty across all Status=1 BOM POs.
-        var pendingQtys = await GetPendingBomOrderQtysAsync();
+            // Process any existing Approved (Status=2) BOM vendor POs from the AdventureWorks data.
+            // Runs once per process lifetime; idempotent — POs already at Status=3/4 will not match.
+            await ProcessHistoricalApprovedOrdersAsync();
 
-        if (!alreadySeeded)
-        {
-            var vendors         = await GetVendorsAsync();
-            var vendorDict      = vendors.ToDictionary(v => v.VendorId);
-            var vendorProducts  = await GetVendorProductsFromSqlAsync();
-            var historicalStock = await GetHistoricalStockLevelsAsync();
+            // Table Storage used only for vendor stock levels
 
-            int seededFromHistory = 0, seededFromFormula = 0;
-
-            foreach (var vp in vendorProducts)
+            // Fast path: if stock rows already exist, skip all seeding work.
+            // We still need to run ProcessHistoricalPendingOrdersAsync even when already seeded
+            // because it is idempotent (guarded by SimOrderState) and handles the queue injection.
+            bool alreadySeeded = false;
+            await foreach (var _ in _tableClient.QueryAsync<TableEntity>(
+                filter: $"PartitionKey eq '{PART_STOCK}'",
+                maxPerPage: 1,
+                select: new[] { "RowKey" }))
             {
-                if (!vendorDict.TryGetValue(vp.VendorId, out var vendor)) continue;
-
-                var rowKey   = StockRowKey(vp.VendorId, vp.ProductId);
-                int maxStock = Math.Max(vp.MaxOrderQty, 10);
-
-                int initStock;
-                if (historicalStock.TryGetValue((vp.VendorId, vp.ProductId), out int histQty))
-                {
-                    // Seed from the average stocked qty on completed POs for this vendor+product,
-                    // randomised ±20 % to give a realistic spread across runs.
-                    initStock = (int)Math.Round(histQty * (0.8 + 0.4 * Random.Shared.NextDouble()));
-                    initStock = Math.Clamp(initStock, 0, maxStock);
-                    seededFromHistory++;
-                }
-                else
-                {
-                    // No purchase history for this pair — fall back to credit-rating fill ratio
-                    double fillRatio = vendor.CreditRating >= 1 && vendor.CreditRating <= 5
-                        ? FillRatioByRating[vendor.CreditRating] : 0.70;
-                    initStock = (int)Math.Round(maxStock * fillRatio
-                        * (0.7 + 0.6 * Random.Shared.NextDouble()));
-                    initStock = Math.Clamp(initStock, 0, maxStock);
-                    seededFromFormula++;
-                }
-
-                // Deduct qty already committed in Status=1 (Pending) BOM purchase orders so
-                // that stockAvailable accurately reflects what is still orderable at this vendor.
-                if (pendingQtys.TryGetValue((vp.VendorId, vp.ProductId), out int pendingQty))
-                    initStock = Math.Max(0, initStock - pendingQty);
-
-                var entity = new TableEntity(PART_STOCK, rowKey)
-                {
-                    ["VendorId"]        = vp.VendorId,
-                    ["ProductId"]       = vp.ProductId,
-                    ["ProductName"]     = vp.ProductName,
-                    ["StandardPrice"]   = vp.StandardPrice,
-                    ["AverageLeadTime"] = vp.AverageLeadTime,
-                    ["MinOrderQty"]     = vp.MinOrderQty,
-                    ["MaxOrderQty"]     = vp.MaxOrderQty,
-                    ["WeightKg"]        = vp.WeightKg > 0 ? vp.WeightKg : 0.5,
-                    ["CurrentStock"]    = initStock,
-                    ["MaxStock"]        = maxStock,
-                };
-                await _tableClient.UpsertEntityAsync(entity);
+                alreadySeeded = true;
+                break;
             }
 
-            _logger.LogInformation(
-                "Supply chain initialized: {VendorCount} vendors, {ProductCount} vendor-product pairs " +
-                "({FromHistory} seeded from PO history, {FromFormula} from fill-ratio fallback)",
-                vendors.Count, vendorProducts.Count, seededFromHistory, seededFromFormula);
+            // Fetch pending BOM orders before seeding so stock accounts for already-committed qty.
+            // Returns (VendorId, ProductId) → total OrderQty across all Status=1 BOM POs.
+            var pendingQtys = await GetPendingBomOrderQtysAsync();
+
+            if (!alreadySeeded)
+            {
+                var vendors         = await GetVendorsAsync();
+                var vendorDict      = vendors.ToDictionary(v => v.VendorId);
+                var vendorProducts  = await GetVendorProductsFromSqlAsync();
+                var historicalStock = await GetHistoricalStockLevelsAsync();
+
+                int seededFromHistory = 0, seededFromFormula = 0;
+
+                foreach (var vp in vendorProducts)
+                {
+                    if (!vendorDict.TryGetValue(vp.VendorId, out var vendor)) continue;
+
+                    var rowKey   = StockRowKey(vp.VendorId, vp.ProductId);
+                    int maxStock = VENDOR_MAX_STOCK;
+
+                    int initStock;
+                    if (historicalStock.TryGetValue((vp.VendorId, vp.ProductId), out int histQty))
+                    {
+                        // Seed from the average stocked qty on completed POs for this vendor+product,
+                        // scaled up 5× to give vendors a healthy starting buffer, randomised ±20%.
+                        initStock = (int)Math.Round(histQty * 5.0 * (0.8 + 0.4 * Random.Shared.NextDouble()));
+                        initStock = Math.Clamp(initStock, 0, maxStock);
+                        seededFromHistory++;
+                    }
+                    else
+                    {
+                        // No purchase history for this pair — fall back to credit-rating fill ratio
+                        // applied to MaxOrderQty × 5 (several orders' worth of starting stock)
+                        double fillRatio = vendor.CreditRating >= 1 && vendor.CreditRating <= 5
+                            ? FillRatioByRating[vendor.CreditRating] : 0.70;
+                        int baseStock = vp.MaxOrderQty * 5;
+                        initStock = (int)Math.Round(baseStock * fillRatio
+                            * (0.7 + 0.6 * Random.Shared.NextDouble()));
+                        initStock = Math.Clamp(initStock, 0, maxStock);
+                        seededFromFormula++;
+                    }
+
+                    // Deduct qty already committed in Status=1 (Pending) BOM purchase orders so
+                    // that stockAvailable accurately reflects what is still orderable at this vendor.
+                    if (pendingQtys.TryGetValue((vp.VendorId, vp.ProductId), out int pendingQty))
+                        initStock = Math.Max(0, initStock - pendingQty);
+
+                    var entity = new TableEntity(PART_STOCK, rowKey)
+                    {
+                        ["VendorId"]        = vp.VendorId,
+                        ["ProductId"]       = vp.ProductId,
+                        ["ProductName"]     = vp.ProductName,
+                        ["StandardPrice"]   = vp.StandardPrice,
+                        ["AverageLeadTime"] = vp.AverageLeadTime,
+                        ["MinOrderQty"]     = vp.MinOrderQty,
+                        ["MaxOrderQty"]     = vp.MaxOrderQty,
+                        ["WeightKg"]        = vp.WeightKg > 0 ? vp.WeightKg : 0.5,
+                        ["CurrentStock"]    = initStock,
+                        ["MaxStock"]        = maxStock,
+                    };
+                    await _tableClient.UpsertEntityAsync(entity);
+                }
+
+                _logger.LogInformation(
+                    "Supply chain initialized: {VendorCount} vendors, {ProductCount} vendor-product pairs " +
+                    "({FromHistory} seeded from PO history, {FromFormula} from fill-ratio fallback)",
+                    vendors.Count, vendorProducts.Count, seededFromHistory, seededFromFormula);
+            }
+
+            // Inject historical Pending (Status=1) BOM orders into the queue so they go through
+            // the normal approval → delivery state machine.
+            await ProcessHistoricalPendingOrdersAsync(pendingQtys);
+
+            _initComplete = true;
+        }
+        finally
+        {
+            _initLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Force re-initialization: deletes all vendor stock rows from Table Storage and re-seeds
+    /// with the current logic (new MaxStock, initial stock formulas). Resets the in-process
+    /// init guard so subsequent calls to InitializeAsync will run the full seeding path.
+    /// </summary>
+    public async Task ForceReinitializeAsync()
+    {
+        await _initLock.WaitAsync();
+        try
+        {
+            // Delete all stock rows
+            var toDelete = new List<TableEntity>();
+            await foreach (var e in _tableClient.QueryAsync<TableEntity>(
+                filter: $"PartitionKey eq '{PART_STOCK}'",
+                select: new[] { "PartitionKey", "RowKey" }))
+            {
+                toDelete.Add(e);
+            }
+            foreach (var e in toDelete)
+                await _tableClient.DeleteEntityAsync(e.PartitionKey, e.RowKey);
+
+            _logger.LogInformation("Deleted {Count} stock rows from Table Storage for re-initialization.", toDelete.Count);
+
+            // Reset init flag so InitializeAsync runs full seeding on next call
+            _initComplete = false;
+            _vendorCache = null;
+        }
+        finally
+        {
+            _initLock.Release();
         }
 
-        // Inject historical Pending (Status=1) BOM orders into the queue so they go through
-        // the normal approval → delivery state machine.
-        await ProcessHistoricalPendingOrdersAsync(pendingQtys);
+        // Run full initialization with fresh seeding
+        await InitializeAsync();
     }
 
     /// <summary>
@@ -431,7 +502,6 @@ public class SupplyChainService
             queueClient = new QueueClient(connStr, QUEUE_NAME,
                 new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
         }
-        await queueClient.CreateIfNotExistsAsync();
 
         // Load recently-injected PO tracking rows to prevent duplicate queue messages.
         // Any PO injected within the last 10 minutes is considered "in flight" and skipped.
@@ -483,6 +553,28 @@ public class SupplyChainService
             string encoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
             await queueClient.SendMessageAsync(encoded,
                 visibilityTimeout: TimeSpan.FromSeconds(approvalDelaySec));
+
+            // Also enqueue vendor restock (supplier knows to replenish when PO is placed)
+            string vendorId = (string)r.VendorId;
+            int prodId      = (int)r.ProductID;
+            int qty         = (int)r.Qty;
+            var vendorInfo  = (await GetVendorsAsync()).FirstOrDefault(v => v.VendorId == vendorId);
+            int restockHrs  = vendorInfo?.RestockDelaySimHrs ?? 12;
+            double effScale = await GetEffectiveTimeScaleAsync();
+            int restockSec  = Math.Max(1, (int)(restockHrs * 3600.0 / effScale)) + i; // stagger
+
+            var restockMsg = new PurchaseOrderMessage
+            {
+                MessageType    = "vendor-restock",
+                VendorId       = vendorId,
+                ProductId      = prodId,
+                OrderedQty     = qty,
+                ScheduledAtUtc = DateTime.UtcNow.AddSeconds(restockSec),
+            };
+            string restockJson    = System.Text.Json.JsonSerializer.Serialize(restockMsg);
+            string restockEncoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(restockJson));
+            await queueClient.SendMessageAsync(restockEncoded,
+                visibilityTimeout: TimeSpan.FromSeconds(restockSec));
 
             // Mark this PO as recently injected so subsequent calls within 10 min skip it.
             var trackEntity = new TableEntity(PART_PENDING_INJECTED, poId.ToString())
@@ -607,7 +699,6 @@ public class SupplyChainService
 
     public async Task<List<VendorSummary>> GetVendorSummariesAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var vendors = await GetVendorsAsync();
 
         // Count active and delivered-today orders per vendor from SQL
@@ -703,7 +794,6 @@ public class SupplyChainService
 
     public async Task<List<SupplyQuote>> GetCatalogAsync(int? filterProductId = null)
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var vendors = await GetVendorsAsync();
         var vendorDict = vendors.ToDictionary(v => v.VendorId);
 
@@ -756,7 +846,6 @@ public class SupplyChainService
 
     public async Task<SupplyQuote?> GetQuoteAsync(string vendorId, int productId, int qty)
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var vendors = await GetVendorsAsync();
         var vendor  = vendors.FirstOrDefault(v => v.VendorId == vendorId);
         if (vendor == null) return null;
@@ -864,6 +953,65 @@ public class SupplyChainService
             purchaseOrderId, qty, productId, vendor.Name, eta);
 
         return await GetOrderAsync(purchaseOrderId.ToString());
+    }
+
+    /// <summary>
+    /// Lightweight variant of <see cref="PlaceOrderAsync"/> that returns only the
+    /// SQL PurchaseOrderID (as a string) instead of re-reading the full order.
+    /// Used by the bulk reorder loop where the full order details are not needed.
+    /// Returns null on failure (same semantics as <see cref="PlaceOrderAsync"/>).
+    /// </summary>
+    public async Task<string?> PlaceOrderFastAsync(string vendorId, int productId, int qty)
+    {
+        var vendors = await GetVendorsAsync();
+        var vendor  = vendors.FirstOrDefault(v => v.VendorId == vendorId);
+        if (vendor == null || qty <= 0) return null;
+
+        var stockResp = await _tableClient.GetEntityIfExistsAsync<TableEntity>(
+            PART_STOCK, StockRowKey(vendorId, productId));
+        if (!stockResp.HasValue) return null;
+
+        var stock  = stockResp.Value!;
+        int minQty = stock.GetInt32("MinOrderQty") ?? 1;
+        int maxQty = stock.GetInt32("MaxOrderQty") ?? int.MaxValue;
+        if (qty < minQty || qty > maxQty) return null;
+
+        int current = stock.GetInt32("CurrentStock") ?? 0;
+        if (current < qty) return null;
+
+        stock["CurrentStock"] = current - qty;
+        try
+        {
+            await _tableClient.UpdateEntityAsync(stock, stock.ETag);
+        }
+        catch (Azure.RequestFailedException ex) when (ex.Status == 412 || ex.Status == 409)
+        {
+            stockResp = await _tableClient.GetEntityIfExistsAsync<TableEntity>(
+                PART_STOCK, StockRowKey(vendorId, productId));
+            if (!stockResp.HasValue) return null;
+            stock   = stockResp.Value!;
+            current = stock.GetInt32("CurrentStock") ?? 0;
+            if (current < qty) return null;
+            stock["CurrentStock"] = current - qty;
+            await _tableClient.UpdateEntityAsync(stock, stock.ETag);
+        }
+
+        double standardPrice = stock.GetDouble("StandardPrice") ?? stock.GetDouble("UnitCostBase") ?? 1.0;
+        int    leadTime      = stock.GetInt32("AverageLeadTime") ?? vendor.DefaultLeadTimeDays;
+        double weight        = stock.GetDouble("WeightKg") ?? 0.5;
+        double unitCost      = Math.Round(standardPrice, 2);
+        double shipping      = Math.Round(vendor.ShipBase + weight * vendor.ShipRate * qty, 2);
+        double simHrs        = leadTime * 24.0;
+        DateTime placed      = DateTime.UtcNow;
+        DateTime eta         = placed.AddSeconds(simHrs * 3600.0 / _simTimeScale);
+
+        if (!int.TryParse(vendorId, out int vendorBusinessId)) return null;
+
+        int purchaseOrderId = await InsertSqlPurchaseOrderAsync(
+            vendorBusinessId, vendor.ShipMethodId, placed, eta,
+            productId, qty, unitCost, shipping);
+
+        return purchaseOrderId.ToString();
     }
 
     // ── Order state transitions ────────────────────────────────────────────────
@@ -1053,9 +1201,12 @@ public class SupplyChainService
 
     // ── Vendor restock ────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Manual full-fill restock (for demo resets via POST /api/supply/restock/{vendorId}).
+    /// Sets CurrentStock = MaxStock for the specified vendor (and optionally product).
+    /// </summary>
     public async Task RestockVendorAsync(string vendorId, int productId = 0)
     {
-        await _tableClient.CreateIfNotExistsAsync();
         string filter = $"PartitionKey eq '{PART_STOCK}' and VendorId eq '{vendorId}'";
         if (productId > 0)
             filter += $" and ProductId eq {productId}";
@@ -1066,12 +1217,183 @@ public class SupplyChainService
 
         foreach (var e in toUpdate)
         {
-            int maxStock = e.GetInt32("MaxStock") ?? 100;
+            int maxStock = e.GetInt32("MaxStock") ?? VENDOR_MAX_STOCK;
             e["CurrentStock"] = maxStock;
-            await _tableClient.UpdateEntityAsync(e, e.ETag);
+            try
+            {
+                await _tableClient.UpdateEntityAsync(e, e.ETag);
+            }
+            catch (Azure.RequestFailedException ex) when (ex.Status is 412 or 409)
+            {
+                // Re-read and retry once for concurrent conflict
+                var fresh = await _tableClient.GetEntityIfExistsAsync<TableEntity>(e.PartitionKey, e.RowKey);
+                if (!fresh.HasValue) continue;
+                fresh.Value!["CurrentStock"] = fresh.Value.GetInt32("MaxStock") ?? VENDOR_MAX_STOCK;
+                await _tableClient.UpdateEntityAsync(fresh.Value, fresh.Value.ETag);
+            }
         }
 
-        _logger.LogInformation("Restocked vendor {VendorId}, {Count} SKUs", vendorId, toUpdate.Count);
+        _logger.LogInformation("Restocked vendor {VendorId}, {Count} SKUs (full fill)", vendorId, toUpdate.Count);
+    }
+
+    /// <summary>
+    /// Demand-scaled restock triggered at PO placement time. The supplier replenishes
+    /// proportionally to recent order volume (× <see cref="DemandRestockMultiplier"/>),
+    /// capped by <see cref="VENDOR_MAX_STOCK"/>.
+    /// </summary>
+    public async Task RestockVendorScaledAsync(string vendorId, int productId, int orderedQty = 0)
+    {
+        string filter = $"PartitionKey eq '{PART_STOCK}' and VendorId eq '{vendorId}'";
+        if (productId > 0)
+            filter += $" and ProductId eq {productId}";
+
+        var toUpdate = new List<TableEntity>();
+        await foreach (var e in _tableClient.QueryAsync<TableEntity>(filter: filter))
+            toUpdate.Add(e);
+
+        foreach (var e in toUpdate)
+        {
+            int pid      = e.GetInt32("ProductId") ?? 0;
+            int maxStock = e.GetInt32("MaxStock") ?? VENDOR_MAX_STOCK;
+            int maxOrder = e.GetInt32("MaxOrderQty") ?? 1000;
+
+            // Demand sensing: look at recent PO volume for this vendor+product
+            int recentDemand = await GetRecentDemandAsync(vendorId, pid);
+            int demandSignal = Math.Max(recentDemand, orderedQty);
+
+            // Retry loop for ETag conflicts (concurrent restocks from bulk reorder)
+            for (int attempt = 0; attempt < 5; attempt++)
+            {
+                TableEntity entity;
+                if (attempt == 0)
+                {
+                    entity = e;
+                }
+                else
+                {
+                    // Re-fetch the entity to get the latest ETag and stock value
+                    try
+                    {
+                        var resp = await _tableClient.GetEntityAsync<TableEntity>(e.PartitionKey, e.RowKey);
+                        entity = resp.Value;
+                    }
+                    catch
+                    {
+                        break; // entity gone — nothing to update
+                    }
+                }
+
+                int current = entity.GetInt32("CurrentStock") ?? 0;
+
+                int restockQty;
+                if (demandSignal > 0)
+                {
+                    // Scale to demand: restock demandMultiplier × the demand signal
+                    restockQty = demandSignal * DemandRestockMultiplier;
+                }
+                else
+                {
+                    // No recent demand (cold start / idle) — restock one MaxOrderQty batch as baseline
+                    restockQty = maxOrder;
+                }
+
+                int newStock = Math.Min(current + restockQty, maxStock);
+                entity["CurrentStock"] = newStock;
+
+                try
+                {
+                    await _tableClient.UpdateEntityAsync(entity, entity.ETag);
+
+                    _logger.LogDebug(
+                        "Demand-scaled restock vendor {VendorId} ProductID={ProductId}: {Old}→{New} (demand={Demand}, orderedQty={Ordered}, added={Added})",
+                        vendorId, pid, current, newStock, recentDemand, orderedQty, newStock - current);
+                    break; // success
+                }
+                catch (Azure.RequestFailedException ex) when (ex.Status == 412)
+                {
+                    _logger.LogDebug("ETag conflict restocking vendor {VendorId} ProductID={ProductId}, attempt {Attempt}. Retrying.",
+                        vendorId, pid, attempt + 1);
+                    if (attempt == 4)
+                        _logger.LogWarning("Restock ETag conflict not resolved after 5 attempts for vendor {VendorId} ProductID={ProductId}.", vendorId, pid);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns the total qty ordered from this vendor for the given product within the last
+    /// 24 sim-hours (converted to real time using effective time scale).
+    /// </summary>
+    private async Task<int> GetRecentDemandAsync(string vendorId, int productId)
+    {
+        if (!int.TryParse(vendorId, out int vendorBusinessId)) return 0;
+
+        // Lookback window: 24 sim-hours converted to real seconds
+        double effScale       = await GetEffectiveTimeScaleAsync();
+        double lookbackRealSec = 24.0 * 3600.0 / effScale;
+        // Clamp to at least 60 seconds and at most 1 hour of real time
+        lookbackRealSec = Math.Clamp(lookbackRealSec, 60, 3600);
+
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        var result = await conn.ExecuteScalarAsync<int?>(
+            @"SELECT ISNULL(SUM(CAST(pod.OrderQty AS INT)), 0)
+              FROM Purchasing.PurchaseOrderHeader poh
+              INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
+              WHERE poh.VendorID = @VendorId
+                AND pod.ProductID = @ProductId
+                AND poh.OrderDate >= DATEADD(SECOND, -@LookbackSec, GETUTCDATE())",
+            new { VendorId = vendorBusinessId, ProductId = productId, LookbackSec = (int)lookbackRealSec });
+
+        return result ?? 0;
+    }
+
+    // ── Speed multiplier config (Table Storage) ────────────────────────────────
+
+    /// <summary>
+    /// Returns the effective supply chain speed multiplier.
+    /// Reads from Table Storage config partition; falls back to the constructor default.
+    /// </summary>
+    public async Task<double> GetSpeedMultiplierAsync()
+    {
+        try
+        {
+            var entity = await _tableClient.GetEntityAsync<TableEntity>(PART_CONFIG, ROW_SPEED);
+            double val = entity.Value.GetDouble("Value") ?? _defaultSpeedMultiplier;
+            return val > 0 ? val : _defaultSpeedMultiplier;
+        }
+        catch (Azure.RequestFailedException ex) when (ex.Status == 404)
+        {
+            return _defaultSpeedMultiplier;
+        }
+    }
+
+    /// <summary>
+    /// Persists the supply chain speed multiplier to Table Storage.
+    /// </summary>
+    public async Task SetSpeedMultiplierAsync(double value)
+    {
+        if (value < 1.0) value = 1.0;
+        if (value > 50.0) value = 50.0;
+
+        var entity = new TableEntity(PART_CONFIG, ROW_SPEED)
+        {
+            ["Value"] = value,
+            ["UpdatedAtUtc"] = DateTime.UtcNow,
+        };
+        await _tableClient.UpsertEntityAsync(entity);
+        _logger.LogInformation("Supply chain speed multiplier updated to {Value}×", value);
+    }
+
+    /// <summary>
+    /// Returns the effective combined scale for converting sim-time to real seconds.
+    /// Used by PurchaseOrderProcessorFunction for delivery and restock delays.
+    /// </summary>
+    public async Task<double> GetEffectiveTimeScaleAsync()
+    {
+        double multiplier = await GetSpeedMultiplierAsync();
+        return _simTimeScale * multiplier;
     }
 
     // ── Order queries ──────────────────────────────────────────────────────────
@@ -1099,8 +1421,8 @@ public class SupplyChainService
         INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
         INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
         INNER JOIN Production.Product p ON pod.ProductID = p.ProductID
-        INNER JOIN Production.BillOfMaterials bom ON bom.ComponentID = p.ProductID AND bom.EndDate IS NULL
-        WHERE v.ActiveFlag = 1 AND p.MakeFlag = 0";
+        WHERE v.ActiveFlag = 1 AND p.MakeFlag = 0
+          AND EXISTS (SELECT 1 FROM Production.BillOfMaterials bom WHERE bom.ComponentID = p.ProductID AND bom.EndDate IS NULL)";
 
     public async Task<List<PurchaseOrder>> GetOrdersAsync(bool includeCompleted = false)
     {
@@ -1156,6 +1478,7 @@ public class SupplyChainService
     public async Task ResetAsync()
     {
         _vendorCache = null;
+        _initComplete = false;   // Allow InitializeAsync to re-seed after stock rows are deleted
 
         await using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
@@ -1227,21 +1550,58 @@ public class SupplyChainService
     {
         if (vendorId == "" || productId == 0 || qty == 0) return;
 
-        var stockResp = await _tableClient.GetEntityIfExistsAsync<TableEntity>(
-            PART_STOCK, StockRowKey(vendorId, productId));
-        if (!stockResp.HasValue) return;
+        const int maxRetries = 5;
+        for (int attempt = 0; attempt < maxRetries; attempt++)
+        {
+            var stockResp = await _tableClient.GetEntityIfExistsAsync<TableEntity>(
+                PART_STOCK, StockRowKey(vendorId, productId));
+            if (!stockResp.HasValue) return;
 
-        var stock    = stockResp.Value!;
-        int current  = stock.GetInt32("CurrentStock") ?? 0;
-        int maxStock = stock.GetInt32("MaxStock") ?? 999;
-        stock["CurrentStock"] = Math.Min(current + qty, maxStock);
-        await _tableClient.UpdateEntityAsync(stock, stock.ETag);
+            var stock    = stockResp.Value!;
+            int current  = stock.GetInt32("CurrentStock") ?? 0;
+            int maxStock = stock.GetInt32("MaxStock") ?? VENDOR_MAX_STOCK;
+            stock["CurrentStock"] = Math.Min(current + qty, maxStock);
+
+            try
+            {
+                await _tableClient.UpdateEntityAsync(stock, stock.ETag);
+                return;
+            }
+            catch (Azure.RequestFailedException ex) when (ex.Status is 412 or 409 && attempt < maxRetries - 1)
+            {
+                // ETag conflict from concurrent refunds — retry with fresh read
+                await Task.Delay(20 * (attempt + 1));
+            }
+        }
     }
 
     private async Task AddToSqlInventoryAsync(int productId, int qty, string vendorId, double unitCost, int purchaseOrderId = 0)
     {
+        // Route through warehouse simulation — goods must be put away by a warehouse worker
+        // before they appear in inventory at LocationID 7 (Finished Goods Storage).
+        if (_warehouse != null)
+        {
+            try
+            {
+                await _warehouse.EnqueueReceiveSupplierOperationAsync(purchaseOrderId, productId, qty);
+                // Still record TransactionHistory immediately for audit trail
+                await RecordPurchaseTransactionHistoryAsync(productId, qty, purchaseOrderId, unitCost, vendorId);
+                _logger.LogInformation("Warehouse receive op enqueued for ProductID={ProductId} qty={Qty} PO={POId}", productId, qty, purchaseOrderId);
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Warehouse] Failed to enqueue receive op for PO {PurchaseOrderId} — falling back to direct inventory insert.", purchaseOrderId);
+            }
+        }
+
+        // Fallback: direct SQL inventory insert (warehouse service unavailable)
+        await DirectInsertToSqlInventoryAsync(productId, qty, vendorId, unitCost, purchaseOrderId);
+    }
+
+    private async Task DirectInsertToSqlInventoryAsync(int productId, int qty, string vendorId, double unitCost, int purchaseOrderId)
+    {
         // Adds stock to the first bin (LocationID 7 = Finished Goods Storage)
-        // using the same Dapper pattern as the rest of the project.
         await using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
 
@@ -1259,7 +1619,6 @@ public class SupplyChainService
         }
         else
         {
-            // Insert new bin row — Shelf and Bin are nullable/have defaults
             await conn.ExecuteAsync(
                 "INSERT INTO Production.ProductInventory (ProductID, LocationID, Shelf, Bin, Quantity, rowguid, ModifiedDate) " +
                 "VALUES (@ProductId, 7, N'A', 1, @Qty, NEWID(), GETDATE())",
@@ -1267,6 +1626,13 @@ public class SupplyChainService
         }
 
         _logger.LogInformation("Added {Qty} units of ProductID={ProductId} to SQL inventory (LocationID=7)", qty, productId);
+        await RecordPurchaseTransactionHistoryAsync(productId, qty, purchaseOrderId, unitCost, vendorId);
+    }
+
+    private async Task RecordPurchaseTransactionHistoryAsync(int productId, int qty, int purchaseOrderId, double unitCost, string vendorId)
+    {
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
 
         // Record purchase receipt in TransactionHistory ('P' = Purchase Order, positive qty = received)
         await conn.ExecuteAsync(@"
@@ -1361,6 +1727,11 @@ public class SupplyChainService
     /// <summary>
     /// Loads all vendor-product pairs from Purchasing.ProductVendor for BOM purchased components.
     /// Used to seed Table Storage stock entities.
+    /// NOTE: The BOM filter (EXISTS ... BillOfMaterials) includes retail-only products
+    /// (MakeFlag=0, FinishedGoodsFlag=1) via top-level BOM entries (NULL ProductAssemblyID,
+    /// BOMLevel=0) added in BillOfMaterials-ai.csv. Without those entries, retail products
+    /// like helmets, gloves, and accessories would be excluded from the supply chain catalog
+    /// and could not be restocked when sold out.
     /// </summary>
     internal async Task<List<VendorStockItem>> GetVendorProductsFromSqlAsync()
     {
@@ -1395,7 +1766,7 @@ public class SupplyChainService
             MinOrderQty:   (int)r.MinOrderQty,
             MaxOrderQty:   (int)r.MaxOrderQty,
             CurrentStock:  0,
-            MaxStock:      Math.Max((int)r.MaxOrderQty, 10),
+            MaxStock:      VENDOR_MAX_STOCK,
             WeightKg:      (double)r.WeightKg)).ToList();
     }
 

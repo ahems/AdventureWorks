@@ -42,10 +42,18 @@ workflow_promotion_id=$(get_azd_value "AI_AGENT_WORKFLOW_PROMOTION_ID")
 workflow_order_id=$(get_azd_value "AI_AGENT_WORKFLOW_ORDER_ID")
 workflow_help_me_choose_id=$(get_azd_value "AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID")
 cart_recovery_id=$(get_azd_value "AI_AGENT_CART_RECOVERY_ID")
+review_id=$(get_azd_value "AI_AGENT_REVIEW_ID")
 product_content_id=$(get_azd_value "AI_AGENT_PRODUCT_CONTENT_ID")
 customer_id=$(get_azd_value "AI_AGENT_CUSTOMER_ID")
 admin_chat_id=$(get_azd_value "AI_AGENT_ADMIN_CHAT_ID")
+translation_id=$(get_azd_value "AI_AGENT_TRANSLATION_ID")
+review_batch_id=$(get_azd_value "AI_AGENT_REVIEW_BATCH_ID")
+review_analysis_id=$(get_azd_value "AI_AGENT_REVIEW_ANALYSIS_ID")
+email_content_id=$(get_azd_value "AI_AGENT_EMAIL_CONTENT_ID")
+catalog_suggestion_id=$(get_azd_value "AI_AGENT_CATALOG_SUGGESTION_ID")
 mcp_service_url=$(get_azd_value "MCP_SERVICE_URL")
+manufacturing_agent_endpoint=$(get_azd_value "MANUFACTURING_AGENT_ENDPOINT")
+api_functions_url=$(get_azd_value "API_FUNCTIONS_URL")
 
 if [[ -z "$chat_id" ]] || [[ -z "$order_id" ]] || [[ -z "$promotion_id" ]] || [[ -z "$help_me_choose_id" ]] || [[ -z "$cart_recovery_id" ]] || [[ -z "$product_content_id" ]]; then
   color_yellow "Warning: One or more agent IDs not found in azd environment."
@@ -75,10 +83,18 @@ if az functionapp config appsettings set \
     "AI_AGENT_WORKFLOW_ORDER_ID=${workflow_order_id:-}" \
     "AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID=${workflow_help_me_choose_id:-}" \
     "AI_AGENT_CART_RECOVERY_ID=$cart_recovery_id" \
+    ${review_id:+"AI_AGENT_REVIEW_ID=$review_id"} \
     "AI_AGENT_PRODUCT_CONTENT_ID=$product_content_id" \
     ${customer_id:+"AI_AGENT_CUSTOMER_ID=$customer_id"} \
     ${admin_chat_id:+"AI_AGENT_ADMIN_CHAT_ID=$admin_chat_id"} \
+    ${translation_id:+"AI_AGENT_TRANSLATION_ID=$translation_id"} \
+    ${review_batch_id:+"AI_AGENT_REVIEW_BATCH_ID=$review_batch_id"} \
+    ${review_analysis_id:+"AI_AGENT_REVIEW_ANALYSIS_ID=$review_analysis_id"} \
+    ${email_content_id:+"AI_AGENT_EMAIL_CONTENT_ID=$email_content_id"} \
+    ${catalog_suggestion_id:+"AI_AGENT_CATALOG_SUGGESTION_ID=$catalog_suggestion_id"} \
     ${mcp_service_url:+"MCP_SERVICE_URL=$mcp_service_url"} \
+    ${manufacturing_agent_endpoint:+"MANUFACTURING_AGENT_ENDPOINT=$manufacturing_agent_endpoint"} \
+    ${api_functions_url:+"API_FUNCTIONS_URL=$api_functions_url"} \
   --output none; then
   color_green "✓ Successfully injected agent IDs into $functions_service_name"
   echo "  AI_AGENT_CHAT_ID                      = $chat_id"
@@ -90,10 +106,18 @@ if az functionapp config appsettings set \
   [[ -n "$workflow_order_id" ]] && echo "  AI_AGENT_WORKFLOW_ORDER_ID            = $workflow_order_id" || true
   [[ -n "$workflow_help_me_choose_id" ]] && echo "  AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID   = $workflow_help_me_choose_id" || true
   echo "  AI_AGENT_CART_RECOVERY_ID             = $cart_recovery_id"
+  [[ -n "$review_id" ]] && echo "  AI_AGENT_REVIEW_ID                    = $review_id" || true
   echo "  AI_AGENT_PRODUCT_CONTENT_ID           = $product_content_id"
   [[ -n "$customer_id" ]] && echo "  AI_AGENT_CUSTOMER_ID                  = $customer_id" || true
   [[ -n "$admin_chat_id" ]] && echo "  AI_AGENT_ADMIN_CHAT_ID                = $admin_chat_id" || true
+  [[ -n "$translation_id" ]] && echo "  AI_AGENT_TRANSLATION_ID               = $translation_id" || true
+  [[ -n "$review_batch_id" ]] && echo "  AI_AGENT_REVIEW_BATCH_ID              = $review_batch_id" || true
+  [[ -n "$review_analysis_id" ]] && echo "  AI_AGENT_REVIEW_ANALYSIS_ID           = $review_analysis_id" || true
+  [[ -n "$email_content_id" ]] && echo "  AI_AGENT_EMAIL_CONTENT_ID             = $email_content_id" || true
+  [[ -n "$catalog_suggestion_id" ]] && echo "  AI_AGENT_CATALOG_SUGGESTION_ID        = $catalog_suggestion_id" || true
   [[ -n "$mcp_service_url" ]] && echo "  MCP_SERVICE_URL                       = $mcp_service_url" || true
+  [[ -n "$manufacturing_agent_endpoint" ]] && echo "  MANUFACTURING_AGENT_ENDPOINT          = $manufacturing_agent_endpoint" || true
+  [[ -n "$api_functions_url" ]] && echo "  API_FUNCTIONS_URL                     = $api_functions_url" || true
 else
   color_red "✗ Failed to update Function App settings."
   exit 1

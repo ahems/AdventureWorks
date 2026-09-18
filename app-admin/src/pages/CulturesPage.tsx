@@ -8,6 +8,7 @@ import {
   FileText,
   Loader2,
 } from "lucide-react";
+import { TableSkeleton } from "@/components/LoadingSkeletons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,7 +56,8 @@ import { format } from "date-fns";
 
 const CulturesPage = () => {
   const { toast } = useToast();
-  const { data: apiCultures = [] } = useAdminCultures();
+  const { data: apiCultures = [], isLoading: culturesLoading } =
+    useAdminCultures();
   const { data: localizationCounts = {} } = useAdminLocalizationCounts();
   const [cultures, setCultures] = useState<Culture[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -240,83 +242,88 @@ const CulturesPage = () => {
           </div>
 
           {/* Table */}
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Culture ID</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Localizations</TableHead>
-                    <TableHead>Last Modified</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredCultures.length === 0 ? (
+          {culturesLoading ? (
+            <TableSkeleton rows={8} cols={5} />
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell
-                        colSpan={5}
-                        className="text-center py-8 text-muted-foreground"
-                      >
-                        No cultures found.
-                      </TableCell>
+                      <TableHead>Culture ID</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Localizations</TableHead>
+                      <TableHead>Last Modified</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ) : (
-                    filteredCultures.map((culture) => (
-                      <TableRow key={culture.CultureID}>
-                        <TableCell className="font-mono font-medium">
-                          {culture.CultureID}
-                        </TableCell>
-                        <TableCell>{culture.Name}</TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-auto py-1 px-2"
-                            onClick={() => setLocalizationCulture(culture)}
-                          >
-                            <Badge
-                              variant="secondary"
-                              className="cursor-pointer hover:bg-secondary/80"
-                            >
-                              <FileText className="h-3 w-3 mr-1" />
-                              {getLocalizationCount(culture.CultureID)} products
-                            </Badge>
-                          </Button>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {format(
-                            new Date(culture.ModifiedDate),
-                            "MMM d, yyyy HH:mm",
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openEditDialog(culture)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openDeleteDialog(culture)}
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredCultures.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="text-center py-8 text-muted-foreground"
+                        >
+                          No cultures found.
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                    ) : (
+                      filteredCultures.map((culture) => (
+                        <TableRow key={culture.CultureID}>
+                          <TableCell className="font-mono font-medium">
+                            {culture.CultureID}
+                          </TableCell>
+                          <TableCell>{culture.Name}</TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-auto py-1 px-2"
+                              onClick={() => setLocalizationCulture(culture)}
+                            >
+                              <Badge
+                                variant="secondary"
+                                className="cursor-pointer hover:bg-secondary/80"
+                              >
+                                <FileText className="h-3 w-3 mr-1" />
+                                {getLocalizationCount(culture.CultureID)}{" "}
+                                products
+                              </Badge>
+                            </Button>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {format(
+                              new Date(culture.ModifiedDate),
+                              "MMM d, yyyy HH:mm",
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openEditDialog(culture)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openDeleteDialog(culture)}
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </main>
 

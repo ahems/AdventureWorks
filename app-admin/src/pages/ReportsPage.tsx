@@ -20,6 +20,7 @@ import {
 import { BarChart3, Loader2, AlertCircle, TrendingUp } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
+import { ChartSkeleton } from "@/components/LoadingSkeletons";
 import ChannelSelector from "@/components/ChannelSelector";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -97,12 +98,7 @@ const ChartCard: React.FC<{ title: string; children: React.ReactNode }> = ({
 );
 
 const ChartLoading: React.FC = () => (
-  <div className="h-64 flex items-center justify-center">
-    <Loader2 className="w-6 h-6 animate-spin text-doodle-accent" />
-    <span className="ml-2 font-doodle text-sm text-doodle-text/60">
-      Loading…
-    </span>
-  </div>
+  <ChartSkeleton />
 );
 
 const ChartError: React.FC<{ message?: string }> = ({ message }) => (

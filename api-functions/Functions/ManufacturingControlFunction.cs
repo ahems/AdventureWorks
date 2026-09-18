@@ -35,15 +35,18 @@ public class ManufacturingControlFunction
     private readonly ILogger<ManufacturingControlFunction> _logger;
     private readonly WorkOrderSimulationService _sim;
     private readonly WorkforceService _workforce;
+    private readonly WebPubSubService _webPubSub;
 
     public ManufacturingControlFunction(
         ILogger<ManufacturingControlFunction> logger,
         WorkOrderSimulationService sim,
-        WorkforceService workforce)
+        WorkforceService workforce,
+        WebPubSubService webPubSub)
     {
         _logger    = logger;
         _sim       = sim;
         _workforce = workforce;
+        _webPubSub = webPubSub;
     }
 
     // ── POST /api/manufacturing/begin ─────────────────────────────────────────
@@ -66,6 +69,10 @@ public class ManufacturingControlFunction
 
         if (body == null || body.ProductId <= 0 || body.OrderQty <= 0)
             return await BadRequestAsync(req, "productId and orderQty are required and must be > 0.");
+
+        if (body.OrderQty > WarehouseService.INVENTORY_MAX_QTY)
+            return await BadRequestAsync(req,
+                $"orderQty cannot exceed {WarehouseService.INVENTORY_MAX_QTY} — the maximum units the warehouse can hold per SKU (smallint limit).");
 
         // 1. Validate the root product is a finished good
         var productInfo = await _sim.ValidateFinishedGoodAsync(body.ProductId);
@@ -197,6 +204,7 @@ public class ManufacturingControlFunction
         await queueClient.ClearMessagesAsync();
 
         _logger.LogInformation("Manufacturing queue cleared — simulation stopped.");
+        await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "simulation-stopped" });
         var response = req.CreateResponse(HttpStatusCode.OK);
         await response.WriteAsJsonAsync(new { message = "Production queue cleared. Container will scale to zero once in-flight messages complete." });
         return response;
@@ -298,6 +306,7 @@ public class ManufacturingControlFunction
             "Scrap config updated for LocationID={LocationId}: rate={Rate:P0}, reasons={Reasons}",
             locationId, body.FailureRatePct, string.Join(",", body.ScrapReasonIds ?? Array.Empty<int>()));
 
+        await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "config-changed", configType = "scrap", locationId });
         var updated  = await _sim.GetScrapConfigAsync(locationId);
         var response = req.CreateResponse(HttpStatusCode.OK);
         await response.WriteAsJsonAsync(updated);
@@ -353,6 +362,7 @@ public class ManufacturingControlFunction
             "Location config updated for LocationID={LocationId}: capacity={Units}, speed={Speed:F2}, hours={Hours}h",
             locationId, config.CapacityUnits, config.SpeedFactor, config.DailyOperatingHours);
 
+        await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "config-changed", configType = "location", locationId });
         var response = req.CreateResponse(HttpStatusCode.OK);
         await response.WriteAsJsonAsync(config);
         return response;
@@ -375,7 +385,6 @@ public class ManufacturingControlFunction
             new DefaultAzureCredential(),
             new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
         var client = svc.GetQueueClient(QUEUE_NAME);
-        await client.CreateIfNotExistsAsync();
         return client;
     }
 

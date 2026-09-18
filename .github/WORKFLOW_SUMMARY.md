@@ -49,7 +49,6 @@ When you trigger the workflow, you can provide:
 - **AZURE_RESOURCE_GROUP** (required): Name of the resource group
 - **AZURE_LOCATION** (optional, default: eastus2): Main Azure region
 - **FOUNDRY_LOCATION** (optional, default: swedencentral): AI Foundry/Cognitive Services region
-- **PLAYWRIGHT_LOCATION** (optional, default: westeurope): Playwright browser automation region
 
 ## How to Use
 
@@ -63,6 +62,7 @@ When you trigger the workflow, you can provide:
 ## Expected Duration
 
 Approximately 21-29 minutes total:
+
 - Infrastructure provisioning: ~21 minutes
 - Container builds and deployments: varies
 - Database seeding: ~8 minutes (starts during deployment and continues asynchronously in background after workflow completes)
@@ -79,6 +79,7 @@ Approximately 21-29 minutes total:
 ## Testing
 
 The workflow structure has been validated with automated tests:
+
 - YAML syntax validation
 - Required inputs and secrets verification
 - Key steps presence check

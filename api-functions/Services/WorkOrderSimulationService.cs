@@ -98,6 +98,7 @@ public class WorkOrderSimulationService
     private readonly double _defaultScrapRate;
     private readonly ILogger<WorkOrderSimulationService> _logger;
     private readonly BankService? _bank;
+    private readonly WarehouseService? _warehouse;
 
     public WorkOrderSimulationService(
         string connectionString,
@@ -105,13 +106,15 @@ public class WorkOrderSimulationService
         double simulationTimeScale,
         double defaultScrapRate,
         ILogger<WorkOrderSimulationService> logger,
-        BankService? bank = null)
+        BankService? bank = null,
+        WarehouseService? warehouse = null)
     {
         _connectionString = connectionString;
         _simulationTimeScale = simulationTimeScale;
         _defaultScrapRate = defaultScrapRate;
         _logger = logger;
         _bank = bank;
+        _warehouse = warehouse;
 
         var tableServiceClient = new TableServiceClient(
             new Uri(tableServiceUri),
@@ -132,7 +135,6 @@ public class WorkOrderSimulationService
 
     public async Task InitializeTablesAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         await InitializeLocationConfigAsync();
         await InitializeScrapConfigAsync();
     }
@@ -369,18 +371,6 @@ public class WorkOrderSimulationService
 
         if (stocked > 0)
         {
-            // Upsert ProductInventory at Finished Goods Storage (LocationID=7)
-            await conn.ExecuteAsync(@"
-                IF EXISTS (SELECT 1 FROM Production.ProductInventory WHERE ProductID = @ProductId AND LocationID = 7)
-                    UPDATE Production.ProductInventory
-                    SET Quantity = Quantity + @Qty, ModifiedDate = GETDATE()
-                    WHERE ProductID = @ProductId AND LocationID = 7
-                ELSE
-                    INSERT INTO Production.ProductInventory
-                        (ProductID, LocationID, Shelf, Bin, Quantity, rowguid, ModifiedDate)
-                    VALUES (@ProductId, 7, 'A', 1, @Qty, NEWID(), GETDATE())",
-                new { ProductId = productId, Qty = stocked });
-
             totalActualCost = await conn.ExecuteScalarAsync<decimal>(
                 "SELECT ISNULL(SUM(ActualCost), 0) FROM Production.WorkOrderRouting WHERE WorkOrderID = @Id AND ActualEndDate IS NOT NULL",
                 new { Id = workOrderId });
@@ -392,6 +382,45 @@ public class WorkOrderSimulationService
                     (ProductID, ReferenceOrderID, ReferenceOrderLineID, TransactionDate, TransactionType, Quantity, ActualCost, ModifiedDate)
                 VALUES (@ProductId, @WorkOrderId, 0, GETDATE(), 'W', @Qty, @ActualCost, GETDATE())",
                 new { ProductId = productId, WorkOrderId = workOrderId, Qty = stocked, ActualCost = costPerUnit });
+
+            // Route through warehouse simulation instead of directly upserting inventory.
+            // Inventory only appears in LocationID 7 after a warehouse worker completes the store operation.
+            if (_warehouse != null)
+            {
+                try
+                {
+                    await _warehouse.EnqueueStoreOperationAsync(workOrderId, productId, stocked);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[Warehouse] Failed to enqueue store op for WO {WorkOrderId} — falling back to direct inventory upsert.", workOrderId);
+                    // Fallback: direct upsert so inventory is not lost if warehouse service is unavailable
+                    await conn.ExecuteAsync(@"
+                        IF EXISTS (SELECT 1 FROM Production.ProductInventory WHERE ProductID = @ProductId AND LocationID = 7)
+                            UPDATE Production.ProductInventory
+                            SET Quantity = Quantity + @Qty, ModifiedDate = GETDATE()
+                            WHERE ProductID = @ProductId AND LocationID = 7
+                        ELSE
+                            INSERT INTO Production.ProductInventory
+                                (ProductID, LocationID, Shelf, Bin, Quantity, rowguid, ModifiedDate)
+                            VALUES (@ProductId, 7, 'A', 1, @Qty, NEWID(), GETDATE())",
+                        new { ProductId = productId, Qty = stocked });
+                }
+            }
+            else
+            {
+                // Warehouse service not registered — fall back to direct inventory upsert
+                await conn.ExecuteAsync(@"
+                    IF EXISTS (SELECT 1 FROM Production.ProductInventory WHERE ProductID = @ProductId AND LocationID = 7)
+                        UPDATE Production.ProductInventory
+                        SET Quantity = Quantity + @Qty, ModifiedDate = GETDATE()
+                        WHERE ProductID = @ProductId AND LocationID = 7
+                    ELSE
+                        INSERT INTO Production.ProductInventory
+                            (ProductID, LocationID, Shelf, Bin, Quantity, rowguid, ModifiedDate)
+                        VALUES (@ProductId, 7, 'A', 1, @Qty, NEWID(), GETDATE())",
+                    new { ProductId = productId, Qty = stocked });
+            }
         }
 
         _logger.LogInformation("WorkOrder {WorkOrderId} (Product {ProductId}) completed. Stocked={Stocked}, Scrapped={Scrapped}",
@@ -700,7 +729,6 @@ public class WorkOrderSimulationService
 
     public async Task<List<LocationConfigData>> GetAllLocationConfigsAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var results = new List<LocationConfigData>();
         await foreach (var entity in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_LOCATION_CONFIG}'"))
@@ -816,7 +844,6 @@ public class WorkOrderSimulationService
 
     public async Task<List<LocationLoadData>> GetLocationLoadsAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var loads = new List<LocationLoadData>();
         await foreach (var entity in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_LOCATION_SLOTS}'"))
@@ -904,7 +931,6 @@ public class WorkOrderSimulationService
 
     public async Task<List<ScrapConfigData>> GetAllScrapConfigsAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var results = new List<ScrapConfigData>();
         await foreach (var entity in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_SCRAP_CONFIG}'"))
@@ -950,13 +976,37 @@ public class WorkOrderSimulationService
 
     public async Task<List<ShortageData>> GetAllShortagesAsync()
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var results = new List<ShortageData>();
+        var entities = new List<TableEntity>();
         await foreach (var entity in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_SHORTAGE}'"))
         {
+            entities.Add(entity);
+        }
+        if (entities.Count == 0) return results;
+
+        // Validate against SQL — prune stale records referencing deleted work orders
+        var woIds = entities.Select(e => e.GetInt32("WorkOrderId") ?? 0).Where(id => id > 0).Distinct().ToList();
+        var validIds = new HashSet<int>();
+        using var conn = await GetConnectionAsync();
+        foreach (var batch in woIds.Chunk(500))
+        {
+            var ids = string.Join(",", batch);
+            var rows = await conn.QueryAsync<int>($"SELECT WorkOrderID FROM Production.WorkOrder WHERE WorkOrderID IN ({ids})");
+            foreach (var id in rows) validIds.Add(id);
+        }
+
+        foreach (var entity in entities)
+        {
+            var woId = entity.GetInt32("WorkOrderId") ?? 0;
+            if (!validIds.Contains(woId))
+            {
+                // Stale record — delete from Table Storage
+                _ = _tableClient.DeleteEntityAsync(entity.PartitionKey, entity.RowKey);
+                continue;
+            }
             results.Add(new ShortageData(
-                entity.GetInt32("WorkOrderId") ?? 0,
+                woId,
                 entity.GetInt32("ProductId") ?? 0,
                 entity.GetString("ProductName") ?? "",
                 entity.GetInt32("Needed") ?? 0,
@@ -1001,7 +1051,6 @@ public class WorkOrderSimulationService
 
     public async Task<List<ScrapEventData>> GetRecentScrapEventsAsync(int count = 10)
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var results = new List<ScrapEventData>();
         await foreach (var entity in _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PART_SCRAP_EVENT}'",
@@ -1019,7 +1068,6 @@ public class WorkOrderSimulationService
     /// </summary>
     public async Task<List<ScrapEventData>> GetAllScrapEventsAsync(int? vendorId = null)
     {
-        await _tableClient.CreateIfNotExistsAsync();
         var results = new List<ScrapEventData>();
         string filter = $"PartitionKey eq '{PART_SCRAP_EVENT}'";
         if (vendorId.HasValue)

@@ -167,6 +167,16 @@ public class FoundryAgentClient
         // "Return ONLY a valid JSON object") and returns prose instead.
         var resolvedInstructions = ResolveHandlebarsTemplate(def.Instructions, structuredInputs);
 
+        // --- Pre-warm MCP servers ------------------------------------------------
+        // Foundry connects to MCP server URLs during tool enumeration. If the Container
+        // App has scaled to zero, the first connection attempt may time out with
+        // "TaskCanceledException encountered while enumerating tools". Sending a
+        // lightweight request here wakes the server before Foundry's timeout applies.
+        if (def.Tools.Count > 0)
+        {
+            await WarmupMcpServersAsync(def.Tools, cancellationToken);
+        }
+
         // --- Approval loop -----------------------------------------------------
         // Foundry "kind: prompt" agents with MCP tools may require the client to
         // explicitly approve each tool call before the model can execute it.
@@ -180,6 +190,7 @@ public class FoundryAgentClient
         //
         // The final response contains the model's answer in a "message" output item.
         const int maxApprovalRounds = 10; // safety guard
+        const int maxToolRetries = 2; // retries for transient MCP tool enumeration failures
         string? currentPreviousId = string.IsNullOrEmpty(previousResponseId) ? null : previousResponseId;
         object currentInput = input;
         string lastResponseBody = string.Empty;
@@ -193,7 +204,9 @@ public class FoundryAgentClient
             var token = await _credential.GetTokenAsync(
                 new TokenRequestContext([FoundryTokenScope]), cancellationToken);
 
-            var hasTools = def.Tools.Count > 0;
+            var activeTools = def.Tools;
+            var usingFallbackTools = false;
+            var hasTools = activeTools.Count > 0;
 
             // Guard: "required" tool_choice is only valid when the agent actually has tools
             // registered. If the agent definition has no tools fall back to "auto" to avoid
@@ -221,7 +234,7 @@ public class FoundryAgentClient
                 Stream = false,
                 Store = true,
                 PreviousResponseId = currentPreviousId,
-                Tools = hasTools ? def.Tools : null,
+                Tools = hasTools ? activeTools : null,
                 // structured_inputs still sent for any future Foundry-native endpoint support,
                 // but the resolved instructions are the primary mechanism.
                 StructuredInputs = round == 0 && structuredInputs?.Count > 0 ? structuredInputs : null,
@@ -230,25 +243,75 @@ public class FoundryAgentClient
 
             var json = JsonSerializer.Serialize(requestBody, _serializeOptions);
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, _responsesUrl)
-            {
-                Content = new StringContent(json, Encoding.UTF8, "application/json")
-            };
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
-            if (!string.IsNullOrEmpty(userId))
-                request.Headers.TryAddWithoutValidation("x-memory-user-id", userId);
-
             _logger.LogInformation(
                 "Invoking Foundry agent '{AgentId}' model='{Model}' round={Round} (previousResponseId={Prev}, toolChoice={ToolChoice}, structuredInputKeys={Keys})",
                 agentId, def.Model, round, currentPreviousId ?? "none",
                 toolChoice ?? "auto",
                 structuredInputs?.Count > 0 ? string.Join(",", structuredInputs.Keys) : "none");
 
-            var httpResponse = await httpClient.SendAsync(request, cancellationToken);
-            var responseBody = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
-
-            if (!httpResponse.IsSuccessStatusCode)
+            // Retry loop for transient MCP tool enumeration failures (e.g. cold-start
+            // timeouts returning 400 "TaskCanceledException encountered while enumerating tools")
+            string responseBody = string.Empty;
+            for (int retry = 0; retry <= maxToolRetries; retry++)
             {
+                using var retryRequest = new HttpRequestMessage(HttpMethod.Post, _responsesUrl)
+                {
+                    Content = new StringContent(json, Encoding.UTF8, "application/json")
+                };
+                retryRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
+                if (!string.IsNullOrEmpty(userId))
+                    retryRequest.Headers.TryAddWithoutValidation("x-memory-user-id", userId);
+
+                var httpResponse = await httpClient.SendAsync(retryRequest, cancellationToken);
+                responseBody = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
+
+                if (httpResponse.IsSuccessStatusCode)
+                    break;
+
+                // Check if this is a retryable MCP tool enumeration error
+                var isToolEnumError = (int)httpResponse.StatusCode == 400
+                    && (responseBody.Contains("tool_user_error") || responseBody.Contains("enumerating tools"));
+
+                if (isToolEnumError && retry < maxToolRetries)
+                {
+                    var delayMs = (retry + 1) * 3000; // 3s, 6s
+                    _logger.LogWarning(
+                        "Foundry agent '{AgentId}' MCP tool enumeration failed (attempt {Attempt}/{Max}). " +
+                        "Retrying in {Delay}ms. Error: {Body}",
+                        agentId, retry + 1, maxToolRetries + 1, delayMs,
+                        responseBody.Length > 200 ? responseBody[..200] : responseBody);
+                    await Task.Delay(delayMs, cancellationToken);
+                    continue;
+                }
+
+                // If all retries failed while enumerating tools, switch to the fallback
+                // MCP config (from MCP_SERVICE_URL) once and retry the round.
+                // This recovers from stale/broken MCP URLs in the agent definition.
+                if (isToolEnumError
+                    && !usingFallbackTools
+                    && !string.IsNullOrEmpty(_fallbackMcpServiceUrl))
+                {
+                    var fallbackTools = BuildFallbackDefinition().Tools;
+                    if (fallbackTools.Count > 0)
+                    {
+                        usingFallbackTools = true;
+                        activeTools = fallbackTools;
+                        hasTools = true;
+
+                        requestBody.Tools = activeTools;
+                        json = JsonSerializer.Serialize(requestBody, _serializeOptions);
+
+                        _logger.LogWarning(
+                            "Foundry agent '{AgentId}' MCP tool enumeration still failing after retries. " +
+                            "Switching to fallback MCP tool configuration and retrying.",
+                            agentId);
+
+                        await WarmupMcpServersAsync(activeTools, cancellationToken);
+                        retry = -1; // reset retry counter for fallback tool config
+                        continue;
+                    }
+                }
+
                 _logger.LogError("Foundry Responses API returned {Status}: {Body}",
                     (int)httpResponse.StatusCode,
                     responseBody.Length > 500 ? responseBody[..500] : responseBody);
@@ -303,7 +366,84 @@ public class FoundryAgentClient
             currentInput = approvals;
         }
 
-        return ParseResponse(lastResponseBody, agentId);
+        var parsedResponse = ParseResponse(lastResponseBody, agentId);
+
+        // ── Empty-text recovery ────────────────────────────────────────────────
+        // When tool_choice is "required", the model may consume all output tokens on
+        // tool-call arguments and never produce a final "message" output item.
+        // The response is valid (status=completed) but ResponseText is empty.
+        // Fix: send one more request via previous_response_id with tool_choice="none"
+        // to force the model to synthesise its text answer from the stored tool results.
+        if (string.IsNullOrWhiteSpace(parsedResponse.ResponseText)
+            && parsedResponse.ToolsUsed.Count > 0
+            && !string.IsNullOrEmpty(parsedResponse.ResponseId))
+        {
+            _logger.LogWarning(
+                "Foundry agent '{AgentId}' returned empty text after tool calls ({Tools}). " +
+                "Sending continuation request with tool_choice=none to elicit the final answer.",
+                agentId, string.Join(",", parsedResponse.ToolsUsed));
+
+            var continuationToken = await _credential.GetTokenAsync(
+                new TokenRequestContext([FoundryTokenScope]), cancellationToken);
+
+            var continuationBody = new FoundryResponsesRequest
+            {
+                Model = def.Model,
+                Instructions = resolvedInstructions,
+                Input = "Now produce your final answer based on the tool results above.",
+                Stream = false,
+                Store = true,
+                PreviousResponseId = parsedResponse.ResponseId,
+                Tools = def.Tools.Count > 0 ? def.Tools : null,
+                ToolChoice = "none"
+            };
+
+            var continuationJson = JsonSerializer.Serialize(continuationBody, _serializeOptions);
+            using var continuationRequest = new HttpRequestMessage(HttpMethod.Post, _responsesUrl)
+            {
+                Content = new StringContent(continuationJson, Encoding.UTF8, "application/json")
+            };
+            continuationRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", continuationToken.Token);
+            if (!string.IsNullOrEmpty(userId))
+                continuationRequest.Headers.TryAddWithoutValidation("x-memory-user-id", userId);
+
+            var continuationHttpResponse = await httpClient.SendAsync(continuationRequest, cancellationToken);
+            var continuationResponseBody = await continuationHttpResponse.Content.ReadAsStringAsync(cancellationToken);
+
+            if (continuationHttpResponse.IsSuccessStatusCode)
+            {
+                var continuationParsed = ParseResponse(continuationResponseBody, agentId);
+                if (!string.IsNullOrWhiteSpace(continuationParsed.ResponseText))
+                {
+                    _logger.LogInformation(
+                        "Continuation request produced text output ({Length} chars). ResponseId={Id}",
+                        continuationParsed.ResponseText.Length, continuationParsed.ResponseId ?? "?");
+
+                    // Merge: keep the original tools-used list, use continuation text & response ID
+                    continuationParsed.ToolsUsed = parsedResponse.ToolsUsed
+                        .Concat(continuationParsed.ToolsUsed)
+                        .Distinct()
+                        .ToList();
+                    continuationParsed.InputTokens += parsedResponse.InputTokens;
+                    continuationParsed.OutputTokens += parsedResponse.OutputTokens;
+                    parsedResponse = continuationParsed;
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "Continuation request also returned empty text for agent '{AgentId}'.", agentId);
+                }
+            }
+            else
+            {
+                _logger.LogError(
+                    "Continuation request failed for agent '{AgentId}': {Status} {Body}",
+                    agentId, (int)continuationHttpResponse.StatusCode,
+                    continuationResponseBody.Length > 300 ? continuationResponseBody[..300] : continuationResponseBody);
+            }
+        }
+
+        return parsedResponse;
     }
 
     // ── Response parsing ───────────────────────────────────────────────────────
@@ -545,20 +685,22 @@ public class FoundryAgentClient
         var result = template;
 
         // Multiple passes to resolve nested {{#if}} blocks (inner-most blocks first).
-        // Pattern matches {{#if variable}}content{{/if}} where content has NO nested {{#if.
+        // Pattern matches {{#if variable}}truthy{{else}}falsy{{/if}} where content has
+        // no nested {{#if}} blocks. The {{else}} section is optional.
         const string innerIfPattern =
-            @"\{\{#if\s+(\w+)\}\}((?:(?!\{\{#if)[\s\S])*?)\{\{/if\}\}";
+            @"\{\{#if\s+(\w+)\}\}((?:(?!\{\{#if)[\s\S])*?)(?:\{\{else\}\}((?:(?!\{\{#if)[\s\S])*?))?\{\{/if\}\}";
 
         for (var pass = 0; pass < 5; pass++)
         {
             var next = Regex.Replace(result, innerIfPattern, m =>
             {
                 var varName = m.Groups[1].Value;
-                var inner   = m.Groups[2].Value;
-                return inputs.TryGetValue(varName, out var val)
-                       && !string.IsNullOrEmpty(val?.ToString())
-                    ? inner
-                    : string.Empty;
+                var truthyBranch = m.Groups[2].Value;
+                var falsyBranch = m.Groups[3].Success ? m.Groups[3].Value : string.Empty;
+
+                return inputs.TryGetValue(varName, out var val) && IsTemplateTruthy(val)
+                    ? truthyBranch
+                    : falsyBranch;
             });
 
             if (next == result) break;   // converged — no more resolvable blocks
@@ -570,6 +712,84 @@ public class FoundryAgentClient
             result = result.Replace($"{{{{{kvp.Key}}}}}", kvp.Value?.ToString() ?? string.Empty);
 
         return result;
+    }
+
+    private static bool IsTemplateTruthy(object? value)
+    {
+        return value switch
+        {
+            null => false,
+            bool boolValue => boolValue,
+            string stringValue => !string.IsNullOrWhiteSpace(stringValue)
+                && !string.Equals(stringValue, "false", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(stringValue, "0", StringComparison.OrdinalIgnoreCase),
+            sbyte signedByte => signedByte != 0,
+            byte unsignedByte => unsignedByte != 0,
+            short shortValue => shortValue != 0,
+            ushort unsignedShort => unsignedShort != 0,
+            int intValue => intValue != 0,
+            uint unsignedInt => unsignedInt != 0,
+            long longValue => longValue != 0,
+            ulong unsignedLong => unsignedLong != 0,
+            JsonElement jsonElement => jsonElement.ValueKind switch
+            {
+                JsonValueKind.False => false,
+                JsonValueKind.True => true,
+                JsonValueKind.Null => false,
+                JsonValueKind.String => IsTemplateTruthy(jsonElement.GetString()),
+                JsonValueKind.Number => jsonElement.TryGetInt64(out var numericValue) && numericValue != 0,
+                _ => true,
+            },
+            _ => !string.IsNullOrWhiteSpace(value.ToString())
+        };
+    }
+
+    /// <summary>
+    /// Pre-warms MCP servers referenced in the agent's tool definitions by sending a
+    /// lightweight HTTP POST. This ensures Container Apps are scaled up before Foundry
+    /// attempts to enumerate tools (which has an internal timeout that triggers
+    /// "TaskCanceledException encountered while enumerating tools" on cold starts).
+    /// </summary>
+    private async Task WarmupMcpServersAsync(IReadOnlyList<JsonElement> tools, CancellationToken cancellationToken)
+    {
+        var mcpUrls = new HashSet<string>();
+        foreach (var tool in tools)
+        {
+            if (tool.TryGetProperty("type", out var typeProp) && typeProp.GetString() == "mcp"
+                && tool.TryGetProperty("server_url", out var urlProp))
+            {
+                var url = urlProp.GetString();
+                if (!string.IsNullOrEmpty(url))
+                    mcpUrls.Add(url);
+            }
+        }
+
+        if (mcpUrls.Count == 0) return;
+
+        using var httpClient = _httpClientFactory.CreateClient();
+        httpClient.Timeout = TimeSpan.FromSeconds(15);
+
+        var warmupTasks = mcpUrls.Select(async url =>
+        {
+            try
+            {
+                // Send tools/list — lightweight JSON-RPC call that wakes the Container App
+                var listPayload = """{"jsonrpc":"2.0","id":0,"method":"tools/list","params":{}}""";
+                using var req = new HttpRequestMessage(HttpMethod.Post, url)
+                {
+                    Content = new StringContent(listPayload, Encoding.UTF8, "application/json")
+                };
+                var resp = await httpClient.SendAsync(req, cancellationToken);
+                _logger.LogDebug("MCP warmup for {Url}: {Status}", url, (int)resp.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                // Non-fatal: warmup is best-effort; the retry loop handles failures
+                _logger.LogDebug(ex, "MCP warmup failed for {Url} (non-fatal)", url);
+            }
+        });
+
+        await Task.WhenAll(warmupTasks);
     }
 
     /// <summary>

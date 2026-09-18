@@ -39,7 +39,6 @@ public class GenerateProductImages
 
             // Clear the image job queue (and its poison queue) so stale work doesn't block new jobs
             var aiJobQueueClient = queueServiceClient.GetQueueClient(AI_JOB_QUEUE);
-            await aiJobQueueClient.CreateIfNotExistsAsync();
             _logger.LogInformation("Clearing existing messages from queue: {queueName}", AI_JOB_QUEUE);
             await aiJobQueueClient.ClearMessagesAsync();
 
@@ -127,7 +126,6 @@ public class GenerateProductImages
 
             var queueServiceClient = GetQueueServiceClient();
             var aiJobQueueClient = queueServiceClient.GetQueueClient(AI_JOB_QUEUE);
-            await aiJobQueueClient.CreateIfNotExistsAsync();
 
             var message = JsonSerializer.Serialize(new AiJobMessage
             {

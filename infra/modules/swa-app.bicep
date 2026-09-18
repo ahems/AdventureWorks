@@ -12,6 +12,7 @@ param apiUrl string
 param apiFunctionsUrl string = ''
 param apiMcpUrl string = ''
 param appInsightsConnectionString string = ''
+param webPubSubHostName string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -58,6 +59,7 @@ resource swaConfig 'Microsoft.Web/staticSites/config@2023-01-01' = {
     API_FUNCTIONS_URL: apiFunctionsUrl
     API_MCP_URL: apiMcpUrl
     APPINSIGHTS_CONNECTIONSTRING: appInsightsConnectionString
+    WEB_PUBSUB_HOST_NAME: webPubSubHostName
   }
 }
 

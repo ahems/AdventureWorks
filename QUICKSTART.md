@@ -2,6 +2,8 @@
 
 This guide walks you through cloning this repo into your own GitHub account, starting a devcontainer in **GitHub Codespaces**, and provisioning the full Azure environment with **Azure Developer CLI (`azd`)**. It also explains how `azure.yaml` and the azd lifecycle hooks work together.
 
+> **What you're deploying:** See the [architecture diagram](docs/AdventureWorks-Reference-Architecture.svg) for a visual map of all Azure components provisioned by `azd up`.
+
 ---
 
 ## 1. Fork and Clone the Repository
@@ -77,7 +79,6 @@ Set the Azure regions you want to deploy services to:
 ```bash
 azd env set AZURE_LOCATION "eastus2"
 azd env set FOUNDRY_LOCATION "swedencentral"
-azd env set PLAYWRIGHT_LOCATION "westeurope"
 ```
 
 Optional: Set the OpenAI model parameters to use for chat, embeddings and image generation (example values shown):
@@ -104,8 +105,10 @@ From the repo root inside the Codespace:
 
 ```bash
 cd /workspaces/AdventureWorks
-azd up
+azd up --no-prompt
 ```
+
+> **Important:** Always use `--no-prompt` to avoid interactive prompts that can stall the deployment. The `azd` preflight validation may warn about AI model catalog entries and prompt for confirmation — `--no-prompt` auto-accepts non-destructive warnings and ensures the deployment runs end-to-end without hanging.
 
 `azd up` will:
 
@@ -121,6 +124,19 @@ azd up
 At the end, `azd` will print out key endpoints such as the Static Web App URL, API URLs, and Function endpoints.
 
 > **Tip:** After deployment completes, visit `https://<your-static-web-app-url>/health` to verify all services are running and the database is fully loaded. The health check will show the status of the API, Functions, and database connectivity.
+
+### Important: what happens when the demo is idle
+
+The SQL Database is configured as General Purpose serverless with a 60-minute auto-pause delay. This does not mean the database will pause whenever the frontends and Container Apps are idle. `api-functions` keeps one Flex Consumption instance always ready for `OrderPlacedSqlTrigger`, which polls SQL Change Tracking on `Sales.SalesOrderHeader` so new orders can be processed reliably. That listener maintains SQL activity and prevents the zero-session condition required for auto-pause. The hourly delivery timer and weekly transaction-history archive are additional, intermittent SQL callers.
+
+For a demo that is unused most of the time, the recommended no-code workaround is to delete the Azure environment after use and redeploy it when needed:
+
+```bash
+azd down --no-prompt
+azd up --no-prompt
+```
+
+`azd down` deletes the deployed resources, so do not run it while using the local-development workflow in this guide if that workflow needs the Azure-hosted database, authentication, or APIs. See [infra/README.md](infra/README.md) for the design trade-off and possible future alternatives.
 
 ---
 

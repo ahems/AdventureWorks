@@ -97,22 +97,6 @@ public class GenerateOrderReceipts
 
             var queueClient = queueServiceClient.GetQueueClient(QUEUE_NAME);
 
-            // Create queue if it doesn't exist
-            try
-            {
-                _logger.LogInformation("Ensuring queue '{queueName}' exists", QUEUE_NAME);
-                await queueClient.CreateIfNotExistsAsync();
-                _logger.LogInformation("Queue '{queueName}' is ready", QUEUE_NAME);
-            }
-            catch (Azure.RequestFailedException ex) when (ex.Status == 404)
-            {
-                _logger.LogError(ex, "Failed to create queue '{queueName}'. The Managed Identity may not have 'Storage Queue Data Contributor' role.", QUEUE_NAME);
-                throw new InvalidOperationException(
-                    $"Queue '{QUEUE_NAME}' does not exist and cannot be created. " +
-                    "Please create the queue manually or grant 'Storage Queue Data Contributor' role to the function's Managed Identity.",
-                    ex);
-            }
-
             // Enqueue one message per sales order number
             int enqueued = 0;
             var enqueuedOrders = new List<string>();
@@ -237,7 +221,6 @@ public class GenerateOrderReceipts
                 );
 
                 var emailQueueClient = queueServiceClient.GetQueueClient("order-email-generation");
-                await emailQueueClient.CreateIfNotExistsAsync();
 
                 var emailMessage = System.Text.Json.JsonSerializer.Serialize(new
                 {

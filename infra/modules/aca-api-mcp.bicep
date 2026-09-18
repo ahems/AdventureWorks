@@ -4,7 +4,7 @@ param location string = resourceGroup().location
 param containerRegistryName string = 'avacr${toLower(uniqueString(resourceGroup().id))}'
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param containerAppEnvId string
-param bootstrapImage string = 'mcr.microsoft.com/dotnet/aspnet:8.0'
+param bootstrapImage string = 'mcr.microsoft.com/dotnet/aspnet:10.0'
 param apiFunctionsUrl string
 @minValue(0)
 @maxValue(25)

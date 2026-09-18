@@ -16,7 +16,17 @@ _[Watch full video](docs/adventureworks-demo.webm) (25 seconds)_
 
 ## High‑Level Architecture
 
-This repo implements a **3‑tier Azure application** with passwordless authentication and managed identities:
+This repo implements a **3‑tier Azure application** with passwordless authentication and managed identities.
+
+### Production Reference Architecture
+
+The diagram below shows the **ideal production state** of this solution, modeled on the [Baseline Microsoft Foundry Chat Reference Architecture](https://learn.microsoft.com/en-us/azure/architecture/ai-ml/architecture/baseline-openai-e2e-chat). It includes enterprise security features (VNet, private endpoints, Application Gateway + WAF, Azure Firewall) that the current demo deployment omits for simplicity.
+
+![AdventureWorks Azure Reference Architecture](docs/AdventureWorks-Reference-Architecture.svg)
+
+_See [ARCHITECTURE_DIAGRAM_PROMPT.md](ARCHITECTURE_DIAGRAM_PROMPT.md) for the detailed prompt used to generate this diagram._
+
+### Simplified Data Flow
 
 ```text
 User → Static Web App → GraphQL (DAB) → Azure SQL
@@ -42,7 +52,7 @@ Admin → Container App (app-admin) → Azure Functions → Azure SQL
   - Enforces DAB naming conventions and pagination limits (100 items per query).
 
 - **Serverless Functions** (`api-functions/`)
-  - .NET 8 **Azure Functions (isolated worker)** in Container Apps.
+  - .NET 10 **Azure Functions (isolated worker)** in Container Apps.
   - Implements custom business logic not suited for DAB, including:
     - AI agent endpoints (via Model Context Protocol).
     - Password & password‑reset workflows.
@@ -97,7 +107,7 @@ All services authenticate using **Managed Identity** and the `Authentication=Act
 - `app/` – React + TypeScript + Vite frontend (Azure Static Web App).
 - `app-admin/` – React + TypeScript + Vite admin portal (Azure Container App, scale-to-zero).
 - `api/` – Data API Builder (DAB) configuration, Dockerfile, and local start scripts.
-- `api-functions/` – .NET 8 isolated Azure Functions with AI, email, receipts, passwords, SEO, and translation workflows.
+- `api-functions/` – .NET 10 isolated Azure Functions with AI, email, receipts, passwords, SEO, and translation workflows.
 - `api-mcp/` – Model Context Protocol server providing AI agent tool capabilities.
 - `seed-job/` – Containerized database seeding job (Azure Container App Job) that loads SQL scripts, CSV data, and product images (~8 minute execution time). See [seed-job/README.md](seed-job/README.md).
 - `infra/` – Bicep infrastructure as code for Azure resource provisioning.
@@ -106,7 +116,7 @@ All services authenticate using **Managed Identity** and the `Authentication=Act
   - `scripts/data-management/` – Data export and orchestration monitoring scripts
   - `scripts/generators/` – Content generation scripts (reviews, telemetry)
   - `scripts/utilities/` – Helper tools (translations, image downloads, duplicate checking)
-- `tests/` – Playwright E2E tests and test scripts (see [tests/README.md](tests/README.md))
+- `tests/` – API and integration test scripts (see [tests/README.md](tests/README.md))
 - `docs/` – Comprehensive documentation organized by feature area (see [docs/README.md](docs/README.md))
 
 For function‑level details (routes, triggers, and responsibilities), see:
@@ -136,8 +146,10 @@ For testing and test scripts, see:
 Deploy the complete solution to Azure using:
 
 ```bash
-azd up
+azd up --no-prompt
 ```
+
+> **Important:** Always use `--no-prompt` to avoid interactive prompts (e.g. AI model catalog validation warnings) that can stall the deployment.
 
 This command will:
 
@@ -151,6 +163,20 @@ This command will:
 **Total deployment time: ~29 minutes** (infrastructure provisioning + seed-job execution)
 
 Once deployed, you can access the application via the Static Web App URL shown in the deployment output.
+
+### Demo idle behavior and Azure SQL cost
+
+The SQL Database is provisioned on the General Purpose serverless tier with a 60-minute auto-pause delay. Most Container Apps are configured to scale to zero when idle, but the deployment also keeps one Flex Consumption Functions instance always ready for `OrderPlacedSqlTrigger`. That function uses Azure SQL Change Tracking and polls `Sales.SalesOrderHeader` for new orders. The listener's SQL session means the database normally does not reach the zero-session condition required for auto-pause, even when no user is using the demo.
+
+This is intentional: allowing the Functions app to scale fully to zero would make the SQL trigger unreliable and could miss new orders. The hourly order-delivery timer and weekly transaction-history archive can also briefly wake SQL when they run, although they are not the continuous idle connection.
+
+For this demo, the simplest cost control is to remove the deployment when it is not needed:
+
+```bash
+azd down --no-prompt
+```
+
+Run `azd up --no-prompt` when the demo is needed again. Do not use `azd down` while following the local-development steps that depend on the deployed Azure services. A future code change could replace the SQL trigger with an explicit queue/outbox workflow, disable the background timers when idle, or isolate the SQL-trigger function in a separately managed Function App; those options trade lower idle cost for more implementation and operational complexity.
 
 ---
 
@@ -174,7 +200,7 @@ The `docs/` folder contains comprehensive documentation organized by feature are
   - [docs/features/email/](docs/features/email/) – Email and PDF receipt generation
 
 - **Testing**
-  - [tests/README.md](tests/README.md) – Playwright E2E tests
+  - [tests/README.md](tests/README.md) – API and integration test scripts
   - [tests/scripts/README.md](tests/scripts/README.md) – API and integration test scripts
   - [docs/testing/](docs/testing/) – Testing guides and telemetry validation
 
@@ -195,9 +221,6 @@ The test suite uses **dynamic product selection** to ensure comprehensive covera
 **Quick Commands:**
 
 ```bash
-# Run E2E tests
-npx playwright test
-
 # API and integration tests (see tests/scripts/README.md for all available tests)
 cd tests/scripts
 ./test-telemetry.sh              # Validate telemetry
@@ -205,37 +228,6 @@ cd tests/scripts
 ./test-password-reset-flow.sh    # Test password reset flow
 ./test-ai-and-mcp-complete.sh    # Test AI agent and MCP integration
 ```
-
-**Product Helper Utility** (`tests/utils/productHelper.ts`):
-
-- Fetches all products from the database (handles DAB's 100-item pagination)
-- Provides random product selection functions with optional filtering
-- Caches results for 5 minutes to optimize performance
-
-**Usage in tests:**
-
-```typescript
-import {
-  getRandomProductIds,
-  getInStockProductIds,
-} from "../utils/productHelper";
-
-// Get any random products
-const productIds = await getRandomProductIds(5);
-
-// Get products likely to be in stock
-const inStockIds = await getInStockProductIds(10);
-
-// Navigate to a random product
-await page.goto(`${testEnv.webBaseUrl}/product/${productIds[0]}`);
-```
-
-**Benefits:**
-
-- Tests exercise 100% of product catalog over multiple runs (vs. 1-2% with hardcoded IDs)
-- Automatically adapts to product database changes
-- Catches edge cases with different product characteristics
-- More realistic simulation of user behavior
 
 See [docs/testing/TEST_DATA_RANDOMIZATION_ANALYSIS.md](docs/testing/TEST_DATA_RANDOMIZATION_ANALYSIS.md) for detailed analysis and implementation details.
 

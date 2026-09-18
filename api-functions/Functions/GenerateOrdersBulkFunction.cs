@@ -134,7 +134,6 @@ public class GenerateOrdersBulkFunction
             new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 });
 
         var queueClient = client.GetQueueClient(AIJobProcessorFunction.CHAT_QUEUE);
-        await queueClient.CreateIfNotExistsAsync();
         return queueClient;
     }
 }

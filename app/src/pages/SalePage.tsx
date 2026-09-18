@@ -27,12 +27,20 @@ const SalePage: React.FC = () => {
     useSaleProducts(selectedLanguage);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [itemsPerPage, setItemsPerPage] = React.useState(12);
-  const [sortBy, setSortBy] = React.useState("discount-desc");
+  const [sortBy, setSortBy] = React.useState("ends-soonest");
 
   // Apply sorting
   const saleProducts = React.useMemo(() => {
     const sorted = [...allSaleProducts].sort((a, b) => {
       switch (sortBy) {
+        case "ends-soonest":
+          const endA = a.SpecialOfferEndDate
+            ? new Date(a.SpecialOfferEndDate).getTime()
+            : Infinity;
+          const endB = b.SpecialOfferEndDate
+            ? new Date(b.SpecialOfferEndDate).getTime()
+            : Infinity;
+          return endA - endB;
         case "discount-desc":
           return (b.DiscountPct || 0) - (a.DiscountPct || 0);
         case "discount-asc":
@@ -90,7 +98,7 @@ const SalePage: React.FC = () => {
         totalPages - 3,
         totalPages - 2,
         totalPages - 1,
-        totalPages
+        totalPages,
       );
     } else {
       pages.push(
@@ -100,7 +108,7 @@ const SalePage: React.FC = () => {
         currentPage,
         currentPage + 1,
         "...",
-        totalPages
+        totalPages,
       );
     }
 
@@ -261,6 +269,12 @@ const SalePage: React.FC = () => {
                       </SelectTrigger>
                       <SelectContent className="bg-white border-2 border-doodle-text">
                         <SelectItem
+                          value="ends-soonest"
+                          className="font-doodle"
+                        >
+                          {t("sale.sortEndsSoonest", "Ends Soonest")}
+                        </SelectItem>
+                        <SelectItem
                           value="discount-desc"
                           className="font-doodle"
                         >
@@ -312,7 +326,7 @@ const SalePage: React.FC = () => {
                       key={`product-${item.ProductID}`}
                       product={item}
                     />
-                  )
+                  ),
                 )}
               </div>
 

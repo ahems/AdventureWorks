@@ -18,7 +18,7 @@
       "version": "latest"
     },
     "ghcr.io/devcontainers/features/dotnet:2": {
-      "version": "8.0"
+      "version": "10.0"
     }
   },
   "customizations": {
@@ -28,8 +28,7 @@
         "ms-vscode.powershell",
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
-        "bradlc.vscode-tailwindcss",
-        "ms-playwright.playwright"
+        "bradlc.vscode-tailwindcss"
       ],
       "settings": {
         // PowerShell settings
@@ -45,7 +44,10 @@
       }
     }
   },
-  "postCreateCommand": "git lfs pull && az bicep install && npm ci && npx playwright install --with-deps chromium && (cd app && npm ci) && npm install --prefix app @playwright/test csv-parse",
+  "containerEnv": {
+    "AZD_SKIP_FIRST_RUN": "true"
+  },
+  "postCreateCommand": "git lfs pull || true && az bicep install && npm ci && (cd app && npm ci) && (cd app-admin && npm ci) && (cd app-manufacturing && npm ci) && dotnet restore api-functions/api-functions.csproj && dotnet restore api-mcp/ServiceDefaults/ServiceDefaults.csproj && dotnet restore api-mcp/AppHost/AppHost.csproj",
   "hostRequirements": {
     "memory": "8gb"
   }

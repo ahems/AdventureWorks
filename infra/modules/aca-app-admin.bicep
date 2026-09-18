@@ -19,6 +19,8 @@ param apiMcpUrl string = ''
 param appInsightsConnectionString string = ''
 param appUrl string = ''
 param mcpInspectorUrl string = ''
+param appManufacturingUrl string = ''
+param webPubSubHostName string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -103,8 +105,16 @@ resource appAdmin 'Microsoft.App/containerApps@2024-03-01' = {
               value: mcpInspectorUrl
             }
             {
+              name: 'APP_MANUFACTURING_URL'
+              value: appManufacturingUrl
+            }
+            {
               name: 'AZURE_CLIENT_ID'
               value: azidentity.properties.clientId
+            }
+            {
+              name: 'WEB_PUBSUB_HOST_NAME'
+              value: webPubSubHostName
             }
           ]
         }

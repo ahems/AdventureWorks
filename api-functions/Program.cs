@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.ApplicationInsights;
 using Azure.Identity;
 using Azure.Core.Serialization;
+using Azure.Storage.Queues;
 using AddressFunctions.Services;
 using api_functions.Services;
 using Microsoft.OpenApi.Models;
@@ -96,7 +97,9 @@ builder.Services.AddScoped<ReviewService>(sp =>
     var configuration = sp.GetRequiredService<IConfiguration>();
     var connectionString = configuration["SQL_CONNECTION_STRING"]
         ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
-    return new ReviewService(connectionString);
+    var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
+    return new ReviewService(connectionString, tableServiceUri);
 });
 
 // Register OrderService for MCP Server
@@ -226,6 +229,21 @@ builder.Services.AddScoped<CartRecoveryAgentService>(sp =>
         telemetryClient);
 });
 
+// Register ReviewAgentService — Foundry agent for verified-review generation.
+builder.Services.AddScoped<ReviewAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<ReviewAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new ReviewAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
 // Register Promotion Agent Service for single-shot AI promotion generation via Foundry
 builder.Services.AddScoped<PromotionAgentService>(sp =>
 {
@@ -235,6 +253,81 @@ builder.Services.AddScoped<PromotionAgentService>(sp =>
     var telemetryClient = sp.GetRequiredService<TelemetryClient>();
 
     return new PromotionAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
+// Register Translation Agent Service for AI translation via Foundry
+builder.Services.AddScoped<TranslationAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<TranslationAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new TranslationAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
+// Register Review Batch Agent Service for batch review generation and replies via Foundry
+builder.Services.AddScoped<ReviewBatchAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<ReviewBatchAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new ReviewBatchAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
+// Register Review Analysis Agent Service for sentiment analysis and moderation via Foundry
+builder.Services.AddScoped<ReviewAnalysisAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<ReviewAnalysisAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new ReviewAnalysisAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
+// Register Email Content Agent Service for AI email generation via Foundry
+builder.Services.AddScoped<EmailContentAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<EmailContentAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new EmailContentAgentService(
+        logger,
+        configuration,
+        foundryClient,
+        telemetryClient);
+});
+
+// Register Catalog Suggestion Agent Service for AI category/subcategory suggestions via Foundry
+builder.Services.AddScoped<CatalogSuggestionAgentService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<CatalogSuggestionAgentService>>();
+    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
+    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
+
+    return new CatalogSuggestionAgentService(
         logger,
         configuration,
         foundryClient,
@@ -266,9 +359,10 @@ builder.Services.AddScoped<WorkOrderSimulationService>(sp =>
         ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
     var simulationTimeScale = double.TryParse(configuration["SIMULATION_TIME_SCALE_FACTOR"], out var scale) ? scale : 60.0;
     var defaultScrapRate    = double.TryParse(configuration["SIMULATION_SCRAP_RATE"],        out var rate)  ? rate  : 0.05;
-    var logger = sp.GetRequiredService<ILogger<WorkOrderSimulationService>>();
-    var bank   = sp.GetRequiredService<BankService>();
-    return new WorkOrderSimulationService(connectionString, tableServiceUri, simulationTimeScale, defaultScrapRate, logger, bank);
+    var logger    = sp.GetRequiredService<ILogger<WorkOrderSimulationService>>();
+    var bank      = sp.GetRequiredService<BankService>();
+    var warehouse = sp.GetRequiredService<WarehouseService>();
+    return new WorkOrderSimulationService(connectionString, tableServiceUri, simulationTimeScale, defaultScrapRate, logger, bank, warehouse);
 });
 
 // Register SupplyChainService for the procurement simulation
@@ -280,10 +374,12 @@ builder.Services.AddScoped<SupplyChainService>(sp =>
     var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
         ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
     var simulationTimeScale = double.TryParse(configuration["SIMULATION_TIME_SCALE_FACTOR"], out var scSupply) ? scSupply : 60.0;
+    var supplyChainSpeedMultiplier = double.TryParse(configuration["SUPPLY_CHAIN_SPEED_MULTIPLIER"], out var scMultiplier) ? scMultiplier : 15.0;
     var logger    = sp.GetRequiredService<ILogger<SupplyChainService>>();
     var telemetry = sp.GetRequiredService<TelemetryClient>();
     var bank      = sp.GetRequiredService<BankService>();
-    return new SupplyChainService(connectionString, tableServiceUri, simulationTimeScale, logger, telemetry, bank);
+    var warehouse = sp.GetRequiredService<WarehouseService>();
+    return new SupplyChainService(connectionString, tableServiceUri, simulationTimeScale, supplyChainSpeedMultiplier, logger, telemetry, bank, warehouse);
 });
 
 // Register ManufacturingPlanningService for planning intelligence endpoints
@@ -308,6 +404,38 @@ builder.Services.AddScoped<WorkforceService>(sp =>
     return new WorkforceService(connectionString, tableServiceUri, logger);
 });
 
+// Register WarehouseService — always-on, event-driven warehouse simulation
+// Responds to Store/Retrieve/Receive ops enqueued by manufacturing, order pipeline, and supply chain.
+builder.Services.AddScoped<WarehouseService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
+    var queueServiceUri = configuration["AzureWebJobsStorage:queueEndpoint"]
+        ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.queue.core.windows.net";
+    var bank   = sp.GetRequiredService<BankService>();
+    var logger = sp.GetRequiredService<ILogger<WarehouseService>>();
+    return new WarehouseService(connectionString, tableServiceUri, queueServiceUri, bank, logger);
+});
+
+// Register ShoppingSimulatorService — manages Shopping Simulator state, queue depth, and
+// the cached top-spender list used by the timer-driven order injection function.
+builder.Services.AddScoped<ShoppingSimulatorService>(sp =>
+{
+    var configuration    = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    var accountName      = configuration["AzureWebJobsStorage:accountName"] ?? string.Empty;
+    var tableServiceUri  = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{accountName}.table.core.windows.net";
+    var queueServiceUri  = configuration["AzureWebJobsStorage:queueServiceUri"]
+        ?? $"https://{accountName}.queue.core.windows.net";
+    var logger = sp.GetRequiredService<ILogger<ShoppingSimulatorService>>();
+    return new ShoppingSimulatorService(connectionString, tableServiceUri, queueServiceUri, logger);
+});
+
 // Register OrderGenerationService for SQL write operations during AI order generation
 builder.Services.AddScoped<OrderGenerationService>(sp =>
 {
@@ -317,14 +445,27 @@ builder.Services.AddScoped<OrderGenerationService>(sp =>
     return new OrderGenerationService(connectionString, sp.GetRequiredService<ILogger<OrderGenerationService>>());
 });
 
-// Register ManufacturingAgentService: autonomous agent invoked by SQL change-tracking trigger
-builder.Services.AddScoped<ManufacturingAgentService>(sp =>
+// Register manufacturing agent infrastructure (replaces ManufacturingAgentService).
+// Orders are now queued to manufacturing-agent-queue; the queue trigger invokes the hosted agent.
+builder.Services.AddScoped<ManufacturingAgentConfigService>(sp =>
+    new ManufacturingAgentConfigService(sp.GetRequiredService<ILogger<ManufacturingAgentConfigService>>()));
+
+builder.Services.AddScoped<AutoPromotionConfigService>(sp =>
+    new AutoPromotionConfigService(sp.GetRequiredService<ILogger<AutoPromotionConfigService>>()));
+
+builder.Services.AddScoped<ManufacturingProposalService>(sp =>
+    new ManufacturingProposalService(sp.GetRequiredService<ILogger<ManufacturingProposalService>>()));
+
+builder.Services.AddScoped<ManufacturingAgentRunService>(sp =>
 {
-    var configuration = sp.GetRequiredService<IConfiguration>();
-    var logger = sp.GetRequiredService<ILogger<ManufacturingAgentService>>();
-    var foundryClient = sp.GetRequiredService<FoundryAgentClient>();
-    var telemetryClient = sp.GetRequiredService<TelemetryClient>();
-    return new ManufacturingAgentService(logger, configuration, foundryClient, telemetryClient);
+    var configuration   = sp.GetRequiredService<IConfiguration>();
+    var accountName     = configuration["AzureWebJobsStorage:accountName"] ?? string.Empty;
+    var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{accountName}.table.core.windows.net";
+    var queueServiceUri = configuration["AzureWebJobsStorage:queueServiceUri"]
+        ?? $"https://{accountName}.queue.core.windows.net";
+    var logger = sp.GetRequiredService<ILogger<ManufacturingAgentRunService>>();
+    return new ManufacturingAgentRunService(logger, tableServiceUri, queueServiceUri);
 });
 
 // Register OrderGenerationAgentService: AI+Foundry orchestration for order generation wizard
@@ -365,6 +506,13 @@ builder.Services.AddScoped<CustomerGenerationAgentService>(sp =>
         foundryClient);
 });
 
+// Register OrderPipelineConfigService for order processing timing configuration
+builder.Services.AddScoped<OrderPipelineConfigService>(sp =>
+{
+    var logger = sp.GetRequiredService<ILogger<OrderPipelineConfigService>>();
+    return new OrderPipelineConfigService(logger);
+});
+
 // Register BankService for the virtual bank simulator
 builder.Services.AddScoped<BankService>(sp =>
 {
@@ -375,7 +523,8 @@ builder.Services.AddScoped<BankService>(sp =>
         ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
     var logger = sp.GetRequiredService<ILogger<BankService>>();
     var telemetry = sp.GetRequiredService<TelemetryClient>();
-    return new BankService(connectionString, tableServiceUri, logger, telemetry);
+    var webPubSub = sp.GetRequiredService<WebPubSubService>();
+    return new BankService(connectionString, tableServiceUri, logger, telemetry, webPubSub);
 });
 
 // Register AIService with Azure OpenAI endpoint
@@ -422,6 +571,70 @@ builder.Services.AddScoped<EmailService>(sp =>
         sp.GetRequiredService<ILogger<EmailService>>());
 });
 
+// Register WebPubSubService for real-time push notifications to browser clients
+builder.Services.AddSingleton<WebPubSubService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var hostName = configuration["WEB_PUBSUB_HOST_NAME"];
+    var credential = sp.GetRequiredService<DefaultAzureCredential>();
+    var logger = sp.GetRequiredService<ILogger<WebPubSubService>>();
+    return new WebPubSubService(hostName, credential, logger);
+});
+
 var app = builder.Build();
 
-app.Run();
+// Verify that all expected storage resources exist (provisioned by infra/modules/storage.bicep via azd up).
+// Logs warnings to App Insights for any missing resource but does not block startup.
+var config = app.Services.GetRequiredService<IConfiguration>();
+var storageAccountName = config["AzureWebJobsStorage:accountName"];
+if (!string.IsNullOrEmpty(storageAccountName))
+{
+    var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+    var credential = new DefaultAzureCredential();
+
+    var queueUri = config["AzureWebJobsStorage:queueServiceUri"]
+        ?? $"https://{storageAccountName}.queue.core.windows.net";
+    var tableUri = config["AzureWebJobsStorage:tableServiceUri"]
+        ?? $"https://{storageAccountName}.table.core.windows.net";
+    var blobUri = config["AzureWebJobsStorage:blobServiceUri"]
+        ?? $"https://{storageAccountName}.blob.core.windows.net";
+
+    var queueSvc = new Azure.Storage.Queues.QueueServiceClient(new Uri(queueUri), credential);
+    var tableSvc = new Azure.Data.Tables.TableServiceClient(new Uri(tableUri), credential);
+    var blobSvc  = new Azure.Storage.Blobs.BlobServiceClient(new Uri(blobUri), credential);
+
+    string[] expectedQueues = [
+        "order-receipt-generation", "order-email-generation",
+        "ai-job-image-queue", "ai-job-chat-queue", "ai-job-embeddings-queue",
+        "product-thumbnail-generation", "sales-order-status", "production-wo-queue",
+        "supply-chain-orders-queue", "simulation-order-queue", "warehouse-ops-queue",
+        "review-moderation-queue", "manufacturing-agent-queue", "auto-promotion-queue"
+    ];
+    string[] expectedTables = [
+        "shoppingSimulator", "awOrderPipelineConfig", "awSupplyChain", "awManufacturing",
+        "awBankAccounts", "awBankTransactions", "awWarehouse",
+        "awManufacturingAgentConfig", "awManufacturingAgentRuns", "awManufacturingProposals",
+        "verifiedReviewsJob", "reviewModerationJob", "awAutoPromotionConfig"
+    ];
+    string[] expectedContainers = [
+        "adventureworks-receipts", "locales", "function-releases"
+    ];
+
+    foreach (var q in expectedQueues)
+    {
+        try { await queueSvc.GetQueueClient(q).GetPropertiesAsync(); }
+        catch { startupLogger.LogWarning("Missing storage queue '{Queue}' — run 'azd provision' to create infrastructure", q); }
+    }
+    foreach (var t in expectedTables)
+    {
+        try { await tableSvc.GetTableClient(t).GetAccessPoliciesAsync(); }
+        catch { startupLogger.LogWarning("Missing storage table '{Table}' — run 'azd provision' to create infrastructure", t); }
+    }
+    foreach (var c in expectedContainers)
+    {
+        try { await blobSvc.GetBlobContainerClient(c).GetPropertiesAsync(); }
+        catch { startupLogger.LogWarning("Missing blob container '{Container}' — run 'azd provision' to create infrastructure", c); }
+    }
+}
+
+await app.RunAsync();

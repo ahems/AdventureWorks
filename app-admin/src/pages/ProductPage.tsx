@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
+import { TableSkeleton } from "@/components/LoadingSkeletons";
 import ProductImageGallery from "@/components/ProductImageGallery";
 import AiImageGeneratorDialog from "@/components/AiImageGeneratorDialog";
 import CreateVariationsDialog from "@/components/CreateVariationsDialog";
@@ -49,7 +50,8 @@ import { getAppUrl } from "@/lib/utils";
 import {
   translateProductContent,
   generateProductContent,
-  generateProductReviews,
+  getProductEligibleReviewerCount,
+  generateVerifiedReviewsForProduct,
 } from "@/services/utilityService";
 import {
   useProductTransactionHistory,
@@ -113,10 +115,7 @@ const TransactionHistorySection: React.FC<TransactionHistorySectionProps> = ({
         </span>
       </div>
       {isLoading ? (
-        <div className="flex items-center justify-center p-8 gap-3">
-          <div className="w-6 h-6 border-4 border-doodle-accent border-t-transparent rounded-full animate-spin" />
-          <span className="font-doodle text-doodle-text/60">Loading…</span>
-        </div>
+        <TableSkeleton rows={5} cols={5} />
       ) : isError ? (
         <p className="font-doodle text-sm text-red-600 px-6 py-4">
           Failed to load transaction history.
@@ -238,6 +237,10 @@ const ProductPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingReviews, setIsGeneratingReviews] = useState(false);
+  const [eligibleReviewerCount, setEligibleReviewerCount] = useState<
+    number | null
+  >(null);
+  const [eligibilityLoading, setEligibilityLoading] = useState(false);
   const [isDeletingAiImages, setIsDeletingAiImages] = useState(false);
   const [isVariationsOpen, setIsVariationsOpen] = useState(false);
   const [selectedPromotionId, setSelectedPromotionId] =
@@ -255,6 +258,17 @@ const ProductPage: React.FC = () => {
   const { data: englishDesc } = useAdminProductEnglishDescription(
     product?.ProductModelID ?? null,
   );
+
+  // Fetch eligible unreviewed customer count for this product whenever the product loads.
+  // Uses the lightweight count endpoint — avoids downloading full customer rows.
+  useEffect(() => {
+    if (!prodIdNum) return;
+    setEligibilityLoading(true);
+    getProductEligibleReviewerCount(prodIdNum)
+      .then((count) => setEligibleReviewerCount(count))
+      .catch(() => setEligibleReviewerCount(0))
+      .finally(() => setEligibilityLoading(false));
+  }, [prodIdNum]);
 
   const updateProduct = useUpdateProduct();
   const updateProductDescription = useUpdateProductDescription();
@@ -903,11 +917,15 @@ const ProductPage: React.FC = () => {
                         onChange={(e) => {
                           const v = Math.max(
                             0,
-                            Math.floor(Number(e.target.value) || 0),
+                            Math.min(
+                              32767,
+                              Math.floor(Number(e.target.value) || 0),
+                            ),
                           );
                           setStockQuantity(String(v));
                         }}
                         min="0"
+                        max="32767"
                         step="1"
                         className="doodle-input w-full"
                       />
@@ -1208,31 +1226,56 @@ const ProductPage: React.FC = () => {
                     onClick={async () => {
                       setIsGeneratingReviews(true);
                       try {
-                        await generateProductReviews([product.ProductID]);
+                        await generateVerifiedReviewsForProduct(
+                          product.ProductID,
+                        );
                         toast({
-                          title: "Reviews queued",
+                          title: "Review generation started",
                           description:
-                            "AI review generation has been started for this product.",
+                            "A verified review is being generated using a real customer who purchased and received this product.",
                         });
-                      } catch {
+                      } catch (err) {
+                        const msg =
+                          err instanceof Error
+                            ? err.message
+                            : "Failed to start review generation.";
                         toast({
                           title: "Error",
-                          description: "Failed to start review generation.",
+                          description: msg,
                           variant: "destructive",
                         });
                       } finally {
                         setIsGeneratingReviews(false);
                       }
                     }}
-                    disabled={isGeneratingReviews}
-                    className="inline-flex items-center gap-1 font-doodle text-xs text-doodle-blue hover:underline disabled:opacity-60 bg-transparent border-0 p-0 cursor-pointer"
+                    disabled={
+                      isGeneratingReviews ||
+                      eligibilityLoading ||
+                      eligibleReviewerCount === 0
+                    }
+                    title={
+                      eligibleReviewerCount === 0
+                        ? "No eligible customers: reviews can only be generated for eshop customers who purchased and received this product but haven't yet written a review."
+                        : eligibleReviewerCount !== null
+                          ? `${eligibleReviewerCount} eligible customer${eligibleReviewerCount !== 1 ? "s" : ""} who purchased and received this product without yet reviewing it`
+                          : "Generate a verified review from a real customer"
+                    }
+                    className="inline-flex items-center gap-1 font-doodle text-xs text-doodle-blue hover:underline disabled:opacity-40 disabled:cursor-not-allowed bg-transparent border-0 p-0 cursor-pointer"
                   >
                     {isGeneratingReviews ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : eligibilityLoading ? (
                       <Loader2 className="w-3 h-3 animate-spin" />
                     ) : (
                       <Sparkles className="w-3 h-3" />
                     )}
-                    Generate Reviews for this Product Using AI
+                    {eligibilityLoading
+                      ? "Checking eligibility…"
+                      : eligibleReviewerCount === 0
+                        ? "No eligible customers for verified reviews"
+                        : eligibleReviewerCount !== null
+                          ? `Generate Verified Review (${eligibleReviewerCount} eligible customer${eligibleReviewerCount !== 1 ? "s" : ""})`
+                          : "Generate Verified Review Using AI"}
                   </button>
                 </div>
               </div>

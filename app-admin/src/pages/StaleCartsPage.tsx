@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import AdminHeader from "@/components/AdminHeader";
+import { TableSkeleton } from "@/components/LoadingSkeletons";
 import Footer from "@/components/Footer";
 import CartRecoveryAgent from "@/components/CartRecoveryAgent";
 import { Button } from "@/components/ui/button";
@@ -62,7 +63,8 @@ import { getAppUrl } from "@/lib/utils";
 type StaleFilter = "all" | "7days" | "14days" | "30days" | "60days";
 
 const StaleCartsPage = () => {
-  const { data: apiCarts = [] } = useAdminShoppingCarts();
+  const { data: apiCarts = [], isLoading: cartsLoading } =
+    useAdminShoppingCarts();
   const { data: allProducts = [] } = useAdminAllProducts();
   const productMap = React.useMemo(
     () => new Map(allProducts.map((p) => [p.ProductID, p])),
@@ -311,119 +313,125 @@ const StaleCartsPage = () => {
         )}
 
         {/* Carts Table */}
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">
-                    <Checkbox
-                      checked={
-                        filteredCarts.length > 0 &&
-                        selectedCarts.size === filteredCarts.length
-                      }
-                      onCheckedChange={handleSelectAll}
-                    />
-                  </TableHead>
-                  <TableHead>Cart ID</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead className="text-center">Items</TableHead>
-                  <TableHead className="text-right">Value</TableHead>
-                  <TableHead>Last Activity</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredCarts.length === 0 ? (
+        {cartsLoading ? (
+          <TableSkeleton rows={8} cols={6} />
+        ) : (
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
-                      <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
-                      <p className="text-muted-foreground">
-                        No stale carts found
-                      </p>
-                    </TableCell>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={
+                          filteredCarts.length > 0 &&
+                          selectedCarts.size === filteredCarts.length
+                        }
+                        onCheckedChange={handleSelectAll}
+                      />
+                    </TableHead>
+                    <TableHead>Cart ID</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead className="text-center">Items</TableHead>
+                    <TableHead className="text-right">Value</TableHead>
+                    <TableHead>Last Activity</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="w-12"></TableHead>
                   </TableRow>
-                ) : (
-                  filteredCarts.map((cart) => (
-                    <TableRow key={cart.ShoppingCartID}>
-                      <TableCell>
-                        <Checkbox
-                          checked={selectedCarts.has(cart.ShoppingCartID)}
-                          onCheckedChange={(checked) =>
-                            handleSelectCart(
-                              cart.ShoppingCartID,
-                              checked as boolean,
-                            )
-                          }
-                        />
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {cart.ShoppingCartID}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{cart.customerName}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {cart.customerEmail}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {cart.totalItems}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        ${cart.totalValue.toFixed(2)}
-                      </TableCell>
-                      <TableCell>
-                        {format(new Date(cart.lastActivity), "MMM d, yyyy")}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant={getStaleBadgeVariant(cart.daysStale)}>
-                          {cart.daysStale} days
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => setViewCartDialog(cart)}
-                            >
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                setConfirmDialog({ type: "remind", cart })
-                              }
-                            >
-                              <Mail className="h-4 w-4 mr-2" />
-                              Send Reminder
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() =>
-                                setConfirmDialog({ type: "clear", cart })
-                              }
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Clear Cart
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                </TableHeader>
+                <TableBody>
+                  {filteredCarts.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8">
+                        <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
+                        <p className="text-muted-foreground">
+                          No stale carts found
+                        </p>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                  ) : (
+                    filteredCarts.map((cart) => (
+                      <TableRow key={cart.ShoppingCartID}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedCarts.has(cart.ShoppingCartID)}
+                            onCheckedChange={(checked) =>
+                              handleSelectCart(
+                                cart.ShoppingCartID,
+                                checked as boolean,
+                              )
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {cart.ShoppingCartID}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">
+                              {cart.customerName}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {cart.customerEmail}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {cart.totalItems}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          ${cart.totalValue.toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          {format(new Date(cart.lastActivity), "MMM d, yyyy")}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant={getStaleBadgeVariant(cart.daysStale)}>
+                            {cart.daysStale} days
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => setViewCartDialog(cart)}
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  setConfirmDialog({ type: "remind", cart })
+                                }
+                              >
+                                <Mail className="h-4 w-4 mr-2" />
+                                Send Reminder
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() =>
+                                  setConfirmDialog({ type: "clear", cart })
+                                }
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Clear Cart
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
       </main>
 
       <Footer />

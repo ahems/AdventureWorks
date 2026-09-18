@@ -4,7 +4,7 @@ param location string = resourceGroup().location
 param containerRegistryName string = 'avacr${toLower(uniqueString(resourceGroup().id))}'
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param containerAppEnvId string
-param bootstrapImage string = 'mcr.microsoft.com/azure-functions/dotnet-isolated:4-dotnet-isolated8.0'
+param bootstrapImage string = 'mcr.microsoft.com/azure-functions/dotnet-isolated:4-dotnet-isolated10.0'
 @minValue(0)
 @maxValue(25)
 param minReplica int = 0
@@ -28,6 +28,11 @@ param agentWorkflowChatId string = ''
 param agentWorkflowPromotionId string = ''
 param agentWorkflowOrderId string = ''
 param agentWorkflowHelpMeChooseId string = ''
+param agentTranslationId string = ''
+param agentReviewBatchId string = ''
+param agentReviewAnalysisId string = ''
+param agentEmailContentId string = ''
+param agentCatalogSuggestionId string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -208,6 +213,30 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
               name: 'AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID'
               value: agentWorkflowHelpMeChooseId
             }
+            {
+              name: 'AI_AGENT_TRANSLATION_ID'
+              value: agentTranslationId
+            }
+            {
+              name: 'AI_AGENT_REVIEW_BATCH_ID'
+              value: agentReviewBatchId
+            }
+            {
+              name: 'AI_AGENT_REVIEW_ANALYSIS_ID'
+              value: agentReviewAnalysisId
+            }
+            {
+              name: 'AI_AGENT_EMAIL_CONTENT_ID'
+              value: agentEmailContentId
+            }
+            {
+              name: 'AI_AGENT_CATALOG_SUGGESTION_ID'
+              value: agentCatalogSuggestionId
+            }
+            {
+              name: 'ORDER_NOTIFICATIONS_EMAIL_ENABLED'
+              value: 'false'
+            }
           ]
         }
       ]
@@ -291,6 +320,18 @@ resource apiFunctions 'Microsoft.App/containerApps@2025-10-02-preview' = {
                 accountName: storageAccountName
                 queueName: 'simulation-order-queue'
                 queueLength: '5'
+              }
+              identity: azidentity.id
+            }
+          }
+          {
+            name: 'review-moderation-queue'
+            custom: {
+              type: 'azure-queue'
+              metadata: {
+                accountName: storageAccountName
+                queueName: 'review-moderation-queue'
+                queueLength: '1'
               }
               identity: azidentity.id
             }

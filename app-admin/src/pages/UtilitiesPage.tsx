@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
+import GenerateVerifiedReviewsWizardDialog from "@/components/GenerateVerifiedReviewsWizardDialog";
 
 import {
   Bot,
@@ -14,6 +15,8 @@ import {
   Package,
   Tag,
   FolderPlus,
+  Clock,
+  Star,
 } from "lucide-react";
 import { buildInspectorUrl, getApiMcpUrl, getDabMcpUrl } from "@/lib/utils";
 
@@ -108,6 +111,21 @@ const UtilitiesPage: React.FC = () => {
               </p>
             </div>
           </Link>
+          <Link
+            to="/shopping-simulator"
+            className="doodle-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow"
+          >
+            <Bot className="w-8 h-8 text-doodle-green shrink-0" />
+            <div>
+              <p className="font-doodle font-semibold text-doodle-text">
+                Shopping Simulator
+              </p>
+              <p className="font-doodle text-sm text-doodle-text/60">
+                Simulate continuous customer orders at configurable rates
+              </p>
+            </div>
+          </Link>
+          <GenerateVerifiedReviewsWizardDialog />
         </div>
 
         {/* Tools & Inspectors */}
@@ -126,6 +144,20 @@ const UtilitiesPage: React.FC = () => {
               </p>
               <p className="font-doodle text-sm text-doodle-text/60">
                 Manage abandoned cart recovery campaigns
+              </p>
+            </div>
+          </Link>
+          <Link
+            to="/order-pipeline"
+            className="doodle-card p-5 flex items-center gap-4 hover:shadow-md transition-shadow"
+          >
+            <Clock className="w-8 h-8 text-doodle-purple shrink-0" />
+            <div>
+              <p className="font-doodle font-semibold text-doodle-text">
+                Order Processing Pipeline
+              </p>
+              <p className="font-doodle text-sm text-doodle-text/60">
+                Configure timing delays and bulk-promote orders
               </p>
             </div>
           </Link>

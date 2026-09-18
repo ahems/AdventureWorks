@@ -1,6 +1,7 @@
 import React from "react";
 import { Link, Navigate } from "react-router-dom";
 import { ArrowLeft, BarChart3 } from "lucide-react";
+import { KpiSkeleton } from "@/components/LoadingSkeletons";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/context/AuthContext";
@@ -15,7 +16,8 @@ import CustomerCountryMap from "@/components/CustomerCountryMap";
 
 const CustomerStatsPage: React.FC = () => {
   const { isAuthenticated } = useAuth();
-  const { data: summary, isLoading: summaryLoading } = useCustomerStatsSummary();
+  const { data: summary, isLoading: summaryLoading } =
+    useCustomerStatsSummary();
   const { data: countryStats = [] } = useCustomerCountryBreakdown();
   const { data: regionStats = [] } = useCustomerRegionBreakdown();
   const { data: monthlyRevenue = [] } = useCustomerMonthlyRevenue();
@@ -44,9 +46,9 @@ const CustomerStatsPage: React.FC = () => {
               </h1>
             </div>
             {summaryLoading && (
-              <p className="font-doodle text-sm text-doodle-text/60 mt-4">
-                Loading customer data…
-              </p>
+              <div className="mt-4">
+                <KpiSkeleton count={4} />
+              </div>
             )}
           </div>
         </section>

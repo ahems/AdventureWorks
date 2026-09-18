@@ -2,14 +2,14 @@
 -- AdventureWorks Date-Shift Stored Procedures
 -- =============================================================================
 -- PURPOSE
---   The AdventureWorks dataset was generated with dates from ~2001–2014.
+--   The AdventureWorks community dataset contains dates from ~2022–2025.
 --   These two procedures allow the data to be "brought forward" so that the
 --   most recent activity appears to have happened yesterday in real time.
 --
 -- PROCEDURE SUMMARY
 --   1. dbo.uspFindDateHighWatermark
 --        Scans every date/datetime column across all AdventureWorks schemas
---        and returns the most recent value that is at least one year in the
+--        and returns the most recent value that is at least 7 days in the
 --        past (to exclude auto-generated GETDATE() timestamps from the import).
 --        Run this once manually to discover the high watermark and verify the
 --        result before calling the second procedure.
@@ -48,15 +48,14 @@
 -- =============================================================================
 -- Iterates over every date/datetime column in every base table belonging to the
 -- AdventureWorks schemas (Person, HumanResources, Production, Purchasing, Sales,
--- dbo).  For each column it finds the maximum value that is at least TWO years
--- before the current date.  The two-year guard does two things:
---   1. Excludes GETDATE()-stamped metadata columns (ModifiedDate, etc.) written
---      during a seed job run that occurred in the past year or two.
---   2. Metadata columns (ModifiedDate, VersionDate, ErrorTime, DateCreated) are
---      excluded from the scan entirely — they are import artifacts, not business
---      event dates.  They are still shifted by procedure 2.
+-- dbo).  For each column it finds the maximum value that is at least SEVEN days
+-- before the current date.  The 7-day guard excludes GETDATE()-stamped values
+-- written during the current seed job run.  Metadata columns (ModifiedDate,
+-- VersionDate, ErrorTime, DateCreated) are also excluded by name as an extra
+-- safety net — they are import artifacts, not business event dates (but are
+-- still shifted by procedure 2).
 -- The watermark is therefore driven purely by business event dates such as
--- OrderDate, TransactionDate, HireDate, SellStartDate, QuotaDate, etc.
+-- OrderDate, TransactionDate, HireDate, SellStartDate, QuotaDate, DueDate, etc.
 --
 -- Returns
 --   Result set 1 : one row per column, sorted most-recent first — a full audit
@@ -72,10 +71,13 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- The filter: we only consider dates at least two years in the past.
-    -- Two years (rather than one) ensures we skip any GETDATE()-stamped
-    -- ModifiedDate values written during a seed job run in the past year.
-    DECLARE @CutOffDate DATETIME = DATEADD(YEAR, -2, GETDATE());
+    -- The filter: we only consider dates at least 7 days in the past.
+    -- This is a narrow guard that excludes only GETDATE()-stamped values from
+    -- the current seed job run.  Metadata columns are already excluded by name,
+    -- so a short buffer is sufficient.  A longer cutoff (e.g. 2 years) would
+    -- exclude legitimate business dates from the community CSV data (which now
+    -- spans ~2022–2025) and cause the shift to overshoot into the future.
+    DECLARE @CutOffDate DATETIME = DATEADD(DAY, -7, GETDATE());
 
     -- Temp table to accumulate one row per (schema, table, column).
     CREATE TABLE #DateResults (
@@ -117,22 +119,13 @@ BEGIN
           -- Exclude metadata/audit columns stamped with GETDATE() on import.
           AND  c.COLUMN_NAME NOT IN ('ModifiedDate', 'VersionDate', 'ErrorTime',
                                      'DateCreated')
-          -- Exclude tables whose dates are actively maintained by the manufacturing
-          -- simulation or AI pipeline.  Their values span from simulation start
-          -- through to today, so MAX(col) <= any cutoff returns a false watermark
-          -- right at the cutoff boundary.  These tables are still shifted by
-          -- proc 2 (for their original seed rows only — see @ShiftThreshold there).
-          AND NOT (c.TABLE_SCHEMA = 'Production'
-                   AND c.TABLE_NAME IN ('WorkOrder', 'WorkOrderRouting',
-                                        'ProductCostHistory'))
+          -- Exclude pure simulation/AI tables that do not come from the CSV seed
+          -- data.  These are populated at runtime and should never influence the
+          -- watermark.
           AND NOT (c.TABLE_SCHEMA = 'Purchasing'
-                   AND c.TABLE_NAME IN ('PurchaseOrderHeader', 'PurchaseOrderDetail',
-                                        'SimOrderTracking', 'SimOrderState'))
-          -- LastReceiptDate is updated by the simulation on otherwise-static rows.
-          AND NOT (c.TABLE_SCHEMA = 'Purchasing' AND c.TABLE_NAME = 'ProductVendor'
-                   AND c.COLUMN_NAME = 'LastReceiptDate')
-          -- ReviewDate for AI-generated reviews is recent by design (Dec 2025).
-          -- Original 5 AW reviews are shifted via the threshold in proc 2.
+                   AND c.TABLE_NAME IN ('SimOrderTracking', 'SimOrderState'))
+          -- ReviewDate for AI-generated reviews is recent by design.
+          -- Original AW reviews are shifted via the threshold in proc 2.
           AND NOT (c.TABLE_SCHEMA = 'Production' AND c.TABLE_NAME = 'ProductReview'
                    AND c.COLUMN_NAME = 'ReviewDate')
         ORDER BY c.TABLE_SCHEMA, c.TABLE_NAME, c.COLUMN_NAME;
@@ -261,8 +254,8 @@ GO
 --
 -- CHECK CONSTRAINTS
 --   The cursor updates one column at a time, so a transient state exists where
---   e.g. OrderDate has been shifted to ~2026 while ShipDate is still at ~2014,
---   triggering cross-column constraints.  All affected constraints are disabled
+--   e.g. OrderDate has been shifted forward while ShipDate has not yet been
+--   updated, triggering cross-column constraints.  All affected constraints are disabled
 --   before the loop and re-enabled (without row re-validation) afterwards:
 --     CK_Employee_BirthDate / CK_Employee_HireDate      (dynamic GETDATE() bounds)
 --     CK_EmployeeDepartmentHistory_EndDate              (EndDate >= StartDate)
@@ -278,7 +271,7 @@ GO
 --   is rolled back and the original error is re-thrown.
 --
 -- USAGE
---   EXEC dbo.uspShiftDatesForward @OriginalHighWatermark = '2014-05-29 00:00:00';
+--   EXEC dbo.uspShiftDatesForward @OriginalHighWatermark = '2025-10-21 00:00:00';
 -- =============================================================================
 IF OBJECT_ID(N'[dbo].[uspShiftDatesForward]', 'P') IS NOT NULL
     DROP PROCEDURE [dbo].[uspShiftDatesForward];
@@ -315,10 +308,11 @@ BEGIN
     DECLARE @OffsetSeconds INT      = DATEDIFF(SECOND, @OriginalHighWatermark, @Yesterday);
 
     -- Only shift dates that belong to the original seed data era.  The
-    -- manufacturing simulation and AI pipeline write dates from 2024 onwards;
-    -- those must not be shifted.  Adding 2 years to the watermark gives a
-    -- generous buffer above the original AW data range (2001–~2014) while
-    -- remaining well below any simulation-generated value (2024+).
+    -- manufacturing simulation and AI pipeline write dates from deployment time
+    -- onwards; those must not be shifted.  Adding 2 years to the watermark gives
+    -- a generous buffer above the CSV data range (~2022–Oct 2025) while remaining
+    -- well below any simulation-generated value.  The idempotency guard above
+    -- ensures this procedure only runs once on fresh (pre-simulation) data.
     DECLARE @ShiftThreshold DATETIME = DATEADD(YEAR, 2, @OriginalHighWatermark);
 
     PRINT '======================================================';
@@ -344,13 +338,14 @@ BEGIN
     -- Disable all CHECK constraints whose expressions reference multiple date
     -- columns on the same table.  Because the cursor updates one column at a
     -- time, an intermediate state exists where e.g. OrderDate has been shifted
-    -- to ~2026 but ShipDate is still at ~2014, causing ShipDate >= OrderDate to
-    -- fail.  Disabling before the loop and re-enabling (WITHOUT re-validation)
-    -- afterwards avoids this while keeping the constraints active for future DML.
+    -- forward but ShipDate has not yet been updated, causing
+    -- ShipDate >= OrderDate to fail.  Disabling before the loop and re-enabling
+    -- (WITHOUT re-validation) afterwards avoids this while keeping the
+    -- constraints active for future DML.
     --
     -- Also includes the two Employee constraints that use GETDATE() dynamically:
-    -- after shifting ~11 years forward some birthdate/hire-date values would
-    -- breach those dynamic bounds.
+    -- after shifting forward some birthdate/hire-date values would breach those
+    -- dynamic bounds.
     -- -------------------------------------------------------------------------
     ALTER TABLE [HumanResources].[Employee]
         NOCHECK CONSTRAINT [CK_Employee_BirthDate];

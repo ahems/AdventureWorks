@@ -38,9 +38,6 @@ param AIServicesKind string = 'AIServices'
 param publicNetworkAccess string = 'Enabled'
 param sqlDatabaseName string
 param skipLocalDevRoleAssignments bool = false
-@description('Location for Playwright Testing workspace. Must be one of: eastus, westus3, westeurope, eastasia. Defaults to resource group location.')
-@allowed(['eastus', 'westus3', 'westeurope', 'eastasia'])
-param playwrightLocation string = 'westeurope'
 
 var chatGptDeploymentCapacity = availableChatGptDeploymentCapacity / 10
 var embeddingDeploymentCapacity = availableEmbeddingDeploymentCapacity / 10
@@ -75,6 +72,18 @@ module communication 'modules/communication.bicep' = {
   dependsOn: [
     identity
     appinsights
+  ]
+}
+
+module webpubsub 'modules/webpubsub.bicep' = {
+  name: 'Deploy-Web-PubSub'
+  params: {
+    webPubSubName: 'av-wps-${resourceToken}'
+    location: location
+    identityName: identityName
+  }
+  dependsOn: [
+    identity
   ]
 }
 
@@ -159,21 +168,13 @@ module appinsights 'modules/applicationinsights.bicep' = {
     appName: appInsightsName
     workspaceName: workspaceName
     location: location
+    identityName: identityName
+    aadAdminObjectId: aadAdminObjectId
+    skipLocalDevRoleAssignments: skipLocalDevRoleAssignments
   }
   dependsOn: [
     identity
   ]
-}
-
-module playwright 'modules/playwright.bicep' = {
-  name: 'Deploy-Playwright-Testing-Workspace'
-  params: {
-    playwrightWorkspaceName: 'pw${resourceToken}'
-    location: playwrightLocation
-    identityName: identityName
-    aadAdminObjectId: aadAdminObjectId
-    storageAccountName: storage.outputs.storageAccountName
-  }
 }
 
 module containerApp 'modules/aca.bicep' = {
@@ -243,6 +244,7 @@ module containerAppApiFunctions 'modules/flex-api-functions.bicep' = {
     communicationServiceEndpoint: communication.outputs.communicationServiceEndpoint
     emailSenderDomain: communication.outputs.senderDomain
     foundryProjectEndpoint: aifoundry.outputs.projectEndpoint
+    webPubSubHostName: webpubsub.outputs.webPubSubHostName
   }
 }
 
@@ -279,6 +281,7 @@ module staticWebAppFrontend 'modules/swa-app.bicep' = {
     apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
     apiMcpUrl: containerAppApiMcp.outputs.apiMcpUrl
     appInsightsConnectionString: appinsights.outputs.connectionString
+    webPubSubHostName: webpubsub.outputs.webPubSubHostName
   }
 }
 
@@ -314,6 +317,27 @@ module containerAppAdmin 'modules/aca-app-admin.bicep' = {
     appInsightsConnectionString: appinsights.outputs.connectionString
     appUrl: staticWebAppFrontend.outputs.appRedirectUri
     mcpInspectorUrl: containerAppMcpInspector.outputs.mcpInspectorUrl
+    appManufacturingUrl: containerAppManufacturing.outputs.appManufacturingUrl
+    webPubSubHostName: webpubsub.outputs.webPubSubHostName
+    minReplica: 0
+    maxReplica: 3
+    revisionSuffix: revisionSuffix
+    containerAppEnvId: containerApp.outputs.containerAppEnvId
+  }
+}
+
+module containerAppManufacturing 'modules/aca-app-manufacturing.bicep' = {
+  name: 'Deploy-Container-App-Manufacturing'
+  params: {
+    location: location
+    appInsightsName: appInsightsName
+    appManufacturingName: 'av-app-manufactur-${resourceToken}'
+    containerRegistryName: acrName
+    identityName: identityName
+    apiUrl: containerAppApi.outputs.apiUrl
+    apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
+    appInsightsConnectionString: appinsights.outputs.connectionString
+    webPubSubHostName: webpubsub.outputs.webPubSubHostName
     minReplica: 0
     maxReplica: 3
     revisionSuffix: revisionSuffix
@@ -324,6 +348,7 @@ module containerAppAdmin 'modules/aca-app-admin.bicep' = {
 output APP_URL string = staticWebAppFrontend.outputs.appRedirectUri
 output APP_REDIRECT_URI string = staticWebAppFrontend.outputs.appRedirectUri
 output APP_ADMIN_URL string = containerAppAdmin.outputs.appAdminUrl
+output APP_MANUFACTURING_URL string = containerAppManufacturing.outputs.appManufacturingUrl
 
 // Expose values needed for local debugging / .env population
 // Application Insights connection string (need to reference component resource id after module deployment)
@@ -352,6 +377,7 @@ output STORAGE_ACCOUNT_NAME string = storage.outputs.storageAccountName
 // Service names for azd deploy mapping (required by azd CLI)
 output SERVICE_APP_NAME string = staticWebAppFrontend.outputs.staticWebAppName
 output SERVICE_APP_ADMIN_NAME string = containerAppAdmin.outputs.appAdminName
+output SERVICE_APP_MANUFACTURING_NAME string = containerAppManufacturing.outputs.appManufacturingName
 output SERVICE_API_NAME string = 'av-api-${resourceToken}'
 output SERVICE_API_FUNCTIONS_NAME string = 'av-func-${resourceToken}'
 output SERVICE_API_MCP_NAME string = 'av-mcp-${resourceToken}'
@@ -374,16 +400,11 @@ output COMMUNICATION_SERVICE_ENDPOINT string = communication.outputs.communicati
 output EMAIL_SENDER_DOMAIN string = communication.outputs.senderDomain
 output PROJECT_NAME string = aifoundry.outputs.projectName
 output PROJECT_RESOURCE_ID string = aifoundry.outputs.projectResourceId
+output AZURE_AI_PROJECT_ID string = aifoundry.outputs.projectResourceId
 output AI_FOUNDRY_PROJECT_ENDPOINT string = aifoundry.outputs.projectEndpoint
+output FOUNDRY_PROJECT_ENDPOINT string = aifoundry.outputs.projectEndpoint
 output chatGptDeploymentName string = chatGptDeploymentName
 output CONTAINER_APP_ENVIRONMENT_NAME string = containerApp.outputs.containerAppEnvName
 
-// Playwright Workspaces outputs (Azure LoadTest Service)
-output PLAYWRIGHT_WORKSPACE_ID string = playwright.outputs.playwrightWorkspaceId
-output PLAYWRIGHT_WORKSPACE_NAME string = playwright.outputs.playwrightWorkspaceName
-output PLAYWRIGHT_WORKSPACE_GUID string = playwright.outputs.playwrightWorkspaceGuid
-output PLAYWRIGHT_DASHBOARD_URL string = playwright.outputs.playwrightDashboardUrl
-output PLAYWRIGHT_SERVICE_URL string = playwright.outputs.playwrightServiceUrl
-output PLAYWRIGHT_STORAGE_ACCOUNT string = playwright.outputs.storageAccountName
-output PLAYWRIGHT_REPORTS_CONTAINER string = playwright.outputs.reportsContainerName
-output PLAYWRIGHT_REPORTS_URL string = playwright.outputs.reportsContainerUrl
+// Web PubSub outputs (real-time push notifications)
+output WEB_PUBSUB_HOST_NAME string = webpubsub.outputs.webPubSubHostName

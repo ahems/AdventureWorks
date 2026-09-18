@@ -24,6 +24,10 @@ namespace api_functions.Services;
 /// </summary>
 public class OrderGenerationAgentService
 {
+    private const string CustomerModeExisting = "existing";
+    private const string CustomerModeNew = "new";
+    private const string CustomerModeStore = "store";
+
     private readonly ILogger<OrderGenerationAgentService> _logger;
     private readonly IConfiguration _configuration;
     private readonly TelemetryClient _telemetryClient;
@@ -50,15 +54,9 @@ public class OrderGenerationAgentService
         _pdfGenerator = pdfGenerator;
         _foundryClient = foundryClient;
 
-        // Always use the direct order-generation agent (AI_AGENT_ORDER_ID) for programmatic
-        // order creation — it is instructed to return a structured JSON plan that this service
-        // parses into a database order.  The workflow agent (AI_AGENT_WORKFLOW_ORDER_ID) is a
-        // conversational Foundry Workflow designed for the portal chat experience; it returns
-        // human-readable prose and is incompatible with ParseOrderPlan.
-        var agentId = configuration["AI_AGENT_ORDER_ID"]
+        _agentId = configuration["AI_AGENT_ORDER_ID"]
             ?? throw new InvalidOperationException(
                 "AI_AGENT_ORDER_ID environment variable is not set");
-        _agentId = agentId;
     }
 
     /// <summary>
@@ -72,10 +70,13 @@ public class OrderGenerationAgentService
         string? customPersona,
         int? seedCustomerId = null,
         Action<string, string>? onLog = null,
-        string? previousResponseId = null)
+        string? previousResponseId = null,
+        string? orderMode = null,
+        int? storeId = null)
     {
         var result = new OrderGenerationResult();
         var startTime = DateTimeOffset.UtcNow;
+        string rawResponse = string.Empty;
 
         void Log(string msg, string type = "info")
         {
@@ -93,7 +94,7 @@ public class OrderGenerationAgentService
 
             // ── Resolve seed customer for "existing-customer" persona ─────────
             CustomerProfile? seedProfile = null;
-            if (personaType == "existing-customer")
+            if (personaType == "existing-customer" || orderMode == "no-order-customer" || orderMode == "cart-recovery")
             {
                 int resolvedCustomerId;
                 if (seedCustomerId.HasValue && seedCustomerId.Value > 0)
@@ -114,14 +115,24 @@ public class OrderGenerationAgentService
                 if (seedProfile == null)
                     throw new InvalidOperationException($"Customer {resolvedCustomerId} not found");
 
-                // Log name and order stats only — omit email to avoid PII in log traces.
-                // See: https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/tool-best-practice (Secure tool usage)
                 Log($"Loaded profile: {seedProfile.FirstName} {seedProfile.LastName} — CustomerID={resolvedCustomerId}, {seedProfile.OrderCount} orders, ${seedProfile.TotalSpend:N2} total spend", "info");
             }
 
-            var personaDescription = seedProfile != null
-                ? BuildExistingCustomerPersona(seedProfile)
-                : BuildPersonaDescription(personaType, customPersona);
+            var expectedCustomerMode = ResolveExpectedCustomerMode(orderMode, seedProfile);
+
+            var personaDescription = orderMode switch
+            {
+                "no-order-customer" => seedProfile != null
+                    ? $"Registered customer '{seedProfile.FirstName} {seedProfile.LastName}' (ID={seedProfile.CustomerID}) who browsed the site, registered an account, but never placed an order. They received a marketing email highlighting current sales and promotions. They are STRONGLY drawn to discounted/sale items — prioritise products with active SpecialOffers."
+                    : "A registered customer who browsed, never purchased, and is now returning after a marketing email. Strongly drawn to sale items.",
+                "cart-recovery" => seedProfile != null
+                    ? $"Customer '{seedProfile.FirstName} {seedProfile.LastName}' (ID={seedProfile.CustomerID}) who abandoned their shopping cart and has now returned after receiving a Smart Cart Recovery email. They should purchase the items that were in their cart (check ShoppingCartItem for their saved items). Place those exact items as an order."
+                    : "A customer returning to complete an abandoned cart purchase after a recovery email.",
+                "b2b-store" => $"B2B store order (StoreID={storeId}). Generate a representative purchase order for this store based on their previous order history and current available stock. This is a business replenishment order, not a consumer purchase. IMPORTANT: Strongly prefer products that have active Reseller promotions (SpecialOffer with Category='Reseller'). These represent negotiated trade discounts — prioritise promoted products when they are in stock.",
+                _ => seedProfile != null
+                    ? BuildExistingCustomerPersona(seedProfile)
+                    : BuildPersonaDescription(personaType, customPersona)
+            };
 
             Log($"Planning order for persona: {personaDescription}", "info");
 
@@ -135,7 +146,13 @@ public class OrderGenerationAgentService
             {
                 ["todayDate"]          = today,
                 ["personaDescription"] = personaDescription,
-                ["isExistingCustomer"] = seedProfile != null
+                ["isExistingCustomer"] = seedProfile != null,
+                ["orderMode"]          = orderMode ?? "new-persona",
+                ["storeId"]            = storeId ?? 0,
+                ["expectedCustomerMode"] = expectedCustomerMode,
+                ["requiresExistingCustomer"] = expectedCustomerMode == CustomerModeExisting,
+                ["requiresNewCustomer"] = expectedCustomerMode == CustomerModeNew,
+                ["isB2BStore"] = expectedCustomerMode == CustomerModeStore
             };
 
             if (seedProfile != null)
@@ -157,7 +174,7 @@ public class OrderGenerationAgentService
                 ? $"order-gen-customer-{seedProfile.CustomerID}"
                 : $"order-gen-persona-{personaType}";
 
-            // The user message is now a short constant — all dynamic context lives in
+            // The user message is a short constant — all dynamic context lives in
             // structured_inputs which resolve the Handlebars templates in the agent instructions.
             const string userMessage = "Generate a realistic purchase order following the instructions.";
 
@@ -169,29 +186,40 @@ public class OrderGenerationAgentService
             // tool_choice: "required" ensures the agent always calls MCP tools — preventing
             // hallucinated catalog data from being written to the database as real orders.
             var agentResponse = await _foundryClient.InvokeAsync(
-                agentId: _agentId,
+                agentId: _agentId!,
                 userMessage: userMessage,
                 userId: memoryUserId,
                 previousResponseId: string.IsNullOrEmpty(previousResponseId) ? null : previousResponseId,
                 structuredInputs: structuredInputs,
                 toolChoice: "required");
-            var rawResponse = agentResponse.ResponseText;
+            rawResponse = agentResponse.ResponseText ?? string.Empty;
 
-            if (agentResponse.ToolsUsed.Count > 0)
+            if (agentResponse.ToolsUsed?.Count > 0)
                 Log($"Agent used tools: {string.Join(", ", agentResponse.ToolsUsed)}", "dim");
 
             _logger.LogInformation("AI order plan raw response length: {Length}", rawResponse.Length);
 
             Log("AI finished reasoning — parsing order plan...", "dim");
             var plan = ParseOrderPlan(rawResponse);
+            ValidateOrderPlan(plan, expectedCustomerMode, seedProfile);
 
             Log($"AI reasoning: {plan.AiReasoning}", "dim");
             Log($"Persona: {plan.PersonaSummary}", "info");
 
             // ── Resolve customer ─────────────────────────────────────────────
             int customerId;
+            // B2B store orders don't need a consumer customer — they resolve it from StoreID later
+            if (orderMode == "b2b-store")
+            {
+                // For B2B, we don't resolve a consumer customer here.
+                // The store's CustomerID is resolved inside CreateStoreOrderAsync.
+                customerId = 0; // placeholder — not used for B2B path
+                var storeInfo = await _orderGenService.GetStoreInfoAsync(storeId ?? 0);
+                result.CustomerName = storeInfo?.StoreName ?? $"Store #{storeId}";
+                Log($"B2B store order for: {result.CustomerName} (StoreID={storeId})", "success");
+            }
             // If we used a seed customer (existing-customer persona), always honour it
-            if (seedProfile != null)
+            else if (seedProfile != null)
             {
                 customerId = seedProfile.CustomerID;
                 result.CustomerName = $"{seedProfile.FirstName} {seedProfile.LastName}";
@@ -210,8 +238,9 @@ public class OrderGenerationAgentService
                 }
                 else
                 {
-                    Log($"Customer ID {plan.ExistingCustomerId.Value} not found — creating new customer", "info");
-                    customerId = await CreateNewCustomer(plan, result, Log);
+                    throw new OrderPlanValidationException(
+                        OrderPlanFailureCodes.ExistingCustomerNotFound,
+                        $"AI plan referenced CustomerID={plan.ExistingCustomerId.Value}, but that customer does not exist");
                 }
             }
             else if (plan.NewCustomer != null)
@@ -220,14 +249,17 @@ public class OrderGenerationAgentService
             }
             else
             {
-                throw new InvalidOperationException("AI plan did not specify a customer");
+                throw new OrderPlanValidationException(
+                    OrderPlanFailureCodes.MissingCustomerIdentity,
+                    "AI plan did not include required customer details");
             }
 
             // ── Validate items & check stock ─────────────────────────────────
             Log("Validating items and checking live inventory...", "info");
             var validItems = new List<OrderLineItem>();
+            var orderItems = plan.OrderItems ?? new List<PlannedOrderItem>();
 
-            foreach (var item in plan.OrderItems)
+            foreach (var item in orderItems)
             {
                 // Guard against out-of-range values in the AI-generated plan
                 // (treats agent output as untrusted input per tool best practices).
@@ -239,10 +271,15 @@ public class OrderGenerationAgentService
                 var clampedQty = Math.Clamp(item.Quantity, 1, 10);
 
                 var stock = await _orderGenService.GetProductStockAsync(item.ProductId);
+                if (stock <= 0)
+                {
+                    Log($"  Skipping ProductID={item.ProductId} ({item.ProductName}): out of stock", "dim");
+                    continue;
+                }
                 if (stock < clampedQty)
                 {
-                    Log($"  Skipping ProductID={item.ProductId} ({item.ProductName}): stock={stock} < qty={clampedQty}", "dim");
-                    continue;
+                    Log($"  Reducing qty for ProductID={item.ProductId} ({item.ProductName}): stock={stock} < requested={clampedQty}", "dim");
+                    clampedQty = stock;
                 }
 
                 var price = item.UnitPrice > 0 ? item.UnitPrice
@@ -265,15 +302,45 @@ public class OrderGenerationAgentService
             }
 
             if (!validItems.Any())
-                throw new InvalidOperationException("All planned items are out of stock or unavailable");
+                throw new OrderPlanValidationException(
+                    OrderPlanFailureCodes.NoValidAiPlannedItems,
+                    "AI plan did not contain any valid in-stock items after inventory validation");
 
             // ── Create the order ─────────────────────────────────────────────
-            Log("Creating order in database...", "info");
-            var salesOrderId = await _orderGenService.CreateOrderAsync(new CreateOrderRequest
+            int salesOrderId;
+            if (orderMode == "b2b-store" && storeId.HasValue && storeId.Value > 0)
             {
-                CustomerId = customerId,
-                Items = validItems
-            });
+                Log($"Creating B2B store order for StoreID={storeId.Value}...", "info");
+                var storeItems = new List<StoreOrderLineItem>();
+                foreach (var vi in validItems)
+                {
+                    var resellerOffer = await _orderGenService.GetBestResellerOfferAsync(vi.ProductId);
+                    storeItems.Add(new StoreOrderLineItem
+                    {
+                        ProductId = vi.ProductId,
+                        Quantity = vi.Quantity,
+                        UnitPrice = vi.UnitPrice,
+                        DiscountPct = resellerOffer.DiscountPct
+                    });
+                }
+
+                salesOrderId = await _orderGenService.CreateStoreOrderAsync(new CreateStoreOrderRequest
+                {
+                    StoreBusinessEntityId = storeId.Value,
+                    Items = storeItems,
+                    PurchaseOrderNumber = $"SIM-{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
+                    Comment = "Simulated B2B replenishment order (AI-generated)"
+                });
+            }
+            else
+            {
+                Log("Creating order in database...", "info");
+                salesOrderId = await _orderGenService.CreateOrderAsync(new CreateOrderRequest
+                {
+                    CustomerId = customerId,
+                    Items = validItems
+                });
+            }
 
             Log($"Order created: SalesOrderID={salesOrderId}", "success");
             result.SalesOrderId = salesOrderId;
@@ -293,7 +360,9 @@ public class OrderGenerationAgentService
 
             var duration = DateTimeOffset.UtcNow - startTime;
             result.Success   = true;
-            result.TotalDue  = receiptData?.TotalDue ?? 0;
+            result.TotalDue  = receiptData?.TotalDue
+                ?? validItems.Sum(vi => vi.UnitPrice * vi.Quantity);
+            result.CustomerId = customerId;
             result.ThreadId  = agentResponse.ResponseId;
             operation.Telemetry.Success = true;
 
@@ -315,39 +384,83 @@ public class OrderGenerationAgentService
         {
             _logger.LogError(ex, "Order generation failed for persona={Persona}", personaType);
             operation.Telemetry.Success = false;
+            var failureCode = ex switch
+            {
+                OrderPlanValidationException validationEx => validationEx.FailureCode,
+                JsonException => OrderPlanFailureCodes.InvalidJson,
+                _ => OrderPlanFailureCodes.UnhandledError,
+            };
+            result.FailureCode = failureCode;
+
+            if (!string.IsNullOrWhiteSpace(rawResponse))
+            {
+                var preview = rawResponse.Length > 400 ? rawResponse[..400] + "..." : rawResponse;
+                _logger.LogWarning("AI order plan failure code={FailureCode}; raw response preview: {Preview}", failureCode, preview);
+            }
+
             _telemetryClient.TrackException(ex, new Dictionary<string, string>
             {
                 ["Operation"] = "OrderGeneration.Generate",
-                ["PersonaType"] = personaType
+                ["PersonaType"] = personaType,
+                ["FailureCode"] = failureCode
             });
 
-            Log($"Error: {ex.Message}", "error");
+            Log($"Error [{failureCode}]: {ex.Message}", "error");
             result.ErrorMessage = ex.Message;
             return result;
         }
     }
+
+    // ── Direct order generation (no AI agent) ────────────────────────────────
 
     private async Task<int> CreateNewCustomer(
         OrderPlan plan,
         OrderGenerationResult result,
         Action<string, string> log)
     {
-        var nc = plan.NewCustomer!;
-        log($"Creating new customer: {nc.FirstName} {nc.LastName} ({nc.Email})", "info");
+        var nc = plan.NewCustomer
+            ?? throw new OrderPlanValidationException(
+                OrderPlanFailureCodes.MissingCustomerIdentity,
+                "AI plan did not provide a newCustomer payload");
+
+        var firstName = nc.FirstName;
+        var lastName = nc.LastName;
+        var email = nc.Email;
+        var addressLine1 = nc.AddressLine1;
+        var city = nc.City;
+        var stateCode = nc.StateCode;
+        var postalCode = nc.PostalCode;
+
+        log($"Creating new customer: {firstName} {lastName} ({email})", "info");
 
         var customerId = await _orderGenService.CreateCustomerAsync(new NewCustomerRequest
         {
-            FirstName = nc.FirstName,
-            LastName = nc.LastName,
-            Email = nc.Email,
-            AddressLine1 = nc.AddressLine1 ?? "1 Main St",
-            City = nc.City ?? "Seattle",
-            StateCode = nc.StateCode,
-            PostalCode = nc.PostalCode ?? "98101"
+            FirstName = firstName!,
+            LastName = lastName!,
+            Email = email,
+            AddressLine1 = addressLine1!,
+            City = city!,
+            StateCode = stateCode,
+            PostalCode = postalCode!,
+            Password = nc.Password,
         });
 
-        result.CustomerName = $"{nc.FirstName} {nc.LastName}";
-        result.CustomerEmail = nc.Email;
+        await _orderGenService.AddPersonPhoneAsync(
+            new NewCustomerRequest { FirstName = firstName!, LastName = lastName! },
+            nc.Phone!, customerId);
+        log($"  Phone saved: {nc.Phone}", "dim");
+
+        await _orderGenService.AddCreditCardAsync(
+            customerId,
+            nc.CreditCardType!,
+            nc.CreditCardNumber!,
+            nc.CreditCardExpMonth!.Value,
+            nc.CreditCardExpYear!.Value);
+        var last4 = nc.CreditCardNumber!.Length >= 4 ? nc.CreditCardNumber[^4..] : nc.CreditCardNumber;
+        log($"  Credit card saved: {nc.CreditCardType} ****{last4}", "dim");
+
+        result.CustomerName = $"{firstName} {lastName}";
+        result.CustomerEmail = email;
         result.NewCustomerCreated = true;
         log($"New customer created with CustomerID={customerId}", "success");
         return customerId;
@@ -381,24 +494,149 @@ public class OrderGenerationAgentService
 
     private static OrderPlan ParseOrderPlan(string rawResponse)
     {
-        var cleaned = Regex.Replace(rawResponse, @"^```(?:json)?\s*", "", RegexOptions.Multiline);
+        var cleaned = rawResponse.Trim();
+        if (string.IsNullOrWhiteSpace(cleaned))
+            throw new OrderPlanValidationException(OrderPlanFailureCodes.EmptyResponse, "AI returned an empty order plan response");
+
+        // Strip markdown code fences if the model added them
+        cleaned = Regex.Replace(cleaned, @"^```(?:json)?\s*", "", RegexOptions.Multiline);
         cleaned = Regex.Replace(cleaned, @"```\s*$", "", RegexOptions.Multiline).Trim();
 
+        // Extract the first complete JSON object using brace-depth matching
         var start = cleaned.IndexOf('{');
-        var end = cleaned.LastIndexOf('}');
+        if (start < 0)
+            throw new OrderPlanValidationException(OrderPlanFailureCodes.InvalidJson, "AI order plan does not contain a JSON object");
 
-        if (start < 0 || end <= start)
+        int depth = 0;
+        bool inString = false;
+        bool escape = false;
+        int end = -1;
+        for (int i = start; i < cleaned.Length; i++)
         {
-            var preview = cleaned.Length > 200 ? cleaned[..200] + "..." : cleaned;
-            throw new InvalidOperationException(
-                $"AI returned text instead of a JSON order plan. Response preview: '{preview}'");
+            char c = cleaned[i];
+            if (escape) { escape = false; continue; }
+            if (c == '\\' && inString) { escape = true; continue; }
+            if (c == '"') { inString = !inString; continue; }
+            if (inString) continue;
+            if (c == '{') depth++;
+            else if (c == '}')
+            {
+                depth--;
+                if (depth == 0) { end = i; break; }
+            }
         }
 
-        cleaned = cleaned.Substring(start, end - start + 1);
+        if (end < 0)
+            throw new OrderPlanValidationException(OrderPlanFailureCodes.InvalidJson, "AI order plan contains an unclosed JSON object");
+
+        cleaned = cleaned[start..(end + 1)];
+
+        using var document = JsonDocument.Parse(cleaned);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+            throw new OrderPlanValidationException(OrderPlanFailureCodes.InvalidJson, "AI order plan must be a single JSON object");
 
         return JsonSerializer.Deserialize<OrderPlan>(cleaned,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException("AI returned unparseable JSON for order plan");
+    }
+
+    private static string ResolveExpectedCustomerMode(string? orderMode, CustomerProfile? seedProfile)
+    {
+        if (orderMode == "b2b-store") return CustomerModeStore;
+        if (seedProfile != null) return CustomerModeExisting;
+        return CustomerModeNew;
+    }
+
+    private static void ValidateOrderPlan(OrderPlan plan, string expectedCustomerMode, CustomerProfile? seedProfile)
+    {
+        if (string.IsNullOrWhiteSpace(plan.CustomerMode))
+            throw new OrderPlanValidationException(OrderPlanFailureCodes.MissingCustomerMode, "AI plan did not specify customerMode");
+
+        var customerMode = plan.CustomerMode.Trim().ToLowerInvariant();
+        if (!string.Equals(customerMode, expectedCustomerMode, StringComparison.Ordinal))
+            throw new OrderPlanValidationException(
+                OrderPlanFailureCodes.UnexpectedCustomerMode,
+                $"AI plan specified customerMode='{plan.CustomerMode}', expected '{expectedCustomerMode}'");
+
+        if (plan.OrderItems == null || plan.OrderItems.Count == 0)
+            throw new OrderPlanValidationException(OrderPlanFailureCodes.NoPlannedItems, "AI plan did not include any order items");
+
+        switch (customerMode)
+        {
+            case CustomerModeStore:
+                if (plan.ExistingCustomerId.HasValue || plan.NewCustomer != null)
+                    throw new OrderPlanValidationException(
+                        OrderPlanFailureCodes.InvalidStoreCustomerPayload,
+                        "Store plans must not include existingCustomerId or newCustomer");
+                break;
+
+            case CustomerModeExisting:
+                if (!plan.ExistingCustomerId.HasValue || plan.ExistingCustomerId.Value <= 0)
+                    throw new OrderPlanValidationException(
+                        OrderPlanFailureCodes.MissingCustomerIdentity,
+                        "Existing-customer plans must include a positive existingCustomerId");
+
+                if (plan.NewCustomer != null)
+                    throw new OrderPlanValidationException(
+                        OrderPlanFailureCodes.BothCustomerModesPresent,
+                        "Existing-customer plans must not include a newCustomer payload");
+
+                if (seedProfile != null && plan.ExistingCustomerId.Value != seedProfile.CustomerID)
+                    throw new OrderPlanValidationException(
+                        OrderPlanFailureCodes.SeedCustomerMismatch,
+                        $"AI plan returned existingCustomerId={plan.ExistingCustomerId.Value}, expected {seedProfile.CustomerID}");
+                break;
+
+            case CustomerModeNew:
+                if (plan.ExistingCustomerId.HasValue)
+                    throw new OrderPlanValidationException(
+                        OrderPlanFailureCodes.BothCustomerModesPresent,
+                        "New-customer plans must not include existingCustomerId");
+
+                ValidateNewCustomerPlan(plan.NewCustomer);
+                break;
+
+            default:
+                throw new OrderPlanValidationException(
+                    OrderPlanFailureCodes.InvalidCustomerMode,
+                    $"AI plan returned unsupported customerMode='{plan.CustomerMode}'");
+        }
+    }
+
+    private static void ValidateNewCustomerPlan(NewCustomerPlan? newCustomer)
+    {
+        if (newCustomer == null)
+            throw new OrderPlanValidationException(OrderPlanFailureCodes.MissingCustomerIdentity, "New-customer plans must include a newCustomer payload");
+
+        RequireCustomerField(newCustomer.FirstName, nameof(newCustomer.FirstName));
+        RequireCustomerField(newCustomer.LastName, nameof(newCustomer.LastName));
+        RequireCustomerField(newCustomer.Email, nameof(newCustomer.Email));
+        RequireCustomerField(newCustomer.Phone, nameof(newCustomer.Phone));
+        RequireCustomerField(newCustomer.AddressLine1, nameof(newCustomer.AddressLine1));
+        RequireCustomerField(newCustomer.City, nameof(newCustomer.City));
+        RequireCustomerField(newCustomer.StateCode, nameof(newCustomer.StateCode));
+        RequireCustomerField(newCustomer.PostalCode, nameof(newCustomer.PostalCode));
+        RequireCustomerField(newCustomer.Password, nameof(newCustomer.Password));
+        RequireCustomerField(newCustomer.CreditCardType, nameof(newCustomer.CreditCardType));
+        RequireCustomerField(newCustomer.CreditCardNumber, nameof(newCustomer.CreditCardNumber));
+
+        if (newCustomer.CreditCardExpMonth is null || newCustomer.CreditCardExpMonth < 1 || newCustomer.CreditCardExpMonth > 12)
+            throw new OrderPlanValidationException(
+                OrderPlanFailureCodes.InvalidNewCustomerPayload,
+                "newCustomer.creditCardExpMonth must be between 1 and 12");
+
+        if (newCustomer.CreditCardExpYear is null || newCustomer.CreditCardExpYear < DateTime.UtcNow.Year)
+            throw new OrderPlanValidationException(
+                OrderPlanFailureCodes.InvalidNewCustomerPayload,
+                "newCustomer.creditCardExpYear must be the current year or later");
+    }
+
+    private static void RequireCustomerField(string? value, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new OrderPlanValidationException(
+                OrderPlanFailureCodes.InvalidNewCustomerPayload,
+                $"AI plan omitted required field newCustomer.{fieldName}");
     }
 
     // The system prompt and tool configuration are managed in Azure AI Foundry on the agent definition.
@@ -411,11 +649,13 @@ public class OrderGenerationResult
 {
     public bool Success { get; set; }
     public int SalesOrderId { get; set; }
+    public int CustomerId { get; set; }
     public string? CustomerName { get; set; }
     public string? CustomerEmail { get; set; }
     public bool NewCustomerCreated { get; set; }
     public decimal TotalDue { get; set; }
     public string? ReceiptPdfBase64 { get; set; }
+    public string? FailureCode { get; set; }
     public string? ErrorMessage { get; set; }
     public List<OrderGenLogEntry> Log { get; set; } = new();
     /// <summary>
@@ -435,6 +675,7 @@ public class OrderGenLogEntry
 public class OrderPlan
 {
     public string PersonaSummary { get; set; } = string.Empty;
+    public string CustomerMode { get; set; } = string.Empty;
     public int? ExistingCustomerId { get; set; }
     public NewCustomerPlan? NewCustomer { get; set; }
     public List<PlannedOrderItem> OrderItems { get; set; } = new();
@@ -447,10 +688,16 @@ public class NewCustomerPlan
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public string? Email { get; set; }
+    public string? Phone { get; set; }
     public string? AddressLine1 { get; set; }
     public string? City { get; set; }
     public string? StateCode { get; set; }
     public string? PostalCode { get; set; }
+    public string? Password { get; set; }
+    public string? CreditCardType { get; set; }
+    public string? CreditCardNumber { get; set; }
+    public byte? CreditCardExpMonth { get; set; }
+    public short? CreditCardExpYear { get; set; }
 }
 
 public class PlannedOrderItem
@@ -461,4 +708,33 @@ public class PlannedOrderItem
     public decimal UnitPrice { get; set; }
     public int? SpecialOfferID { get; set; }
     public string Reason { get; set; } = string.Empty;
+}
+
+public sealed class OrderPlanValidationException : InvalidOperationException
+{
+    public OrderPlanValidationException(string failureCode, string message)
+        : base(message)
+    {
+        FailureCode = failureCode;
+    }
+
+    public string FailureCode { get; }
+}
+
+public static class OrderPlanFailureCodes
+{
+    public const string EmptyResponse = "empty_response";
+    public const string InvalidJson = "invalid_json";
+    public const string MissingCustomerMode = "missing_customer_mode";
+    public const string InvalidCustomerMode = "invalid_customer_mode";
+    public const string UnexpectedCustomerMode = "unexpected_customer_mode";
+    public const string MissingCustomerIdentity = "missing_customer_identity";
+    public const string BothCustomerModesPresent = "both_customer_modes_present";
+    public const string SeedCustomerMismatch = "seed_customer_mismatch";
+    public const string ExistingCustomerNotFound = "existing_customer_not_found";
+    public const string InvalidNewCustomerPayload = "invalid_new_customer_payload";
+    public const string InvalidStoreCustomerPayload = "invalid_store_customer_payload";
+    public const string NoPlannedItems = "no_planned_items";
+    public const string NoValidAiPlannedItems = "no_valid_ai_planned_items";
+    public const string UnhandledError = "unhandled_error";
 }

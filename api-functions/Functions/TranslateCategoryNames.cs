@@ -16,18 +16,21 @@ public class CategoryManagementFunctions
 {
     private readonly ILogger<CategoryManagementFunctions> _logger;
     private readonly ProductService _productService;
-    private readonly AIService _aiService;
+    private readonly TranslationAgentService _translationAgentService;
+    private readonly CatalogSuggestionAgentService _catalogSuggestionAgentService;
     private readonly TelemetryClient _telemetryClient;
 
     public CategoryManagementFunctions(
         ILogger<CategoryManagementFunctions> logger,
         ProductService productService,
-        AIService aiService,
+        TranslationAgentService translationAgentService,
+        CatalogSuggestionAgentService catalogSuggestionAgentService,
         TelemetryClient telemetryClient)
     {
         _logger = logger;
         _productService = productService;
-        _aiService = aiService;
+        _translationAgentService = translationAgentService;
+        _catalogSuggestionAgentService = catalogSuggestionAgentService;
         _telemetryClient = telemetryClient;
     }
 
@@ -73,7 +76,7 @@ public class CategoryManagementFunctions
             _logger.LogInformation("Translating {Type} '{Name}' to {Count} cultures",
                 request.Type, request.EnglishName, nonEnglish.Count + enVariants.Count);
 
-            var aiTranslations = await _aiService.TranslateTextAsync(
+            var aiTranslations = await _translationAgentService.TranslateTextAsync(
                 request.EnglishName,
                 $"Product {request.Type} name for an outdoor adventure sports equipment retailer",
                 nonEnglish);
@@ -434,12 +437,12 @@ public class CategoryManagementFunctions
                     ? request.CategoryName
                     : allCategories.FirstOrDefault(c => c.ProductCategoryID == request.CategoryId)?.Name ?? string.Empty;
 
-                (suggested, suggestedName) = await _aiService.SuggestNewSubcategoryAsync(
+                (suggested, suggestedName) = await _catalogSuggestionAgentService.SuggestNewSubcategoryAsync(
                     request.CategoryId, categoryName, allCategories, allSubcategories);
             }
             else
             {
-                (suggested, suggestedName) = await _aiService.SuggestNewCategoryAsync(allCategories, allSubcategories);
+                (suggested, suggestedName) = await _catalogSuggestionAgentService.SuggestNewCategoryAsync(allCategories, allSubcategories);
             }
 
             if (!suggested || string.IsNullOrWhiteSpace(suggestedName))
@@ -481,7 +484,7 @@ public class CategoryManagementFunctions
                 .Where(c => c.CultureID.TrimEnd().StartsWith("en-", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            var aiTranslations = await _aiService.TranslateTextAsync(
+            var aiTranslations = await _translationAgentService.TranslateTextAsync(
                 trimmedName,
                 $"Product {request.Type} name for an outdoor adventure sports equipment retailer",
                 nonEnglish);

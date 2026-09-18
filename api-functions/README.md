@@ -1,6 +1,6 @@
 # AdventureWorks Azure Functions (`api-functions`)
 
-This project contains the serverless backend for the AdventureWorks e‑commerce demo. It runs as .NET 8 isolated Azure Functions (usually hosted in Azure Container Apps) and complements the Data API Builder (`api/`) and Static Web App frontend (`app/`).
+This project contains the serverless backend for the AdventureWorks e‑commerce demo. It runs as .NET 10 isolated Azure Functions (usually hosted in Azure Container Apps) and complements the Data API Builder (`api/`) and Static Web App frontend (`app/`).
 
 High‑level responsibilities:
 
@@ -9,6 +9,21 @@ High‑level responsibilities:
 - Integrate with Azure OpenAI / Azure AI, Azure Storage (Blobs & Queues), Azure Communication Services, and Azure SQL via managed identity.
 
 > **Note**: Function _names_ below refer to the `[Function("...")]` attribute and may differ from class or method names.
+
+## SQL connection and idle-cost behavior
+
+Most Functions open SQL connections only while handling an HTTP request, queue message, or scheduled job. `OrderPlacedSqlTrigger` is different: it is an Azure SQL Change Tracking trigger on `Sales.SalesOrderHeader`, and the binding continuously polls SQL for changes. The infrastructure intentionally keeps one Flex Consumption instance always ready for this listener so that new orders are not missed. Consequently, the deployed Functions app can keep the serverless Azure SQL Database online even when all user-facing Container Apps have scaled to zero.
+
+The SQL Database still has serverless auto-pause enabled, but auto-pause requires zero sessions and zero user-workload CPU for the configured delay. The hourly `OrderDelivery_Timer` and weekly `ArchiveTransactionHistoryTimer` are additional scheduled SQL callers that can wake the database periodically. `ShoppingSimulator_Timer` does not query SQL when the simulator is stopped; it checks state in Table Storage and returns.
+
+For the demo's normal intermittent usage, the no-code workaround is to delete the environment when finished and redeploy it before the next session:
+
+```bash
+azd down --no-prompt
+azd up --no-prompt
+```
+
+See [infra/README.md](../infra/README.md) for the lifecycle guidance and the future queue/outbox, separate-function-app, and timer-disable options. Removing the always-ready setting without replacing the trigger is unsafe because new order events can be missed when the listener scales to zero.
 
 ---
 
@@ -138,7 +153,14 @@ All AI Foundry agent calls share the `FoundryAgentClient` singleton, which lever
 
 ## Sales Order Status Processing
 
-Demo pipeline that simulates order lifecycle (In Process → Approved/Rejected → Shipped or Backordered) via the `sales-order-status` queue. Used to demonstrate queue‑driven workflows and optional “pretend‑shipped” email. The frontend calls `BeginProcessingOrder` when an order is placed so processing starts automatically.
+Demo pipeline that simulates the full order lifecycle via the `sales-order-status` queue:
+
+```
+In Process (1) → Approved (2) → Shipped (5) → Delivered (7)
+              ↘ Rejected (4)   ↘ Backordered (3) → Shipped (5)
+```
+
+Notification emails (Shipped, Delivered) are gated behind the `ORDER_NOTIFICATIONS_EMAIL_ENABLED` environment variable — see [docs/features/email/ORDER_NOTIFICATIONS.md](../docs/features/email/ORDER_NOTIFICATIONS.md) for details. **Emails are disabled by default** to prevent spam when the Shopping Simulator is running.
 
 **Seed script**: To enqueue messages for all existing orders that are still In Process (Status 1), use [scripts/utilities/seed-sales-order-status-queue.sh](../scripts/utilities/seed-sales-order-status-queue.sh). It reads configuration from `azd env` (DAB URL, storage account, resource group), queries the DAB REST API for orders with `Status = 1`, and sends one message per order to the `sales-order-status` queue so the Functions process them as if they had just been placed. Use `--dry-run` to list orders without sending messages. Requires `az login` and `jq`; optional `DAB_ACCESS_TOKEN` if the DAB API requires auth.
 
@@ -150,7 +172,12 @@ Demo pipeline that simulates order lifecycle (In Process → Approved/Rejected �
 ### `ProcessSalesOrderStatus_QueueTrigger`
 
 - **Trigger**: Queue `sales-order-status`
-- **Purpose**: Processes each message (JSON with `SalesOrderID` and `Status`). Implements a state machine over `Sales.SalesOrderHeader.Status`: from **1 (In Process)** moves to **2 (Approved)** (95%) or **4 (Rejected)** (5%); from **2 (Approved)** moves to **3 (Backordered)** (10%) or **5 (Shipped)** (90%); when a **3 (Backordered)** message is picked up after its visibility delay, the order is set to **5 (Shipped)**. For each transition the function updates the database, then either re‑queues the next step with a visibility timeout (1–12 hours for Approved, 2–4 days for Backordered) or stops (terminal statuses 4, 5, 6). When status becomes **5 (Shipped)**, it looks up the customer email via `OrderService.GetCustomerEmailInfoBySalesOrderIdAsync` and sends a “pretend‑shipped” demo email via `EmailService`. If the order no longer exists (e.g. removed by the seed job), the function logs “Order not found” and completes successfully so the message is removed without retry or poison queue.
+- **Purpose**: Processes each message (JSON with `SalesOrderID` and `Status`). Implements a state machine over `Sales.SalesOrderHeader.Status`: from **1 (In Process)** moves to **2 (Approved)** (95%) or **4 (Rejected)** (5%); from **2 (Approved)** moves to **3 (Backordered)** (10%) or **5 (Shipped)** (90%); when a **3 (Backordered)** message is picked up after its visibility delay, the order is set to **5 (Shipped)**. For each transition the function updates the database, then either re-queues the next step with a visibility timeout (1–12 hours for Approved, 2–4 days for Backordered) or stops (terminal statuses 4, 6, 7). When status becomes **5 (Shipped)**, `ShipDate` is stamped on the row and a notification email is conditionally sent (see `ORDER_NOTIFICATIONS_EMAIL_ENABLED`). Terminal statuses are **4** (Rejected), **6** (Cancelled), and **7** (Delivered). If the order no longer exists (e.g. removed by the seed job), the function logs "Order not found" and completes successfully so the message is removed without retry or poison queue.
+
+### `OrderDelivery_Timer` / `OrderDelivery_HttpTrigger`
+
+- **Trigger**: Timer (every hour at `:00`) + HTTP `GET /api/orders/delivery/trigger`
+- **Purpose**: Promotes Shipped (Status=5) orders to Delivered (Status=7) once the configured delivery window has elapsed since `ShipDate` (falls back to `ModifiedDate` when `ShipDate` is NULL). B2C orders (`OnlineOrderFlag=1`) and B2B store orders (`OnlineOrderFlag=0`) use separate minimum-day thresholds configured via `PUT /api/orders/pipeline/config`. Sends a "delivered" notification email per promoted order (gated by `ORDER_NOTIFICATIONS_EMAIL_ENABLED`). Emits a `OrderDelivery.BatchProcessed` Application Insights custom event with the count. The HTTP endpoint is useful for manual triggering during development — returns `{"delivered": N}`.
 
 ---
 
@@ -706,6 +733,81 @@ These functions expose the virtual bank. See [BANK_SIMULATOR.md](./BANK_SIMULATO
 
 ---
 
+## Shopping Simulator Functions
+
+The Shopping Simulator continuously generates AI-driven orders to simulate realistic customer and B2B activity. It auto-stops after a configurable duration (default 24h, max 72h) to prevent runaway Azure costs.
+
+### `ShoppingSimulator_Status`
+
+- **Trigger / Route**: HTTP `GET /api/shopping-simulator/status`
+- **Purpose**: Returns the current simulator state including all configuration, queue depth, and cumulative counters.
+- **Response fields**: `isRunning`, `ordersPerMinute`, `existingCustomerPercentage`, `durationHours`, `stopScheduledAt`, `noOrderCustomerPercentage`, `abandonedCartPercentage`, `includeConsumerOrders`, `includeStoreOrders`, `storeOrderPercentage`, `startedAt`, `totalQueued`, `newCustomerQueued`, `existingCustomerQueued`, `storeOrderQueued`, `queueDepth`.
+
+### `ShoppingSimulator_Start`
+
+- **Trigger / Route**: HTTP `POST /api/shopping-simulator/start`
+- **Purpose**: Starts the simulator with the given configuration. Computes `stopScheduledAt` = `startedAt` + `durationHours`.
+- **Body**:
+  ```json
+  {
+    "ordersPerMinute": 1,
+    "existingCustomerPercentage": 30,
+    "durationHours": 24,
+    "noOrderCustomerPercentage": 50,
+    "abandonedCartPercentage": 10,
+    "includeConsumerOrders": true,
+    "includeStoreOrders": true,
+    "storeOrderPercentage": 20
+  }
+  ```
+- **Configuration details**:
+  - `ordersPerMinute` (1–60): Messages enqueued per timer tick (every minute).
+  - `durationHours` (1–72, default 24): Auto-stop duration. Simulator NEVER runs forever.
+  - `existingCustomerPercentage` (0–100): Split between existing customers and new customers for consumer orders.
+  - `noOrderCustomerPercentage` (0–100): % of new-customer slots given to registered customers who never ordered (drawn to sale items via marketing re-engagement).
+  - `abandonedCartPercentage` (0–100): % of existing-customer slots given to customers with abandoned shopping carts (Smart Cart Recovery).
+  - `includeConsumerOrders` / `includeStoreOrders`: Toggle consumer B2C and/or B2B store orders. At least one must be enabled.
+  - `storeOrderPercentage` (5–50): When both types enabled, this % of messages go to B2B stores.
+
+### `ShoppingSimulator_Stop`
+
+- **Trigger / Route**: HTTP `POST /api/shopping-simulator/stop`
+- **Purpose**: Stops the simulator. Messages already in the queue continue processing.
+
+### `ShoppingSimulator_ClearQueue`
+
+- **Trigger / Route**: HTTP `POST /api/shopping-simulator/clear-queue`
+- **Purpose**: Purges all pending messages from `simulation-order-queue`.
+
+### `ShoppingSimulator_Results`
+
+- **Trigger / Route**: HTTP `GET /api/shopping-simulator/results[?limit=50]`
+- **Purpose**: Returns recent simulation results (most recent first). Each result includes `orderType` (`"consumer"`, `"b2b-store"`, `"no-order-customer"`, `"cart-recovery"`).
+
+### `ShoppingSimulator_Timer`
+
+- **Trigger**: Timer `0 * * * * *` (every minute)
+- **Purpose**: If running, enqueues `ordersPerMinute` messages to `simulation-order-queue` with the configured routing:
+  1. Checks auto-stop: if `UtcNow >= stopScheduledAt`, stops the simulator and returns.
+  2. Splits messages between B2B store orders and consumer orders based on `storeOrderPercentage`.
+  3. Consumer orders split into existing-customer slots (top spenders + cart recovery) and new-customer slots (random personas + no-order sale-seekers).
+
+### Order Modes (queue message routing)
+
+Each queued message carries an `OrderMode` field that determines generation strategy:
+
+| OrderMode           | Description                                             | AI Required             |
+| ------------------- | ------------------------------------------------------- | ----------------------- |
+| `new-persona`       | Random persona (newbie, family-shopper, commuter, etc.) | No (fallback to Bogus)  |
+| `existing-repeat`   | Top-spender repeat purchase                             | No (fallback to random) |
+| `no-order-customer` | Registered customer with 0 orders, drawn to sale items  | **Yes** (hard fail)     |
+| `cart-recovery`     | Customer with abandoned cart, completes purchase        | **Yes** (hard fail)     |
+| `b2b-store`         | B2B store replenishment order based on history + stock  | **Yes** (hard fail)     |
+
+Modes marked "AI Required" will log full diagnostics and fail (message goes to poison queue) if `AI_AGENT_ORDER_ID` is not configured.
+
+---
+
 ## Simulation Queue & Background Functions
 
 ### `SimulationOrderStart`
@@ -735,6 +837,25 @@ These functions expose the virtual bank. See [BANK_SIMULATOR.md](./BANK_SIMULATO
 - **Frontend (`app/`)** calls these Functions for operations that need server‑side processing, long‑running workloads, or integration with external services (OpenAI, email, blob storage).
 - **Database access** is handled via services such as `ProductService`, `ReviewService`, `AddressService`, and `ReceiptService`, all using managed identity to reach Azure SQL.
 - **Durable Functions** orchestrate multi‑step AI workflows (embellishment, translations, embeddings) and expose simple HTTP entrypoints that the frontend and scripts can call.
+- **Real-time push** — the `WebPubSubService` singleton sends fire-and-forget JSON events to Azure Web PubSub after each mutation. All three frontends subscribe via the `useWebPubSub` hook and invalidate React Query caches on receipt.
+
+### Web PubSub Negotiate Endpoint
+
+`GET /api/webpubsub/negotiate?groups=manufacturing-agent,warehouse,...`
+
+Returns a client access URL with a short-lived JWT token for opening a WebSocket connection.
+
+### Real-Time Push Groups
+
+| Group                 | Events                                                                  | Source Functions                                                                                  |
+| --------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `manufacturing-agent` | run-started, run-completed, step-updated, config-changed, queue-cleared | ManufacturingAgentQueueTrigger, ManufacturingAgentRunFunctions, ManufacturingAgentConfigFunctions |
+| `manufacturing-ops`   | wo-completed, simulation-stopped, config-changed                        | WorkOrderOperationProcessorFunction, ManufacturingControlFunction                                 |
+| `warehouse`           | operation-completed, config-changed                                     | WarehouseOperationProcessorFunction, WarehouseFunction                                            |
+| `supply-chain`        | po-status-changed                                                       | PurchaseOrderProcessorFunction                                                                    |
+| `orders`              | order-placed, order-status-changed, orders-delivered                    | OrderPlacedSqlTrigger, ProcessSalesOrderStatus, OrderDeliveryTimerFunction, StoreOrderFunctions   |
+| `shopping-simulator`  | simulator-started, simulator-stopped                                    | ShoppingSimulatorControlFunction                                                                  |
+| `reviews`             | moderation-progress, generation-progress                                | ReviewModerationQueueFunction, GenerateVerifiedReviewsFunction                                    |
 
 For examples of how these Functions are exercised, see the test scripts in the repo root (e.g. `test-receipt-generation.sh`, `test-send-email.sh`, `test-ai-and-mcp-complete.sh`) and the utilities in [scripts/utilities/](../scripts/utilities/) (e.g. `seed-sales-order-status-queue.sh` for the sales order status pipeline).
 
@@ -746,6 +867,7 @@ For examples of how these Functions are exercised, see the test scripts in the r
 - MCP server and tools: [api-mcp/README.md](../api-mcp/README.md)
 - Password hashing and reset flow: [docs/features/authentication/](../docs/features/authentication/)
 - Receipts, PDFs, and email: [docs/features/email/](../docs/features/email/)
+- Order lifecycle notifications and email flag: [docs/features/email/ORDER_NOTIFICATIONS.md](../docs/features/email/ORDER_NOTIFICATIONS.md)
 - AI agent and MCP integration: [docs/features/ai-agent/](../docs/features/ai-agent/)
 - Translations and localization flows: [docs/features/internationalization/](../docs/features/internationalization/)
 - Review generation and embeddings: [docs/features/reviews/](../docs/features/reviews/) and [docs/data-management/](../docs/data-management/)

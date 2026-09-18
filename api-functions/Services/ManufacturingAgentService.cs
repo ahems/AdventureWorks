@@ -24,7 +24,7 @@ public class ManufacturingAgentService
     private readonly ILogger<ManufacturingAgentService> _logger;
     private readonly TelemetryClient _telemetryClient;
     private readonly FoundryAgentClient _foundryClient;
-    private readonly string? _agentId;
+    private readonly string _agentId;
 
     public ManufacturingAgentService(
         ILogger<ManufacturingAgentService> logger,
@@ -35,9 +35,9 @@ public class ManufacturingAgentService
         _logger = logger;
         _telemetryClient = telemetryClient;
         _foundryClient = foundryClient;
-        _agentId = configuration["AI_AGENT_MANUFACTURING_ID"];
-        if (string.IsNullOrEmpty(_agentId))
-            _logger.LogWarning("AI_AGENT_MANUFACTURING_ID is not configured; manufacturing agent invocations will be skipped.");
+        _agentId = configuration["AI_AGENT_MANUFACTURING_ID"]
+            ?? throw new InvalidOperationException(
+                "AI_AGENT_MANUFACTURING_ID environment variable is not set");
     }
 
     /// <summary>
@@ -48,14 +48,6 @@ public class ManufacturingAgentService
     /// <param name="customerId">The <c>CustomerID</c> associated with the order.</param>
     public void InvokeFireAndForget(int salesOrderId, int customerId)
     {
-        if (string.IsNullOrEmpty(_agentId))
-        {
-            _logger.LogWarning(
-                "Skipping manufacturing agent for SalesOrderID={SalesOrderId}: AI_AGENT_MANUFACTURING_ID not configured.",
-                salesOrderId);
-            return;
-        }
-
         _ = Task.Run(async () =>
         {
             using var operation = _telemetryClient.StartOperation<RequestTelemetry>(

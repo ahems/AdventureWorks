@@ -17,6 +17,12 @@ param agentWorkflowChatId string = ''
 param agentWorkflowPromotionId string = ''
 param agentWorkflowOrderId string = ''
 param agentWorkflowHelpMeChooseId string = ''
+param agentTranslationId string = ''
+param agentReviewBatchId string = ''
+param agentReviewAnalysisId string = ''
+param agentEmailContentId string = ''
+param agentCatalogSuggestionId string = ''
+param webPubSubHostName string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -68,11 +74,19 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
       scaleAndConcurrency: {
         maximumInstanceCount: 5
         instanceMemoryMB: 2048
-        alwaysReady: []
+        alwaysReady: [
+          {
+            // Keep a dedicated instance for the SQL Change Tracking trigger.
+            // Without this, Flex Consumption scales it to zero and assigns a
+            // NoOpListener, causing new orders to be silently missed.
+            name: 'function:OrderPlacedSqlTrigger'
+            instanceCount: 1
+          }
+        ]
       }
       runtime: {
         name: 'dotnet-isolated'
-        version: '8.0'
+        version: '10.0'
       }
     }
     siteConfig: {
@@ -164,6 +178,36 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID'
           value: agentWorkflowHelpMeChooseId
+        }
+        {
+          name: 'AI_AGENT_TRANSLATION_ID'
+          value: agentTranslationId
+        }
+        {
+          name: 'AI_AGENT_REVIEW_BATCH_ID'
+          value: agentReviewBatchId
+        }
+        {
+          name: 'AI_AGENT_REVIEW_ANALYSIS_ID'
+          value: agentReviewAnalysisId
+        }
+        {
+          name: 'AI_AGENT_EMAIL_CONTENT_ID'
+          value: agentEmailContentId
+        }
+        {
+          name: 'AI_AGENT_CATALOG_SUGGESTION_ID'
+          value: agentCatalogSuggestionId
+        }
+        {
+          // Self-referencing URL so the queue trigger can POST step callbacks
+          // back to the Functions API without needing an external env var.
+          name: 'API_FUNCTIONS_URL'
+          value: 'https://${apiFunctionsName}.azurewebsites.net'
+        }
+        {
+          name: 'WEB_PUBSUB_HOST_NAME'
+          value: webPubSubHostName
         }
       ]
     }

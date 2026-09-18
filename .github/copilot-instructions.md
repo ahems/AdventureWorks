@@ -10,7 +10,7 @@ This is a **3-tier Azure application** demonstrating enterprise patterns with pa
 
 - **Frontend** (`app/`): React + TypeScript + Vite SPA deployed as Azure Static Web App
 - **Backend API** (`api/`): Microsoft Data API Builder (DAB) providing GraphQL + REST, running in Azure Container Apps
-- **Serverless Functions** (`api-functions/`): .NET 8 Azure Functions in Container Apps for custom business logic
+- **Serverless Functions** (`api-functions/`): .NET 10 Azure Functions in Container Apps for custom business logic
 - **Database**: Azure SQL with AdventureWorks schema using Entra ID authentication
 - **Infrastructure** (`infra/`): Bicep modules with modular service definitions
 
@@ -19,9 +19,22 @@ This is a **3-tier Azure application** demonstrating enterprise patterns with pa
 ```
 User → Static Web App → GraphQL (DAB) → Azure SQL
                      ↘ Azure Functions → Azure SQL
+                     ↕ Web PubSub (real-time push)
 ```
 
 All services authenticate via **Managed Identity** (passwordless). No connection strings in code.
+
+**Real-time push**: Azure Web PubSub (Free tier) pushes events from Azure Functions to all three frontends via WebSocket. The `WebPubSubService` singleton fires events after each mutation. Clients use the `useWebPubSub` hook + `useRealTimeUpdates` dispatcher to invalidate React Query caches.
+
+### No Polling / No Manual Refresh Policy
+
+**Do NOT use `refetchInterval` or manual polling on any page where Web PubSub real-time updates apply.** All data freshness must come from server-pushed cache invalidation via the `useRealTimeUpdates` hook. React Query's default window-focus refetch provides a natural fallback when users return to the tab.
+
+When adding a new query that needs live updates:
+
+1. Register the query key in the appropriate group handler in `app-manufacturing/src/hooks/useRealTimeUpdates.ts` (or the equivalent hook in `app/` or `app-admin/`)
+2. Ensure the server-side mutation calls `WebPubSubService.SendToGroupAsync` for the relevant group
+3. Do NOT add `refetchInterval` — the Web PubSub event-driven invalidation replaces polling entirely
 
 ## Critical Development Workflows
 
@@ -72,6 +85,7 @@ Testin is done against the Azure-hosted services, so the following environment v
 - USER_MANAGED_IDENTITY_NAME - the User Managed Identity name
 - VITE_API_FUNCTIONS_URL - the Azure Functions URL
 - VITE_API_URL - the GraphQL API URL
+- WEB_PUBSUB_HOST_NAME - the Azure Web PubSub host name (e.g. av-wps-xxx.webpubsub.azure.com)
 - chatGptDeploymentVersion - the ChatGPT deployment version
 - chatGptModelName - the ChatGPT model name
 - chatGptSkuName - the ChatGPT SKU name
@@ -99,9 +113,11 @@ azd env get-values | grep MCP_SERVICE_URL
 The app uses **azd lifecycle hooks** for automated deployment orchestration:
 
 ```bash
-azd up  # Full deploy: preup → provision → deploy → postdeploy
-        # Total time: ~29 minutes (21 min infrastructure + 8 min seed-job)
-````
+azd up --no-prompt  # Full deploy: preup → provision → deploy → postdeploy
+                    # Total time: ~29 minutes (21 min infrastructure + 8 min seed-job)
+```
+
+**Important:** Always use `--no-prompt` to prevent the deployment from stalling. The `azd` preflight validation may warn about AI model catalog entries and prompt for confirmation, which causes the process to hang. `--no-prompt` auto-accepts non-destructive warnings.`
 
 **Hook execution order:**
 
@@ -219,6 +235,64 @@ public AddressFunctions(ILogger<AddressFunctions> logger, AddressService service
 
 Connection string uses **Active Directory Default** authentication (Managed Identity in Azure, Azure CLI locally).
 
+### Loading Skeletons (app-manufacturing)
+
+**Every page that fetches async data must show a loading skeleton** while data is in-flight. This is a hard convention for the manufacturing app.
+
+**Available skeleton components** — import from `@/components/LoadingSkeletons`:
+
+| Component             | Use for                                          |
+| --------------------- | ------------------------------------------------ |
+| `TableSkeleton`       | Any table/list view (configurable `rows`/`cols`) |
+| `CardGridSkeleton`    | Grid of cards (configurable `count`)             |
+| `KpiSkeleton`         | KPI metric cards (configurable `count`)          |
+| `DetailPageSkeleton`  | Detail pages: header + stats + table             |
+| `SidebarListSkeleton` | Sidebar navigation lists                         |
+| `ChartSkeleton`       | Chart/graph containers                           |
+| `DashboardSkeleton`   | Full dashboard layout                            |
+| `ScheduleSkeleton`    | Schedule/calendar layouts                        |
+| `ShopFloorSkeleton`   | Shop floor operation card grids                  |
+
+The base `Skeleton` primitive is also available from `@/components/ui/skeleton` for custom layouts.
+
+**Pattern to follow:**
+
+```tsx
+import { DetailPageSkeleton, TableSkeleton } from '@/components/LoadingSkeletons';
+
+const MyPage = () => {
+  const { data, isLoading } = useQuery({ ... });
+
+  // Early-return skeleton for full-page loading states
+  if (isLoading) return <DetailPageSkeleton />;
+
+  // For partial/panel loading states, use inline branches:
+  // {isLoading ? <TableSkeleton rows={6} cols={4} /> : <table>...</table>}
+  return (...);
+};
+```
+
+- **Full-page loads**: early-return the appropriate skeleton before the main JSX
+- **Panel/section loads**: use a ternary in the JSX — `{isLoading ? <Skeleton> : <Content>}`
+- **Multiple queries**: derive a combined flag — `const isLoading = queryA.isLoading || queryB.isLoading`
+- Static pages (login, 404, settings with no async data) do not need skeletons
+- Pages that only display a selection prompt before data loads (e.g. "select a product first") should show a skeleton only after the user has made a selection and data is actively loading
+
+### Real-Time Push Pattern (Web PubSub)
+
+All three frontends connect to Azure Web PubSub via the `useWebPubSub` hook. When server-side mutations occur, the `WebPubSubService` singleton pushes JSON events to topic groups. The `useRealTimeUpdates` dispatcher hook maps events to `queryClient.invalidateQueries()` calls, triggering React Query to refetch.
+
+**Server-side pattern** — inject `WebPubSubService`, call `SendToGroupAsync` after mutations:
+```csharp
+await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "wo-completed", workOrderId });
+```
+
+**Client-side pattern** — `useRealTimeUpdates()` is mounted in each app's root component. Individual pages keep a slow `refetchInterval` (60–120s) as a fallback.
+
+**Groups**: `manufacturing-agent`, `manufacturing-ops`, `warehouse`, `supply-chain`, `orders`, `shopping-simulator`, `reviews`
+
+**Negotiate endpoint**: `GET /api/webpubsub/negotiate?groups=manufacturing-agent,warehouse,...`
+
 ### Bicep Infrastructure Patterns
 
 Infrastructure uses **modular decomposition** in `infra/modules/`:
@@ -234,6 +308,15 @@ module database 'modules/database.bicep' = { params: { identityId: identity.outp
 - `revisionSuffix` - unique per deployment (avoids Container App conflicts)
 - `chatGptModelName`, `embeddingModelName` - discovered in preup.ps1
 - `aadAdminObjectId` - current user's Entra ID for SQL admin
+
+### Infrastructure-as-Code Policy
+
+All Azure Storage resources (queues, tables, blob containers) are provisioned **exclusively** by `infra/modules/storage.bicep` via `azd up`. Application code must **never** call `CreateIfNotExistsAsync`, `CreateIfNotExists`, or `CreateTableIfNotExistsAsync` — it must assume all infrastructure already exists at runtime.
+
+- **New queue or table needed?** Add it to the `queueServices.queues` or `tableServices.tables` array in `storage.bicep`.
+- **New blob container needed?** Add it to `blobServices.containers` in `storage.bicep`.
+- **Startup health check**: `Program.cs` verifies all expected storage resources exist at cold-start using lightweight `GetPropertiesAsync()` calls and logs `ILogger.LogWarning` to App Insights for any missing resource. It does not block startup or create resources.
+- **Why**: Each `CreateIfNotExistsAsync` adds an unnecessary HTTP round-trip (HEAD + conditional PUT). During simulation workloads that send hundreds of queue messages per minute, this overhead is significant.
 
 ## Common Integration Points
 
@@ -342,6 +425,23 @@ az monitor app-insights query --app <app-name> --analytics-query "requests | top
 7. **Build failures**: Functions require restore before build - use `restore (functions)` task first
 8. **Connection errors**: Ensure `az login` is fresh - tokens expire after hours
 9. **Missing env vars**: DAB reads from `@env()` placeholders - check azd environment with `azd env get-values`
+10. **Shopping Simulator AI requirement**: The `no-order-customer`, `cart-recovery`, and `b2b-store` order modes require `AI_AGENT_ORDER_ID` to be configured. Without it, those messages will hard-fail to the poison queue with full diagnostics. The `new-persona` and `existing-repeat` modes fall back to random generation if AI is unavailable.
+11. **Shopping Simulator auto-stop**: The simulator always auto-stops after the configured `durationHours` (default 24h, max 72h). It never runs forever — this is a cost protection feature checked every timer tick (1 minute).
+12. **Order Status=7 is "Delivered"**: Orders are automatically promoted from Shipped (5) to Delivered (7) by the hourly `OrderDelivery_Timer` function. Terminal statuses are now 4 (Rejected), 6 (Cancelled), and 7 (Delivered) — Status=5 (Shipped) is no longer a terminal state. Delivery windows are configurable per order type via `PUT /api/orders/pipeline/config`.
+13. **Order notification emails disabled by default**: `ORDER_NOTIFICATIONS_EMAIL_ENABLED` must be explicitly set to `"true"` to send Shipped/Delivered emails via Azure Communication Services. When unset or `"false"`, the intended email content is logged at Info level instead (look for `[EmailNotifications disabled]` in Application Insights). This prevents the Shopping Simulator from generating email spam. The flag is hardcoded to `"false"` in the Bicep infra — enabling it requires a manual Azure Portal or CLI override. See [docs/features/email/ORDER_NOTIFICATIONS.md](docs/features/email/ORDER_NOTIFICATIONS.md).
+14. **Web PubSub Free tier limits**: 20 concurrent connections, 20K messages/day — sufficient for a single-user demo. All three frontend apps share one instance via groups. If `WEB_PUBSUB_HOST_NAME` is empty or the negotiate endpoint fails, apps fall back to slow polling (60–120s) automatically.
+15. **No runtime infra creation**: Application code must not call `CreateIfNotExistsAsync` or `CreateIfNotExists` on storage resources (queues, tables, containers). All storage infrastructure is provisioned by `infra/modules/storage.bicep` via `azd up`. If you need a new queue or table, add it to the Bicep file. A startup health check in `Program.cs` logs App Insights warnings for any missing resources.
+
+### Shopping Simulator
+
+The shopping simulator (`POST /api/shopping-simulator/start`) generates continuous AI-driven orders. Configuration:
+
+- **Duration**: 1–72 hours (default 24). Auto-stops to prevent runaway costs.
+- **Order types**: Consumer (B2C) and/or B2B store orders. At least one must be enabled.
+- **Consumer mix**: Existing top-spenders, new random personas, no-order customers drawn to sales, and abandoned-cart recoveries.
+- **B2B stores**: AI generates representative replenishment orders based on each store's purchase history and current inventory.
+- **State**: Persisted in Azure Table Storage (`shoppingSimulator` table). Queue: `simulation-order-queue`.
+- **Admin UI**: `app-admin/src/pages/ShoppingSimulatorPage.tsx` — sliders, toggles, live stats, and results feed.
 
 ## Documentation Map
 
@@ -350,3 +450,4 @@ az monitor app-insights query --app <app-name> --analytics-query "requests | top
 - [api/README.md](api/README.md) - DAB deployment details
 - [MIGRATION_SUMMARY.md](MIGRATION_SUMMARY.md) - GraphQL integration history
 - [docs/DAB_NAMING_CONVENTIONS.md](docs/DAB_NAMING_CONVENTIONS.md) - GraphQL schema rules
+````

@@ -1,11 +1,10 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ShoppingCart, Star, Bell } from "lucide-react";
+import { ShoppingCart, Clock, Bell } from "lucide-react";
 import { Product, getSalePrice, isVariantAvailable } from "@/types/product";
 import { OptimizedImage } from "@/components/OptimizedImage";
 import { useCart } from "@/context/CartContext";
-import { useReviews } from "@/hooks/useReviews";
 import { toast } from "@/hooks/use-toast";
 import { useCurrency } from "@/context/CurrencyContext";
 import { useProductNames } from "@/context/ProductNamesContext";
@@ -26,25 +25,34 @@ interface SaleProductCardProps {
 const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
   const { t } = useTranslation("common");
   const { addToCart } = useCart();
-  const { averageRating } = useReviews(product.ProductID);
   const { formatPrice } = useCurrency();
   const { getLocalizedName } = useProductNames();
   const localizedName = getLocalizedName(product.ProductID) ?? product.Name;
   const [selectedSize, setSelectedSize] = useState<string | undefined>(
-    undefined
+    undefined,
   );
   const [selectedColor, setSelectedColor] = useState<string | undefined>(
-    undefined
+    undefined,
   );
 
   const salePrice = getSalePrice(product);
   const hasVariants = product.availableSizes || product.availableColors;
 
+  const daysLeft = React.useMemo(() => {
+    if (!product.SpecialOfferEndDate) return null;
+    const end = new Date(product.SpecialOfferEndDate);
+    const now = new Date();
+    return Math.max(
+      0,
+      Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+    );
+  }, [product.SpecialOfferEndDate]);
+
   // Check if current selection is available
   const currentVariantAvailable = isVariantAvailable(
     product,
     selectedSize,
-    selectedColor
+    selectedColor,
   );
   const showUnavailable =
     hasVariants && selectedSize && selectedColor && !currentVariantAvailable;
@@ -132,27 +140,35 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
           </h3>
         </Link>
 
-        {/* Star Rating */}
-        {averageRating > 0 && (
-          <div className="flex items-center gap-1 mb-2">
-            {[...Array(5)].map((_, i) => (
-              <Star
-                key={i}
-                className={`w-3 h-3 ${
-                  i < Math.round(averageRating)
-                    ? "text-doodle-accent fill-current"
-                    : "text-doodle-text/20"
-                }`}
-              />
-            ))}
-            <span className="font-doodle text-xs text-doodle-text/50 ml-1">
-              {averageRating.toFixed(1)}
+        {/* Sale Countdown */}
+        {daysLeft !== null && (
+          <div
+            className={`flex items-center gap-1.5 mb-2 px-2 py-1 rounded-sm border border-dashed w-fit ${
+              daysLeft <= 3
+                ? "bg-red-50 border-red-300 text-red-600"
+                : daysLeft <= 7
+                  ? "bg-amber-50 border-amber-300 text-amber-600"
+                  : "bg-doodle-green/10 border-doodle-green/30 text-doodle-green"
+            }`}
+          >
+            <Clock className="w-3 h-3" />
+            <span className="font-doodle text-xs font-bold">
+              {daysLeft === 0
+                ? t("saleProductCard.endsToday", "Ends today!")
+                : daysLeft === 1
+                  ? t("saleProductCard.endsInOneDay", "1 day left")
+                  : t("saleProductCard.endsInDays", "{{count}} days left", {
+                      count: daysLeft,
+                    })}
             </span>
           </div>
         )}
 
         {/* Price */}
-        <div className="mb-3" data-testid={`sale-product-price-${product.ProductID}`}>
+        <div
+          className="mb-3"
+          data-testid={`sale-product-price-${product.ProductID}`}
+        >
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-doodle text-sm text-doodle-text/50 line-through">
               {formatPrice(product.ListPrice)}
@@ -258,8 +274,8 @@ const SaleProductCard: React.FC<SaleProductCardProps> = ({ product }) => {
             {!product.inStock
               ? t("saleProductCard.outOfStock")
               : showUnavailable
-              ? t("saleProductCard.unavailable")
-              : t("saleProductCard.addToCart")}
+                ? t("saleProductCard.unavailable")
+                : t("saleProductCard.addToCart")}
           </button>
         </div>
       </div>

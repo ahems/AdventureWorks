@@ -1,5 +1,5 @@
 # Start from the base Ubuntu image
-FROM mcr.microsoft.com/devcontainers/base:ubuntu-22.04
+FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 
 # Install prerequisites
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
@@ -10,6 +10,8 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
         gnupg \
         ca-certificates \
         unzip \
+        git-lfs \
+    && git lfs install \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 22.x (LTS - Node 20 reaches EOL April 2026)

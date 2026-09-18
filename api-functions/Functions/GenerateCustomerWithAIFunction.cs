@@ -63,6 +63,10 @@ public class GenerateCustomerWithAIFunction
                 postalCode  = result.PostalCode,
                 country     = result.Country,
                 locale      = result.Locale,
+                creditCardType = result.CreditCardType,
+                creditCardLast4 = result.CreditCardLast4,
+                creditCardExpMonth = result.CreditCardExpMonth,
+                creditCardExpYear = result.CreditCardExpYear,
             });
             return response;
         }

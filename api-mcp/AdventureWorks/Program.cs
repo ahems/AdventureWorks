@@ -1,7 +1,9 @@
-using AdventureWorks.Tools;
 using AdventureWorks.Services;
 using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.Extensions.Localization;
+using ModelContextProtocol.Extensions.Tasks;
+using ModelContextProtocol.Protocol;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.AddConsole(consoleLogOptions =>
@@ -13,7 +15,8 @@ builder.Logging.AddConsole(consoleLogOptions =>
 // Add Application Insights telemetry
 builder.Services.AddApplicationInsightsTelemetry();
 
-// Configure localization
+// Configure localization (Microsoft.Extensions.Localization is actively used by services below)
+// Services inject IStringLocalizer<Strings> for multilingual message formatting in OrderService, ProductService, ReviewService, and others
 builder.Services.AddLocalization();
 
 // Get database connection string from configuration
@@ -51,6 +54,9 @@ builder.Services.AddScoped<AIService>(sp =>
 	return new AIService(openAiEndpoint, logger, telemetryClient);
 });
 
+// Register CustomerGeneratorService for random fake customer data (Bogus)
+builder.Services.AddSingleton<CustomerGeneratorService>();
+
 // Register HttpClient factories for api-functions proxy services
 builder.Services.AddHttpClient<ManufacturingService>(client =>
 {
@@ -69,15 +75,49 @@ builder.Services.AddHttpClient<SimulatorService>(client =>
 	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
 });
 
-// Register MCP server with SSE transport and AdventureWorks tools
+// Resolve task store: durable Azure Table Storage when a storage account is configured, else in-memory
+var storageAccountName = builder.Configuration["AzureWebJobsStorage:accountName"]
+	?? Environment.GetEnvironmentVariable("STORAGE_ACCOUNT_NAME");
+IMcpTaskStore taskStore = !string.IsNullOrEmpty(storageAccountName)
+	? new AzureTableMcpTaskStore(storageAccountName)
+	: new InMemoryMcpTaskStore();
+
+// Register MCP server (v2.0 — stateless by default, assembly-level tool discovery)
 builder.Services
 	   .AddMcpServer()
-	   .WithHttpTransport(o => o.Stateless = true) // Stateless mode: no session IDs required, compatible with Azure AI Foundry agents
-	   .WithTools<AdventureWorksMcpTools>()
-	   .WithTools<ManufacturingMcpTools>()
-	   .WithTools<SupplyChainMcpTools>()
-	   .WithTools<BankMcpTools>()
-	   .WithTools<SimulatorMcpTools>();
+	   .WithHttpTransport()
+	   .WithToolsFromAssembly()
+	   .WithTasks(taskStore)
+	   .WithRequestFilters(filters =>
+	   {
+		   // Centralized Application Insights telemetry for every tool call
+		   filters.AddCallToolFilter(next => async (context, ct) =>
+		   {
+			   var telemetry = context.Services.GetRequiredService<TelemetryClient>();
+			   var toolName = context.Params?.Name ?? "unknown";
+			   using var operation = telemetry.StartOperation<RequestTelemetry>($"MCP_{toolName}");
+
+			   if (context.Params?.Arguments is { } args)
+			   {
+				   foreach (var kvp in args)
+					   operation.Telemetry.Properties[kvp.Key] = kvp.Value.ToString()[..Math.Min(kvp.Value.ToString().Length, 200)];
+			   }
+
+			   try
+			   {
+				   var result = await next(context, ct);
+				   operation.Telemetry.Success = true;
+				   telemetry.TrackEvent("MCP_ToolExecuted", new Dictionary<string, string> { { "tool", toolName } });
+				   return result;
+			   }
+			   catch (Exception ex) when (ex is not InputRequiredException)
+			   {
+				   operation.Telemetry.Success = false;
+				   telemetry.TrackException(ex, new Dictionary<string, string> { { "tool", toolName } });
+				   throw;
+			   }
+		   });
+	   });
 
 builder.AddServiceDefaults();
 

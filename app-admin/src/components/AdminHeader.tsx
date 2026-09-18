@@ -3,7 +3,6 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   Menu,
   X,
-  Bike,
   User,
   LogOut,
   ChevronDown,
@@ -21,9 +20,11 @@ import {
   FolderOpen,
   TrendingUp,
   TrendingDown,
+  Warehouse,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import AppBreadcrumb from "@/components/AppBreadcrumb";
+import AdminLogo from "@/components/AdminLogo";
 
 const SALES_NAV_ITEMS = [
   {
@@ -48,6 +49,11 @@ const secondaryNavGroups = [
         to: "/inventory-transactions",
         label: "Inv. Transactions",
         icon: History,
+      },
+      {
+        to: "/warehouse",
+        label: "Warehouse",
+        icon: Warehouse,
       },
     ],
   },
@@ -115,8 +121,8 @@ const AdminHeader: React.FC = () => {
           <div className="flex items-center justify-between h-16 md:h-20">
             {/* Logo */}
             <Link to="/" className="flex items-center gap-2 group">
-              <div className="doodle-border-light p-1.5 group-hover:rotate-6 transition-transform">
-                <Bike className="w-6 h-6 md:w-8 md:h-8 text-doodle-text" />
+              <div className="group-hover:rotate-6 transition-transform">
+                <AdminLogo className="w-8 h-8 md:w-10 md:h-10" />
               </div>
               <div className="flex flex-col">
                 <span className="font-doodle text-lg md:text-2xl font-bold text-doodle-text leading-tight">
@@ -238,20 +244,6 @@ const AdminHeader: React.FC = () => {
               {/* Auth Section */}
               {isAuthenticated && user ? (
                 <div className="flex items-center gap-2">
-                  {/* Always-visible Sign Out button so tests can find it directly */}
-                  <button
-                    onClick={() => {
-                      logout();
-                      navigate("/login");
-                    }}
-                    className="doodle-button flex items-center gap-1 py-2 px-3 text-doodle-accent"
-                    aria-label="Sign Out"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span className="hidden sm:inline font-doodle text-sm">
-                      Sign Out
-                    </span>
-                  </button>
                   <div className="relative" ref={userMenuRef}>
                     <button
                       onClick={() => setUserMenuOpen(!userMenuOpen)}

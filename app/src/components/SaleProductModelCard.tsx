@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ShoppingCart, Star, Bell } from "lucide-react";
+import { ShoppingCart, Clock, Bell } from "lucide-react";
 import {
   ProductModelGroup,
   getSalePrice,
@@ -10,7 +10,6 @@ import {
 import { getProductVariant } from "@/utils/productGrouping";
 import { OptimizedImage } from "@/components/OptimizedImage";
 import { useCart } from "@/context/CartContext";
-import { useReviews } from "@/hooks/useReviews";
 import { toast } from "@/hooks/use-toast";
 import { useCurrency } from "@/context/CurrencyContext";
 import { useUnitMeasure } from "@/context/UnitMeasureContext";
@@ -39,10 +38,10 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
 
   // State for selected variants
   const [selectedColor, setSelectedColor] = useState<string | undefined>(
-    productGroup.colors.length > 0 ? productGroup.colors[0] : undefined
+    productGroup.colors.length > 0 ? productGroup.colors[0] : undefined,
   );
   const [selectedSize, setSelectedSize] = useState<string | undefined>(
-    productGroup.sizes.length > 0 ? productGroup.sizes[0] : undefined
+    productGroup.sizes.length > 0 ? productGroup.sizes[0] : undefined,
   );
 
   // Get the current product variant based on selections
@@ -54,7 +53,6 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
   const localizedName =
     getLocalizedName(currentProduct.ProductID) ?? currentProduct.Name;
 
-  const { averageRating } = useReviews(currentProduct.ProductID);
   const salePrice = getSalePrice(currentProduct);
   const hasVariants =
     productGroup.colors.length > 0 || productGroup.sizes.length > 0;
@@ -63,10 +61,20 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
   const currentVariantAvailable = isVariantAvailable(
     currentProduct,
     selectedSize,
-    selectedColor
+    selectedColor,
   );
   const showUnavailable =
     hasVariants && selectedSize && selectedColor && !currentVariantAvailable;
+
+  const daysLeft = useMemo(() => {
+    if (!currentProduct.SpecialOfferEndDate) return null;
+    const end = new Date(currentProduct.SpecialOfferEndDate);
+    const now = new Date();
+    return Math.max(
+      0,
+      Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+    );
+  }, [currentProduct.SpecialOfferEndDate]);
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -77,9 +85,7 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
         addToCart(currentProduct, 1, selectedSize, selectedColor);
         toast({
           title: t("toast.addedToCart"),
-          description: `${localizedName} ${t(
-            "toast.addedToCartDescription"
-          )}`,
+          description: `${localizedName} ${t("toast.addedToCartDescription")}`,
         });
       }
     } else {
@@ -209,30 +215,41 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
           )}
         </div>
 
-        {/* Star Rating */}
-        <div className="flex items-center gap-1">
-          <div className="flex items-center gap-0.5">
-            {[...Array(5)].map((_, i) => (
-              <Star
-                key={i}
-                className={`w-3 h-3 ${
-                  i < Math.round(averageRating)
-                    ? "text-doodle-accent fill-current"
-                    : "text-doodle-text/20"
-                }`}
-              />
-            ))}
+        {/* Sale Countdown */}
+        {daysLeft !== null && (
+          <div
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-sm border border-dashed w-fit ${
+              daysLeft <= 3
+                ? "bg-red-50 border-red-300 text-red-600"
+                : daysLeft <= 7
+                  ? "bg-amber-50 border-amber-300 text-amber-600"
+                  : "bg-doodle-green/10 border-doodle-green/30 text-doodle-green"
+            }`}
+          >
+            <Clock className="w-3 h-3" />
+            <span className="font-doodle text-xs font-bold">
+              {daysLeft === 0
+                ? t("saleProductCard.endsToday", "Ends today!")
+                : daysLeft === 1
+                  ? t("saleProductCard.endsInOneDay", "1 day left")
+                  : t("saleProductCard.endsInDays", "{{count}} days left", {
+                      count: daysLeft,
+                    })}
+            </span>
           </div>
-        </div>
+        )}
 
         {/* Price */}
-        <div className="flex flex-col gap-1" data-testid={`sale-product-price-${currentProduct.ProductID}`}>
+        <div
+          className="flex flex-col gap-1"
+          data-testid={`sale-product-price-${currentProduct.ProductID}`}
+        >
           <div className="flex items-center gap-2">
             <span className="font-doodle text-sm text-doodle-text/50 line-through">
               {productGroup.priceRange.min === productGroup.priceRange.max
                 ? formatPrice(currentProduct.ListPrice)
                 : `${formatPrice(productGroup.priceRange.min)} - ${formatPrice(
-                    productGroup.priceRange.max
+                    productGroup.priceRange.max,
                   )}`}
             </span>
           </div>

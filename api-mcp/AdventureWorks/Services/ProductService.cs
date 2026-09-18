@@ -230,8 +230,27 @@ public class ProductService
     private static readonly HashSet<string> SupportedCultures = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "ar", "en", "es", "fr", "he", "th", "zh-cht",
-        "en-gb", "en-ca", "en-au", "ja", "ko", "de"
+        "de", "en-au", "en-ca", "en-gb", "en-ie", "en-nz",
+        "id", "it", "ja", "ko", "nl", "pt", "ru", "tr", "vi", "zh"
     };
+
+    private static string NormalizeCultureId(string cultureId)
+    {
+        if (SupportedCultures.Contains(cultureId))
+            return cultureId;
+
+        // Try base language code (e.g., "en-US" -> "en", "fr-FR" -> "fr")
+        var dashIndex = cultureId.IndexOf('-');
+        if (dashIndex > 0)
+        {
+            var baseCulture = cultureId.Substring(0, dashIndex);
+            if (SupportedCultures.Contains(baseCulture))
+                return baseCulture;
+        }
+
+        // Fall back to English for completely unsupported cultures (e.g., "ru", "pt")
+        return "en";
+    }
 
     /// <summary>
     /// Get a compact view of all product categories, subcategories, and in-stock products
@@ -493,6 +512,9 @@ public class ProductService
 
     public async Task<List<ProductSearchResult>> SearchProductsByDescriptionEmbeddingAsync(float[] queryEmbedding, int topN = 10, string cultureId = "en")
     {
+        // Normalize culture ID: if not found, try the base language code (e.g., "en-US" -> "en")
+        cultureId = NormalizeCultureId(cultureId);
+
         // Validate culture ID
         if (!SupportedCultures.Contains(cultureId))
         {

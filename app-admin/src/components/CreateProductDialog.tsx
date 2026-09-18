@@ -721,6 +721,7 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
               }));
             }}
             min="0"
+            max="32767"
             step="1"
             className="doodle-input w-full"
             placeholder="0"

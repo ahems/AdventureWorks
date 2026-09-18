@@ -66,7 +66,7 @@ public class CustomerGenerationAgentService
 
         var agentResponse = await _foundryClient.InvokeAsync(
             agentId: _agentId,
-            userMessage: "Generate a realistic customer profile following the instructions.",
+            userMessage: "Generate a realistic customer profile following the instructions. You MUST call the generate_random_customer_for_locale tool to get the profile data.",
             userId: memoryUserId,
             previousResponseId: null,
             structuredInputs: structuredInputs,
@@ -98,6 +98,7 @@ public class CustomerGenerationAgentService
             City         = profile.City         ?? "Seattle",
             StateCode    = profile.StateCode,
             PostalCode   = profile.PostalCode   ?? "00000",
+            Password     = profile.Password,
         };
 
         var salesCustomerId = await _orderGenService.CreateCustomerAsync(newReq);
@@ -105,6 +106,15 @@ public class CustomerGenerationAgentService
         if (!string.IsNullOrWhiteSpace(profile.Phone))
         {
             await _orderGenService.AddPersonPhoneAsync(newReq, profile.Phone, salesCustomerId);
+        }
+
+        // Save credit card if provided
+        if (!string.IsNullOrWhiteSpace(profile.CreditCardNumber) && !string.IsNullOrWhiteSpace(profile.CreditCardType)
+            && profile.CreditCardExpMonth.HasValue && profile.CreditCardExpYear.HasValue)
+        {
+            await _orderGenService.AddCreditCardAsync(
+                salesCustomerId, profile.CreditCardType, profile.CreditCardNumber,
+                profile.CreditCardExpMonth.Value, profile.CreditCardExpYear.Value);
         }
 
         _telemetryClient.TrackEvent("GenerateCustomerWithAI.Success", new Dictionary<string, string>
@@ -125,7 +135,12 @@ public class CustomerGenerationAgentService
             StateCode       = profile.StateCode,
             PostalCode      = profile.PostalCode,
             Country         = profile.Country,
-            Locale          = locale
+            Locale          = locale,
+            CreditCardType  = profile.CreditCardType,
+            CreditCardLast4 = profile.CreditCardNumber?.Length >= 4
+                ? profile.CreditCardNumber[^4..] : null,
+            CreditCardExpMonth = profile.CreditCardExpMonth,
+            CreditCardExpYear  = profile.CreditCardExpYear,
         };
     }
 }
@@ -143,6 +158,10 @@ public class GenerateCustomerResult
     public string? PostalCode      { get; init; }
     public string? Country         { get; init; }
     public string? Locale          { get; init; }
+    public string? CreditCardType  { get; init; }
+    public string? CreditCardLast4 { get; init; }
+    public byte?   CreditCardExpMonth { get; init; }
+    public short?  CreditCardExpYear  { get; init; }
 }
 
 public class AiGeneratedProfile
@@ -156,4 +175,9 @@ public class AiGeneratedProfile
     public string? StateCode    { get; set; }
     public string? PostalCode   { get; set; }
     public string? Country      { get; set; }
+    public string? Password     { get; set; }
+    public string? CreditCardType   { get; set; }
+    public string? CreditCardNumber { get; set; }
+    public byte?   CreditCardExpMonth { get; set; }
+    public short?  CreditCardExpYear  { get; set; }
 }

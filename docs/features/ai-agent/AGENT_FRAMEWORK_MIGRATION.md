@@ -356,7 +356,7 @@ curl -X POST http://localhost:7071/api/agent/chat \
 **Compatibility:**
 
 - Requires Microsoft.Agents.AI preview packages (`*-*` version)
-- Compatible with .NET 8 and Azure Functions V4
+- Compatible with .NET 10 and Azure Functions V4
 - MCP server must be running and accessible
 
 **Configuration:**

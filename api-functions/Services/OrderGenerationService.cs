@@ -14,6 +14,16 @@ public class OrderGenerationService
     private readonly string _connectionString;
     private readonly ILogger<OrderGenerationService> _logger;
 
+    private static readonly HashSet<string> PlaceholderValues = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "n/a",
+        "na",
+        "none",
+        "null",
+        "unknown",
+        "not applicable"
+    };
+
     public OrderGenerationService(string connectionString, ILogger<OrderGenerationService> logger)
     {
         _connectionString = connectionString;
@@ -25,6 +35,23 @@ public class OrderGenerationService
         var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
         return connection;
+    }
+
+    private static bool IsPlaceholderValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return true;
+
+        return PlaceholderValues.Contains(value.Trim());
+    }
+
+    private static string NormalizeRequiredValue(string? value, string fallback)
+    {
+        return IsPlaceholderValue(value) ? fallback : value!.Trim();
+    }
+
+    private static string? NormalizeOptionalValue(string? value)
+    {
+        return IsPlaceholderValue(value) ? null : value!.Trim();
     }
 
     /// <summary>
@@ -71,6 +98,13 @@ public class OrderGenerationService
         using var connection = await GetConnectionAsync();
         using var tx = connection.BeginTransaction();
 
+        var normalizedFirstName = NormalizeRequiredValue(req.FirstName, "New");
+        var normalizedLastName = NormalizeRequiredValue(req.LastName, "Customer");
+        var normalizedEmail = NormalizeOptionalValue(req.Email);
+        var normalizedAddressLine1 = NormalizeRequiredValue(req.AddressLine1, "1 Main St");
+        var normalizedCity = NormalizeRequiredValue(req.City, "Seattle");
+        var normalizedPostalCode = NormalizeRequiredValue(req.PostalCode, "98101");
+
         try
         {
             // 1. BusinessEntity
@@ -86,16 +120,16 @@ public class OrderGenerationService
                     (BusinessEntityID, PersonType, NameStyle, FirstName, LastName, EmailPromotion, rowguid, ModifiedDate)
                 VALUES
                     (@BizEntityId, 'IN', 0, @FirstName, @LastName, 0, NEWID(), GETDATE())",
-                new { BizEntityId = bizEntityId, req.FirstName, req.LastName },
+                new { BizEntityId = bizEntityId, FirstName = normalizedFirstName, LastName = normalizedLastName },
                 transaction: tx);
 
             // 3. EmailAddress (EmailAddressID is IDENTITY — omit it and let SQL Server auto-generate)
-            if (!string.IsNullOrEmpty(req.Email))
+            if (!string.IsNullOrEmpty(normalizedEmail))
             {
                 await connection.ExecuteAsync(@"
                     INSERT INTO Person.EmailAddress (BusinessEntityID, EmailAddress, rowguid, ModifiedDate)
                     VALUES (@BizEntityId, @Email, NEWID(), GETDATE())",
-                    new { BizEntityId = bizEntityId, req.Email },
+                    new { BizEntityId = bizEntityId, Email = normalizedEmail },
                     transaction: tx);
             }
 
@@ -114,7 +148,13 @@ public class OrderGenerationService
                 INSERT INTO Person.Address (AddressLine1, City, StateProvinceID, PostalCode, rowguid, ModifiedDate)
                 OUTPUT INSERTED.AddressID
                 VALUES (@AddressLine1, @City, @StateProvinceId, @PostalCode, NEWID(), GETDATE())",
-                new { req.AddressLine1, req.City, StateProvinceId = stateProvinceId, req.PostalCode },
+                new
+                {
+                    AddressLine1 = normalizedAddressLine1,
+                    City = normalizedCity,
+                    StateProvinceId = stateProvinceId,
+                    PostalCode = normalizedPostalCode
+                },
                 transaction: tx);
 
             // 5. BusinessEntityAddress (type 2 = home)
@@ -124,28 +164,54 @@ public class OrderGenerationService
                 new { BizEntityId = bizEntityId, AddressId = addressId },
                 transaction: tx);
 
-            // 6. Password (minimal hash so the customer could log in later)
-            await connection.ExecuteAsync(@"
-                INSERT INTO Person.Password (BusinessEntityID, PasswordHash, PasswordSalt, rowguid, ModifiedDate)
-                VALUES (@BizEntityId, 'L/Rlwxzp4w7RWmEgXX+/A7cXaePEPcp+KwQhl2fJL7w=', 'fs1ZGmY=', NEWID(), GETDATE())",
-                new { BizEntityId = bizEntityId },
-                transaction: tx);
+            // 6. Password (hash with PBKDF2 if provided, otherwise static placeholder)
+            if (!string.IsNullOrEmpty(req.Password))
+            {
+                var saltBytes = new byte[6];
+                System.Security.Cryptography.RandomNumberGenerator.Fill(saltBytes);
+                var salt = Convert.ToBase64String(saltBytes);
+
+                using var pbkdf2 = new System.Security.Cryptography.Rfc2898DeriveBytes(
+                    req.Password, saltBytes, 100000, System.Security.Cryptography.HashAlgorithmName.SHA256);
+                var hash = Convert.ToBase64String(pbkdf2.GetBytes(96));
+
+                await connection.ExecuteAsync(@"
+                    INSERT INTO Person.Password (BusinessEntityID, PasswordHash, PasswordSalt, rowguid, ModifiedDate)
+                    VALUES (@BizEntityId, @Hash, @Salt, NEWID(), GETDATE())",
+                    new { BizEntityId = bizEntityId, Hash = hash, Salt = salt },
+                    transaction: tx);
+            }
+            else
+            {
+                await connection.ExecuteAsync(@"
+                    INSERT INTO Person.Password (BusinessEntityID, PasswordHash, PasswordSalt, rowguid, ModifiedDate)
+                    VALUES (@BizEntityId, 'L/Rlwxzp4w7RWmEgXX+/A7cXaePEPcp+KwQhl2fJL7w=', 'fs1ZGmY=', NEWID(), GETDATE())",
+                    new { BizEntityId = bizEntityId },
+                    transaction: tx);
+            }
 
             // 7. Customer
             // AccountNumber is a computed column on Sales.Customer (derived from CustomerID
             // by the scalar function dbo.ufnLeadingZeros) — it cannot be INSERT-targeted.
             // Sales.SalesOrderNumber does not exist as a SEQUENCE; SalesOrderNumber is a
             // computed column on Sales.SalesOrderHeader.  Both are omitted from the INSERT.
+            // Resolve TerritoryID from the customer's StateProvinceID so international
+            // customers are assigned to the correct sales territory.
+            var territoryId = await connection.ExecuteScalarAsync<int?>(@"
+                SELECT TerritoryID FROM Person.StateProvince WHERE StateProvinceID = @StateProvinceId",
+                new { StateProvinceId = stateProvinceId },
+                transaction: tx) ?? 1; // fallback to territory 1 (Northwest)
+
             var customerId = await connection.ExecuteScalarAsync<int>(@"
                 INSERT INTO Sales.Customer (PersonID, TerritoryID, rowguid, ModifiedDate)
                 OUTPUT INSERTED.CustomerID
-                VALUES (@BizEntityId, 1, NEWID(), GETDATE())",
-                new { BizEntityId = bizEntityId },
+                VALUES (@BizEntityId, @TerritoryId, NEWID(), GETDATE())",
+                new { BizEntityId = bizEntityId, TerritoryId = territoryId },
                 transaction: tx);
 
             tx.Commit();
             _logger.LogInformation("Created new customer CustomerID={CustomerId} for {FirstName} {LastName}",
-                customerId, req.FirstName, req.LastName);
+                customerId, normalizedFirstName, normalizedLastName);
 
             return customerId;
         }
@@ -162,7 +228,8 @@ public class OrderGenerationService
     /// </summary>
     public async Task AddPersonPhoneAsync(NewCustomerRequest req, string phoneNumber, int salesCustomerId)
     {
-        if (string.IsNullOrWhiteSpace(phoneNumber)) return;
+        var normalizedPhone = NormalizeOptionalValue(phoneNumber);
+        if (string.IsNullOrWhiteSpace(normalizedPhone)) return;
 
         using var connection = await GetConnectionAsync();
 
@@ -178,9 +245,47 @@ public class OrderGenerationService
             IF NOT EXISTS (SELECT 1 FROM Person.PersonPhone WHERE BusinessEntityID = @BizEntityId AND PhoneNumber = @Phone)
             INSERT INTO Person.PersonPhone (BusinessEntityID, PhoneNumber, PhoneNumberTypeID, ModifiedDate)
             VALUES (@BizEntityId, @Phone, 1, GETDATE())",
-            new { BizEntityId = bizEntityId, Phone = phoneNumber });
+            new { BizEntityId = bizEntityId, Phone = normalizedPhone });
 
         _logger.LogInformation("Added phone for BusinessEntityID={BizEntityId}", bizEntityId);
+    }
+
+    /// <summary>
+    /// Add a credit card for a customer, looked up by their SalesCustomerID.
+    /// Creates the card in Sales.CreditCard and links it via Sales.PersonCreditCard.
+    /// Returns the CreditCardID, or 0 if the customer was not found.
+    /// </summary>
+    public async Task<int> AddCreditCardAsync(int salesCustomerId, string cardType, string cardNumber, byte expMonth, short expYear)
+    {
+        if (string.IsNullOrWhiteSpace(cardNumber)) return 0;
+
+        using var connection = await GetConnectionAsync();
+
+        // Resolve BusinessEntityID from Sales.Customer
+        var bizEntityId = await connection.ExecuteScalarAsync<int?>(
+            "SELECT PersonID FROM Sales.Customer WHERE CustomerID = @CustomerId",
+            new { CustomerId = salesCustomerId });
+
+        if (bizEntityId == null || bizEntityId == 0) return 0;
+
+        // Insert the credit card
+        var creditCardId = await connection.ExecuteScalarAsync<int>(@"
+            INSERT INTO Sales.CreditCard (CardType, CardNumber, ExpMonth, ExpYear, ModifiedDate)
+            OUTPUT INSERTED.CreditCardID
+            VALUES (@CardType, @CardNumber, @ExpMonth, @ExpYear, GETDATE())",
+            new { CardType = cardType, CardNumber = cardNumber, ExpMonth = expMonth, ExpYear = expYear });
+
+        // Link the card to the person
+        await connection.ExecuteAsync(@"
+            IF NOT EXISTS (SELECT 1 FROM Sales.PersonCreditCard WHERE BusinessEntityID = @BizEntityId AND CreditCardID = @CardId)
+            INSERT INTO Sales.PersonCreditCard (BusinessEntityID, CreditCardID, ModifiedDate)
+            VALUES (@BizEntityId, @CardId, GETDATE())",
+            new { BizEntityId = bizEntityId, CardId = creditCardId });
+
+        _logger.LogInformation("Added credit card {CardType} for BusinessEntityID={BizEntityId}",
+            cardType, bizEntityId);
+
+        return creditCardId;
     }
 
     /// <summary>
@@ -267,6 +372,29 @@ public class OrderGenerationService
     }
 
     /// <summary>
+    /// Look up the best active Reseller-category SpecialOffer for a product.
+    /// Returns the offer ID and discount percentage. Falls back to (1, 0) if none.
+    /// </summary>
+    public async Task<(int SpecialOfferId, decimal DiscountPct)> GetBestResellerOfferAsync(int productId)
+    {
+        using var connection = await GetConnectionAsync();
+        var row = await connection.QueryFirstOrDefaultAsync(""" 
+            SELECT TOP 1 sop.SpecialOfferID AS Id, so.DiscountPct / 100.0 AS Pct
+            FROM Sales.SpecialOfferProduct sop
+            INNER JOIN Sales.SpecialOffer so ON sop.SpecialOfferID = so.SpecialOfferID
+            WHERE sop.ProductID = @ProductId
+              AND so.StartDate <= GETDATE()
+              AND so.EndDate >= GETDATE()
+              AND so.DiscountPct > 0
+              AND so.Category = 'Reseller'
+            ORDER BY so.DiscountPct DESC
+            """,
+            new { ProductId = productId });
+        if (row == null) return (1, 0m);
+        return ((int)row.Id, (decimal)row.Pct);
+    }
+
+    /// <summary>
     /// Create a complete sales order with details and decrement inventory.
     /// Returns the new SalesOrderID.
     /// </summary>
@@ -287,19 +415,42 @@ public class OrderGenerationService
             var orderDate = DateTime.UtcNow;
             var dueDate = orderDate.AddDays(7);
 
+            // Resolve CurrencyRateID from the ship-to address so international orders
+            // record the applicable exchange rate (Address → StateProvince → Country → CurrencyRate).
+            var currencyRateId = await connection.ExecuteScalarAsync<int?>(@"
+                SELECT TOP 1 cr.CurrencyRateID
+                FROM Person.Address addr
+                INNER JOIN Person.StateProvince sp    ON sp.StateProvinceID    = addr.StateProvinceID
+                INNER JOIN Sales.CountryRegionCurrency crc
+                                                      ON crc.CountryRegionCode = sp.CountryRegionCode
+                INNER JOIN (
+                    SELECT RTRIM(ToCurrencyCode) AS ToCurrencyCode, MAX(CurrencyRateDate) AS LatestDate
+                    FROM   Sales.CurrencyRate
+                    WHERE  RTRIM(FromCurrencyCode) = 'USD'
+                    GROUP  BY ToCurrencyCode
+                ) latest ON latest.ToCurrencyCode = RTRIM(crc.CurrencyCode)
+                INNER JOIN Sales.CurrencyRate cr
+                           ON RTRIM(cr.ToCurrencyCode)   = latest.ToCurrencyCode
+                          AND cr.CurrencyRateDate          = latest.LatestDate
+                          AND RTRIM(cr.FromCurrencyCode)  = 'USD'
+                WHERE addr.AddressID = @AddressId
+                  AND RTRIM(crc.CurrencyCode) <> 'USD'",
+                new { AddressId = addressId },
+                transaction: tx);
+
             // Insert SalesOrderHeader (Status 1 = Pending / In Process)
             // TotalDue is a computed column (SubTotal + TaxAmt + Freight) — do not include it
             var salesOrderId = await connection.ExecuteScalarAsync<int>(@"
                 INSERT INTO Sales.SalesOrderHeader
                     (RevisionNumber, OrderDate, DueDate, Status, OnlineOrderFlag,
                      CustomerID, ShipToAddressID, BillToAddressID,
-                     ShipMethodID, SubTotal, TaxAmt, Freight,
+                     ShipMethodID, CurrencyRateID, SubTotal, TaxAmt, Freight,
                      rowguid, ModifiedDate)
                 OUTPUT INSERTED.SalesOrderID
                 VALUES
                     (1, @OrderDate, @DueDate, 1, 1,
                      @CustomerId, @AddressId, @AddressId,
-                     @ShipMethodId, 0, 0, 0,
+                     @ShipMethodId, @CurrencyRateId, 0, 0, 0,
                      NEWID(), GETDATE())",
                 new
                 {
@@ -307,7 +458,8 @@ public class OrderGenerationService
                     DueDate = dueDate,
                     req.CustomerId,
                     AddressId = addressId,
-                    ShipMethodId = shipMethodId
+                    ShipMethodId = shipMethodId,
+                    CurrencyRateId = currencyRateId.HasValue ? (object)currencyRateId.Value : DBNull.Value
                 },
                 transaction: tx);
 
@@ -492,20 +644,42 @@ public class OrderGenerationService
             var orderDate = DateTime.UtcNow;
             var dueDate = req.DueDate?.ToUniversalTime() ?? orderDate.AddDays(14); // B2B default: 14-day terms
 
+            // Resolve CurrencyRateID from the store's ship-to address for international stores.
+            var currencyRateId = await connection.ExecuteScalarAsync<int?>(@"
+                SELECT TOP 1 cr.CurrencyRateID
+                FROM Person.Address addr
+                INNER JOIN Person.StateProvince sp    ON sp.StateProvinceID    = addr.StateProvinceID
+                INNER JOIN Sales.CountryRegionCurrency crc
+                                                      ON crc.CountryRegionCode = sp.CountryRegionCode
+                INNER JOIN (
+                    SELECT RTRIM(ToCurrencyCode) AS ToCurrencyCode, MAX(CurrencyRateDate) AS LatestDate
+                    FROM   Sales.CurrencyRate
+                    WHERE  RTRIM(FromCurrencyCode) = 'USD'
+                    GROUP  BY ToCurrencyCode
+                ) latest ON latest.ToCurrencyCode = RTRIM(crc.CurrencyCode)
+                INNER JOIN Sales.CurrencyRate cr
+                           ON RTRIM(cr.ToCurrencyCode)   = latest.ToCurrencyCode
+                          AND cr.CurrencyRateDate          = latest.LatestDate
+                          AND RTRIM(cr.FromCurrencyCode)  = 'USD'
+                WHERE addr.AddressID = @AddressId
+                  AND RTRIM(crc.CurrencyCode) <> 'USD'",
+                new { AddressId = addressId },
+                transaction: tx);
+
             // Insert SalesOrderHeader — OnlineOrderFlag=0 for manually placed orders
             var salesOrderId = await connection.ExecuteScalarAsync<int>(@"
                 INSERT INTO Sales.SalesOrderHeader
                     (RevisionNumber, OrderDate, DueDate, Status, OnlineOrderFlag,
                      PurchaseOrderNumber, AccountNumber,
                      CustomerID, ShipToAddressID, BillToAddressID,
-                     ShipMethodID, SubTotal, TaxAmt, Freight, Comment,
+                     ShipMethodID, CurrencyRateID, SubTotal, TaxAmt, Freight, Comment,
                      rowguid, ModifiedDate)
                 OUTPUT INSERTED.SalesOrderID
                 VALUES
                     (1, @OrderDate, @DueDate, 1, 0,
                      @PurchaseOrderNumber, @AccountNumber,
                      @CustomerId, @AddressId, @AddressId,
-                     @ShipMethodId, 0, 0, 0, @Comment,
+                     @ShipMethodId, @CurrencyRateId, 0, 0, 0, @Comment,
                      NEWID(), GETDATE())",
                 new
                 {
@@ -516,6 +690,7 @@ public class OrderGenerationService
                     CustomerId = storeInfo.CustomerID,
                     AddressId = addressId,
                     ShipMethodId = shipMethodId,
+                    CurrencyRateId = currencyRateId.HasValue ? (object)currencyRateId.Value : DBNull.Value,
                     Comment = req.Comment ?? (object)DBNull.Value
                 },
                 transaction: tx);
@@ -533,6 +708,7 @@ public class OrderGenerationService
                 var lineTotal = Math.Round(discountedPrice * item.Quantity, 2);
                 subTotal += lineTotal;
 
+                // Prefer Reseller-category offers for B2B orders; fall back to any active offer
                 var specialOfferId = await connection.ExecuteScalarAsync<int?>(@"
                     SELECT TOP 1 sop.SpecialOfferID
                     FROM Sales.SpecialOfferProduct sop
@@ -541,7 +717,8 @@ public class OrderGenerationService
                       AND so.StartDate <= GETDATE()
                       AND so.EndDate >= GETDATE()
                       AND so.DiscountPct > 0
-                    ORDER BY so.DiscountPct DESC",
+                    ORDER BY CASE WHEN so.Category = 'Reseller' THEN 0 ELSE 1 END,
+                             so.DiscountPct DESC",
                     new { item.ProductId }, transaction: tx) ?? 1;
 
                 var salesOrderDetailId = await connection.ExecuteScalarAsync<int>(@"
@@ -604,6 +781,33 @@ public class OrderGenerationService
             tx.Rollback();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Returns a random selection of in-stock products suitable for order simulation.
+    /// Products are filtered to those with stock in Finished Goods locations and a non-zero ListPrice.
+    /// </summary>
+    public async Task<List<InStockProduct>> GetRandomInStockProductsAsync(int count = 5)
+    {
+        using var connection = await GetConnectionAsync();
+        var products = await connection.QueryAsync<InStockProduct>(@"
+            SELECT TOP (@Count)
+                p.ProductID,
+                p.Name,
+                p.ListPrice,
+                ISNULL(SUM(pi.Quantity), 0) AS Stock
+            FROM Production.Product p
+            INNER JOIN Production.ProductInventory pi ON p.ProductID = pi.ProductID
+            INNER JOIN Production.Location l ON pi.LocationID = l.LocationID
+            WHERE l.Name LIKE 'Finished Goods%'
+              AND p.ListPrice > 0
+              AND p.FinishedGoodsFlag = 1
+              AND p.SellEndDate IS NULL
+            GROUP BY p.ProductID, p.Name, p.ListPrice
+            HAVING SUM(pi.Quantity) > 0
+            ORDER BY NEWID()",
+            new { Count = count });
+        return products.ToList();
     }
 
     /// <summary>
@@ -721,6 +925,11 @@ public class NewCustomerRequest
     public string? StateCode { get; set; }
     public int StateProvinceID { get; set; } = 0;
     public string PostalCode { get; set; } = "98101";
+    /// <summary>
+    /// Optional plaintext password. If provided, will be hashed with PBKDF2 before storing.
+    /// If null, a static placeholder hash is used.
+    /// </summary>
+    public string? Password { get; set; }
 }
 
 public class CreateOrderRequest
@@ -784,4 +993,12 @@ public class StoreOrderLineItem
     public short Quantity { get; set; } = 1;
     public decimal UnitPrice { get; set; } = 0; // 0 = use list price
     public decimal DiscountPct { get; set; } = 0; // 0 = no discount
+}
+
+public class InStockProduct
+{
+    public int ProductID { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public decimal ListPrice { get; set; }
+    public int Stock { get; set; }
 }

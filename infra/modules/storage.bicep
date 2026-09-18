@@ -124,11 +124,78 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
             description: 'Autonomous order simulation queue: each message carries a CustomerId (0 = new customer) and optional PersonaHint. The AI agent generates a realistic order for the specified customer or persona.'
           }
         }
+        {
+          name: 'warehouse-ops-queue'
+          metadata: {
+            description: 'Event-driven queue driving the warehouse simulation: each message represents one store/retrieve/receive operation phase for a warehouse worker at Finished Goods Storage (LocationID 7)'
+          }
+        }
+        {
+          name: 'review-moderation-queue'
+          metadata: {
+            description: 'Background queue for review auto-moderation: analyze pending unreplied reviews with AI, create staff reply, and approve.'
+          }
+        }
+        {
+          name: 'manufacturing-agent-queue'
+          metadata: {
+            description: 'Queue for manufacturing AI agent invocations triggered by new sales orders'
+          }
+        }
+        {
+          name: 'auto-promotion-queue'
+          metadata: {
+            description: 'Queue for automatic AI promotion generation triggered by order volume thresholds'
+          }
+        }
       ]
     }
     
     tableServices: {
-      tables: []
+      tables: [
+        {
+          name: 'shoppingSimulator'
+        }
+        {
+          name: 'awOrderPipelineConfig'
+        }
+        {
+          name: 'awSupplyChain'
+        }
+        {
+          name: 'awManufacturing'
+        }
+        {
+          name: 'awBankAccounts'
+        }
+        {
+          name: 'awBankTransactions'
+        }
+        {
+          name: 'awWarehouse'
+        }
+        {
+          name: 'awManufacturingAgentConfig'
+        }
+        {
+          name: 'awManufacturingAgentRuns'
+        }
+        {
+          name: 'awManufacturingProposals'
+        }
+        {
+          name: 'verifiedReviewsJob'
+        }
+        {
+          name: 'reviewModerationJob'
+        }
+        {
+          name: 'awAutoPromotionConfig'
+        }
+        {
+          name: 'awMcpTasks'
+        }
+      ]
     }
     
     fileServices: {

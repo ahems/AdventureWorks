@@ -73,4 +73,52 @@ WHEN NOT MATCHED THEN
             MaxQty = maxQty
         });
     }
+
+    public async Task<int> GetNextSpecialOfferIdAsync()
+    {
+        using var connection = await GetConnectionAsync();
+        var maxId = await connection.ExecuteScalarAsync<int?>(
+            "SELECT MAX(SpecialOfferID) FROM [Sales].[SpecialOffer]");
+        return (maxId ?? 1) + 1;
+    }
+
+    public async Task AssignProductsAsync(int specialOfferId, IEnumerable<int> productIds)
+    {
+        using var connection = await GetConnectionAsync();
+        foreach (var productId in productIds)
+        {
+            await connection.ExecuteAsync(@"
+IF NOT EXISTS (SELECT 1 FROM [Sales].[SpecialOfferProduct] WHERE SpecialOfferID = @OfferId AND ProductID = @ProductId)
+    INSERT INTO [Sales].[SpecialOfferProduct] (SpecialOfferID, ProductID, rowguid, ModifiedDate)
+    VALUES (@OfferId, @ProductId, NEWID(), GETDATE())",
+                new { OfferId = specialOfferId, ProductId = productId });
+        }
+    }
+
+    /// <summary>
+    /// Expires any active promotion that has at least one assigned product with zero inventory.
+    /// Returns the IDs of promotions that were expired.
+    /// </summary>
+    public async Task<List<int>> ExpireOutOfStockPromotionsAsync()
+    {
+        using var connection = await GetConnectionAsync();
+        var expiredIds = await connection.QueryAsync<int>(@"
+UPDATE so
+SET so.EndDate = GETDATE(), so.ModifiedDate = GETDATE()
+OUTPUT INSERTED.SpecialOfferID
+FROM [Sales].[SpecialOffer] so
+WHERE so.StartDate <= GETDATE()
+  AND so.EndDate > GETDATE()
+  AND so.SpecialOfferID != 1
+  AND EXISTS (
+      SELECT 1
+      FROM [Sales].[SpecialOfferProduct] sop
+      WHERE sop.SpecialOfferID = so.SpecialOfferID
+        AND NOT EXISTS (
+            SELECT 1 FROM Production.ProductInventory pi
+            WHERE pi.ProductID = sop.ProductID AND pi.Quantity > 0
+        )
+  )");
+        return expiredIds.ToList();
+    }
 }

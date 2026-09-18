@@ -54,11 +54,23 @@ if [ -n "$CONTAINER_APP_ENV_NAME" ] && [ "$CONTAINER_APP_ENV_NAME" != "ERROR: ke
                 --scope "$ENV_RESOURCE_ID" \
                 --assignee "$CURRENT_USER_OBJECT_ID" \
                 --role "Contributor" \
-                --output none 2>/dev/null || echo "Note: Role assignment may already exist or failed (this is OK)"
+                --output none
             echo "  Aspire Dashboard access configured successfully"
         else
             echo "  Aspire Dashboard access already configured"
         fi
+
+        # Do not continue if the exact user assignment is not visible yet.
+        VERIFIED_ASSIGNMENT=$(az role assignment list \
+            --scope "$ENV_RESOURCE_ID" \
+            --assignee "$CURRENT_USER_OBJECT_ID" \
+            --role "Contributor" \
+            --query "[?principalId=='$CURRENT_USER_OBJECT_ID'].id" -o tsv)
+        if [ -z "$VERIFIED_ASSIGNMENT" ]; then
+            echo "ERROR: Could not verify the explicit Contributor assignment required by the Aspire Dashboard."
+            exit 1
+        fi
+        echo "  Verified explicit Contributor assignment for the signed-in user"
     else
         echo "  WARNING: Could not determine current user or resource group. Skipping Aspire Dashboard role assignment."
     fi
@@ -306,6 +318,82 @@ echo "    az containerapp job execution list --name $SEED_JOB_NAME --resource-gr
 
 echo ""
 echo "=========================================="
+echo "Assigning project-scoped RBAC for AI Foundry Agents..."
+echo "=========================================="
+# The Agents data-plane API requires Azure AI Developer role at the project scope.
+# Account-level roles (assigned by Bicep) do not cascade for agents/write operations.
+_AI_ACCOUNT=$(azd env get-value AZURE_OPENAI_ACCOUNT_NAME 2>/dev/null | head -n1 | tr -d '\n\r ')
+_AI_PROJECT=$(azd env get-value AI_FOUNDRY_PROJECT_NAME 2>/dev/null | head -n1 | tr -d '\n\r ')
+_SUBSCRIPTION=$(azd env get-value AZURE_SUBSCRIPTION_ID 2>/dev/null | head -n1 | tr -d '\n\r ')
+_RG=$(azd env get-value AZURE_RESOURCE_GROUP 2>/dev/null | head -n1 | tr -d '\n\r ')
+_USER_OID=$(azd env get-value OBJECT_ID 2>/dev/null | head -n1 | tr -d '\n\r ')
+_MI_NAME=$(azd env get-value USER_MANAGED_IDENTITY_NAME 2>/dev/null | head -n1 | tr -d '\n\r ')
+
+# Resolve project name from the Foundry endpoint if not stored separately
+if [[ -z "$_AI_PROJECT" ]]; then
+  _PROJ_ENDPOINT=$(azd env get-value AI_FOUNDRY_PROJECT_ENDPOINT 2>/dev/null | head -n1 | tr -d '\n\r ')
+  _AI_PROJECT=$(echo "$_PROJ_ENDPOINT" | grep -oP '/projects/\K[^/?#]+' || true)
+fi
+
+if [[ -n "$_AI_ACCOUNT" ]] && [[ -n "$_AI_PROJECT" ]] && [[ -n "$_USER_OID" ]]; then
+  _PROJECT_SCOPE="/subscriptions/${_SUBSCRIPTION}/resourceGroups/${_RG}/providers/Microsoft.CognitiveServices/accounts/${_AI_ACCOUNT}/projects/${_AI_PROJECT}"
+
+  echo "  Project scope: $_AI_ACCOUNT/projects/$_AI_PROJECT"
+
+  # Assign Azure AI Developer to the current user at project scope
+  az role assignment create --scope "$_PROJECT_SCOPE" --assignee "$_USER_OID" \
+    --role "64702f94-c441-49e6-a78b-ef80e0188fee" --output none 2>/dev/null && \
+    echo "  ✓ Azure AI Developer → current user (project scope)" || \
+    echo "  ✓ Azure AI Developer → current user (already exists)"
+
+  # Assign Cognitive Services OpenAI Contributor to the current user at project scope
+  az role assignment create --scope "$_PROJECT_SCOPE" --assignee "$_USER_OID" \
+    --role "a001fd3d-188f-4b5d-821b-7da978bf7442" --output none 2>/dev/null && \
+    echo "  ✓ OpenAI Contributor → current user (project scope)" || \
+    echo "  ✓ OpenAI Contributor → current user (already exists)"
+
+  # Assign Azure AI Developer to the managed identity at project scope
+  if [[ -n "$_MI_NAME" ]]; then
+    _MI_PRINCIPAL=$(az identity show -n "$_MI_NAME" -g "$_RG" --query principalId -o tsv 2>/dev/null || true)
+    if [[ -n "$_MI_PRINCIPAL" ]]; then
+      az role assignment create --scope "$_PROJECT_SCOPE" \
+        --assignee-object-id "$_MI_PRINCIPAL" --assignee-principal-type ServicePrincipal \
+        --role "64702f94-c441-49e6-a78b-ef80e0188fee" --output none 2>/dev/null && \
+        echo "  ✓ Azure AI Developer → managed identity (project scope)" || \
+        echo "  ✓ Azure AI Developer → managed identity (already exists)"
+    fi
+  fi
+
+  # Assign the custom AIServices data-plane role (covers agents/write, memory stores, etc.)
+  # The built-in Azure AI Developer role does NOT include AIServices/* data actions.
+  _CUSTOM_ROLE_NAME=$(az role definition list \
+    --scope "/subscriptions/${_SUBSCRIPTION}/resourceGroups/${_RG}" \
+    --custom-role-only true --query "[?contains(roleName,'Foundry Agents')].roleName | [0]" -o tsv 2>/dev/null || true)
+  if [[ -n "$_CUSTOM_ROLE_NAME" ]]; then
+    az role assignment create --scope "$_PROJECT_SCOPE" --assignee "$_USER_OID" \
+      --role "$_CUSTOM_ROLE_NAME" --output none 2>/dev/null && \
+      echo "  ✓ $_CUSTOM_ROLE_NAME → current user (project scope)" || \
+      echo "  ✓ $_CUSTOM_ROLE_NAME → current user (already exists)"
+    if [[ -n "$_MI_PRINCIPAL" ]]; then
+      az role assignment create --scope "$_PROJECT_SCOPE" \
+        --assignee-object-id "$_MI_PRINCIPAL" --assignee-principal-type ServicePrincipal \
+        --role "$_CUSTOM_ROLE_NAME" --output none 2>/dev/null && \
+        echo "  ✓ $_CUSTOM_ROLE_NAME → managed identity (project scope)" || \
+        echo "  ✓ $_CUSTOM_ROLE_NAME → managed identity (already exists)"
+    fi
+  else
+    echo "  ⚠ Custom AIServices role not found — Bicep will create it on next provision"
+  fi
+
+  # Allow time for RBAC propagation before agent creation
+  echo "  Waiting 60s for RBAC propagation..."
+  sleep 60
+else
+  echo "  WARNING: Missing AI Foundry account/project info — skipping project RBAC."
+fi
+
+echo ""
+echo "=========================================="
 echo "Creating / Updating Azure AI Foundry Agents..."
 echo "=========================================="
 bash "$(git rev-parse --show-toplevel)/scripts/utilities/create-foundry-agents.sh" || {
@@ -316,14 +404,8 @@ echo ""
 echo "=========================================="
 echo "Refreshing azd environment with deployment outputs..."
 echo "=========================================="
-# Ensure all Bicep outputs (e.g. PLAYWRIGHT_SERVICE_URL) are in the azd environment
-# so that 'npm run test:e2e:azure' and run-tests-on-azure-playwright.sh work without manual setup
 if azd env refresh --no-prompt 2>/dev/null; then
-    echo "  ✓ Environment refreshed; Playwright and other outputs are available."
-    PLAYWRIGHT_URL=$(azd env get-value PLAYWRIGHT_SERVICE_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
-    if [ -n "$PLAYWRIGHT_URL" ]; then
-        echo "  ✓ PLAYWRIGHT_SERVICE_URL is set (Azure Playwright tests will use the service)."
-    fi
+    echo "  ✓ Environment refreshed; deployment outputs are available."
 else
     echo "  Note: azd env refresh skipped or failed; Bicep outputs may already be present."
 fi

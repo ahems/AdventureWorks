@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import Footer from "@/components/Footer";
+import { TableSkeleton, CardGridSkeleton } from "@/components/LoadingSkeletons";
 import { useAuth } from "@/context/AuthContext";
 import {
   useStores,
@@ -157,12 +158,7 @@ const StoreOrderHistory: React.FC<{
     }
   }, [orderLines, reorderSalesOrderId]);
 
-  if (isLoading)
-    return (
-      <div className="flex items-center gap-2 py-5 font-doodle text-doodle-text/60 text-sm">
-        <Loader2 className="w-4 h-4 animate-spin" /> Loading orders…
-      </div>
-    );
+  if (isLoading) return <TableSkeleton rows={5} cols={4} />;
 
   if (isError)
     return (
@@ -563,9 +559,7 @@ const OverviewPage: React.FC<{
       </div>
 
       {loading ? (
-        <div className="doodle-card p-20 flex items-center justify-center gap-2 font-doodle text-doodle-text/60">
-          <Loader2 className="w-6 h-6 animate-spin" /> Loading territory data…
-        </div>
+        <CardGridSkeleton count={4} />
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -819,9 +813,7 @@ const TerritoryStoreView: React.FC<{
       {/* Store table */}
       <div className="doodle-card overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16 gap-2 font-doodle text-doodle-text/60">
-            <Loader2 className="w-6 h-6 animate-spin" /> Loading stores…
-          </div>
+          <TableSkeleton rows={6} cols={5} />
         ) : stores.length === 0 ? (
           <div className="py-16 text-center font-doodle text-doodle-text/50">
             {withOrdersOnly

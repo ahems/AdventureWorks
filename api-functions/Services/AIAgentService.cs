@@ -1,11 +1,8 @@
 using System.Text.Json;
-using Azure.AI.OpenAI;
-using Azure.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
-using OpenAI.Chat;
 
 namespace api_functions.Services;
 
@@ -33,8 +30,6 @@ public class AIAgentService
     private readonly TelemetryClient _telemetryClient;
     private readonly string _agentId;
     private readonly string? _adminAgentId;
-    private readonly string _openAiEndpoint;
-    private readonly string _modelDeployment;
 
     public AIAgentService(
         ILogger<AIAgentService> logger,
@@ -60,10 +55,6 @@ public class AIAgentService
         // Admin chat agent — falls back to the customer chat agent if not configured
         var adminAgentId = configuration["AI_AGENT_ADMIN_CHAT_ID"];
         _adminAgentId = !string.IsNullOrWhiteSpace(adminAgentId) ? adminAgentId : null;
-
-        _openAiEndpoint = configuration["AZURE_OPENAI_ENDPOINT"]
-            ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT environment variable is not set");
-        _modelDeployment = configuration["chatGptDeploymentName"] ?? "chat";
 
         _logger.LogInformation("AIAgentService configured with Foundry agent ID: {AgentId}, Admin agent ID: {AdminAgentId}",
             _agentId, _adminAgentId ?? "(using customer agent)");
@@ -176,42 +167,18 @@ public class AIAgentService
         }
     }
 
-    private async Task<List<string>> GenerateSuggestedQuestionsAsync(
+    /// <summary>
+    /// Returns default suggested follow-up questions.
+    /// TODO: Fold into the Foundry chat agent's response schema so the agent
+    /// generates context-aware suggestions as part of its output.
+    /// </summary>
+    private Task<List<string>> GenerateSuggestedQuestionsAsync(
         string userMessage,
         string assistantResponse,
         int? customerId)
     {
-        try
-        {
-            var credential = new DefaultAzureCredential();
-            var chatClient = new AzureOpenAIClient(new Uri(_openAiEndpoint), credential)
-                .GetChatClient(_modelDeployment);
-
-            var prompt = $"""
-                Based on this customer service conversation, generate 2 relevant follow-up questions:
-                User: {userMessage}
-                Assistant: {assistantResponse}
-
-                Generate 2 short questions (each under 50 characters) a customer might ask next.
-                Return ONLY a JSON array of strings. Example: ["Track my order", "Find bike helmets"]
-                """;
-
-            var completion = await chatClient.CompleteChatAsync(
-                [
-                    new SystemChatMessage("You are a helpful assistant that generates follow-up questions."),
-                    new UserChatMessage(prompt)
-                ],
-                new ChatCompletionOptions { MaxOutputTokenCount = 100 });
-
-            var raw = completion.Value.Content[0].Text?.Trim() ?? "[]";
-            return JsonSerializer.Deserialize<List<string>>(raw)
-                ?? new List<string> { "Tell me more", "What else can you help with?" };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to generate suggestions, using defaults");
-            return new List<string> { "Show my orders", "Search products" };
-        }
+        var defaults = new List<string> { "Show my orders", "Search products" };
+        return Task.FromResult(defaults);
     }
 }
 
