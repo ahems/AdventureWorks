@@ -282,8 +282,8 @@ public class OrderGenerationService
             VALUES (@BizEntityId, @CardId, GETDATE())",
             new { BizEntityId = bizEntityId, CardId = creditCardId });
 
-        _logger.LogInformation("Added credit card {CardType} for BusinessEntityID={BizEntityId}, CreditCardID={CardId}",
-            cardType, bizEntityId, creditCardId);
+        _logger.LogInformation("Added credit card {CardType} for BusinessEntityID={BizEntityId}",
+            cardType, bizEntityId);
 
         return creditCardId;
     }
