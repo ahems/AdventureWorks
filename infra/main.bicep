@@ -8,6 +8,7 @@ param workspaceName string = 'av-workspace-${toLower(resourceToken)}'
 param acrName string = 'avacr${toLower(resourceToken)}'
 param sqlServerName string = 'av-sql-${toLower(resourceToken)}'
 param diagnosticsName string = 'acr-diagnostics-${toLower(resourceToken)}'
+param keyVaultName string = 'av-kv-${toLower(resourceToken)}'
 param foundryLocation string = resourceGroup().location
 param location string = resourceGroup().location
 param adminUserEnabled bool = true
@@ -48,6 +49,15 @@ module identity 'modules/identity.bicep' = {
   params: {
     identityName: identityName
     location: location
+  }
+}
+
+module keyvault 'modules/keyvault.bicep' = {
+  name: 'Deploy-Key-Vault'
+  params: {
+    keyVaultName: keyVaultName
+    location: location
+    runtimeIdentityPrincipalId: identity.outputs.principalId
   }
 }
 
@@ -227,6 +237,9 @@ module containerAppApiMcp 'modules/aca-api-mcp.bicep' = {
     maxReplica: 1
     revisionSuffix: revisionSuffix
     containerAppEnvId: containerApp.outputs.containerAppEnvId
+    containerAppEnvDefaultDomain: containerApp.outputs.containerAppEnvDefaultDomain
+    keyVaultUri: keyvault.outputs.keyVaultUri
+    signingCertificateName: 'mcp-signing'
   }
 }
 
@@ -389,6 +402,12 @@ output MCP_SERVICE_URL string = containerAppApiMcp.outputs.apiMcpUrl
 output API_MCP_URL string = containerAppApiMcp.outputs.apiMcpUrl
 output MCP_INSPECTOR_URL string = containerAppMcpInspector.outputs.mcpInspectorUrl
 output MCP_INSPECTOR_APP_URL string = containerAppMcpInspector.outputs.mcpInspectorUrl
+
+// MCP OAuth signing (Key Vault). The postprovision hook creates the RSA signing
+// certificate here and the postdeploy hook wires OAuth redirect URIs.
+output MCP_SIGNING_KEY_VAULT_NAME string = keyvault.outputs.keyVaultName
+output MCP_SIGNING_KEY_VAULT_URI string = keyvault.outputs.keyVaultUri
+output MCP_SIGNING_CERTIFICATE_NAME string = 'mcp-signing'
 
 // Static Web App deployment token for azd deploy
 @secure()

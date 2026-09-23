@@ -18,6 +18,19 @@ param revisionSuffix string
 param sqlConnectionString string
 param aiFoundryEndpoint string
 
+@description('Managed environment default domain, used to derive this app FQDN for the OAuth issuer/resource without a self-reference.')
+param containerAppEnvDefaultDomain string = ''
+
+@description('Key Vault URI holding the RSA signing certificate. When empty, api-mcp uses an ephemeral dev key.')
+param keyVaultUri string = ''
+
+@description('Name of the signing certificate/secret in Key Vault.')
+param signingCertificateName string = 'mcp-signing'
+
+// Canonical public base URL (issuer) for the OAuth authorization server. Derived from the
+// deployed FQDN; never a hard-coded hostname. The resource identifier is this + "/mcp".
+var apiMcpPublicBaseUrl = empty(containerAppEnvDefaultDomain) ? '' : 'https://${apiMcpName}.${containerAppEnvDefaultDomain}'
+
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
 }
@@ -111,6 +124,22 @@ resource apiMcp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'ASPNETCORE_URLS'
               value: 'http://+:8080'
+            }
+            {
+              name: 'MCP_PUBLIC_BASE_URL'
+              value: apiMcpPublicBaseUrl
+            }
+            {
+              name: 'MCP_SIGNING_KEY_VAULT_URI'
+              value: keyVaultUri
+            }
+            {
+              name: 'MCP_KEYVAULT_MANAGED_IDENTITY_CLIENT_ID'
+              value: azidentity.properties.clientId
+            }
+            {
+              name: 'MCP_SIGNING_CERTIFICATE_NAME'
+              value: signingCertificateName
             }
           ]
         }
