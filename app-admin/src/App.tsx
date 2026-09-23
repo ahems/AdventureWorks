@@ -33,6 +33,8 @@ import ShoppingSimulatorPage from "./pages/ShoppingSimulatorPage";
 import AutoPromotionsPage from "./pages/AutoPromotionsPage";
 import OrderPipelinePage from "./pages/OrderPipelinePage";
 import WarehousePage from "./pages/WarehousePage";
+import McpAuthorizationPage from "./pages/McpAuthorizationPage";
+import OAuthCallbackPage from "./pages/OAuthCallbackPage";
 import { useRealTimeUpdates } from "./hooks/useRealTimeUpdates";
 
 const queryClient = new QueryClient();
@@ -100,6 +102,11 @@ const App = () => (
                 />
                 <Route path="/order-pipeline" element={<OrderPipelinePage />} />
                 <Route path="/warehouse" element={<WarehousePage />} />
+                <Route
+                  path="/mcp-authorization"
+                  element={<McpAuthorizationPage />}
+                />
+                <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>

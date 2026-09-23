@@ -10,6 +10,7 @@ import { gql } from "graphql-request";
 import { toast } from "@/hooks/use-toast";
 import { graphqlClient } from "@/lib/graphql-client";
 import { getFunctionsApiUrl } from "@/lib/utils";
+import { clearAuthorization } from "@/services/mcpAuth";
 
 interface User {
   id: string;
@@ -188,6 +189,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     const userName = user?.firstName;
     setUser(null);
     localStorage.removeItem(CURRENT_USER_KEY);
+    // Clear any MCP OAuth authorization context so the next user cannot inherit
+    // the previous employee's delegated token/scopes.
+    clearAuthorization();
     toast({
       title: "Logged Out",
       description: `Goodbye, ${userName}! See you next time.`,

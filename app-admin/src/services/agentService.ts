@@ -1,4 +1,5 @@
 import { getFunctionsApiUrl } from "@/lib/utils";
+import { getAccessToken } from "@/services/mcpAuth";
 
 export interface AgentMessage {
   role: "user" | "assistant";
@@ -19,9 +20,19 @@ export async function sendAgentMessage(
 ): Promise<AgentMessage> {
   const url = `${getFunctionsApiUrl()}/api/agent/chat`;
 
+  // Attach the delegated MCP access token when the employee has authorized via
+  // OAuth. api-functions forwards it to the MCP server so tool calls run under
+  // this user's scopes/ownership. Safe no-op when the user has not authorized.
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = getAccessToken();
+  if (token) {
+    const scheme = "Bearer";
+    headers.Authorization = scheme + " " + token;
+  }
+
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
       message,
       conversationHistory: conversationHistory.map((m) => ({
