@@ -1,3 +1,4 @@
+using AdventureWorks.Auth;
 using AdventureWorks.Services;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
@@ -90,6 +91,15 @@ builder.Services
 	   .WithTasks(taskStore)
 	   .WithRequestFilters(filters =>
 	   {
+		   // OAuth authorization: re-evaluate the validated token's scopes and (for
+		   // consumers) record ownership on EVERY tools/call. Registered first so denials
+		   // short-circuit before any tool executes. Returns a safe error result on deny.
+		   filters.AddCallToolFilter(next => async (context, ct) =>
+		   {
+			   var denial = await McpToolAuthorizationFilter.AuthorizeAsync(context, ct);
+			   return denial ?? await next(context, ct);
+		   });
+
 		   // Centralized Application Insights telemetry for every tool call
 		   filters.AddCallToolFilter(next => async (context, ct) =>
 		   {
@@ -121,10 +131,21 @@ builder.Services
 
 builder.AddServiceDefaults();
 
+// Self-contained OAuth authorization server + resource-server validation for MCP.
+var authOptions = builder.AddMcpAuthorization(connectionString ?? string.Empty);
+
 var app = builder.Build();
+
+// AuthN/AuthZ, OAuth endpoints (authorize/token/login/consent/logout), protected-resource
+// metadata, and the /mcp WWW-Authenticate challenge. Must precede endpoint mapping.
+app.UseMcpAuthorization(authOptions);
 
 app.MapDefaultEndpoints();
 
-app.MapMcp("/mcp");
+// /mcp requires a valid resource-bound token carrying the mcp.access scope.
+app.MapMcp("/mcp").RequireAuthorization(McpAuthorizationExtensions.McpPolicy);
+
+// Fail fast unless every discovered MCP tool has an authorization policy.
+app.ValidateToolAuthorizationCoverage();
 
 app.Run();
