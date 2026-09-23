@@ -149,3 +149,10 @@ app.MapMcp("/mcp").RequireAuthorization(McpAuthorizationExtensions.McpPolicy);
 app.ValidateToolAuthorizationCoverage();
 
 app.Run();
+
+/// <summary>
+/// Exposes the implicit Program class to the test project so
+/// <see cref="Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory{TEntryPoint}"/> can
+/// boot the OAuth authorization server in-process for endpoint/JWKS/metadata tests.
+/// </summary>
+public partial class Program { }

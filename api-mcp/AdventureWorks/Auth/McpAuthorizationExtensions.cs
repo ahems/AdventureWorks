@@ -117,6 +117,14 @@ public static class McpAuthorizationExtensions
                 }
             });
 
+        // Advertise and accept S256 only. OpenIddict enables 'plain' by default; removing it
+        // keeps the authorization-server metadata honest (it matches the S256-only enforcement
+        // in the authorize handler) as required by OAuth 2.1 / the MCP authorization spec.
+        builder.Services.Configure<OpenIddict.Server.OpenIddictServerOptions>(o =>
+        {
+            o.CodeChallengeMethods.Remove(OpenIddictConstants.CodeChallengeMethods.Plain);
+        });
+
         builder.Services.AddAuthentication(o =>
         {
             o.DefaultScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
