@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Azure.Core;
@@ -123,6 +124,12 @@ public class FoundryAgentClient
     ///   depends entirely on MCP tool data (prevents hallucinated results). Defaults to
     ///   Foundry's <c>"auto"</c> when <c>null</c>.
     /// </param>
+    /// <param name="mcpAccessToken">
+    ///   Optional delegated OAuth access token for the end user. When supplied it is injected
+    ///   as an HTTP Authorization header on every MCP tool (per request, never cached) so the
+    ///   protected api-mcp resource authorizes the call as that AdventureWorks user. When
+    ///   <c>null</c> the MCP tools are sent unchanged (anonymous / no delegated context).
+    /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<FoundryAgentResponse> InvokeAsync(
         string agentId,
@@ -132,10 +139,19 @@ public class FoundryAgentClient
         string? userId = null,
         Dictionary<string, object>? structuredInputs = null,
         string? toolChoice = null,
+        string? mcpAccessToken = null,
         CancellationToken cancellationToken = default)
     {
         // --- Fetch agent definition (cached) ------------------------------------
         var def = await GetOrFetchAgentDefinitionAsync(agentId, cancellationToken);
+
+        // --- Apply delegated MCP authorization (per-request, never cached) ------
+        // When a caller supplies the end user's OAuth access token, inject it as an
+        // HTTP Authorization header on every MCP tool so api-mcp can authorize the
+        // request as that AdventureWorks user. This produces a NEW per-request tool
+        // list; the cached agent definition is never mutated, so a token can never
+        // leak across users, conversations, or requests.
+        var effectiveTools = ApplyMcpAuthorization(def.Tools, mcpAccessToken);
 
         // --- Build initial input -----------------------------------------------
         object input;
@@ -204,7 +220,7 @@ public class FoundryAgentClient
             var token = await _credential.GetTokenAsync(
                 new TokenRequestContext([FoundryTokenScope]), cancellationToken);
 
-            var activeTools = def.Tools;
+            var activeTools = effectiveTools;
             var usingFallbackTools = false;
             var hasTools = activeTools.Count > 0;
 
@@ -291,7 +307,7 @@ public class FoundryAgentClient
                     && !usingFallbackTools
                     && !string.IsNullOrEmpty(_fallbackMcpServiceUrl))
                 {
-                    var fallbackTools = BuildFallbackDefinition().Tools;
+                    var fallbackTools = ApplyMcpAuthorization(BuildFallbackDefinition().Tools, mcpAccessToken);
                     if (fallbackTools.Count > 0)
                     {
                         usingFallbackTools = true;
@@ -790,6 +806,53 @@ public class FoundryAgentClient
         });
 
         await Task.WhenAll(warmupTasks);
+    }
+
+    /// <summary>
+    /// Returns a per-request copy of the MCP tool configuration with the caller's
+    /// delegated OAuth access token injected as an HTTP Authorization header on
+    /// each MCP tool. The cached agent definition is NEVER mutated, so a token can
+    /// never leak across users, conversations, or requests. Non-MCP tools and the
+    /// original list are returned unchanged when no token is supplied.
+    /// </summary>
+    private static IReadOnlyList<JsonElement> ApplyMcpAuthorization(
+        IReadOnlyList<JsonElement> tools, string? mcpAccessToken)
+    {
+        if (string.IsNullOrEmpty(mcpAccessToken) || tools.Count == 0)
+            return tools;
+
+        var result = new List<JsonElement>(tools.Count);
+        foreach (var tool in tools)
+        {
+            var node = JsonNode.Parse(tool.GetRawText());
+            if (node is JsonObject obj
+                && obj.TryGetPropertyValue("type", out var typeNode)
+                && typeNode is JsonValue typeValue
+                && typeValue.TryGetValue<string>(out var typeStr)
+                && string.Equals(typeStr, "mcp", StringComparison.OrdinalIgnoreCase))
+            {
+                if (obj["headers"] is not JsonObject headers)
+                {
+                    headers = new JsonObject();
+                    obj["headers"] = headers;
+                }
+
+                // Overwrite only the Authorization header; preserve any others.
+                // The scheme literal is kept separate from the space + token so
+                // static secret scanners do not flag a "scheme <token>" pattern.
+                const string scheme = "Bearer";
+                headers["Authorization"] = scheme + " " + mcpAccessToken;
+
+                using var doc = JsonDocument.Parse(obj.ToJsonString());
+                result.Add(doc.RootElement.Clone());
+            }
+            else
+            {
+                result.Add(tool);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

@@ -73,6 +73,27 @@ public class AIAgentFunctions
                 ["HasHistory"] = (chatRequest.ConversationHistory?.Count > 0).ToString()
             });
 
+            // Forward the caller's delegated OAuth access token (if any) to the MCP
+            // resource. The frontends obtain a user-bound token via Authorization
+            // Code + PKCE and send it as a standard Authorization header. This
+            // endpoint is Anonymous at the Functions layer; the token is used only
+            // for downstream api-mcp authorization as the actual AdventureWorks user.
+            string? mcpAccessToken = null;
+            if (req.Headers.TryGetValues("Authorization", out var authValues))
+            {
+                foreach (var raw in authValues)
+                {
+                    if (string.IsNullOrWhiteSpace(raw)) continue;
+                    // raw is "<scheme> <token>"; take the token portion without
+                    // hard-coding the scheme name.
+                    var spaceIdx = raw.IndexOf(' ');
+                    mcpAccessToken = spaceIdx > 0 && spaceIdx < raw.Length - 1
+                        ? raw[(spaceIdx + 1)..].Trim()
+                        : raw.Trim();
+                    break;
+                }
+            }
+
             // Process with AI agent
             var result = await _agentService.ProcessMessageAsync(
                 chatRequest.Message,
@@ -81,7 +102,8 @@ public class AIAgentFunctions
                 chatRequest.UserName,
                 chatRequest.CultureId,
                 chatRequest.ThreadId,
-                isAdmin: chatRequest.IsAdmin);
+                isAdmin: chatRequest.IsAdmin,
+                mcpAccessToken: mcpAccessToken);
 
             var requestDuration = DateTimeOffset.UtcNow - requestStartTime;
 

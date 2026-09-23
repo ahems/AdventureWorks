@@ -72,7 +72,8 @@ public class AIAgentService
         string? userName = null,
         string? cultureId = null,
         string? threadId = null,
-        bool isAdmin = false)
+        bool isAdmin = false,
+        string? mcpAccessToken = null)
     {
         var resolvedAgentId = isAdmin && _adminAgentId != null ? _adminAgentId : _agentId;
         var sessionId = isAdmin ? "admin" : (customerId.HasValue ? $"customer-{customerId.Value}" : Guid.NewGuid().ToString());
@@ -119,13 +120,18 @@ public class AIAgentService
             }
 
             // ── Invoke Foundry agent via Responses API ────────────────────────────
+            // The end user's delegated OAuth access token (when present) is forwarded
+            // to the protected api-mcp resource so every MCP tool call is authorized
+            // as the actual AdventureWorks user. It is passed per request and never
+            // cached, preventing cross-user leakage.
             var agentResponse = await _foundryClient.InvokeAsync(
                 agentId: resolvedAgentId,
                 userMessage: message,
                 conversationHistory: historyToSeed,
                 previousResponseId: string.IsNullOrEmpty(threadId) ? null : threadId,
                 userId: customerId.HasValue ? customerId.Value.ToString() : null,
-                structuredInputs: structuredInputs);
+                structuredInputs: structuredInputs,
+                mcpAccessToken: mcpAccessToken);
 
             // ── Suggested follow-up questions ─────────────────────────────────────
             var suggestions = await GenerateSuggestedQuestionsAsync(message, agentResponse.ResponseText, customerId);
