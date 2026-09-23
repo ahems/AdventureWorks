@@ -701,6 +701,112 @@ EXEC sp_executesql @sql;
     }
     
     # ---------------------------------------------------------------------
+    # Apply OAuth authorization catalog (Auth.* tables) + demo passwords
+    # for the api-mcp self-contained authorization server.
+    # ---------------------------------------------------------------------
+    $authSqlPath = Join-Path $PSScriptRoot 'sql' 'AdventureWorks-Auth.sql'
+    if (Test-Path $authSqlPath) {
+        $elapsed = (Get-Date) - $scriptStartTime
+        Write-Log "`n[+$([math]::Floor($elapsed.TotalMinutes))m] Applying OAuth authorization catalog from $authSqlPath..."
+        $authSql = Get-Content -Path $authSqlPath -Raw
+
+        $authBatches = $authSql -split '(?mi)^\s*GO\s*$'
+        $authSuccess = 0
+        $authSkip = 0
+        $authErrors = $false
+        foreach ($batch in $authBatches) {
+            $cleanBatch = $batch -replace '(?mi)^\s*GO\s*$', ''
+            $cleanBatch = $cleanBatch -replace '(?i)\bGO\b(?=\s*$)', ''
+            $cleanBatch = $cleanBatch -replace '(?i)\bGO\b(?=\s*\r?\n)', ''
+            $trimmedBatch = $cleanBatch.Trim()
+            if ($trimmedBatch.Length -eq 0) { continue }
+            if ($trimmedBatch -match '(?i)\bGO\b') { $authSkip++; continue }
+
+            try {
+                $cmd.CommandText = $trimmedBatch
+                $null = $cmd.ExecuteNonQuery()
+                $authSuccess++
+            }
+            catch {
+                $errorMsg = $_.Exception.Message
+                if ($errorMsg -match 'already exists' -or
+                    $errorMsg -match 'There is already an object named' -or
+                    $errorMsg -match 'Could not create constraint or index') {
+                    $authSkip++
+                } else {
+                    Write-Warning "OAuth authorization batch failed: $errorMsg"
+                    $authErrors = $true
+                }
+            }
+        }
+        $elapsed = (Get-Date) - $scriptStartTime
+        Write-Log "OAuth authorization catalog completed: $authSuccess applied, $authSkip skipped [+$([math]::Floor($elapsed.TotalMinutes))m]"
+        if ($authErrors) {
+            throw "OAuth authorization catalog completed with errors. Review the warnings above."
+        }
+
+        # -----------------------------------------------------------------
+        # Deterministic demo password for OAuth sign-in.
+        #
+        # Seeded AdventureWorks users carry the original 32-byte (44-char
+        # base64) password hashes, which are INCOMPATIBLE with the app /
+        # api-mcp PBKDF2-SHA256 (96-byte, 128-char) verifier. Without a
+        # compatible password no seeded user could complete the OAuth login.
+        #
+        # We compute ONE PBKDF2 hash (SHA256, 100k iterations, 96 bytes,
+        # 6-byte salt) for a documented demo password and UPSERT it ONLY for
+        # persons whose password is still in the original format
+        # (LEN(PasswordHash) < 100 OR NULL). App-format accounts created at
+        # runtime (128-char hashes) are NEVER overwritten, so the operation is
+        # idempotent and never clobbers real account passwords.
+        #
+        # The plaintext is a well-known demonstration value (overridable via
+        # MCP_DEMO_PASSWORD); only the derived hash is written to the database.
+        # This is a demo mechanism, NOT enterprise identity.
+        # -----------------------------------------------------------------
+        $demoPassword = if ($env:MCP_DEMO_PASSWORD) { $env:MCP_DEMO_PASSWORD } else { 'AdventureWorks!MCP2024' }
+        $saltBytes = New-Object byte[] 6
+        [System.Security.Cryptography.RandomNumberGenerator]::Fill($saltBytes)
+        $demoSalt = [Convert]::ToBase64String($saltBytes)
+        $pbkdf2 = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
+            $demoPassword, $saltBytes, 100000, [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+        try { $demoHashBytes = $pbkdf2.GetBytes(96) } finally { $pbkdf2.Dispose() }
+        $demoHash = [Convert]::ToBase64String($demoHashBytes)
+
+        try {
+            $upsertCmd = $conn.CreateCommand()
+            $upsertCmd.CommandTimeout = 300
+            $upsertCmd.CommandText = @'
+SET NOCOUNT ON;
+UPDATE pw
+    SET pw.PasswordHash = @Hash, pw.PasswordSalt = @Salt, pw.ModifiedDate = SYSUTCDATETIME()
+FROM Person.[Password] pw
+WHERE (pw.PasswordHash IS NULL OR LEN(pw.PasswordHash) < 100)
+  AND EXISTS (SELECT 1 FROM Person.EmailAddress e WHERE e.BusinessEntityID = pw.BusinessEntityID);
+
+INSERT INTO Person.[Password] (BusinessEntityID, PasswordHash, PasswordSalt, rowguid, ModifiedDate)
+SELECT p.BusinessEntityID, @Hash, @Salt, NEWID(), SYSUTCDATETIME()
+FROM Person.Person p
+WHERE EXISTS (SELECT 1 FROM Person.EmailAddress e WHERE e.BusinessEntityID = p.BusinessEntityID)
+  AND NOT EXISTS (SELECT 1 FROM Person.[Password] pw WHERE pw.BusinessEntityID = p.BusinessEntityID);
+'@
+            $hashParam = $upsertCmd.CreateParameter(); $hashParam.ParameterName = '@Hash'; $hashParam.Value = $demoHash
+            $saltParam = $upsertCmd.CreateParameter(); $saltParam.ParameterName = '@Salt'; $saltParam.Value = $demoSalt
+            $null = $upsertCmd.Parameters.Add($hashParam)
+            $null = $upsertCmd.Parameters.Add($saltParam)
+            $affected = $upsertCmd.ExecuteNonQuery()
+            $upsertCmd.Dispose()
+            $elapsed = (Get-Date) - $scriptStartTime
+            Write-Log "Demo OAuth password applied to seeded users (rows affected: $affected) [+$([math]::Floor($elapsed.TotalMinutes))m]"
+        }
+        catch {
+            Write-Warning "Demo OAuth password UPSERT failed: $($_.Exception.Message)"
+        }
+    } else {
+        Write-Log "`nOAuth authorization SQL file not found, skipping..."
+    }
+    
+    # ---------------------------------------------------------------------
     # Generate ProductProductPhoto-ai.csv from filesystem (source of truth)
     # Scan images/product_<ProductID>_photo_<N>.png and assign ProductPhotoIDs 1000+; junction table CSV is derived from the file list.
     # ---------------------------------------------------------------------
