@@ -43,6 +43,13 @@ _Production reference architecture showing all Azure components with enterprise 
 - [AI_AGENT_DEPLOYMENT_SUMMARY.md](features/ai-agent/AI_AGENT_DEPLOYMENT_SUMMARY.md) - Deployment architecture
 - [AI_AGENT_TELEMETRY_IMPLEMENTATION.md](features/ai-agent/AI_AGENT_TELEMETRY_IMPLEMENTATION.md) - Telemetry integration
 
+### MCP OAuth Authorization
+
+**Location:** `features/mcp-oauth/`
+
+- [README.md](features/mcp-oauth/README.md) - Self-contained OAuth 2.0 authorization server for the MCP resource: PKCE S256, resource-bound JWTs, Key Vault-backed signing (RBAC + managed identity), role-to-scope mapping, ownership checks, delegated token propagation, telemetry, security review, and end-to-end demonstration steps
+- [TOOL_SCOPE_MATRIX.md](features/mcp-oauth/TOOL_SCOPE_MATRIX.md) - Complete mapping of all 62 MCP tools to their required scope and access mode
+
 ### Authentication
 
 **Location:** `features/authentication/`

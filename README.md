@@ -192,6 +192,7 @@ The `docs/` folder contains comprehensive documentation organized by feature are
 - **AI Agent & MCP**
   - [docs/features/ai-agent/](docs/features/ai-agent/) – AI agent implementation and deployment guides
   - [api-mcp/README.md](api-mcp/README.md) – MCP server tool surface area
+  - [docs/features/mcp-oauth/](docs/features/mcp-oauth/) – Self-contained OAuth authorization for the MCP resource (PKCE S256, resource-bound JWTs, Key Vault signing, role/scope mapping, ownership, and the complete tool-to-scope matrix)
 
 - **Authentication & Security**
   - [docs/features/authentication/](docs/features/authentication/) – Password implementation and reset flows

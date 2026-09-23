@@ -4,6 +4,15 @@ This project hosts the **Model Context Protocol (MCP) server** for the Adventure
 
 The MCP server is implemented as an ASP.NET Core service with SSE transport and is deployed as a Container App alongside the rest of the backend.
 
+> [!IMPORTANT]
+> `api-mcp` is also a **self-contained OAuth 2.0 authorization server** that protects
+> its own `/mcp` endpoint. It issues resource-bound JWT access tokens (Authorization
+> Code + PKCE `S256`), signs them with a Key Vault-backed key (RBAC + managed identity),
+> and enforces business-domain scopes plus tool-level and record-level (ownership)
+> authorization for **AdventureWorks database users**. See
+> **[docs/features/mcp-oauth/README.md](../docs/features/mcp-oauth/README.md)** and the
+> complete **[tool-to-scope matrix](../docs/features/mcp-oauth/TOOL_SCOPE_MATRIX.md)**.
+
 ---
 
 ## Role in the Overall Architecture
