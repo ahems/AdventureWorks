@@ -39,6 +39,12 @@ import {
   getGrantedScopes,
   isAuthorized,
 } from "@/services/mcpAuth";
+import {
+  beginAuthorization as beginDabAuthorization,
+  clearAuthorization as clearDabAuthorization,
+  getDabRole,
+  isAuthorized as isDabAuthorized,
+} from "@/services/dabAuth";
 import { evaluateTools } from "@/services/mcpToolMatrix";
 
 /**
@@ -54,6 +60,8 @@ const McpAuthorizationPage: React.FC = () => {
   const { user } = useAuth();
   const [authorized, setAuthorized] = useState(isAuthorized());
   const [busy, setBusy] = useState(false);
+  const [dabAuthorized, setDabAuthorized] = useState(isDabAuthorized());
+  const [dabBusy, setDabBusy] = useState(false);
   const [revealToken, setRevealToken] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,6 +95,24 @@ const McpAuthorizationPage: React.FC = () => {
     setAuthorized(false);
     setRevealToken(false);
   };
+
+  const handleConnectDab = async () => {
+    setError(null);
+    setDabBusy(true);
+    try {
+      await beginDabAuthorization(user.email);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setDabBusy(false);
+    }
+  };
+
+  const handleDisconnectDab = () => {
+    clearDabAuthorization();
+    setDabAuthorized(false);
+  };
+
+  const dabRole = dabAuthorized ? getDabRole() : null;
 
   const expiresAt = claims?.exp ? new Date(claims.exp * 1000) : null;
   const issuedAt = claims?.iat ? new Date(claims.iat * 1000) : null;
@@ -141,6 +167,33 @@ const McpAuthorizationPage: React.FC = () => {
               ) : (
                 <Badge variant="secondary">
                   <ShieldAlert className="h-3.5 w-3.5 mr-1" /> Not authorized
+                </Badge>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-3 border-t pt-3">
+              <span className="text-sm font-medium">Data API (DAB):</span>
+              {dabAuthorized ? (
+                <Button variant="outline" onClick={handleDisconnectDab}>
+                  <LogOut className="h-4 w-4 mr-2" /> Disconnect DAB token
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  onClick={handleConnectDab}
+                  disabled={dabBusy}
+                >
+                  <LogIn className="h-4 w-4 mr-2" />
+                  {dabBusy ? "Redirecting…" : "Authorize Data API (OAuth + PKCE)"}
+                </Button>
+              )}
+              {dabAuthorized ? (
+                <Badge className="bg-emerald-600 hover:bg-emerald-600">
+                  <ShieldCheck className="h-3.5 w-3.5 mr-1" /> DAB token active
+                  {dabRole ? ` · X-MS-API-ROLE: ${dabRole}` : ""}
+                </Badge>
+              ) : (
+                <Badge variant="secondary">
+                  <ShieldAlert className="h-3.5 w-3.5 mr-1" /> DAB not authorized
                 </Badge>
               )}
             </div>

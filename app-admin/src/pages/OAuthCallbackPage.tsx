@@ -1,12 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
-import { handleCallback } from "@/services/mcpAuth";
+import { handleCallback as handleMcpCallback } from "@/services/mcpAuth";
+import {
+  handleCallback as handleDabCallback,
+  hasPendingAuthorization as hasPendingDabAuthorization,
+} from "@/services/dabAuth";
 
 /**
  * Handles the OAuth redirect (`/oauth/callback`) from the api-mcp authorization
- * server: validates state, exchanges the authorization code (with the PKCE
- * verifier) for a resource-bound access token, then returns to the inspection page.
+ * server. The route is shared by two PKCE flows — the MCP-resource token
+ * (inspection page) and the DAB-resource token (Data API access) — so it
+ * dispatches based on which flow has a pending PKCE state in sessionStorage.
  */
 const OAuthCallbackPage: React.FC = () => {
   const navigate = useNavigate();
@@ -17,9 +22,14 @@ const OAuthCallbackPage: React.FC = () => {
     if (ran.current) return; // guard React 18 StrictMode double-invoke
     ran.current = true;
     (async () => {
-      const result = await handleCallback();
+      const isDab = hasPendingDabAuthorization();
+      const result = isDab
+        ? await handleDabCallback()
+        : await handleMcpCallback();
       if (result.ok) {
-        navigate("/mcp-authorization", { replace: true });
+        const target =
+          (isDab && result.returnTo) || "/mcp-authorization";
+        navigate(target, { replace: true });
       } else {
         setError(result.error ?? "Authorization failed.");
       }

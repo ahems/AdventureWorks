@@ -11,6 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import { graphqlClient } from "@/lib/graphql-client";
 import { getFunctionsApiUrl } from "@/lib/utils";
 import { clearAuthorization } from "@/services/mcpAuth";
+import { clearAuthorization as clearDabAuthorization } from "@/services/dabAuth";
 
 interface User {
   id: string;
@@ -77,6 +78,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   const login = useCallback(
     async (email: string, password: string): Promise<boolean> => {
       setIsLoading(true);
+      // Clear any prior OAuth authorization so a user switch never inherits the
+      // previous employee's delegated MCP/DAB tokens, scopes or role.
+      clearAuthorization();
+      clearDabAuthorization();
 
       try {
         // Step 1: Look up email in DAB
@@ -192,6 +197,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     // Clear any MCP OAuth authorization context so the next user cannot inherit
     // the previous employee's delegated token/scopes.
     clearAuthorization();
+    clearDabAuthorization();
     toast({
       title: "Logged Out",
       description: `Goodbye, ${userName}! See you next time.`,
