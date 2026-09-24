@@ -1,5 +1,6 @@
 import { GraphQLClient } from "graphql-request";
 import { trackError } from "@/lib/appInsights";
+import { getAccessToken, getDabRole } from "@/services/dabAuth";
 
 // Get API URL from runtime config or environment variables
 const getApiUrl = (): string => {
@@ -29,9 +30,28 @@ const getApiUrl = (): string => {
   return import.meta.env.VITE_API_URL || "http://localhost:5000/graphql";
 };
 
-// Create GraphQL client instance
-export const graphqlClient = new GraphQLClient(getApiUrl(), {
-  headers: {
+// Create GraphQL client instance.
+//
+// Headers are computed per-request: once a signed-in consumer has obtained a
+// DAB-resource access token (Authorization Code + PKCE via the api-mcp OAuth
+// server), it is attached as a ****** together with the seeded role in
+// `X-MS-API-ROLE` so Data API Builder authorizes the request (and constrains a
+// consumer to their own records via server-issued ownership claims). Anonymous
+// visitors have no token, so no auth headers are sent and public catalog
+// browsing continues to work unchanged.
+const buildHeaders = (): Record<string, string> => {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
-  },
+  };
+  const token = getAccessToken();
+  if (token) {
+    headers["Authorization"] = `******;
+    const role = getDabRole();
+    if (role) headers["X-MS-API-ROLE"] = role;
+  }
+  return headers;
+};
+
+export const graphqlClient = new GraphQLClient(getApiUrl(), {
+  headers: buildHeaders,
 });

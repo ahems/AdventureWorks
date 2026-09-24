@@ -24,6 +24,7 @@ import CartPage from "./pages/CartPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import OrderConfirmationPage from "./pages/OrderConfirmationPage";
 import AuthPage from "./pages/AuthPage";
+import OAuthCallbackPage from "./pages/OAuthCallbackPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import AccountPage from "./pages/AccountPage";
 import SalePage from "./pages/SalePage";
@@ -93,6 +94,10 @@ const App = () => (
                                   element={<OrderConfirmationPage />}
                                 />
                                 <Route path="/auth" element={<AuthPage />} />
+                                <Route
+                                  path="/oauth/callback"
+                                  element={<OAuthCallbackPage />}
+                                />
                                 <Route
                                   path="/reset-password"
                                   element={<ResetPasswordPage />}

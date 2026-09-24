@@ -31,6 +31,19 @@ export function getFunctionsApiUrl(): string {
 }
 
 /**
+ * Get the api-mcp base URL (which hosts the self-contained OAuth authorization
+ * server) from runtime config or environment. Empty string when not configured;
+ * callers must handle that (OAuth features simply stay dormant / anonymous).
+ */
+export function getApiMcpUrl(): string {
+  return (
+    (window as any).APP_CONFIG?.API_MCP_URL ||
+    import.meta.env.VITE_API_MCP_URL ||
+    ""
+  );
+}
+
+/**
  * Convert GraphQL API URL to REST API URL
  * Handles both /graphql and /graphql/ patterns
  */

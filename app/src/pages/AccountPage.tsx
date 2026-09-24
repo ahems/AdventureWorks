@@ -43,6 +43,12 @@ import {
 } from "@/hooks/useOrders";
 import { useProfile, useUpdateProfile } from "@/hooks/useProfile";
 import {
+  beginAuthorization as beginDabAuthorization,
+  clearAuthorization as clearDabAuthorization,
+  isAuthorized as isDabAuthorized,
+  getDabRole,
+} from "@/services/dabAuth";
+import {
   useEmailAddresses,
   useCreateEmailAddress,
   useUpdateEmailAddress,
@@ -96,6 +102,8 @@ const AccountPage: React.FC = () => {
   const { user, isAuthenticated, logout, updateProfile, isLoading } = useAuth();
   const { t } = useTranslation("common");
   const navigate = useNavigate();
+  // Reflects DAB OAuth connection status; bumped to re-render after disconnect.
+  const [dabNonce, setDabNonce] = useState(0);
   const { items: wishlistItems, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
   const { formatPrice } = useCurrency();
@@ -2266,6 +2274,45 @@ const AccountPage: React.FC = () => {
                     )}
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Data API (DAB) OAuth access — optional, never required for browsing */}
+            <div className="mt-8" data-dab-nonce={dabNonce}>
+              <div className="border rounded-lg p-4 text-center space-y-3 max-w-xl mx-auto">
+                <h3 className="font-semibold">Data API access (OAuth)</h3>
+                <p className="text-sm text-muted-foreground">
+                  Optionally connect this signed-in session to the AdventureWorks
+                  Data API with OAuth 2.0 (Authorization Code + PKCE). Browsing the
+                  catalog never requires this; it authorizes access to your own
+                  profile and orders and is cleared automatically on sign out.
+                </p>
+                {isDabAuthorized() ? (
+                  <div className="space-y-2">
+                    <p className="text-sm">
+                      Connected
+                      {getDabRole() ? ` · role: ${getDabRole()}` : ""}
+                    </p>
+                    <button
+                      onClick={() => {
+                        clearDabAuthorization();
+                        setDabNonce((n) => n + 1);
+                      }}
+                      className="doodle-button inline-flex items-center gap-2"
+                    >
+                      Disconnect Data API
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      void beginDabAuthorization(user?.email);
+                    }}
+                    className="doodle-button inline-flex items-center gap-2"
+                  >
+                    Connect to Data API
+                  </button>
+                )}
               </div>
             </div>
 
