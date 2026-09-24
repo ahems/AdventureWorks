@@ -158,14 +158,15 @@ public static class AuthorizationEndpoints
         }
 
         // Bind the token to a single allowed resource (RFC 8707). A request may target the
-        // MCP resource or the DAB resource; an unknown or multi-valued target is rejected.
-        // OpenIddict 6.x does not expose an InvalidTarget error constant; use the RFC 8707 value.
-        if (!TryResolveRequestedResource(request, options, out var resource, out var targetsDab))
+        // MCP resource, the DAB resource or the Functions resource; an unknown or multi-valued
+        // target is rejected. OpenIddict 6.x does not expose an InvalidTarget error constant;
+        // use the RFC 8707 value.
+        if (!TryResolveRequestedResource(request, options, out var resource, out var includeOwnerClaims))
         {
             return Forbid("The requested resource is not an allowed target.", "invalid_target");
         }
 
-        var identity = BuildAccessIdentity(user, request, targetsDab);
+        var identity = BuildAccessIdentity(user, request, includeOwnerClaims);
         var principal = new ClaimsPrincipal(identity);
         principal.SetScopes(granted);
         principal.SetResources(resource);
@@ -197,7 +198,7 @@ public static class AuthorizationEndpoints
 
     // ----------------------------------------------------------------- helpers
 
-    private static ClaimsIdentity BuildAccessIdentity(ResolvedUser user, OpenIddictRequest request, bool targetsDab)
+    private static ClaimsIdentity BuildAccessIdentity(ResolvedUser user, OpenIddictRequest request, bool includeOwnerClaims)
     {
         var identity = new ClaimsIdentity(
             authenticationType: "OpenIddict",
@@ -218,15 +219,16 @@ public static class AuthorizationEndpoints
             identity.AddClaim(new Claim(AwClaims.Roles, role));
         }
 
-        // Record-level ownership at the DAB layer needs non-sensitive owner claims to compare
-        // against (@claims.customer_id / @claims.business_entity_id). They are added ONLY to
-        // DAB-audience consumer tokens, resolved server-side from the subject — never taken from
-        // the client and never placed in MCP tokens. No sensitive database identifiers (passwords,
-        // hashes, PANs) are ever exposed.
-        if (targetsDab && user.IsConsumer)
+        // Record-level ownership at a resource server (DAB or the Functions API) needs
+        // non-sensitive owner claims to compare against (@claims.customer_id /
+        // @claims.business_entity_id). They are added ONLY to DAB- or Functions-audience
+        // consumer tokens, resolved server-side from the subject — never taken from the client
+        // and never placed in MCP tokens. No sensitive database identifiers (passwords, hashes,
+        // PANs) are ever exposed.
+        if (includeOwnerClaims && user.IsConsumer)
         {
             // CustomerID may not exist until a consumer's first purchase; emit a 0 sentinel so the
-            // claim is always present (avoids DAB missing-claim policy failures) yet matches no row,
+            // claim is always present (avoids missing-claim policy failures) yet matches no row,
             // since CustomerIDs are strictly positive. Ownership therefore gates read/update/delete
             // without blocking a first-time buyer's Customer/SalesOrderHeader create.
             identity.SetClaim(AwClaims.CustomerId, (user.CustomerId ?? 0).ToString(CultureInfo.InvariantCulture));
@@ -244,17 +246,20 @@ public static class AuthorizationEndpoints
     /// <summary>
     /// Resolves the single resource the access token will be bound to from the request's
     /// RFC 8707 <c>resource</c> parameter, validated against the configured allow-list
-    /// (MCP + DAB). No target defaults to the MCP resource; an unknown or multi-valued
-    /// target is rejected. <paramref name="targetsDab"/> gates the DAB-only owner claim.
+    /// (MCP + DAB + Functions). No target defaults to the MCP resource; an unknown or
+    /// multi-valued target is rejected. <paramref name="includeOwnerClaims"/> is set for the
+    /// DAB and Functions resources (both perform record-level ownership) and gates the
+    /// consumer owner claims; it is false for the MCP resource.
     /// </summary>
     private static bool TryResolveRequestedResource(
         OpenIddictRequest request,
         AuthorizationServerOptions options,
         out string resource,
-        out bool targetsDab)
+        out bool includeOwnerClaims)
     {
         var mcp = options.GetResourceIdentifier();
         var dab = options.GetDabResourceIdentifier();
+        var functions = options.GetFunctionsResourceIdentifier();
 
         var requested = request.Resources
             .Where(r => !string.IsNullOrWhiteSpace(r))
@@ -265,7 +270,7 @@ public static class AuthorizationEndpoints
         if (requested.Count == 0)
         {
             resource = mcp;
-            targetsDab = false;
+            includeOwnerClaims = false;
             return true;
         }
 
@@ -274,20 +279,27 @@ public static class AuthorizationEndpoints
             if (string.Equals(requested[0], dab, StringComparison.Ordinal))
             {
                 resource = dab;
-                targetsDab = true;
+                includeOwnerClaims = true;
+                return true;
+            }
+
+            if (string.Equals(requested[0], functions, StringComparison.Ordinal))
+            {
+                resource = functions;
+                includeOwnerClaims = true;
                 return true;
             }
 
             if (string.Equals(requested[0], mcp, StringComparison.Ordinal))
             {
                 resource = mcp;
-                targetsDab = false;
+                includeOwnerClaims = false;
                 return true;
             }
         }
 
         resource = string.Empty;
-        targetsDab = false;
+        includeOwnerClaims = false;
         return false;
     }
 

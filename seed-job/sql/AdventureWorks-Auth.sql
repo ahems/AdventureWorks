@@ -72,16 +72,19 @@ GO
 -- layered on top of scopes server-side (they are NOT encoded here).
 DELETE FROM Auth.RoleScope;
 INSERT INTO Auth.RoleScope (RoleName, Scope) VALUES
-    -- consumer
+    -- consumer (catalog + own orders + own profile/addresses; self-access is ownership-gated)
     ('consumer', 'mcp.access'),
     ('consumer', 'products.read'),
     ('consumer', 'orders.read'),
     ('consumer', 'orders.write'),
+    ('consumer', 'customers.read'),
+    ('consumer', 'customers.write'),
     -- sales-admin
     ('sales-admin', 'mcp.access'),
     ('sales-admin', 'products.read'),
     ('sales-admin', 'sales.read'),
     ('sales-admin', 'customers.read'),
+    ('sales-admin', 'customers.write'),
     ('sales-admin', 'orders.read'),
     ('sales-admin', 'admin.read'),
     -- marketing-admin
@@ -89,6 +92,7 @@ INSERT INTO Auth.RoleScope (RoleName, Scope) VALUES
     ('marketing-admin', 'products.read'),
     ('marketing-admin', 'sales.read'),
     ('marketing-admin', 'customers.read'),
+    ('marketing-admin', 'customers.write'),
     ('marketing-admin', 'admin.read'),
     ('marketing-admin', 'admin.write'),
     -- inventory-admin
@@ -102,6 +106,7 @@ INSERT INTO Auth.RoleScope (RoleName, Scope) VALUES
     ('operations-admin', 'products.read'),
     ('operations-admin', 'sales.read'),
     ('operations-admin', 'customers.read'),
+    ('operations-admin', 'customers.write'),
     ('operations-admin', 'orders.read'),
     ('operations-admin', 'inventory.read'),
     ('operations-admin', 'admin.read'),
@@ -110,6 +115,7 @@ INSERT INTO Auth.RoleScope (RoleName, Scope) VALUES
     ('executive-admin', 'products.read'),
     ('executive-admin', 'sales.read'),
     ('executive-admin', 'customers.read'),
+    ('executive-admin', 'customers.write'),
     ('executive-admin', 'inventory.read'),
     ('executive-admin', 'manufacturing.read'),
     ('executive-admin', 'orders.read'),

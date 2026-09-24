@@ -61,16 +61,19 @@ public static class ApplicationRoles
         [Consumer] = new[]
         {
             OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.OrdersRead, OAuthScopes.OrdersWrite,
+            // Own-profile self-service (e.g. their addresses via the Functions API). Restricted
+            // to owned rows by record-level ownership; internal-only endpoints add a category gate.
+            OAuthScopes.CustomersRead, OAuthScopes.CustomersWrite,
         },
         [SalesAdmin] = new[]
         {
             OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.SalesRead, OAuthScopes.CustomersRead,
-            OAuthScopes.OrdersRead, OAuthScopes.AdminRead,
+            OAuthScopes.CustomersWrite, OAuthScopes.OrdersRead, OAuthScopes.AdminRead,
         },
         [MarketingAdmin] = new[]
         {
             OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.SalesRead, OAuthScopes.CustomersRead,
-            OAuthScopes.AdminRead, OAuthScopes.AdminWrite,
+            OAuthScopes.CustomersWrite, OAuthScopes.AdminRead, OAuthScopes.AdminWrite,
         },
         [InventoryAdmin] = new[]
         {
@@ -80,13 +83,13 @@ public static class ApplicationRoles
         [OperationsAdmin] = new[]
         {
             OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.SalesRead, OAuthScopes.CustomersRead,
-            OAuthScopes.OrdersRead, OAuthScopes.InventoryRead, OAuthScopes.AdminRead,
+            OAuthScopes.CustomersWrite, OAuthScopes.OrdersRead, OAuthScopes.InventoryRead, OAuthScopes.AdminRead,
         },
         [ExecutiveAdmin] = new[]
         {
             OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.SalesRead, OAuthScopes.CustomersRead,
-            OAuthScopes.InventoryRead, OAuthScopes.ManufacturingRead, OAuthScopes.OrdersRead, OAuthScopes.OrdersWrite,
-            OAuthScopes.AdminRead, OAuthScopes.AdminWrite, OAuthScopes.McpAdmin,
+            OAuthScopes.CustomersWrite, OAuthScopes.InventoryRead, OAuthScopes.ManufacturingRead, OAuthScopes.OrdersRead,
+            OAuthScopes.OrdersWrite, OAuthScopes.AdminRead, OAuthScopes.AdminWrite, OAuthScopes.McpAdmin,
         },
         [ManufacturingEngineer] = new[]
         {

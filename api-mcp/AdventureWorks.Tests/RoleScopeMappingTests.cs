@@ -32,23 +32,29 @@ public class RoleScopeMappingTests
     }
 
     [Fact]
-    public void Consumer_has_only_catalog_and_own_orders()
+    public void Consumer_has_catalog_own_orders_and_own_profile()
     {
         var scopes = ApplicationRoles.DefaultRoleScopes[ApplicationRoles.Consumer];
         Assert.Equal(
-            new[] { OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.OrdersRead, OAuthScopes.OrdersWrite }
-                .OrderBy(s => s),
+            new[]
+            {
+                OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.OrdersRead, OAuthScopes.OrdersWrite,
+                OAuthScopes.CustomersRead, OAuthScopes.CustomersWrite,
+            }.OrderBy(s => s),
             scopes.OrderBy(s => s));
     }
 
     [Fact]
-    public void Consumer_never_has_internal_scopes()
+    public void Consumer_never_has_internal_only_scopes()
     {
+        // customers.read/write are SHARED scopes (own-profile for consumers, any for internal),
+        // ownership-gated at the resource server — exactly like orders.read. The truly
+        // internal-only scopes below must never be granted to a consumer.
         var scopes = ApplicationRoles.DefaultRoleScopes[ApplicationRoles.Consumer];
-        Assert.DoesNotContain(OAuthScopes.CustomersRead, scopes);
         Assert.DoesNotContain(OAuthScopes.SalesRead, scopes);
         Assert.DoesNotContain(OAuthScopes.InventoryRead, scopes);
         Assert.DoesNotContain(OAuthScopes.ManufacturingRead, scopes);
+        Assert.DoesNotContain(OAuthScopes.ManufacturingWrite, scopes);
         Assert.DoesNotContain(OAuthScopes.AdminRead, scopes);
         Assert.DoesNotContain(OAuthScopes.AdminWrite, scopes);
         Assert.DoesNotContain(OAuthScopes.McpAdmin, scopes);

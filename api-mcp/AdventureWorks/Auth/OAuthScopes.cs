@@ -20,8 +20,21 @@ public static class OAuthScopes
     /// <summary>Internal sales summaries, analytics and financial reporting.</summary>
     public const string SalesRead = "sales.read";
 
-    /// <summary>Internal customer lookup / enumeration. Consumer self-access is handled by ownership, not this scope.</summary>
+    /// <summary>
+    /// Read customer records. Internal roles read any customer (enumeration / lookup);
+    /// consumers hold this scope to read their <em>own</em> profile records (e.g. their
+    /// addresses via the Functions API) and are restricted to owned rows by record-level
+    /// ownership — exactly like <see cref="OrdersRead"/>. Internal-only endpoints add a
+    /// category gate so a consumer holding the scope still cannot enumerate other customers.
+    /// </summary>
     public const string CustomersRead = "customers.read";
+
+    /// <summary>
+    /// Write customer records. Internal roles may edit any customer; consumers hold this
+    /// scope to manage their <em>own</em> profile records (e.g. add / update / delete their
+    /// own addresses via the Functions API) and are restricted to owned rows by ownership.
+    /// </summary>
+    public const string CustomersWrite = "customers.write";
 
     /// <summary>Internal inventory levels and availability detail.</summary>
     public const string InventoryRead = "inventory.read";
@@ -53,7 +66,8 @@ public static class OAuthScopes
         [McpAccess] = "Connect to the AdventureWorks MCP server",
         [ProductsRead] = "Browse the public product catalog, recommendations and reviews",
         [SalesRead] = "Read internal sales analytics and financial summaries",
-        [CustomersRead] = "Look up internal customer records",
+        [CustomersRead] = "Read customer records (own profile for consumers; any for internal roles)",
+        [CustomersWrite] = "Manage customer records (own profile for consumers; any for internal roles)",
         [InventoryRead] = "Read internal inventory levels and availability",
         [OrdersRead] = "Read order history and status",
         [OrdersWrite] = "Make permitted changes to orders",
@@ -71,6 +85,7 @@ public static class OAuthScopes
         ProductsRead,
         SalesRead,
         CustomersRead,
+        CustomersWrite,
         InventoryRead,
         OrdersRead,
         OrdersWrite,

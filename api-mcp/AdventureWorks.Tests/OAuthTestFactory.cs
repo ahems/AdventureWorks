@@ -21,6 +21,7 @@ public sealed class OAuthTestFactory : WebApplicationFactory<Program>
 {
     public const string ResourceIdentifier = "https://mcp.adventureworks.test/mcp";
     public const string DabResourceIdentifier = "https://mcp.adventureworks.test/dab";
+    public const string FunctionsResourceIdentifier = "https://mcp.adventureworks.test/functions";
 
     static OAuthTestFactory()
     {
@@ -33,6 +34,7 @@ public sealed class OAuthTestFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("MCP_OAUTH_ALLOW_HTTP", "true");
         Environment.SetEnvironmentVariable("MCP_RESOURCE_IDENTIFIER", ResourceIdentifier);
         Environment.SetEnvironmentVariable("DAB_RESOURCE_IDENTIFIER", DabResourceIdentifier);
+        Environment.SetEnvironmentVariable("FUNCTIONS_RESOURCE_IDENTIFIER", FunctionsResourceIdentifier);
     }
 
     public FakeUserDirectory Directory { get; } = new();

@@ -35,6 +35,14 @@ public sealed class AuthorizationServerOptions
     /// </summary>
     public string? DabResourceIdentifier { get; set; }
 
+    /// <summary>
+    /// Canonical Azure Functions (api-functions) protected-resource identifier (RFC 8707
+    /// resource indicator). The Functions API validates access tokens whose <c>aud</c> equals
+    /// this value. Defaults to <c>{PublicBaseUrl}/functions</c>; override with
+    /// <c>FUNCTIONS_RESOURCE_IDENTIFIER</c>. Never a hard-coded Azure hostname.
+    /// </summary>
+    public string? FunctionsResourceIdentifier { get; set; }
+
     /// <summary>Access token lifetime. Short-lived per the demo design (~10 minutes).</summary>
     public TimeSpan AccessTokenLifetime { get; set; } = TimeSpan.FromMinutes(10);
 
@@ -94,6 +102,25 @@ public sealed class AuthorizationServerOptions
     }
 
     /// <summary>
+    /// Resolves the canonical Functions resource identifier (the <c>aud</c> of Functions-bound
+    /// tokens).
+    /// </summary>
+    public string GetFunctionsResourceIdentifier()
+    {
+        if (!string.IsNullOrWhiteSpace(FunctionsResourceIdentifier))
+        {
+            return FunctionsResourceIdentifier!.TrimEnd('/');
+        }
+
+        if (!string.IsNullOrWhiteSpace(PublicBaseUrl))
+        {
+            return PublicBaseUrl!.TrimEnd('/') + "/functions";
+        }
+
+        return "urn:adventureworks:functions";
+    }
+
+    /// <summary>
     /// Allow-list of resource identifiers the authorization server will bind tokens to
     /// (RFC 8707 <c>resource</c> targets). A request may target at most one of these; an
     /// unknown target is rejected with <c>invalid_target</c>.
@@ -102,5 +129,6 @@ public sealed class AuthorizationServerOptions
     {
         GetResourceIdentifier(),
         GetDabResourceIdentifier(),
+        GetFunctionsResourceIdentifier(),
     };
 }

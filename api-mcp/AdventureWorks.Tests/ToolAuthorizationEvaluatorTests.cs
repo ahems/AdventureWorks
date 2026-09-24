@@ -99,8 +99,9 @@ public class ToolAuthorizationEvaluatorTests
     {
         var d = _eval.Evaluate(Consumer(), "search_customers", null, false);
         Assert.False(d.Allowed);
-        // Consumer lacks customers.read entirely -> scope denial.
-        Assert.Equal(AuthorizationOutcome.DenyScope, d.Outcome);
+        // Consumer now holds customers.read (shared own-profile scope) but search_customers is
+        // InternalOnly -> denied by the category gate (defense in depth), not by missing scope.
+        Assert.Equal(AuthorizationOutcome.DenyInternalOnly, d.Outcome);
     }
 
     [Fact]
@@ -185,7 +186,9 @@ public class ToolAuthorizationEvaluatorTests
         var policy = new ToolPolicy("mutate_order", OAuthScopes.OrdersWrite, ToolAccessMode.SelfOrInternal, "customerId");
 
         var withoutWrite = Caller(UserCategories.Consumer, new[] { OAuthScopes.McpAccess, OAuthScopes.OrdersRead }, 100);
-        Assert.False(_eval.Evaluate(withoutWrite, policy, 100, true).Allowed);
+        var deniedForScope = _eval.Evaluate(withoutWrite, policy, 100, true);
+        Assert.False(deniedForScope.Allowed);
+        Assert.Equal(AuthorizationOutcome.DenyScope, deniedForScope.Outcome);
 
         var withWrite = Caller(UserCategories.Consumer,
             new[] { OAuthScopes.McpAccess, OAuthScopes.OrdersWrite }, 100);

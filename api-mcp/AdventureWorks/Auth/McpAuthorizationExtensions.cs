@@ -237,6 +237,7 @@ public static class McpAuthorizationExtensions
             PublicBaseUrl = publicBaseUrl,
             ResourceIdentifier = Get("MCP_RESOURCE_IDENTIFIER"),
             DabResourceIdentifier = Get("DAB_RESOURCE_IDENTIFIER"),
+            FunctionsResourceIdentifier = Get("FUNCTIONS_RESOURCE_IDENTIFIER"),
             KeyVaultUri = Get("MCP_SIGNING_KEY_VAULT_URI", "AZURE_KEY_VAULT_URI", "KEY_VAULT_URI"),
             KeyVaultManagedIdentityClientId = Get("MCP_KEYVAULT_MANAGED_IDENTITY_CLIENT_ID", "KEYVAULT_MANAGED_IDENTITY_CLIENT_ID"),
         };
@@ -255,9 +256,16 @@ public static class McpAuthorizationExtensions
 
         // First-party public (PKCE) clients. Redirect URIs come from deployed app URLs
         // (never hard-coded Azure hostnames) plus localhost for development.
+        // The e-shop consumer requests catalog + own-orders scopes plus own-profile
+        // (customers.*) so a signed-in consumer can manage their own addresses through the
+        // Functions API; access remains ownership-gated at the resource server.
         options.Clients.Add(BuildClient("adventureworks-eshop", "AdventureWorks Shop",
             config, new[] { "APP_REDIRECT_URI", "OAUTH_ESHOP_REDIRECT_URIS", "SERVICE_APP_URL", "APP_URL" },
-            new[] { OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.OrdersRead, OAuthScopes.OrdersWrite }));
+            new[]
+            {
+                OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.OrdersRead, OAuthScopes.OrdersWrite,
+                OAuthScopes.CustomersRead, OAuthScopes.CustomersWrite,
+            }));
 
         options.Clients.Add(BuildClient("adventureworks-admin", "AdventureWorks Admin",
             config, new[] { "OAUTH_ADMIN_REDIRECT_URIS", "ADMIN_APP_URL", "SERVICE_APP_ADMIN_URL" },
