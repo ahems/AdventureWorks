@@ -206,6 +206,11 @@ module containerApp 'modules/aca.bicep' = {
   ]
 }
 
+// Canonical api-mcp public base URL / OAuth issuer, derived from the deployed Container Apps
+// environment domain (matches aca-api-mcp.bicep's own MCP_PUBLIC_BASE_URL derivation). The DAB
+// resource server reuses this issuer and the {issuer}/dab audience — no hard-coded hostnames.
+var mcpPublicBaseUrl = 'https://av-mcp-${resourceToken}.${containerApp.outputs.containerAppEnvDefaultDomain}'
+
 module containerAppApi 'modules/aca-api.bicep' = {
   name: 'Deploy-Container-App-API'
   params: {
@@ -219,6 +224,11 @@ module containerAppApi 'modules/aca-api.bicep' = {
     containerAppEnvId: containerApp.outputs.containerAppEnvId
     minReplica:0
     maxReplica:3
+    // DAB validates api-mcp-issued bearer tokens against the shared OAuth issuer and the
+    // dedicated DAB audience ({issuer}/dab). Both are derived from the deployed api-mcp FQDN
+    // (same value api-mcp advertises as MCP_PUBLIC_BASE_URL); no hard-coded hostnames.
+    dabJwtIssuer: mcpPublicBaseUrl
+    dabJwtAudience: '${mcpPublicBaseUrl}/dab'
   }
 }
 

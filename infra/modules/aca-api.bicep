@@ -17,6 +17,12 @@ param revisionSuffix string
 @secure()
 param sqlConnectionString string
 param appUrl string = ''
+// api-mcp OAuth issuer + dedicated DAB audience used by DAB's JWT provider to validate
+// bearer tokens (dab-config.json reads DAB_JWT_ISSUER / DAB_JWT_AUDIENCE via @env()).
+// Derived from deployed hostnames in main.bicep; no hard-coded FQDNs. When empty (e.g. a
+// standalone deploy), DAB falls back to anonymous-role behaviour for unauthenticated calls.
+param dabJwtIssuer string = ''
+param dabJwtAudience string = ''
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -119,6 +125,14 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'APP_URL'
               value: appUrl
+            }
+            {
+              name: 'DAB_JWT_ISSUER'
+              value: dabJwtIssuer
+            }
+            {
+              name: 'DAB_JWT_AUDIENCE'
+              value: dabJwtAudience
             }
             {
               name: 'ASPNETCORE_URLS'
