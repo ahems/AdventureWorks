@@ -10,6 +10,7 @@ namespace AdventureWorks.Tests;
 /// metadata (RFC 8414), JWKS (public key only), MCP protected-resource metadata (RFC 9728),
 /// the unauthenticated <c>/mcp</c> 401 challenge, and health-probe availability.
 /// </summary>
+[Collection(OAuthServerCollection.Name)]
 public class OAuthMetadataTests : IClassFixture<OAuthTestFactory>
 {
     private readonly OAuthTestFactory _factory;

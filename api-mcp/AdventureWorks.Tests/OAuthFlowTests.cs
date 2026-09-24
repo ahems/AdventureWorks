@@ -14,6 +14,7 @@ namespace AdventureWorks.Tests;
 /// bad redirect). Asserts the issued JWT carries the correct issuer, audience/resource,
 /// subject, scopes, application, category and ~10-minute lifetime.
 /// </summary>
+[Collection(OAuthServerCollection.Name)]
 public class OAuthFlowTests : IClassFixture<OAuthTestFactory>
 {
     private const string Client = "mcp-inspector";

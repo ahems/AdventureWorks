@@ -24,6 +24,14 @@ public static class AwClaims
     /// resolved server-side from the subject — never accepted from the client.
     /// </summary>
     public const string CustomerId = "customer_id";
+
+    /// <summary>
+    /// Non-sensitive owner id (Person.BusinessEntityID) used by DAB record-level ownership
+    /// policies (<c>@claims.business_entity_id</c>) for a consumer's own identity, address,
+    /// phone and payment-link records. Present ONLY in DAB-audience consumer tokens and always
+    /// resolved server-side from the subject — never accepted from the client.
+    /// </summary>
+    public const string BusinessEntityId = "business_entity_id";
 }
 
 /// <summary>Helpers to read the AdventureWorks identity from a validated token principal.</summary>

@@ -218,13 +218,22 @@ public static class AuthorizationEndpoints
             identity.AddClaim(new Claim(AwClaims.Roles, role));
         }
 
-        // Record-level ownership at the DAB layer needs a non-sensitive owner claim to
-        // compare against (@claims.customer_id). It is added ONLY to DAB-audience tokens,
-        // resolved server-side from the subject — never taken from the client and never
-        // placed in MCP tokens. No other database identifiers are exposed.
-        if (targetsDab && user.CustomerId is int customerId)
+        // Record-level ownership at the DAB layer needs non-sensitive owner claims to compare
+        // against (@claims.customer_id / @claims.business_entity_id). They are added ONLY to
+        // DAB-audience consumer tokens, resolved server-side from the subject — never taken from
+        // the client and never placed in MCP tokens. No sensitive database identifiers (passwords,
+        // hashes, PANs) are ever exposed.
+        if (targetsDab && user.IsConsumer)
         {
-            identity.SetClaim(AwClaims.CustomerId, customerId.ToString(CultureInfo.InvariantCulture));
+            // CustomerID may not exist until a consumer's first purchase; emit a 0 sentinel so the
+            // claim is always present (avoids DAB missing-claim policy failures) yet matches no row,
+            // since CustomerIDs are strictly positive. Ownership therefore gates read/update/delete
+            // without blocking a first-time buyer's Customer/SalesOrderHeader create.
+            identity.SetClaim(AwClaims.CustomerId, (user.CustomerId ?? 0).ToString(CultureInfo.InvariantCulture));
+
+            // BusinessEntityID always exists for a resolved consumer and owns their identity,
+            // address, phone and credit-card-link records.
+            identity.SetClaim(AwClaims.BusinessEntityId, user.BusinessEntityId.ToString(CultureInfo.InvariantCulture));
         }
 
         // All claims go to the access token only (no id token is issued).

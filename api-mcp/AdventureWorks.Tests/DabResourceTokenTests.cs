@@ -15,6 +15,7 @@ namespace AdventureWorks.Tests;
 /// claim Data API Builder reads, and adding the non-sensitive <c>customer_id</c> ownership
 /// claim ONLY to DAB-audience tokens.
 /// </summary>
+[Collection(OAuthServerCollection.Name)]
 public class DabResourceTokenTests : IClassFixture<OAuthTestFactory>
 {
     private const string Client = "adventureworks-eshop";
@@ -63,9 +64,11 @@ public class DabResourceTokenTests : IClassFixture<OAuthTestFactory>
         var roles = StringOrArray(payload, "roles");
         Assert.Contains(ApplicationRoles.Consumer, roles);
 
-        // Non-sensitive ownership claim is present for DAB-audience tokens.
+        // Non-sensitive ownership claims are present for DAB-audience tokens.
         Assert.True(payload.TryGetProperty("customer_id", out var cid));
         Assert.Equal("30001", cid.GetString());
+        Assert.True(payload.TryGetProperty("business_entity_id", out var beid));
+        Assert.Equal("2002", beid.GetString());
     }
 
     [Fact]
@@ -81,8 +84,9 @@ public class DabResourceTokenTests : IClassFixture<OAuthTestFactory>
         var payload = DecodeJwtPayload(await ExchangeAsync(client, code!, verifier));
 
         Assert.Equal(OAuthTestFactory.ResourceIdentifier, Audience(payload));
-        // Ownership id must never leak into MCP-audience tokens.
+        // Ownership ids must never leak into MCP-audience tokens.
         Assert.False(payload.TryGetProperty("customer_id", out _));
+        Assert.False(payload.TryGetProperty("business_entity_id", out _));
         // Roles are still present for informational/consistency purposes.
         Assert.Contains(ApplicationRoles.Consumer, StringOrArray(payload, "roles"));
     }
