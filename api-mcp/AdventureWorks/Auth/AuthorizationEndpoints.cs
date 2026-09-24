@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Security.Claims;
 using System.Text;
@@ -156,15 +157,18 @@ public static class AuthorizationEndpoints
             return Forbid("Your AdventureWorks account has none of the requested scopes.", Errors.AccessDenied);
         }
 
-        var identity = BuildAccessIdentity(user, request);
+        // Bind the token to a single allowed resource (RFC 8707). A request may target the
+        // MCP resource or the DAB resource; an unknown or multi-valued target is rejected.
+        // OpenIddict 6.x does not expose an InvalidTarget error constant; use the RFC 8707 value.
+        if (!TryResolveRequestedResource(request, options, out var resource, out var targetsDab))
+        {
+            return Forbid("The requested resource is not an allowed target.", "invalid_target");
+        }
+
+        var identity = BuildAccessIdentity(user, request, targetsDab);
         var principal = new ClaimsPrincipal(identity);
         principal.SetScopes(granted);
-
-        var resource = options.GetResourceIdentifier();
-        if (!string.IsNullOrEmpty(resource))
-        {
-            principal.SetResources(resource);
-        }
+        principal.SetResources(resource);
 
         return Results.SignIn(principal, new AuthenticationProperties(), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
@@ -193,7 +197,7 @@ public static class AuthorizationEndpoints
 
     // ----------------------------------------------------------------- helpers
 
-    private static ClaimsIdentity BuildAccessIdentity(ResolvedUser user, OpenIddictRequest request)
+    private static ClaimsIdentity BuildAccessIdentity(ResolvedUser user, OpenIddictRequest request, bool targetsDab)
     {
         var identity = new ClaimsIdentity(
             authenticationType: "OpenIddict",
@@ -207,12 +211,75 @@ public static class AuthorizationEndpoints
 
         foreach (var role in user.Roles)
         {
+            // 'role' (singular) is retained for human inspection / back-compat; 'roles'
+            // (plural array) is what Data API Builder reads to authorize the requested
+            // X-MS-API-ROLE header against the caller's granted roles.
             identity.AddClaim(new Claim(Claims.Role, role));
+            identity.AddClaim(new Claim(AwClaims.Roles, role));
+        }
+
+        // Record-level ownership at the DAB layer needs a non-sensitive owner claim to
+        // compare against (@claims.customer_id). It is added ONLY to DAB-audience tokens,
+        // resolved server-side from the subject — never taken from the client and never
+        // placed in MCP tokens. No other database identifiers are exposed.
+        if (targetsDab && user.CustomerId is int customerId)
+        {
+            identity.SetClaim(AwClaims.CustomerId, customerId.ToString(CultureInfo.InvariantCulture));
         }
 
         // All claims go to the access token only (no id token is issued).
         identity.SetDestinations(static _ => new[] { Destinations.AccessToken });
         return identity;
+    }
+
+    /// <summary>
+    /// Resolves the single resource the access token will be bound to from the request's
+    /// RFC 8707 <c>resource</c> parameter, validated against the configured allow-list
+    /// (MCP + DAB). No target defaults to the MCP resource; an unknown or multi-valued
+    /// target is rejected. <paramref name="targetsDab"/> gates the DAB-only owner claim.
+    /// </summary>
+    private static bool TryResolveRequestedResource(
+        OpenIddictRequest request,
+        AuthorizationServerOptions options,
+        out string resource,
+        out bool targetsDab)
+    {
+        var mcp = options.GetResourceIdentifier();
+        var dab = options.GetDabResourceIdentifier();
+
+        var requested = request.Resources
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Select(r => r!.TrimEnd('/'))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (requested.Count == 0)
+        {
+            resource = mcp;
+            targetsDab = false;
+            return true;
+        }
+
+        if (requested.Count == 1)
+        {
+            if (string.Equals(requested[0], dab, StringComparison.Ordinal))
+            {
+                resource = dab;
+                targetsDab = true;
+                return true;
+            }
+
+            if (string.Equals(requested[0], mcp, StringComparison.Ordinal))
+            {
+                resource = mcp;
+                targetsDab = false;
+                return true;
+            }
+        }
+
+        resource = string.Empty;
+        targetsDab = false;
+        return false;
     }
 
     private static string BaseUrl(HttpContext ctx, AuthorizationServerOptions options) =>

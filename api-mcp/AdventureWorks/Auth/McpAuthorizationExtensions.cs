@@ -236,6 +236,7 @@ public static class McpAuthorizationExtensions
         {
             PublicBaseUrl = publicBaseUrl,
             ResourceIdentifier = Get("MCP_RESOURCE_IDENTIFIER"),
+            DabResourceIdentifier = Get("DAB_RESOURCE_IDENTIFIER"),
             KeyVaultUri = Get("MCP_SIGNING_KEY_VAULT_URI", "AZURE_KEY_VAULT_URI", "KEY_VAULT_URI"),
             KeyVaultManagedIdentityClientId = Get("MCP_KEYVAULT_MANAGED_IDENTITY_CLIENT_ID", "KEYVAULT_MANAGED_IDENTITY_CLIENT_ID"),
         };

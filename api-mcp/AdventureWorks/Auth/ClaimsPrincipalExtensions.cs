@@ -11,6 +11,19 @@ public static class AwClaims
 
     /// <summary>Application/client context the token was issued to.</summary>
     public const string Application = "app";
+
+    /// <summary>
+    /// Application role(s), emitted as a JSON array. Data API Builder reads this claim to
+    /// authorize the requested <c>X-MS-API-ROLE</c> against the caller's granted roles.
+    /// </summary>
+    public const string Roles = "roles";
+
+    /// <summary>
+    /// Non-sensitive owner id (Sales.Customer.CustomerID) used by DAB record-level ownership
+    /// policies (<c>@claims.customer_id</c>). Present ONLY in DAB-audience tokens and always
+    /// resolved server-side from the subject — never accepted from the client.
+    /// </summary>
+    public const string CustomerId = "customer_id";
 }
 
 /// <summary>Helpers to read the AdventureWorks identity from a validated token principal.</summary>

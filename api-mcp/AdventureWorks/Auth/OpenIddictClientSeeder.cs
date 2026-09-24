@@ -33,6 +33,7 @@ public sealed class OpenIddictClientSeeder : IHostedService
         await context.Database.EnsureCreatedAsync(cancellationToken);
 
         var resource = _options.GetResourceIdentifier();
+        var dabResource = _options.GetDabResourceIdentifier();
 
         var scopeManager = scope.ServiceProvider.GetRequiredService<IOpenIddictScopeManager>();
         foreach (var name in OAuthScopes.All)
@@ -42,11 +43,14 @@ public sealed class OpenIddictClientSeeder : IHostedService
                 continue;
             }
 
+            // Bind every scope to both protected resources so a client may target either the
+            // MCP resource or the DAB resource via the RFC 8707 'resource' parameter. The
+            // effective single audience is chosen server-side in the authorize handler.
             await scopeManager.CreateAsync(new OpenIddictScopeDescriptor
             {
                 Name = name,
                 DisplayName = OAuthScopes.Descriptions.TryGetValue(name, out var d) ? d : name,
-                Resources = { resource },
+                Resources = { resource, dabResource },
             }, cancellationToken);
         }
 

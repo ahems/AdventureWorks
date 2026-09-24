@@ -26,6 +26,15 @@ public sealed class AuthorizationServerOptions
     /// </summary>
     public string? ResourceIdentifier { get; set; }
 
+    /// <summary>
+    /// Canonical Data API Builder (DAB) protected-resource identifier (RFC 8707 resource
+    /// indicator). The DAB GraphQL/REST API validates access tokens whose <c>aud</c> equals
+    /// this value. Defaults to <c>{PublicBaseUrl}/dab</c>; override with
+    /// <c>DAB_RESOURCE_IDENTIFIER</c> (e.g. the deployed DAB app URL). Never a hard-coded
+    /// Azure hostname.
+    /// </summary>
+    public string? DabResourceIdentifier { get; set; }
+
     /// <summary>Access token lifetime. Short-lived per the demo design (~10 minutes).</summary>
     public TimeSpan AccessTokenLifetime { get; set; } = TimeSpan.FromMinutes(10);
 
@@ -65,4 +74,33 @@ public sealed class AuthorizationServerOptions
 
         return "urn:adventureworks:mcp";
     }
+
+    /// <summary>
+    /// Resolves the canonical DAB resource identifier (the <c>aud</c> of DAB-bound tokens).
+    /// </summary>
+    public string GetDabResourceIdentifier()
+    {
+        if (!string.IsNullOrWhiteSpace(DabResourceIdentifier))
+        {
+            return DabResourceIdentifier!.TrimEnd('/');
+        }
+
+        if (!string.IsNullOrWhiteSpace(PublicBaseUrl))
+        {
+            return PublicBaseUrl!.TrimEnd('/') + "/dab";
+        }
+
+        return "urn:adventureworks:dab";
+    }
+
+    /// <summary>
+    /// Allow-list of resource identifiers the authorization server will bind tokens to
+    /// (RFC 8707 <c>resource</c> targets). A request may target at most one of these; an
+    /// unknown target is rejected with <c>invalid_target</c>.
+    /// </summary>
+    public IReadOnlyList<string> AllowedResources() => new[]
+    {
+        GetResourceIdentifier(),
+        GetDabResourceIdentifier(),
+    };
 }
