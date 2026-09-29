@@ -2,58 +2,44 @@
 
 This guide documents how to prepare a Windows laptop to clone and deploy the LFS-enabled AdventureWorks repository using Ubuntu in Windows Subsystem for Linux (WSL).
 
-> [!IMPORTANT]
-> Run this repository's deployment workflow from **Ubuntu in WSL**, not from Windows PowerShell. The repository uses Bash-based scripts, so native PowerShell is not a supported execution environment for this workflow.
+> \[!IMPORTANT]
+> Run this repository's deployment workflow from \*\*Ubuntu in WSL\*\*, not from Windows PowerShell. The repository uses Bash-based scripts, so native PowerShell is not the supported execution environment for this workflow.
 >
 > Docker is not required for this procedure because the application is built remotely.
 
 ## Prerequisites
 
-- Windows Subsystem for Linux (WSL)
-- Ubuntu 22.04 LTS or later installed in WSL
-- Access to the `3cloud-sandbox/AdventureWorks` GitHub repository
-- Access to the target Azure subscription
+* Windows Subsystem for Linux (WSL)
+* Ubuntu 22.04 LTS installed in WSL
+* Access to the `3cloud-sandbox/AdventureWorks` GitHub repository
+* Access to the target Azure subscription
 
-Keep the repository in the Linux filesystem, such as `~/src/AdventureWorks`, rather than under `/mnt/c`. This provides a Linux-native environment for Bash scripts, permissions, line endings, and tooling.
+Keep the repository in the Linux filesystem, such as `\~/src/AdventureWorks`, rather than under `/mnt/c`.
 
-## 1. Open Ubuntu in WSL
-
-Launch the Ubuntu terminal from Windows Terminal or the Start menu.
-
-## 2. Install GitHub CLI
-
-Install the GitHub CLI from its official package repository:
+## 1\. Install GitHub CLI
 
 ```bash
-(type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
-&& sudo mkdir -p -m 755 /etc/apt/keyrings \
-&& out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-&& cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
-&& sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-&& sudo mkdir -p -m 755 /etc/apt/sources.list.d \
-&& echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-| sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-&& sudo apt update \
-&& sudo apt install gh -y
+(type -p wget >/dev/null || (sudo apt update \&\& sudo apt install wget -y)) \\
+\&\& sudo mkdir -p -m 755 /etc/apt/keyrings \\
+\&\& out=$(mktemp) \&\& wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \\
+\&\& cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \\
+\&\& sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \\
+\&\& sudo mkdir -p -m 755 /etc/apt/sources.list.d \\
+\&\& echo "deb \[arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \\
+| sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \\
+\&\& sudo apt update \\
+\&\& sudo apt install gh -y
 ```
 
-## 3. Sign in to GitHub with SSO
-
-Use the browser-based OAuth flow with HTTPS for Git operations:
+## 2\. Sign in to GitHub with SSO
 
 ```bash
 gh auth login --web --git-protocol https
 ```
 
-When prompted:
+Select `GitHub.com`, authenticate with the account that has access to the `3cloud-sandbox` organization, and complete the organization's SSO flow in the browser.
 
-1. Select `GitHub.com`.
-2. Authenticate with the GitHub account that has access to the `3cloud-sandbox` organization.
-3. Complete the organization's SSO flow in the browser.
-
-## 4. Install Git LFS
-
-Install and initialize Git Large File Storage inside Ubuntu:
+## 3\. Install Git LFS
 
 ```bash
 sudo apt update
@@ -61,116 +47,118 @@ sudo apt install git-lfs -y
 git lfs install
 ```
 
-Git LFS must be installed within WSL. A Git LFS installation on Windows does not configure the separate Ubuntu environment.
+Git LFS must be installed inside WSL. A Windows Git LFS installation does not configure the Ubuntu environment.
 
-## 5. Clone the AdventureWorks Repository
-
-Create a source directory in the WSL filesystem and clone the repository:
+## 4\. Clone AdventureWorks
 
 ```bash
-mkdir -p ~/src
-cd ~/src
+mkdir -p \~/src
+cd \~/src
 gh repo clone 3cloud-sandbox/AdventureWorks
 cd AdventureWorks
 ```
 
-## 6. Switch to the OAuth Demonstration Branch
-
-Fetch the latest remote references and switch to the required branch:
+## 5\. Switch to the OAuth Demonstration Branch
 
 ```bash
 git fetch origin
 git switch copilot/oauth-authorization-demonstration-again
 ```
 
-## 7. Download the Git LFS Content
-
-Hydrate the LFS-managed files for the checked-out branch:
+## 6\. Hydrate the Git LFS Content
 
 ```bash
 git lfs pull
 ```
 
-## 8. Install Azure CLI
-
-Install the Linux version of Azure CLI inside Ubuntu:
+## 7\. Install Azure CLI
 
 ```bash
 curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 ```
 
-Sign in to Azure:
+Sign in:
 
 ```bash
 az login
 ```
 
-If the required subscription is not the default subscription, select it explicitly:
+If required, select the target subscription:
 
 ```bash
 az account set --subscription "<subscription-name-or-id>"
 ```
 
-## 9. Install Azure Developer CLI
-
-Install the Linux version of Azure Developer CLI inside Ubuntu:
+## 8\. Install Azure Developer CLI
 
 ```bash
 curl -fsSL https://aka.ms/install-azd.sh | bash
 ```
 
-Sign in to Azure Developer CLI:
+Sign in:
 
 ```bash
 azd auth login
 ```
 
-## 10. Create and Configure an AZD Environment
+## 9\. Install .NET 10 SDK
 
-From the repository root, create an environment with a random three-digit suffix and set the required Azure regions:
+The `api-functions` project targets `net10.0`. The repository's `global.json` specifies SDK `10.0.100` with `rollForward` set to `latestFeature`.
 
-```bash
-cd ~/src/AdventureWorks
-
-ENV_SUFFIX=$((RANDOM % 900 + 100)) && \
-azd env new "adamhems-adventureworks${ENV_SUFFIX}" --no-prompt && \
-azd env set AZURE_LOCATION "eastus2" && \
-azd env set FOUNDRY_LOCATION "swedencentral" && \
-azd env set PLAYWRIGHT_LOCATION "westeurope"
-```
-
-This creates an environment name similar to:
-
-```text
-adamhems-adventureworks472
-```
-
-## 11. Deploy AdventureWorks
-
-Run the deployment from the repository root:
+On Ubuntu 22.04, enable the Ubuntu .NET backports repository and install the .NET 10 SDK:
 
 ```bash
-azd up
+sudo add-apt-repository ppa:dotnet/backports -y
+sudo apt update
+sudo apt install dotnet-sdk-10.0 -y
 ```
 
-The repository's Bash-based deployment scripts will execute within the Ubuntu/WSL environment, and application builds will run remotely.
+A compatible later .NET 10 SDK can be selected because of the repository's roll-forward policy.
+
+## 10\. Create and Configure the AZD Environment
+
+From the repository root, create an environment with a random three-digit suffix and configure the required Azure regions:
+
+```bash
+cd \~/src/AdventureWorks
+
+ENV\_SUFFIX=$((RANDOM % 900 + 100)) \&\& \\
+azd env new "adventureworks${ENV\_SUFFIX}" --no-prompt \&\& \\
+azd env set AZURE\_LOCATION "eastus2" \&\& \\
+azd env set FOUNDRY\_LOCATION "swedencentral"
+```
+
+This creates an environment name such as `adamhems-adventureworks472`.
+
+## 11\. Deploy AdventureWorks
+
+Use `--no-prompt` when running `azd up`:
+
+```bash
+azd up --no-prompt
+```
+
+The repository's `azure.yaml` requires the Foundry agents extension (`azure.ai.agents`). With `--no-prompt`, AZD automatically installs required extensions and their dependencies rather than waiting for interactive confirmation. This includes the Foundry-related dependencies required by the repository.
+
+The repository's Bash-based deployment scripts execute within the Ubuntu/WSL environment, while the applications all build remotely.
 
 ## Returning to the Repository Later
 
-For subsequent sessions, open Ubuntu in WSL and run:
+For subsequent sessions:
 
 ```bash
-cd ~/src/AdventureWorks
+cd \~/src/AdventureWorks
 git switch copilot/oauth-authorization-demonstration-again
 git pull
 git lfs pull
-azd up
+azd up --no-prompt
 ```
 
-If authentication has expired, sign in again before running the deployment:
+If authentication has expired:
 
 ```bash
 gh auth login --web --git-protocol https
 az login
 azd auth login
 ```
+
