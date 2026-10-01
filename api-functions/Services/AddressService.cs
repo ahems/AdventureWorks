@@ -58,6 +58,40 @@ public class AddressService
     }
 
     /// <summary>
+    /// Returns true when the given AddressID is linked to the given BusinessEntityID via
+    /// Person.BusinessEntityAddress. Used for consumer record-level ownership checks so a signed-in
+    /// consumer can only read or modify their own address records.
+    /// </summary>
+    public async Task<bool> IsAddressOwnedByAsync(int addressId, int businessEntityId)
+    {
+        using var connection = await CreateConnectionAsync();
+
+        const string sql = @"
+            SELECT CASE WHEN EXISTS (
+                SELECT 1 FROM Person.BusinessEntityAddress
+                WHERE AddressID = @AddressId AND BusinessEntityID = @BusinessEntityId
+            ) THEN 1 ELSE 0 END";
+
+        return await connection.ExecuteScalarAsync<int>(sql, new { AddressId = addressId, BusinessEntityId = businessEntityId }) == 1;
+    }
+
+    /// <summary>
+    /// Returns the set of AddressIDs owned (linked) by the given BusinessEntityID. Used to filter a
+    /// bulk address listing down to a consumer's own records.
+    /// </summary>
+    public async Task<IReadOnlyCollection<int>> GetOwnedAddressIdsAsync(int businessEntityId)
+    {
+        using var connection = await CreateConnectionAsync();
+
+        const string sql = @"
+            SELECT AddressID FROM Person.BusinessEntityAddress
+            WHERE BusinessEntityID = @BusinessEntityId";
+
+        var ids = await connection.QueryAsync<int>(sql, new { BusinessEntityId = businessEntityId });
+        return ids.ToHashSet();
+    }
+
+    /// <summary>
     /// Get all addresses with optional pagination
     /// </summary>
     public async Task<IEnumerable<Address>> GetAddressesAsync(int? limit = 100, int? offset = 0)

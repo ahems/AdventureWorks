@@ -3,6 +3,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using AddressFunctions.Models;
 using AddressFunctions.Services;
+using ApiFunctions.Auth;
 using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.WebUtilities;
@@ -21,14 +22,27 @@ public class AddressFunctions
     }
 
     /// <summary>
+    /// Writes a 403 for a consumer record-level ownership violation (callers may only act on their
+    /// own records). Internal users and anonymous/disabled-mode requests never reach this path.
+    /// </summary>
+    private static async Task<HttpResponseData> ForbiddenAsync(HttpRequestData req, string message)
+    {
+        var response = req.CreateResponse(HttpStatusCode.Forbidden);
+        await response.WriteAsJsonAsync(new { error = message });
+        return response;
+    }
+
+    /// <summary>
     /// Get addresses for multiple persons by BusinessEntityID.
     /// Returns joined address data (street, city, state, country) without the unsupported geography column.
     /// </summary>
     /// <param name="req">HTTP request with required query param: businessEntityIds (comma-separated integers)</param>
     /// <returns>Array of PersonAddressResult</returns>
+    /// <param name="executionContext">Function execution context carrying the validated caller identity.</param>
     [Function("GetPersonAddresses")]
     public async Task<HttpResponseData> GetPersonAddresses(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "person-addresses")] HttpRequestData req)
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "person-addresses")] HttpRequestData req,
+        FunctionContext executionContext)
     {
         _logger.LogInformation("GetPersonAddresses function processing request");
 
@@ -56,6 +70,20 @@ public class AddressFunctions
                 return badRequest;
             }
 
+            // Record-level ownership: a consumer may only query their own person-addresses, so the
+            // server-resolved owner id overrides any client-supplied businessEntityIds. Internal
+            // users (and anonymous/disabled-mode requests) are unrestricted.
+            var user = FunctionUser.Current(executionContext);
+            if (user.IsConsumer)
+            {
+                if (user.BusinessEntityId is null)
+                {
+                    return await ForbiddenAsync(req, "This token has no business entity id; cannot resolve owned records.");
+                }
+
+                ids = new List<int> { user.BusinessEntityId.Value };
+            }
+
             var addresses = await _addressService.GetPersonAddressesAsync(ids);
             var response = req.CreateResponse(HttpStatusCode.OK);
             await response.WriteAsJsonAsync(addresses);
@@ -77,9 +105,11 @@ public class AddressFunctions
     /// <returns>Paginated list of addresses</returns>
     /// <response code="200">Successfully retrieved addresses</response>
     /// <response code="500">Internal server error</response>
+    /// <param name="executionContext">Function execution context carrying the validated caller identity.</param>
     [Function("GetAddresses")]
     public async Task<HttpResponseData> GetAddresses(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "addresses")] HttpRequestData req)
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "addresses")] HttpRequestData req,
+        FunctionContext executionContext)
     {
         _logger.LogInformation("GetAddresses function processing request");
 
@@ -91,6 +121,20 @@ public class AddressFunctions
             var offset = queryParams.TryGetValue("offset", out var offsetValue) && int.TryParse(offsetValue, out var o) ? o : 0;
 
             var addresses = await _addressService.GetAddressesAsync(limit, offset);
+
+            // Record-level ownership: a consumer only sees their own address records. Internal users
+            // (and anonymous/disabled-mode requests) receive the full listing unchanged.
+            var user = FunctionUser.Current(executionContext);
+            if (user.IsConsumer)
+            {
+                if (user.BusinessEntityId is null)
+                {
+                    return await ForbiddenAsync(req, "This token has no business entity id; cannot resolve owned records.");
+                }
+
+                var owned = await _addressService.GetOwnedAddressIdsAsync(user.BusinessEntityId.Value);
+                addresses = addresses.Where(a => owned.Contains(a.AddressID)).ToList();
+            }
 
             var response = req.CreateResponse(HttpStatusCode.OK);
             await response.WriteAsJsonAsync(addresses);
@@ -106,6 +150,32 @@ public class AddressFunctions
     }
 
     /// <summary>
+    /// Enforces consumer record-level ownership for an id-addressed route. Returns a 403 response to
+    /// return when the signed-in consumer does not own the address; returns <c>null</c> when the
+    /// caller is allowed to proceed (consumer owns it, or caller is internal / anonymous).
+    /// </summary>
+    private async Task<HttpResponseData?> EnforceAddressOwnershipAsync(HttpRequestData req, FunctionContext executionContext, int addressId)
+    {
+        var user = FunctionUser.Current(executionContext);
+        if (!user.IsConsumer)
+        {
+            return null;
+        }
+
+        if (user.BusinessEntityId is null)
+        {
+            return await ForbiddenAsync(req, "This token has no business entity id; cannot resolve owned records.");
+        }
+
+        if (!await _addressService.IsAddressOwnedByAsync(addressId, user.BusinessEntityId.Value))
+        {
+            return await ForbiddenAsync(req, $"Address {addressId} is not owned by the current user.");
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Get a specific address by ID
     /// </summary>
     /// <param name="req">HTTP request</param>
@@ -114,15 +184,23 @@ public class AddressFunctions
     /// <response code="200">Successfully retrieved address</response>
     /// <response code="404">Address not found</response>
     /// <response code="500">Internal server error</response>
+    /// <param name="executionContext">Function execution context carrying the validated caller identity.</param>
     [Function("GetAddressById")]
     public async Task<HttpResponseData> GetAddressById(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "addresses/{id:int}")] HttpRequestData req,
-        int id)
+        int id,
+        FunctionContext executionContext)
     {
         _logger.LogInformation("GetAddressById function processing request for ID: {Id}", id);
 
         try
         {
+            var ownership = await EnforceAddressOwnershipAsync(req, executionContext, id);
+            if (ownership is not null)
+            {
+                return ownership;
+            }
+
             var address = await _addressService.GetAddressByIdAsync(id);
 
             if (address == null)
@@ -153,9 +231,11 @@ public class AddressFunctions
     /// <response code="201">Address created successfully</response>
     /// <response code="400">Invalid request body or missing required fields</response>
     /// <response code="500">Internal server error</response>
+    /// <param name="executionContext">Function execution context carrying the validated caller identity.</param>
     [Function("CreateAddress")]
     public async Task<HttpResponseData> CreateAddress(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "addresses")] HttpRequestData req)
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "addresses")] HttpRequestData req,
+        FunctionContext executionContext)
     {
         _logger.LogInformation("CreateAddress function processing request");
 
@@ -169,6 +249,20 @@ public class AddressFunctions
                 var badRequest = req.CreateResponse(HttpStatusCode.BadRequest);
                 await badRequest.WriteAsJsonAsync(new { error = "Invalid request body" });
                 return badRequest;
+            }
+
+            // Record-level ownership: a consumer may only link a new address to their own identity,
+            // so the server-resolved owner id overrides any client-supplied BusinessEntityID.
+            // Internal users (and anonymous/disabled-mode requests) keep the supplied value.
+            var user = FunctionUser.Current(executionContext);
+            if (user.IsConsumer)
+            {
+                if (user.BusinessEntityId is null)
+                {
+                    return await ForbiddenAsync(req, "This token has no business entity id; cannot create an owned record.");
+                }
+
+                createRequest.BusinessEntityID = user.BusinessEntityId.Value;
             }
 
             // Log the incoming request for debugging
@@ -222,15 +316,23 @@ public class AddressFunctions
     /// <response code="404">Address not found</response>
     /// <response code="400">Invalid request body</response>
     /// <response code="500">Internal server error</response>
+    /// <param name="executionContext">Function execution context carrying the validated caller identity.</param>
     [Function("UpdateAddress")]
     public async Task<HttpResponseData> UpdateAddress(
         [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "addresses/{id:int}")] HttpRequestData req,
-        int id)
+        int id,
+        FunctionContext executionContext)
     {
         _logger.LogInformation("UpdateAddress function processing request for ID: {Id}", id);
 
         try
         {
+            var ownership = await EnforceAddressOwnershipAsync(req, executionContext, id);
+            if (ownership is not null)
+            {
+                return ownership;
+            }
+
             var updateRequest = await req.ReadFromJsonAsync<UpdateAddressRequest>();
 
             if (updateRequest == null)
@@ -271,15 +373,23 @@ public class AddressFunctions
     /// <response code="204">Address deleted successfully</response>
     /// <response code="404">Address not found</response>
     /// <response code="500">Internal server error</response>
+    /// <param name="executionContext">Function execution context carrying the validated caller identity.</param>
     [Function("DeleteAddress")]
     public async Task<HttpResponseData> DeleteAddress(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "addresses/{id:int}")] HttpRequestData req,
-        int id)
+        int id,
+        FunctionContext executionContext)
     {
         _logger.LogInformation("DeleteAddress function processing request for ID: {Id}", id);
 
         try
         {
+            var ownership = await EnforceAddressOwnershipAsync(req, executionContext, id);
+            if (ownership is not null)
+            {
+                return ownership;
+            }
+
             var deleted = await _addressService.DeleteAddressAsync(id);
 
             if (!deleted)

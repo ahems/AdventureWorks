@@ -10,6 +10,7 @@ using Azure.Core.Serialization;
 using Azure.Storage.Queues;
 using AddressFunctions.Services;
 using api_functions.Services;
+using ApiFunctions.Auth;
 using Microsoft.OpenApi.Models;
 using Azure.AI.Projects;
 using Azure.AI.OpenAI;
@@ -17,6 +18,16 @@ using Azure.AI.OpenAI;
 var builder = FunctionsApplication.CreateBuilder(args);
 
 builder.ConfigureFunctionsWebApplication();
+
+// ---- Functions OAuth resource server (validates api-mcp-issued JWT access tokens) ----
+// Non-breaking by default: FunctionsOAuthOptions resolves to Disabled (pure passthrough) unless
+// infra wires the issuer/audience AND sets FUNCTIONS_OAUTH_MODE=audit|enforced. The middleware
+// keys per-route policy by the [Function] name and leaves anonymous/MCP-proxied tiers open.
+var functionsOAuthOptions = FunctionsOAuthOptions.FromConfiguration(builder.Configuration);
+builder.Services.AddSingleton(functionsOAuthOptions);
+builder.Services.AddSingleton<FunctionsAccessTokenValidator>();
+builder.Services.AddSingleton<FunctionsAuthorizationMiddleware>();
+builder.UseMiddleware<FunctionsAuthorizationMiddleware>();
 
 // Register Application Insights for telemetry
 builder.Services.AddApplicationInsightsTelemetryWorkerService();

@@ -45,6 +45,11 @@
 
     
     <PackageReference Include="Microsoft.OpenApi" Version="1.6.22" />
+
+    <!-- OAuth resource-server token validation (JWKS discovery against api-mcp authorization server).
+         Pinned to the versions already resolved transitively via Azure.Identity 1.21.0. -->
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.16.0" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.16.0" />
     
     <!-- Aspire Component Integrations -->
     <PackageReference Include="Aspire.Microsoft.Data.SqlClient" Version="13.5.4" />
