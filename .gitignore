@@ -194,9 +194,12 @@ blob-report/
 test-results/
 tests/test-results/
 
-# api-mcp .NET build outputs
-api-mcp/**/bin/
-api-mcp/**/obj/
+# .NET build outputs
+**/bin/
+**/obj/
+
+# .NET IDE / language-server caches (e.g. C# Dev Kit)
+*.lscache
 
 # .NET SDK runfile discovery cache
 dotnet/runfile-discovery/
