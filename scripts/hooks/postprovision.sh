@@ -80,6 +80,112 @@ fi
 
 echo ""
 echo "=========================================="
+echo "Creating MCP OAuth signing certificate in Key Vault..."
+echo "=========================================="
+# NOTE: This runs EARLY — before the database-role, seed-job, and Foundry-agent
+# steps below — on purpose. The api-mcp OAuth server fail-fasts at startup if this
+# signing certificate is missing, so creating it must NOT be gated behind the more
+# failure-prone steps that follow (a failure there would leave api-mcp crash-looping
+# with ContainerBackOff). It only needs Key Vault + the deployer identity, both ready
+# immediately after provisioning. Do not move it below those steps.
+#
+# The api-mcp self-contained OAuth authorization server signs JWT access tokens
+# with an RSA private key that lives ONLY in Key Vault. The runtime managed
+# identity already holds "Key Vault Secrets User" (granted in Bicep) to read the
+# certificate PFX. Here we (a) grant the deployer the narrow "Key Vault
+# Certificates Officer" role scoped to the vault, then (b) create a self-signed
+# exportable RSA 2048 certificate if one does not already exist. Both steps are
+# idempotent so re-running azd up is safe.
+KEY_VAULT_NAME=$(azd env get-value 'MCP_SIGNING_KEY_VAULT_NAME' 2>/dev/null | head -n1 | tr -d '\n\r ')
+SIGNING_CERT_NAME=$(azd env get-value 'MCP_SIGNING_CERTIFICATE_NAME' 2>/dev/null | head -n1 | tr -d '\n\r ')
+[ -z "$SIGNING_CERT_NAME" ] && SIGNING_CERT_NAME="mcp-signing"
+
+if [ -z "$KEY_VAULT_NAME" ] || [[ "$KEY_VAULT_NAME" == ERROR:* ]]; then
+    echo "  WARNING: MCP_SIGNING_KEY_VAULT_NAME not found. Skipping signing certificate creation."
+    echo "           The api-mcp OAuth server will fail to start until a signing certificate exists."
+else
+    SUBSCRIPTION_ID=$(az account show --query id -o tsv 2>/dev/null || echo "")
+    VAULT_RESOURCE_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.KeyVault/vaults/${KEY_VAULT_NAME}"
+    DEPLOYER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || echo "")
+
+    if [ -n "$DEPLOYER_OBJECT_ID" ]; then
+        # Grant the deployer "Key Vault Certificates Officer" (idempotent), scoped to the vault only.
+        EXISTING_CERT_OFFICER=$(az role assignment list \
+            --scope "$VAULT_RESOURCE_ID" \
+            --assignee "$DEPLOYER_OBJECT_ID" \
+            --role "Key Vault Certificates Officer" \
+            --query "[].id" -o tsv 2>/dev/null || echo "")
+        if [ -z "$EXISTING_CERT_OFFICER" ]; then
+            az role assignment create \
+                --scope "$VAULT_RESOURCE_ID" \
+                --assignee "$DEPLOYER_OBJECT_ID" \
+                --role "Key Vault Certificates Officer" \
+                --output none 2>/dev/null || echo "  WARNING: Could not create Certificates Officer assignment (may already exist)."
+            echo "  Granted deployer 'Key Vault Certificates Officer' on $KEY_VAULT_NAME"
+        else
+            echo "  Deployer already has 'Key Vault Certificates Officer' on $KEY_VAULT_NAME"
+        fi
+    else
+        echo "  WARNING: Could not determine deployer object ID; assuming existing Key Vault permissions."
+    fi
+
+    # Create the signing certificate only if it does not already exist (idempotent).
+    if az keyvault certificate show --vault-name "$KEY_VAULT_NAME" --name "$SIGNING_CERT_NAME" &>/dev/null; then
+        echo "  Signing certificate '$SIGNING_CERT_NAME' already exists in $KEY_VAULT_NAME"
+    else
+        # Self-signed, exportable RSA 2048 so api-mcp can read the PFX (private key)
+        # via the Secrets endpoint. contentType application/x-pkcs12 => PFX with key.
+        CERT_POLICY_FILE=$(mktemp /tmp/mcp-signing-policy.XXXXXX.json)
+        cat > "$CERT_POLICY_FILE" <<'POLICY'
+{
+  "issuerParameters": { "name": "Self" },
+  "keyProperties": {
+    "exportable": true,
+    "keyType": "RSA",
+    "keySize": 2048,
+    "reuseKey": false
+  },
+  "secretProperties": { "contentType": "application/x-pkcs12" },
+  "x509CertificateProperties": {
+    "subject": "CN=adventureworks-mcp",
+    "validityInMonths": 12,
+    "keyUsage": [ "digitalSignature" ]
+  },
+  "lifetimeActions": [
+    { "action": { "actionType": "AutoRenew" }, "trigger": { "daysBeforeExpiry": 30 } }
+  ]
+}
+POLICY
+        # Bounded retries handle RBAC role propagation (Certificates Officer) which
+        # can take up to a minute or two after assignment.
+        CERT_CREATED="false"
+        for attempt in $(seq 1 12); do
+            if az keyvault certificate create \
+                --vault-name "$KEY_VAULT_NAME" \
+                --name "$SIGNING_CERT_NAME" \
+                --policy @"$CERT_POLICY_FILE" \
+                --output none 2>/tmp/mcp-cert-err.txt; then
+                CERT_CREATED="true"
+                echo "  Created signing certificate '$SIGNING_CERT_NAME' in $KEY_VAULT_NAME (attempt $attempt)"
+                break
+            fi
+            echo "  Waiting for Key Vault RBAC propagation before creating certificate (attempt $attempt/12)..."
+            sleep 15
+        done
+        rm -f "$CERT_POLICY_FILE"
+        if [ "$CERT_CREATED" != "true" ]; then
+            echo "  ERROR: Failed to create signing certificate '$SIGNING_CERT_NAME' after multiple attempts."
+            echo "         Last error:"
+            sed 's/^/           /' /tmp/mcp-cert-err.txt 2>/dev/null || true
+            echo "         Re-run 'azd provision' or create the certificate manually:"
+            echo "           az keyvault certificate create --vault-name $KEY_VAULT_NAME --name $SIGNING_CERT_NAME --policy @<policy.json>"
+            exit 1
+        fi
+    fi
+fi
+
+echo ""
+echo "=========================================="
 echo "Assigning database roles to Managed Identity..."
 echo "=========================================="
 
@@ -417,105 +523,6 @@ echo "=========================================="
 bash "$(git rev-parse --show-toplevel)/scripts/utilities/create-foundry-agents.sh" || {
     echo "  WARNING: Foundry agent creation failed. Re-run 'bash scripts/utilities/create-foundry-agents.sh' after provisioning."
 }
-
-echo ""
-echo "=========================================="
-echo "Creating MCP OAuth signing certificate in Key Vault..."
-echo "=========================================="
-# The api-mcp self-contained OAuth authorization server signs JWT access tokens
-# with an RSA private key that lives ONLY in Key Vault. The runtime managed
-# identity already holds "Key Vault Secrets User" (granted in Bicep) to read the
-# certificate PFX. Here we (a) grant the deployer the narrow "Key Vault
-# Certificates Officer" role scoped to the vault, then (b) create a self-signed
-# exportable RSA 2048 certificate if one does not already exist. Both steps are
-# idempotent so re-running azd up is safe.
-KEY_VAULT_NAME=$(azd env get-value 'MCP_SIGNING_KEY_VAULT_NAME' 2>/dev/null | head -n1 | tr -d '\n\r ')
-SIGNING_CERT_NAME=$(azd env get-value 'MCP_SIGNING_CERTIFICATE_NAME' 2>/dev/null | head -n1 | tr -d '\n\r ')
-[ -z "$SIGNING_CERT_NAME" ] && SIGNING_CERT_NAME="mcp-signing"
-
-if [ -z "$KEY_VAULT_NAME" ] || [[ "$KEY_VAULT_NAME" == ERROR:* ]]; then
-    echo "  WARNING: MCP_SIGNING_KEY_VAULT_NAME not found. Skipping signing certificate creation."
-    echo "           The api-mcp OAuth server will fail to start until a signing certificate exists."
-else
-    SUBSCRIPTION_ID=$(az account show --query id -o tsv 2>/dev/null || echo "")
-    VAULT_RESOURCE_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.KeyVault/vaults/${KEY_VAULT_NAME}"
-    DEPLOYER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || echo "")
-
-    if [ -n "$DEPLOYER_OBJECT_ID" ]; then
-        # Grant the deployer "Key Vault Certificates Officer" (idempotent), scoped to the vault only.
-        EXISTING_CERT_OFFICER=$(az role assignment list \
-            --scope "$VAULT_RESOURCE_ID" \
-            --assignee "$DEPLOYER_OBJECT_ID" \
-            --role "Key Vault Certificates Officer" \
-            --query "[].id" -o tsv 2>/dev/null || echo "")
-        if [ -z "$EXISTING_CERT_OFFICER" ]; then
-            az role assignment create \
-                --scope "$VAULT_RESOURCE_ID" \
-                --assignee "$DEPLOYER_OBJECT_ID" \
-                --role "Key Vault Certificates Officer" \
-                --output none 2>/dev/null || echo "  WARNING: Could not create Certificates Officer assignment (may already exist)."
-            echo "  Granted deployer 'Key Vault Certificates Officer' on $KEY_VAULT_NAME"
-        else
-            echo "  Deployer already has 'Key Vault Certificates Officer' on $KEY_VAULT_NAME"
-        fi
-    else
-        echo "  WARNING: Could not determine deployer object ID; assuming existing Key Vault permissions."
-    fi
-
-    # Create the signing certificate only if it does not already exist (idempotent).
-    if az keyvault certificate show --vault-name "$KEY_VAULT_NAME" --name "$SIGNING_CERT_NAME" &>/dev/null; then
-        echo "  Signing certificate '$SIGNING_CERT_NAME' already exists in $KEY_VAULT_NAME"
-    else
-        # Self-signed, exportable RSA 2048 so api-mcp can read the PFX (private key)
-        # via the Secrets endpoint. contentType application/x-pkcs12 => PFX with key.
-        CERT_POLICY_FILE=$(mktemp /tmp/mcp-signing-policy.XXXXXX.json)
-        cat > "$CERT_POLICY_FILE" <<'POLICY'
-{
-  "issuerParameters": { "name": "Self" },
-  "keyProperties": {
-    "exportable": true,
-    "keyType": "RSA",
-    "keySize": 2048,
-    "reuseKey": false
-  },
-  "secretProperties": { "contentType": "application/x-pkcs12" },
-  "x509CertificateProperties": {
-    "subject": "CN=adventureworks-mcp",
-    "validityInMonths": 12,
-    "keyUsage": [ "digitalSignature" ]
-  },
-  "lifetimeActions": [
-    { "action": { "actionType": "AutoRenew" }, "trigger": { "daysBeforeExpiry": 30 } }
-  ]
-}
-POLICY
-        # Bounded retries handle RBAC role propagation (Certificates Officer) which
-        # can take up to a minute or two after assignment.
-        CERT_CREATED="false"
-        for attempt in $(seq 1 12); do
-            if az keyvault certificate create \
-                --vault-name "$KEY_VAULT_NAME" \
-                --name "$SIGNING_CERT_NAME" \
-                --policy @"$CERT_POLICY_FILE" \
-                --output none 2>/tmp/mcp-cert-err.txt; then
-                CERT_CREATED="true"
-                echo "  Created signing certificate '$SIGNING_CERT_NAME' in $KEY_VAULT_NAME (attempt $attempt)"
-                break
-            fi
-            echo "  Waiting for Key Vault RBAC propagation before creating certificate (attempt $attempt/12)..."
-            sleep 15
-        done
-        rm -f "$CERT_POLICY_FILE"
-        if [ "$CERT_CREATED" != "true" ]; then
-            echo "  ERROR: Failed to create signing certificate '$SIGNING_CERT_NAME' after multiple attempts."
-            echo "         Last error:"
-            sed 's/^/           /' /tmp/mcp-cert-err.txt 2>/dev/null || true
-            echo "         Re-run 'azd provision' or create the certificate manually:"
-            echo "           az keyvault certificate create --vault-name $KEY_VAULT_NAME --name $SIGNING_CERT_NAME --policy @<policy.json>"
-            exit 1
-        fi
-    fi
-fi
 
 echo ""
 echo "=========================================="
