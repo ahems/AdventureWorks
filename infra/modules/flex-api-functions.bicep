@@ -23,6 +23,17 @@ param agentReviewAnalysisId string = ''
 param agentEmailContentId string = ''
 param agentCatalogSuggestionId string = ''
 param webPubSubHostName string = ''
+// api-mcp OAuth issuer + dedicated Functions audience used by the Functions resource server
+// to validate bearer tokens (api-functions/Auth reads FUNCTIONS_JWT_ISSUER / FUNCTIONS_JWT_AUDIENCE).
+// Derived from the deployed api-mcp FQDN in main.bicep; no hard-coded hostnames. When empty (e.g. a
+// standalone deploy) the resource server cannot resolve metadata and stays in passthrough mode.
+param functionsJwtIssuer string = ''
+param functionsJwtAudience string = ''
+// Enforcement mode for the Functions OAuth middleware: 'disabled' (pure passthrough),
+// 'audit' (validate-if-present, log, never block) or 'enforced' (block). Defaults to 'audit',
+// a non-breaking mode that demonstrates delegated ownership for token-bearing consumers while
+// never 401-ing the unwired internal/anonymous calls that keep the deployed demo working.
+param functionsOAuthMode string = 'audit'
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -208,6 +219,18 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'WEB_PUBSUB_HOST_NAME'
           value: webPubSubHostName
+        }
+        {
+          name: 'FUNCTIONS_JWT_ISSUER'
+          value: functionsJwtIssuer
+        }
+        {
+          name: 'FUNCTIONS_JWT_AUDIENCE'
+          value: functionsJwtAudience
+        }
+        {
+          name: 'FUNCTIONS_OAUTH_MODE'
+          value: functionsOAuthMode
         }
       ]
     }

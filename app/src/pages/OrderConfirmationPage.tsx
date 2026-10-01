@@ -6,6 +6,7 @@ import { gql } from "graphql-request";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { getFunctionsApiUrl } from "@/lib/utils";
+import { functionsFetch } from "@/services/functionsAuth";
 import { graphqlClient } from "@/lib/graphql-client";
 import { trackError, trackEvent } from "@/lib/appInsights";
 import { CURRENCY_SYMBOLS } from "@/lib/currencies";
@@ -269,7 +270,7 @@ const OrderConfirmationPage: React.FC = () => {
         if (Number.isInteger(shipToAddressId) && shipToAddressId > 0) {
           const functionsApiUrl = getFunctionsApiUrl();
           const addressApiUrl = `${functionsApiUrl}/api/addresses/${shipToAddressId}`;
-          const addressRes = await fetch(addressApiUrl);
+          const addressRes = await functionsFetch(addressApiUrl);
           if (addressRes.ok) {
             // Functions API uses camelCase (JsonNamingPolicy.CamelCase)
             const raw = (await addressRes.json()) as Record<string, unknown>;

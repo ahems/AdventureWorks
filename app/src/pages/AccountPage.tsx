@@ -49,6 +49,11 @@ import {
   getDabRole,
 } from "@/services/dabAuth";
 import {
+  beginAuthorization as beginFunctionsAuthorization,
+  clearAuthorization as clearFunctionsAuthorization,
+  isAuthorized as isFunctionsAuthorized,
+} from "@/services/functionsAuth";
+import {
   useEmailAddresses,
   useCreateEmailAddress,
   useUpdateEmailAddress,
@@ -104,6 +109,8 @@ const AccountPage: React.FC = () => {
   const navigate = useNavigate();
   // Reflects DAB OAuth connection status; bumped to re-render after disconnect.
   const [dabNonce, setDabNonce] = useState(0);
+  // Reflects Functions OAuth connection status; bumped to re-render after disconnect.
+  const [functionsNonce, setFunctionsNonce] = useState(0);
   const { items: wishlistItems, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
   const { formatPrice } = useCurrency();
@@ -2311,6 +2318,43 @@ const AccountPage: React.FC = () => {
                     className="doodle-button inline-flex items-center gap-2"
                   >
                     Connect to Data API
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Functions API OAuth access — optional, enables delegated address management */}
+            <div className="mt-8" data-functions-nonce={functionsNonce}>
+              <div className="border rounded-lg p-4 text-center space-y-3 max-w-xl mx-auto">
+                <h3 className="font-semibold">Functions API access (OAuth)</h3>
+                <p className="text-sm text-muted-foreground">
+                  Optionally connect this signed-in session to the AdventureWorks
+                  Functions API with OAuth 2.0 (Authorization Code + PKCE). This
+                  authorizes delegated access to your own address records; the
+                  resource server restricts you to records you own and the token is
+                  cleared automatically on sign out.
+                </p>
+                {isFunctionsAuthorized() ? (
+                  <div className="space-y-2">
+                    <p className="text-sm">Connected</p>
+                    <button
+                      onClick={() => {
+                        clearFunctionsAuthorization();
+                        setFunctionsNonce((n) => n + 1);
+                      }}
+                      className="doodle-button inline-flex items-center gap-2"
+                    >
+                      Disconnect Functions API
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      void beginFunctionsAuthorization(user?.email);
+                    }}
+                    className="doodle-button inline-flex items-center gap-2"
+                  >
+                    Connect to Functions API
                   </button>
                 )}
               </div>

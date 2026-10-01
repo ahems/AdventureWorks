@@ -14,6 +14,7 @@ import {
   trackEvent,
 } from "@/lib/appInsights";
 import { clearAuthorization as clearDabAuthorization } from "@/services/dabAuth";
+import { clearAuthorization as clearFunctionsAuthorization } from "@/services/functionsAuth";
 
 interface User {
   id: string;
@@ -74,6 +75,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       // Clear any prior DAB authorization so switching accounts never inherits
       // the previous consumer's delegated token, role or ownership claims.
       clearDabAuthorization();
+      clearFunctionsAuthorization();
 
       const result = await loginUser(email, password);
 
@@ -128,6 +130,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       setIsLoading(true);
       // Clear any prior DAB authorization before establishing a new account.
       clearDabAuthorization();
+      clearFunctionsAuthorization();
 
       const result = await signupUser(email, password, firstName, lastName);
 
@@ -185,6 +188,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     // Clear any DAB OAuth authorization so the next visitor browses anonymously
     // and cannot inherit the previous consumer's delegated token/role.
     clearDabAuthorization();
+    clearFunctionsAuthorization();
 
     toast({
       title: "Logged Out",

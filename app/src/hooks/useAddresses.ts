@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { getRestApiUrl, getFunctionsApiUrl } from "@/lib/utils";
+import { functionsFetch } from "@/services/functionsAuth";
 import { trackError } from "@/lib/appInsights";
 
 export interface Address {
@@ -93,7 +94,7 @@ export const useAddresses = () => {
       const functionsApiUrl = getFunctionsApiUrl();
       const addressPromises = businessEntityAddresses.map(async (bea) => {
         try {
-          const addrResponse = await fetch(
+          const addrResponse = await functionsFetch(
             `${functionsApiUrl}/api/addresses/${bea.AddressID}`,
           );
           if (!addrResponse.ok) return null;
@@ -225,7 +226,7 @@ export const useAddresses = () => {
         }
 
         // Create address via Functions API (with BusinessEntityID to create link automatically)
-        const response = await fetch(`${functionsApiUrl}/api/addresses`, {
+        const response = await functionsFetch(`${functionsApiUrl}/api/addresses`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -302,7 +303,7 @@ export const useAddresses = () => {
             updatePayload.StateProvinceID = updates.stateProvinceId;
           if (updates.postalCode) updatePayload.PostalCode = updates.postalCode;
 
-          const response = await fetch(
+          const response = await functionsFetch(
             `${functionsApiUrl}/api/addresses/${addressId}`,
             {
               method: "PUT",
@@ -381,7 +382,7 @@ export const useAddresses = () => {
 
         // Delete address from Functions API
         const functionsApiUrl = getFunctionsApiUrl();
-        await fetch(`${functionsApiUrl}/api/addresses/${addressId}`, {
+        await functionsFetch(`${functionsApiUrl}/api/addresses/${addressId}`, {
           method: "DELETE",
         });
 

@@ -1,13 +1,19 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
-import { handleCallback } from "@/services/dabAuth";
+import { handleCallback as handleDabCallback } from "@/services/dabAuth";
+import {
+  handleCallback as handleFunctionsCallback,
+  hasPendingAuthorization as hasPendingFunctionsAuthorization,
+} from "@/services/functionsAuth";
 
 /**
  * Handles the OAuth redirect (`/oauth/callback`) from the api-mcp authorization
- * server for the e-shop's Data API (DAB) token: validates state, exchanges the
- * authorization code (with the PKCE verifier) for a DAB-resource access token,
- * then returns the consumer to the page they started from.
+ * server. The e-shop acquires two distinct single-resource tokens from the same
+ * server — one for the Data API (DAB) and one for the Functions API — which share
+ * this callback route. The pending PKCE marker disambiguates which flow to
+ * complete; the code is exchanged (with its PKCE verifier) for the resource
+ * access token, then the consumer is returned to the page they started from.
  */
 const OAuthCallbackPage: React.FC = () => {
   const navigate = useNavigate();
@@ -18,7 +24,9 @@ const OAuthCallbackPage: React.FC = () => {
     if (ran.current) return; // guard React 18 StrictMode double-invoke
     ran.current = true;
     (async () => {
-      const result = await handleCallback();
+      const result = hasPendingFunctionsAuthorization()
+        ? await handleFunctionsCallback()
+        : await handleDabCallback();
       if (result.ok) {
         navigate(result.returnTo || "/", { replace: true });
       } else {

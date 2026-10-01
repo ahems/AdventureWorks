@@ -1,6 +1,7 @@
 import { graphqlClient } from "./graphql-client";
 import { gql } from "graphql-request";
 import { getFunctionsApiUrl, getRestApiUrl } from "./utils";
+import { functionsFetch } from "@/services/functionsAuth";
 import { trackError } from "@/lib/appInsights";
 
 export interface AuthUser {
@@ -654,7 +655,7 @@ export async function deleteAccount(
 
           // Delete the address itself from Functions API
           try {
-            await fetch(`${functionsUrl}/api/addresses/${link.AddressID}`, {
+            await functionsFetch(`${functionsUrl}/api/addresses/${link.AddressID}`, {
               method: "DELETE",
             });
           } catch (error) {

@@ -268,6 +268,14 @@ module containerAppApiFunctions 'modules/flex-api-functions.bicep' = {
     emailSenderDomain: communication.outputs.senderDomain
     foundryProjectEndpoint: aifoundry.outputs.projectEndpoint
     webPubSubHostName: webpubsub.outputs.webPubSubHostName
+    // The Functions resource server validates api-mcp-issued bearer tokens against the shared
+    // OAuth issuer and the dedicated Functions audience ({issuer}/functions). Both are derived
+    // from the deployed api-mcp FQDN (same value api-mcp advertises as MCP_PUBLIC_BASE_URL); no
+    // hard-coded hostnames. Mode defaults to 'audit' (non-breaking) so partial client rollout
+    // never 401s the demo — flip to 'enforced' once every first-party client sends tokens.
+    functionsJwtIssuer: mcpPublicBaseUrl
+    functionsJwtAudience: '${mcpPublicBaseUrl}/functions'
+    functionsOAuthMode: 'audit'
   }
 }
 
