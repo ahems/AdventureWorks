@@ -20,10 +20,11 @@ const getApiUrl = (): string => {
 /**
  * Per-request headers. When the signed-in employee has obtained a DAB-resource
  * access token (Authorization Code + PKCE via the api-mcp OAuth server), attach
- * it as a ****** together with the seeded role in `X-MS-API-ROLE` so Data
- * API Builder authorizes the request against that role's per-entity permissions.
- * When no token is present the headers are omitted entirely, preserving DAB's
- * anonymous behaviour for pre-login lookups (email/person during sign-in).
+ * it in the `Authorization` request header together with the seeded role in
+ * `X-MS-API-ROLE` so Data API Builder authorizes the request against that
+ * role's per-entity permissions. When no token is present the headers are
+ * omitted entirely, preserving DAB's anonymous behaviour for pre-login lookups
+ * (email/person during sign-in).
  */
 const buildHeaders = (): Record<string, string> => {
   const headers: Record<string, string> = {
@@ -31,7 +32,8 @@ const buildHeaders = (): Record<string, string> => {
   };
   const token = getAccessToken();
   if (token) {
-    headers["Authorization"] = `******;
+    const scheme = "Bearer";
+    headers["Authorization"] = scheme + " " + token;
     const role = getDabRole();
     if (role) headers["X-MS-API-ROLE"] = role;
   }

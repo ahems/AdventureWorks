@@ -127,7 +127,7 @@ sequenceDiagram
   participant U as User (browser)
   participant M as api-mcp (/mcp)
   participant F as api-functions
-  U->>M: MCP tool call (****** token) ✅ scope-checked
+  U->>M: MCP tool call (MCP-audience access token) ✅ scope-checked
   Note over M: MCP tool is Internal-only + manufacturing.* scope
   M->>F: GET /api/manufacturing/status (no token) ⬅ Tier M stays anonymous in v1
   F-->>M: 200 data

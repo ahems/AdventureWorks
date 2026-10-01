@@ -42,6 +42,16 @@ jobs:
         continue-on-error: true
         run: docker build ./api-mcp
 
+      - name: app-admin
+        id: app-admin
+        continue-on-error: true
+        run: docker build ./app-admin
+
+      - name: app-manufacturing
+        id: app-manufacturing
+        continue-on-error: true
+        run: docker build ./app-manufacturing
+
       - name: .devcontainer
         id: devcontainer
         continue-on-error: true
@@ -55,8 +65,41 @@ jobs:
                 "${{ steps.seed-job.outcome }}" == "failure" || \
                 "${{ steps.api-functions.outcome }}" == "failure" || \
                 "${{ steps.api-mcp.outcome }}" == "failure" || \
+                "${{ steps.app-admin.outcome }}" == "failure" || \
+                "${{ steps.app-manufacturing.outcome }}" == "failure" || \
                 "${{ steps.devcontainer.outcome }}" == "failure" ]]; then
             echo "One or more Docker builds failed."
             exit 1
           fi
           echo "All Docker builds succeeded."
+
+  # Reproduces the azd `package-app` step for the e-shop Static Web App, which
+  # runs `swa build` (Azure Static Web Apps CLI) rather than `docker build`.
+  # The container `app` build above compiles the same Vite bundle, but the azd
+  # deployment path goes through the SWA CLI + `scripts/build-with-env.sh`; this
+  # job exercises that exact path so a broken frontend build (e.g. a TypeScript
+  # / Vite compile error) is caught here instead of only surfacing during
+  # `azd up`.
+  swa-build:
+    name: swa build (e-shop)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Azure Static Web Apps CLI
+        run: npm install -g @azure/static-web-apps-cli
+
+      - name: Install app dependencies
+        working-directory: app
+        run: npm ci --legacy-peer-deps
+
+      - name: swa build (adventure-eshop)
+        working-directory: app
+        run: swa build adventure-eshop
