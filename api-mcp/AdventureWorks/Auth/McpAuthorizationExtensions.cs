@@ -1,7 +1,9 @@
 using System.Reflection;
+using System.Security.Cryptography.X509Certificates;
 using AdventureWorks.Auth;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol.Server;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
@@ -80,12 +82,25 @@ public static class McpAuthorizationExtensions
                     o.SetIssuer(new Uri(options.PublicBaseUrl!, UriKind.Absolute));
                 }
 
-                // Signing + encryption credentials. Access tokens are JWS (encryption disabled)
-                // so the resource server can validate them via JWKS.
+                // Signing + encryption credentials. Access tokens are JWS (encryption disabled
+                // below) so the resource server can validate them via JWKS. OpenIddict still
+                // requires an encryption credential to protect authorization codes.
                 if (material.Certificate is not null)
                 {
                     o.AddSigningCertificate(material.Certificate);
-                    o.AddEncryptionCertificate(material.Certificate);
+
+                    // The Key Vault signing certificate is issued for digitalSignature only, so
+                    // AddEncryptionCertificate() would reject it ("The specified certificate is
+                    // not a key encryption certificate"). Register the certificate's RSA key
+                    // directly as the encryption key instead: this reuses the Key Vault-backed
+                    // key material (stable across restarts and replicas, unlike an ephemeral key)
+                    // without the X509 keyEncipherment usage restriction. A distinct kid keeps
+                    // the signing and encryption entries in JWKS unambiguous.
+                    var encryptionKey = new RsaSecurityKey(material.Certificate.GetRSAPrivateKey()!)
+                    {
+                        KeyId = material.KeyId + "-enc",
+                    };
+                    o.AddEncryptionKey(encryptionKey);
                 }
                 else
                 {
