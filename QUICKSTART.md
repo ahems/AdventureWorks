@@ -34,6 +34,8 @@ This repository is configured with a devcontainer so you get all required toolin
 
 > Tip: You can also open the devcontainer locally with VS Code Remote Containers using the same repo.
 
+> **Running `azd up` outside the Dev Container / Codespaces?** You must install the same tooling the container provides, including **PowerShell 7+ (`pwsh`)** — the post-provision hook (`scripts/hooks/postprovision.sh`) uses it to assign the Azure SQL database roles. Without it, `azd up` fails during post-provision with a clear error telling you to install PowerShell. See the [PowerShell install guide](https://learn.microsoft.com/powershell/scripting/install/installing-powershell). Azure CLI (`az`), azd, .NET 10, Node.js and Docker are also required.
+
 ---
 
 ## 3. Create an Environment and Log in to Azure

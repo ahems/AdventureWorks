@@ -107,10 +107,29 @@ if [ -n "$SQL_SERVER_NAME" ] && [ -n "$SQL_DATABASE_NAME" ] && [ -n "$USER_MANAG
     
     echo ""
     echo "Executing database role assignment..."
-    
-    # Use a minimal PowerShell script that calls az CLI (not Az PowerShell modules)
-    # This avoids separate PowerShell login and uses current az CLI context
-    PWSH_OUTPUT=$(pwsh -NoProfile -NonInteractive -Command "
+
+    # PowerShell 7+ ('pwsh') is required on the host running 'azd up' to execute the
+    # role-assignment SQL. The Dev Container / Codespaces image installs it automatically
+    # (ghcr.io/devcontainers/features/powershell); on a bare host it must be installed
+    # first. Fail fast with a clear, actionable message instead of a cryptic
+    # 'command not found' (exit 127) abort under 'set -e'.
+    if ! command -v pwsh >/dev/null 2>&1; then
+        echo ""
+        echo "❌ ERROR: 'pwsh' (PowerShell 7+) was not found on PATH, but it is required to assign database roles."
+        echo ""
+        echo "Resolve this, then re-run 'azd up':"
+        echo "  - Open this repository in the provided Dev Container / GitHub Codespaces (PowerShell is preinstalled), or"
+        echo "  - Install PowerShell 7+ on this machine:"
+        echo "      https://learn.microsoft.com/powershell/scripting/install/installing-powershell"
+        echo ""
+        exit 1
+    fi
+
+    # Use a minimal PowerShell script that calls az CLI (not Az PowerShell modules).
+    # This avoids separate PowerShell login and uses current az CLI context.
+    # Wrap in 'if' so a non-zero exit is captured safely under 'set -e' — a bare
+    # command-substitution assignment would otherwise abort the whole hook.
+    if PWSH_OUTPUT=$(pwsh -NoProfile -NonInteractive -Command "
         # Get SQL token using az CLI (same login as bash)
         try {
             \$tokenJson = az account get-access-token --resource https://database.windows.net/ 2>&1 | ConvertFrom-Json
@@ -148,14 +167,13 @@ if [ -n "$SQL_SERVER_NAME" ] && [ -n "$SQL_DATABASE_NAME" ] && [ -n "$USER_MANAG
             Write-Error \"Failed to execute SQL: \$_\"
             exit 1
         }
-    " 2>&1)
-    PWSH_EXIT_CODE=$?
-    
-    echo "$PWSH_OUTPUT"
-    
-    if [ $PWSH_EXIT_CODE -ne 0 ]; then
+    " 2>&1); then
+        echo "$PWSH_OUTPUT"
+    else
+        PWSH_EXIT_CODE=$?
+        echo "$PWSH_OUTPUT"
         echo ""
-        echo "❌ ERROR: Database role assignment failed"
+        echo "❌ ERROR: Database role assignment failed (exit $PWSH_EXIT_CODE)"
         echo ""
         echo "This may be caused by:"
         echo "  - Azure CLI token expired (try running 'az login' again)"
