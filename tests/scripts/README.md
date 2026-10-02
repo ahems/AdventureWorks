@@ -31,6 +31,7 @@ These scripts test the AdventureWorks APIs and Azure Functions directly using cu
 
 - **test-password-functions.sh** - Password hashing and verification
 - **test-password-reset-flow.sh** - Complete password reset flow (request → validate → reset)
+- **auth-smoke-tests.sh** - MCP OAuth discovery/challenge + core endpoint smoke test. Reads endpoint URLs from the current `azd` environment, prints a `PASS`/`FAIL` summary, and on failure emits per-check diagnostics (resolved URL, HTTP status, translated curl exit code, and response headers/body). Exits non-zero if any check fails. Tunable via `SMOKE_TIMEOUT`, `SMOKE_CONNECT_TIMEOUT`, and `SMOKE_BODY_MAX`. If URLs show as `(EMPTY)`, run `azd env refresh` first.
 
 ### Data & API Tests
 
