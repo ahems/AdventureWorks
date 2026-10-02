@@ -22,20 +22,27 @@
 #                         DNS, or 000/408/429/5xx (default 2). Lets a single run absorb a cold
 #                         start instead of needing a manual second run.
 #   SMOKE_RETRY_DELAY     seconds between attempts (default 3)
-#   SMOKE_BODY_MAX        max bytes of body/headers echoed on failure (default 1200)
+#   SMOKE_BODY_MAX        max bytes of body/headers *echoed* on failure (default 4000). This
+#                         caps DISPLAY only — JSON is always parsed from the full body, so a
+#                         large document is never truncated before extraction/validation.
+#   SMOKE_PARSE_MAX       max bytes of body captured for JSON parsing (default 1048576)
 set -u
 
 TIMEOUT="${SMOKE_TIMEOUT:-60}"
 CONNECT_TIMEOUT="${SMOKE_CONNECT_TIMEOUT:-15}"
 RETRIES="${SMOKE_RETRIES:-2}"
 RETRY_DELAY="${SMOKE_RETRY_DELAY:-3}"
-BODY_MAX="${SMOKE_BODY_MAX:-1200}"
+BODY_MAX="${SMOKE_BODY_MAX:-4000}"
+PARSE_MAX="${SMOKE_PARSE_MAX:-1048576}"
 
 passes=0
 fails=0
 
 # Populated by do_request; initialised so 'set -u' is safe before the first request.
-R_CODE="000"; R_EXIT=0; R_TIME="?"; R_BODY=""; R_HDRS=""; R_ERR=""; R_ATTEMPTS=1
+# R_BODY is the display-truncated body (<= BODY_MAX); R_BODY_FULL is the full body used for
+# JSON parsing (<= PARSE_MAX) — the two were conflated before, which truncated metadata to
+# invalid JSON and made jwks_uri un-parseable even though it was present.
+R_CODE="000"; R_EXIT=0; R_TIME="?"; R_BODY=""; R_BODY_FULL=""; R_HDRS=""; R_ERR=""; R_ATTEMPTS=1
 
 # ---- dependency checks -------------------------------------------------------
 missing=""
@@ -103,7 +110,7 @@ _transient() {
 
 # ---- HTTP request wrapper ----------------------------------------------------
 # Usage: do_request METHOD URL [extra curl args...]
-# Sets globals: R_CODE R_EXIT R_TIME R_BODY R_HDRS R_ERR R_ATTEMPTS
+# Sets globals: R_CODE R_EXIT R_TIME R_BODY R_BODY_FULL R_HDRS R_ERR R_ATTEMPTS
 # Retries transient failures (cold starts) up to SMOKE_RETRIES times.
 do_request() {
     local method="$1" url="$2"
@@ -112,6 +119,7 @@ do_request() {
     R_EXIT=0
     R_TIME="?"
     R_BODY=""
+    R_BODY_FULL=""
     R_HDRS=""
     R_ERR=""
     R_ATTEMPTS=0
@@ -138,7 +146,10 @@ do_request() {
         [ -z "$R_CODE" ] && R_CODE="000"
         R_TIME="${out##* }"
         [ "$R_TIME" = "$out" ] && R_TIME="?"
-        R_BODY=$(head -c "$BODY_MAX" "$bf" 2>/dev/null)
+        # Capture the full body for parsing, then derive the display-truncated view from it.
+        # Parsing must never see a truncated (invalid-JSON) body — that was the jwks_uri bug.
+        R_BODY_FULL=$(head -c "$PARSE_MAX" "$bf" 2>/dev/null)
+        R_BODY=$(printf '%s' "$R_BODY_FULL" | head -c "$BODY_MAX")
         R_HDRS=$(tr -d '\r' <"$hf" | head -c "$BODY_MAX")
         R_ERR=$(tr -d '\r' <"$ef")
         rm -f "$bf" "$hf" "$ef"
@@ -148,6 +159,45 @@ do_request() {
         fi
         break
     done
+}
+
+# ---- JSON assertion helper ---------------------------------------------------
+# Usage: check_json LABEL JSON PREDICATE
+#   PREDICATE is a Python boolean expression over `d` (the parsed JSON document). A small set
+#   of safe builtins (len/any/all/str/bool/int/isinstance/dict/list/set/sorted) is provided;
+#   __builtins__ is otherwise stripped. The expression is a fixed literal authored in this
+#   script — never user input — so eval here is controlled. Prints PASS, or FAIL with the
+#   reason, predicate and body.
+check_json() {
+    local label="$1" json="$2" expr="$3" out rc
+    out=$(printf '%s' "$json" | python3 -c '
+import sys, json
+raw = sys.stdin.read()
+try:
+    d = json.loads(raw)
+except Exception as e:
+    print("response was not valid JSON: %s" % e)
+    sys.exit(2)
+safe = {"len": len, "any": any, "all": all, "str": str,
+        "isinstance": isinstance, "dict": dict, "list": list,
+        "set": set, "sorted": sorted, "bool": bool, "int": int}
+try:
+    ok = bool(eval(sys.argv[1], {"__builtins__": {}}, dict(safe, d=d)))
+except Exception as e:
+    print("predicate raised %s: %s" % (type(e).__name__, e))
+    sys.exit(3)
+sys.exit(0 if ok else 1)
+' "$expr" 2>&1)
+    rc=$?
+    if [ "$rc" -eq 0 ]; then
+        pass "$label"
+    else
+        fail "$label"
+        [ -n "$out" ] && note "reason:     $out"
+        note "predicate:  $expr"
+        note "body:"
+        blk "$(printf '%s' "$json" | head -c "$BODY_MAX")"
+    fi
 }
 
 # Print a standard failure diagnostic block for the most recent do_request.
@@ -209,36 +259,71 @@ fi
 echo
 echo "=== MCP OAuth Discovery ==="
 
-# 1) Protected-resource metadata (RFC 9728).
+# 1) Protected-resource metadata (RFC 9728) — reachable AND advertises the resource, its
+#    authorization server(s), the mcp.access scope and bearer-in-header token delivery.
 url="$mcp_base/.well-known/oauth-protected-resource"
 do_request GET "$url"
 if [ "$R_CODE" = "200" ]; then
     pass "protected-resource metadata ($R_CODE)"
+    check_json "protected-resource: resource + AS + mcp.access + bearer header" "$R_BODY_FULL" \
+        "bool(d.get('resource')) and len(d.get('authorization_servers') or []) > 0 and 'mcp.access' in (d.get('scopes_supported') or []) and 'header' in (d.get('bearer_methods_supported') or [])"
 else
     fail "protected-resource metadata ($R_CODE)"
     diag "$url"
 fi
 
-# 2) Authorization-server metadata (RFC 8414 / OIDC). Keep the body for JWKS.
-url="$mcp_base/.well-known/openid-configuration"
-do_request GET "$url"
-META_BODY="$R_BODY"
-META_CODE="$R_CODE"
+# 2) Authorization-server metadata. OAuth/MCP clients discover the AS via RFC 8414 at
+#    /.well-known/oauth-authorization-server; /.well-known/openid-configuration is the OIDC
+#    compatibility alias. Both are served by OpenIddict. Fetch the RFC 8414 document for
+#    content validation and keep its FULL body (not the display-truncated copy) for JWKS.
+as_url="$mcp_base/.well-known/oauth-authorization-server"
+do_request GET "$as_url"
+as_meta="$R_BODY_FULL"
+as_code="$R_CODE"
 if [ "$R_CODE" = "200" ]; then
-    pass "authz-server metadata ($R_CODE)"
+    pass "authz-server metadata — RFC 8414 ($R_CODE)"
 else
-    fail "authz-server metadata ($R_CODE)"
-    diag "$url"
+    fail "authz-server metadata — RFC 8414 ($R_CODE)"
+    diag "$as_url"
     if [ "$R_CODE" = "400" ]; then
-        note "hint: OpenIddict returns 400 here when it rejects the request host/issuer"
-        note "      (e.g. reached over http instead of https, a Host header it doesn't"
-        note "      trust, or an Issuer mismatch). The body above holds the OpenIddict"
-        note "      error_description that names the exact reason."
+        note "hint: OpenIddict returns 400 here when it rejects the request scheme/host/issuer"
+        note "      (e.g. reached over http behind a proxy without X-Forwarded-Proto honoured,"
+        note "      a Host it doesn't trust, or an Issuer mismatch). The body above names it."
     fi
 fi
 
-# 3) JWKS — extract jwks_uri from the metadata fetched above, then fetch it.
-jwks=$(printf '%s' "$META_BODY" | python3 -c 'import sys, json
+# OIDC compatibility alias — reachability check (serves the same document). If the RFC 8414
+# path somehow failed but this one works, fall back to it for the content/JWKS checks.
+oidc_url="$mcp_base/.well-known/openid-configuration"
+do_request GET "$oidc_url"
+if [ "$R_CODE" = "200" ]; then
+    pass "authz-server metadata — OIDC alias ($R_CODE)"
+    if [ "$as_code" != "200" ]; then
+        as_meta="$R_BODY_FULL"
+        as_code="200"
+    fi
+else
+    fail "authz-server metadata — OIDC alias ($R_CODE)"
+    diag "$oidc_url"
+fi
+
+# Content-validate the AS metadata document (whichever alias served it).
+if [ "$as_code" = "200" ]; then
+    check_json "AS metadata: issuer + endpoints are HTTPS" "$as_meta" \
+        "d['issuer'].startswith('https://') and d['authorization_endpoint'].startswith('https://') and 'authorize' in d['authorization_endpoint'] and d['token_endpoint'].startswith('https://') and 'token' in d['token_endpoint'] and d['jwks_uri'].startswith('https://')"
+    check_json "AS metadata: Authorization Code + PKCE S256 only (no 'plain')" "$as_meta" \
+        "'code' in d['response_types_supported'] and 'authorization_code' in d['grant_types_supported'] and 'S256' in d['code_challenge_methods_supported'] and 'plain' not in d['code_challenge_methods_supported']"
+    check_json "AS metadata: business scopes advertised (mcp.access, products.read)" "$as_meta" \
+        "set(['mcp.access','products.read']).issubset(set(d.get('scopes_supported') or []))"
+else
+    fail "AS metadata content checks skipped"
+    note "neither the RFC 8414 nor the OIDC metadata endpoint returned 200; fix those first."
+fi
+
+# 3) JWKS — extract the advertised jwks_uri from the FULL metadata body (never the truncated
+#    display copy — that conflation was the original 'JWKS URI missing' bug), fetch it, and
+#    assert only PUBLIC RSA key material is published (no private d/p/q components).
+jwks=$(printf '%s' "$as_meta" | python3 -c 'import sys, json
 try:
     print(json.load(sys.stdin).get("jwks_uri", ""))
 except Exception:
@@ -247,27 +332,27 @@ if [ -n "$jwks" ]; then
     do_request GET "$jwks"
     if [ "$R_CODE" = "200" ]; then
         pass "JWKS reachable ($R_CODE)"
+        check_json "JWKS: public RSA key(s) only, no private material (d/p/q)" "$R_BODY_FULL" \
+            "len(d.get('keys') or []) > 0 and all(k.get('kty') == 'RSA' and 'n' in k and 'e' in k and 'd' not in k and 'p' not in k and 'q' not in k for k in d['keys'])"
     else
         fail "JWKS ($R_CODE)"
         diag "$jwks"
     fi
 else
-    fail "JWKS URI missing from OIDC metadata"
-    note "could not extract jwks_uri from authz-server metadata (that check returned $META_CODE)."
+    fail "JWKS URI missing from AS metadata"
+    note "could not extract jwks_uri from authz-server metadata (RFC 8414 returned $as_code)."
     note "metadata body that was parsed:"
-    blk "$META_BODY"
+    blk "$(printf '%s' "$as_meta" | head -c "$BODY_MAX")"
     note "fix the authz-server metadata check above first; JWKS is advertised by it."
 fi
 
 echo
-echo "=== MCP Challenge ==="
+echo "=== MCP Authorization Enforcement ==="
 
-# MCP must challenge unauthenticated calls with a 401 that points discovery clients at the
-# protected-resource metadata (RFC 9728 WWW-Authenticate). The /mcp Streamable HTTP endpoint
-# is POST-only, so it must be probed with POST: a GET matches the route but not the method and
-# returns 405 at routing — before authorization runs — so the 401 challenge never fires. An
-# unauthenticated POST (no bearer token) reaches the authorization policy and is rejected with
-# the challenge regardless of the JSON-RPC body. The status line is CR-stripped by do_request.
+# (a) Unauthenticated POST /mcp must be challenged with a 401 that points discovery clients at
+#     the protected-resource metadata (RFC 9728 WWW-Authenticate). /mcp is POST-only, so a GET
+#     matches the route but not the method and returns 405 at routing — before authorization
+#     runs — so the 401 challenge only fires for POST. The status line is CR-stripped already.
 url="$mcp_base/mcp"
 do_request POST "$url" \
     -H 'content-type: application/json' \
@@ -275,9 +360,9 @@ do_request POST "$url" \
     --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
 status_line=$(printf '%s' "$R_HDRS" | head -1)
 if printf '%s' "$R_HDRS" | grep -qi 'WWW-Authenticate:.*resource_metadata'; then
-    pass "/mcp 401 challenge (${status_line:-?})"
+    pass "/mcp unauthenticated → 401 challenge (${status_line:-?})"
 else
-    fail "/mcp challenge (${status_line:-no response})"
+    fail "/mcp unauthenticated challenge (${status_line:-no response})"
     diag "$url"
     note "expected: HTTP 401 with header 'WWW-Authenticate: ****** resource_metadata=...'"
     note "response headers received:"
@@ -294,6 +379,78 @@ else
         note "hint: an unauthenticated call unexpectedly SUCCEEDED (200). /mcp must require the"
         note "      mcp.access scope — verify .RequireAuthorization(McpPolicy) on the endpoint." ;;
     esac
+fi
+
+# (b) A malformed/forged bearer token must be REJECTED (401), proving the resource server
+#     actually validates the token (signature/issuer/audience/lifetime) rather than merely
+#     checking that *some* Authorization header is present.
+forged_token="Bearer not-a-valid-token"  # obviously-synthetic, no real credential
+do_request POST "$url" \
+    -H 'content-type: application/json' \
+    -H 'accept: application/json, text/event-stream' \
+    -H "authorization: $forged_token" \
+    --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+if [ "$R_CODE" = "401" ]; then
+    pass "/mcp forged bearer token → 401 rejected"
+else
+    fail "/mcp forged bearer token ($R_CODE)"
+    diag "$url"
+    note "expected: HTTP 401 — a malformed/forged bearer token must be rejected, not accepted."
+    if [ "$R_CODE" = "200" ]; then
+        note "hint: a bogus token was ACCEPTED (200). Token validation (signature/issuer/audience)"
+        note "      is not enforced on /mcp — verify the OpenIddict validation handler + McpPolicy."
+    fi
+fi
+
+echo
+echo "=== OAuth Endpoint Policy ==="
+
+# PKCE S256 challenge for the RFC 7636 sample verifier (dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk).
+pkce_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+
+# (a) /authorize for an UNKNOWN client must be rejected outright (400) and must NOT redirect a
+#     code back — the server cannot trust the redirect of an unregistered client. OpenIddict
+#     validates the client before any passthrough, so this needs no login/user selection.
+url="$mcp_base/authorize?client_id=__unregistered_smoke__&response_type=code&scope=mcp.access&state=smoke&code_challenge=$pkce_challenge&code_challenge_method=S256"
+do_request GET "$url"
+if [ "$R_CODE" = "400" ] && ! printf '%s' "$R_HDRS" | grep -qi '^location:.*code='; then
+    pass "/authorize unknown client → 400 (no code issued)"
+else
+    fail "/authorize unknown client ($R_CODE)"
+    diag "$url"
+    note "expected: HTTP 400 and no redirect carrying 'code=' for an unregistered client."
+    if printf '%s' "$R_HDRS" | grep -qi '^location:.*code='; then
+        note "hint: the server REDIRECTED a code for an unknown client — client/redirect"
+        note "      validation is not enforced before issuing the authorization code."
+    fi
+fi
+
+# (b) /token with an unsupported grant_type must be rejected (400); only authorization_code is
+#     enabled on this server. mcp-inspector is a first-party public client always registered at
+#     deploy time, so this logical id is deployment-independent (not a secret, not a hostname).
+do_request POST "$mcp_base/token" \
+    -H 'content-type: application/x-www-form-urlencoded' \
+    --data 'grant_type=client_credentials&client_id=mcp-inspector'
+if [ "$R_CODE" = "400" ] && printf '%s' "$R_BODY_FULL" | grep -qi 'error'; then
+    pass "/token unsupported grant_type → 400"
+else
+    fail "/token unsupported grant_type ($R_CODE)"
+    diag "$mcp_base/token"
+    note "expected: HTTP 400 with an OAuth 'error' (unsupported_grant_type); only the"
+    note "          authorization_code grant is enabled on this server."
+fi
+
+# (c) /token presenting a bogus authorization_code must fail (400 invalid_grant) — codes are
+#     single-use, signed and PKCE-bound, so an unknown code is never exchangeable for a token.
+do_request POST "$mcp_base/token" \
+    -H 'content-type: application/x-www-form-urlencoded' \
+    --data 'grant_type=authorization_code&code=not-a-real-code&client_id=mcp-inspector&redirect_uri=http%3A%2F%2Flocalhost%3A6274%2Foauth%2Fcallback&code_verifier=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'
+if [ "$R_CODE" = "400" ] && printf '%s' "$R_BODY_FULL" | grep -qi 'invalid_grant\|error'; then
+    pass "/token bogus authorization_code → 400 invalid_grant"
+else
+    fail "/token bogus authorization_code ($R_CODE)"
+    diag "$mcp_base/token"
+    note "expected: HTTP 400 invalid_grant — an unknown/forged code must never be exchanged."
 fi
 
 echo
@@ -340,7 +497,8 @@ echo "=== Summary ==="
 printf "  %d passed, %d failed\n" "$passes" "$fails"
 if [ "$fails" -ne 0 ]; then
     echo "  Re-run after addressing the diagnostics above. Tunables: SMOKE_TIMEOUT,"
-    echo "  SMOKE_CONNECT_TIMEOUT, SMOKE_RETRIES, SMOKE_RETRY_DELAY, SMOKE_BODY_MAX."
+    echo "  SMOKE_CONNECT_TIMEOUT, SMOKE_RETRIES, SMOKE_RETRY_DELAY, SMOKE_BODY_MAX,"
+    echo "  SMOKE_PARSE_MAX."
     exit 1
 fi
 exit 0
