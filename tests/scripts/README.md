@@ -31,7 +31,7 @@ These scripts test the AdventureWorks APIs and Azure Functions directly using cu
 
 - **test-password-functions.sh** - Password hashing and verification
 - **test-password-reset-flow.sh** - Complete password reset flow (request → validate → reset)
-- **auth-smoke-tests.sh** - MCP OAuth discovery/challenge + core endpoint smoke test. Reads endpoint URLs from the current `azd` environment, prints a `PASS`/`FAIL` summary, and on failure emits per-check diagnostics (resolved URL, HTTP status, translated curl exit code, and response headers/body). Exits non-zero if any check fails. Tunable via `SMOKE_TIMEOUT`, `SMOKE_CONNECT_TIMEOUT`, and `SMOKE_BODY_MAX`. If URLs show as `(EMPTY)`, run `azd env refresh` first.
+- **auth-smoke-tests.sh** - MCP OAuth discovery/challenge + core endpoint smoke test. Reads endpoint URLs from the current `azd` environment, prints a `PASS`/`FAIL` summary, and on failure emits per-check diagnostics (resolved URL, HTTP status, translated curl exit code, attempt count, and response headers/body). The `/mcp` challenge is probed with an unauthenticated **POST** (the Streamable HTTP endpoint is POST-only; a GET returns 405 before authorization runs). Transient failures (timeouts, resets, `000`/`408`/`429`/`5xx`) are retried so a single run absorbs scaled-to-zero Container App cold starts. Exits non-zero if any check fails. Tunable via `SMOKE_TIMEOUT` (per-attempt seconds, default 60), `SMOKE_CONNECT_TIMEOUT` (default 15), `SMOKE_RETRIES` (extra attempts on transient failure, default 2), `SMOKE_RETRY_DELAY` (seconds between attempts, default 3), and `SMOKE_BODY_MAX` (bytes of body/headers echoed, default 1200). If URLs show as `(EMPTY)`, run `azd env refresh` first.
 
 ### Data & API Tests
 

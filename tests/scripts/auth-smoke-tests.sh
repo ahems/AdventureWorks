@@ -14,16 +14,28 @@
 # The script exits 0 when all checks pass and 1 when any fail (matching the
 # convention documented in tests/scripts/README.md).
 #
-# Tunables (env vars): SMOKE_TIMEOUT (default 20s), SMOKE_CONNECT_TIMEOUT (10s),
-# SMOKE_BODY_MAX (max bytes of body/headers echoed, default 1200).
+# Tunables (env vars):
+#   SMOKE_TIMEOUT         per-attempt max seconds (default 60; raised from 20 so a
+#                         scaled-to-zero Container App cold start is not reported as failure)
+#   SMOKE_CONNECT_TIMEOUT TCP connect timeout in seconds (default 15)
+#   SMOKE_RETRIES         extra attempts on a transient failure — timeout, connection reset,
+#                         DNS, or 000/408/429/5xx (default 2). Lets a single run absorb a cold
+#                         start instead of needing a manual second run.
+#   SMOKE_RETRY_DELAY     seconds between attempts (default 3)
+#   SMOKE_BODY_MAX        max bytes of body/headers echoed on failure (default 1200)
 set -u
 
-TIMEOUT="${SMOKE_TIMEOUT:-20}"
-CONNECT_TIMEOUT="${SMOKE_CONNECT_TIMEOUT:-10}"
+TIMEOUT="${SMOKE_TIMEOUT:-60}"
+CONNECT_TIMEOUT="${SMOKE_CONNECT_TIMEOUT:-15}"
+RETRIES="${SMOKE_RETRIES:-2}"
+RETRY_DELAY="${SMOKE_RETRY_DELAY:-3}"
 BODY_MAX="${SMOKE_BODY_MAX:-1200}"
 
 passes=0
 fails=0
+
+# Populated by do_request; initialised so 'set -u' is safe before the first request.
+R_CODE="000"; R_EXIT=0; R_TIME="?"; R_BODY=""; R_HDRS=""; R_ERR=""; R_ATTEMPTS=1
 
 # ---- dependency checks -------------------------------------------------------
 missing=""
@@ -37,7 +49,12 @@ if [ -n "$missing" ]; then
 fi
 
 # ---- output helpers ----------------------------------------------------------
-pass() { printf "%-52s %s\n" "$1" "PASS"; passes=$((passes + 1)); }
+pass() {
+    printf "%-52s %s\n" "$1" "PASS"
+    passes=$((passes + 1))
+    # Surface cold-start recovery so a slow-but-healthy service is still visible.
+    [ "${R_ATTEMPTS:-1}" -gt 1 ] && note "(warmed up after $R_ATTEMPTS attempts — cold start absorbed)"
+}
 fail() { printf "%-52s %s\n" "$1" "FAIL"; fails=$((fails + 1)); }
 note() { printf "      %s\n" "$1"; }   # single indented diagnostic line
 blk() {                                 # indented multi-line block (or "(none)")
@@ -70,9 +87,24 @@ curl_hint() {
     esac
 }
 
+# Decide whether a result is worth retrying (cold-start / transient network blip) rather than
+# a deterministic failure we want to surface immediately (e.g. a 400/401/404). Used by
+# do_request to absorb scaled-to-zero Container App wake-ups within a single invocation.
+_transient() {
+    # $1 = curl exit code, $2 = http status
+    case "$1" in
+    6 | 7 | 28 | 35 | 52 | 56) return 0 ;; # DNS / refused / timeout / TLS / empty reply / reset
+    esac
+    case "$2" in
+    000 | 408 | 429 | 500 | 502 | 503 | 504) return 0 ;;
+    esac
+    return 1
+}
+
 # ---- HTTP request wrapper ----------------------------------------------------
 # Usage: do_request METHOD URL [extra curl args...]
-# Sets globals: R_CODE R_EXIT R_TIME R_BODY R_HDRS R_ERR
+# Sets globals: R_CODE R_EXIT R_TIME R_BODY R_HDRS R_ERR R_ATTEMPTS
+# Retries transient failures (cold starts) up to SMOKE_RETRIES times.
 do_request() {
     local method="$1" url="$2"
     shift 2
@@ -82,36 +114,47 @@ do_request() {
     R_BODY=""
     R_HDRS=""
     R_ERR=""
+    R_ATTEMPTS=0
     if [ -z "$url" ]; then
         R_EXIT=3
         R_ERR="URL is empty (azd env value missing) — nothing was requested"
+        R_ATTEMPTS=1
         return
     fi
-    local bf hf ef out
-    bf=$(mktemp)
-    hf=$(mktemp)
-    ef=$(mktemp)
-    out=$(curl -sS -X "$method" \
-        -o "$bf" -D "$hf" \
-        -w '%{http_code} %{time_total}' \
-        --connect-timeout "$CONNECT_TIMEOUT" --max-time "$TIMEOUT" \
-        "$@" "$url" 2>"$ef")
-    R_EXIT=$?
-    R_CODE="${out%% *}"
-    [ -z "$R_CODE" ] && R_CODE="000"
-    R_TIME="${out##* }"
-    [ "$R_TIME" = "$out" ] && R_TIME="?"
-    R_BODY=$(head -c "$BODY_MAX" "$bf" 2>/dev/null)
-    R_HDRS=$(tr -d '\r' <"$hf" | head -c "$BODY_MAX")
-    R_ERR=$(tr -d '\r' <"$ef")
-    rm -f "$bf" "$hf" "$ef"
+    local bf hf ef out max
+    max=$((RETRIES + 1))
+    while :; do
+        R_ATTEMPTS=$((R_ATTEMPTS + 1))
+        bf=$(mktemp)
+        hf=$(mktemp)
+        ef=$(mktemp)
+        out=$(curl -sS -X "$method" \
+            -o "$bf" -D "$hf" \
+            -w '%{http_code} %{time_total}' \
+            --connect-timeout "$CONNECT_TIMEOUT" --max-time "$TIMEOUT" \
+            "$@" "$url" 2>"$ef")
+        R_EXIT=$?
+        R_CODE="${out%% *}"
+        [ -z "$R_CODE" ] && R_CODE="000"
+        R_TIME="${out##* }"
+        [ "$R_TIME" = "$out" ] && R_TIME="?"
+        R_BODY=$(head -c "$BODY_MAX" "$bf" 2>/dev/null)
+        R_HDRS=$(tr -d '\r' <"$hf" | head -c "$BODY_MAX")
+        R_ERR=$(tr -d '\r' <"$ef")
+        rm -f "$bf" "$hf" "$ef"
+        if [ "$R_ATTEMPTS" -lt "$max" ] && _transient "$R_EXIT" "$R_CODE"; then
+            sleep "$RETRY_DELAY"
+            continue
+        fi
+        break
+    done
 }
 
 # Print a standard failure diagnostic block for the most recent do_request.
 diag() {
     local url="$1"
     note "url:        ${url:-(empty)}"
-    note "http_code:  $R_CODE   time: ${R_TIME}s   curl_exit: $R_EXIT"
+    note "http_code:  $R_CODE   time: ${R_TIME}s   curl_exit: $R_EXIT   attempts: $R_ATTEMPTS"
     note "cause:      $(curl_hint "$R_EXIT")"
     if [ -n "$R_ERR" ]; then
         note "curl_stderr:"
@@ -219,11 +262,17 @@ fi
 echo
 echo "=== MCP Challenge ==="
 
-# MCP must challenge unauthenticated calls with a 401 that points discovery
-# clients at the protected-resource metadata (RFC 9728 WWW-Authenticate). The
-# status line is CR-stripped by do_request so it no longer corrupts the output.
+# MCP must challenge unauthenticated calls with a 401 that points discovery clients at the
+# protected-resource metadata (RFC 9728 WWW-Authenticate). The /mcp Streamable HTTP endpoint
+# is POST-only, so it must be probed with POST: a GET matches the route but not the method and
+# returns 405 at routing — before authorization runs — so the 401 challenge never fires. An
+# unauthenticated POST (no bearer token) reaches the authorization policy and is rejected with
+# the challenge regardless of the JSON-RPC body. The status line is CR-stripped by do_request.
 url="$mcp_base/mcp"
-do_request GET "$url"
+do_request POST "$url" \
+    -H 'content-type: application/json' \
+    -H 'accept: application/json, text/event-stream' \
+    --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
 status_line=$(printf '%s' "$R_HDRS" | head -1)
 if printf '%s' "$R_HDRS" | grep -qi 'WWW-Authenticate:.*resource_metadata'; then
     pass "/mcp 401 challenge (${status_line:-?})"
@@ -233,6 +282,18 @@ else
     note "expected: HTTP 401 with header 'WWW-Authenticate: ****** resource_metadata=...'"
     note "response headers received:"
     blk "$R_HDRS"
+    case "$R_CODE" in
+    405)
+        note "hint: 405 means the method was rejected at routing. /mcp is POST-only and this"
+        note "      probe already uses POST, so a 405 now implies the MCP transport is not"
+        note "      mapped at this path (check app.MapMcp(\"/mcp\")) or an ingress path rewrite." ;;
+    401)
+        note "hint: got 401 but no resource_metadata challenge — the WWW-Authenticate hook in"
+        note "      UseMcpAuthorization did not attach the header (check the /mcp OnStarting hook)." ;;
+    200)
+        note "hint: an unauthenticated call unexpectedly SUCCEEDED (200). /mcp must require the"
+        note "      mcp.access scope — verify .RequireAuthorization(McpPolicy) on the endpoint." ;;
+    esac
 fi
 
 echo
@@ -279,7 +340,7 @@ echo "=== Summary ==="
 printf "  %d passed, %d failed\n" "$passes" "$fails"
 if [ "$fails" -ne 0 ]; then
     echo "  Re-run after addressing the diagnostics above. Tunables: SMOKE_TIMEOUT,"
-    echo "  SMOKE_CONNECT_TIMEOUT, SMOKE_BODY_MAX."
+    echo "  SMOKE_CONNECT_TIMEOUT, SMOKE_RETRIES, SMOKE_RETRY_DELAY, SMOKE_BODY_MAX."
     exit 1
 fi
 exit 0

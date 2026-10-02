@@ -1,6 +1,7 @@
 using AdventureWorks.Auth;
 using AdventureWorks.Services;
 using Microsoft.ApplicationInsights;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.Extensions.Localization;
 using ModelContextProtocol.Extensions.Tasks;
@@ -131,10 +132,29 @@ builder.Services
 
 builder.AddServiceDefaults();
 
+// Azure Container Apps (and any TLS-terminating ingress) forward requests to Kestrel over
+// plain HTTP while setting X-Forwarded-Proto: https. Honor that header so Request.Scheme is
+// "https"; otherwise OpenIddict's transport-security requirement rejects its own discovery
+// and token endpoints with "This server only accepts HTTPS requests" (error ID2083), and the
+// authorization-server metadata (incl. jwks_uri) never renders. KnownNetworks/KnownProxies
+// are cleared because the platform ingress address is not known ahead of time. Processing
+// only X-Forwarded-Proto keeps the fix minimal and avoids Host-header spoofing surface
+// (the issuer and metadata URLs are pinned to the configured public base URL regardless).
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+	o.ForwardedHeaders = ForwardedHeaders.XForwardedProto;
+	o.KnownNetworks.Clear();
+	o.KnownProxies.Clear();
+});
+
 // Self-contained OAuth authorization server + resource-server validation for MCP.
 var authOptions = builder.AddMcpAuthorization(connectionString ?? string.Empty);
 
 var app = builder.Build();
+
+// Apply forwarded headers before any authentication/OAuth middleware so the corrected
+// (https) scheme is visible to OpenIddict's transport-security check and URL generation.
+app.UseForwardedHeaders();
 
 // AuthN/AuthZ, OAuth endpoints (authorize/token/login/consent/logout), protected-resource
 // metadata, and the /mcp WWW-Authenticate challenge. Must precede endpoint mapping.
