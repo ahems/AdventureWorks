@@ -5,6 +5,7 @@ param containerRegistryName string = 'avacr${toLower(uniqueString(resourceGroup(
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param workspaceName string = 'av-workspace-${toLower(uniqueString(resourceGroup().id))}'
 param storageAccountName string
+param infrastructureSubnetId string
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspaceName
@@ -51,6 +52,10 @@ resource containerAppEnv 'Microsoft.App/managedEnvironments@2023-11-02-preview' 
       connectionString: appInsights.properties.ConnectionString
     }
     zoneRedundant: false
+    vnetConfiguration: {
+      infrastructureSubnetId: infrastructureSubnetId
+      internal: false
+    }
     appLogsConfiguration: {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
@@ -90,4 +95,3 @@ output containerAppEnvId string = containerAppEnv.id
 output containerAppEnvName string = containerAppEnv.name
 output containerAppEnvDefaultDomain string = containerAppEnv.properties.defaultDomain
 output applicationInsightsConnectionString string = appInsights.properties.ConnectionString
-

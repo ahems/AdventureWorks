@@ -207,6 +207,57 @@ SQL_DATABASE_NAME=$(azd env get-value SQL_DATABASE_NAME 2>/dev/null | head -n1 |
 USER_MANAGED_IDENTITY_NAME=$(azd env get-value USER_MANAGED_IDENTITY_NAME 2>/dev/null | head -n1 | tr -d '\n\r ')
 
 if [ -n "$SQL_SERVER_NAME" ] && [ -n "$SQL_DATABASE_NAME" ] && [ -n "$USER_MANAGED_IDENTITY_NAME" ]; then
+    # The deployment host still needs SQL access during azd up. Restrict the temporary
+    # public firewall exception to its IPv4 egress address; postup disables public access.
+    if [ -z "${SQL_CLIENT_IP:-}" ]; then
+        SQL_CLIENT_IP=$(curl -4fsS --connect-timeout 5 --max-time 10 https://api.ipify.org) || {
+            echo "ERROR: Could not discover the deployment host's public IPv4 address; set SQL_CLIENT_IP and retry."
+            exit 1
+        }
+    fi
+    if ! printf '%s\n' "$SQL_CLIENT_IP" | awk -F. 'NF != 4 { exit 1 } { for (i = 1; i <= 4; i++) if ($i !~ /^[0-9]+$/ || $i > 255) exit 1 }'; then
+        echo "ERROR: SQL_CLIENT_IP must be a valid IPv4 address (got: $SQL_CLIENT_IP)"
+        exit 1
+    fi
+    cleanup_sql_firewall_rule() {
+        if [ "${SQL_CLIENT_FIREWALL_RULE_ACTIVE:-false}" = "true" ]; then
+            if az sql server firewall-rule delete \
+                --server "$SQL_SERVER_NAME" \
+                --resource-group "$RESOURCE_GROUP" \
+                --name "AllowClient" \
+                --output none 2>/dev/null; then
+                echo "Removed temporary SQL client firewall rule."
+            else
+                echo "WARNING: Could not remove the temporary SQL client firewall rule. If azd up stops before postup completes, remove AllowClient manually."
+            fi
+        fi
+    }
+    SQL_CLIENT_FIREWALL_RULE_ACTIVE=true
+    trap cleanup_sql_firewall_rule EXIT
+
+    echo "Adding temporary SQL firewall rule for deployment client $SQL_CLIENT_IP..."
+    if az sql server firewall-rule show \
+        --server "$SQL_SERVER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "AllowClient" \
+        --output none 2>/dev/null; then
+        az sql server firewall-rule update \
+            --server "$SQL_SERVER_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "AllowClient" \
+            --start-ip-address "$SQL_CLIENT_IP" \
+            --end-ip-address "$SQL_CLIENT_IP" \
+            --output none
+    else
+        az sql server firewall-rule create \
+            --server "$SQL_SERVER_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "AllowClient" \
+            --start-ip-address "$SQL_CLIENT_IP" \
+            --end-ip-address "$SQL_CLIENT_IP" \
+            --output none
+    fi
+
     echo "SQL Server: $SQL_SERVER_NAME"
     echo "Database: $SQL_DATABASE_NAME"
     echo "Managed Identity: $USER_MANAGED_IDENTITY_NAME"

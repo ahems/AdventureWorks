@@ -116,10 +116,12 @@ azd up --no-prompt
 
 1. Execute the **preup** hook to create an AI Foundry and discover available model quotas for chat, embeddings, and image generation in your subscription (~2-3 minutes).
 2. Run `azd provision` to deploy Bicep infrastructure templates under `infra/` (Container Apps, Azure SQL, Storage, OpenAI, etc.) — **~21 minutes**.
-3. Execute **postprovision.sh** to configure Azure SQL managed identity permissions and deploy the seed-job Container App Job (~2-3 minutes). The seed-job runs asynchronously in the background to create database schema and import AdventureWorks seed data (**~8 minutes**).
+3. Execute **postprovision.sh** to temporarily allow the deployment host's IPv4 address through the SQL firewall, configure managed-identity permissions, and deploy the seed-job Container App Job (~2-3 minutes). The seed-job runs asynchronously in the background to create database schema and import AdventureWorks seed data (**~8 minutes**).
 4. Run `azd deploy` to build container images via ACR remote build and deploy services to Container Apps and Static Web Apps.
 5. Execute the **postdeploy** hook to configure runtime CORS settings and environment variables on the API Container App.
-6. Execute the **postup** hook to generate a local `.env` file in the repo root for easier debugging.
+6. Execute the **postup** hook to disable public SQL network access after deployment and generate a local `.env` file in the repo root for easier debugging.
+
+The deployment host's address is discovered over HTTPS; set `SQL_CLIENT_IP` in the shell running `azd up` to override discovery when required. After `azd up`, DAB, api-mcp, Functions, and the Seed Job access SQL through Private Link. Local direct-SQL scripts need to run from a VNet-connected host once public access is disabled.
 
 **Total deployment time: ~29 minutes** (infrastructure provisioning + seed-job execution)
 

@@ -19,6 +19,14 @@ At a high level, these templates provision:
 - Application Insights and related monitoring
 - Managed identities for passwordless authentication
 
+## Private Azure SQL connectivity
+
+`modules/sql-private-network.bicep` creates the VNet, the Container Apps and Flex Consumption integration subnets, an Azure SQL private endpoint, and the `privatelink.database.windows.net` zone linked to that VNet. The Data API Builder API, api-mcp server, and Seed Job use the integrated Container Apps environment; the Flex Consumption Functions app has its own VNet integration. Their existing SQL server FQDN continues to work through private DNS.
+
+SQL public access is enabled while `azd up` runs, but the former `AllowAll` firewall rule is removed. The `postprovision.sh` hook discovers the deployment host's public IPv4 address (or accepts `SQL_CLIENT_IP` as an override), grants a temporary single-IP firewall rule for its SQL setup, then removes the rule on exit. Once service deployments finish, `postup.sh` disables SQL public network access. The deployment principal therefore needs permission to create/delete SQL firewall rules and disable public network access. A failed/interrupted `azd up` can leave public network access enabled; if the postup hook cannot complete, check SQL networking and remove any `AllowClient` rule manually.
+
+After successful deployment, direct SQL clients outside the VNet (including local data-management scripts) cannot connect. Run those tools from a VNet-connected host or temporarily arrange approved access; do not restore the broad `AllowAll` rule.
+
 ## Serverless SQL and idle cost behavior
 
 `modules/database.bicep` provisions Azure SQL Database as General Purpose serverless with `autoPauseDelay: 60` minutes and a minimum capacity of `0.5` vCores. Auto-pause is therefore enabled, but it requires no active sessions and no user-workload CPU during the delay.
@@ -92,6 +100,12 @@ Each module focuses on a single Azure resource or closely related resource set. 
   - Azure SQL Server and AdventureWorks database.
   - Configuration for Entra ID admin / managed identity access.
 - **Notes**: Works together with post‑provision scripts (see docs) to load schema and sample data.
+
+### `sql-private-network.bicep`
+
+- **Purpose**: Provides private network routing and DNS for Azure SQL.
+- **Typical resources**: A VNet with dedicated Container Apps, Functions integration, and private endpoint subnets; an Azure SQL private endpoint; and a linked private DNS zone.
+- **Notes**: The `azd up` deployment hooks temporarily permit only the deployment caller's IPv4 address while doing SQL bootstrap work, then disable public SQL access in `postup.sh`.
 
 ### `acr.bicep`
 
