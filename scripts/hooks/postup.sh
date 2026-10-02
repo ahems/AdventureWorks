@@ -56,6 +56,40 @@ else
   color_green "Manufacturing Hosted Agent already deployed; skipping fallback deployment."
 fi
 
+# All deployment-time SQL work has completed. Close the public SQL endpoint only
+# after every azd deploy operation succeeds; runtime traffic uses the private endpoint.
+sql_server=$(get_azd_value "SQL_SERVER_NAME")
+resource_group=$(get_azd_value "AZURE_RESOURCE_GROUP")
+if [[ -z "$sql_server" || -z "$resource_group" ]]; then
+  echo "ERROR: SQL_SERVER_NAME or AZURE_RESOURCE_GROUP is missing; cannot disable public SQL access." >&2
+  exit 1
+fi
+
+echo "Disabling public network access to Azure SQL..."
+if ! az sql server update \
+  --name "$sql_server" \
+  --resource-group "$resource_group" \
+  --enable-public-network false \
+  --output none; then
+  echo "ERROR: Could not disable public SQL access. Removing the temporary client firewall rule." >&2
+  if ! az sql server firewall-rule delete \
+    --server "$sql_server" \
+    --resource-group "$resource_group" \
+    --name "AllowClient" \
+    --output none 2>/dev/null; then
+    echo "WARNING: Could not remove AllowClient; public SQL networking remains enabled and requires manual cleanup." >&2
+  fi
+  exit 1
+fi
+
+az sql server firewall-rule delete \
+  --server "$sql_server" \
+  --resource-group "$resource_group" \
+  --name "AllowClient" \
+  --output none 2>/dev/null || \
+  echo "WARNING: Public SQL access is disabled, but the AllowClient firewall rule could not be removed."
+color_green "Azure SQL public network access disabled."
+
 echo ""
 color_bold "╔════════════════════════════════════════════════════════════════════╗"
 color_bold "║                                                                    ║"

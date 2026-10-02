@@ -154,6 +154,18 @@ module database 'modules/database.bicep' = {
   ]
 }
 
+module sqlPrivateNetwork 'modules/sql-private-network.bicep' = {
+  name: 'Deploy-SQL-Private-Network'
+  params: {
+    virtualNetworkName: 'av-vnet-${resourceToken}'
+    location: location
+    sqlServerName: sqlServerName
+  }
+  dependsOn: [
+    database
+  ]
+}
+
 module acr 'modules/acr.bicep' = {
   name: 'Deploy-ACR'
   params: {
@@ -197,6 +209,7 @@ module containerApp 'modules/aca.bicep' = {
     containerRegistryName:acrName
     identityName:identityName
     storageAccountName:storage.outputs.storageAccountName
+    infrastructureSubnetId: sqlPrivateNetwork.outputs.containerAppsSubnetId
   }
   dependsOn: [
     appinsights
@@ -276,6 +289,7 @@ module containerAppApiFunctions 'modules/flex-api-functions.bicep' = {
     functionsJwtIssuer: mcpPublicBaseUrl
     functionsJwtAudience: '${mcpPublicBaseUrl}/functions'
     functionsOAuthMode: 'audit'
+    virtualNetworkSubnetId: sqlPrivateNetwork.outputs.functionsSubnetId
   }
 }
 

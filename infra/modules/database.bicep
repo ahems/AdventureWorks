@@ -34,14 +34,9 @@ module sqlServerModule 'br/public:avm/res/sql/server:0.14.0' = {
     }
   // AVM expects primaryUserAssignedIdentityId (not *ResourceId*) when specifying a UAI as primary
   primaryUserAssignedIdentityId: azidentity.id
-    // Preserve permissive firewall behavior (legacy compatibility)
-    firewallRules: [
-      {
-        name: 'AllowAll'
-        startIpAddress: '0.0.0.0'
-        endIpAddress: '255.255.255.255'
-      }
-    ]
+    // Public access is used temporarily during azd up; postup disables it after deployment.
+    publicNetworkAccess: 'Enabled'
+    firewallRules: []
     // Single database definition replicating previous properties
     databases: [
       {

@@ -34,6 +34,7 @@ param functionsJwtAudience string = ''
 // a non-breaking mode that demonstrates delegated ownership for token-bearing consumers while
 // never 401-ing the unwired internal/anonymous calls that keep the deployed demo working.
 param functionsOAuthMode string = 'audit'
+param virtualNetworkSubnetId string
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
@@ -71,6 +72,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   }
   properties: {
     serverFarmId: flexPlan.id
+    virtualNetworkSubnetId: virtualNetworkSubnetId
     functionAppConfig: {
       deployment: {
         storage: {
