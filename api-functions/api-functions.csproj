@@ -59,6 +59,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\api-mcp\AdventureWorks\Services\PromotionProductData.cs"
+             Link="Services\PromotionProductData.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Include OpenAPI spec file in deployment -->
     <None Update="openapi-spec.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

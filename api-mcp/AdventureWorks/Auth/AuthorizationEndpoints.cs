@@ -261,7 +261,7 @@ public static class AuthorizationEndpoints
         var dab = options.GetDabResourceIdentifier();
         var functions = options.GetFunctionsResourceIdentifier();
 
-        var requested = request.Resources
+        var requested = (request.Resources ?? Array.Empty<string>())
             .Where(r => !string.IsNullOrWhiteSpace(r))
             .Select(r => r!.TrimEnd('/'))
             .Distinct(StringComparer.Ordinal)
@@ -390,7 +390,7 @@ public static class AuthorizationEndpoints
     <tr><th>Category</th><td>{enc(user.Category)}</td></tr>
     <tr><th>Role(s)</th><td>{enc(roles)}</td></tr>
     <tr><th>Application</th><td>{enc(request.ClientId ?? "(unknown)")}</td></tr>
-    <tr><th>Resource</th><td><code>{enc(request.Resources.FirstOrDefault() ?? "AdventureWorks MCP")}</code></td></tr>
+    <tr><th>Resource</th><td><code>{enc(request.Resources?.FirstOrDefault() ?? "AdventureWorks MCP")}</code></td></tr>
   </table>
   <h2>Requested scopes</h2>
   <table class=""scopes"">

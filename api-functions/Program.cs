@@ -267,7 +267,8 @@ builder.Services.AddScoped<PromotionAgentService>(sp =>
         logger,
         configuration,
         foundryClient,
-        telemetryClient);
+        telemetryClient,
+        sp.GetRequiredService<ProductService>());
 });
 
 // Register Translation Agent Service for AI translation via Foundry

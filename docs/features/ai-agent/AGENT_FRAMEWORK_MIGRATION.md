@@ -8,7 +8,7 @@ Every agent now uses the complete Foundry platform feature set:
 
 - **Named memory stores** — long-term context retained per user/persona across sessions
 - **Structured inputs** — Handlebars `{{variable}}` placeholders resolved by Foundry at invocation time (prevents prompt injection)
-- **MCP tools** — live catalog/inventory data access; `tool_choice: "required"` on three agents to prevent hallucinations
+- **MCP tools** — live catalog/inventory data access for tool-driven agents; promotion generation instead receives server-loaded SQL data with `tool_choice: "none"`
 - **Multi-turn** — `previous_response_id` chains turns so admins and customers can refine results in follow-up messages
 - **Workflow routing agents** — three new workflow YAMLs route conversational intent to the correct base agent
 
@@ -140,7 +140,7 @@ var response = await _foundryClient.InvokeAsync(
     previousResponseId: threadId,              // null on first turn; chains multi-turn
     userId:             memoryUserId,          // → x-memory-user-id header for Foundry memory
     structuredInputs:   inputs,                // Handlebars {{variable}} resolution
-    toolChoice:         "required" | "auto");  // required on 3 agents; auto on chat
+    toolChoice:         "required" | "auto" | "none");
 ```
 
 ## Phase 2 Changes: Help-Me-Choose, Promotion, Order
@@ -157,6 +157,23 @@ var response = await _foundryClient.InvokeAsync(
 ### 2. **PromotionAgentService.cs** — Multi-turn refinement
 
 `GeneratePromotionAsync` accepts an optional `previousResponseId`. When present, Foundry continues the stored conversation — the admin can say "change the discount to 25%" and get a refined suggestion without repeating all inputs.
+
+On every initial or refinement turn, Functions loads live inventory, costs, 90-day sales,
+and active discounts using its SQL managed identity. The query and formatted data are shared
+with the MCP `GetProductsForPromotion` tool through
+[`PromotionProductData`](../../../api-mcp/AdventureWorks/Services/PromotionProductData.cs).
+This preserves the same category/subcategory filters and ranking while supporting both the
+admin UI and unattended auto-promotions without a user OAuth session. MCP remains protected;
+no service-wide token or anonymous MCP bypass is introduced.
+
+`FoundryAgentClient` omits the tools field entirely when `toolChoice` is `"none"` (including
+empty-text recovery). Merely setting `tool_choice: none` can still cause Foundry to enumerate
+configured remote MCP servers and fail authentication. Trusted per-request instructions tell
+the promotion agent to use the supplied product data rather than its portal-defined tool.
+
+For an optional Functions container build, use the repository root as context:
+`docker build -f api-functions/Dockerfile .`. The current `azd` Functions deployment publishes
+the .NET project directly and includes the linked shared query source automatically.
 
 ### 3. **OrderGenerationAgentService.cs** — Multi-turn refinement
 

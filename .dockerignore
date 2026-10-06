@@ -2,6 +2,8 @@
 *.bicep
 
 # Ignore build artifacts
+**/bin/
+**/obj/
 *.o
 *.obj
 *.exe

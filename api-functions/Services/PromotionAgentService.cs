@@ -9,8 +9,7 @@ namespace api_functions.Services;
 
 /// <summary>
 /// Single-shot Azure AI Foundry Agent service that generates promotion suggestions by
-/// reasoning over live inventory and sales data retrieved via the MCP server's
-/// GetProductsForPromotion tool.
+/// reasoning over live inventory and sales data retrieved directly through SQL managed identity.
 ///
 /// Foundry features used:
 ///   - structured_inputs    → promotion type, category, and date context resolved via Handlebars
@@ -19,28 +18,30 @@ namespace api_functions.Services;
 ///                            promotions and generates varied campaigns across successive runs
 ///   - previousResponseId   → enables admin refinement turns (e.g. 'increase discount to 20%')
 ///                            by continuing a stored Foundry conversation
-///   - tool_choice: required → ensures the agent always calls GetProductsForPromotion;
-///                             prevents fabricated product lists from reaching the response
+///   - tool_choice: none → live product context is supplied by the server, not a remote MCP call
 /// </summary>
 public class PromotionAgentService
 {
     private readonly ILogger<PromotionAgentService> _logger;
     private readonly TelemetryClient _telemetryClient;
     private readonly FoundryAgentClient _foundryClient;
+    private readonly ProductService _productService;
     private readonly string _agentId;
 
     public PromotionAgentService(
         ILogger<PromotionAgentService> logger,
         IConfiguration configuration,
         FoundryAgentClient foundryClient,
-        TelemetryClient telemetryClient)
+        TelemetryClient telemetryClient,
+        ProductService productService)
     {
         _logger = logger;
         _foundryClient = foundryClient;
         _telemetryClient = telemetryClient;
+        _productService = productService;
 
         // Use the plain promotion agent (not the workflow orchestrator variant) because
-        // PromotionAgentService relies on structured_inputs + tool_choice="required" which are
+        // PromotionAgentService relies on structured_inputs and JSON output instructions which are
         // configured only on admin-promotion-agent. The workflow agent is a Foundry orchestrator
         // without tool/instruction setup and would return unstructured prose.
         var agentId = configuration["AI_AGENT_PROMOTION_ID"];
@@ -50,7 +51,7 @@ public class PromotionAgentService
 
     /// <summary>
     /// Generate a promotion suggestion for the given parameters.
-    /// Uses the Foundry agent's MCP GetProductsForPromotion tool to retrieve live data,
+    /// Uses the same SQL query as the MCP GetProductsForPromotion tool to retrieve live data,
     /// then reasons about appropriate products, discount %, and campaign framing.
     /// Pass <paramref name="previousResponseId"/> to continue a refinement conversation
     /// (e.g. admin adjusts discount or target category in a follow-up turn).
@@ -100,22 +101,32 @@ public class PromotionAgentService
             // generated and produces more varied campaigns across successive admin runs.
             var memoryUserId = $"promotion-gen-{promotionType}";
 
-            // The user message is now a short constant — all dynamic context lives in
-            // structured_inputs which resolve the Handlebars templates in the agent instructions.
-            const string userMessage = "Generate a promotion campaign following the instructions.";
+            var productData = await _productService.GetProductsWithPromotionDataAsync(
+                promotionType, categoryId, subcategoryId);
+            var userMessage =
+                "Generate a promotion campaign following the instructions. " +
+                "The server has already retrieved the GetProductsForPromotion data below using " +
+                "the requested category filters. Use only these products and figures; do not call " +
+                "MCP tools or invent product IDs, prices, inventory or sales data.\n\n" + productData;
 
             // Invoke the Foundry agent via the Responses API (supports multi-turn refinement).
             // Passing previousResponseId continues a stored conversation so the admin can
             // refine the suggestion (e.g. 'increase discount to 25%') without losing context.
-            // tool_choice: "required" ensures the agent always calls GetProductsForPromotion;
-            // prevents hallucinated product lists from appearing in the response.
             var agentResponse = await _foundryClient.InvokeAsync(
                 agentId: _agentId,
                 userMessage: userMessage,
                 userId: memoryUserId,
                 previousResponseId: string.IsNullOrEmpty(previousResponseId) ? null : previousResponseId,
                 structuredInputs: structuredInputs,
-                toolChoice: "required");
+                toolChoice: "none",
+                additionalInstructions:
+                    "For this invocation, the server has already executed the promotion product query. " +
+                    "Do not call GetProductsForPromotion or any other tool, regardless of earlier tool instructions. " +
+                    "Use only the live product data in the current user message, including on refinement turns. " +
+                    "Return ONLY a JSON object with description, discountPct (percentage), type, category, " +
+                    "startDate, endDate, minQty, aiReasoning, and suggestedProducts. Each suggested product " +
+                    "must have productId, productName, currentPrice, standardCost, inventoryLevel, " +
+                    "recentSalesCount and reason. Never invent product IDs or financial figures.");
             var rawResponse = agentResponse.ResponseText;
 
             _logger.LogInformation("PromotionAgent raw response length: {Length}, tools used: {Tools}",

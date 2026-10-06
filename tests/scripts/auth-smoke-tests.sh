@@ -839,7 +839,7 @@ echo "=== AI Agent Endpoints ==="
 # whose backends authenticate to Azure OpenAI and Azure SQL via MANAGED IDENTITY. "Auth
 # correctly" here means those managed-identity backends SUCCEED (HTTP 200) rather than failing
 # (500) on a token/role error. catalog-meta exercises the SQL path (fast, deterministic) and
-# GeneratePromotion exercises the Azure OpenAI agent path (a real model call — allow more time).
+# GeneratePromotion exercises SQL product context + Azure OpenAI (a real model call).
 if [ -z "$func" ]; then
     fail "AI agent endpoints skipped"
     note "API_FUNCTIONS_URL is empty — cannot reach the Functions app."
@@ -872,7 +872,7 @@ else
     fi
 
     # (c) Generate Promotion with AI — Azure OpenAI agent via managed identity. The service
-    #     rethrows on failure, so 200 with a non-empty suggestion proves the model call authed.
+    #     Supplies live SQL product context without calling the protected MCP server.
     #     Allow extra time (SMOKE_AI_TIMEOUT) for the multi-step agent turn.
     url="$func/api/GeneratePromotion"
     _saved_timeout="$TIMEOUT"
@@ -882,12 +882,15 @@ else
     TIMEOUT="$_saved_timeout"
     if [ "$R_CODE" = "200" ]; then
         check_json "Generate Promotion with AI → suggestion (Azure OpenAI via managed identity)" "$R_BODY_FULL" \
-            "bool(d.get('suggestion')) and len(str(d.get('suggestion'))) > 0"
+            "isinstance(d.get('suggestion'), dict) and bool(d['suggestion'].get('description')) and bool(d.get('threadId'))"
     else
         fail "Generate Promotion with AI ($R_CODE)"
         diag "$url"
-        note "expected: 200 {suggestion, threadId}. A 500 here means the Azure OpenAI managed-"
-        note "          identity call failed (check the Functions MI role on the OpenAI account)."
+        note "expected: 200 {suggestion, threadId}. Inspect the response body and Functions logs:"
+        note "          failures may come from SQL product-context loading, Foundry authentication,"
+        note "          model configuration, or AI output parsing — not just OpenAI role grants."
+        note "          An MCP 401 indicates stale code still sending unauthenticated MCP tools;"
+        note "          redeploy api-functions. Promotion generation uses server-loaded SQL data."
     fi
 fi
 

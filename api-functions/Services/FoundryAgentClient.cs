@@ -131,6 +131,7 @@ public class FoundryAgentClient
     ///   <c>null</c> the MCP tools are sent unchanged (anonymous / no delegated context).
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="additionalInstructions">Trusted server instructions appended for this invocation only.</param>
     public async Task<FoundryAgentResponse> InvokeAsync(
         string agentId,
         string userMessage,
@@ -140,7 +141,8 @@ public class FoundryAgentClient
         Dictionary<string, object>? structuredInputs = null,
         string? toolChoice = null,
         string? mcpAccessToken = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? additionalInstructions = null)
     {
         // --- Fetch agent definition (cached) ------------------------------------
         var def = await GetOrFetchAgentDefinitionAsync(agentId, cancellationToken);
@@ -151,7 +153,12 @@ public class FoundryAgentClient
         // request as that AdventureWorks user. This produces a NEW per-request tool
         // list; the cached agent definition is never mutated, so a token can never
         // leak across users, conversations, or requests.
-        var effectiveTools = ApplyMcpAuthorization(def.Tools, mcpAccessToken);
+        // Foundry may enumerate remote MCP servers even when tool_choice is "none".
+        // Data-supplied requests must omit tools entirely, not just forbid tool calls.
+        var toolsDisabled = string.Equals(toolChoice, "none", StringComparison.Ordinal);
+        var effectiveTools = toolsDisabled
+            ? Array.Empty<JsonElement>()
+            : ApplyMcpAuthorization(def.Tools, mcpAccessToken);
 
         // --- Build initial input -----------------------------------------------
         object input;
@@ -182,15 +189,21 @@ public class FoundryAgentClient
         // in approval continuation rounds, the model loses its format requirements (e.g.
         // "Return ONLY a valid JSON object") and returns prose instead.
         var resolvedInstructions = ResolveHandlebarsTemplate(def.Instructions, structuredInputs);
+        if (!string.IsNullOrWhiteSpace(additionalInstructions))
+        {
+            resolvedInstructions = string.IsNullOrWhiteSpace(resolvedInstructions)
+                ? additionalInstructions
+                : resolvedInstructions + "\n\n" + additionalInstructions;
+        }
 
         // --- Pre-warm MCP servers ------------------------------------------------
         // Foundry connects to MCP server URLs during tool enumeration. If the Container
         // App has scaled to zero, the first connection attempt may time out with
         // "TaskCanceledException encountered while enumerating tools". Sending a
         // lightweight request here wakes the server before Foundry's timeout applies.
-        if (def.Tools.Count > 0)
+        if (effectiveTools.Count > 0)
         {
-            await WarmupMcpServersAsync(def.Tools, cancellationToken);
+            await WarmupMcpServersAsync(effectiveTools, cancellationToken);
         }
 
         // --- Approval loop -----------------------------------------------------
@@ -285,7 +298,7 @@ public class FoundryAgentClient
                     break;
 
                 // Check if this is a retryable MCP tool enumeration error
-                var isToolEnumError = (int)httpResponse.StatusCode == 400
+                var isToolEnumError = !toolsDisabled && (int)httpResponse.StatusCode == 400
                     && (responseBody.Contains("tool_user_error") || responseBody.Contains("enumerating tools"));
 
                 if (isToolEnumError && retry < maxToolRetries)
@@ -410,7 +423,6 @@ public class FoundryAgentClient
                 Stream = false,
                 Store = true,
                 PreviousResponseId = parsedResponse.ResponseId,
-                Tools = def.Tools.Count > 0 ? def.Tools : null,
                 ToolChoice = "none"
             };
 

@@ -1,12 +1,14 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-# Copy csproj and restore dependencies
-COPY api-functions.csproj .
-RUN dotnet restore
+# Build with the repository root as context: docker build -f api-functions/Dockerfile .
+COPY api-functions/api-functions.csproj api-functions/
+RUN dotnet restore api-functions/api-functions.csproj
 
 # Copy everything else and build
-COPY . .
+COPY api-functions/ api-functions/
+COPY api-mcp/AdventureWorks/Services/PromotionProductData.cs api-mcp/AdventureWorks/Services/
+WORKDIR /src/api-functions
 RUN dotnet publish -c Release -o /app/publish
 
 # Build runtime image

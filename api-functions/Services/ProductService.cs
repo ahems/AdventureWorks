@@ -80,6 +80,14 @@ public class ProductService
         return cultures.ToList();
     }
 
+    public async Task<string> GetProductsWithPromotionDataAsync(
+        string promotionType, int? categoryId = null, int? subcategoryId = null, int topN = 20)
+    {
+        using var connection = await GetConnectionAsync();
+        return await AdventureWorks.Shared.PromotionProductData.GetAsync(
+            connection, promotionType, categoryId, subcategoryId, topN);
+    }
+
     public async Task<List<TranslationRequest>> GetProductsByModelIdsAsync(List<int> productModelIds)
     {
         using var connection = await GetConnectionAsync();

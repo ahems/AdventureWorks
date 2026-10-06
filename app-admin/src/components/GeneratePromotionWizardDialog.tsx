@@ -485,8 +485,8 @@ const GeneratePromotionWizardDialog: React.FC<
                   AI is analysing your catalogue…
                 </p>
                 <p className="font-doodle text-sm text-doodle-text/60">
-                  Checking inventory levels and 90-day sales data via the MCP
-                  server, then selecting the best products and discount for a{" "}
+                  Checking live inventory levels and 90-day sales data, then
+                  selecting the best products and discount for a{" "}
                   <em>{selectedType}</em> promotion.
                 </p>
               </div>

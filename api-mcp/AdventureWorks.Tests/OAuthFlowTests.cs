@@ -80,6 +80,20 @@ public class OAuthFlowTests : IClassFixture<OAuthTestFactory>
     }
 
     [Fact]
+    public async Task Omitted_resource_defaults_to_mcp_for_consent_and_token()
+    {
+        var client = CreateClient();
+        var verifier = CreateVerifier();
+
+        await LoginAsync(client, "consumer@demo.test", "pw-consumer");
+        var code = await AuthorizeAsync(client, Challenge(verifier), "mcp.access products.read",
+            state: "default-resource", includeResource: false);
+
+        var token = await ExchangeAsync(client, code!, verifier);
+        Assert.Equal(OAuthTestFactory.ResourceIdentifier, Audience(DecodeJwtPayload(token)));
+    }
+
+    [Fact]
     public async Task Authorization_code_cannot_be_replayed()
     {
         var client = CreateClient();
@@ -160,19 +174,23 @@ public class OAuthFlowTests : IClassFixture<OAuthTestFactory>
         Assert.Equal(HttpStatusCode.Found, response.StatusCode);
     }
 
-    private async Task<string?> AuthorizeAsync(HttpClient client, string challenge, string scope, string state)
+    private async Task<string?> AuthorizeAsync(
+        HttpClient client, string challenge, string scope, string state, bool includeResource = true)
     {
         var query = $"?client_id={Client}&redirect_uri={Uri.EscapeDataString(Redirect)}" +
                     $"&response_type=code&scope={Uri.EscapeDataString(scope)}&state={state}" +
-                    $"&code_challenge={challenge}&code_challenge_method=S256" +
-                    $"&resource={Uri.EscapeDataString(OAuthTestFactory.ResourceIdentifier)}";
+                    $"&code_challenge={challenge}&code_challenge_method=S256";
+        if (includeResource)
+        {
+            query += $"&resource={Uri.EscapeDataString(OAuthTestFactory.ResourceIdentifier)}";
+        }
 
         // Consent page renders for the authenticated user.
         var consent = await client.GetAsync("/authorize" + query);
         Assert.Equal(HttpStatusCode.OK, consent.StatusCode);
 
         // Approve.
-        var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        var parameters = new Dictionary<string, string>
         {
             ["client_id"] = Client,
             ["redirect_uri"] = Redirect,
@@ -181,9 +199,13 @@ public class OAuthFlowTests : IClassFixture<OAuthTestFactory>
             ["state"] = state,
             ["code_challenge"] = challenge,
             ["code_challenge_method"] = "S256",
-            ["resource"] = OAuthTestFactory.ResourceIdentifier,
             ["decision"] = "allow",
-        });
+        };
+        if (includeResource)
+        {
+            parameters["resource"] = OAuthTestFactory.ResourceIdentifier;
+        }
+        var form = new FormUrlEncodedContent(parameters);
 
         var approved = await client.PostAsync("/authorize", form);
         Assert.Equal(HttpStatusCode.Found, approved.StatusCode);

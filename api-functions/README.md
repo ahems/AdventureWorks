@@ -49,7 +49,8 @@ All AI Foundry agent calls share the `FoundryAgentClient` singleton, which lever
 | `previous_response_id`    | Chains multi-turn conversations (replaces thread/session management in the client)                                                                                                                                        |
 | `x-memory-user-id`        | Scopes Foundry memory per user or persona so agents recall prior interactions                                                                                                                                             |
 | `structured_inputs`       | Resolves `{{variable}}` Handlebars placeholders declared in each agent's Foundry portal definition at runtime — avoids duplicating agent versions for different customers or contexts                                     |
-| `tool_choice: "required"` | Forces MCP tool calls for agents whose output depends on live catalog/inventory data (Help-Me-Choose, Order Generation, Promotion Generation) — prevents hallucinated product IDs or prices being written to the database |
+| `tool_choice: "required"` | Forces MCP tool calls for tool-driven agents (Help-Me-Choose, Order Generation) |
+| `tool_choice: "none"` | Omits tools entirely for data-supplied agents, including Promotion Generation, so Foundry does not enumerate OAuth-protected MCP servers unnecessarily |
 
 **Per-agent configuration:**
 
@@ -58,7 +59,7 @@ All AI Foundry agent calls share the `FoundryAgentClient` singleton, which lever
 | Chat (`AIAgentService`)                          | Customer ID                                             | auto (null)   | `customerId`, `cultureId`                                                                                                           |
 | Help-Me-Choose (`HelpMeChooseService`)           | Customer ID                                             | `required`    | _(declared in portal)_                                                                                                              |
 | Order Generation (`OrderGenerationAgentService`) | `order-gen-customer-{id}` or `order-gen-persona-{type}` | `required`    | `todayDate`, `personaDescription`, `isExistingCustomer`, `customerName`, `customerId`, `orderCount`, `totalSpend`, `recentProducts` |
-| Promotion Generation (`PromotionAgentService`)   | `promotion-gen-{type}`                                  | `required`    | `promotionType`, `offerCategory`, `todayDate`, `categoryName`, `subcategoryName`, `categoryId`, `subcategoryId`                     |
+| Promotion Generation (`PromotionAgentService`)   | `promotion-gen-{type}`                                  | `none`        | `promotionType`, `offerCategory`, `todayDate`, `categoryName`, `subcategoryName`, `categoryId`, `subcategoryId`                     |
 
 > **Foundry portal prerequisite**: The `structured_inputs` schema (declaring each variable name and type) **must be added to each agent's definition in the Foundry portal** before the Handlebars templates in the instructions will resolve. See [docs/features/ai-agent/AI_AGENT_AUTOMATION.md](../docs/features/ai-agent/AI_AGENT_AUTOMATION.md) for details.
 
@@ -438,6 +439,8 @@ These endpoints power the AI-driven generation features in the admin portal (`ap
 
 - **Trigger / Route**: HTTP `POST /api/GeneratePromotion`
 - **Purpose**: Generates a promotion campaign suggestion using the Foundry Promotion agent. Accepts `promotionType`, `offerCategory`, `categoryId`, `categoryName`, `subcategoryId`, and `subcategoryName`. Returns a promotion strategy with discount percentage, conditions, headline, and body copy, plus a `threadId` for multi-turn refinement turns.
+- **Data access**: Functions retrieves live inventory, costs, 90-day sales, and active discounts via its SQL managed identity on every turn. It reuses the same query as the MCP `GetProductsForPromotion` tool, but supplies the data directly to Foundry with no remote tools. Interactive and unattended auto-promotions therefore need no delegated MCP user token; Functions route authorization still follows its configured audit/enforced mode.
+- **Container build**: If building the optional Functions image, use the repository root as context: `docker build -f api-functions/Dockerfile .`. The current `azd` Function App deployment publishes the .NET project directly.
 
 ### `GenerateOrdersBulk`
 
