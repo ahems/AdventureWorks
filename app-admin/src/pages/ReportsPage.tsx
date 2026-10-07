@@ -58,6 +58,7 @@ const ORDER_STATUS_LABELS: Record<number, string> = {
   4: "Rejected",
   5: "Shipped",
   6: "Cancelled",
+  7: "Delivered",
 };
 
 const MONTH_NAMES = [

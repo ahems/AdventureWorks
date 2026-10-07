@@ -141,6 +141,18 @@ resource apiMcp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'MCP_SIGNING_CERTIFICATE_NAME'
               value: signingCertificateName
             }
+            {
+              // Entra tenant whose managed-identity assertions may be exchanged for a
+              // service MCP token (urn:adventureworks:params:oauth:grant-type:managed-identity).
+              name: 'MCP_ENTRA_TENANT_ID'
+              value: subscription().tenantId
+            }
+            {
+              // Allow-list of managed-identity object ids (the shared runtime identity used
+              // by api-functions) trusted to obtain a service MCP token for AI agents.
+              name: 'MCP_TRUSTED_SERVICE_PRINCIPAL_IDS'
+              value: azidentity.properties.principalId
+            }
           ]
         }
       ]

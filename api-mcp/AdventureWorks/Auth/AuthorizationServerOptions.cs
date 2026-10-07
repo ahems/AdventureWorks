@@ -46,8 +46,49 @@ public sealed class AuthorizationServerOptions
     /// <summary>Access token lifetime. Short-lived per the demo design (~10 minutes).</summary>
     public TimeSpan AccessTokenLifetime { get; set; } = TimeSpan.FromMinutes(10);
 
+    /// <summary>
+    /// Refresh token lifetime (absolute; sliding expiration is disabled). Refresh tokens are only
+    /// issued to trusted first-party clients that request <c>offline_access</c>, so a signed-in
+    /// employee keeps working silently for this long without re-entering credentials.
+    /// </summary>
+    public TimeSpan RefreshTokenLifetime { get; set; } = TimeSpan.FromHours(12);
+
     /// <summary>Registered first-party clients.</summary>
     public List<OAuthClient> Clients { get; } = new();
+
+    /// <summary>
+    /// First-party AdventureWorks clients whose users have already authenticated against the
+    /// AdventureWorks login. The consent page is skipped for these (the grant is still
+    /// restricted to the user's role-derived scopes) and they may request <c>offline_access</c>.
+    /// Third-party clients such as the MCP Inspector always see the consent page.
+    /// </summary>
+    public HashSet<string> TrustedFirstPartyClientIds { get; } = new(StringComparer.Ordinal)
+    {
+        "adventureworks-admin",
+        "adventureworks-eshop",
+        "adventureworks-manufacturing",
+    };
+
+    // ---- Service (workload) tokens via managed-identity assertion ----
+
+    /// <summary>Client id used by backend workloads for the managed-identity assertion grant.</summary>
+    public const string ServiceClientId = "adventureworks-agents";
+
+    /// <summary>
+    /// Entra tenant id whose managed-identity tokens (audience <c>api://AzureADTokenExchange</c>)
+    /// may be exchanged for a service MCP token. Empty disables the grant.
+    /// </summary>
+    public string? EntraTenantId { get; set; }
+
+    /// <summary>
+    /// Allow-list of Entra object ids (managed identity principal ids) permitted to obtain a
+    /// service MCP token. Empty disables the grant.
+    /// </summary>
+    public HashSet<string> TrustedServicePrincipalIds { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Whether the managed-identity assertion grant is configured.</summary>
+    public bool ServiceGrantEnabled =>
+        !string.IsNullOrWhiteSpace(EntraTenantId) && TrustedServicePrincipalIds.Count > 0;
 
     // ---- Key Vault signing material ----
 

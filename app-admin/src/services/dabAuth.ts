@@ -1,30 +1,28 @@
 // Self-contained browser OAuth client for a Data API Builder (DAB) resource token.
 //
-// This is a sibling of `mcpAuth.ts`. Both talk to the same api-mcp authorization
-// server with Authorization Code + PKCE (S256) and no client secret, but they
-// request DIFFERENT RFC 8707 `resource` indicators and therefore yield tokens
-// with different audiences:
-//
-//   mcpAuth  -> resource {api-mcp}/mcp  -> aud used by the /mcp endpoint
-//   dabAuth  -> resource {api-mcp}/dab  -> aud validated by the DAB GraphQL/REST API
-//
-// DAB rejects a token whose `aud` is not its own, so the DAB token MUST be
-// obtained separately and stored under its own keys. Keeping the two flows in
-// separate modules (and separate sessionStorage keys) prevents cross-audience
-// token reuse.
+// Talks to the api-mcp authorization server with Authorization Code + PKCE (S256)
+// and no client secret, requesting the RFC 8707 resource `{api-mcp}/dab`. DAB
+// validates that audience and rejects tokens issued for any other resource.
 //
 // Security posture (demo):
 //  - The authorization server re-authenticates the AdventureWorks user
 //    server-side (api-mcp `/login`); this client never handles the password.
 //  - PKCE verifier + state live in sessionStorage only for the redirect
 //    round-trip and are removed as soon as the code is exchanged.
-//  - The short-lived (~10 min) access token is kept in sessionStorage (not
-//    localStorage) so it is tab-scoped and cleared on logout / user switch.
+//  - Silent sign-in: when the employee signs in to the admin app, `startSilentSignIn`
+//    also signs them in to api-mcp and runs this flow. api-mcp skips the consent page
+//    for first-party AdventureWorks clients, so the user sees nothing but a brief
+//    redirect. `offline_access` yields a refresh token so the short-lived (~10 min)
+//    access token is renewed in the background for the rest of the session.
+//  - The access + refresh token are kept in localStorage so every admin tab shares
+//    one session; they are cleared on logout / user switch. Concurrent refreshes are
+//    serialized with the Web Locks API (refresh tokens are single-use upstream).
 import { getApiMcpUrl } from "@/lib/utils";
 
 const CLIENT_ID = "adventureworks-admin";
 const PKCE_KEY = "dab_oauth_pkce";
 const TOKEN_KEY = "dab_oauth_token";
+const MCP_TOKEN_KEY = "mcp_oauth_token";
 
 // Scopes the admin client may request for DAB access. The authorization server
 // intersects these with the signed-in employee's seeded role-derived scopes, so
@@ -32,6 +30,7 @@ const TOKEN_KEY = "dab_oauth_token";
 // authorizes by ROLE (X-MS-API-ROLE vs the `roles` claim), not by scope, but at
 // least one granted scope is required for the server to issue a token at all.
 export const DAB_ADMIN_REQUESTED_SCOPES = [
+  "offline_access",
   "mcp.access",
   "products.read",
   "sales.read",
@@ -66,7 +65,14 @@ interface StoredToken {
   accessToken: string;
   expiresAt: number; // epoch seconds
   scope: string;
+  refreshToken?: string;
 }
+
+/** Fired on `window` when the DAB session can no longer be renewed (sign in again). */
+export const DAB_SESSION_LOST_EVENT = "dab-session-lost";
+
+/** Renew the access token this many seconds before it expires. */
+const REFRESH_SKEW_SECONDS = 60;
 
 /** OAuth authorization-server base URL (api-mcp origin, without the /mcp path). */
 export function getOAuthBaseUrl(): string {
@@ -127,14 +133,13 @@ export function decodeTokenClaims(token: string): DabTokenClaims | null {
   }
 }
 
-/** True when a DAB PKCE flow is currently pending (used to disambiguate the
- * shared `/oauth/callback` route from the MCP flow). */
+/** True when a DAB PKCE flow is currently pending (redirect round-trip in progress). */
 export function hasPendingAuthorization(): boolean {
   return sessionStorage.getItem(PKCE_KEY) !== null;
 }
 
-/** Begin Authorization Code + PKCE (S256) for a DAB-resource token. */
-export async function beginAuthorization(loginHint?: string): Promise<void> {
+/** Builds the `/authorize` URL and stores the PKCE verifier/state for the callback. */
+async function buildAuthorizeUrl(returnTo: string, loginHint?: string): Promise<string> {
   const base = getOAuthBaseUrl();
   if (!base) {
     throw new Error("DAB authorization server URL is not configured.");
@@ -146,7 +151,7 @@ export async function beginAuthorization(loginHint?: string): Promise<void> {
 
   sessionStorage.setItem(
     PKCE_KEY,
-    JSON.stringify({ verifier, state, returnTo: window.location.pathname }),
+    JSON.stringify({ verifier, state, returnTo }),
   );
 
   const params = new URLSearchParams({
@@ -163,7 +168,50 @@ export async function beginAuthorization(loginHint?: string): Promise<void> {
   if (resource) params.set("resource", resource);
   if (loginHint) params.set("login_hint", loginHint);
 
-  window.location.assign(`${base}/authorize?${params.toString()}`);
+  return `${base}/authorize?${params.toString()}`;
+}
+
+/**
+ * Signs the employee in to the api-mcp authorization server with the credentials they
+ * just entered in the admin app, then continues straight into the DAB Authorization
+ * Code + PKCE flow. Because the admin app is a trusted first-party client, api-mcp
+ * issues the code without a consent page and redirects back to `/oauth/callback`,
+ * which exchanges it and returns the user to `returnTo`.
+ *
+ * Implemented as a top-level form POST (not fetch) so the api-mcp session cookie is
+ * first-party for the following `/authorize` navigation. The password is sent only to
+ * api-mcp's own `/login` endpoint over HTTPS and is never stored.
+ */
+export async function startSilentSignIn(
+  username: string,
+  password: string,
+  returnTo = "/",
+): Promise<void> {
+  const base = getOAuthBaseUrl();
+  if (!base) {
+    throw new Error("DAB authorization server URL is not configured.");
+  }
+
+  const authorizeUrl = new URL(await buildAuthorizeUrl(returnTo, username));
+
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = `${base}/login`;
+  form.style.display = "none";
+  const fields: Record<string, string> = {
+    username,
+    password,
+    returnUrl: `/authorize${authorizeUrl.search}`,
+  };
+  for (const [name, value] of Object.entries(fields)) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  }
+  document.body.appendChild(form);
+  form.submit();
 }
 
 export interface CallbackResult {
@@ -220,39 +268,221 @@ export async function handleCallback(): Promise<CallbackResult> {
     return { ok: false, error: `Token exchange failed (${res.status}): ${text}` };
   }
 
-  const token = (await res.json()) as {
-    access_token: string;
-    expires_in?: number;
-    scope?: string;
-  };
-
-  const stored2: StoredToken = {
-    accessToken: token.access_token,
-    expiresAt: Math.floor(Date.now() / 1000) + (token.expires_in ?? 600),
-    scope: token.scope ?? "",
-  };
-  sessionStorage.setItem(TOKEN_KEY, JSON.stringify(stored2));
+  storeTokenResponse((await res.json()) as TokenResponse);
   return { ok: true, returnTo: pkce.returnTo };
 }
 
-function readStoredToken(): StoredToken | null {
-  const raw = sessionStorage.getItem(TOKEN_KEY);
+interface TokenResponse {
+  access_token: string;
+  expires_in?: number;
+  scope?: string;
+  refresh_token?: string;
+}
+
+function storeTokenResponse(token: TokenResponse, previousRefreshToken?: string): void {
+  const stored: StoredToken = {
+    accessToken: token.access_token,
+    expiresAt: Math.floor(Date.now() / 1000) + (token.expires_in ?? 600),
+    scope: token.scope ?? "",
+    refreshToken: token.refresh_token ?? previousRefreshToken,
+  };
+  localStorage.setItem(TOKEN_KEY, JSON.stringify(stored));
+}
+
+function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+/** Raw stored session (may hold an expired access token alongside a refresh token). */
+function readSession(): StoredToken | null {
+  const raw = localStorage.getItem(TOKEN_KEY);
   if (!raw) return null;
   try {
-    const t = JSON.parse(raw) as StoredToken;
-    if (t.expiresAt <= Math.floor(Date.now() / 1000)) {
-      sessionStorage.removeItem(TOKEN_KEY);
-      return null;
-    }
-    return t;
+    return JSON.parse(raw) as StoredToken;
   } catch {
+    localStorage.removeItem(TOKEN_KEY);
     return null;
   }
+}
+
+function readStoredToken(): StoredToken | null {
+  const t = readSession();
+  return t && t.expiresAt > nowSeconds() ? t : null;
 }
 
 /** Returns the current (unexpired) DAB access token, or null. */
 export function getAccessToken(): string | null {
   return readStoredToken()?.accessToken ?? null;
+}
+
+/** True while there is a usable access token or a refresh token to renew it. */
+export function hasSession(): boolean {
+  const t = readSession();
+  return !!t && (t.expiresAt > nowSeconds() || !!t.refreshToken);
+}
+
+function needsRefresh(t: StoredToken | null, force: boolean): boolean {
+  if (!t) return false;
+  return force || t.expiresAt - REFRESH_SKEW_SECONDS <= nowSeconds();
+}
+
+async function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+  if (typeof navigator !== "undefined" && navigator.locks?.request) {
+    return navigator.locks.request("dab-oauth-refresh", fn) as Promise<T>;
+  }
+  return fn();
+}
+
+let inFlightRefresh: Promise<string | null> | null = null;
+
+/**
+ * Exchanges the refresh token for a new access token. Serialized across tabs; a tab
+ * that waited on the lock re-reads storage and reuses the token another tab obtained.
+ * On a definitive rejection the session is cleared and DAB_SESSION_LOST_EVENT fires.
+ */
+export async function refreshAccessToken(force = false): Promise<string | null> {
+  if (inFlightRefresh) return inFlightRefresh;
+  const startedWith = readSession()?.accessToken;
+
+  inFlightRefresh = withRefreshLock(async () => {
+    const current = readSession();
+    if (!current?.refreshToken) return getAccessToken();
+    // Another tab refreshed while we waited for the lock.
+    if (current.accessToken !== startedWith && !needsRefresh(current, false)) {
+      return current.accessToken;
+    }
+    if (!needsRefresh(current, force)) return current.accessToken;
+
+    const base = getOAuthBaseUrl();
+    const body = new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: current.refreshToken,
+      client_id: CLIENT_ID,
+      resource: getDabResourceIdentifier(),
+    });
+
+    let res: Response;
+    try {
+      res = await fetch(`${base}/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      });
+    } catch {
+      // Network / cold-start failure: keep the session and retry on the next request.
+      return getAccessToken();
+    }
+
+    if (!res.ok) {
+      if (res.status === 400 || res.status === 401) {
+        clearAuthorization();
+        window.dispatchEvent(new Event(DAB_SESSION_LOST_EVENT));
+        return null;
+      }
+      return getAccessToken();
+    }
+
+    storeTokenResponse((await res.json()) as TokenResponse, current.refreshToken);
+    return getAccessToken();
+  }).finally(() => {
+    inFlightRefresh = null;
+  });
+
+  return inFlightRefresh;
+}
+
+/** Canonical MCP resource indicator (RFC 8707) — the api-mcp `/mcp` endpoint URL. */
+export function getMcpResourceIdentifier(): string {
+  return getApiMcpUrl().replace(/\/$/, "");
+}
+
+interface StoredMcpToken {
+  accessToken: string;
+  expiresAt: number;
+  subject?: string;
+}
+
+function readMcpToken(): StoredMcpToken | null {
+  const raw = localStorage.getItem(MCP_TOKEN_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as StoredMcpToken;
+  } catch {
+    localStorage.removeItem(MCP_TOKEN_KEY);
+    return null;
+  }
+}
+
+let inFlightMcp: Promise<string | null> | null = null;
+
+/**
+ * Returns a per-user access token for the MCP server, minted silently from the
+ * sign-in refresh token (RFC 8707 resource switch). Lets the AI agent call MCP
+ * tools as the signed-in admin so role-based tool authorization applies.
+ * Returns null when no session exists or the mint fails (agent falls back to
+ * its service identity).
+ */
+export async function getMcpAccessToken(): Promise<string | null> {
+  const session = readSession();
+  if (!session) return null;
+  const subject = decodeTokenClaims(session.accessToken)?.sub as string | undefined;
+  const cached = readMcpToken();
+  if (cached && cached.subject === subject && cached.expiresAt - REFRESH_SKEW_SECONDS > nowSeconds()) {
+    return cached.accessToken;
+  }
+  if (inFlightMcp) return inFlightMcp;
+
+  inFlightMcp = withRefreshLock(async () => {
+    const again = readMcpToken();
+    if (again && again.subject === subject && again.expiresAt - REFRESH_SKEW_SECONDS > nowSeconds()) {
+      return again.accessToken;
+    }
+    const current = readSession();
+    const resource = getMcpResourceIdentifier();
+    if (!current?.refreshToken || !resource) return null;
+
+    const body = new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: current.refreshToken,
+      client_id: CLIENT_ID,
+      resource,
+    });
+    try {
+      const res = await fetch(`${getOAuthBaseUrl()}/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      });
+      if (!res.ok) return null;
+      const token = (await res.json()) as TokenResponse;
+      // Keep the DAB access token; persist only the rotated refresh token.
+      if (token.refresh_token) {
+        localStorage.setItem(TOKEN_KEY, JSON.stringify({ ...current, refreshToken: token.refresh_token }));
+      }
+      const stored: StoredMcpToken = {
+        accessToken: token.access_token,
+        expiresAt: nowSeconds() + (token.expires_in ?? 600),
+        subject,
+      };
+      localStorage.setItem(MCP_TOKEN_KEY, JSON.stringify(stored));
+      return stored.accessToken;
+    } catch {
+      return null;
+    }
+  }).finally(() => {
+    inFlightMcp = null;
+  });
+
+  return inFlightMcp;
+}
+
+/** Returns a DAB access token, silently renewing it first when it is about to expire. */
+export async function getValidAccessToken(): Promise<string | null> {
+  const t = readSession();
+  if (!t) return null;
+  if (!needsRefresh(t, false)) return t.accessToken;
+  if (!t.refreshToken) return getAccessToken();
+  return refreshAccessToken();
 }
 
 /** Decoded claims of the current DAB token, for the inspection view. */
@@ -288,6 +518,8 @@ export function isAuthorized(): boolean {
 
 /** Clears all DAB authorization context. Call on logout / user switch. */
 export function clearAuthorization(): void {
-  sessionStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(MCP_TOKEN_KEY);
+  sessionStorage.removeItem(TOKEN_KEY); // legacy tab-scoped storage
   sessionStorage.removeItem(PKCE_KEY);
 }

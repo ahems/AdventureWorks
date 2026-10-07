@@ -32,6 +32,9 @@ public static class McpAuthorizationExtensions
         builder.Services.AddSingleton<IUserDirectory>(sp =>
             new SqlUserDirectory(connectionString, sp.GetRequiredService<ILogger<SqlUserDirectory>>()));
         builder.Services.AddSingleton<ToolAuthorizationEvaluator>();
+        builder.Services.AddSingleton<OneTimeUseCache>();
+        builder.Services.AddHttpClient(nameof(EntraManagedIdentityAssertionValidator));
+        builder.Services.AddSingleton<IServiceAssertionValidator, EntraManagedIdentityAssertionValidator>();
 
         // Signing material provider (Key Vault in Azure, ephemeral for local/dev/test).
         ISigningKeyProvider signingProvider;
@@ -72,10 +75,26 @@ public static class McpAuthorizationExtensions
                 o.AllowAuthorizationCodeFlow()
                  .RequireProofKeyForCodeExchange();
 
+                // Refresh tokens let first-party apps renew access silently after the user signs
+                // in once. Workload tokens use the managed-identity assertion grant.
+                o.AllowRefreshTokenFlow();
+                o.AllowCustomFlow(ManagedIdentityGrant.GrantType);
+
                 o.RegisterScopes(OAuthScopes.All.ToArray());
+                o.RegisterScopes(OpenIddictConstants.Scopes.OfflineAccess);
 
                 o.SetAccessTokenLifetime(options.AccessTokenLifetime);
                 o.SetAuthorizationCodeLifetime(TimeSpan.FromMinutes(5));
+                o.SetRefreshTokenLifetime(options.RefreshTokenLifetime);
+                o.DisableSlidingRefreshTokenExpiration();
+
+                // api-mcp scales to zero and keeps its OpenIddict store in memory, so stored
+                // token/authorization entries would be lost on every restart and invalidate
+                // outstanding refresh tokens. Tokens are therefore fully self-contained (encrypted
+                // with the stable Key Vault key); authorization-code single use is enforced by
+                // OneTimeUseCache in the token endpoint.
+                o.DisableTokenStorage();
+                o.DisableAuthorizationStorage();
 
                 if (!string.IsNullOrWhiteSpace(options.PublicBaseUrl))
                 {
@@ -256,6 +275,22 @@ public static class McpAuthorizationExtensions
             KeyVaultUri = Get("MCP_SIGNING_KEY_VAULT_URI", "AZURE_KEY_VAULT_URI", "KEY_VAULT_URI"),
             KeyVaultManagedIdentityClientId = Get("MCP_KEYVAULT_MANAGED_IDENTITY_CLIENT_ID", "KEYVAULT_MANAGED_IDENTITY_CLIENT_ID"),
         };
+
+        options.EntraTenantId = Get("MCP_ENTRA_TENANT_ID");
+        var trustedPrincipals = Get("MCP_TRUSTED_SERVICE_PRINCIPAL_IDS");
+        if (!string.IsNullOrWhiteSpace(trustedPrincipals))
+        {
+            foreach (var id in trustedPrincipals!.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                options.TrustedServicePrincipalIds.Add(id);
+            }
+        }
+
+        var refreshHours = Get("MCP_REFRESH_TOKEN_LIFETIME_HOURS");
+        if (int.TryParse(refreshHours, out var hours) && hours is > 0 and <= 168)
+        {
+            options.RefreshTokenLifetime = TimeSpan.FromHours(hours);
+        }
 
         var certName = Get("MCP_SIGNING_CERTIFICATE_NAME");
         if (!string.IsNullOrWhiteSpace(certName))

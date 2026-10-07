@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Loader2, Eye, EyeOff, Shield } from "lucide-react";
 import AdminLogo from "@/components/AdminLogo";
 import { useAuth } from "@/context/AuthContext";
@@ -18,7 +18,6 @@ const LoginPage: React.FC = () => {
   const [password, setPassword] = useState("");
 
   const { login, isLoading } = useAuth();
-  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,10 +35,9 @@ const LoginPage: React.FC = () => {
       return;
     }
 
-    const success = await login(email, password);
-    if (success) {
-      navigate("/", { replace: true });
-    }
+    // On success the browser is redirected through the api-mcp authorization
+    // server to obtain the data-access token and returns via /oauth/callback.
+    await login(email, password);
   };
 
   return (

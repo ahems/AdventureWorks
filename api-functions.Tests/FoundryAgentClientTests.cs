@@ -80,10 +80,54 @@ public class FoundryAgentClientTests
         Assert.Equal("none", handler.ResponseRequests[1].GetProperty("tool_choice").GetString());
     }
 
-    private static FoundryAgentClient CreateClient(FoundryHandler handler, TelemetryConfiguration telemetry) =>
+    [Fact]
+    public async Task Service_token_is_injected_only_for_api_mcp_tools_without_delegated_token()
+    {
+        using var handler = new FoundryHandler();
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        var provider = new StubServiceTokenProvider(handler, "https://mcp.test/mcp");
+        var client = CreateClient(handler, telemetry, provider);
+
+        await client.InvokeAsync("customer-agent", "Generate", toolChoice: "required");
+        var auth = handler.ResponseRequests[0].GetProperty("tools")[0].GetProperty("headers").GetProperty("Authorization").GetString();
+        Assert.EndsWith(" svc-token", auth);
+
+        // A delegated user token always wins over the service token.
+        await client.InvokeAsync("customer-agent", "Generate", toolChoice: "required", mcpAccessToken: "user-token");
+        auth = handler.ResponseRequests[1].GetProperty("tools")[0].GetProperty("headers").GetProperty("Authorization").GetString();
+        Assert.EndsWith(" user-token", auth);
+        Assert.Equal(1, provider.Calls);
+    }
+
+    [Fact]
+    public async Task Service_token_is_not_sent_to_other_mcp_servers()
+    {
+        using var handler = new FoundryHandler();
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        var client = CreateClient(handler, telemetry, new StubServiceTokenProvider(handler, "https://other-mcp.test/mcp"));
+
+        await client.InvokeAsync("customer-agent", "Generate", toolChoice: "required");
+        Assert.False(handler.ResponseRequests[0].GetProperty("tools")[0].TryGetProperty("headers", out _));
+    }
+
+    private static FoundryAgentClient CreateClient(
+        FoundryHandler handler, TelemetryConfiguration telemetry, McpServiceTokenProvider? provider = null) =>
         new(NullLogger<FoundryAgentClient>.Instance, new TelemetryClient(telemetry), new TestCredential(),
             "https://foundry.test/api/projects/demo", new TestHttpClientFactory(handler),
-            fallbackMcpServiceUrl: "https://fallback.test/mcp");
+            fallbackMcpServiceUrl: "https://fallback.test/mcp", serviceTokenProvider: provider);
+
+    private sealed class StubServiceTokenProvider(FoundryHandler handler, string mcpUrl)
+        : McpServiceTokenProvider(new TestCredential(), new TestHttpClientFactory(handler),
+            NullLogger<McpServiceTokenProvider>.Instance, mcpUrl)
+    {
+        public int Calls { get; private set; }
+
+        public override Task<string?> GetTokenAsync(CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromResult<string?>("svc-token");
+        }
+    }
 
     private sealed class TestCredential : TokenCredential
     {

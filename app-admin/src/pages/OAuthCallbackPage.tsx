@@ -1,20 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
-import { handleCallback as handleMcpCallback } from "@/services/mcpAuth";
-import {
-  handleCallback as handleDabCallback,
-  hasPendingAuthorization as hasPendingDabAuthorization,
-} from "@/services/dabAuth";
+import { handleCallback as handleDabCallback } from "@/services/dabAuth";
+import { useAuth } from "@/context/AuthContext";
 
 /**
  * Handles the OAuth redirect (`/oauth/callback`) from the api-mcp authorization
- * server. The route is shared by two PKCE flows — the MCP-resource token
- * (inspection page) and the DAB-resource token (Data API access) — so it
- * dispatches based on which flow has a pending PKCE state in sessionStorage.
+ * server for the DAB-resource token. The flow runs silently right after the
+ * employee signs in and returns them to the dashboard.
  */
 const OAuthCallbackPage: React.FC = () => {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const ran = useRef(false);
 
@@ -22,14 +19,9 @@ const OAuthCallbackPage: React.FC = () => {
     if (ran.current) return; // guard React 18 StrictMode double-invoke
     ran.current = true;
     (async () => {
-      const isDab = hasPendingDabAuthorization();
-      const result = isDab
-        ? await handleDabCallback()
-        : await handleMcpCallback();
+      const result = await handleDabCallback();
       if (result.ok) {
-        const target =
-          (isDab && result.returnTo) || "/mcp-authorization";
-        navigate(target, { replace: true });
+        navigate(result.returnTo || "/", { replace: true });
       } else {
         setError(result.error ?? "Authorization failed.");
       }
@@ -46,9 +38,12 @@ const OAuthCallbackPage: React.FC = () => {
             <p className="text-sm text-muted-foreground break-words">{error}</p>
             <button
               className="text-sm underline text-primary"
-              onClick={() => navigate("/mcp-authorization", { replace: true })}
+              onClick={() => {
+                logout();
+                navigate("/login", { replace: true });
+              }}
             >
-              Back to MCP Authorization
+              Back to sign in
             </button>
           </>
         ) : (

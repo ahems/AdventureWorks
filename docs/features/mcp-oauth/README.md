@@ -29,6 +29,7 @@ existing **AdventureWorks database users**.
 - [JWT access-token validation](#jwt-access-token-validation)
 - [Key Vault signing key (RBAC + managed identity)](#key-vault-signing-key-rbac--managed-identity)
 - [Delegated token propagation and isolation](#delegated-token-propagation-and-isolation)
+- [Silent admin sign-in and service tokens](#silent-admin-sign-in-and-service-tokens)
 - [Demonstration steps (allowed and denied)](#demonstration-steps-allowed-and-denied)
 - [Telemetry](#telemetry)
 - [Testing](#testing)
@@ -168,9 +169,11 @@ hard-coded**.
 
 ## Clients
 
-All first-party clients are **public** (no secret) and use **Authorization Code + PKCE**,
-**explicit consent**, and `code` response type. Redirect URIs are wired from the deployed
-app URLs at deploy time (`scripts/hooks/postdeploy.sh`) — never hard-coded.
+All first-party clients are **public** (no secret) and use **Authorization Code + PKCE**
+with the `code` response type. First-party apps skip the consent screen; third-party
+clients (e.g. `mcp-inspector`) still require explicit consent. The service client
+`adventureworks-agents` is used only for the managed-identity grant. Redirect URIs are
+wired from the deployed app URLs at deploy time (`scripts/hooks/postdeploy.sh`) — never hard-coded.
 
 | Client ID | App | Redirect URI (prod) | Local dev redirect |
 | --------- | --- | ------------------- | ------------------ |
@@ -271,12 +274,10 @@ tokens:
   `GET /authorize`. It shows the **current AdventureWorks user**, the **app** (client),
   the resolved **role**, the target **resource**, and the **requested scopes** before the
   user approves. It does **not** bypass the app's existing login/selection.
-- **Admin authorization-inspection view** — the admin app's surface that additionally
-  shows the **requested tool**, its **required scopes**, the **ownership result** and the
-  final **allow/deny decision**. It is driven by the **server-side decision data** that
-  `McpToolAuthorizationFilter` computes and logs for every tool call (subject, category,
-  app, tool, required scope, ownership result, correlation ID, allow/deny category). Raw
-  access tokens are **not** displayed by default.
+- **Server-side decision log** — `McpToolAuthorizationFilter` computes and logs the
+  decision for every tool call (subject, category, app, tool, required scope, ownership
+  result, correlation ID, allow/deny category) to Application Insights. Raw access tokens
+  are **not** logged.
 
 ## Authorization Code + PKCE sequence
 
@@ -377,6 +378,44 @@ flowchart TB
 - Authorization is re-evaluated on **every** tool invocation. Logout, user switching,
   account changes and app switching clear the prior authorization context (no shared
   globally-authenticated MCP client).
+- When **no** delegated user token is supplied (for example, server-initiated AI
+  features such as *Generate Customer with AI*), `FoundryAgentClient` falls back to a
+  short-lived **service token** from `McpServiceTokenProvider` (see
+  [Silent admin sign-in and service tokens](#silent-admin-sign-in-and-service-tokens)).
+  Those calls are logged with subject `service:<principalId>` and category `service`.
+
+## Silent admin sign-in and service tokens
+
+The admin portal reads its data (customers, orders, dashboard KPIs) from DAB, which
+requires an `api-mcp`-issued JWT. Authorization happens once, at sign-in, and is silent
+afterwards; there is no separate authorization page.
+
+- **Sign-in once.** After the admin login succeeds, `startSilentSignIn` (in
+  `app-admin/src/services/dabAuth.ts`) performs a top-level form POST of the same
+  credentials to `api-mcp` `/login`, which returns straight into `/authorize`
+  (Authorization Code + PKCE) and back to `/oauth/callback`.
+- **No consent prompt for first-party clients.** Clients in the trusted first-party list
+  (`adventureworks-admin`, `adventureworks-eshop`, `adventureworks-manufacturing`) skip
+  the consent screen; third-party clients such as `mcp-inspector` still see it.
+- **Refresh tokens.** The admin requests `offline_access` and receives a rotating refresh
+  token (12 h lifetime). `graphql-client.ts` refreshes the access token ahead of expiry
+  and retries once on `401` / `AUTH_NOT_AUTHENTICATED`. If the refresh fails, the user is
+  signed out with a "session expired" toast instead of seeing silently empty pages.
+- **Managed-identity service grant.** Backend callers exchange a Microsoft Entra
+  managed-identity token for an MCP token at `POST /token` with
+  `grant_type=urn:adventureworks:params:oauth:grant-type:managed-identity`,
+  `client_id=adventureworks-agents` and `assertion=<Entra token>`. `api-mcp` validates
+  the assertion against `MCP_ENTRA_TENANT_ID` and only accepts principal IDs listed in
+  `MCP_TRUSTED_SERVICE_PRINCIPAL_IDS` (both set in `infra/modules/aca-api-mcp.bicep`).
+- Authorization codes are strictly single-use.
+
+- **Per-user MCP token for agent chat.** The same refresh token can be exchanged for a
+  token bound to a different allowed resource by sending an RFC 8707 `resource`
+  parameter on the `refresh_token` grant (trusted first-party clients only).
+  `getMcpAccessToken` uses this to mint an MCP-resource token silently, and
+  `agentService.ts` forwards it to `/api/agent/chat`, so MCP tool calls run as the
+  signed-in admin and role-based allow/deny applies. If no user token is available,
+  the agent falls back to the managed-identity service token.
 
 ## Demonstration steps (allowed and denied)
 
@@ -402,14 +441,14 @@ flowchart TB
    the mismatch is logged. You cannot read another consumer's order.
 
 ### 4. Admin allow/deny **and switching** (the key demo)
-1. In the **admin app**, select a seeded **Sales** employee (`sales-admin`).
-2. Review the **authorization inspection** (consent/inspection page at `/authorize`, plus
-   the admin inspection view): employee, category, role, app, subject, granted scopes,
-   the requested tool, its required scopes, the ownership result, and the allow/deny
-   decision (**raw tokens are not shown**).
+1. Sign in to the **admin app** as a seeded **Sales** employee (`sales-admin`).
+2. Review the **authorization decisions** in the server-side decision log (Application
+   Insights): employee, category, role, app, subject, granted scopes, the requested tool,
+   its required scopes, the ownership result, and the allow/deny decision (**raw tokens
+   are not logged**).
 3. Request `search_customers` → **allowed** (`customers.read`). Request `bank_deposit`
    (`admin.write`) → **denied** for `sales-admin`.
-4. **Switch** to a seeded **Executive** (`executive-admin`) or **Marketing**
+4. **Sign out and sign in** as a seeded **Executive** (`executive-admin`) or **Marketing**
    (`marketing-admin`) user and repeat `bank_deposit` → now **allowed**. This is the
    required "denied operation succeeding after switching to an appropriately authorized
    seeded user" demonstration. Switching **clears** the previous authorization context.

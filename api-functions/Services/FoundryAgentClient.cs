@@ -43,6 +43,7 @@ public class FoundryAgentClient
     private readonly string _fallbackMcpServiceUrl;
     private readonly string _fallbackDabMcpUrl;
     private readonly string _fallbackModelDeployment;
+    private readonly McpServiceTokenProvider? _serviceTokenProvider;
 
     // Cache of agent definitions keyed by agent ID — fetched once, reused every call
     private readonly ConcurrentDictionary<string, CachedAgentDefinition> _agentDefCache = new();
@@ -70,8 +71,10 @@ public class FoundryAgentClient
         IHttpClientFactory httpClientFactory,
         string fallbackMcpServiceUrl = "",
         string fallbackDabMcpUrl = "",
-        string fallbackModelDeployment = "chat")
+        string fallbackModelDeployment = "chat",
+        McpServiceTokenProvider? serviceTokenProvider = null)
     {
+        _serviceTokenProvider = serviceTokenProvider;
         _logger = logger;
         _telemetryClient = telemetryClient;
         _credential = credential;
@@ -128,7 +131,8 @@ public class FoundryAgentClient
     ///   Optional delegated OAuth access token for the end user. When supplied it is injected
     ///   as an HTTP Authorization header on every MCP tool (per request, never cached) so the
     ///   protected api-mcp resource authorizes the call as that AdventureWorks user. When
-    ///   <c>null</c> the MCP tools are sent unchanged (anonymous / no delegated context).
+    ///   <c>null</c>, tools that target the api-mcp server receive a backend service token
+    ///   (managed-identity assertion grant) so agent tool calls are still authorized.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="additionalInstructions">Trusted server instructions appended for this invocation only.</param>
@@ -156,9 +160,12 @@ public class FoundryAgentClient
         // Foundry may enumerate remote MCP servers even when tool_choice is "none".
         // Data-supplied requests must omit tools entirely, not just forbid tool calls.
         var toolsDisabled = string.Equals(toolChoice, "none", StringComparison.Ordinal);
+        var serviceToken = toolsDisabled || !string.IsNullOrEmpty(mcpAccessToken)
+            ? null
+            : await GetServiceTokenAsync(cancellationToken);
         var effectiveTools = toolsDisabled
             ? Array.Empty<JsonElement>()
-            : ApplyMcpAuthorization(def.Tools, mcpAccessToken);
+            : ApplyMcpAuthorization(def.Tools, mcpAccessToken, serviceToken);
 
         // --- Build initial input -----------------------------------------------
         object input;
@@ -320,7 +327,7 @@ public class FoundryAgentClient
                     && !usingFallbackTools
                     && !string.IsNullOrEmpty(_fallbackMcpServiceUrl))
                 {
-                    var fallbackTools = ApplyMcpAuthorization(BuildFallbackDefinition().Tools, mcpAccessToken);
+                    var fallbackTools = ApplyMcpAuthorization(BuildFallbackDefinition().Tools, mcpAccessToken, serviceToken);
                     if (fallbackTools.Count > 0)
                     {
                         usingFallbackTools = true;
@@ -827,10 +834,19 @@ public class FoundryAgentClient
     /// never leak across users, conversations, or requests. Non-MCP tools and the
     /// original list are returned unchanged when no token is supplied.
     /// </summary>
-    private static IReadOnlyList<JsonElement> ApplyMcpAuthorization(
-        IReadOnlyList<JsonElement> tools, string? mcpAccessToken)
+    private async Task<string?> GetServiceTokenAsync(CancellationToken cancellationToken) =>
+        _serviceTokenProvider is null ? null : await _serviceTokenProvider.GetTokenAsync(cancellationToken);
+
+    /// <remarks>
+    /// When no delegated token is supplied, <paramref name="serviceToken"/> (if any) is injected
+    /// only into MCP tools whose <c>server_url</c> targets the api-mcp server and that do not
+    /// already carry an Authorization header, so it is never sent to other MCP servers.
+    /// </remarks>
+    private IReadOnlyList<JsonElement> ApplyMcpAuthorization(
+        IReadOnlyList<JsonElement> tools, string? mcpAccessToken, string? serviceToken = null)
     {
-        if (string.IsNullOrEmpty(mcpAccessToken) || tools.Count == 0)
+        var useDelegated = !string.IsNullOrEmpty(mcpAccessToken);
+        if ((!useDelegated && string.IsNullOrEmpty(serviceToken)) || tools.Count == 0)
             return tools;
 
         var result = new List<JsonElement>(tools.Count);
@@ -843,6 +859,18 @@ public class FoundryAgentClient
                 && typeValue.TryGetValue<string>(out var typeStr)
                 && string.Equals(typeStr, "mcp", StringComparison.OrdinalIgnoreCase))
             {
+                if (!useDelegated)
+                {
+                    var serverUrl = obj["server_url"] is JsonValue urlValue && urlValue.TryGetValue<string>(out var u) ? u : null;
+                    var hasAuth = obj["headers"] is JsonObject existing
+                        && existing.Any(h => string.Equals(h.Key, "Authorization", StringComparison.OrdinalIgnoreCase));
+                    if (hasAuth || _serviceTokenProvider?.IsMcpServer(serverUrl) != true)
+                    {
+                        result.Add(tool);
+                        continue;
+                    }
+                }
+
                 if (obj["headers"] is not JsonObject headers)
                 {
                     headers = new JsonObject();
@@ -853,7 +881,7 @@ public class FoundryAgentClient
                 // The scheme literal is kept separate from the space + token so
                 // static secret scanners do not flag a "scheme <token>" pattern.
                 const string scheme = "Bearer";
-                headers["Authorization"] = scheme + " " + mcpAccessToken;
+                headers["Authorization"] = scheme + " " + (useDelegated ? mcpAccessToken : serviceToken);
 
                 using var doc = JsonDocument.Parse(obj.ToJsonString());
                 result.Add(doc.RootElement.Clone());

@@ -42,6 +42,7 @@ export const ORDER_STATUS_LABELS: Record<number, string> = {
   4: "Rejected",
   5: "Shipped",
   6: "Cancelled",
+  7: "Delivered",
 };
 
 export const getOrderStatusLabel = (status: number): string =>
@@ -59,7 +60,9 @@ export const useDashboardStats = () => {
   return useQuery<DashboardStats>({
     queryKey: ["dashboardStats"],
     queryFn: async () => {
-      const [countsRes, recentData] = await Promise.all([
+      // Load KPI counts and recent orders independently so one failing source
+      // doesn't blank the whole dashboard.
+      const [countsResult, recentResult] = await Promise.allSettled([
         fetch(`${getFunctionsApiUrl()}/api/reporting/dashboard-counts`).then(
           (r) => {
             if (!r.ok) throw new Error(`dashboard-counts HTTP ${r.status}`);
@@ -71,13 +74,28 @@ export const useDashboardStats = () => {
         }>(GET_RECENT_ORDERS),
       ]);
 
+      if (countsResult.status === "rejected" && recentResult.status === "rejected") {
+        throw countsResult.reason;
+      }
+      if (countsResult.status === "rejected") {
+        console.error("Dashboard counts failed:", countsResult.reason);
+      }
+      if (recentResult.status === "rejected") {
+        console.error("Recent orders failed:", recentResult.reason);
+      }
+
+      const counts =
+        countsResult.status === "fulfilled" ? countsResult.value : undefined;
       return {
-        totalProducts: countsRes.totalProducts,
-        totalCustomers: countsRes.totalCustomers,
-        totalOrders: countsRes.totalOrders,
-        pendingOrders: countsRes.pendingOrders,
-        reviewsToModerate: countsRes.reviewsToModerate,
-        recentOrders: recentData.salesOrderHeaders?.items ?? [],
+        totalProducts: counts?.totalProducts ?? 0,
+        totalCustomers: counts?.totalCustomers ?? 0,
+        totalOrders: counts?.totalOrders ?? 0,
+        pendingOrders: counts?.pendingOrders ?? 0,
+        reviewsToModerate: counts?.reviewsToModerate ?? 0,
+        recentOrders:
+          recentResult.status === "fulfilled"
+            ? (recentResult.value.salesOrderHeaders?.items ?? [])
+            : [],
       };
     },
     staleTime: 2 * 60 * 1000,

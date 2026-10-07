@@ -99,10 +99,45 @@ public sealed class OpenIddictClientSeeder : IHostedService
                 descriptor.Permissions.Add(Permissions.Prefixes.Scope + s);
             }
 
+            // Trusted first-party apps may request offline_access and redeem refresh tokens so
+            // the signed-in user is never prompted again during the session.
+            if (_options.TrustedFirstPartyClientIds.Contains(client.ClientId))
+            {
+                descriptor.Permissions.Add(Permissions.GrantTypes.RefreshToken);
+            }
+
             await appManager.CreateAsync(descriptor, cancellationToken);
             _logger.LogInformation(
                 "Registered OAuth client '{ClientId}' with {RedirectCount} redirect URI(s) and {ScopeCount} scope(s).",
                 client.ClientId, descriptor.RedirectUris.Count, client.Scopes.Count);
+        }
+
+        // Backend workload client (no redirect, token endpoint only) for the managed-identity
+        // assertion grant. The assertion itself authenticates the caller.
+        if (await appManager.FindByClientIdAsync(AuthorizationServerOptions.ServiceClientId, cancellationToken) is null)
+        {
+            var serviceDescriptor = new OpenIddictApplicationDescriptor
+            {
+                ClientId = AuthorizationServerOptions.ServiceClientId,
+                ClientType = ClientTypes.Public,
+                DisplayName = "AdventureWorks AI Agents (service)",
+                Permissions =
+                {
+                    Permissions.Endpoints.Token,
+                    Permissions.Prefixes.GrantType + ManagedIdentityGrant.GrantType,
+                },
+            };
+
+            foreach (var s in OAuthScopes.All)
+            {
+                serviceDescriptor.Permissions.Add(Permissions.Prefixes.Scope + s);
+            }
+
+            await appManager.CreateAsync(serviceDescriptor, cancellationToken);
+            _logger.LogInformation(
+                "Registered service client '{ClientId}' (managed-identity grant {Status}).",
+                AuthorizationServerOptions.ServiceClientId,
+                _options.ServiceGrantEnabled ? "enabled" : "disabled: MCP_ENTRA_TENANT_ID / MCP_TRUSTED_SERVICE_PRINCIPAL_IDS not set");
         }
     }
 

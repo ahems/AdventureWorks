@@ -1,5 +1,5 @@
 import { getFunctionsApiUrl } from "@/lib/utils";
-import { getAccessToken } from "@/services/mcpAuth";
+import { getMcpAccessToken } from "@/services/dabAuth";
 
 export interface AgentMessage {
   role: "user" | "assistant";
@@ -20,15 +20,12 @@ export async function sendAgentMessage(
 ): Promise<AgentMessage> {
   const url = `${getFunctionsApiUrl()}/api/agent/chat`;
 
-  // Attach the delegated MCP access token when the employee has authorized via
-  // OAuth. api-functions forwards it to the MCP server so tool calls run under
-  // this user's scopes/ownership. Safe no-op when the user has not authorized.
+  // Forward a per-user MCP token (minted silently from the sign-in session) so
+  // tool calls are authorized as the signed-in admin. Without one, api-functions
+  // falls back to its managed-identity service token.
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const token = getAccessToken();
-  if (token) {
-    const scheme = "Bearer";
-    headers.Authorization = scheme + " " + token;
-  }
+  const mcpToken = await getMcpAccessToken();
+  if (mcpToken) headers.Authorization = `Bearer ${mcpToken}`;
 
   const response = await fetch(url, {
     method: "POST",

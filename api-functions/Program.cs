@@ -192,8 +192,18 @@ builder.Services.AddSingleton<FoundryAgentClient>(sp =>
     // Model deployment name (falls back to "chat" which is the standard deployment)
     var modelDeployment = configuration["chatGptDeploymentName"] ?? "chat";
 
-    return new FoundryAgentClient(logger, telemetryClient, credential, projectEndpoint, httpClientFactory, mcpServiceUrl, dabMcpUrl, modelDeployment);
+    var serviceTokenProvider = sp.GetRequiredService<McpServiceTokenProvider>();
+
+    return new FoundryAgentClient(logger, telemetryClient, credential, projectEndpoint, httpClientFactory, mcpServiceUrl, dabMcpUrl, modelDeployment, serviceTokenProvider);
 });
+
+// Backend service credential for api-mcp: exchanges the managed identity's Entra token for an
+// MCP-resource token so AI agent tool calls without a delegated user token are authorized.
+builder.Services.AddSingleton<McpServiceTokenProvider>(sp => new McpServiceTokenProvider(
+    sp.GetRequiredService<DefaultAzureCredential>(),
+    sp.GetRequiredService<IHttpClientFactory>(),
+    sp.GetRequiredService<ILogger<McpServiceTokenProvider>>(),
+    sp.GetRequiredService<IConfiguration>()["MCP_SERVICE_URL"] ?? string.Empty));
 
 // Register AI Agent Service for conversational AI backed by Azure AI Foundry
 builder.Services.AddScoped<AIAgentService>(sp =>

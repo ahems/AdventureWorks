@@ -18,6 +18,12 @@ public static class UserCategories
 
     /// <summary>Unauthenticated / anonymous browser. Never issued an MCP access token.</summary>
     public const string Anonymous = "anonymous";
+
+    /// <summary>
+    /// Trusted backend workload (e.g. the api-functions managed identity invoking Foundry agents)
+    /// that obtained an MCP token via the managed-identity assertion grant. Treated as internal.
+    /// </summary>
+    public const string Service = "service";
 }
 
 /// <summary>

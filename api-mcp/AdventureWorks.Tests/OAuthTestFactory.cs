@@ -35,7 +35,14 @@ public sealed class OAuthTestFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("MCP_RESOURCE_IDENTIFIER", ResourceIdentifier);
         Environment.SetEnvironmentVariable("DAB_RESOURCE_IDENTIFIER", DabResourceIdentifier);
         Environment.SetEnvironmentVariable("FUNCTIONS_RESOURCE_IDENTIFIER", FunctionsResourceIdentifier);
+        Environment.SetEnvironmentVariable("MCP_ENTRA_TENANT_ID", "00000000-0000-0000-0000-00000000aaaa");
+        Environment.SetEnvironmentVariable("MCP_TRUSTED_SERVICE_PRINCIPAL_IDS", TrustedServicePrincipalId);
     }
+
+    public const string TrustedServicePrincipalId = "3a3f63e6-0000-0000-0000-000000000001";
+
+    /// <summary>Assertion value the fake validator accepts as the trusted managed identity.</summary>
+    public const string ValidServiceAssertion = "valid-test-assertion";
 
     public FakeUserDirectory Directory { get; } = new();
 
@@ -61,6 +68,15 @@ public sealed class OAuthTestFactory : WebApplicationFactory<Program>
             }
 
             services.AddSingleton<IUserDirectory>(Directory);
+
+            // Entra JWKS is never contacted in tests; accept one well-known assertion.
+            var validators = services.Where(d => d.ServiceType == typeof(IServiceAssertionValidator)).ToList();
+            foreach (var d in validators)
+            {
+                services.Remove(d);
+            }
+
+            services.AddSingleton<IServiceAssertionValidator, FakeServiceAssertionValidator>();
         });
     }
 }
@@ -97,4 +113,13 @@ public sealed class FakeUserDirectory : IUserDirectory
 
     public Task<ResolvedUser?> ResolveByBusinessEntityIdAsync(int businessEntityId, CancellationToken ct = default) =>
         Task.FromResult(_byBeid.TryGetValue(businessEntityId, out var u) ? u : null);
+}
+
+/// <summary>Accepts only <see cref="OAuthTestFactory.ValidServiceAssertion"/>.</summary>
+public sealed class FakeServiceAssertionValidator : IServiceAssertionValidator
+{
+    public Task<ServiceAssertion?> ValidateAsync(string assertion, CancellationToken cancellationToken) =>
+        Task.FromResult(assertion == OAuthTestFactory.ValidServiceAssertion
+            ? new ServiceAssertion(OAuthTestFactory.TrustedServicePrincipalId)
+            : null);
 }

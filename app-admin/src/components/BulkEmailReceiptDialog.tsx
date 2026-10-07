@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { graphqlClient } from "@/lib/graphql-client";
 import {
   Dialog,
   DialogContent,
@@ -99,44 +100,32 @@ const BulkEmailReceiptDialog: React.FC<BulkEmailReceiptDialogProps> = ({
 
       try {
         // Fetch the customer's first email address via GraphQL, then call the receipt API
-        const gqlResponse = await fetch(
-          `${import.meta.env.VITE_API_URL ?? ""}/graphql`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              query: `query GetEmail($custId: Int!) {
-                customers(filter: { CustomerID: { eq: $custId } }) {
-                  items { PersonID }
-                }
-              }`,
-              variables: { custId: order.CustomerID },
-            }),
-          },
+        const gqlData = await graphqlClient.request<{
+          customers?: { items: { PersonID: number | null }[] };
+        }>(
+          `query GetEmail($custId: Int!) {
+            customers(filter: { CustomerID: { eq: $custId } }) {
+              items { PersonID }
+            }
+          }`,
+          { custId: order.CustomerID },
         );
-        const gqlData = await gqlResponse.json();
-        const personId = gqlData?.data?.customers?.items?.[0]?.PersonID;
+        const personId = gqlData?.customers?.items?.[0]?.PersonID;
 
         if (!personId) throw new Error("Customer has no person record");
 
-        const emailGqlResponse = await fetch(
-          `${import.meta.env.VITE_API_URL ?? ""}/graphql`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              query: `query GetEmailAddr($personId: Int!) {
-                emailAddresses(filter: { BusinessEntityID: { eq: $personId } }, first: 1) {
-                  items { EmailAddressID }
-                }
-              }`,
-              variables: { personId },
-            }),
-          },
+        const emailData = await graphqlClient.request<{
+          emailAddresses?: { items: { EmailAddressID: number }[] };
+        }>(
+          `query GetEmailAddr($personId: Int!) {
+            emailAddresses(filter: { BusinessEntityID: { eq: $personId } }, first: 1) {
+              items { EmailAddressID }
+            }
+          }`,
+          { personId },
         );
-        const emailData = await emailGqlResponse.json();
         const emailAddressId =
-          emailData?.data?.emailAddresses?.items?.[0]?.EmailAddressID;
+          emailData?.emailAddresses?.items?.[0]?.EmailAddressID;
 
         if (!emailAddressId) throw new Error("No email address on file");
 

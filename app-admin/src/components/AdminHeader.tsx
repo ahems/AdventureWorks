@@ -21,7 +21,6 @@ import {
   TrendingUp,
   TrendingDown,
   Warehouse,
-  KeyRound,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import AppBreadcrumb from "@/components/AppBreadcrumb";
@@ -278,14 +277,6 @@ const AdminHeader: React.FC = () => {
                             {user.department}
                           </p>
                         </div>
-                        <Link
-                          to="/mcp-authorization"
-                          onClick={() => setUserMenuOpen(false)}
-                          className="w-full flex items-center gap-2 px-3 py-2 font-doodle text-doodle-text hover:bg-doodle-text/10 transition-colors"
-                        >
-                          <KeyRound className="w-4 h-4" />
-                          MCP Authorization
-                        </Link>
                         <button
                           onClick={() => {
                             logout();
