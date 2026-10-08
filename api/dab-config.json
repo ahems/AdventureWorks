@@ -3157,7 +3157,10 @@
         {
           "role": "manufacturing-engineer",
           "actions": [
-            "read"
+            "read",
+            "create",
+            "update",
+            "delete"
           ]
         }
       ],
@@ -3810,7 +3813,10 @@
         {
           "role": "manufacturing-engineer",
           "actions": [
-            "read"
+            "read",
+            "create",
+            "update",
+            "delete"
           ]
         }
       ],
@@ -4029,6 +4035,12 @@
             "read",
             "update",
             "delete"
+          ]
+        },
+        {
+          "role": "manufacturing-engineer",
+          "actions": [
+            "read"
           ]
         }
       ],
@@ -4735,6 +4747,12 @@
             "update",
             "delete"
           ]
+        },
+        {
+          "role": "manufacturing-engineer",
+          "actions": [
+            "read"
+          ]
         }
       ],
       "relationships": {
@@ -4920,6 +4938,12 @@
             "read",
             "update",
             "delete"
+          ]
+        },
+        {
+          "role": "manufacturing-engineer",
+          "actions": [
+            "read"
           ]
         }
       ],
@@ -5472,6 +5496,12 @@
             "update",
             "delete"
           ]
+        },
+        {
+          "role": "manufacturing-engineer",
+          "actions": [
+            "read"
+          ]
         }
       ]
     },
@@ -5547,6 +5577,12 @@
             "read",
             "update",
             "delete"
+          ]
+        },
+        {
+          "role": "manufacturing-engineer",
+          "actions": [
+            "read"
           ]
         }
       ]
@@ -5873,6 +5909,12 @@
             "update",
             "delete"
           ]
+        },
+        {
+          "role": "manufacturing-engineer",
+          "actions": [
+            "read"
+          ]
         }
       ]
     },
@@ -6103,6 +6145,12 @@
             "update",
             "delete"
           ]
+        },
+        {
+          "role": "manufacturing-engineer",
+          "actions": [
+            "read"
+          ]
         }
       ],
       "relationships": {
@@ -6234,6 +6282,12 @@
             "read",
             "update",
             "delete"
+          ]
+        },
+        {
+          "role": "manufacturing-engineer",
+          "actions": [
+            "read"
           ]
         }
       ],

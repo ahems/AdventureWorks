@@ -408,6 +408,17 @@ afterwards; there is no separate authorization page.
   the assertion against `MCP_ENTRA_TENANT_ID` and only accepts principal IDs listed in
   `MCP_TRUSTED_SERVICE_PRINCIPAL_IDS` (both set in `infra/modules/aca-api-mcp.bicep`).
 - Authorization codes are strictly single-use.
+- **Manufacturing app.** `app-manufacturing` uses the same silent flow with the
+  `adventureworks-manufacturing` client (`app-manufacturing/src/services/dabAuth.ts`).
+  Every DAB REST call goes through `src/lib/dabFetch.ts`, which sends the bearer token
+  and `X-MS-API-ROLE`. When the session can't be renewed, the user is sent back to
+  `/login`. In `api/dab-config.json`, the `manufacturing-engineer` role has CRUD on
+  `Product`, `ProductModel`, `BillOfMaterials`, `WorkOrder`, `WorkOrderRouting`,
+  `Location`, `ScrapReason` and `ProductInventory`. It has read access to the reference
+  data the app displays, including `Department`, `Shift`, `Vendor`,
+  `PurchaseOrderHeader`/`Detail`, `ProductCostHistory` and `SalesOrderHeader`/`Detail`
+  (used for demand planning). These DAB grants are separate from the MCP **scopes**
+  above, so the role still gets no customer, sales or admin MCP tools.
 
 - **Per-user MCP token for agent chat.** The same refresh token can be exchanged for a
   token bound to a different allowed resource by sending an RFC 8707 `resource`

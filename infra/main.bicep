@@ -381,6 +381,7 @@ module containerAppManufacturing 'modules/aca-app-manufacturing.bicep' = {
     identityName: identityName
     apiUrl: containerAppApi.outputs.apiUrl
     apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
+    apiMcpUrl: containerAppApiMcp.outputs.apiMcpUrl
     appInsightsConnectionString: appinsights.outputs.connectionString
     webPubSubHostName: webpubsub.outputs.webPubSubHostName
     minReplica: 0

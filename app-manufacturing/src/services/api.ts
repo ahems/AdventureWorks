@@ -23,6 +23,7 @@ import type {
   ODataResponse,
 } from "@/types/production";
 import { ODATA_BASE, MANUFACTURING_BASE } from "@/config/api";
+import { dabFetch } from "@/lib/dabFetch";
 
 const API_BASE = ODATA_BASE;
 
@@ -40,7 +41,7 @@ async function fetchOData<T>(
   params?: Record<string, string>,
 ): Promise<T[]> {
   const url = buildODataUrl(`${API_BASE}/${entity}`, params);
-  const res = await fetch(url);
+  const res = await dabFetch(url);
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
   const data: ODataResponse<T> = await res.json();
   return data.value;
@@ -55,7 +56,7 @@ async function fetchAllOData<T>(
   let url: string | null = buildODataUrl(`${API_BASE}/${entity}`, params);
   let page = 0;
   while (url && page < maxPages) {
-    const res = await fetch(url);
+    const res = await dabFetch(url);
     if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
     const data: ODataResponse<T> & { nextLink?: string } = await res.json();
     all.push(...data.value);
@@ -211,7 +212,7 @@ async function postEntity<T>(
   entity: string,
   body: Record<string, unknown>,
 ): Promise<T> {
-  const res = await fetch(`${API_BASE}/${entity}`, {
+  const res = await dabFetch(`${API_BASE}/${entity}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -229,7 +230,7 @@ async function deleteEntity(
   keyPath: string,
   options?: { ignoreNotFound?: boolean },
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/${entity}/${keyPath}`, {
+  const res = await dabFetch(`${API_BASE}/${entity}/${keyPath}`, {
     method: "DELETE",
   });
   if (res.status === 404 && options?.ignoreNotFound) return;
@@ -281,7 +282,7 @@ async function patchEntity(
   keyPath: string,
   body: Record<string, unknown>,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/${entity}/${keyPath}`, {
+  const res = await dabFetch(`${API_BASE}/${entity}/${keyPath}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

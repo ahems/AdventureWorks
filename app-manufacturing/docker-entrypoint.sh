@@ -4,6 +4,7 @@ set -e
 echo "Starting entrypoint script..."
 echo "API_URL: ${API_URL}"
 echo "API_FUNCTIONS_URL: ${API_FUNCTIONS_URL}"
+echo "API_MCP_URL: ${API_MCP_URL}"
 
 # Strip /graphql (with optional trailing slash) from API_URL to get the DAB REST base
 DAB_REST_BASE="$(echo "${API_URL}" | sed 's|/graphql/*$||')"
@@ -16,6 +17,7 @@ window.APP_CONFIG = {
   MANUFACTURING_BASE: "${API_FUNCTIONS_URL}/api",
   API_URL: "${API_URL}",
   API_FUNCTIONS_URL: "${API_FUNCTIONS_URL}",
+  API_MCP_URL: "${API_MCP_URL}",
   APPINSIGHTS_CONNECTIONSTRING: "${APPINSIGHTS_CONNECTIONSTRING}",
   WEB_PUBSUB_HOST_NAME: "${WEB_PUBSUB_HOST_NAME}"
 };

@@ -15,6 +15,7 @@ param maxReplica int = 3
 param revisionSuffix string
 param apiUrl string = ''
 param apiFunctionsUrl string = ''
+param apiMcpUrl string = ''
 param appInsightsConnectionString string = ''
 param webPubSubHostName string = ''
 
@@ -83,6 +84,10 @@ resource appManufacturing 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'API_FUNCTIONS_URL'
               value: apiFunctionsUrl
+            }
+            {
+              name: 'API_MCP_URL'
+              value: apiMcpUrl
             }
             {
               name: 'APPINSIGHTS_CONNECTIONSTRING'

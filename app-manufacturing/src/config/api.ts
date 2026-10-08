@@ -16,6 +16,7 @@ type AppWindow = Window & {
     ODATA_BASE?: string;
     MANUFACTURING_BASE?: string;
     API_FUNCTIONS_URL?: string;
+    API_MCP_URL?: string;
     WEB_PUBSUB_HOST_NAME?: string;
   };
 };
@@ -35,6 +36,15 @@ export const MANUFACTURING_BASE: string =
   runtimeConfig?.MANUFACTURING_BASE ||
   (import.meta.env.VITE_MANUFACTURING_BASE as string | undefined) ||
   DEFAULT_MANUFACTURING_BASE;
+
+/**
+ * api-mcp MCP endpoint URL (e.g. https://av-api-mcp-xxx/mcp). Its origin hosts the
+ * OAuth authorization server that issues the delegated DAB access token.
+ */
+export const API_MCP_URL: string =
+  runtimeConfig?.API_MCP_URL ||
+  (import.meta.env.VITE_API_MCP_URL as string | undefined) ||
+  "";
 
 /** Negotiate URL for Web PubSub real-time push. Empty string = disabled. */
 export const WEB_PUBSUB_NEGOTIATE_URL: string = (() => {

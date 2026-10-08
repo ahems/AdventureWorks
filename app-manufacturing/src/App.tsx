@@ -17,6 +17,7 @@ import { useRealTimeUpdates } from "@/hooks/useRealTimeUpdates";
 import ProductionHeader from "@/components/ProductionHeader";
 import Footer from "@/components/Footer";
 import LoginPage from "@/pages/LoginPage";
+import OAuthCallbackPage from "@/pages/OAuthCallbackPage";
 import Dashboard from "@/pages/Dashboard";
 import DefineProducts from "@/pages/define/DefineProducts";
 import DefineProductDetail from "@/pages/define/DefineProductDetail";
@@ -85,6 +86,7 @@ const App = () => (
           <BrowserRouter>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
               <Route element={<AuthGuard />}>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/define" element={<DefineProducts />} />

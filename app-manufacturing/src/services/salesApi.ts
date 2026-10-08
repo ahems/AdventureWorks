@@ -1,4 +1,5 @@
 import { ODATA_BASE } from "@/config/api";
+import { dabFetch } from "@/lib/dabFetch";
 import type {
   SalesOrderHeader,
   SalesOrderDetail,
@@ -23,7 +24,7 @@ async function fetchAll<T>(
       : base;
   let page = 0;
   while (url && page < maxPages) {
-    const res = await fetch(url);
+    const res = await dabFetch(url);
     if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
     const data: ODataResponse<T> & { nextLink?: string } = await res.json();
     all.push(...data.value);
@@ -49,7 +50,7 @@ export const fetchRecentShippedOrders = (sinceISODate: string) =>
 
 /** Latest single shipped order — used to anchor the trailing windows when the dataset is static. */
 export async function fetchLatestShippedOrderDate(): Promise<string | null> {
-  const res = await fetch(
+  const res = await dabFetch(
     `${API_BASE}/SalesOrderHeader?$filter=Status%20eq%205&$orderby=OrderDate%20desc&$first=1`,
   );
   if (!res.ok) return null;

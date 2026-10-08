@@ -3,10 +3,18 @@ import React, {
   useContext,
   useState,
   useCallback,
+  useEffect,
   ReactNode,
 } from "react";
 import { toast } from "@/hooks/use-toast";
 import { ODATA_BASE, MANUFACTURING_BASE } from "@/config/api";
+import {
+  DAB_SESSION_LOST_EVENT,
+  clearAuthorization as clearDabAuthorization,
+  hasPendingAuthorization as hasPendingDabAuthorization,
+  hasSession as hasDabSession,
+  startSilentSignIn,
+} from "@/services/dabAuth";
 
 interface User {
   id: string;
@@ -36,7 +44,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   const [user, setUser] = useState<User | null>(() => {
     try {
       const storedUser = localStorage.getItem(CURRENT_USER_KEY);
-      return storedUser ? (JSON.parse(storedUser) as User) : null;
+      if (!storedUser) return null;
+      // A signed-in user without a renewable DAB session would see 403s
+      // (DAB rejects anonymous reads), so treat it as signed out.
+      if (!hasDabSession() && !hasPendingDabAuthorization()) {
+        localStorage.removeItem(CURRENT_USER_KEY);
+        return null;
+      }
+      return JSON.parse(storedUser) as User;
     } catch {
       return null;
     }
@@ -46,6 +61,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   const login = useCallback(
     async (email: string, password: string): Promise<boolean> => {
       setIsLoading(true);
+      // Clear any prior OAuth authorization so a user switch never inherits the
+      // previous employee's delegated DAB token or role.
+      clearDabAuthorization();
 
       try {
         // Step 1: Look up email via DAB REST API
@@ -128,14 +146,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
           createdAt: new Date().toISOString(),
         };
 
-        setUser(loggedInUser);
         localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(loggedInUser));
 
-        toast({
-          title: "Welcome back!",
-          description: `Logged in as ${person.FirstName} ${person.LastName}`,
-        });
-        return true;
+        // Silently obtain the delegated DAB token: signs the employee in to the
+        // api-mcp authorization server with the same credentials and completes the
+        // Authorization Code + PKCE flow (no consent page for this first-party app).
+        // The browser briefly leaves the app and returns via /oauth/callback.
+        try {
+          await startSilentSignIn(emailRecord.EmailAddress, password, "/");
+          return true;
+        } catch (err) {
+          console.error("Silent DAB sign-in failed:", err);
+          localStorage.removeItem(CURRENT_USER_KEY);
+          toast({
+            title: "Login Error",
+            description:
+              "Signed in, but could not obtain data access. Please try again.",
+            variant: "destructive",
+          });
+          return false;
+        }
       } catch (err) {
         console.error("Login error:", err);
         toast({
@@ -152,10 +182,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     [],
   );
 
+  // Refresh token rejected/expired: the data session is over, so end the app session.
+  useEffect(() => {
+    const onSessionLost = () => {
+      if (!localStorage.getItem(CURRENT_USER_KEY)) return;
+      setUser(null);
+      localStorage.removeItem(CURRENT_USER_KEY);
+      toast({
+        title: "Session expired",
+        description: "Please sign in again.",
+        variant: "destructive",
+      });
+    };
+    window.addEventListener(DAB_SESSION_LOST_EVENT, onSessionLost);
+    return () => window.removeEventListener(DAB_SESSION_LOST_EVENT, onSessionLost);
+  }, []);
+
   const logout = useCallback(() => {
     const userName = user?.firstName;
     setUser(null);
     localStorage.removeItem(CURRENT_USER_KEY);
+    // Clear the OAuth authorization context so the next user cannot inherit
+    // the previous employee's delegated token/role.
+    clearDabAuthorization();
     toast({
       title: "Logged Out",
       description: `Goodbye, ${userName}! See you next time.`,
