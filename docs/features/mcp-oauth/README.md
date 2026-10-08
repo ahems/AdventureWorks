@@ -417,7 +417,12 @@ afterwards; there is no separate authorization page.
   `Location`, `ScrapReason` and `ProductInventory`. It has read access to the reference
   data the app displays, including `Department`, `Shift`, `Vendor`,
   `PurchaseOrderHeader`/`Detail`, `ProductCostHistory` and `SalesOrderHeader`/`Detail`
-  (used for demand planning). These DAB grants are separate from the MCP **scopes**
+  (used for demand planning). Read access to the sales entities is limited to specific
+  columns. On `SalesOrderHeader`: `SalesOrderID`, `SalesOrderNumber`, `OrderDate`,
+  `DueDate`, `Status`, `OnlineOrderFlag`, `CustomerID` and `TotalDue`. On
+  `SalesOrderDetail`: `SalesOrderID`, `SalesOrderDetailID`, `ProductID`, `OrderQty` and
+  `LineTotal`. The role can't see addresses, account or PO numbers, tax, freight,
+  comments or pricing details. These DAB grants are separate from the MCP **scopes**
   above, so the role still gets no customer, sales or admin MCP tools.
 
 - **Per-user MCP token for agent chat.** The same refresh token can be exchanged for a

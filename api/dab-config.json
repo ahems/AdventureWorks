@@ -4751,7 +4751,21 @@
         {
           "role": "manufacturing-engineer",
           "actions": [
-            "read"
+            {
+              "action": "read",
+              "fields": {
+                "include": [
+                  "SalesOrderID",
+                  "SalesOrderNumber",
+                  "OrderDate",
+                  "DueDate",
+                  "Status",
+                  "OnlineOrderFlag",
+                  "CustomerID",
+                  "TotalDue"
+                ]
+              }
+            }
           ]
         }
       ],
@@ -4943,7 +4957,18 @@
         {
           "role": "manufacturing-engineer",
           "actions": [
-            "read"
+            {
+              "action": "read",
+              "fields": {
+                "include": [
+                  "SalesOrderID",
+                  "SalesOrderDetailID",
+                  "ProductID",
+                  "OrderQty",
+                  "LineTotal"
+                ]
+              }
+            }
           ]
         }
       ],

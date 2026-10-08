@@ -39,10 +39,14 @@ function buildODataUrl(base: string, params?: Record<string, string>): string {
 async function fetchOData<T>(
   entity: string,
   params?: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<T[]> {
   const url = buildODataUrl(`${API_BASE}/${entity}`, params);
-  const res = await dabFetch(url);
-  if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
+  const res = await dabFetch(url, { signal });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`API error (${entity}): ${res.status} ${res.statusText} - ${detail}`);
+  }
   const data: ODataResponse<T> = await res.json();
   return data.value;
 }
@@ -121,11 +125,12 @@ export const fetchActiveBOM = () =>
   });
 
 // Work Orders — limited fetches for list views (most recent 500)
-export const fetchWorkOrders = () =>
-  fetchOData<WorkOrder>("WorkOrder", {
-    $orderby: "ModifiedDate desc",
-    $first: "500",
-  });
+export const fetchWorkOrders = (options?: { signal?: AbortSignal }) =>
+  fetchOData<WorkOrder>(
+    "WorkOrder",
+    { $orderby: "ModifiedDate desc", $first: "500" },
+    options?.signal,
+  );
 
 export const fetchWorkOrder = (id: number) =>
   fetchOData<WorkOrder>("WorkOrder", { $filter: `WorkOrderID eq ${id}` }).then(

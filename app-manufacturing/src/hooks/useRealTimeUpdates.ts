@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useWebPubSub } from "./useWebPubSub";
 
 const GROUPS = [
@@ -17,12 +17,18 @@ const GROUPS = [
  * when the server pushes real-time events. Mount once at the app root.
  *
  * This replaces aggressive polling with event-driven cache invalidation.
- * Each page still has a slow fallback `refetchInterval` for resilience.
+ * Manufacturing bursts are batched without postponing refreshes indefinitely.
  */
 export function useRealTimeUpdates() {
   const qc = useQueryClient();
+  const manufacturingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const supplyChainTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const supplyChainHasPoCreated = useRef(false);
+
+  useEffect(() => () => {
+    if (manufacturingTimer.current) clearTimeout(manufacturingTimer.current);
+    if (supplyChainTimer.current) clearTimeout(supplyChainTimer.current);
+  }, []);
 
   useWebPubSub(GROUPS, (group, data) => {
     switch (group) {
@@ -38,26 +44,36 @@ export function useRealTimeUpdates() {
         break;
 
       case "manufacturing-ops":
-        qc.invalidateQueries({ queryKey: ["manufacturing-status"] });
-        qc.invalidateQueries({ queryKey: ["manufacturing-active"] });
-        qc.invalidateQueries({ queryKey: ["active-operations"] });
-        qc.invalidateQueries({ queryKey: ["work-orders"] });
-        qc.invalidateQueries({ queryKey: ["work-order"] });
-        qc.invalidateQueries({ queryKey: ["work-orders-active"] });
-        qc.invalidateQueries({ queryKey: ["all-recent-wos"] });
-        qc.invalidateQueries({ queryKey: ["recent-routings"] });
-        qc.invalidateQueries({ queryKey: ["wo-routing"] });
-        qc.invalidateQueries({ queryKey: ["all-routing"] });
-        qc.invalidateQueries({ queryKey: ["workforce-snapshot"] });
-        qc.invalidateQueries({ queryKey: ["workforce"] });
-        qc.invalidateQueries({ queryKey: ["workforce-detail"] });
-        qc.invalidateQueries({ queryKey: ["vendor-quality"] });
-        qc.invalidateQueries({ queryKey: ["scrap-events"] });
-        qc.invalidateQueries({ queryKey: ["supply-orders-shortages"] });
-        qc.invalidateQueries({ queryKey: ["shortage-forecast"] });
-        qc.invalidateQueries({ queryKey: ["reorder-recs"] });
-        qc.invalidateQueries({ queryKey: ["plan-catalog"] });
-        qc.invalidateQueries({ queryKey: ["overstock"] });
+        // A fixed window keeps continuous operation events from starving updates.
+        if (manufacturingTimer.current) break;
+        manufacturingTimer.current = setTimeout(() => {
+          manufacturingTimer.current = null;
+          for (const key of [
+            "manufacturing-status",
+            "manufacturing-active",
+            "active-operations",
+            "work-orders",
+            "work-order",
+            "work-orders-active",
+            "all-recent-wos",
+            "recent-routings",
+            "wo-routing",
+            "all-routing",
+            "workforce-snapshot",
+            "workforce",
+            "workforce-detail",
+            "vendor-quality",
+            "scrap-events",
+            "supply-orders-shortages",
+            "shortage-forecast",
+            "reorder-recs",
+            "plan-catalog",
+            "overstock",
+          ]) {
+            // Reuse an in-flight read instead of restarting it on every burst.
+            qc.invalidateQueries({ queryKey: [key] }, { cancelRefetch: false });
+          }
+        }, 2000);
         break;
 
       case "warehouse":

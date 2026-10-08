@@ -4,6 +4,26 @@
 
 Application Insights has been successfully integrated into the AdventureWorks e-commerce application to provide comprehensive telemetry tracking for user behavior, performance monitoring, and business analytics.
 
+## Manufacturing WorkOrder HTTP 500 diagnostics
+
+For failures from `GET /api/WorkOrder`, correlate the DAB request with its SQL dependency using `operation_Id`:
+
+```kusto
+let failedReads = requests
+| where timestamp > ago(1h)
+| where cloud_RoleName == "DataApiBuilder"
+| where url contains "/api/WorkOrder?" and resultCode == "500"
+| project operation_Id;
+dependencies
+| where timestamp > ago(1h)
+| where operation_Id in (failedReads)
+| project timestamp, operation_Id, name, resultCode, success
+```
+
+SQL dependency result code `10928` means the database worker limit was reached, not an invalid `$first` or `$orderby` parameter. Manufacturing operation events can arrive in bursts; the [real-time dispatcher](../../../app-manufacturing/src/hooks/useRealTimeUpdates.ts) batches them into fixed two-second windows and reuses in-flight reads instead of cancelling and restarting them. Continuous events still refresh each window, and unmount cancels pending timers. This is event-driven batching, not polling.
+
+The [WorkOrder read](../../../app-manufacturing/src/services/api.ts) preserves the most-recent-500 query, accepts React Query's abort signal, and includes the API error response in thrown errors. If `10928` persists after deploying the frontend fix, investigate concurrent backend workloads and database worker utilization; batching frontend requests cannot remove unrelated SQL resource pressure.
+
 ## Changes Made
 
 ### 1. Infrastructure Updates

@@ -48,6 +48,7 @@ import {
   AGENT_MODE_DESCRIPTIONS,
   type ManufacturingAgentMode,
   type AgentRun,
+  type AgentStep,
   type AgentProposal,
 } from "@/services/agentApi";
 import { toast } from "sonner";
@@ -393,8 +394,7 @@ const ModeSelector: React.FC = () => {
                     key={h}
                     onClick={() => {
                       setShutoffHours(h);
-                      if (currentMode !== 0)
-                        saveMutation.mutate({ mode: currentMode, hours: h });
+                      saveMutation.mutate({ mode: currentMode, hours: h });
                     }}
                     disabled={saveMutation.isPending}
                     title={
@@ -420,8 +420,7 @@ const ModeSelector: React.FC = () => {
                   <button
                     onClick={() => {
                       setShutoffHours(null);
-                      if (currentMode !== 0)
-                        saveMutation.mutate({ mode: currentMode, hours: null });
+                      saveMutation.mutate({ mode: currentMode, hours: null });
                     }}
                     disabled={saveMutation.isPending}
                     title={
@@ -501,7 +500,7 @@ const RunEntry: React.FC<{ run: AgentRun }> = ({ run }) => {
   const cfg = statusConfig[run.status] ?? statusConfig.pending;
   const Icon = cfg.icon;
   const steps: AgentStep[] = Array.isArray(run.steps)
-    ? (run.steps as AgentStep[])
+    ? run.steps
     : [];
   const summary = parseFinding(run.findingsSummary);
 
