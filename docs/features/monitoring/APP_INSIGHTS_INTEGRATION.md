@@ -24,6 +24,14 @@ SQL dependency result code `10928` means the database worker limit was reached, 
 
 The [WorkOrder read](../../../app-manufacturing/src/services/api.ts) preserves the most-recent-500 query, accepts React Query's abort signal, and includes the API error response in thrown errors. If `10928` persists after deploying the frontend fix, investigate concurrent backend workloads and database worker utilization; batching frontend requests cannot remove unrelated SQL resource pressure.
 
+## Web PubSub blocked by Content Security Policy
+
+If the browser reports that a `wss://...webpubsub.azure.com` connection violates `default-src`, the storefront can still load over HTTPS, but Web PubSub real-time cache invalidation is unavailable. This is a browser policy failure, not a Web PubSub authentication or API availability failure.
+
+The storefront and admin Static Web Apps configs explicitly set `connect-src 'self' https: data: blob: wss://*.webpubsub.azure.com`. This preserves existing HTTP connection permissions and adds secure WebSockets only for Azure Web PubSub hosts, rather than allowing arbitrary WebSocket destinations. Other CSP directives are unchanged.
+
+Keep both `staticwebapp.config.json` and `staticwebapp.config.template.json` in sync: the storefront predeploy hook regenerates the config from its template. Deploy with `azd deploy app --no-prompt` (and `azd deploy app-admin --no-prompt` for the admin site), then reload the browser. Verify the document's `Content-Security-Policy` response header contains `connect-src` and the authenticated WebSocket handshake returns HTTP 101. Never copy the negotiate URL's access token into logs or documentation.
+
 ## Changes Made
 
 ### 1. Infrastructure Updates
