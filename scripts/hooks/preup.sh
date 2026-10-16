@@ -523,13 +523,66 @@ color_green "Sorting quota results..."
 # Sort by AvailableCapacity descending
 sorted=$(echo "$all_quota" | jq -c 'sort_by(-.AvailableCapacity)')
 
-# Select chat model with preference for 'mini' models, then exclude 'nano', then any available
-chat_pick=$(echo "$sorted" | jq -c 'first(.[] | select(.ModelName | test("mini"; "i")))' 2>/dev/null || echo "null")
+# Select a current, general-purpose chat model. Capacity is a gate/tie-breaker,
+# not the primary ranking: sorting by capacity first tended to choose old mini models.
+# Override with: azd env set CHAT_MODEL_NAME_REGEX '^(gpt-4\.1|gpt-4o)$'
+# Set CHAT_MODEL_COST_TIER to economy, balanced (default), or premium.
+chat_model_name_regex=$(get_azd_value "CHAT_MODEL_NAME_REGEX" "")
+chat_model_cost_tier=$(get_azd_value "CHAT_MODEL_COST_TIER" "balanced")
+chat_min_capacity=$(get_azd_value "CHAT_MODEL_MIN_CAPACITY" "1")
+
+chat_pick=$(echo "$all_quota" | jq -c   --arg preferred "$chat_model_name_regex"   --arg tier "$chat_model_cost_tier"   --argjson mincap "$chat_min_capacity" '
+  def lname: (.ModelName | ascii_downcase);
+  def is_chat:
+    (lname | test("embedding|dall-e|image|tts|whisper|audio|realtime|transcri|moderation"; "i") | not);
+  def is_reasoning: (lname | test("^(o[1-9]|codex)|reasoning"; "i"));
+  def size_penalty:
+    if (lname | test("nano|micro"; "i")) then 3
+    elif (lname | test("mini|small|lite"; "i")) then 1
+    else 0 end;
+  # Known lineage helps when names are comparable. Unknown future names still rank
+  # by their service-supplied version date rather than silently going to the bottom.
+  def family_rank:
+    if (lname | test("^gpt-([6-9]|[1-9][0-9])")) then 600
+    elif (lname | test("^gpt-5")) then 500
+    elif (lname | test("^gpt-4\.1")) then 410
+    elif (lname | test("^gpt-4o")) then 400
+    elif (lname | test("^gpt-4")) then 390
+    elif (lname | test("^gpt-3\.5|^gpt-35")) then 300
+    else 350 end;
+  def version_rank:
+    # Azure versions are commonly YYYY-MM-DD; removing punctuation preserves order.
+    ((.ModelVersion // "") | gsub("[^0-9]"; "") | .[0:8] | tonumber? // 0);
+  def sku_rank:
+    if (.SkuName | test("GlobalStandard"; "i")) then 3
+    elif (.SkuName | test("DataZoneStandard"; "i")) then 2
+    elif (.SkuName | test("Standard"; "i")) then 1
+    else 0 end;
+  [ .[]
+    | select(.AvailableCapacity >= $mincap)
+    | select(is_chat)
+    | select(($preferred == "") or (.ModelName | test($preferred; "i")))
+    | select(if $tier == "economy" then (size_penalty >= 1)
+             elif $tier == "premium" then true
+             else ((size_penalty <= 1) and (is_reasoning | not)) end)
+    | . + { _rank: [family_rank, version_rank,
+                     (if $tier == "economy" then size_penalty else -size_penalty end),
+                     sku_rank, .AvailableCapacity] }
+  ] | sort_by(._rank) | reverse | first // null
+  | if . == null then null else del(._rank) end
+' 2>/dev/null || echo "null")
+
+# If a strict override or tier produced no match, retain safety by falling back to
+# any non-specialized, non-nano chat model, newest version first.
 if [[ "$chat_pick" == "null" ]] || [[ -z "$chat_pick" ]]; then
-  chat_pick=$(echo "$sorted" | jq -c 'first(.[] | select(.ModelName | test("nano"; "i") | not))' 2>/dev/null || echo "null")
-fi
-if [[ "$chat_pick" == "null" ]] || [[ -z "$chat_pick" ]]; then
-  chat_pick=$(echo "$sorted" | jq -c 'first(.[])' 2>/dev/null || echo "null")
+  color_yellow "Preferred chat policy had no match; using safe general-chat fallback."
+  chat_pick=$(echo "$all_quota" | jq -c '
+    [ .[]
+      | select(.ModelName | test("embedding|dall-e|image|tts|whisper|audio|realtime|transcri|moderation|nano"; "i") | not)
+      | . + { _v: ((.ModelVersion // "") | gsub("[^0-9]"; "") | .[0:8] | tonumber? // 0) }
+    ] | sort_by([._v, .AvailableCapacity]) | reverse | first // null
+      | if . == null then null else del(._v) end
+  ' 2>/dev/null || echo "null")
 fi
 
 if [[ "$chat_pick" != "null" ]] && [[ -n "$chat_pick" ]]; then
