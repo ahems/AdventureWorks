@@ -28,6 +28,8 @@ const TOKEN_KEY = "dab_oauth_token";
 export const DAB_CONSUMER_REQUESTED_SCOPES = [
   "mcp.access",
   "products.read",
+  "customers.read",
+  "customers.write",
   "orders.read",
   "orders.write",
 ];

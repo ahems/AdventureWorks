@@ -5,7 +5,7 @@
 > [`TOOL_SCOPE_MATRIX.md`](../mcp-oauth/TOOL_SCOPE_MATRIX.md). It reuses the same
 > business-domain scopes ([`OAuthScopes.cs`](../../../api-mcp/AdventureWorks/Auth/OAuthScopes.cs))
 > and the same authorization server in `api-mcp`. It classifies **every** one of the
-> **187** HTTP-triggered routes discovered in `api-functions` — no route is left
+> **183** HTTP-triggered routes discovered in `api-functions` — no route is left
 > unclassified. Non-HTTP triggers (queue / SQL / timer) are internal and not part of
 > this matrix.
 
@@ -30,8 +30,8 @@ frontend token attachment, tests). No runtime behavior changes with this documen
 | **P** | Anonymous | 18 |
 | **C** | Consumer (ownership) | 9 |
 | **I** | Internal-only | 116 |
-| **M** | Anonymous — v1 descope (MCP-proxied) | 44 |
-| | **Total** | **187** |
+| **M** | Anonymous — v1 descope (MCP-proxied) | 40 |
+| | **Total** | **183** |
 
 ### Routes per required scope (protected routes only)
 
@@ -61,7 +61,7 @@ supports only `authorization_code` + PKCE (no client-credentials / token-exchang
 so `api-mcp` cannot yet obtain a Functions-audience token on its own behalf.
 
 **Decision (v1):** the exact (method, route) pairs reachable through those four proxy
-services — **44** endpoints — remain `Anonymous` for now, so the MCP tools keep
+services — **40** endpoints — remain `Anonymous` for now, so the MCP tools keep
 working. They are still protected *at the MCP layer* (the MCP tools that call them require
 `manufacturing.*` / `sales.read` / `admin.write` / `mcp.admin` scopes and are `Internal-only`).
 A later phase protects them directly by making `api-mcp` a confidential client that mints a
@@ -69,6 +69,11 @@ down-scoped Functions token (RFC 8693 token exchange or client-credentials). Unt
 is an **accepted, documented limitation** — note it includes some mutating endpoints
 (`manufacturing/begin`, `manufacturing/stop`, `supply/order`, `bank/deposit`, `bank/withdraw`,
 config PUTs, `simulators/reset`).
+
+SQL-only active-operation and purchase-order read Functions have been removed.
+The Manufacturing site reads these through OAuth-authenticated DAB REST calls;
+MCP tools use native Managed Identity SQL reads, matching the other MCP data tools.
+These reads are no longer part of the Functions authorization surface.
 
 ## Matrix by functional area
 
@@ -311,11 +316,10 @@ config PUTs, `simulators/reset`).
 | `POST /api/manufacturing/proposals/{id}/approve` | I | `manufacturing.write` | Internal-only | — |
 | `POST /api/manufacturing/proposals/{id}/reject` | I | `manufacturing.write` | Internal-only | — |
 
-### Manufacturing control (13)
+### Manufacturing control (12)
 
 | Method / route | Tier | Required scope | Access mode | Ownership key |
 | -------------- | ---- | -------------- | ----------- | ------------- |
-| `GET /api/manufacturing/active` | M | — | Anonymous (v1 — MCP-proxied) | — |
 | `POST /api/manufacturing/begin` | M | — | Anonymous (v1 — MCP-proxied) | — |
 | `GET /api/manufacturing/location-config` | M | — | Anonymous (v1 — MCP-proxied) | — |
 | `PUT /api/manufacturing/location-config/{locationId:int}` | M | — | Anonymous (v1 — MCP-proxied) | — |
@@ -343,7 +347,7 @@ config PUTs, `simulators/reset`).
 | `GET /api/plan/shortage-forecast` | M | — | Anonymous (v1 — MCP-proxied) | — |
 | `GET /api/plan/thin-margin` | M | — | Anonymous (v1 — MCP-proxied) | — |
 
-### Supply chain (15)
+### Supply chain (12)
 
 | Method / route | Tier | Required scope | Access mode | Ownership key |
 | -------------- | ---- | -------------- | ----------- | ------------- |
@@ -353,10 +357,7 @@ config PUTs, `simulators/reset`).
 | `PUT /api/supply/config` | I | `manufacturing.write` | Internal-only | — |
 | `POST /api/supply/initialize` | I | `manufacturing.write` | Internal-only | — |
 | `POST /api/supply/order` | M | — | Anonymous (v1 — MCP-proxied) | — |
-| `GET /api/supply/order/{orderId}` | M | — | Anonymous (v1 — MCP-proxied) | — |
 | `DELETE /api/supply/order/{orderId}` | M | — | Anonymous (v1 — MCP-proxied) | — |
-| `GET /api/supply/orders` | M | — | Anonymous (v1 — MCP-proxied) | — |
-| `GET /api/supply/orders/history` | M | — | Anonymous (v1 — MCP-proxied) | — |
 | `GET /api/supply/quote` | M | — | Anonymous (v1 — MCP-proxied) | — |
 | `POST /api/supply/reorder-all` | I | `manufacturing.write` | Internal-only | — |
 | `POST /api/supply/restock/{vendorId}` | M | — | Anonymous (v1 — MCP-proxied) | — |
@@ -378,4 +379,3 @@ config PUTs, `simulators/reset`).
 | `GET /api/financials/manufacturing` | M | — | Anonymous (v1 — MCP-proxied) | — |
 | `GET /api/financials/procurement` | M | — | Anonymous (v1 — MCP-proxied) | — |
 | `GET /api/financials/summary` | M | — | Anonymous (v1 — MCP-proxied) | — |
-

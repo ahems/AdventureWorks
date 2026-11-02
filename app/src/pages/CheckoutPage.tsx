@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { trackEvent, trackError } from "@/lib/appInsights";
@@ -41,6 +41,11 @@ import { getSalePrice } from "@/types/product";
 import { useProfile } from "@/hooks/useProfile";
 import { formatPhoneNumber, parsePhoneNumber } from "@/lib/phoneFormatter";
 import { graphqlClient } from "@/lib/graphql-client";
+import {
+  beginAuthorization as beginDabAuthorization,
+  getDabRole,
+  isAuthorized as isDabAuthorized,
+} from "@/services/dabAuth";
 import { gql } from "graphql-request";
 import { CURRENCY_SYMBOLS } from "@/lib/currencies";
 
@@ -62,6 +67,41 @@ const shippingSchema = z.object({
 });
 
 type ShippingData = z.infer<typeof shippingSchema>;
+
+const CHECKOUT_AUTH_STATE_KEY = "checkout_auth_return_state";
+
+interface CheckoutAuthReturnState {
+  addressId: string | null;
+  newAddressIdFromForm: string | null;
+  useNewAddress: boolean;
+  selectedPaymentId: string | null;
+  paymentMethod: "card" | "paypal";
+  useNewPayment: boolean;
+}
+
+const readCheckoutAuthReturnState = (): CheckoutAuthReturnState | null => {
+  const storedState = sessionStorage.getItem(CHECKOUT_AUTH_STATE_KEY);
+  if (!storedState) return null;
+  if (!isDabAuthorized() || !getDabRole()) {
+    sessionStorage.removeItem(CHECKOUT_AUTH_STATE_KEY);
+    return null;
+  }
+
+  try {
+    const state = JSON.parse(storedState) as CheckoutAuthReturnState;
+    if (state.paymentMethod !== "card" && state.paymentMethod !== "paypal") {
+      throw new Error("Invalid checkout authorization state");
+    }
+    return state;
+  } catch (error) {
+    trackError("Unable to restore checkout after authorization", error, {
+      page: "CheckoutPage",
+      context: "authorizationReturn",
+    });
+    sessionStorage.removeItem(CHECKOUT_AUTH_STATE_KEY);
+    return null;
+  }
+};
 
 // Mock discount codes
 const DISCOUNT_CODES: Record<
@@ -289,6 +329,18 @@ const isValidCardNumber = (number: string): boolean => {
 const CheckoutPage: React.FC = () => {
   const { t } = useTranslation("common");
   const navigate = useNavigate();
+  const [authorizationReturnState] = useState(readCheckoutAuthReturnState);
+  const authorizationReturnNotified = useRef(false);
+  useEffect(() => {
+    if (authorizationReturnState && !authorizationReturnNotified.current) {
+      authorizationReturnNotified.current = true;
+      sessionStorage.removeItem(CHECKOUT_AUTH_STATE_KEY);
+      toast({
+        title: "Authorization complete",
+        description: "Your checkout is ready. Click Pay to place your order.",
+      });
+    }
+  }, [authorizationReturnState]);
   const {
     items,
     getTotalPrice,
@@ -318,20 +370,26 @@ const CheckoutPage: React.FC = () => {
   const [useNewEmail, setUseNewEmail] = useState(false);
   const [newEmailInput, setNewEmailInput] = useState("");
   const [emailWarning, setEmailWarning] = useState("");
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(authorizationReturnState ? 2 : 1);
   const [countryCode, setCountryCode] = useState("+1");
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(
-    null,
+    authorizationReturnState?.addressId ?? null,
   );
-  const [useNewAddress, setUseNewAddress] = useState(false);
+  const [useNewAddress, setUseNewAddress] = useState(
+    authorizationReturnState?.useNewAddress ?? false,
+  );
   const [addressLabel, setAddressLabel] = useState("");
   /** When user enters a new address and saves it in the form (onSave), we store the new address ID here. Do not use selectedAddressId for new-address flow—it may still be the previous default. */
-  const [newAddressIdFromForm, setNewAddressIdFromForm] = useState<string | null>(null);
-  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(
-    null,
+  const [newAddressIdFromForm, setNewAddressIdFromForm] = useState<string | null>(
+    authorizationReturnState?.newAddressIdFromForm ?? null,
   );
-  const [useNewPayment, setUseNewPayment] = useState(false);
+  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(
+    authorizationReturnState?.selectedPaymentId ?? null,
+  );
+  const [useNewPayment, setUseNewPayment] = useState(
+    authorizationReturnState?.useNewPayment ?? false,
+  );
   const [saveNewPayment, setSaveNewPayment] = useState(false);
   const [paymentLabel, setPaymentLabel] = useState("");
   const [discountCode, setDiscountCode] = useState("");
@@ -392,7 +450,9 @@ const CheckoutPage: React.FC = () => {
     }
   }, [profileData]);
 
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "paypal">("card");
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "paypal">(
+    authorizationReturnState?.paymentMethod ?? "card",
+  );
   const [cardData, setCardData] = useState({
     number: "",
     name: "",
@@ -760,6 +820,49 @@ const CheckoutPage: React.FC = () => {
   };
 
   const handlePlaceOrder = async () => {
+    if (user?.businessEntityId && (!isDabAuthorized() || !getDabRole())) {
+      setIsProcessing(true);
+      try {
+        sessionStorage.setItem(
+          CHECKOUT_AUTH_STATE_KEY,
+          JSON.stringify({
+            addressId:
+              newAddressIdFromForm ??
+              selectedAddressId ??
+              addresses[0]?.id ??
+              null,
+            newAddressIdFromForm,
+            useNewAddress,
+            selectedPaymentId,
+            paymentMethod,
+            useNewPayment,
+          } satisfies CheckoutAuthReturnState),
+        );
+        toast({
+          title: "Secure authorization required",
+          description:
+            "We'll connect your account securely, then return you to checkout.",
+        });
+        await beginDabAuthorization(user.email);
+      } catch (error) {
+        sessionStorage.removeItem(CHECKOUT_AUTH_STATE_KEY);
+        trackError("Unable to start checkout authorization", error, {
+          page: "CheckoutPage",
+          context: "placeOrder",
+        });
+        toast({
+          title: t("checkout.orderFailed"),
+          description:
+            error instanceof Error
+              ? error.message
+              : t("checkout.orderFailedDesc"),
+          variant: "destructive",
+        });
+        setIsProcessing(false);
+      }
+      return;
+    }
+
     setIsProcessing(true);
 
     try {

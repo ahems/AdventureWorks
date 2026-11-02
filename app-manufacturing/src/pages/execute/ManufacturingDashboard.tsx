@@ -107,7 +107,6 @@ const ManufacturingDashboard: React.FC = () => {
     queryKey: ["supply-orders-shortages"],
     queryFn: fetchOrders,
     staleTime: 15_000,
-    refetchInterval: 120_000,
   });
 
   // Build lookup: productId → active orders with ETA

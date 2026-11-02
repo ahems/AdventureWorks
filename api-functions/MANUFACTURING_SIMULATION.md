@@ -232,11 +232,19 @@ Returns a dashboard snapshot: queue depth, work order counts, active shortages, 
 
 ---
 
-### `GET /api/manufacturing/active`
+### Active operations (DAB, not a Functions endpoint)
 
-Returns all currently in-progress routing operations with elapsed time. Useful for a live operations view.
+The Manufacturing site uses `fetchActiveOperations` in
+[`api.ts`](../app-manufacturing/src/services/api.ts) to read DAB `WorkOrderRouting`
+with `$filter=ActualStartDate ne null and ActualEndDate eq null`, ordered by
+`ActualStartDate asc`, and joins DAB `Product` / `Location` names. Every page is
+read using the delegated OAuth bearer token and `X-MS-API-ROLE`.
+Elapsed minutes are calculated in the browser. The SQL-only HTTP Function was
+removed; MCP tools read SQL natively using Managed Identity.
+SQL datetime values without an offset are interpreted as UTC, preserving the
+former Functions response semantics regardless of the browser's timezone.
 
-#### Response `200 OK` (array)
+#### Client result (array)
 
 ```json
 [
@@ -783,10 +791,12 @@ setInterval(async () => {
 
 ### Scenario: Show live operations board
 
-```javascript
-// Poll /active every 10 seconds for the live operations table
-const active = await fetch("/api/manufacturing/active").then((r) => r.json());
+```typescript
+import { fetchActiveOperations } from "@/services/api";
+
+const active = await fetchActiveOperations();
 // active[].productName, locationName, operationSequence, elapsedMinutes
+// React Query is invalidated by manufacturing-ops Web PubSub events; do not poll.
 ```
 
 ### Scenario: Adjust location capacity (add a machine)
@@ -1219,25 +1229,26 @@ Places a purchase order. Stock is deducted immediately. Returns `201 Created` wi
 
 ---
 
-#### `GET /supply/orders`
+#### Purchase-order reads (DAB, not Functions endpoints)
 
-Returns all **active** orders (`pending` and `approved` only — excludes `complete` and `rejected`). Poll this every few seconds for a live orders board.
+Use `fetchOrders`, `fetchOrderHistory`, and `fetchOrder` from
+[`supplyChainApi.ts`](../app-manufacturing/src/services/supplyChainApi.ts).
+These read DAB `PurchaseOrderHeader` / `PurchaseOrderDetail` and join
+`Vendor`, `Product`, and active `BillOfMaterials`, using the delegated OAuth
+bearer token and `X-MS-API-ROLE`. The former SQL-only list/history/detail HTTP
+Functions were removed. MCP tools perform equivalent native SQL reads.
 
-Response is an array of order objects (same shape as POST response).
+Only active vendors and purchased components referenced by active BOM entries are
+included, matching the simulation's SQL filter. All pages are read, and order IDs
+are batched for detail queries to avoid oversized URLs.
 
----
-
-#### `GET /supply/orders/history`
-
-Returns all orders including completed and cancelled. Sorted newest first.
-
----
-
-#### `GET /supply/order/{orderId}`
-
-Returns a single order by its ID (the SQL `PurchaseOrderID` as a string). Includes the full `trackingEvents` array, which grows as the order progresses.
-
-`orderId` is case-insensitive.
+- `fetchOrders()`: active orders (SQL statuses 1/2), newest first, one row per line.
+- `fetchOrderHistory()`: all statuses, newest first, one row per line.
+- `fetchOrder(orderId)`: positive numeric SQL ID; aggregates matching lines into
+  one detail result, counting header freight and total only once.
+- Tracking events, cancellation reasons, and delivery timestamps are not stored
+  in these SQL projections and are not synthesized.
+- `supply-chain` Web PubSub events invalidate lists, history and detail; do not poll.
 
 ---
 
@@ -1348,7 +1359,9 @@ const quote = await fetch(
 
 #### Scenario: Place an order and track it
 
-```javascript
+```typescript
+import { fetchOrder } from "@/services/supplyChainApi";
+
 // 1. Place order (vendorId is the numeric BusinessEntityID as a string)
 const order = await fetch("/api/supply/order", {
   method: "POST",
@@ -1358,24 +1371,19 @@ const order = await fetch("/api/supply/order", {
 
 // order.orderId, order.status, order.estimatedDeliveryUtc
 
-// 2. Poll for status updates
-setInterval(async () => {
-  const updated = await fetch(`/api/supply/order/${order.orderId}`).then((r) =>
-    r.json(),
-  );
-  // updated.status ("pending" | "approved" | "complete" | "rejected")
-}, 5000);
+// 2. Read via authenticated DAB; Web PubSub invalidates the React Query detail.
+const updated = await fetchOrder(order.orderId);
+// updated.status ("pending" | "approved" | "complete" | "rejected")
 ```
 
 #### Scenario: Live active orders board
 
-```javascript
-// Poll every 3 seconds for orders board
-setInterval(async () => {
-  const active = await fetch("/api/supply/orders").then((r) => r.json());
-  // active[].orderId, vendorName, productName, qty, status, estimatedDeliveryUtc
-  // active[].orderId — IS the SQL PurchaseOrderID; use directly to link to Purchasing.PurchaseOrderHeader via GraphQL
-}, 3000);
+```typescript
+import { fetchOrders } from "@/services/supplyChainApi";
+
+const active = await fetchOrders();
+// active[].orderId, vendorName, productName, qty, status, estimatedDeliveryUtc
+// orderId is the SQL PurchaseOrderID. Web PubSub invalidates the list; do not poll.
 ```
 
 #### Scenario: Show stock availability including in-transit units

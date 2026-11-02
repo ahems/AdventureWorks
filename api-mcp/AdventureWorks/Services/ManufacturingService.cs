@@ -2,16 +2,19 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Dapper;
+using Microsoft.Data.SqlClient;
 
 namespace AdventureWorks.Services;
 
 /// <summary>
-/// Calls the api-functions manufacturing and planning endpoints on behalf of MCP tools.
+/// Calls api-functions for manufacturing workflows and SQL for tabular reads on behalf of MCP tools.
 /// Base URL is read from the API_FUNCTIONS_URL environment variable / configuration.
 /// </summary>
 public class ManufacturingService
 {
     private readonly HttpClient _http;
+    private readonly string _connectionString;
     private static readonly JsonSerializerOptions _json = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -19,7 +22,12 @@ public class ManufacturingService
         WriteIndented = false,
     };
 
-    public ManufacturingService(HttpClient http) => _http = http;
+    public ManufacturingService(HttpClient http, IConfiguration configuration)
+    {
+        _http = http;
+        _connectionString = configuration.GetConnectionString("AdventureWorks")
+            ?? throw new InvalidOperationException("AdventureWorks connection string is required.");
+    }
 
     // ── Manufacturing Status ─────────────────────────────────────────────────
 
@@ -80,31 +88,33 @@ public class ManufacturingService
 
     public async Task<string> GetActiveOperationsAsync()
     {
-        var resp = await _http.GetAsync("api/manufacturing/active");
-        if (!resp.IsSuccessStatusCode)
-            return $"Error retrieving active operations: {resp.StatusCode}";
-
-        var json = await resp.Content.ReadAsStringAsync();
-        using var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
+        await using var conn = new SqlConnection(_connectionString);
+        var operations = (await conn.QueryAsync(@"
+            SELECT wor.WorkOrderID, p.Name AS ProductName, wor.OperationSequence,
+                   l.Name AS LocationName,
+                   DATEDIFF(SECOND, wor.ActualStartDate, GETDATE()) / 60.0 AS ElapsedMinutes
+            FROM Production.WorkOrderRouting wor
+            INNER JOIN Production.Product p ON wor.ProductID = p.ProductID
+            INNER JOIN Production.Location l ON wor.LocationID = l.LocationID
+            WHERE wor.ActualStartDate IS NOT NULL AND wor.ActualEndDate IS NULL
+            ORDER BY wor.ActualStartDate")).AsList();
 
         var sb = new StringBuilder();
         sb.AppendLine("## Active Manufacturing Operations");
         sb.AppendLine();
 
-        var arr = root.ValueKind == JsonValueKind.Array ? root : default;
-        if (arr.ValueKind != JsonValueKind.Array || arr.GetArrayLength() == 0)
+        if (operations.Count == 0)
         {
             sb.AppendLine("No operations currently in progress.");
             return sb.ToString();
         }
 
-        sb.AppendLine($"Total active: {arr.GetArrayLength()}");
+        sb.AppendLine($"Total active: {operations.Count}");
         sb.AppendLine();
-        foreach (var op in arr.EnumerateArray().Take(20))
+        foreach (var op in operations.Take(20))
         {
-            sb.AppendLine($"- WO {op.GetIntOrDefault("workOrderId")} | {op.GetStringOrDefault("productName")} | Op {op.GetIntOrDefault("operationSequence")} — {op.GetStringOrDefault("operationName")}");
-            sb.AppendLine($"  Location: {op.GetStringOrDefault("locationName")}, Elapsed: {op.GetStringOrDefault("elapsedDisplay")}, Qty: {op.GetIntOrDefault("qty")}");
+            sb.AppendLine($"- WO {op.WorkOrderID} | {op.ProductName} | Op {op.OperationSequence}");
+            sb.AppendLine($"  Location: {op.LocationName}, Elapsed: {op.ElapsedMinutes:N1} minutes");
         }
 
         return sb.ToString();

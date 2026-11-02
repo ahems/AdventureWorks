@@ -84,9 +84,9 @@ public class SupplyChainMcpTools
     }
 
     [McpServerTool]
-    [Description("Get the current status and full details of a specific supply chain purchase order by its order ID, including status history showing each stage transition.")]
+    [Description("Get the current SQL status and details of a specific supply chain purchase order by its numeric PurchaseOrderID, including all matching purchased BOM component lines and the order total.")]
     public async Task<string> GetSupplyOrderDetails(
-        [Description("The order ID to look up (e.g. 'ORD-ABC123').")] string orderId)
+        [Description("The numeric SQL PurchaseOrderID to look up (e.g. '4215').")] string orderId)
     {
         return await _supplyChain.GetOrderAsync(orderId);
     }

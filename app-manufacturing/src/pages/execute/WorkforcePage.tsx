@@ -38,7 +38,6 @@ const WorkforcePage: React.FC = () => {
   const { data: activeOps } = useQuery({
     queryKey: ['active-operations'],
     queryFn: fetchActiveOperations,
-    refetchInterval: 60_000,
   });
 
   const workersWithLiveAssignments = useMemo(() => {

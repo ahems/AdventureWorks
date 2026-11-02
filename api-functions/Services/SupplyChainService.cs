@@ -1441,18 +1441,6 @@ public class SupplyChainService
         return result;
     }
 
-    public async Task<List<PurchaseOrder>> GetOrderHistoryAsync()
-    {
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-
-        var rows   = await conn.QueryAsync(OrderSelectSql + " ORDER BY poh.OrderDate DESC");
-        var result = new List<PurchaseOrder>();
-        foreach (var r in rows)
-            result.Add(RowToOrder(r));
-        return result;
-    }
-
     public async Task<PurchaseOrder?> GetOrderAsync(string orderId)
     {
         if (!int.TryParse(orderId, out int purchaseOrderId)) return null;
@@ -1908,4 +1896,3 @@ public class SupplyChainService
         return rows.Select(r => ((int)r.ProductID, (string)r.Name, (decimal)r.StandardCost, (double)r.Weight)).ToList();
     }
 }
-

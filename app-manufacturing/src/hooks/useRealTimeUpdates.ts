@@ -99,13 +99,15 @@ export function useRealTimeUpdates() {
         supplyChainTimer.current = setTimeout(() => {
           qc.invalidateQueries({ queryKey: ["supply-orders"] });
           qc.invalidateQueries({ queryKey: ["supply-orders-dashboard"] });
+          qc.invalidateQueries({ queryKey: ["supply-orders-history"] });
+          qc.invalidateQueries({ queryKey: ["supply-orders-shortages"] });
+          qc.invalidateQueries({ queryKey: ["supply-orders-blocked"] });
           qc.invalidateQueries({ queryKey: ["supply-order"] });
           qc.invalidateQueries({ queryKey: ["open-purchase-orders"] });
           qc.invalidateQueries({ queryKey: ["po-headers-all"] });
           qc.invalidateQueries({ queryKey: ["supply-catalog-all"] });
           qc.invalidateQueries({ queryKey: ["supply-catalog"] });
           if (supplyChainHasPoCreated.current) {
-            qc.invalidateQueries({ queryKey: ["supply-orders-shortages"] });
             qc.invalidateQueries({ queryKey: ["manufacturing-status"] });
             supplyChainHasPoCreated.current = false;
           }

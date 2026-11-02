@@ -180,35 +180,6 @@ public class SupplyChainControlFunction
         return await CreatedAsync(req, order);
     }
 
-    [Function("SupplyChainGetOrders")]
-    public async Task<HttpResponseData> GetOrders(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "supply/orders")] HttpRequestData req)
-    {
-        await _svc.InitializeAsync();
-        var orders = await _svc.GetOrdersAsync(includeCompleted: false);
-        return await OkAsync(req, orders);
-    }
-
-    [Function("SupplyChainGetOrderHistory")]
-    public async Task<HttpResponseData> GetOrderHistory(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "supply/orders/history")] HttpRequestData req)
-    {
-        await _svc.InitializeAsync();
-        var orders = await _svc.GetOrderHistoryAsync();
-        return await OkAsync(req, orders);
-    }
-
-    [Function("SupplyChainGetOrder")]
-    public async Task<HttpResponseData> GetOrder(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "supply/order/{orderId}")] HttpRequestData req,
-        string orderId)
-    {
-        var order = await _svc.GetOrderAsync(orderId.ToUpperInvariant());
-        if (order == null)
-            return await NotFoundAsync(req, $"Order '{orderId}' not found.");
-        return await OkAsync(req, order);
-    }
-
     [Function("SupplyChainCancelOrder")]
     public async Task<HttpResponseData> CancelOrder(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "supply/order/{orderId}")] HttpRequestData req,

@@ -36,6 +36,15 @@ function buildODataUrl(base: string, params?: Record<string, string>): string {
   return `${base}?${qs}`;
 }
 
+// DAB returns SQL datetime values without an offset; the simulation stores UTC.
+export function sqlUtcTimestamp(value: string): string {
+  const timestamp = /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
+  if (!Number.isFinite(new Date(timestamp).getTime())) {
+    throw new Error(`Invalid SQL timestamp: ${value}`);
+  }
+  return timestamp;
+}
+
 async function fetchOData<T>(
   entity: string,
   params?: Record<string, string>,
@@ -51,10 +60,10 @@ async function fetchOData<T>(
   return data.value;
 }
 
-async function fetchAllOData<T>(
+export async function fetchAllOData<T>(
   entity: string,
   params?: Record<string, string>,
-  maxPages = 50,
+  maxPages = Infinity,
 ): Promise<T[]> {
   const all: T[] = [];
   let url: string | null = buildODataUrl(`${API_BASE}/${entity}`, params);
@@ -395,9 +404,38 @@ export async function fetchManufacturingStatus(): Promise<ManufacturingStatus> {
 }
 
 export async function fetchActiveOperations(): Promise<ActiveOperation[]> {
-  const res = await fetch(`${MANUFACTURING_BASE}/manufacturing/active`);
-  if (!res.ok) throw new Error(`Active ops API error: ${res.status}`);
-  return res.json();
+  const routing = await fetchAllOData<WorkOrderRouting>("WorkOrderRouting", {
+    $filter: "ActualStartDate ne null and ActualEndDate eq null",
+    $orderby: "ActualStartDate asc",
+  });
+  if (routing.length === 0) return [];
+
+  const [products, locations] = await Promise.all([
+    fetchAllProducts(),
+    fetchLocations(),
+  ]);
+  const productsById = new Map(products.map((p) => [p.ProductID, p]));
+  const locationsById = new Map(locations.map((l) => [l.LocationID, l]));
+  const now = Date.now();
+
+  return routing.map((op) => {
+    const product = productsById.get(op.ProductID);
+    const location = locationsById.get(op.LocationID);
+    if (!product || !location || !op.ActualStartDate) {
+      throw new Error(`Incomplete active routing data for work order ${op.WorkOrderID}`);
+    }
+    const actualStartDate = sqlUtcTimestamp(op.ActualStartDate);
+    return {
+      workOrderId: op.WorkOrderID,
+      productId: op.ProductID,
+      productName: product.Name,
+      operationSequence: op.OperationSequence,
+      locationId: op.LocationID,
+      locationName: location.Name,
+      actualStartDate,
+      elapsedMinutes: (now - new Date(actualStartDate).getTime()) / 60_000,
+    };
+  });
 }
 
 export async function stopManufacturing(): Promise<void> {
@@ -547,10 +585,19 @@ export const fetchPurchaseOrderDetails = (purchaseOrderId: number) =>
     $filter: `PurchaseOrderID eq ${purchaseOrderId}`,
   });
 
-export const fetchAllPurchaseOrderDetails = (poIds: number[]) =>
-  fetchAllOData<PurchaseOrderDetail>("PurchaseOrderDetail", {
-    $filter: poIds.map((id) => `PurchaseOrderID eq ${id}`).join(" or "),
-  });
+export async function fetchAllPurchaseOrderDetails(
+  poIds: number[],
+): Promise<PurchaseOrderDetail[]> {
+  const details: PurchaseOrderDetail[] = [];
+  const ids = [...new Set(poIds)];
+  for (let i = 0; i < ids.length; i += 40) {
+    details.push(...await fetchAllOData<PurchaseOrderDetail>("PurchaseOrderDetail", {
+      $filter: ids.slice(i, i + 40).map((id) => `PurchaseOrderID eq ${id}`).join(" or "),
+      $orderby: "PurchaseOrderDetailID asc",
+    }));
+  }
+  return details;
+}
 
 // Vendors
 export const fetchVendors = () => fetchAllOData<Vendor>("Vendor");

@@ -16,7 +16,6 @@ namespace api_functions.Functions;
 /// POST /api/manufacturing/begin         – Explode BOM, create WorkOrders + routing, seed queue
 /// POST /api/manufacturing/stop          – Clear the production queue (scale-to-zero follows)
 /// GET  /api/manufacturing/status        – Live counts, shortages, scrap events, location load
-/// GET  /api/manufacturing/active        – In-progress routing operations with elapsed time
 /// GET  /api/manufacturing/scrap-config  – Per-location failure rates and applicable scrap reasons
 /// PUT  /api/manufacturing/scrap-config/{locationId} – Update failure rate/reasons for a station
 /// GET  /api/manufacturing/location-config             – Per-location capacity settings
@@ -250,19 +249,6 @@ public class ManufacturingControlFunction
             await err.WriteAsJsonAsync(new { error = ex.GetType().Name, message = ex.Message, inner = ex.InnerException?.Message });
             return err;
         }
-    }
-
-    // ── GET /api/manufacturing/active ─────────────────────────────────────────
-
-    [Function(nameof(ManufacturingActive))]
-    public async Task<HttpResponseData> ManufacturingActive(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "manufacturing/active")]
-        HttpRequestData req)
-    {
-        var activeOps = await _sim.GetActiveOperationsAsync();
-        var response  = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(activeOps);
-        return response;
     }
 
     // ── GET /api/manufacturing/scrap-config ───────────────────────────────────

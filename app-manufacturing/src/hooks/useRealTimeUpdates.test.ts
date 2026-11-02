@@ -78,4 +78,17 @@ describe("manufacturing real-time refresh batching", () => {
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["open-demand"] });
     unmount();
   });
+
+  it("invalidates DAB purchase-order lists, history and details after supply events", () => {
+    const { unmount } = renderHook(useRealTimeUpdates);
+    emit("supply-chain");
+    advance(2000);
+    for (const key of [
+      "supply-orders", "supply-orders-history", "supply-order",
+      "supply-orders-shortages", "supply-orders-blocked", "open-purchase-orders",
+    ]) {
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: [key] });
+    }
+    unmount();
+  });
 });

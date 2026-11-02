@@ -41,6 +41,13 @@ npm run dev
 
 ## Project info
 
+### Sale cart regression tests
+
+Run `node --test scripts/sale-product-model-card.test.mjs` from this directory.
+The tests cover adding sale products with size-only, color-only, both, or no
+variant options, and blocking unavailable products. Cart success/error feedback
+is provided by `CartContext` after the cart operation, not by the sale card.
+
 ## How can I edit this code?
 
 There are several ways of editing your application.

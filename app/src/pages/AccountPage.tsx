@@ -2284,15 +2284,16 @@ const AccountPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Data API (DAB) OAuth access — optional, never required for browsing */}
+            {/* Data API (DAB) OAuth access — required for protected account and checkout operations */}
             <div className="mt-8" data-dab-nonce={dabNonce}>
               <div className="border rounded-lg p-4 text-center space-y-3 max-w-xl mx-auto">
                 <h3 className="font-semibold">Data API access (OAuth)</h3>
                 <p className="text-sm text-muted-foreground">
-                  Optionally connect this signed-in session to the AdventureWorks
-                  Data API with OAuth 2.0 (Authorization Code + PKCE). Browsing the
-                  catalog never requires this; it authorizes access to your own
-                  profile and orders and is cleared automatically on sign out.
+                  Connect this signed-in session to the AdventureWorks Data API
+                  with OAuth 2.0 (Authorization Code + PKCE). Catalog browsing
+                  does not require this; checkout and access to your own profile
+                  and orders do. The connection is cleared automatically on sign
+                  out.
                 </p>
                 {isDabAuthorized() ? (
                   <div className="space-y-2">

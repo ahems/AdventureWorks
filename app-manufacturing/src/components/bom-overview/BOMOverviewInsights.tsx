@@ -212,7 +212,6 @@ const BOMOverviewInsights: React.FC<Props> = ({ bom, products }) => {
     queryFn: fetchActiveOperations,
     enabled: wantWoData,
     staleTime: 30_000,
-    refetchInterval: 120_000,
   });
   const invQ = useQuery({
     queryKey: ['all-product-inventory'],
@@ -233,7 +232,6 @@ const BOMOverviewInsights: React.FC<Props> = ({ bom, products }) => {
     queryFn: fetchOrders,
     enabled: wantOps,
     staleTime: 60_000,
-    refetchInterval: 120_000,
   });
   const catQ = useQuery({
     queryKey: ['supply-catalog-all'],

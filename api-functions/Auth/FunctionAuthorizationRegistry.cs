@@ -10,7 +10,7 @@ using System.Collections.Frozen;
 namespace ApiFunctions.Auth;
 
 /// <summary>
-/// Authoritative, per-function authorization policy for every api-functions HTTP route (187
+/// Authoritative, per-function authorization policy for every api-functions HTTP route (183
 /// routes). Keyed by the <c>[Function]</c> name. Mirrors the committed route-to-scope matrix and
 /// the pattern of api-mcp's <c>ToolAuthorizationRegistry</c>.
 /// </summary>
@@ -167,7 +167,7 @@ public static class FunctionAuthorizationRegistry
         new("WarehouseWorkforce", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/warehouse/workforce
         new("WarehouseWorkforceDetail", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/warehouse/workforce/detail
 
-        // ---- Tier M — v1-descoped MCP-proxied anonymous (44) ----
+        // ---- Tier M — v1-descoped MCP-proxied anonymous (40) ----
         new("BankDeposit", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/bank/deposit
         new("BankGetAccount", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/bank/accounts/{currencyCode}
         new("BankGetCurrencies", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/bank/currencies
@@ -181,7 +181,6 @@ public static class FunctionAuthorizationRegistry
         new("FinancialSummary", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/financials/summary
         new("GetLocationConfig", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/location-config
         new("GetScrapConfig", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/scrap-config
-        new("ManufacturingActive", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/active
         new("ManufacturingBegin", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/begin
         new("ManufacturingGetScrapEvents", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/scrap-events
         new("ManufacturingGetVendorQuality", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/vendor-quality
@@ -204,9 +203,6 @@ public static class FunctionAuthorizationRegistry
         new("SupplyChainCancelOrder", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/order/{orderId}
         new("SupplyChainGetCatalog", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/catalog
         new("SupplyChainGetCatalogByProduct", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/catalog/{productId:int}
-        new("SupplyChainGetOrder", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/order/{orderId}
-        new("SupplyChainGetOrderHistory", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/orders/history
-        new("SupplyChainGetOrders", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/orders
         new("SupplyChainGetQuote", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/quote
         new("SupplyChainGetVendor", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/vendors/{vendorId}
         new("SupplyChainGetVendors", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/vendors

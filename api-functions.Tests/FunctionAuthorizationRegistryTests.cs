@@ -160,4 +160,15 @@ public class FunctionAuthorizationRegistryTests
     {
         Assert.Null(FunctionAuthorizationRegistry.Find("ThisFunctionDoesNotExist"));
     }
+
+    [Theory]
+    [InlineData("ManufacturingActive")]
+    [InlineData("SupplyChainGetOrders")]
+    [InlineData("SupplyChainGetOrderHistory")]
+    [InlineData("SupplyChainGetOrder")]
+    public void Sql_only_reads_are_no_longer_exposed_as_http_functions(string functionName)
+    {
+        Assert.DoesNotContain(functionName, ReflectedHttpFunctionNames());
+        Assert.Null(FunctionAuthorizationRegistry.Find(functionName));
+    }
 }

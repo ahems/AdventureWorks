@@ -43,7 +43,6 @@ public record VendorQualityData(
 public record VendorQualityComponentData(
     int ComponentProductId, string ComponentName,
     int ScrapEvents, int TotalFailures);
-public record ActiveOperationData(int WorkOrderId, int ProductId, string ProductName, int OperationSequence, int LocationId, string LocationName, DateTime ActualStartDate, double ElapsedMinutes);
 public record LocationLoadData(int LocationId, string LocationName, DateTime? EarliestFreeSlotUtc, double AvailabilityHrs, int CapacityUnits);
 public record ManufacturingStatusData(bool IsRunning, long QueueDepth, int PendingWorkOrders, int InProgressWorkOrders, int CompletedToday, int StalledForMaterials, List<ShortageData> Shortages, List<ScrapEventData> RecentScrapEvents, List<LocationLoadData> LocationLoad);
 public record RunWoItem(int WorkOrderId, int ProductId, int? ParentProductId, bool IsLeaf);
@@ -1202,24 +1201,4 @@ public class WorkOrderSimulationService
         return ((int)row.Pending, (int)row.InProgress, (int)row.CompletedToday);
     }
 
-    public async Task<List<ActiveOperationData>> GetActiveOperationsAsync()
-    {
-        using var conn = await GetConnectionAsync();
-        var rows = await conn.QueryAsync(@"
-            SELECT wor.WorkOrderID, wor.ProductID,
-                   p.Name AS ProductName,
-                   wor.OperationSequence, wor.LocationID,
-                   l.Name AS LocationName,
-                   wor.ActualStartDate,
-                   DATEDIFF(SECOND, wor.ActualStartDate, GETDATE()) / 60.0 AS ElapsedMinutes
-            FROM Production.WorkOrderRouting wor
-            INNER JOIN Production.Product p ON wor.ProductID = p.ProductID
-            INNER JOIN Production.Location l ON wor.LocationID = l.LocationID
-            WHERE wor.ActualStartDate IS NOT NULL AND wor.ActualEndDate IS NULL
-            ORDER BY wor.ActualStartDate");
-        return rows.Select(r => new ActiveOperationData(
-            (int)r.WorkOrderID, (int)r.ProductID, (string)r.ProductName,
-            (int)r.OperationSequence, (int)r.LocationID, (string)r.LocationName,
-            (DateTime)r.ActualStartDate, (double)r.ElapsedMinutes)).ToList();
-    }
 }

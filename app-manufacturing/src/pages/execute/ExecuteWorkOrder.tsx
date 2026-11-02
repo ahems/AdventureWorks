@@ -17,7 +17,7 @@ const ExecuteWorkOrder = () => {
   const { data: scrapReasons } = useQuery({ queryKey: ['scrap-reasons'], queryFn: fetchScrapReasons });
   const { data: bom } = useQuery({ queryKey: ['active-bom'], queryFn: fetchActiveBOM });
   const { data: allProducts } = useQuery({ queryKey: ['all-products'], queryFn: () => fetchAllProducts() });
-  const { data: activeOps } = useQuery({ queryKey: ['active-operations'], queryFn: fetchActiveOperations, refetchInterval: 60_000 });
+  const { data: activeOps } = useQuery({ queryKey: ['active-operations'], queryFn: fetchActiveOperations });
   const { data: inventory } = useQuery({ queryKey: ['product-inventory'], queryFn: () => fetchProductInventory() });
 
   const locationMap = useMemo(() => {

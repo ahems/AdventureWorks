@@ -2,16 +2,19 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Dapper;
+using Microsoft.Data.SqlClient;
 
 namespace AdventureWorks.Services;
 
 /// <summary>
-/// Calls the api-functions supply-chain endpoints on behalf of MCP tools.
+/// Calls api-functions for supply-chain workflows and SQL for tabular reads on behalf of MCP tools.
 /// Base URL is read from the API_FUNCTIONS_URL environment variable / configuration.
 /// </summary>
 public class SupplyChainService
 {
     private readonly HttpClient _http;
+    private readonly string _connectionString;
     private static readonly JsonSerializerOptions _json = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -19,7 +22,12 @@ public class SupplyChainService
         WriteIndented = false,
     };
 
-    public SupplyChainService(HttpClient http) => _http = http;
+    public SupplyChainService(HttpClient http, IConfiguration configuration)
+    {
+        _http = http;
+        _connectionString = configuration.GetConnectionString("AdventureWorks")
+            ?? throw new InvalidOperationException("AdventureWorks connection string is required.");
+    }
 
     // ── Vendors ───────────────────────────────────────────────────────────────
 
@@ -193,27 +201,21 @@ public class SupplyChainService
 
     public async Task<string> GetOrdersAsync(bool includeHistory = false)
     {
-        var url = includeHistory ? "api/supply/orders/history" : "api/supply/orders";
-        var resp = await _http.GetAsync(url);
-        if (!resp.IsSuccessStatusCode)
-            return $"Error retrieving orders: {resp.StatusCode}";
-
-        var json = await resp.Content.ReadAsStringAsync();
-        using var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
-        var arr = root.ValueKind == JsonValueKind.Array ? root : default;
-        if (arr.ValueKind != JsonValueKind.Array)
-            return "Unexpected response format for orders.";
+        await using var conn = new SqlConnection(_connectionString);
+        var sql = OrderSelectSql
+            + (includeHistory ? "" : " AND poh.Status IN (1, 2)")
+            + " ORDER BY poh.OrderDate DESC";
+        var orders = (await conn.QueryAsync(sql)).AsList();
 
         var sb = new StringBuilder();
         sb.AppendLine(includeHistory ? "## Supply Chain Order History" : "## Active Supply Chain Orders");
-        sb.AppendLine($"Total: {arr.GetArrayLength()}");
+        sb.AppendLine($"Total: {orders.Count}");
         sb.AppendLine();
 
-        foreach (var o in arr.EnumerateArray().Take(30))
+        foreach (var order in orders.Take(30))
         {
-            sb.AppendLine($"- [{o.GetStringOrDefault("status")?.ToUpperInvariant()}] Order {o.GetStringOrDefault("orderId")}: {o.GetStringOrDefault("productName")} x{o.GetIntOrDefault("qty")}");
-            sb.AppendLine($"  Vendor: {o.GetStringOrDefault("vendorName")}, Cost: ${o.GetDecimalOrDefault("totalCost"):N2}, Expected: {o.GetStringOrDefault("expectedDeliveryDate")}");
+            sb.AppendLine($"- [{((string)order.Status).ToUpperInvariant()}] Order {order.PurchaseOrderID}: {order.ProductName} x{order.Qty}");
+            sb.AppendLine($"  Vendor: {order.VendorName}, Cost: ${order.TotalCost:N2}, Expected: {order.EstimatedDeliveryUtc:O}");
         }
 
         return sb.ToString();
@@ -221,38 +223,53 @@ public class SupplyChainService
 
     public async Task<string> GetOrderAsync(string orderId)
     {
-        var resp = await _http.GetAsync($"api/supply/order/{Uri.EscapeDataString(orderId)}");
-        if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
-            return $"Order '{orderId}' not found.";
-        if (!resp.IsSuccessStatusCode)
-            return $"Error retrieving order '{orderId}': {resp.StatusCode}";
+        if (!int.TryParse(orderId, out var id) || id <= 0)
+            throw new ArgumentException("Purchase order ID must be a positive integer.", nameof(orderId));
 
-        var json = await resp.Content.ReadAsStringAsync();
-        using var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
+        await using var conn = new SqlConnection(_connectionString);
+        var lines = (await conn.QueryAsync(
+            OrderSelectSql + " AND poh.PurchaseOrderID = @Id ORDER BY pod.PurchaseOrderDetailID",
+            new { Id = id })).AsList();
+        if (lines.Count == 0)
+            return $"Order '{orderId}' not found.";
+        var order = lines[0];
 
         var sb = new StringBuilder();
-        sb.AppendLine($"## Order {root.GetStringOrDefault("orderId")}");
-        sb.AppendLine($"Status: {root.GetStringOrDefault("status")}");
-        sb.AppendLine($"Vendor: {root.GetStringOrDefault("vendorName")} (ID: {root.GetStringOrDefault("vendorId")})");
-        sb.AppendLine($"Product: {root.GetStringOrDefault("productName")} (ID: {root.GetIntOrDefault("productId")})");
-        sb.AppendLine($"Qty: {root.GetIntOrDefault("qty")}");
-        sb.AppendLine($"Unit price: ${root.GetDecimalOrDefault("unitPrice"):N4}");
-        sb.AppendLine($"Total cost: ${root.GetDecimalOrDefault("totalCost"):N2}");
-        sb.AppendLine($"Placed: {root.GetStringOrDefault("placedAt")}");
-        sb.AppendLine($"Expected delivery: {root.GetStringOrDefault("expectedDeliveryDate")}");
+        sb.AppendLine($"## Order {order.PurchaseOrderID}");
+        sb.AppendLine($"Status: {order.Status}");
+        sb.AppendLine($"Vendor: {order.VendorName} (ID: {order.VendorId})");
+        sb.AppendLine($"Total cost: ${order.TotalCost:N2}");
+        sb.AppendLine($"Placed: {order.PlacedAtUtc:O}");
 
-        var statusHistory = root.TryGetProperty("statusHistory", out var hist) ? hist : default;
-        if (statusHistory.ValueKind == JsonValueKind.Array)
+        foreach (var line in lines)
         {
             sb.AppendLine();
-            sb.AppendLine("### Status History");
-            foreach (var h in statusHistory.EnumerateArray())
-                sb.AppendLine($"  - {h.GetStringOrDefault("timestamp")}: {h.GetStringOrDefault("status")}");
+            sb.AppendLine($"Product: {line.ProductName} (ID: {line.ProductID})");
+            sb.AppendLine($"Qty: {line.Qty}");
+            sb.AppendLine($"Unit price: ${line.UnitCost:N4}");
+            sb.AppendLine($"Expected delivery: {line.EstimatedDeliveryUtc:O}");
         }
 
         return sb.ToString();
     }
+
+    private const string OrderSelectSql = @"
+        SELECT poh.PurchaseOrderID, poh.VendorID AS VendorId, v.Name AS VendorName,
+               pod.ProductID, p.Name AS ProductName, CAST(pod.OrderQty AS INT) AS Qty,
+               pod.UnitPrice AS UnitCost, poh.TotalDue AS TotalCost,
+               CASE poh.Status
+                   WHEN 1 THEN 'pending' WHEN 2 THEN 'approved'
+                   WHEN 3 THEN 'rejected' WHEN 4 THEN 'complete'
+                   ELSE 'unknown'
+               END AS Status,
+               poh.OrderDate AS PlacedAtUtc, pod.DueDate AS EstimatedDeliveryUtc
+        FROM Purchasing.PurchaseOrderHeader poh
+        INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
+        INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
+        INNER JOIN Production.Product p ON pod.ProductID = p.ProductID
+        WHERE v.ActiveFlag = 1 AND p.MakeFlag = 0
+          AND EXISTS (SELECT 1 FROM Production.BillOfMaterials bom
+                      WHERE bom.ComponentID = p.ProductID AND bom.EndDate IS NULL)";
 
     public async Task<string> CancelOrderAsync(string orderId, string reason = "Cancelled by agent")
     {

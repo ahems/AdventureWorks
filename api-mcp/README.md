@@ -26,6 +26,14 @@ The MCP server is implemented as an ASP.NET Core service with SSE transport and 
 
 This separation lets you evolve tools and data access in a dedicated service while keeping the agent orchestration logic inside Azure Functions.
 
+Manufacturing active-operation reads and supply-chain purchase-order
+lists/history/detail use native SQL with the same Managed Identity configuration
+as the other MCP data tools. They no longer proxy SQL-only Functions endpoints.
+Manufacturing and supply-chain services still call Functions for simulation state,
+planning analytics, and transactional workflows (production runs, order placement,
+cancellation, stock/bank updates and queue scheduling). The Manufacturing browser
+site uses OAuth-authenticated DAB for its corresponding SQL table reads.
+
 ---
 
 ## Project Structure

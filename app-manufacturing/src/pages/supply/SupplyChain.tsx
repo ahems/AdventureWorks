@@ -93,7 +93,6 @@ const SupplyChain: React.FC = () => {
   const { data: orders, isLoading: ordersLoading } = useQuery({
     queryKey: ["supply-orders"],
     queryFn: fetchOrders,
-    refetchInterval: 60_000,
   });
   const { data: orderHistory } = useQuery({
     queryKey: ["supply-orders-history"],

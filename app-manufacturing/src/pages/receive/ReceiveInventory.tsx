@@ -1187,7 +1187,6 @@ const ReceiveInventory = () => {
   const { data: supplyOrders } = useQuery({
     queryKey: ["supply-orders"],
     queryFn: fetchOrders,
-    refetchInterval: 120_000,
   });
   const { data: poHeaders } = useQuery({
     queryKey: ["po-headers-all"],

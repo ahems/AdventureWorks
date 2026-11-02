@@ -553,6 +553,20 @@ These functions support the admin portal Stores page, which allows placing order
 
 These functions expose the manufacturing simulation. See [MANUFACTURING_SIMULATION.md](./MANUFACTURING_SIMULATION.md) for full simulation details.
 
+**Data-access boundary:** Manufacturing uses OAuth-authenticated DAB for SQL table
+CRUD, including active routing operations and purchase-order lists/history/detail.
+Those SQL-only reads are not Functions endpoints. Functions remain responsible for
+server-side planning/cost/feasibility analytics, transactional simulation workflows
+(production scheduling, procurement/cancellation with stock, bank and queue side
+effects), Azure Table/Queue state (configuration, workforce, scrap, warehouse and
+bank data), authentication, and Web PubSub negotiation. DAB-incompatible SQL types
+such as address geography also remain behind Functions. MCP tools use native SQL
+for tabular reads, matching their existing Managed Identity data-access pattern.
+
+**Rollout:** Deploy the Manufacturing frontend and MCP consumers before the
+Functions update removes the old read routes. Existing DAB entities and role
+permissions already support these reads; no database/schema migration is needed.
+
 ### `ManufacturingBegin`
 
 - **Trigger / Route**: HTTP `POST /api/manufacturing/begin`
@@ -568,10 +582,11 @@ These functions expose the manufacturing simulation. See [MANUFACTURING_SIMULATI
 - **Trigger / Route**: HTTP `GET /api/manufacturing/status`
 - **Purpose**: Returns live manufacturing counts — work orders in each status, shortages, scrap events, and per-location load.
 
-### `ManufacturingActive`
+### Active manufacturing operations (DAB)
 
-- **Trigger / Route**: HTTP `GET /api/manufacturing/active`
-- **Purpose**: Returns in-progress routing operations with elapsed time, used to animate the simulation dashboard.
+- The site reads `WorkOrderRouting` filtered to started, unfinished operations and
+  joins `Product` / `Location` through DAB. Elapsed minutes are calculated client-side.
+- The former `ManufacturingActive` HTTP Function has been removed.
 
 ### `GetScrapConfig` / `UpdateScrapConfig`
 
@@ -664,15 +679,17 @@ These functions expose the supply chain simulation. See [MANUFACTURING_SIMULATIO
 - **Trigger / Route**: HTTP `POST /api/supply/order`
 - **Purpose**: Places a purchase order with a vendor. Validates stock, records the PO in the database, and makes a bank debit for the cost.
 
-### `GetSupplyOrders` / `GetSupplyOrderHistory`
+### Purchase-order lists, history and detail (DAB)
 
-- **Trigger / Routes**: `GET /api/supply/orders`, `GET /api/supply/orders/history`
-- **Purpose**: Returns open purchase orders or the full PO history.
-
-### `GetSupplyOrder`
-
-- **Trigger / Route**: HTTP `GET /api/supply/order/{orderId}`
-- **Purpose**: Returns a single purchase order by ID.
+- The site reads `PurchaseOrderHeader` / `PurchaseOrderDetail`, joined with
+  `Vendor`, `Product`, and active `BillOfMaterials` through DAB. Open orders use
+  statuses 1/2; history includes terminal statuses. Active-vendor / purchased-BOM
+  component filtering is preserved.
+- All DAB pages are followed; detail lookups batch order IDs to bound URL lengths.
+  Supply-chain Web PubSub events invalidate lists, history and detail.
+- The former `SupplyChainGetOrders`, `SupplyChainGetOrderHistory`, and
+  `SupplyChainGetOrder` HTTP Functions have been removed. Order placement and
+  cancellation remain Functions workflows, not direct DAB writes.
 
 ### `CancelSupplyOrder`
 

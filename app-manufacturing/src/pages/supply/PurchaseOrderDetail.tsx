@@ -64,10 +64,6 @@ const PurchaseOrderDetailPage: React.FC = () => {
     queryKey: ["supply-order", orderId],
     queryFn: () => fetchOrder(orderId!),
     enabled: !!orderId,
-    refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      return status === "pending" || status === "approved" ? 120_000 : false;
-    },
   });
 
   const { data: vendorDetail } = useQuery({

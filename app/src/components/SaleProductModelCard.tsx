@@ -54,8 +54,9 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
     getLocalizedName(currentProduct.ProductID) ?? currentProduct.Name;
 
   const salePrice = getSalePrice(currentProduct);
-  const hasVariants =
-    productGroup.colors.length > 0 || productGroup.sizes.length > 0;
+  const hasSelectedVariants =
+    (productGroup.sizes.length === 0 || !!selectedSize) &&
+    (productGroup.colors.length === 0 || !!selectedColor);
 
   // Check if current selection is available
   const currentVariantAvailable = isVariantAvailable(
@@ -63,8 +64,7 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
     selectedSize,
     selectedColor,
   );
-  const showUnavailable =
-    hasVariants && selectedSize && selectedColor && !currentVariantAvailable;
+  const showUnavailable = hasSelectedVariants && !currentVariantAvailable;
 
   const daysLeft = useMemo(() => {
     if (!currentProduct.SpecialOfferEndDate) return null;
@@ -80,29 +80,32 @@ const SaleProductModelCard: React.FC<SaleProductModelCardProps> = ({
     e.preventDefault();
     e.stopPropagation();
 
-    if (!hasVariants || (selectedSize && selectedColor)) {
-      if (currentVariantAvailable && currentProduct.inStock) {
-        addToCart(currentProduct, 1, selectedSize, selectedColor);
-        toast({
-          title: t("toast.addedToCart"),
-          description: `${localizedName} ${t("toast.addedToCartDescription")}`,
-        });
-      }
-    } else {
-      if (!selectedSize && productGroup.sizes.length > 0) {
-        toast({
-          title: t("saleProductCard.pleasSelectSize"),
-          description: t("saleProductCard.chooseASizeBeforeAddingToCart"),
-          variant: "destructive",
-        });
-      } else if (!selectedColor && productGroup.colors.length > 0) {
-        toast({
-          title: t("saleProductCard.pleaseSelectColor"),
-          description: t("saleProductCard.chooseAColorBeforeAddingToCart"),
-          variant: "destructive",
-        });
-      }
+    if (!selectedSize && productGroup.sizes.length > 0) {
+      toast({
+        title: t("saleProductCard.pleasSelectSize"),
+        description: t("saleProductCard.chooseASizeBeforeAddingToCart"),
+        variant: "destructive",
+      });
+      return;
     }
+    if (!selectedColor && productGroup.colors.length > 0) {
+      toast({
+        title: t("saleProductCard.pleaseSelectColor"),
+        description: t("saleProductCard.chooseAColorBeforeAddingToCart"),
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!currentVariantAvailable || !currentProduct.inStock) {
+      toast({
+        title: t("saleProductCard.currentlyUnavailable"),
+        description: t("saleProductCard.thisSizeColorCombinationIsOutOfStock"),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    addToCart(currentProduct, 1, selectedSize, selectedColor);
   };
 
   const handleColorChange = (value: string) => {

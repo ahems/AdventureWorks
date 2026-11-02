@@ -1,4 +1,13 @@
 import { MANUFACTURING_BASE as BASE } from "@/config/api";
+import {
+  fetchActiveBOM,
+  fetchAllOData,
+  fetchAllPurchaseOrderDetails,
+  fetchProducts,
+  fetchVendors as fetchSqlVendors,
+  sqlUtcTimestamp,
+} from "./api";
+import type { PurchaseOrderHeader } from "@/types/production";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -104,9 +113,9 @@ export interface PurchaseOrder {
   status: "pending" | "approved" | "complete" | "rejected";
   placedAtUtc: string;
   estimatedDeliveryUtc: string;
-  actualDeliveryUtc: string | null;
-  cancellationReason: string | null;
-  trackingEvents: TrackingEvent[];
+  actualDeliveryUtc?: string | null;
+  cancellationReason?: string | null;
+  trackingEvents?: TrackingEvent[];
 }
 
 // ── API functions ─────────────────────────────────────────────────────────────
@@ -197,22 +206,13 @@ export async function submitBulkReorder(
 }
 
 export async function fetchOrder(orderId: string): Promise<PurchaseOrder> {
-  // Try the singular detail endpoint first (works for live-placed orders).
-  try {
-    const res = await fetch(`${BASE}/supply/order/${orderId}`);
-    if (res.ok) return res.json();
-  } catch {
-    // fall through
+  const id = Number(orderId);
+  if (!/^\d+$/.test(orderId) || !Number.isSafeInteger(id) || id <= 0) {
+    throw new Error(`Invalid purchase order ID: ${orderId}`);
   }
-  // Fallback: the singular endpoint 500s for many seeded/bulk POs.
-  // The listing endpoint returns one row per line item — aggregate them
-  // back into a single PurchaseOrder for the detail page.
-  const listRes = await fetch(`${BASE}/supply/orders`);
-  if (!listRes.ok) throw new Error(`Order detail error: ${listRes.status}`);
-  const all: PurchaseOrder[] = await listRes.json();
-  const lines = all.filter((o) => String(o.orderId) === String(orderId));
-  if (lines.length === 0) throw new Error(`Order ${orderId} not found`);
+  const lines = await fetchSqlOrders(`PurchaseOrderID eq ${id}`);
   const first = lines[0];
+  if (!first) throw new Error(`Order ${orderId} not found`);
   const qty = lines.reduce((s, l) => s + (l.qty || 0), 0);
   const unitCostSum = lines.reduce(
     (s, l) => s + (l.unitCost || 0) * (l.qty || 0),
@@ -222,23 +222,77 @@ export async function fetchOrder(orderId: string): Promise<PurchaseOrder> {
     ...first,
     qty,
     unitCost: qty > 0 ? unitCostSum / qty : first.unitCost,
-    shippingCost: lines.reduce((s, l) => s + (l.shippingCost || 0), 0),
-    totalCost: lines.reduce((s, l) => s + (l.totalCost || 0), 0),
+    // Freight and TotalDue belong to the header, not each detail row.
+    shippingCost: first.shippingCost,
+    totalCost: first.totalCost,
     productName:
       lines.length > 1 ? `${lines.length} line items` : first.productName,
   };
 }
 
 export async function fetchOrders(): Promise<PurchaseOrder[]> {
-  const res = await fetch(`${BASE}/supply/orders`);
-  if (!res.ok) throw new Error(`Orders error: ${res.status}`);
-  return res.json();
+  return fetchSqlOrders("Status eq 1 or Status eq 2");
 }
 
 export async function fetchOrderHistory(): Promise<PurchaseOrder[]> {
-  const res = await fetch(`${BASE}/supply/orders/history`);
-  if (!res.ok) throw new Error(`Order history error: ${res.status}`);
-  return res.json();
+  return fetchSqlOrders();
+}
+
+async function fetchSqlOrders(filter?: string): Promise<PurchaseOrder[]> {
+  const headers = await fetchAllOData<PurchaseOrderHeader>("PurchaseOrderHeader", {
+    ...(filter ? { $filter: filter } : {}),
+    $orderby: "OrderDate desc",
+  });
+  if (headers.length === 0) return [];
+
+  const [details, vendors, products, bom] = await Promise.all([
+    fetchAllPurchaseOrderDetails(headers.map((h) => h.PurchaseOrderID)),
+    fetchSqlVendors(),
+    fetchProducts("MakeFlag eq false"),
+    fetchActiveBOM(),
+  ]);
+  const activeVendors = new Map(
+    vendors.filter((v) => v.ActiveFlag).map((v) => [v.BusinessEntityID, v]),
+  );
+  const componentIds = new Set(bom.map((b) => b.ComponentID));
+  const components = new Map(
+    products.filter((p) => !p.MakeFlag && componentIds.has(p.ProductID))
+      .map((p) => [p.ProductID, p]),
+  );
+  const detailsByOrder = new Map<number, typeof details>();
+  for (const detail of details) {
+    const rows = detailsByOrder.get(detail.PurchaseOrderID) ?? [];
+    rows.push(detail);
+    detailsByOrder.set(detail.PurchaseOrderID, rows);
+  }
+  const statuses: Record<number, PurchaseOrder["status"]> = {
+    1: "pending", 2: "approved", 3: "rejected", 4: "complete",
+  };
+
+  return headers.flatMap((header) => {
+    const vendor = activeVendors.get(header.VendorID);
+    if (!vendor) return [];
+    return (detailsByOrder.get(header.PurchaseOrderID) ?? []).flatMap((detail) => {
+      const product = components.get(detail.ProductID);
+      if (!product) return [];
+      const status = statuses[header.Status];
+      if (!status) throw new Error(`Unknown purchase order status: ${header.Status}`);
+      return [{
+        orderId: String(header.PurchaseOrderID),
+        vendorId: String(header.VendorID),
+        vendorName: vendor.Name,
+        productId: detail.ProductID,
+        productName: product.Name,
+        qty: detail.OrderQty,
+        unitCost: detail.UnitPrice,
+        shippingCost: header.Freight,
+        totalCost: header.TotalDue,
+        status,
+        placedAtUtc: sqlUtcTimestamp(header.OrderDate),
+        estimatedDeliveryUtc: sqlUtcTimestamp(detail.DueDate),
+      }];
+    });
+  });
 }
 
 export async function cancelOrder(

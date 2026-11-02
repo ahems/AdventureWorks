@@ -86,7 +86,6 @@ const Dashboard = () => {
   const { data: activeOps } = useQuery<ActiveOperation[]>({
     queryKey: ["manufacturing-active"],
     queryFn: fetchActiveOperations,
-    refetchInterval: 60_000,
     retry: 1,
   });
 
@@ -104,7 +103,6 @@ const Dashboard = () => {
   const { data: supplyOrders } = useQuery<PurchaseOrder[]>({
     queryKey: ["supply-orders-dashboard"],
     queryFn: fetchOrders,
-    refetchInterval: 120_000,
     retry: 1,
   });
 
