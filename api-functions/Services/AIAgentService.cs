@@ -41,16 +41,16 @@ public class AIAgentService
         _foundryClient = foundryClient;
         _telemetryClient = telemetryClient;
 
-        // Prefer the workflow agent when it has been deployed; fall back to the
-        // plain chat agent so the app remains functional before the workflow agent
-        // is created (e.g. first-time provision or local dev without it).
         var workflowAgentId = configuration["AI_AGENT_WORKFLOW_CHAT_ID"];
         var chatAgentId     = configuration["AI_AGENT_CHAT_ID"];
 
-        _agentId = !string.IsNullOrWhiteSpace(workflowAgentId)
-            ? workflowAgentId
-            : chatAgentId ?? throw new InvalidOperationException(
-                "Neither AI_AGENT_WORKFLOW_CHAT_ID nor AI_AGENT_CHAT_ID environment variable is set");
+        _agentId = !string.IsNullOrWhiteSpace(chatAgentId)
+            ? chatAgentId
+            : throw new InvalidOperationException("AI_AGENT_CHAT_ID environment variable is not set");
+        if (!string.IsNullOrWhiteSpace(workflowAgentId))
+            _logger.LogWarning(
+                "AI_AGENT_WORKFLOW_CHAT_ID is configured but not used: FoundryAgentClient supports prompt agents only. Using {AgentId}.",
+                _agentId);
 
         // Admin chat agent — falls back to the customer chat agent if not configured
         var adminAgentId = configuration["AI_AGENT_ADMIN_CHAT_ID"];

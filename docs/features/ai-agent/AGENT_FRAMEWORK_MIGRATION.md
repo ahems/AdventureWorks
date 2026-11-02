@@ -234,7 +234,7 @@ workflows/
 
 api-functions/Services/
   FoundryAgentClient.cs             (shared singleton — Responses API, approval loop)
-  AIAgentService.cs                 → AI_AGENT_WORKFLOW_CHAT_ID (prefers) / AI_AGENT_CHAT_ID
+  AIAgentService.cs                 → AI_AGENT_CHAT_ID (prompt only; workflow chat routing bypassed)
   HelpMeChooseService.cs            → AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID / AI_AGENT_HELP_ME_CHOOSE_ID
   PromotionAgentService.cs          → AI_AGENT_WORKFLOW_PROMOTION_ID / AI_AGENT_PROMOTION_ID
   OrderGenerationAgentService.cs    → AI_AGENT_WORKFLOW_ORDER_ID / AI_AGENT_ORDER_ID

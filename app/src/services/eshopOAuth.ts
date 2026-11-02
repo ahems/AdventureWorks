@@ -7,6 +7,7 @@ const REFRESH_TOKEN_KEY = "eshop_oauth_refresh_token";
 const TOKEN_KEYS = {
   dab: "dab_oauth_token",
   functions: "functions_oauth_token",
+  mcp: "mcp_oauth_token",
 } as const;
 const REQUESTED_SCOPES = [
   "mcp.access",
@@ -50,7 +51,9 @@ function getResourceIdentifier(resource: EshopResource): string {
   if (!mcpUrl) {
     throw new Error("The AdventureWorks authorization service is not configured.");
   }
-  return new URL(`/${resource}`, mcpUrl).toString().replace(/\/$/, "");
+  return resource === "mcp"
+    ? mcpUrl.replace(/\/$/, "")
+    : new URL(`/${resource}`, mcpUrl).toString().replace(/\/$/, "");
 }
 
 function readToken(resource: EshopResource): StoredToken | null {
@@ -216,6 +219,7 @@ export async function restoreEshopOAuthSession(): Promise<boolean> {
 export function clearEshopOAuthSession(): void {
   sessionStorage.removeItem(TOKEN_KEYS.dab);
   sessionStorage.removeItem(TOKEN_KEYS.functions);
+  sessionStorage.removeItem(TOKEN_KEYS.mcp);
   sessionStorage.removeItem(REFRESH_TOKEN_KEY);
   sessionStorage.removeItem("dab_oauth_pkce");
   sessionStorage.removeItem("functions_oauth_pkce");

@@ -21,11 +21,13 @@ export async function sendAgentMessage(
   const url = `${getFunctionsApiUrl()}/api/agent/chat`;
 
   // Forward a per-user MCP token (minted silently from the sign-in session) so
-  // tool calls are authorized as the signed-in admin. Without one, api-functions
-  // falls back to its managed-identity service token.
+  // tool calls are authorized as the signed-in admin.
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const mcpToken = await getMcpAccessToken();
-  if (mcpToken) headers.Authorization = `Bearer ${mcpToken}`;
+  if (!mcpToken) {
+    throw new Error("Your secure session has expired. Please sign in again.");
+  }
+  headers.Authorization = `Bearer ${mcpToken}`;
 
   const response = await fetch(url, {
     method: "POST",

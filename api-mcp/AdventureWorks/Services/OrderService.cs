@@ -76,6 +76,7 @@ public class OrderService
 
         var result = new StringBuilder();
         result.AppendLine(_localizer["OrderHistory", customerId].Value);
+        result.AppendLine($"CustomerID: {customerId.ToString(CultureInfo.InvariantCulture)}");
         result.AppendLine(_localizer["RecentOrders", orders.Count()].Value);
         result.AppendLine();
 
@@ -109,6 +110,7 @@ public class OrderService
         var headerSql = @"
             SELECT 
                 soh.SalesOrderID,
+                soh.CustomerID,
                 soh.OrderDate,
                 soh.Status,
                 soh.SubTotal,
@@ -164,6 +166,7 @@ public class OrderService
 
         var result = new StringBuilder();
         result.AppendLine(_localizer["OrderDetails", header.SalesOrderID].Value);
+        result.AppendLine($"CustomerID: {((int)header.CustomerID).ToString(CultureInfo.InvariantCulture)}");
         result.AppendLine($"{_localizer["Status", header.StatusText].Value}");
         result.AppendLine($"{_localizer["OrderDate", header.OrderDate].Value}");
         if (header.ShipDate != null)

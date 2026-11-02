@@ -24,7 +24,7 @@ When you run `azd up` or `azd provision`, the system automatically:
    - **Eshop Chat Agent** (`AI_AGENT_CHAT_ID`) — customer service chat, product recommendations, order tracking
    - **Help Me Choose Agent** (`AI_AGENT_HELP_ME_CHOOSE_ID`) — multi-phase product advisor wizard
    - **Eshop Intent Agent** — classifies intent and routes to the right eshop workflow
-   - **Eshop Workflow Agent** (`AI_AGENT_WORKFLOW_CHAT_ID`) — orchestrates chat vs product-advisor routing
+   - **Eshop Workflow Agent** (`AI_AGENT_WORKFLOW_CHAT_ID`) — provisioned for future native workflow execution; the e-shop currently uses the prompt chat agent directly, bypassing the separate workflow Q&A
 
    **Admin agents** (internal portal):
    - **Admin Chat Agent** — general-purpose admin assistant with full catalog and order access
@@ -57,7 +57,7 @@ When you run `azd up` or `azd provision`, the system automatically:
    - `AI_AGENT_CART_RECOVERY_ID`: Admin cart recovery analysis agent
    - `AI_AGENT_PRODUCT_CONTENT_ID`: Admin product content generation agent
    - `AI_AGENT_HELP_ME_CHOOSE_ID`: Eshop product advisor wizard agent
-   - `AI_AGENT_WORKFLOW_CHAT_ID`: Eshop workflow routing agent
+   - `AI_AGENT_WORKFLOW_CHAT_ID`: Provisioned e-shop workflow routing agent (not used by the prompt-only chat client)
    - `AI_AGENT_WORKFLOW_PROMOTION_ID`: Admin promotion workflow agent
    - `AI_AGENT_WORKFLOW_ORDER_ID`: Admin order workflow agent
    - `MANUFACTURING_AGENT_ENDPOINT`: Hosted Manufacturing agent Responses endpoint

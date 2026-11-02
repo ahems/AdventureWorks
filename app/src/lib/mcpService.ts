@@ -4,6 +4,8 @@
  */
 
 import { trackError } from "@/lib/appInsights";
+import { getEshopAccessToken } from "@/services/eshopOAuth";
+import { decodeTokenClaims } from "@/services/functionsAuth";
 
 const getAgentEndpoint = (): string => {
   // Check for runtime config first (Azure deployment)
@@ -48,33 +50,49 @@ interface AgentChatResponse {
 export const chatWithAgent = async (
   message: string,
   conversationHistory: ChatMessage[],
-  customerId?: number,
+  businessEntityId?: number,
   userName?: string,
   cultureId?: string,
   threadId?: string,
 ): Promise<AgentChatResponse> => {
   const endpoint = getAgentEndpoint();
 
-  const request: AgentChatRequest = {
-    message,
-    conversationHistory,
-    customerId,
-    userName,
-    cultureId,
-    threadId,
-  };
-
   try {
+    const functionsToken = await getEshopAccessToken("functions");
+    const claims = functionsToken ? decodeTokenClaims(functionsToken) : null;
+    const customerId = Number(claims?.customer_id);
+    if (
+      !Number.isInteger(customerId) ||
+      customerId <= 0 ||
+      !businessEntityId ||
+      Number(claims?.business_entity_id) !== businessEntityId
+    ) {
+      throw new Error("Your customer session is unavailable. Please sign in again.");
+    }
+    // MCP validates this resource-bound token and enforces ownership server-side.
+    const mcpToken = await getEshopAccessToken("mcp");
+    if (!mcpToken) {
+      throw new Error("Your secure session has expired. Please sign in again.");
+    }
+    const request: AgentChatRequest = {
+      message,
+      conversationHistory,
+      customerId,
+      userName,
+      cultureId,
+      threadId,
+    };
     const response = await fetch(`${endpoint}/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${mcpToken}`,
       },
       body: JSON.stringify(request),
     });
 
     if (!response.ok) {
-      throw new Error(`Agent call failed: ${response.statusText}`);
+      throw new Error(`Agent call failed: HTTP ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
@@ -87,6 +105,9 @@ export const chatWithAgent = async (
       toolsUsed: data.ToolsUsed || data.toolsUsed || [],
       threadId: data.ThreadId || data.threadId,
     };
+    if (!result.response.trim()) {
+      throw new Error("The AI agent returned an empty response.");
+    }
 
     return result;
   } catch (error) {

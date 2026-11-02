@@ -13,6 +13,52 @@ namespace ApiFunctions.Tests;
 public class FoundryAgentClientTests
 {
     [Fact]
+    public async Task Workflow_definitions_are_rejected_instead_of_becoming_instructionless_prompts()
+    {
+        using var handler = new FoundryHandler { DefinitionKind = "workflow" };
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        var client = CreateClient(handler, telemetry);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            client.InvokeAsync("eshop-workflow-agent", "Show my orders"));
+
+        Assert.Contains("not a prompt agent", error.Message);
+        Assert.Empty(handler.ResponseRequests);
+        Assert.Equal(0, handler.McpRequests);
+    }
+
+    [Theory]
+    [InlineData("""{"error":{"type":"http_error","message":"401 Unauthorized"}}""")]
+    [InlineData("""{"output":{"isError":true,"content":[{"type":"text","text":"Access denied"}]}}""")]
+    [InlineData("""{"output":"{\"isError\":true,\"content\":[]}"}""")]
+    public async Task Failed_mcp_tools_do_not_report_chat_success(string toolResult)
+    {
+        using var handler = new FoundryHandler { ToolResult = toolResult };
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        var client = CreateClient(handler, telemetry);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            client.InvokeAsync("eshop-chat-agent", "Show my orders", mcpAccessToken: "test-user"));
+
+        Assert.Contains("get_customer_orders", error.Message);
+        Assert.Single(handler.ResponseRequests);
+    }
+
+    [Theory]
+    [InlineData("""{"output":"Order history"}""")]
+    [InlineData("""{"output":"{\"isError\":false,\"content\":[]}","error":null}""")]
+    public async Task Successful_mcp_tools_preserve_the_answer(string toolResult)
+    {
+        using var handler = new FoundryHandler { ToolResult = toolResult };
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        var response = await CreateClient(handler, telemetry).InvokeAsync(
+            "eshop-chat-agent", "Show my orders", mcpAccessToken: "test-user");
+
+        Assert.Equal("Generated promotion", response.ResponseText);
+        Assert.Contains("get_customer_orders", response.ToolsUsed);
+    }
+
+    [Fact]
     public async Task Data_supplied_calls_omit_tools_and_warmup_on_initial_and_refinement_turns()
     {
         using var handler = new FoundryHandler();
@@ -151,6 +197,8 @@ public class FoundryAgentClientTests
         public List<JsonElement> ResponseRequests { get; } = [];
         public HttpStatusCode ResponseStatus { get; init; } = HttpStatusCode.OK;
         public bool FirstResponseIsToolOnly { get; init; }
+        public string DefinitionKind { get; init; } = "prompt";
+        public string? ToolResult { get; init; }
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
@@ -160,9 +208,9 @@ public class FoundryAgentClientTests
             {
                 DefinitionRequests++;
                 return JsonResponse(HttpStatusCode.OK, """
-                    {"versions":{"latest":{"definition":{"model":"chat","instructions":"Generate JSON.",
+                    {"versions":{"latest":{"definition":{"kind":"DEFINITION_KIND","model":"chat","instructions":"Generate JSON.",
                     "tools":[{"type":"mcp","server_label":"aw","server_url":"https://mcp.test/mcp"}]}}}}
-                    """);
+                    """.Replace("DEFINITION_KIND", DefinitionKind));
             }
 
             if (path == "/mcp")
@@ -184,6 +232,22 @@ public class FoundryAgentClientTests
                 return JsonResponse(HttpStatusCode.OK, """
                     {"id":"resp-tool","status":"completed","output":[{"type":"mcp_call","name":"GetProductsForPromotion"}]}
                     """);
+            }
+            if (ToolResult is not null)
+            {
+                var tool = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(ToolResult)!;
+                tool["type"] = JsonSerializer.SerializeToElement("mcp_call");
+                tool["name"] = JsonSerializer.SerializeToElement("get_customer_orders");
+                return JsonResponse(HttpStatusCode.OK, JsonSerializer.Serialize(new
+                {
+                    id = "resp-test",
+                    status = "completed",
+                    output = new object[]
+                    {
+                        tool,
+                        new { type = "message", content = new[] { new { type = "output_text", text = "Generated promotion" } } }
+                    }
+                }));
             }
 
             return JsonResponse(HttpStatusCode.OK, """

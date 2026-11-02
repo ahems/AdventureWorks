@@ -28,6 +28,15 @@ export const AIChatOverlay = () => {
   const [threadId, setThreadId] = useState<string | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const sessionVersion = useRef(0);
+
+  useEffect(() => {
+    sessionVersion.current += 1;
+    setMessages([]);
+    setThreadId(undefined);
+    setInput("");
+    setIsLoading(false);
+  }, [user?.businessEntityId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -114,6 +123,7 @@ export const AIChatOverlay = () => {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
+    const requestSession = sessionVersion.current;
 
     try {
       // Build conversation history for context
@@ -131,6 +141,7 @@ export const AIChatOverlay = () => {
         selectedLanguage,
         threadId,
       );
+      if (requestSession !== sessionVersion.current) return;
 
       // Persist the thread for continued conversation
       if (agentResponse.threadId) {
@@ -154,6 +165,7 @@ export const AIChatOverlay = () => {
         setSuggestedQuestions(agentResponse.suggestedQuestions);
       }
     } catch (error) {
+      if (requestSession !== sessionVersion.current) return;
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
@@ -162,7 +174,7 @@ export const AIChatOverlay = () => {
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
-      setIsLoading(false);
+      if (requestSession === sessionVersion.current) setIsLoading(false);
     }
   };
 

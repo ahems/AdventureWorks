@@ -75,7 +75,7 @@ public class AIAgentFunctions
 
             // Forward the caller's delegated OAuth access token (if any) to the MCP
             // resource. The frontends obtain a user-bound token via Authorization
-            // Code + PKCE and send it as a standard Authorization header. This
+            // Code + PKCE or refresh grant and send it as a standard Authorization header. This
             // endpoint is Anonymous at the Functions layer; the token is used only
             // for downstream api-mcp authorization as the actual AdventureWorks user.
             string? mcpAccessToken = null;
@@ -84,14 +84,19 @@ public class AIAgentFunctions
                 foreach (var raw in authValues)
                 {
                     if (string.IsNullOrWhiteSpace(raw)) continue;
-                    // raw is "<scheme> <token>"; take the token portion without
-                    // hard-coding the scheme name.
-                    var spaceIdx = raw.IndexOf(' ');
-                    mcpAccessToken = spaceIdx > 0 && spaceIdx < raw.Length - 1
-                        ? raw[(spaceIdx + 1)..].Trim()
-                        : raw.Trim();
-                    break;
+                    if (raw.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                    {
+                        mcpAccessToken = raw["Bearer ".Length..].Trim();
+                        break;
+                    }
                 }
+            }
+            if (string.IsNullOrWhiteSpace(mcpAccessToken))
+            {
+                _logger.LogWarning("AI Agent chat rejected: missing delegated MCP bearer token");
+                var unauthorized = req.CreateResponse(HttpStatusCode.Unauthorized);
+                await unauthorized.WriteAsJsonAsync(new { error = "Sign in again to use the AI assistant." });
+                return unauthorized;
             }
 
             // Process with AI agent

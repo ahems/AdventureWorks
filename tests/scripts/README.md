@@ -24,6 +24,8 @@ These scripts test the AdventureWorks APIs and Azure Functions directly using cu
 
 ### AI & MCP Tests
 
+- **test-eshop-chat.mjs** - Offline regression tests for resource-bound MCP token acquisition/refresh, CustomerID mapping, session cleanup, and explicit chat failures. Uses the real frontend TypeScript modules with stubbed HTTP/storage; run `node --experimental-vm-modules --test tests/scripts/test-eshop-chat.mjs`.
+
 - **test-ai-and-mcp-complete.sh** - Comprehensive test of AI Agent and MCP integration
 - **test-ai-chat-and-mcp.sh** - Tests AI chat functionality with MCP tools
 - **test-product-comparison.sh** - Tests AI-powered product comparison features

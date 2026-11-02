@@ -538,6 +538,16 @@ public class FoundryAgentClient
 
                     case "function_call":
                     case "mcp_call":
+                        if (itemType == "mcp_call" && McpCallFailed(item))
+                        {
+                            var failedTool = item.TryGetProperty("name", out var failedName)
+                                ? failedName.GetString() : "unknown";
+                            _logger.LogError(
+                                "Foundry agent '{AgentId}' MCP tool '{Tool}' failed. ResponseId={ResponseId}",
+                                agentId, failedTool, responseId);
+                            throw new InvalidOperationException(
+                                $"AI tool '{failedTool}' failed. Please try again or sign in again.");
+                        }
                         // Collect distinct tool/function names for telemetry
                         var nameKey = itemType == "mcp_call" ? "name" : "name";
                         if (item.TryGetProperty(nameKey, out var toolName))
@@ -593,6 +603,33 @@ public class FoundryAgentClient
 
     // ── Agent definition fetching ─────────────────────────────────────────────
 
+    private static bool McpCallFailed(JsonElement item)
+    {
+        if (item.TryGetProperty("error", out var error)
+            && error.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined)
+            return true;
+
+        if (!item.TryGetProperty("output", out var output))
+            return false;
+        if (output.ValueKind == JsonValueKind.Object)
+            return output.TryGetProperty("isError", out var isError) && isError.ValueKind == JsonValueKind.True;
+        if (output.ValueKind == JsonValueKind.String)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(output.GetString()!);
+                return doc.RootElement.ValueKind == JsonValueKind.Object
+                    && doc.RootElement.TryGetProperty("isError", out var isError)
+                    && isError.ValueKind == JsonValueKind.True;
+            }
+            catch (JsonException)
+            {
+                // Successful tools may return plain text rather than an MCP result object.
+            }
+        }
+        return false;
+    }
+
     private async Task<CachedAgentDefinition> GetOrFetchAgentDefinitionAsync(
         string agentId,
         CancellationToken cancellationToken)
@@ -645,6 +682,14 @@ public class FoundryAgentClient
             .GetProperty("versions")
             .GetProperty("latest")
             .GetProperty("definition");
+        if (definition.TryGetProperty("kind", out var kind)
+            && !string.Equals(kind.GetString(), "prompt", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogError("Agent '{AgentId}' has unsupported kind '{Kind}'; a prompt agent is required.",
+                agentId, kind.GetString());
+            throw new InvalidOperationException(
+                $"Agent '{agentId}' is not a prompt agent. Workflow execution is not supported by this client.");
+        }
 
         var model = definition.TryGetProperty("model", out var m) ? m.GetString() ?? "chat" : "chat";
         var instructions = definition.TryGetProperty("instructions", out var inst) ? inst.GetString() : null;
