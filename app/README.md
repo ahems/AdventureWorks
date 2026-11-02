@@ -4,7 +4,7 @@ A modern e-commerce web application built with React, TypeScript, and Vite, feat
 
 ## Features
 
-- 🛒 Full-featured e-commerce with shopping cart and wishlist
+- 🛒 Full-featured e-commerce with shopping cart
 - 🎨 Modern UI with doodle-style design system
 - 📱 Responsive design for all devices
 - 🔍 Advanced search and filtering

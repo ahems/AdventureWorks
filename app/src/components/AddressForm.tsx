@@ -44,15 +44,11 @@ export const AddressForm: React.FC<AddressFormProps> = ({
   const [selectedCountry, setSelectedCountry] = useState(
     address?.countryRegionCode || "US",
   );
-  const {
-    countries,
-    states,
-    isCountriesLoading,
-    isStatesLoading,
-  } = useCountriesAndStates(selectedCountry);
+  const { countries, states, isCountriesLoading, isStatesLoading } =
+    useCountriesAndStates(selectedCountry);
 
   const [formData, setFormData] = useState({
-    addressType: address?.addressType || "Home",
+    addressType: address?.addressType || "Shipping",
     addressLine1: address?.addressLine1 || "",
     addressLine2: address?.addressLine2 || "",
     city: address?.city || "",
@@ -74,6 +70,30 @@ export const AddressForm: React.FC<AddressFormProps> = ({
   }, [states, formData.stateProvinceId]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // "Home" is the default address type, so the type and the default checkbox stay in sync.
+  // The current default cannot be un-defaulted here; another address must be made default instead.
+  const isCurrentDefault = !!address?.isDefault;
+
+  const handleTypeChange = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      addressType: value,
+      isDefault: value === "Home",
+    }));
+  };
+
+  const handleDefaultChange = (checked: boolean) => {
+    setFormData((prev) => ({
+      ...prev,
+      isDefault: checked,
+      addressType: checked
+        ? "Home"
+        : prev.addressType === "Home"
+          ? "Shipping"
+          : prev.addressType,
+    }));
+  };
 
   const handleChange = (field: string, value: string | boolean | number) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -127,8 +147,9 @@ export const AddressForm: React.FC<AddressFormProps> = ({
         <select
           id="addressType"
           value={formData.addressType}
-          onChange={(e) => handleChange("addressType", e.target.value)}
-          className="doodle-input w-full"
+          onChange={(e) => handleTypeChange(e.target.value)}
+          disabled={isCurrentDefault}
+          className="doodle-input w-full disabled:opacity-60"
         >
           <option value="Home">{t("addressForm.home")}</option>
           <option value="Shipping">{t("addressForm.shipping")}</option>
@@ -295,11 +316,14 @@ export const AddressForm: React.FC<AddressFormProps> = ({
         </div>
       </div>
 
-      <label className="flex items-center gap-2 cursor-pointer">
+      <label
+        className={`flex items-center gap-2 ${isCurrentDefault ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+      >
         <input
           type="checkbox"
           checked={formData.isDefault}
-          onChange={(e) => handleChange("isDefault", e.target.checked)}
+          onChange={(e) => handleDefaultChange(e.target.checked)}
+          disabled={isCurrentDefault}
           className="w-4 h-4"
         />
         <span className="font-doodle text-sm text-doodle-text">

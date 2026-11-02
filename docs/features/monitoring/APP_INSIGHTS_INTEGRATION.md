@@ -223,8 +223,7 @@ Application Insights connection strings are **not secrets**. They are safe to ex
 ## Next Steps (Optional Enhancements)
 
 1. Add tracking for search queries
-2. Track wishlist additions
-3. Track product comparison usage
-4. Add custom metrics for cart abandonment
+2. Track product comparison usage
+3. Add custom metrics for cart abandonment
 5. Create Application Insights alerts for anomalies
 6. Set up availability tests for uptime monitoring

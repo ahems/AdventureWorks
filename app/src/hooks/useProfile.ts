@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { graphqlClient } from "@/lib/graphql-client";
 import { getRestApiUrl } from "@/lib/utils";
+import { dabFetch } from "@/lib/dabFetch";
 import { gql } from "graphql-request";
 import { toast } from "./use-toast";
 import { trackError } from "@/lib/appInsights";
@@ -151,7 +152,7 @@ export const useUpdateProfile = () => {
 
         // Check if phone exists
         const checkUrl = `${restApiUrl}/PersonPhone?$filter=BusinessEntityID eq ${profile.BusinessEntityID}`;
-        const existingPhones = await fetch(checkUrl).then((r) => r.json());
+        const existingPhones = await dabFetch(checkUrl).then((r) => r.json());
 
         if (existingPhones.value && existingPhones.value.length > 0) {
           // PersonPhone has a composite primary key (BusinessEntityID, PhoneNumber, PhoneNumberTypeID)
@@ -165,7 +166,7 @@ export const useUpdateProfile = () => {
               existingPhone.PhoneNumber,
             )}/PhoneNumberTypeID/${existingPhone.PhoneNumberTypeID}`;
 
-            const deleteResponse = await fetch(deleteUrl, {
+            const deleteResponse = await dabFetch(deleteUrl, {
               method: "DELETE",
             });
 
@@ -185,7 +186,7 @@ export const useUpdateProfile = () => {
             PhoneNumberTypeID: phoneNumberTypeId,
           };
 
-          const createResponse = await fetch(createUrl, {
+          const createResponse = await dabFetch(createUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(createPayload),
@@ -206,7 +207,7 @@ export const useUpdateProfile = () => {
             PhoneNumberTypeID: phoneNumberTypeId,
           };
 
-          const response = await fetch(createUrl, {
+          const response = await dabFetch(createUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(createPayload),

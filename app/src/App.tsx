@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "@/context/CartContext";
 import { AuthProvider } from "@/context/AuthContext";
-import { WishlistProvider } from "@/context/WishlistContext";
 import { RecentlyViewedProvider } from "@/context/RecentlyViewedContext";
 import { CompareProvider } from "@/context/CompareContext";
 import { LanguageProvider } from "@/context/LanguageContext";
@@ -29,7 +28,6 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 import AccountPage from "./pages/AccountPage";
 import SalePage from "./pages/SalePage";
 import SearchPage from "./pages/SearchPage";
-import WishlistPage from "./pages/WishlistPage";
 import OrderTrackingPage from "./pages/OrderTrackingPage";
 import ReturnsPage from "./pages/ReturnsPage";
 import FAQPage from "./pages/FAQPage";
@@ -60,94 +58,88 @@ const App = () => (
               <UnitMeasureProvider>
                 <ProductNamesProvider>
                   <AuthProvider>
-                    <WishlistProvider>
-                      <RecentlyViewedProvider>
-                        <CompareProvider>
-                          <CartProvider>
-                            <Toaster />
-                            <Sonner />
-                            <BrowserRouter
-                              future={{
-                                v7_startTransition: true,
-                                v7_relativeSplatPath: true,
-                              }}
-                            >
-                              <CompareBar />
-                              <AIChatOverlay />
-                              <Routes>
-                                <Route path="/" element={<Index />} />
-                                <Route
-                                  path="/category/:categoryId"
-                                  element={<CategoryPage />}
-                                />
-                                <Route
-                                  path="/product/:productId"
-                                  element={<ProductPage />}
-                                />
-                                <Route path="/cart" element={<CartPage />} />
-                                <Route
-                                  path="/checkout"
-                                  element={<CheckoutPage />}
-                                />
-                                <Route
-                                  path="/order-confirmation"
-                                  element={<OrderConfirmationPage />}
-                                />
-                                <Route path="/auth" element={<AuthPage />} />
-                                <Route
-                                  path="/oauth/callback"
-                                  element={<OAuthCallbackPage />}
-                                />
-                                <Route
-                                  path="/reset-password"
-                                  element={<ResetPasswordPage />}
-                                />
-                                <Route
-                                  path="/account"
-                                  element={<AccountPage />}
-                                />
-                                <Route path="/sale" element={<SalePage />} />
-                                <Route
-                                  path="/search"
-                                  element={<SearchPage />}
-                                />
-                                <Route
-                                  path="/wishlist"
-                                  element={<WishlistPage />}
-                                />
-                                <Route
-                                  path="/order-tracking"
-                                  element={<OrderTrackingPage />}
-                                />
-                                <Route
-                                  path="/order-tracking/:orderId"
-                                  element={<OrderTrackingPage />}
-                                />
-                                <Route
-                                  path="/returns"
-                                  element={<ReturnsPage />}
-                                />
-                                <Route path="/faq" element={<FAQPage />} />
-                                <Route
-                                  path="/compare"
-                                  element={<ComparePage />}
-                                />
-                                <Route
-                                  path="/health"
-                                  element={<HealthCheckPage />}
-                                />
-                                <Route
-                                  path="/help-me-choose"
-                                  element={<HelpMeChoosePage />}
-                                />
-                                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                                <Route path="*" element={<NotFound />} />
-                              </Routes>
-                            </BrowserRouter>
-                          </CartProvider>
-                        </CompareProvider>
-                      </RecentlyViewedProvider>
-                    </WishlistProvider>
+                    <RecentlyViewedProvider>
+                      <CompareProvider>
+                        <CartProvider>
+                          <Toaster />
+                          <Sonner />
+                          <BrowserRouter
+                            future={{
+                              v7_startTransition: true,
+                              v7_relativeSplatPath: true,
+                            }}
+                          >
+                            <CompareBar />
+                            <AIChatOverlay />
+                            <Routes>
+                              <Route path="/" element={<Index />} />
+                              <Route
+                                path="/category/:categoryId"
+                                element={<CategoryPage />}
+                              />
+                              <Route
+                                path="/product/:productId"
+                                element={<ProductPage />}
+                              />
+                              <Route path="/cart" element={<CartPage />} />
+                              <Route
+                                path="/checkout"
+                                element={<CheckoutPage />}
+                              />
+                              <Route
+                                path="/order-confirmation"
+                                element={<OrderConfirmationPage />}
+                              />
+                              <Route path="/auth" element={<AuthPage />} />
+                              <Route
+                                path="/oauth/callback"
+                                element={<OAuthCallbackPage />}
+                              />
+                              <Route
+                                path="/reset-password"
+                                element={<ResetPasswordPage />}
+                              />
+                              <Route
+                                path="/account"
+                                element={<AccountPage />}
+                              />
+                              <Route path="/sale" element={<SalePage />} />
+                              <Route
+                                path="/search"
+                                element={<SearchPage />}
+                              />
+                              <Route
+                                path="/order-tracking"
+                                element={<OrderTrackingPage />}
+                              />
+                              <Route
+                                path="/order-tracking/:orderId"
+                                element={<OrderTrackingPage />}
+                              />
+                              <Route
+                                path="/returns"
+                                element={<ReturnsPage />}
+                              />
+                              <Route path="/faq" element={<FAQPage />} />
+                              <Route
+                                path="/compare"
+                                element={<ComparePage />}
+                              />
+                              <Route
+                                path="/health"
+                                element={<HealthCheckPage />}
+                              />
+                              <Route
+                                path="/help-me-choose"
+                                element={<HelpMeChoosePage />}
+                              />
+                              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                              <Route path="*" element={<NotFound />} />
+                            </Routes>
+                          </BrowserRouter>
+                        </CartProvider>
+                      </CompareProvider>
+                    </RecentlyViewedProvider>
                   </AuthProvider>
                 </ProductNamesProvider>
               </UnitMeasureProvider>

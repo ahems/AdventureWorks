@@ -12,9 +12,12 @@ import {
   setUserContext,
   clearUserContext,
   trackEvent,
+  trackError,
 } from "@/lib/appInsights";
-import { clearAuthorization as clearDabAuthorization } from "@/services/dabAuth";
-import { clearAuthorization as clearFunctionsAuthorization } from "@/services/functionsAuth";
+import {
+  clearEshopOAuthSession,
+  restoreEshopOAuthSession,
+} from "@/services/eshopOAuth";
 
 interface User {
   id: string;
@@ -58,24 +61,52 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
   // Check for existing session on mount
   useEffect(() => {
-    try {
+    let cancelled = false;
+    const restoreSession = async () => {
       const storedUser = localStorage.getItem(CURRENT_USER_KEY);
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
+      if (!storedUser) {
+        clearEshopOAuthSession();
+        setIsLoading(false);
+        return;
       }
-    } catch {
-      // Invalid stored data
-    }
-    setIsLoading(false);
+
+      try {
+        const parsedUser = JSON.parse(storedUser) as User;
+        if (
+          !parsedUser.businessEntityId ||
+          !(await restoreEshopOAuthSession())
+        ) {
+          throw new Error("Stored shop session has no valid OAuth credentials.");
+        }
+        if (!cancelled) setUser(parsedUser);
+      } catch (error) {
+        trackError("Unable to restore the e-shop OAuth session", error, {
+          context: "AuthContext.restoreSession",
+        });
+        localStorage.removeItem(CURRENT_USER_KEY);
+        clearEshopOAuthSession();
+        if (!cancelled) {
+          toast({
+            title: "Please sign in again",
+            description:
+              "Your secure session has expired. Sign in to continue using your account.",
+          });
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    void restoreSession();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = useCallback(
     async (email: string, password: string): Promise<boolean> => {
       setIsLoading(true);
-      // Clear any prior DAB authorization so switching accounts never inherits
-      // the previous consumer's delegated token, role or ownership claims.
-      clearDabAuthorization();
-      clearFunctionsAuthorization();
+      clearEshopOAuthSession();
 
       const result = await loginUser(email, password);
 
@@ -128,9 +159,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       lastName: string,
     ): Promise<boolean> => {
       setIsLoading(true);
-      // Clear any prior DAB authorization before establishing a new account.
-      clearDabAuthorization();
-      clearFunctionsAuthorization();
+      clearEshopOAuthSession();
 
       const result = await signupUser(email, password, firstName, lastName);
 
@@ -187,8 +216,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     localStorage.removeItem(CURRENT_USER_KEY);
     // Clear any DAB OAuth authorization so the next visitor browses anonymously
     // and cannot inherit the previous consumer's delegated token/role.
-    clearDabAuthorization();
-    clearFunctionsAuthorization();
+    clearEshopOAuthSession();
 
     toast({
       title: "Logged Out",

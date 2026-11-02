@@ -15,7 +15,9 @@ const ReviewCard: React.FC<ReviewCardProps> = ({
   onMarkUseful,
   isMarkedByUser,
 }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const isOwnReview =
+    review.userID != null && review.userID === user?.businessEntityId;
   const { t } = useTranslation("common");
 
   const formattedDate = new Date(review.createdAt).toLocaleDateString("en-US", {
@@ -101,7 +103,7 @@ const ReviewCard: React.FC<ReviewCardProps> = ({
           </span>
         </div>
 
-        {isAuthenticated && onMarkUseful && (
+        {isAuthenticated && onMarkUseful && !isOwnReview && (
           <button
             onClick={() => onMarkUseful(review.id)}
             className={`flex items-center gap-1.5 px-3 py-1.5 font-doodle text-xs border-2 transition-all ${

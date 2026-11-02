@@ -1,11 +1,10 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ShoppingCart, Heart, Star, Scale, Eye } from "lucide-react";
+import { ShoppingCart, Star, Scale, Eye } from "lucide-react";
 import { Product, getSalePrice } from "@/types/product";
 import { OptimizedImage } from "@/components/OptimizedImage";
 import { useCart } from "@/context/CartContext";
-import { useWishlist } from "@/context/WishlistContext";
 import { useCompare } from "@/context/CompareContext";
 import { useReviews } from "@/hooks/useReviews";
 import { useCurrency } from "@/context/CurrencyContext";
@@ -24,7 +23,6 @@ const ProductCard: React.FC<ProductCardProps> = ({
 }) => {
   const { t } = useTranslation("common");
   const { addToCart } = useCart();
-  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const { addToCompare, removeFromCompare, isInCompare } = useCompare();
   const { averageRating, reviewCount } = useReviews(product.ProductID);
   const { formatPrice } = useCurrency();
@@ -34,7 +32,6 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
   const localizedName = getLocalizedName(product.ProductID) ?? product.Name;
 
-  const inWishlist = isInWishlist(product.ProductID);
   const inCompare = isInCompare(product.ProductID);
   const salePrice = getSalePrice(product);
 
@@ -42,16 +39,6 @@ const ProductCard: React.FC<ProductCardProps> = ({
     e.preventDefault();
     e.stopPropagation();
     addToCart(product);
-  };
-
-  const handleToggleWishlist = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (inWishlist) {
-      removeFromWishlist(product.ProductID);
-    } else {
-      addToWishlist(product);
-    }
   };
 
   const handleToggleCompare = (e: React.MouseEvent) => {
@@ -103,23 +90,8 @@ const ProductCard: React.FC<ProductCardProps> = ({
             </div>
           )}
 
-        {/* Wishlist & Compare Buttons */}
+        {/* Compare Button */}
         <div className="absolute top-6 right-6 z-10 flex flex-col gap-2">
-          <button
-            onClick={handleToggleWishlist}
-            className={`p-2 border-2 transition-all ${
-              inWishlist
-                ? "bg-doodle-accent border-doodle-accent text-white"
-                : "bg-doodle-bg border-doodle-text/30 text-doodle-text/50 hover:border-doodle-accent hover:text-doodle-accent"
-            }`}
-            aria-label={
-              inWishlist
-                ? t("productCard.removeFromWishlist")
-                : t("productCard.addToWishlist")
-            }
-          >
-            <Heart className={`w-4 h-4 ${inWishlist ? "fill-current" : ""}`} />
-          </button>
           <button
             onClick={handleToggleCompare}
             className={`p-2 border-2 transition-all ${

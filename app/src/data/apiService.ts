@@ -1,5 +1,6 @@
 import { graphqlClient } from "@/lib/graphql-client";
 import { getRestApiUrl } from "@/lib/utils";
+import { dabFetch } from "@/lib/dabFetch";
 import { trackError } from "@/lib/appInsights";
 import {
   GET_CATEGORIES,
@@ -869,7 +870,7 @@ export const createCartItem = async (
     // Use REST API instead of GraphQL to avoid DateTime default value issues
     const restApiUrl = getRestApiUrl();
 
-    const response = await fetch(`${restApiUrl}/ShoppingCartItem`, {
+    const response = await dabFetch(`${restApiUrl}/ShoppingCartItem`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

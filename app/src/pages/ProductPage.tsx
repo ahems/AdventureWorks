@@ -12,7 +12,6 @@ import {
   Shield,
   RotateCcw,
   Bell,
-  Heart,
 } from "lucide-react";
 import { Twemoji } from "@/components/Twemoji";
 import {
@@ -27,7 +26,6 @@ import RecentlyViewed from "@/components/RecentlyViewed";
 import ProductImageGallery from "@/components/ProductImageGallery";
 import NotifyWhenAvailable from "@/components/NotifyWhenAvailable";
 import { useCart } from "@/context/CartContext";
-import { useWishlist } from "@/context/WishlistContext";
 import { useRecentlyViewed } from "@/context/RecentlyViewedContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { useProductNames } from "@/context/ProductNamesContext";
@@ -68,7 +66,6 @@ const ProductPage: React.FC = () => {
   const { t } = useTranslation(["product", "common"]);
   const { productId } = useParams<{ productId: string }>();
   const { addToCart } = useCart();
-  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const { addToRecentlyViewed } = useRecentlyViewed();
   const { selectedLanguage } = useLanguage();
   const { formatPrice } = useCurrency();
@@ -95,7 +92,6 @@ const ProductPage: React.FC = () => {
     selectedLanguage,
   );
 
-  const inWishlist = product ? isInWishlist(product.ProductID) : false;
   const salePrice = product ? getSalePrice(product) : null;
   const { averageRating, reviewCount } = useReviews(product?.ProductID || 0);
   const localizedName = product
@@ -314,15 +310,6 @@ const ProductPage: React.FC = () => {
       }
     }
     addToCart(product, quantity, selectedSize, selectedColor);
-  };
-
-  const handleToggleWishlist = () => {
-    if (!product) return;
-    if (inWishlist) {
-      removeFromWishlist(product.ProductID);
-    } else {
-      addToWishlist(product);
-    }
   };
 
   return (
@@ -730,23 +717,6 @@ const ProductPage: React.FC = () => {
                       : t("product:productPage.addToCart")}
                 </button>
 
-                <button
-                  onClick={handleToggleWishlist}
-                  className={`p-3 border-2 transition-all ${
-                    inWishlist
-                      ? "bg-doodle-accent border-doodle-accent text-white"
-                      : "border-doodle-text hover:border-doodle-accent hover:text-doodle-accent"
-                  }`}
-                  aria-label={
-                    inWishlist
-                      ? t("product:productPage.removeFromWishlist")
-                      : t("product:productPage.addToWishlist")
-                  }
-                >
-                  <Heart
-                    className={`w-5 h-5 ${inWishlist ? "fill-current" : ""}`}
-                  />
-                </button>
               </div>
 
               {/* Benefits */}

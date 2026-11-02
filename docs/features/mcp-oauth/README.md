@@ -64,7 +64,7 @@ login, user selection, account creation, anonymous browsing, or purchasing chang
 
 | App | Population | How the active user is established | OAuth behavior added |
 | --- | ---------- | ---------------------------------- | -------------------- |
-| **E-shop** (`app/`) | External consumers | Browse **anonymously**; **select/sign in** as an existing consumer; or **create an account** (password + reset preserved). | Anonymous browsing stays anonymous (public catalog only). Once a consumer is signed in, the app can obtain a **user-bound** token for catalog + **their own** carts/orders/profile. |
+| **E-shop** (`app/`) | External consumers | Browse **anonymously**; sign in or create an account with the existing AdventureWorks email/password. | Sign-in silently exchanges those credentials for audience-bound DAB and Functions tokens; no OAuth login page or Entra ID is involved. Anonymous browsing stays anonymous. |
 | **Admin** (`app-admin/`) | Internal employees | Selects an existing **seeded employee**. | Employee's **department → role → scopes** resolve to a user-bound token. Surfaces the **authorization-inspection** view (see [below](#authorization-inspection)). |
 | **Manufacturing** (`app-manufacturing/`) | Manufacturing engineers | Selects an existing **seeded manufacturing user**. | Resolves to **manufacturing** scopes only — demonstrably **no** customer/admin/sales rights. |
 
@@ -96,12 +96,12 @@ flowchart LR
   kv[("Azure Key Vault\nRBAC · mcp-signing cert")]
   sql[("Azure SQL\nAdventureWorks + Auth.*")]
 
-  eshop -->|PKCE S256| as
+  eshop -->|credential grant| as
   admin -->|PKCE S256| as
   mfg -->|PKCE S256| as
   insp -->|PKCE S256| as
   as --> disc
-  as -->|issues resource-bound JWT| eshop
+  as -->|issues DAB + Functions JWTs| eshop
 
   eshop -->|user JWT in /api/agent/chat| func
   admin --> func
@@ -365,10 +365,11 @@ flowchart TB
 `api-functions` hosts the AI agents and acts as the MCP client. It must forward the
 **actual user's** token — never an unrestricted application token.
 
-- The frontends obtain a **user-bound** JWT via PKCE and send it as a standard
-  `Authorization: Bearer` header to **`POST /api/agent/chat`** (the Functions endpoint is
-  `Anonymous` at the Functions layer; the header is used purely for downstream
-  delegation).
+- Admin and manufacturing frontends obtain a **user-bound** JWT via PKCE; the e-shop obtains
+  its tokens silently through the AdventureWorks credential grant. They send the MCP-audience
+  token as a standard `Authorization: Bearer` header to **`POST /api/agent/chat`** (the
+  Functions endpoint is `Anonymous` at the Functions layer; the header is used purely for
+  downstream delegation).
 - `AIAgentFunctions.Chat` extracts the token and passes it through
   `AIAgentService.ProcessMessageAsync` → `FoundryAgentClient.InvokeAsync(mcpAccessToken:…)`.
 - `FoundryAgentClient` injects the token as an `Authorization` header on **each MCP tool**
@@ -389,6 +390,15 @@ flowchart TB
 The admin portal reads its data (customers, orders, dashboard KPIs) from DAB, which
 requires an `api-mcp`-issued JWT. Authorization happens once, at sign-in, and is silent
 afterwards; there is no separate authorization page.
+
+The e-shop uses a dedicated first-party credential grant instead of the browser
+Authorization Code redirect: its existing AdventureWorks login submits credentials to
+`POST /token`, and `api-mcp` verifies them against the existing user directory before
+issuing a DAB token and a refreshable Functions token. Requested scopes are intersected
+with the consumer's server-resolved scopes, and owner claims are resolved server-side.
+The password is not stored by the SPA; access and refresh tokens are tab-scoped in
+`sessionStorage` and cleared on logout/account switch. The grant is rate-limited and
+restricted to the e-shop client and consumer accounts.
 
 - **Sign-in once.** After the admin login succeeds, `startSilentSignIn` (in
   `app-admin/src/services/dabAuth.ts`) performs a top-level form POST of the same

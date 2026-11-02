@@ -1,12 +1,17 @@
 import { GraphQLClient } from "graphql-request";
 import { trackError } from "@/lib/appInsights";
-import { getAccessToken, getDabRole } from "@/services/dabAuth";
+import { getDabRole } from "@/services/dabAuth";
+import { getEshopAccessToken } from "@/services/eshopOAuth";
 
 // Get API URL from runtime config or environment variables
 const getApiUrl = (): string => {
   // First check window.APP_CONFIG (set at runtime via config.js)
-  if (typeof window !== "undefined" && (window as any).APP_CONFIG?.API_URL) {
-    const configUrl = (window as any).APP_CONFIG.API_URL;
+  const runtimeConfig =
+    typeof window !== "undefined"
+      ? (window as Window & { APP_CONFIG?: { API_URL?: string } }).APP_CONFIG
+      : undefined;
+  if (runtimeConfig?.API_URL) {
+    const configUrl = runtimeConfig.API_URL;
 
     // Check if it's a placeholder pattern (#{VAR}#)
     if (configUrl.includes("#{")) {
@@ -32,27 +37,19 @@ const getApiUrl = (): string => {
 
 // Create GraphQL client instance.
 //
-// Headers are computed per-request: once a signed-in consumer has obtained a
-// DAB-resource access token (Authorization Code + PKCE via the api-mcp OAuth
-// server), it is attached in the `Authorization` request header together with
-// the seeded role in `X-MS-API-ROLE` so Data API Builder authorizes the request
-// (and constrains a consumer to their own records via server-issued ownership
-// claims). Anonymous visitors have no token, so no auth headers are sent and
-// public catalog browsing continues to work unchanged.
-const buildHeaders = (): Record<string, string> => {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  const token = getAccessToken();
-  if (token) {
-    const scheme = "Bearer";
-    headers["Authorization"] = scheme + " " + token;
-    const role = getDabRole();
-    if (role) headers["X-MS-API-ROLE"] = role;
-  }
-  return headers;
-};
-
 export const graphqlClient = new GraphQLClient(getApiUrl(), {
-  headers: buildHeaders,
+  headers: { "Content-Type": "application/json" },
+  requestMiddleware: async (request) => {
+    const headers = new Headers(request.headers);
+    const token = await getEshopAccessToken("dab");
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+      const role = getDabRole();
+      if (role) headers.set("X-MS-API-ROLE", role);
+    } else {
+      headers.delete("Authorization");
+      headers.delete("X-MS-API-ROLE");
+    }
+    return { ...request, headers };
+  },
 });

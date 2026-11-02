@@ -1,5 +1,6 @@
-// Self-contained browser OAuth client for a Data API Builder (DAB) resource token,
-// used by the e-shop (consumer) app.
+// Legacy browser OAuth client for a Data API Builder (DAB) resource token.
+// The e-shop now acquires DAB and Functions tokens silently alongside its
+// AdventureWorks username/password sign-in via `eshopOAuth.ts`.
 //
 // Mirrors the admin `dabAuth.ts`: Authorization Code + PKCE (S256) against the
 // same api-mcp authorization server, no client secret, requesting the DAB

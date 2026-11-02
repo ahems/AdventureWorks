@@ -1,20 +1,8 @@
-// Self-contained browser OAuth client for an Azure Functions resource token,
-// used by the e-shop (consumer) app.
-//
-// Mirrors `dabAuth.ts`: Authorization Code + PKCE (S256) against the same api-mcp
-// authorization server, no client secret, requesting the RFC 8707 `resource` for
-// the Functions API so the resulting token's `aud` is the one the Functions
-// resource server validates ({issuer}/functions). The token is stored under
-// Functions-specific sessionStorage keys and is attached to Functions API
-// requests only while a consumer is signed in — anonymous flows send no
-// Authorization header and continue to work (the Functions resource server runs
-// in a non-breaking mode until enforcement is enabled).
-//
-// The authorization server binds each token to exactly ONE resource, so the
-// Functions token is acquired via its own authorize round-trip, distinct from the
-// DAB token. Both flows share the single `/oauth/callback` route and are
-// disambiguated by which PKCE marker is pending.
+// Legacy browser OAuth client for a Functions resource token. The e-shop now
+// acquires DAB and Functions tokens silently alongside its existing
+// AdventureWorks username/password sign-in via `eshopOAuth.ts`.
 import { getApiMcpUrl } from "@/lib/utils";
+import { getEshopAccessToken } from "@/services/eshopOAuth";
 
 const CLIENT_ID = "adventureworks-eshop";
 const PKCE_KEY = "functions_oauth_pkce";
@@ -255,18 +243,23 @@ export function authHeaders(): Record<string, string> {
 }
 
 /**
- * fetch() wrapper that attaches the Functions access token (when held) to a
- * request. Anonymous requests (no token) are sent unchanged so pre-auth flows
- * keep working while the Functions resource server is in a non-enforcing mode.
+ * fetch() wrapper that attaches a fresh Functions access token when the e-shop
+ * session is authorized. Anonymous registration and public endpoints stay unchanged.
  */
-export function functionsFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
-  const auth = authHeaders();
-  if (!auth.Authorization) {
+export async function functionsFetch(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+): Promise<Response> {
+  const token = await getEshopAccessToken("functions");
+  if (!token) {
     return fetch(input, init);
   }
+
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${token}`);
   return fetch(input, {
     ...init,
-    headers: { ...(init.headers ?? {}), ...auth },
+    headers,
   });
 }
 

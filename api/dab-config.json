@@ -2186,6 +2186,12 @@
               "policy": {
                 "database": "@item.BusinessEntityID eq @claims.business_entity_id"
               }
+            },
+            {
+              "action": "delete",
+              "policy": {
+                "database": "@item.BusinessEntityID eq @claims.business_entity_id"
+              }
             }
           ]
         },
@@ -2194,6 +2200,12 @@
           "actions": [
             {
               "action": "read",
+              "policy": {
+                "database": "@item.BusinessEntityID eq @claims.business_entity_id"
+              }
+            },
+            {
+              "action": "delete",
               "policy": {
                 "database": "@item.BusinessEntityID eq @claims.business_entity_id"
               }
@@ -2518,7 +2530,10 @@
               }
             },
             {
-              "action": "create"
+              "action": "create",
+              "policy": {
+                "database": "@item.PersonID eq @claims.business_entity_id"
+              }
             },
             {
               "action": "update",
@@ -2544,7 +2559,10 @@
               }
             },
             {
-              "action": "create"
+              "action": "create",
+              "policy": {
+                "database": "@item.PersonID eq @claims.business_entity_id"
+              }
             },
             {
               "action": "update",
@@ -4673,7 +4691,10 @@
               }
             },
             {
-              "action": "create"
+              "action": "create",
+              "policy": {
+                "database": "@item.CustomerID eq @claims.customer_id"
+              }
             },
             {
               "action": "update",
@@ -4693,7 +4714,10 @@
               }
             },
             {
-              "action": "create"
+              "action": "create",
+              "policy": {
+                "database": "@item.CustomerID eq @claims.customer_id"
+              }
             },
             {
               "action": "update",
@@ -7270,14 +7294,36 @@
           "role": "authenticated",
           "actions": [
             "create",
-            "read"
+            "read",
+            {
+              "action": "update",
+              "fields": {
+                "include": [
+                  "HelpfulVotes"
+                ]
+              },
+              "policy": {
+                "database": "@item.UserID eq null or @item.UserID ne @claims.business_entity_id"
+              }
+            }
           ]
         },
         {
           "role": "consumer",
           "actions": [
             "create",
-            "read"
+            "read",
+            {
+              "action": "update",
+              "fields": {
+                "include": [
+                  "HelpfulVotes"
+                ]
+              },
+              "policy": {
+                "database": "@item.UserID eq null or @item.UserID ne @claims.business_entity_id"
+              }
+            }
           ]
         },
         {

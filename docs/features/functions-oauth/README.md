@@ -6,13 +6,13 @@
 > [`api/README.md`](../../../api/README.md)) — to the previously-anonymous
 > **`api-functions`** HTTP surface.
 >
-> **Status: Phases A–D + F implemented; Phase G (tests + docs) landed; Phase E deferred with
-> Tier M.** The `api-functions` resource server validates api-mcp-issued bearer tokens, enforces
-> per-route scope + user-category, and applies Tier-C consumer record ownership. It ships in a
-> **non-breaking default posture**: enforcement mode defaults to **`audit`** (validate-if-present,
-> never block) so the deployed demo keeps working while partial client rollout continues. Flip to
-> `enforced` only once every first-party client attaches tokens (see
-> [Enforcement modes](#enforcement-modes) and [Accepted v1 limitations](#accepted-v1-limitations)).
+> **Status: E-shop token wiring implemented; enforcement remains in audit mode.** The
+> `api-functions` resource server validates api-mcp-issued bearer tokens and applies per-route
+> scope/category/ownership checks when they are present. The e-shop now acquires its Functions
+> token silently during its existing AdventureWorks sign-in. Enforcement stays in **`audit`**
+> (validate-if-present, never block) until the admin and manufacturing clients also attach
+> Functions tokens; switching globally to `enforced` sooner would break those clients. See
+> [Enforcement modes](#enforcement-modes) and [Accepted v1 limitations](#accepted-v1-limitations).
 
 ## Contents
 
@@ -36,7 +36,7 @@
 
 `api-functions` is the .NET-isolated Azure Functions app (running on Flex Consumption) that
 provides custom business logic for the e-shop, admin, and manufacturing frontends, plus AI
-agent hosting and simulators. Every one of its **187 HTTP-triggered routes is currently
+agent hosting and simulators. Every one of its **188 HTTP-triggered routes is currently
 `AuthorizationLevel.Anonymous`**. This phase decides — for each route — whether it should stay
 anonymous or become an OAuth-protected resource, and with which scope and access mode, reusing
 the exact same authorization server, scope catalog, and validation approach already shipped for
@@ -49,19 +49,19 @@ are out of scope for bearer-token protection.
 
 | Trigger kind | Count | In scope for OAuth? |
 | ------------ | ----- | ------------------- |
-| HTTP (`HttpTrigger`) | 187 | **Yes** — classified in the matrix |
+| HTTP (`HttpTrigger`) | 188 | **Yes** — classified in the matrix |
 | Queue (`QueueTrigger`) | 53 | No — internal |
 | SQL (`SqlTrigger`) | 7 | No — internal |
 | Timer (`TimerTrigger`) | 3 | No — internal |
 
-All 187 HTTP routes were `Anonymous` before this work. `Program.cs` uses
+All 188 HTTP routes were `Anonymous` before this work. `Program.cs` uses
 `ConfigureFunctionsWebApplication()` (ASP.NET Core integration), so a JWT-validation
 **middleware** (`IFunctionsWorkerMiddleware`,
 [`FunctionsAuthorizationMiddleware`](../../../api-functions/Auth/FunctionsAuthorizationMiddleware.cs))
 is now the enforcement point — the same signature/issuer/audience/lifetime/subject/scope checks
 used by the MCP and DAB resource servers, validating against the api-mcp JWKS. Enforcement is
-gated by [mode](#enforcement-modes) and defaults to `audit`, so routes still behave anonymously
-until a client presents a token.
+gated by [mode](#enforcement-modes). The e-shop supplies a Functions token after sign-in; other
+first-party clients are not yet wired, so deployment remains in `audit`.
 
 ## Relationship to the MCP and DAB OAuth work
 
@@ -86,7 +86,7 @@ flowchart LR
     MFG[app-manufacturing<br/>seeded engineers]
   end
   MCP[api-mcp<br/>MCP tools]
-  FUNC[api-functions<br/>187 HTTP routes]
+  FUNC[api-functions<br/>188 HTTP routes]
 
   ESHOP -->|catalog, addresses, receipts,<br/>agent/chat, pre-auth| FUNC
   ADMIN -->|reporting, simulators, reviews,<br/>B2B store, AI generation| FUNC
@@ -112,10 +112,10 @@ Every route is assigned exactly one tier (full list in
 | Tier | Name | Meaning | Count |
 | ---- | ---- | ------- | ----- |
 | **P** | Anonymous | No token. Public catalog, discovery, health, pre-auth (login/reset), AI-assistant pass-through. | 18 |
-| **C** | Consumer (ownership) | Valid token + business scope; consumers restricted to their **own** records (server-resolved owner id), internal roles unrestricted. | 9 |
+| **C** | Consumer (ownership) | Valid token + business scope; consumers restricted to their **own** records (server-resolved owner id), internal roles unrestricted. | 10 |
 | **I** | Internal-only | Valid token + business scope + **non-consumer category** (defense-in-depth). | 116 |
 | **M** | Anonymous — v1 descope | Reachable via an api-mcp proxy tool; stays anonymous in v1 (see below). | 44 |
-| | | **Total** | **187** |
+| | | **Total** | **188** |
 
 ## Tier M — the v1 descope
 
@@ -221,7 +221,7 @@ access. Internal roles (with the same scope) are unrestricted.
 
 ## Route-to-scope matrix
 
-The complete, authoritative classification of all 187 routes is in
+The complete, authoritative classification of all 188 routes is in
 **[`ROUTE_SCOPE_MATRIX.md`](./ROUTE_SCOPE_MATRIX.md)** — grouped by functional area, with method,
 route, tier, required scope, access mode, and ownership key for every endpoint. It is the source of
 truth the resource server enforces. Completeness is guaranteed by a reflection test
@@ -239,18 +239,20 @@ deployments keep working unchanged.
 | Mode | Token absent | Token present | Blocks? | Purpose |
 | ---- | ------------ | ------------- | ------- | ------- |
 | `disabled` | allowed | ignored | never | Pure pass-through — pre-OAuth behavior. The implicit fallback when issuer/audience/metadata are unset. |
-| `audit` *(default)* | allowed | validated; allow/deny logged to App Insights | never | Non-breaking shadow mode. Consumers that attach a token still get Tier-C record ownership; unwired internal/anonymous calls are never 401'd. |
+| `audit` *(deployed default)* | allowed | validated; allow/deny logged to App Insights | never | Non-breaking shadow mode. E-shop consumers that attach a token are checked for Tier-C ownership; unwired admin/manufacturing calls are not 401'd. |
 | `enforced` | protected routes → `401` | validated + scope/category/ownership enforced | yes | Full enforcement. Flip here only once every first-party client attaches tokens. |
 
-Infrastructure wires the mode in [`infra/main.bicep`](../../../infra/main.bicep) and defaults it to
-`audit`. Anonymous tiers (P and the v1-descoped M) are always allowed regardless of mode.
+Infrastructure wires the mode in [`infra/main.bicep`](../../../infra/main.bicep) as `audit`.
+Anonymous tiers (P and the v1-descoped M) are always allowed regardless of mode. Switch to
+`enforced` only after `app-admin` and `app-manufacturing` also attach correctly scoped Functions
+tokens to their protected calls.
 
 ## Implementation roadmap
 
 Phases A–D and F are implemented; Phase G (this doc + resource-server unit tests) has landed; Phase
 E stays deferred with the Tier M descope.
 
-- **Phase A — Classification (done):** this document + the 187-route matrix.
+- **Phase A — Classification (done):** this document + the 188-route matrix.
 - **Phase B — Authorization server (done):** `functions` resource identifier + protected-resource
   metadata; `customers.write` scope and role grants; `FunctionsResourceTokenTests`. (Tier M's
   non-interactive grant is deferred with the descope.)
@@ -261,16 +263,16 @@ E stays deferred with the Tier M descope.
   mirroring the MCP tool registry) + Tier-C ownership checks
   ([`AddressFunctions`](../../../api-functions/Functions/AddressFunctions.cs)); Tier P and Tier M stay
   anonymous via explicit classification; structured App Insights authz telemetry.
-- **Phase D — Frontend (done for `app`):** a [`functionsAuth.ts`](../../../app/src/services/functionsAuth.ts)
-  PKCE (S256) client that attaches a Functions-audience token **only when signed in**, cleared on
-  logout/switch, sessionStorage only, with an opt-in "Connect to Functions API" affordance on the
-  account page. **Deferred:** `app-admin` / `app-manufacturing` token attachment for internal
-  endpoints (and the related `app-manufacturing` DAB-token gap) — required before `enforced`.
+- **Phase D — Frontend (e-shop wired):** the existing AdventureWorks login now exchanges
+  credentials through the e-shop-only grant and attaches DAB/Functions audience tokens silently;
+  refresh is tab-scoped and logout clears both. **Deferred:** `app-admin` / `app-manufacturing`
+  Functions token attachment (and the related `app-manufacturing` DAB-token gap) — required
+  before global `enforced` mode.
 - **Phase E — (deferred with Tier M)** api-mcp confidential client + token-exchange to protect the
   proxied endpoints.
 - **Phase F — Infrastructure/AZD (done):** inject `FUNCTIONS_JWT_ISSUER` / `FUNCTIONS_JWT_AUDIENCE` /
-  `FUNCTIONS_OAUTH_MODE` into the Function App settings from the deployed api-mcp FQDN (mirrors the DAB
-  bicep wiring); no secrets in outputs; `azd up`/`azd down` stay automated; mode defaults to `audit`.
+  `FUNCTIONS_OAUTH_MODE` into the Function App settings from the deployed api-mcp FQDN; deployed
+  mode remains `audit` until every first-party caller is wired.
 - **Phase G — Docs & tests (done):** fast offline unit tests
   ([`api-functions.Tests`](../../../api-functions.Tests/)) covering registry completeness/no-stale
   entries, enforcement-mode resolution, and token-claim projection; this document updated. Azure
@@ -292,14 +294,14 @@ E stays deferred with the Tier M descope.
 
 | Path | Role |
 | ---- | ---- |
-| [`ROUTE_SCOPE_MATRIX.md`](./ROUTE_SCOPE_MATRIX.md) | Complete route → tier/scope/mode/ownership matrix (all 187 routes) |
+| [`ROUTE_SCOPE_MATRIX.md`](./ROUTE_SCOPE_MATRIX.md) | Complete route → tier/scope/mode/ownership matrix (all 188 routes) |
 | [`api-mcp/AdventureWorks/Auth/OAuthScopes.cs`](../../../api-mcp/AdventureWorks/Auth/OAuthScopes.cs) | Shared business-domain scope catalog (reused) |
 | [`api-mcp/AdventureWorks/Auth/ApplicationRoles.cs`](../../../api-mcp/AdventureWorks/Auth/ApplicationRoles.cs) | Role → scope mapping (reused) |
 | [`api-mcp/AdventureWorks/Auth/AuthorizationServerOptions.cs`](../../../api-mcp/AdventureWorks/Auth/AuthorizationServerOptions.cs) | Resource identifiers / `AllowedResources()` (includes `functions`) |
 | [`api-mcp/AdventureWorks/Services/{Manufacturing,SupplyChain,Bank,Simulator}Service.cs`](../../../api-mcp/AdventureWorks/Services/) | The four proxy services that define the Tier M set |
 | [`api-functions/Auth/`](../../../api-functions/Auth/) | The resource server: policy registry, options, token validator, user model, and enforcement middleware |
 | [`api-functions/Functions/AddressFunctions.cs`](../../../api-functions/Functions/AddressFunctions.cs) | Tier-C consumer record-ownership reference implementation |
-| [`app/src/services/functionsAuth.ts`](../../../app/src/services/functionsAuth.ts) | E-shop Functions-audience PKCE (S256) client + `functionsFetch` |
+| [`app/src/services/eshopOAuth.ts`](../../../app/src/services/eshopOAuth.ts) | E-shop credential exchange and silent DAB/Functions token refresh |
 | [`infra/modules/flex-api-functions.bicep`](../../../infra/modules/flex-api-functions.bicep) · [`infra/main.bicep`](../../../infra/main.bicep) | Injects issuer/audience/mode into the Flex Consumption Function App settings |
 | [`api-functions.Tests/`](../../../api-functions.Tests/) | Offline resource-server unit tests (registry coverage, mode resolution, claim parsing) |
 | [`docs/features/mcp-oauth/README.md`](../mcp-oauth/README.md) · [`api/README.md`](../../../api/README.md) | Sibling OAuth designs this extends (MCP + DAB) |

@@ -28,10 +28,10 @@ frontend token attachment, tests). No runtime behavior changes with this documen
 | Tier | Access | Count |
 | ---- | ------ | ----- |
 | **P** | Anonymous | 18 |
-| **C** | Consumer (ownership) | 9 |
+| **C** | Consumer (ownership) | 10 |
 | **I** | Internal-only | 116 |
 | **M** | Anonymous — v1 descope (MCP-proxied) | 40 |
-| | **Total** | **183** |
+| | **Total** | **184** |
 
 ### Routes per required scope (protected routes only)
 
@@ -45,7 +45,7 @@ frontend token attachment, tests). No runtime behavior changes with this documen
 | `orders.write` | 6 | yes |
 | `orders.read` | 5 | yes |
 | `customers.read` | 3 | yes |
-| `customers.write` | 3 | **new — added by this work** |
+| `customers.write` | 4 | **new — added by this work** |
 
 > The only scope not already in the shared catalog is **`customers.write`**, required
 > for consumer self-service address writes (and internal customer mutations). All other
@@ -115,7 +115,7 @@ These reads are no longer part of the Functions authorization surface.
 | `POST /api/password/reset/validate` | P | — | Anonymous | — |
 | `POST /api/password/verify` | P | — | Anonymous | — |
 
-### Addresses (consumer) (6)
+### Addresses (consumer) (7)
 
 | Method / route | Tier | Required scope | Access mode | Ownership key |
 | -------------- | ---- | -------------- | ----------- | ------------- |
@@ -123,6 +123,7 @@ These reads are no longer part of the Functions authorization surface.
 | `POST /api/addresses` | C | `customers.write` | Self-or-internal (ownership) | businessEntityId |
 | `GET /api/addresses/{id:int}` | C | `customers.read` | Self-or-internal (ownership) | businessEntityId |
 | `PUT /api/addresses/{id:int}` | C | `customers.write` | Self-or-internal (ownership) | businessEntityId |
+| `PUT /api/addresses/{id:int}/type` | C | `customers.write` | Self-or-internal (ownership) | businessEntityId |
 | `DELETE /api/addresses/{id:int}` | C | `customers.write` | Self-or-internal (ownership) | businessEntityId |
 | `GET /api/person-addresses` | C | `customers.read` | Self-or-internal (ownership) | businessEntityId |
 

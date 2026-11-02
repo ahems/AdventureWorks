@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import {
   X,
   ShoppingCart,
-  Heart,
   Star,
   Scale,
   Eye,
@@ -19,7 +18,6 @@ import {
 } from "@/components/ui/dialog";
 import { Product, getSalePrice, isVariantAvailable } from "@/types/product";
 import { useCart } from "@/context/CartContext";
-import { useWishlist } from "@/context/WishlistContext";
 import { useCompare } from "@/context/CompareContext";
 import { useReviews } from "@/hooks/useReviews";
 import { useTranslation } from "react-i18next";
@@ -38,7 +36,6 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
   onOpenChange,
 }) => {
   const { addToCart } = useCart();
-  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const { addToCompare, removeFromCompare, isInCompare } = useCompare();
   const { averageRating, reviewCount } = useReviews(product.ProductID);
   const { t } = useTranslation("common");
@@ -67,7 +64,6 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
     product.availableColors,
   ]);
 
-  const inWishlist = isInWishlist(product.ProductID);
   const inCompare = isInCompare(product.ProductID);
   const salePrice = getSalePrice(product);
   const currentPrice = salePrice || product.ListPrice;
@@ -82,14 +78,6 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
     if (!product.inStock || !variantAvailable) return;
     addToCart(product, quantity, selectedSize, selectedColor);
     onOpenChange(false);
-  };
-
-  const handleToggleWishlist = () => {
-    if (inWishlist) {
-      removeFromWishlist(product.ProductID);
-    } else {
-      addToWishlist(product);
-    }
   };
 
   const handleToggleCompare = () => {
@@ -329,23 +317,6 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({
                   : variantAvailable
                     ? t("quickViewModal.addToCart")
                     : t("quickViewModal.unavailable")}
-              </button>
-              <button
-                onClick={handleToggleWishlist}
-                className={`doodle-button p-3 ${
-                  inWishlist
-                    ? "bg-doodle-accent text-white border-doodle-accent"
-                    : ""
-                }`}
-                aria-label={
-                  inWishlist
-                    ? t("quickViewModal.removeFromWishlist")
-                    : t("quickViewModal.addToWishlist")
-                }
-              >
-                <Heart
-                  className={`w-5 h-5 ${inWishlist ? "fill-current" : ""}`}
-                />
               </button>
               <button
                 onClick={handleToggleCompare}

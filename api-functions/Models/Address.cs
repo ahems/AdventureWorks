@@ -44,6 +44,18 @@ public class UpdateAddressRequest
 }
 
 /// <summary>
+/// DTO for changing how an address is linked to its owner (Person.BusinessEntityAddress.AddressTypeID).
+/// AddressTypeID 2 (Home) marks the owner's single default address.
+/// </summary>
+public class SetAddressTypeRequest
+{
+    public int AddressTypeID { get; set; }
+
+    // Required for internal callers; consumers are always resolved from their token.
+    public int? BusinessEntityID { get; set; }
+}
+
+/// <summary>
 /// Address result joined with state/country for a given BusinessEntityID
 /// </summary>
 public class PersonAddressResult

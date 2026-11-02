@@ -29,10 +29,9 @@ param webPubSubHostName string = ''
 // standalone deploy) the resource server cannot resolve metadata and stays in passthrough mode.
 param functionsJwtIssuer string = ''
 param functionsJwtAudience string = ''
-// Enforcement mode for the Functions OAuth middleware: 'disabled' (pure passthrough),
-// 'audit' (validate-if-present, log, never block) or 'enforced' (block). Defaults to 'audit',
-// a non-breaking mode that demonstrates delegated ownership for token-bearing consumers while
-// never 401-ing the unwired internal/anonymous calls that keep the deployed demo working.
+// Enforcement mode for the Functions OAuth middleware. Keep audit as the safe default until
+// every first-party app attaches resource-bound tokens; explicit public and MCP-proxied route
+// tiers remain available without one in every mode.
 param functionsOAuthMode string = 'audit'
 param virtualNetworkSubnetId string
 

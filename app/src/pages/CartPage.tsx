@@ -9,12 +9,10 @@ import {
   Plus,
   ShoppingBag,
   Tag,
-  Heart,
 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useCart } from "@/context/CartContext";
-import { useWishlist } from "@/context/WishlistContext";
 import { getSalePrice } from "@/types/product";
 import { useCurrency } from "@/context/CurrencyContext";
 import { OptimizedImage } from "@/components/OptimizedImage";
@@ -24,7 +22,6 @@ const CartPage: React.FC = () => {
   const { t } = useTranslation(["cart", "common"]);
   const { items, isLoading, updateQuantity, removeFromCart, clearCart } =
     useCart();
-  const { addToWishlist, isInWishlist } = useWishlist();
   const { formatPrice } = useCurrency();
   const { getLocalizedName } = useProductNames();
 
@@ -251,24 +248,6 @@ const CartPage: React.FC = () => {
                     {/* Quantity & Remove */}
                     <div className="flex flex-col items-end gap-3">
                       <div className="flex items-center gap-1">
-                        {/* Move to Wishlist */}
-                        <button
-                          onClick={() => {
-                            if (!isInWishlist(item.ProductID)) {
-                              addToWishlist(item);
-                            }
-                            removeFromCart(
-                              item.ProductID,
-                              item.selectedSize,
-                              item.selectedColor,
-                            );
-                          }}
-                          className="text-doodle-text/50 hover:text-doodle-accent transition-colors p-1"
-                          aria-label={t("cart:cart.moveToWishlist")}
-                          title={t("cart:cart.saveLater")}
-                        >
-                          <Heart className="w-5 h-5" />
-                        </button>
                         <button
                           onClick={() =>
                             removeFromCart(
@@ -334,20 +313,6 @@ const CartPage: React.FC = () => {
 
               {/* Cart Actions */}
               <div className="flex flex-wrap gap-4">
-                <button
-                  onClick={() => {
-                    items.forEach((item) => {
-                      if (!isInWishlist(item.ProductID)) {
-                        addToWishlist(item);
-                      }
-                    });
-                    clearCart();
-                  }}
-                  className="font-doodle text-sm text-doodle-text/70 hover:text-doodle-accent transition-colors inline-flex items-center gap-1"
-                >
-                  <Heart className="w-4 h-4" />
-                  {t("cart:cart.moveAllToWishlist")}
-                </button>
                 <button
                   onClick={clearCart}
                   className="font-doodle text-sm text-doodle-accent hover:text-doodle-text transition-colors"

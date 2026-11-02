@@ -34,6 +34,20 @@ public class SilentAuthAndServiceGrantTests : IClassFixture<OAuthTestFactory>
             DisplayName = "Silent Admin",
             BusinessEntityId = 3001,
         });
+        _factory.Directory.Add("eshop@demo.test", "pw-eshop", new ResolvedUser
+        {
+            Subject = "44444444-4444-4444-4444-444444444444",
+            Category = UserCategories.Consumer,
+            Roles = new[] { ApplicationRoles.Consumer },
+            Scopes = new[]
+            {
+                OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.OrdersRead,
+                OAuthScopes.OrdersWrite, OAuthScopes.CustomersRead, OAuthScopes.CustomersWrite,
+            },
+            DisplayName = "E-shop Consumer",
+            CustomerId = 4002,
+            BusinessEntityId = 4001,
+        });
     }
 
     private HttpClient CreateClient() => _factory.CreateClient(new WebApplicationFactoryClientOptions
@@ -123,6 +137,83 @@ public class SilentAuthAndServiceGrantTests : IClassFixture<OAuthTestFactory>
         Assert.Equal(HttpStatusCode.OK, dab.StatusCode);
         Assert.Equal(OAuthTestFactory.DabResourceIdentifier,
             Audience(DecodeJwtPayload(dab.RootElement.GetProperty("access_token").GetString()!)));
+    }
+
+    [Fact]
+    public async Task Eshop_credentials_grant_issues_scoped_resource_token_and_refreshes_to_functions()
+    {
+        var client = CreateClient();
+        var dab = await PostAsync(client, new()
+        {
+            ["grant_type"] = EshopCredentialsGrant.GrantType,
+            ["client_id"] = Client,
+            ["username"] = "eshop@demo.test",
+            ["password"] = "pw-eshop",
+            ["resource"] = OAuthTestFactory.DabResourceIdentifier,
+            ["scope"] = "customers.read customers.write orders.read orders.write offline_access",
+        });
+
+        Assert.Equal(HttpStatusCode.OK, dab.StatusCode);
+        var dabPayload = DecodeJwtPayload(dab.RootElement.GetProperty("access_token").GetString()!);
+        Assert.Equal(OAuthTestFactory.DabResourceIdentifier, Audience(dabPayload));
+        Assert.Equal("consumer", dabPayload.GetProperty("roles").GetString());
+        Assert.Equal("4001", dabPayload.GetProperty("business_entity_id").GetString());
+        Assert.Equal("4002", dabPayload.GetProperty("customer_id").GetString());
+        Assert.True(dabPayload.TryGetProperty("scope", out var scopesClaim));
+        Assert.Contains("customers.write", scopesClaim.GetString()!.Split(' '));
+
+        var functions = await PostAsync(client, new()
+        {
+            ["grant_type"] = "refresh_token",
+            ["client_id"] = Client,
+            ["refresh_token"] = dab.RootElement.GetProperty("refresh_token").GetString()!,
+            ["resource"] = OAuthTestFactory.FunctionsResourceIdentifier,
+        });
+
+        Assert.Equal(HttpStatusCode.OK, functions.StatusCode);
+        var functionsPayload = DecodeJwtPayload(
+            functions.RootElement.GetProperty("access_token").GetString()!);
+        Assert.Equal(OAuthTestFactory.FunctionsResourceIdentifier, Audience(functionsPayload));
+        Assert.Equal("4001", functionsPayload.GetProperty("business_entity_id").GetString());
+        Assert.Equal("4002", functionsPayload.GetProperty("customer_id").GetString());
+    }
+
+    [Fact]
+    public async Task Eshop_credentials_grant_rejects_invalid_password_and_non_consumer_accounts()
+    {
+        var client = CreateClient();
+        var invalidPassword = await PostAsync(client, new()
+        {
+            ["grant_type"] = EshopCredentialsGrant.GrantType,
+            ["client_id"] = Client,
+            ["username"] = "eshop@demo.test",
+            ["password"] = "wrong",
+            ["resource"] = OAuthTestFactory.DabResourceIdentifier,
+            ["scope"] = "customers.read",
+        });
+        Assert.NotEqual(HttpStatusCode.OK, invalidPassword.StatusCode);
+
+        var internalAccount = await PostAsync(client, new()
+        {
+            ["grant_type"] = EshopCredentialsGrant.GrantType,
+            ["client_id"] = Client,
+            ["username"] = "silent@demo.test",
+            ["password"] = "pw-silent",
+            ["resource"] = OAuthTestFactory.DabResourceIdentifier,
+            ["scope"] = "customers.read",
+        });
+        Assert.NotEqual(HttpStatusCode.OK, internalAccount.StatusCode);
+
+        var wrongClient = await PostAsync(client, new()
+        {
+            ["grant_type"] = EshopCredentialsGrant.GrantType,
+            ["client_id"] = "adventureworks-admin",
+            ["username"] = "eshop@demo.test",
+            ["password"] = "pw-eshop",
+            ["resource"] = OAuthTestFactory.DabResourceIdentifier,
+            ["scope"] = "customers.read",
+        });
+        Assert.NotEqual(HttpStatusCode.OK, wrongClient.StatusCode);
     }
 
     [Fact]

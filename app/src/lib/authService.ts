@@ -1,7 +1,10 @@
 import { graphqlClient } from "./graphql-client";
 import { gql } from "graphql-request";
-import { getFunctionsApiUrl, getRestApiUrl } from "./utils";
-import { functionsFetch } from "@/services/functionsAuth";
+import { getFunctionsApiUrl } from "./utils";
+import {
+  clearEshopOAuthSession,
+  signInWithEshopCredentials,
+} from "@/services/eshopOAuth";
 import { trackError } from "@/lib/appInsights";
 
 export interface AuthUser {
@@ -185,6 +188,8 @@ export async function loginUser(
   password: string,
 ): Promise<AuthResult> {
   try {
+    await signInWithEshopCredentials(email, password);
+
     // Check if user exists
     const response = await graphqlClient.request<CheckUserLoginResponse>(
       CHECK_USER_LOGIN,
@@ -196,6 +201,7 @@ export async function loginUser(
     const emailAddresses = response.emailAddresses?.items || [];
 
     if (emailAddresses.length === 0) {
+      clearEshopOAuthSession();
       return {
         success: false,
         error: "No account found with this email address.",
@@ -203,33 +209,6 @@ export async function loginUser(
     }
 
     const emailAddress = emailAddresses[0];
-
-    // Verify password using password functions API
-    const functionsUrl = getFunctionsApiUrl();
-    const verifyResponse = await fetch(`${functionsUrl}/api/password/verify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        businessEntityID: emailAddress.BusinessEntityID,
-        password: password,
-      }),
-    });
-
-    if (!verifyResponse.ok) {
-      return {
-        success: false,
-        error: "An error occurred during login. Please try again.",
-      };
-    }
-
-    const verifyResult = await verifyResponse.json();
-
-    if (!verifyResult.isValid) {
-      return {
-        success: false,
-        error: "Invalid email or password.",
-      };
-    }
 
     // Get person details
     const personResponse = await graphqlClient.request<GetPersonByIdResponse>(
@@ -242,6 +221,7 @@ export async function loginUser(
     const person = personResponse.people?.items?.[0];
 
     if (!person) {
+      clearEshopOAuthSession();
       return {
         success: false,
         error: "Account data not found.",
@@ -257,15 +237,19 @@ export async function loginUser(
         lastName: person.LastName,
         emailAddressId: emailAddress.EmailAddressID,
       },
-    };
+    }
   } catch (error) {
+    clearEshopOAuthSession();
     trackError("Login error", error, {
       service: "authService",
       function: "loginUser",
     });
     return {
       success: false,
-      error: "An error occurred during login. Please try again.",
+      error:
+        error instanceof Error && error.message.startsWith("Sign-in failed.")
+          ? error.message
+          : "An error occurred during login. Please try again.",
     };
   }
 }
@@ -373,6 +357,8 @@ export async function signupUser(
         };
       }
 
+      await signInWithEshopCredentials(email, password);
+
       return {
         success: true,
         user: {
@@ -384,6 +370,7 @@ export async function signupUser(
         },
       };
     } catch (error) {
+      clearEshopOAuthSession();
       trackError("Signup error", error, {
         service: "authService",
         function: "signupUser",
@@ -531,304 +518,6 @@ export async function changePassword(
       success: false,
       error:
         "An error occurred while changing your password. Please try again.",
-    };
-  }
-}
-
-/**
- * Delete user account and all associated data
- * This includes: Person, EmailAddresses, Addresses, Orders, Shopping Cart, Password
- */
-export async function deleteAccount(
-  businessEntityId: number,
-): Promise<AuthResult> {
-  try {
-    const functionsUrl = getFunctionsApiUrl();
-    const restApiUrl = getRestApiUrl();
-
-    // Delete in order to handle foreign key constraints
-
-    // 1. Delete shopping cart items
-    try {
-      const cartResponse = await fetch(
-        `${restApiUrl}/ShoppingCartItem?$filter=ShoppingCartID eq '${businessEntityId}'`,
-      );
-      if (cartResponse.ok) {
-        const cartData = await cartResponse.json();
-        const cartItems = cartData.value || [];
-        for (const item of cartItems) {
-          await fetch(
-            `${restApiUrl}/ShoppingCartItem/ShoppingCartItemID/${item.ShoppingCartItemID}`,
-            { method: "DELETE" },
-          );
-        }
-      }
-    } catch (error) {
-      trackError(
-        "Error deleting shopping cart items during account deletion",
-        error as Error,
-        {
-          service: "authService",
-          operation: "deleteAccount",
-          businessEntityId: businessEntityId.toString(),
-        },
-      );
-    }
-
-    // 2. Delete sales order details, then orders (if customer exists)
-    try {
-      // First get Customer ID
-      const customerResponse = await fetch(
-        `${restApiUrl}/Customer?$filter=PersonID eq ${businessEntityId}`,
-      );
-      if (customerResponse.ok) {
-        const customerData = await customerResponse.json();
-        const customer = customerData.value?.[0];
-        if (customer) {
-          // Get all orders for this customer
-          const ordersResponse = await fetch(
-            `${restApiUrl}/SalesOrderHeader?$filter=CustomerID eq ${customer.CustomerID}`,
-          );
-          if (ordersResponse.ok) {
-            const ordersData = await ordersResponse.json();
-            const orders = ordersData.value || [];
-
-            for (const order of orders) {
-              // Delete order details first
-              const detailsResponse = await fetch(
-                `${restApiUrl}/SalesOrderDetail?$filter=SalesOrderID eq ${order.SalesOrderID}`,
-              );
-              if (detailsResponse.ok) {
-                const detailsData = await detailsResponse.json();
-                const details = detailsData.value || [];
-                for (const detail of details) {
-                  await fetch(
-                    `${restApiUrl}/SalesOrderDetail/SalesOrderID/${detail.SalesOrderID}/SalesOrderDetailID/${detail.SalesOrderDetailID}`,
-                    { method: "DELETE" },
-                  );
-                }
-              }
-
-              // Delete order header
-              await fetch(
-                `${restApiUrl}/SalesOrderHeader/SalesOrderID/${order.SalesOrderID}`,
-                { method: "DELETE" },
-              );
-            }
-          }
-
-          // Delete customer
-          await fetch(
-            `${restApiUrl}/Customer/CustomerID/${customer.CustomerID}`,
-            { method: "DELETE" },
-          );
-        }
-      }
-    } catch (error) {
-      trackError(
-        "Error deleting orders/customer during account deletion",
-        error as Error,
-        {
-          service: "authService",
-          operation: "deleteAccount",
-          businessEntityId: businessEntityId.toString(),
-        },
-      );
-    }
-
-    // 3. Delete addresses
-    try {
-      // Get BusinessEntityAddress links
-      const beaResponse = await fetch(
-        `${restApiUrl}/BusinessEntityAddress?$filter=BusinessEntityID eq ${businessEntityId}`,
-      );
-      if (beaResponse.ok) {
-        const beaData = await beaResponse.json();
-        const beaLinks = beaData.value || [];
-
-        for (const link of beaLinks) {
-          // Delete BusinessEntityAddress link
-          await fetch(
-            `${restApiUrl}/BusinessEntityAddress/BusinessEntityID/${link.BusinessEntityID}/AddressID/${link.AddressID}/AddressTypeID/${link.AddressTypeID}`,
-            { method: "DELETE" },
-          );
-
-          // Delete the address itself from Functions API
-          try {
-            await functionsFetch(`${functionsUrl}/api/addresses/${link.AddressID}`, {
-              method: "DELETE",
-            });
-          } catch (error) {
-            trackError(
-              "Error deleting individual address during account deletion",
-              error as Error,
-              {
-                service: "authService",
-                operation: "deleteAccount",
-                addressId: link.AddressID?.toString() || "unknown",
-              },
-            );
-          }
-        }
-      }
-    } catch (error) {
-      trackError(
-        "Error deleting addresses during account deletion",
-        error as Error,
-        {
-          service: "authService",
-          operation: "deleteAccount",
-          businessEntityId: businessEntityId.toString(),
-        },
-      );
-    }
-
-    // 4. Delete phone numbers
-    try {
-      const phoneResponse = await fetch(
-        `${restApiUrl}/PersonPhone?$filter=BusinessEntityID eq ${businessEntityId}`,
-      );
-      if (phoneResponse.ok) {
-        const phoneData = await phoneResponse.json();
-        const phones = phoneData.value || [];
-        for (const phone of phones) {
-          await fetch(
-            `${restApiUrl}/PersonPhone/BusinessEntityID/${phone.BusinessEntityID}/PhoneNumber/${encodeURIComponent(phone.PhoneNumber)}/PhoneNumberTypeID/${phone.PhoneNumberTypeID}`,
-            { method: "DELETE" },
-          );
-        }
-      }
-    } catch (error) {
-      trackError(
-        "Error deleting phone numbers during account deletion",
-        error as Error,
-        {
-          service: "authService",
-          operation: "deleteAccount",
-          businessEntityId: businessEntityId.toString(),
-        },
-      );
-    }
-
-    // 5. Delete email addresses
-    try {
-      const emailResponse = await fetch(
-        `${restApiUrl}/EmailAddress?$filter=BusinessEntityID eq ${businessEntityId}`,
-      );
-      if (emailResponse.ok) {
-        const emailData = await emailResponse.json();
-        const emails = emailData.value || [];
-        for (const email of emails) {
-          // Use GraphQL mutation for delete to handle composite keys properly
-          const DELETE_EMAIL = gql`
-            mutation DeleteEmail(
-              $businessEntityId: Int!
-              $emailAddressId: Int!
-            ) {
-              deleteEmailAddress(
-                BusinessEntityID: $businessEntityId
-                EmailAddressID: $emailAddressId
-              ) {
-                EmailAddressID
-              }
-            }
-          `;
-          await graphqlClient.request(DELETE_EMAIL, {
-            businessEntityId: businessEntityId,
-            emailAddressId: email.EmailAddressID,
-          });
-        }
-      }
-    } catch (error) {
-      trackError(
-        "Error deleting email addresses during account deletion",
-        error as Error,
-        {
-          service: "authService",
-          operation: "deleteAccount",
-          businessEntityId: businessEntityId.toString(),
-        },
-      );
-    }
-
-    // 6. Delete password
-    try {
-      await fetch(
-        `${restApiUrl}/Password/BusinessEntityID/${businessEntityId}`,
-        { method: "DELETE" },
-      );
-    } catch (error) {
-      trackError(
-        "Error deleting password during account deletion",
-        error as Error,
-        {
-          service: "authService",
-          operation: "deleteAccount",
-          businessEntityId: businessEntityId.toString(),
-        },
-      );
-    }
-
-    // 7. Delete Person record (use GraphQL to ensure proper key handling)
-    try {
-      const DELETE_PERSON = gql`
-        mutation DeletePerson($businessEntityId: Int!) {
-          deletePerson(BusinessEntityID: $businessEntityId) {
-            BusinessEntityID
-          }
-        }
-      `;
-      await graphqlClient.request(DELETE_PERSON, {
-        businessEntityId: businessEntityId,
-      });
-    } catch (error) {
-      trackError(
-        "Error deleting person record during account deletion",
-        error as Error,
-        {
-          service: "authService",
-          operation: "deleteAccount",
-          businessEntityId: businessEntityId.toString(),
-        },
-      );
-    }
-
-    // 8. Delete BusinessEntity (use GraphQL to ensure proper key handling)
-    try {
-      const DELETE_BUSINESS_ENTITY = gql`
-        mutation DeleteBusinessEntity($businessEntityId: Int!) {
-          deleteBusinessEntity(BusinessEntityID: $businessEntityId) {
-            BusinessEntityID
-          }
-        }
-      `;
-      await graphqlClient.request(DELETE_BUSINESS_ENTITY, {
-        businessEntityId: businessEntityId,
-      });
-    } catch (error) {
-      trackError(
-        "Error deleting business entity during account deletion",
-        error as Error,
-        {
-          service: "authService",
-          operation: "deleteAccount",
-          businessEntityId: businessEntityId.toString(),
-        },
-      );
-    }
-
-    return {
-      success: true,
-    };
-  } catch (error) {
-    trackError("Account deletion failed", error as Error, {
-      service: "authService",
-      operation: "deleteAccount",
-      businessEntityId: businessEntityId.toString(),
-    });
-    return {
-      success: false,
-      error: "An error occurred while deleting your account. Please try again.",
     };
   }
 }

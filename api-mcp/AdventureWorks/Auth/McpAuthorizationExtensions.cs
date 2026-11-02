@@ -3,11 +3,13 @@ using System.Security.Cryptography.X509Certificates;
 using AdventureWorks.Auth;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol.Server;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
 using OpenIddict.Validation.AspNetCore;
+using System.Threading.RateLimiting;
 
 namespace AdventureWorks.Auth;
 
@@ -33,6 +35,19 @@ public static class McpAuthorizationExtensions
             new SqlUserDirectory(connectionString, sp.GetRequiredService<ILogger<SqlUserDirectory>>()));
         builder.Services.AddSingleton<ToolAuthorizationEvaluator>();
         builder.Services.AddSingleton<OneTimeUseCache>();
+        builder.Services.AddRateLimiter(rateLimiter =>
+        {
+            rateLimiter.AddPolicy("eshop-credentials", context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        AutoReplenishment = true,
+                        PermitLimit = 20,
+                        QueueLimit = 0,
+                        Window = TimeSpan.FromMinutes(1),
+                    }));
+        });
         builder.Services.AddHttpClient(nameof(EntraManagedIdentityAssertionValidator));
         builder.Services.AddSingleton<IServiceAssertionValidator, EntraManagedIdentityAssertionValidator>();
 
@@ -79,6 +94,7 @@ public static class McpAuthorizationExtensions
                 // in once. Workload tokens use the managed-identity assertion grant.
                 o.AllowRefreshTokenFlow();
                 o.AllowCustomFlow(ManagedIdentityGrant.GrantType);
+                o.AllowCustomFlow(EshopCredentialsGrant.GrantType);
 
                 o.RegisterScopes(OAuthScopes.All.ToArray());
                 o.RegisterScopes(OpenIddictConstants.Scopes.OfflineAccess);
@@ -219,6 +235,7 @@ public static class McpAuthorizationExtensions
 
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseRateLimiter();
 
         AuthorizationEndpoints.Map(app, options);
     }

@@ -21,8 +21,6 @@
     "lowStock": "Only {{count}} left in stock!",
     "notifyWhenAvailable": "Notify When Available",
     "notifyMe": "Notify Me",
-    "addToWishlist": "Add to Wishlist",
-    "removeFromWishlist": "Remove from Wishlist",
     "addToCompare": "Add to Compare",
     "removeFromCompare": "Remove from Compare",
     "quantity": "Quantity",

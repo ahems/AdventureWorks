@@ -3,6 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import { graphqlClient } from "@/lib/graphql-client";
 import { gql } from "graphql-request";
 import { getRestApiUrl } from "@/lib/utils";
+import { dabFetch } from "@/lib/dabFetch";
 import { trackError } from "@/lib/appInsights";
 
 export interface SavedPaymentMethod {
@@ -171,7 +172,7 @@ export const usePaymentMethods = () => {
 
         // Delete the PersonCreditCard link via REST API
         const restUrl = getRestApiUrl();
-        const response = await fetch(
+        const response = await dabFetch(
           `${restUrl}/PersonCreditCard/BusinessEntityID/${user.businessEntityId}/CreditCardID/${creditCardId}`,
           {
             method: "DELETE",

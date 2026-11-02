@@ -4,6 +4,7 @@ import { Review, ProductReview } from "@/types/review";
 import { graphqlClient } from "@/lib/graphql-client";
 import { GET_PRODUCT_REVIEWS, GET_ALL_REVIEWS } from "@/lib/graphql-queries";
 import { getRestApiUrl } from "@/lib/utils";
+import { dabFetch } from "@/lib/dabFetch";
 import { trackError } from "@/lib/appInsights";
 
 const STORAGE_KEY = "adventureworks_user_reviews";
@@ -126,7 +127,7 @@ export const useReviews = (productId: number) => {
 
       try {
         const restApiUrl = getRestApiUrl();
-        const response = await fetch(`${restApiUrl}/ProductReview`, {
+        const response = await dabFetch(`${restApiUrl}/ProductReview`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -255,6 +256,9 @@ export const useReviews = (productId: number) => {
 
     if (!review) return false;
 
+    // Reviewers cannot vote on their own review (also enforced by the DAB update policy)
+    if (review.userID != null && String(review.userID) === userId) return false;
+
     // Load user votes from localStorage
     const voteMarks = localStorage.getItem(`${STORAGE_KEY}_votes`);
     const voteData: Record<string, string[]> = voteMarks
@@ -271,7 +275,7 @@ export const useReviews = (productId: number) => {
     try {
       // Update via DAB REST API
       const restApiUrl = getRestApiUrl();
-      const response = await fetch(
+      const response = await dabFetch(
         `${restApiUrl}/ProductReview/ProductReviewID/${productReviewId}`,
         {
           method: "PATCH",

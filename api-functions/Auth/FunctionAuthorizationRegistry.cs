@@ -38,7 +38,7 @@ public static class FunctionAuthorizationRegistry
         new("ValidateResetToken", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/password/reset/validate
         new("VerifyPassword", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/password/verify
 
-        // ---- Tier C — consumer self-or-internal, ownership (9) ----
+        // ---- Tier C — consumer self-or-internal, ownership (10) ----
         new("CheckOrderReceipt", AccessTier.Consumer, FunctionScopes.OrdersRead, AccessMode.SelfOrInternal, "salesOrderId(owner CustomerID)"),  // /api/orders/{salesOrderId:int}/receipt-status
         new("CreateAddress", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses
         new("DeleteAddress", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses/{id:int}
@@ -47,6 +47,7 @@ public static class FunctionAuthorizationRegistry
         new("GetAddressById", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses/{id:int}
         new("GetAddresses", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses
         new("GetPersonAddresses", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/person-addresses
+        new("SetAddressType", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses/{id:int}/type
         new("UpdateAddress", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses/{id:int}
 
         // ---- Tier I — internal-only (116) ----

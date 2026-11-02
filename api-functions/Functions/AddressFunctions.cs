@@ -365,6 +365,74 @@ public class AddressFunctions
     }
 
     /// <summary>
+    /// Set how an address is linked to its owner. AddressTypeID 2 (Home) makes it the owner's single
+    /// default address; any previous default becomes Shipping.
+    /// </summary>
+    /// <param name="req">HTTP request with body <c>{ "AddressTypeID": 2 }</c>. Internal callers must also supply BusinessEntityID.</param>
+    /// <param name="id">The address ID</param>
+    /// <param name="executionContext">Function execution context carrying the validated caller identity.</param>
+    /// <response code="204">Address type updated</response>
+    /// <response code="400">Invalid request body</response>
+    /// <response code="404">Address is not linked to the owner</response>
+    /// <response code="409">The default address cannot be changed to another type</response>
+    [Function("SetAddressType")]
+    public async Task<HttpResponseData> SetAddressType(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "addresses/{id:int}/type")] HttpRequestData req,
+        int id,
+        FunctionContext executionContext)
+    {
+        _logger.LogInformation("SetAddressType function processing request for ID: {Id}", id);
+
+        try
+        {
+            var ownership = await EnforceAddressOwnershipAsync(req, executionContext, id);
+            if (ownership is not null)
+            {
+                return ownership;
+            }
+
+            var request = await req.ReadFromJsonAsync<SetAddressTypeRequest>();
+            if (request is null || request.AddressTypeID is < 1 or > 6)
+            {
+                var badRequest = req.CreateResponse(HttpStatusCode.BadRequest);
+                await badRequest.WriteAsJsonAsync(new { error = "AddressTypeID must be between 1 and 6" });
+                return badRequest;
+            }
+
+            var user = FunctionUser.Current(executionContext);
+            var businessEntityId = user.IsConsumer ? user.BusinessEntityId : request.BusinessEntityID;
+            if (businessEntityId is null)
+            {
+                var badRequest = req.CreateResponse(HttpStatusCode.BadRequest);
+                await badRequest.WriteAsJsonAsync(new { error = "BusinessEntityID is required" });
+                return badRequest;
+            }
+
+            var result = await _addressService.SetAddressTypeAsync(businessEntityId.Value, id, request.AddressTypeID);
+            switch (result)
+            {
+                case SetAddressTypeResult.NotLinked:
+                    var notFound = req.CreateResponse(HttpStatusCode.NotFound);
+                    await notFound.WriteAsJsonAsync(new { error = $"Address {id} is not linked to business entity {businessEntityId}" });
+                    return notFound;
+                case SetAddressTypeResult.DefaultRequired:
+                    var conflict = req.CreateResponse(HttpStatusCode.Conflict);
+                    await conflict.WriteAsJsonAsync(new { error = "This is the default address. Make another address the default first." });
+                    return conflict;
+                default:
+                    return req.CreateResponse(HttpStatusCode.NoContent);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting address type for {Id}", id);
+            var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await errorResponse.WriteAsJsonAsync(new { error = "An error occurred while updating the address type" });
+            return errorResponse;
+        }
+    }
+
+    /// <summary>
     /// Delete an address
     /// </summary>
     /// <param name="req">HTTP request</param>

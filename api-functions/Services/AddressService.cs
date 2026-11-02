@@ -8,6 +8,10 @@ namespace AddressFunctions.Services;
 
 public class AddressService
 {
+    /// <summary>AdventureWorks Person.AddressType "Home" — used as the owner's single default address.</summary>
+    public const int DefaultAddressTypeId = 2;
+    public const int ShippingAddressTypeId = 3;
+
     private readonly string _connectionString;
 
     public AddressService(string connectionString)
@@ -166,10 +170,24 @@ public class AddressService
 
             var address = await connection.QuerySingleAsync<Address>(sql, request, transaction);
 
-            // If BusinessEntityID is provided, create the link in BusinessEntityAddress
+            // If BusinessEntityID is provided, create the link in BusinessEntityAddress.
+            // Single-default rule: an owner's first address (or any address added while they have no
+            // default) becomes the default; requesting Home (2) explicitly moves the default to it.
             if (request.BusinessEntityID.HasValue)
             {
-                var addressTypeId = request.AddressTypeID ?? 2; // Default to Home (2)
+                var businessEntityId = request.BusinessEntityID.Value;
+                var links = await LockOwnerLinksAsync(connection, transaction, businessEntityId);
+                var hasDefault = links.Any(l => l.AddressTypeID == DefaultAddressTypeId);
+
+                var addressTypeId = !hasDefault
+                    ? DefaultAddressTypeId
+                    : request.AddressTypeID ?? ShippingAddressTypeId;
+
+                if (hasDefault && addressTypeId == DefaultAddressTypeId)
+                {
+                    await DemoteOtherDefaultsAsync(connection, transaction, businessEntityId, address.AddressID);
+                }
+
                 var linkSql = @"
                     INSERT INTO [Person].[BusinessEntityAddress]
                         (BusinessEntityID, AddressID, AddressTypeID, rowguid, ModifiedDate)
@@ -178,7 +196,7 @@ public class AddressService
 
                 await connection.ExecuteAsync(linkSql, new
                 {
-                    BusinessEntityID = request.BusinessEntityID.Value,
+                    BusinessEntityID = businessEntityId,
                     AddressID = address.AddressID,
                     AddressTypeID = addressTypeId
                 }, transaction);
@@ -284,4 +302,114 @@ public class AddressService
 
         return rowsAffected > 0;
     }
+
+    /// <summary>
+    /// Atomically changes how an address is linked to its owner. Setting Home (2) makes it the
+    /// owner's only default, demoting any other default to Shipping (3). The current default cannot
+    /// be changed to another type directly; make a different address the default instead.
+    /// </summary>
+    public async Task<SetAddressTypeResult> SetAddressTypeAsync(int businessEntityId, int addressId, int addressTypeId)
+    {
+        using var connection = await CreateConnectionAsync();
+        using var transaction = connection.BeginTransaction();
+
+        var links = await LockOwnerLinksAsync(connection, transaction, businessEntityId);
+        var targetLinks = links.Where(l => l.AddressID == addressId).ToList();
+        if (targetLinks.Count == 0)
+        {
+            transaction.Rollback();
+            return SetAddressTypeResult.NotLinked;
+        }
+
+        var isDefault = targetLinks.Any(l => l.AddressTypeID == DefaultAddressTypeId);
+        if (addressTypeId != DefaultAddressTypeId && isDefault)
+        {
+            transaction.Rollback();
+            return SetAddressTypeResult.DefaultRequired;
+        }
+
+        if (addressTypeId == DefaultAddressTypeId)
+        {
+            await DemoteOtherDefaultsAsync(connection, transaction, businessEntityId, addressId);
+        }
+
+        // Replace the address's link(s) with a single link of the requested type.
+        await connection.ExecuteAsync(@"
+            DELETE FROM [Person].[BusinessEntityAddress]
+            WHERE BusinessEntityID = @BusinessEntityId AND AddressID = @AddressId AND AddressTypeID <> @AddressTypeId;
+
+            IF NOT EXISTS (
+                SELECT 1 FROM [Person].[BusinessEntityAddress]
+                WHERE BusinessEntityID = @BusinessEntityId AND AddressID = @AddressId AND AddressTypeID = @AddressTypeId)
+            INSERT INTO [Person].[BusinessEntityAddress]
+                (BusinessEntityID, AddressID, AddressTypeID, rowguid, ModifiedDate)
+            VALUES (@BusinessEntityId, @AddressId, @AddressTypeId, NEWID(), GETDATE());",
+            new { BusinessEntityId = businessEntityId, AddressId = addressId, AddressTypeId = addressTypeId },
+            transaction);
+
+        transaction.Commit();
+        return SetAddressTypeResult.Updated;
+    }
+
+    private sealed class OwnerLink
+    {
+        public int AddressID { get; set; }
+        public int AddressTypeID { get; set; }
+    }
+
+    /// <summary>
+    /// Reads and range-locks an owner's address links for the rest of the transaction so concurrent
+    /// requests cannot both create a default.
+    /// </summary>
+    private static async Task<IReadOnlyList<OwnerLink>> LockOwnerLinksAsync(
+        SqlConnection connection, SqlTransaction transaction, int businessEntityId)
+    {
+        var links = await connection.QueryAsync<OwnerLink>(@"
+            SELECT AddressID, AddressTypeID
+            FROM [Person].[BusinessEntityAddress] WITH (UPDLOCK, HOLDLOCK)
+            WHERE BusinessEntityID = @BusinessEntityId",
+            new { BusinessEntityId = businessEntityId }, transaction);
+        return links.ToList();
+    }
+
+    /// <summary>
+    /// Changes every default (Home) link of an owner except <paramref name="keepAddressId"/> to
+    /// Shipping. A Home link whose address already has a Shipping link is removed instead, because
+    /// AddressTypeID is part of the primary key.
+    /// </summary>
+    private static Task DemoteOtherDefaultsAsync(
+        SqlConnection connection, SqlTransaction transaction, int businessEntityId, int keepAddressId)
+    {
+        return connection.ExecuteAsync(@"
+            DELETE d FROM [Person].[BusinessEntityAddress] d
+            WHERE d.BusinessEntityID = @BusinessEntityId
+              AND d.AddressTypeID = @DefaultType
+              AND d.AddressID <> @KeepAddressId
+              AND EXISTS (
+                  SELECT 1 FROM [Person].[BusinessEntityAddress] s
+                  WHERE s.BusinessEntityID = d.BusinessEntityID
+                    AND s.AddressID = d.AddressID
+                    AND s.AddressTypeID = @ShippingType);
+
+            UPDATE [Person].[BusinessEntityAddress]
+            SET AddressTypeID = @ShippingType, ModifiedDate = GETDATE()
+            WHERE BusinessEntityID = @BusinessEntityId
+              AND AddressTypeID = @DefaultType
+              AND AddressID <> @KeepAddressId;",
+            new
+            {
+                BusinessEntityId = businessEntityId,
+                KeepAddressId = keepAddressId,
+                DefaultType = DefaultAddressTypeId,
+                ShippingType = ShippingAddressTypeId
+            },
+            transaction);
+    }
+}
+
+public enum SetAddressTypeResult
+{
+    Updated,
+    NotLinked,
+    DefaultRequired
 }

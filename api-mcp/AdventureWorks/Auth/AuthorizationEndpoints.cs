@@ -36,7 +36,8 @@ public static class AuthorizationEndpoints
         // Cast single-parameter handlers to a concrete Func so minimal APIs treat them as
         // route handlers (writing the IResult) instead of binding them as a RequestDelegate
         // and discarding the returned result (ASP0016).
-        app.MapPost("/token", (Func<HttpContext, Task<IResult>>)ExchangeAsync);
+        app.MapPost("/token", (Func<HttpContext, Task<IResult>>)ExchangeAsync)
+            .RequireRateLimiting("eshop-credentials");
 
         app.MapGet("/logout", (Func<HttpContext, Task<IResult>>)LogoutAsync).AllowAnonymous();
     }
@@ -208,6 +209,11 @@ public static class AuthorizationEndpoints
             return await ServiceTokenAsync(ctx, request);
         }
 
+        if (string.Equals(request.GrantType, EshopCredentialsGrant.GrantType, StringComparison.Ordinal))
+        {
+            return await EshopCredentialsTokenAsync(ctx, request);
+        }
+
         if (!request.IsAuthorizationCodeGrantType())
         {
             return Forbid("Unsupported grant type.", Errors.UnsupportedGrantType);
@@ -228,6 +234,55 @@ public static class AuthorizationEndpoints
         }
 
         return Results.SignIn(auth.Principal, new AuthenticationProperties(), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+    }
+
+    private static async Task<IResult> EshopCredentialsTokenAsync(HttpContext ctx, OpenIddictRequest request)
+    {
+        if (!string.Equals(request.ClientId, EshopCredentialsGrant.ClientId, StringComparison.Ordinal))
+        {
+            return Forbid("This client may not use the e-shop credentials grant.", Errors.UnauthorizedClient);
+        }
+
+        var username = (string?)request["username"];
+        var password = (string?)request["password"];
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password))
+        {
+            return Forbid("The username or password is invalid.", Errors.InvalidGrant);
+        }
+
+        var directory = ctx.RequestServices.GetRequiredService<IUserDirectory>();
+        var user = await directory.AuthenticateAsync(username, password, ctx.RequestAborted);
+        if (user is null || !user.IsConsumer)
+        {
+            return Forbid("The username or password is invalid.", Errors.InvalidGrant);
+        }
+
+        var options = ctx.RequestServices.GetRequiredService<AuthorizationServerOptions>();
+        if (!TryResolveRequestedResource(request, options, out var resource, out var includeOwnerClaims)
+            || !includeOwnerClaims)
+        {
+            return Forbid("The e-shop credentials grant requires a DAB or Functions resource.", "invalid_target");
+        }
+
+        var requestedScopes = request.GetScopes();
+        var granted = requestedScopes.Where(user.Scopes.Contains).ToList();
+        if (options.TrustedFirstPartyClientIds.Contains(EshopCredentialsGrant.ClientId)
+            && requestedScopes.Contains(Scopes.OfflineAccess))
+        {
+            granted.Add(Scopes.OfflineAccess);
+        }
+
+        if (granted.Count == 0)
+        {
+            return Forbid("Your AdventureWorks account has none of the requested scopes.", Errors.AccessDenied);
+        }
+
+        var identity = BuildAccessIdentity(user, EshopCredentialsGrant.ClientId, includeOwnerClaims);
+        var principal = new ClaimsPrincipal(identity);
+        principal.SetScopes(granted);
+        principal.SetResources(resource);
+
+        return Results.SignIn(principal, new AuthenticationProperties(), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 
     /// <summary>

@@ -99,6 +99,12 @@ public sealed class OpenIddictClientSeeder : IHostedService
                 descriptor.Permissions.Add(Permissions.Prefixes.Scope + s);
             }
 
+            if (string.Equals(client.ClientId, EshopCredentialsGrant.ClientId, StringComparison.Ordinal))
+            {
+                descriptor.Permissions.Add(
+                    Permissions.Prefixes.GrantType + EshopCredentialsGrant.GrantType);
+            }
+
             // Trusted first-party apps may request offline_access and redeem refresh tokens so
             // the signed-in user is never prompted again during the session.
             if (_options.TrustedFirstPartyClientIds.Contains(client.ClientId))

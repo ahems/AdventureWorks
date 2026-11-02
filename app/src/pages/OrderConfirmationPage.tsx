@@ -579,7 +579,7 @@ const OrderConfirmationPage: React.FC = () => {
                 {t("orderTracking.continueShopping")}
               </Link>
               <Link
-                to="/orders"
+                to="/account"
                 className="font-doodle text-center py-3 px-4 rounded-lg border border-doodle-border text-doodle-text hover:bg-doodle-bg/5 transition-colors"
               >
                 {t("orderTracking.viewOrders")}

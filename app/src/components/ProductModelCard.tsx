@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   ShoppingCart,
-  Heart,
   Star,
   Scale,
   Eye,
@@ -13,7 +12,6 @@ import { ProductModelGroup, getSalePrice } from "@/types/product";
 import { getProductVariant } from "@/utils/productGrouping";
 import { OptimizedImage } from "@/components/OptimizedImage";
 import { useCart } from "@/context/CartContext";
-import { useWishlist } from "@/context/WishlistContext";
 import { useCompare } from "@/context/CompareContext";
 import { useReviews } from "@/hooks/useReviews";
 import { useCurrency } from "@/context/CurrencyContext";
@@ -39,7 +37,6 @@ const ProductModelCard: React.FC<ProductModelCardProps> = ({
 }) => {
   const { t } = useTranslation("common");
   const { addToCart } = useCart();
-  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const { addToCompare, removeFromCompare, isInCompare } = useCompare();
   const { formatPrice } = useCurrency();
   const { formatSize } = useUnitMeasure();
@@ -64,7 +61,6 @@ const ProductModelCard: React.FC<ProductModelCardProps> = ({
 
   const { averageRating, reviewCount } = useReviews(currentProduct.ProductID);
 
-  const inWishlist = isInWishlist(currentProduct.ProductID);
   const inCompare = isInCompare(currentProduct.ProductID);
   const salePrice = getSalePrice(currentProduct);
 
@@ -76,16 +72,6 @@ const ProductModelCard: React.FC<ProductModelCardProps> = ({
     e.stopPropagation();
     if (isInStock) {
       addToCart(currentProduct);
-    }
-  };
-
-  const handleToggleWishlist = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (inWishlist) {
-      removeFromWishlist(currentProduct.ProductID);
-    } else {
-      addToWishlist(currentProduct);
     }
   };
 
@@ -145,23 +131,8 @@ const ProductModelCard: React.FC<ProductModelCardProps> = ({
             </div>
           )}
 
-        {/* Wishlist & Compare Buttons */}
+        {/* Compare Button */}
         <div className="absolute top-6 right-6 z-10 flex flex-col gap-2">
-          <button
-            onClick={handleToggleWishlist}
-            className={`p-2 border-2 transition-all ${
-              inWishlist
-                ? "bg-doodle-accent border-doodle-accent text-white"
-                : "bg-doodle-bg border-doodle-text/30 text-doodle-text/50 hover:border-doodle-accent hover:text-doodle-accent"
-            }`}
-            aria-label={
-              inWishlist
-                ? t("productCard.removeFromWishlist")
-                : t("productCard.addToWishlist")
-            }
-          >
-            <Heart className={`w-4 h-4 ${inWishlist ? "fill-current" : ""}`} />
-          </button>
           <button
             onClick={handleToggleCompare}
             className={`p-2 border-2 transition-all ${

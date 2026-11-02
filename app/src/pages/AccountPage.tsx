@@ -5,13 +5,10 @@ import {
   ArrowLeft,
   User,
   Package,
-  Heart,
   Settings,
   LogOut,
   ChevronDown,
   ChevronUp,
-  ShoppingCart,
-  X,
   Edit2,
   Save,
   Truck,
@@ -26,13 +23,10 @@ import {
   EyeOff,
   Loader2,
   Lock,
-  AlertTriangle,
 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/context/AuthContext";
-import { useWishlist } from "@/context/WishlistContext";
-import { useCart } from "@/context/CartContext";
 import { useAddresses, Address } from "@/hooks/useAddresses";
 import { usePaymentMethods } from "@/hooks/usePaymentMethods";
 import {
@@ -42,17 +36,7 @@ import {
   type Order,
 } from "@/hooks/useOrders";
 import { useProfile, useUpdateProfile } from "@/hooks/useProfile";
-import {
-  beginAuthorization as beginDabAuthorization,
-  clearAuthorization as clearDabAuthorization,
-  isAuthorized as isDabAuthorized,
-  getDabRole,
-} from "@/services/dabAuth";
-import {
-  beginAuthorization as beginFunctionsAuthorization,
-  clearAuthorization as clearFunctionsAuthorization,
-  isAuthorized as isFunctionsAuthorized,
-} from "@/services/functionsAuth";
+import { functionsFetch } from "@/services/functionsAuth";
 import {
   useEmailAddresses,
   useCreateEmailAddress,
@@ -60,7 +44,7 @@ import {
   useDeleteEmailAddress,
 } from "@/hooks/useEmailAddresses";
 import { getCustomerByPersonId } from "@/lib/customerService";
-import { changePassword, deleteAccount } from "@/lib/authService";
+import { changePassword } from "@/lib/authService";
 import { AddressForm } from "@/components/AddressForm";
 import { AddressCard } from "@/components/AddressCard";
 import { toast } from "@/hooks/use-toast";
@@ -107,12 +91,6 @@ const AccountPage: React.FC = () => {
   const { user, isAuthenticated, logout, updateProfile, isLoading } = useAuth();
   const { t } = useTranslation("common");
   const navigate = useNavigate();
-  // Reflects DAB OAuth connection status; bumped to re-render after disconnect.
-  const [dabNonce, setDabNonce] = useState(0);
-  // Reflects Functions OAuth connection status; bumped to re-render after disconnect.
-  const [functionsNonce, setFunctionsNonce] = useState(0);
-  const { items: wishlistItems, removeFromWishlist } = useWishlist();
-  const { addToCart } = useCart();
   const { formatPrice } = useCurrency();
   const {
     addresses,
@@ -184,11 +162,6 @@ const AccountPage: React.FC = () => {
   const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>(
     {},
   );
-
-  // Delete account state
-  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
-  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -287,7 +260,7 @@ const AccountPage: React.FC = () => {
     setResendingReceiptOrderId(order.SalesOrderID);
     try {
       const url = `${getFunctionsApiUrl()}/api/orders/generate-and-send-receipt`;
-      const res = await fetch(url, {
+      const res = await functionsFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -382,33 +355,6 @@ const AccountPage: React.FC = () => {
                           </div>
                         </div>
                         <Skeleton className="h-5 w-20" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Wishlist Skeleton */}
-              <div className="doodle-card p-6 mb-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-6 h-6 bg-doodle-text/10 animate-pulse"></div>
-                  <div className="h-6 w-32 bg-doodle-text/10 animate-pulse"></div>
-                  <div className="h-4 w-16 bg-doodle-text/10 animate-pulse"></div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {[1, 2].map((i) => (
-                    <div
-                      key={i}
-                      className="border-2 border-dashed border-doodle-text/20 p-4 flex gap-4"
-                    >
-                      <div className="w-20 h-20 bg-doodle-text/10 animate-pulse"></div>
-                      <div className="flex-1 space-y-2">
-                        <div className="h-4 w-full bg-doodle-text/10 animate-pulse"></div>
-                        <div className="h-5 w-20 bg-doodle-text/10 animate-pulse"></div>
-                        <div className="flex gap-2">
-                          <div className="h-8 w-24 bg-doodle-text/10 animate-pulse"></div>
-                          <div className="h-8 w-20 bg-doodle-text/10 animate-pulse"></div>
-                        </div>
                       </div>
                     </div>
                   ))}
@@ -777,78 +723,6 @@ const AccountPage: React.FC = () => {
                             )}
                         </div>
                       )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Wishlist */}
-            <div className="doodle-card p-6 mb-6">
-              <div className="flex items-center gap-3 mb-6">
-                <Heart className="w-6 h-6 text-doodle-accent" />
-                <h2 className="font-doodle text-xl font-bold text-doodle-text">
-                  {t("account.myWishlist")}
-                </h2>
-                <span className="font-doodle text-sm text-doodle-text/50">
-                  ({wishlistItems.length}{" "}
-                  {wishlistItems.length === 1
-                    ? t("account.item")
-                    : t("account.items")}
-                  )
-                </span>
-              </div>
-
-              {wishlistItems.length === 0 ? (
-                <div className="text-center py-8">
-                  <Heart className="w-16 h-16 mx-auto mb-4 text-doodle-text/30" />
-                  <p className="font-doodle text-doodle-text/70 mb-4">
-                    {t("account.wishlistEmpty")}
-                  </p>
-                  <Link to="/" className="doodle-button inline-block">
-                    {t("account.browseProducts")}
-                  </Link>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {wishlistItems.map((item) => (
-                    <div
-                      key={item.ProductID}
-                      className="border-2 border-dashed border-doodle-text/20 p-4 flex gap-4"
-                    >
-                      <div className="w-20 h-20 bg-doodle-bg border-2 border-doodle-text border-dashed flex items-center justify-center flex-shrink-0">
-                        <span className="font-doodle text-2xl">🚴</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <Link
-                          to={`/product/${item.ProductID}`}
-                          className="font-doodle font-bold text-doodle-text hover:text-doodle-accent transition-colors line-clamp-2"
-                        >
-                          {item.Name}
-                        </Link>
-                        <p className="font-doodle text-lg font-bold text-doodle-green mt-1">
-                          {formatPrice(item.ListPrice)}
-                        </p>
-                        <div className="flex gap-2 mt-2">
-                          <button
-                            onClick={() => {
-                              addToCart(item);
-                              removeFromWishlist(item.ProductID);
-                            }}
-                            className="doodle-button doodle-button-primary text-xs py-1 px-2 flex items-center gap-1"
-                          >
-                            <ShoppingCart className="w-3 h-3" />
-                            {t("account.addToCart")}
-                          </button>
-                          <button
-                            onClick={() => removeFromWishlist(item.ProductID)}
-                            className="doodle-button text-xs py-1 px-2 flex items-center gap-1"
-                          >
-                            <X className="w-3 h-3" />
-                            {t("account.remove")}
-                          </button>
-                        </div>
-                      </div>
                     </div>
                   ))}
                 </div>
@@ -1663,7 +1537,7 @@ const AccountPage: React.FC = () => {
                   </div>
                 )}
               </div>
-              ;{/* Saved Addresses */}
+              {/* Saved Addresses */}
               <div className="doodle-card p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
@@ -2169,194 +2043,6 @@ const AccountPage: React.FC = () => {
                       </div>
                     </form>
                   </div>
-                )}
-
-                {/* Delete Account Section */}
-                <div className="mt-6 pt-6 border-t-2 border-dashed border-doodle-accent/20">
-                  <div className="bg-doodle-accent/10 border-2 border-dashed border-doodle-accent/30 p-4 rounded-lg">
-                    <div className="flex items-start gap-3 mb-3">
-                      <AlertTriangle className="w-5 h-5 text-doodle-accent flex-shrink-0 mt-0.5" />
-                      <div>
-                        <h3 className="font-doodle text-lg font-bold text-doodle-accent">
-                          Delete Account
-                        </h3>
-                        <p className="font-doodle text-sm text-doodle-text/70 mt-1">
-                          This will permanently delete your account and all
-                          associated data including orders, addresses, and saved
-                          information. This action cannot be undone.
-                        </p>
-                      </div>
-                    </div>
-
-                    {!showDeleteConfirmation ? (
-                      <button
-                        onClick={() => setShowDeleteConfirmation(true)}
-                        className="doodle-button border-doodle-accent text-doodle-accent hover:bg-doodle-accent hover:text-white transition-colors"
-                      >
-                        Delete My Account
-                      </button>
-                    ) : (
-                      <div className="mt-4 space-y-4">
-                        <div>
-                          <label className="font-doodle text-sm text-doodle-text block mb-2">
-                            Type <strong>DELETE</strong> to confirm:
-                          </label>
-                          <input
-                            type="text"
-                            value={deleteConfirmText}
-                            onChange={(e) =>
-                              setDeleteConfirmText(e.target.value)
-                            }
-                            className="doodle-input w-full max-w-xs"
-                            placeholder="DELETE"
-                          />
-                        </div>
-                        <div className="flex gap-3">
-                          <button
-                            onClick={async () => {
-                              if (deleteConfirmText !== "DELETE") {
-                                toast({
-                                  title: "Confirmation Required",
-                                  description: "Please type DELETE to confirm.",
-                                  variant: "destructive",
-                                });
-                                return;
-                              }
-
-                              setIsDeletingAccount(true);
-                              const result = await deleteAccount(
-                                user!.businessEntityId,
-                              );
-                              setIsDeletingAccount(false);
-
-                              if (result.success) {
-                                toast({
-                                  title: "Account Deleted",
-                                  description:
-                                    "Your account has been permanently deleted.",
-                                });
-                                logout();
-                                navigate("/");
-                              } else {
-                                toast({
-                                  title: "Error",
-                                  description:
-                                    result.error || "Failed to delete account.",
-                                  variant: "destructive",
-                                });
-                                setShowDeleteConfirmation(false);
-                                setDeleteConfirmText("");
-                              }
-                            }}
-                            disabled={
-                              isDeletingAccount ||
-                              deleteConfirmText !== "DELETE"
-                            }
-                            className="doodle-button bg-doodle-accent border-doodle-accent text-white hover:bg-doodle-accent/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                          >
-                            {isDeletingAccount ? (
-                              <>
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                Deleting...
-                              </>
-                            ) : (
-                              <>
-                                <Trash2 className="w-4 h-4" />
-                                Permanently Delete Account
-                              </>
-                            )}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setShowDeleteConfirmation(false);
-                              setDeleteConfirmText("");
-                            }}
-                            disabled={isDeletingAccount}
-                            className="doodle-button"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Data API (DAB) OAuth access — required for protected account and checkout operations */}
-            <div className="mt-8" data-dab-nonce={dabNonce}>
-              <div className="border rounded-lg p-4 text-center space-y-3 max-w-xl mx-auto">
-                <h3 className="font-semibold">Data API access (OAuth)</h3>
-                <p className="text-sm text-muted-foreground">
-                  Connect this signed-in session to the AdventureWorks Data API
-                  with OAuth 2.0 (Authorization Code + PKCE). Catalog browsing
-                  does not require this; checkout and access to your own profile
-                  and orders do. The connection is cleared automatically on sign
-                  out.
-                </p>
-                {isDabAuthorized() ? (
-                  <div className="space-y-2">
-                    <p className="text-sm">
-                      Connected
-                      {getDabRole() ? ` · role: ${getDabRole()}` : ""}
-                    </p>
-                    <button
-                      onClick={() => {
-                        clearDabAuthorization();
-                        setDabNonce((n) => n + 1);
-                      }}
-                      className="doodle-button inline-flex items-center gap-2"
-                    >
-                      Disconnect Data API
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => {
-                      void beginDabAuthorization(user?.email);
-                    }}
-                    className="doodle-button inline-flex items-center gap-2"
-                  >
-                    Connect to Data API
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Functions API OAuth access — optional, enables delegated address management */}
-            <div className="mt-8" data-functions-nonce={functionsNonce}>
-              <div className="border rounded-lg p-4 text-center space-y-3 max-w-xl mx-auto">
-                <h3 className="font-semibold">Functions API access (OAuth)</h3>
-                <p className="text-sm text-muted-foreground">
-                  Optionally connect this signed-in session to the AdventureWorks
-                  Functions API with OAuth 2.0 (Authorization Code + PKCE). This
-                  authorizes delegated access to your own address records; the
-                  resource server restricts you to records you own and the token is
-                  cleared automatically on sign out.
-                </p>
-                {isFunctionsAuthorized() ? (
-                  <div className="space-y-2">
-                    <p className="text-sm">Connected</p>
-                    <button
-                      onClick={() => {
-                        clearFunctionsAuthorization();
-                        setFunctionsNonce((n) => n + 1);
-                      }}
-                      className="doodle-button inline-flex items-center gap-2"
-                    >
-                      Disconnect Functions API
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => {
-                      void beginFunctionsAuthorization(user?.email);
-                    }}
-                    className="doodle-button inline-flex items-center gap-2"
-                  >
-                    Connect to Functions API
-                  </button>
                 )}
               </div>
             </div>
