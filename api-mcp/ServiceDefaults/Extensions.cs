@@ -7,7 +7,6 @@ using Microsoft.Extensions.ServiceDiscovery;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
-using Azure.Monitor.OpenTelemetry.AspNetCore;
 
 namespace Microsoft.Extensions.Hosting;
 
@@ -79,12 +78,9 @@ public static class Extensions
             builder.Services.AddOpenTelemetry().UseOtlpExporter();
         }
 
-        // Enable Azure Monitor exporter for Application Insights
-        if (!string.IsNullOrEmpty(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
-        {
-            builder.Services.AddOpenTelemetry()
-               .UseAzureMonitor();
-        }
+        // Application Insights export is handled by the service's Application Insights SDK
+        // (AddApplicationInsightsTelemetry). Do not also call UseAzureMonitor() here: running both
+        // pipelines suppresses request telemetry and duplicates dependency telemetry.
 
         return builder;
     }

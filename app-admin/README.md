@@ -108,7 +108,7 @@ Key runtime variables:
 | Variable                            | Purpose                                            |
 | ----------------------------------- | -------------------------------------------------- |
 | `VITE_API_URL`                      | GraphQL/REST endpoint of the DAB API Container App |
-| `VITE_API_FUNCTIONS_URL`            | Base URL of the Azure Functions Container App      |
+| `VITE_API_FUNCTIONS_URL`            | Base URL of the Azure Functions Flex Consumption app |
 | `VITE_API_MCP_URL`                  | MCP service URL (for AI agent features)            |
 | `VITE_APPINSIGHTS_CONNECTIONSTRING` | Application Insights connection string             |
 

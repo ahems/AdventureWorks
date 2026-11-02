@@ -29,7 +29,7 @@ namespace api_functions.Functions;
 ///     5. Post payroll and damage write-off bank transactions if applicable.
 ///     6. Increment daily metrics counters.
 ///
-/// The container scales to zero once the queue drains (KEDA rule on warehouse-ops-queue).
+/// Flex Consumption adjusts queue-triggered capacity as the queue drains.
 /// </summary>
 public class WarehouseOperationProcessorFunction
 {

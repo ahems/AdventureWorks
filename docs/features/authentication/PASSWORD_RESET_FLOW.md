@@ -211,7 +211,7 @@ A comprehensive test script is provided: `test-password-reset-flow.sh`
 ./test-password-reset-flow.sh
 
 # Test against a specific URL
-./test-password-reset-flow.sh https://your-function-app.azurecontainerapps.io
+./test-password-reset-flow.sh https://your-function-app.azurewebsites.net
 ```
 
 ### Test Coverage
@@ -249,7 +249,7 @@ The test script validates the following scenarios:
 =========================================
 Testing Password Reset Flow
 =========================================
-Function URL: https://your-function-app.azurecontainerapps.io
+Function URL: https://your-function-app.azurewebsites.net
 
 Test Configuration:
   Email: ken0@adventure-works.com

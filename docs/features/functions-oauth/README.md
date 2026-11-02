@@ -34,7 +34,7 @@
 
 ## What this covers
 
-`api-functions` is the .NET-isolated Azure Functions app (running in Container Apps) that
+`api-functions` is the .NET-isolated Azure Functions app (running on Flex Consumption) that
 provides custom business logic for the e-shop, admin, and manufacturing frontends, plus AI
 agent hosting and simulators. Every one of its **187 HTTP-triggered routes is currently
 `AuthorizationLevel.Anonymous`**. This phase decides — for each route — whether it should stay
@@ -269,7 +269,7 @@ E stays deferred with the Tier M descope.
 - **Phase E — (deferred with Tier M)** api-mcp confidential client + token-exchange to protect the
   proxied endpoints.
 - **Phase F — Infrastructure/AZD (done):** inject `FUNCTIONS_JWT_ISSUER` / `FUNCTIONS_JWT_AUDIENCE` /
-  `FUNCTIONS_OAUTH_MODE` into the Functions container from the deployed api-mcp FQDN (mirrors the DAB
+  `FUNCTIONS_OAUTH_MODE` into the Function App settings from the deployed api-mcp FQDN (mirrors the DAB
   bicep wiring); no secrets in outputs; `azd up`/`azd down` stay automated; mode defaults to `audit`.
 - **Phase G — Docs & tests (done):** fast offline unit tests
   ([`api-functions.Tests`](../../../api-functions.Tests/)) covering registry completeness/no-stale
@@ -300,6 +300,6 @@ E stays deferred with the Tier M descope.
 | [`api-functions/Auth/`](../../../api-functions/Auth/) | The resource server: policy registry, options, token validator, user model, and enforcement middleware |
 | [`api-functions/Functions/AddressFunctions.cs`](../../../api-functions/Functions/AddressFunctions.cs) | Tier-C consumer record-ownership reference implementation |
 | [`app/src/services/functionsAuth.ts`](../../../app/src/services/functionsAuth.ts) | E-shop Functions-audience PKCE (S256) client + `functionsFetch` |
-| [`infra/modules/flex-api-functions.bicep`](../../../infra/modules/flex-api-functions.bicep) · [`infra/main.bicep`](../../../infra/main.bicep) | Injects issuer/audience/mode into the Functions container |
+| [`infra/modules/flex-api-functions.bicep`](../../../infra/modules/flex-api-functions.bicep) · [`infra/main.bicep`](../../../infra/main.bicep) | Injects issuer/audience/mode into the Flex Consumption Function App settings |
 | [`api-functions.Tests/`](../../../api-functions.Tests/) | Offline resource-server unit tests (registry coverage, mode resolution, claim parsing) |
 | [`docs/features/mcp-oauth/README.md`](../mcp-oauth/README.md) · [`api/README.md`](../../../api/README.md) | Sibling OAuth designs this extends (MCP + DAB) |

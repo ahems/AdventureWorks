@@ -64,7 +64,7 @@ For each batch:
 curl -X POST http://localhost:7071/api/GenerateProductReviewsUsingAI_HttpStart
 
 # Azure deployment
-curl -X POST https://av-func-<unique>.azurecontainerapps.io/api/GenerateProductReviewsUsingAI_HttpStart
+curl -X POST https://av-func-<unique>.azurewebsites.net/api/GenerateProductReviewsUsingAI_HttpStart
 ```
 
 That's it! The system will:

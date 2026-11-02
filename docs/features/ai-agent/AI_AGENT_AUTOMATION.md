@@ -15,7 +15,7 @@ When you run `azd up` or `azd provision`, the system automatically:
 1. **Deploys Infrastructure** (via Bicep templates)
    - Azure AI Foundry Hub + Project
    - Azure OpenAI with GPT model deployments
-   - Azure Container Apps (api-functions, api-mcp, DAB)
+    - Azure Functions Flex Consumption (api-functions) and Azure Container Apps (api-mcp, DAB)
    - All supporting Azure resources
 
 2. **Creates prompt agents** (`scripts/utilities/create-foundry-agents.sh`, called from `postprovision.sh`)
@@ -168,7 +168,7 @@ python3 test_agent.py
 # Expected output:
 # 🤖 Loading AdventureWorks Customer Service Agent...
 #    Model: gpt-4.1-mini
-#    MCP Server: https://av-func-xxx.azurecontainerapps.io/api/mcp
+#    MCP Server: https://av-mcp-xxx.azurecontainerapps.io/mcp
 #
 # 👤 User: What tools do you have access to help customers?
 #
@@ -247,7 +247,7 @@ The `AI_AGENT_CONFIG.json` file contains:
   "agent_name": "AdventureWorks Customer Service Agent",
   "model": "gpt-4.1-mini",
   "endpoint": "https://av-openai-xxx.cognitiveservices.azure.com/",
-  "mcp_server": "https://av-func-xxx.azurecontainerapps.io/api/mcp",
+    "mcp_server": "https://av-mcp-xxx.azurecontainerapps.io/mcp",
   "tools": [
     "get_customer_orders",
     "get_order_details",

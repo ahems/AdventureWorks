@@ -25,22 +25,13 @@
 #   - MCP_SERVICE_URL in azd env
 #   - API_URL in azd env
 # =============================================================================
+set -eo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 source "$SCRIPT_DIR/agents/lib/common.sh"
 
-echo ""
-echo "=========================================="
-echo "Creating / Updating Azure AI Foundry Agents"
-echo "=========================================="
-echo ""
-info "Project endpoint : $PROJECT_ENDPOINT"
-info "MCP service URL  : $MCP_SERVICE_URL"
-info "DAB MCP URL      : $DAB_MCP_URL"
-info "Model deployment : $CHAT_GPT_DEPLOYMENT"
-info "Embed deployment : $EMBEDDING_DEPLOYMENT"
-info "App Insights     : ${APPINSIGHTS_CONNECTION_STRING:0:40}..."
-echo ""
+info "Configuring Azure AI agents..."
 
 # ── Set up shared project connections once ────────────────────────────────────
 # This connection allows Foundry to manage the MCP session lifecycle for DAB.
@@ -53,65 +44,38 @@ setup_shared_connections
 # Export flag so each agent script skips the duplicate connection upserts
 export FOUNDRY_CONNECTIONS_READY=1
 
-# ── Run each agent script ─────────────────────────────────────────────────────
-bash "$SCRIPT_DIR/agents/eshop-chat-agent.sh"
-echo ""
-bash "$SCRIPT_DIR/agents/admin-chat-agent.sh"
-echo ""
-bash "$SCRIPT_DIR/agents/admin-order-agent.sh"
-echo ""
-bash "$SCRIPT_DIR/agents/admin-promotion-agent.sh"
-echo ""
-bash "$SCRIPT_DIR/agents/admin-cart-recovery-agent.sh"
-echo ""
-bash "$SCRIPT_DIR/agents/admin-review-agent.sh"
-echo ""
-bash "$SCRIPT_DIR/agents/admin-customer-agent.sh"
-echo ""
-bash "$SCRIPT_DIR/agents/admin-product-content-agent.sh"
-echo ""
-bash "$SCRIPT_DIR/agents/admin-translation-agent.sh"
-echo ""
-bash "$SCRIPT_DIR/agents/admin-review-batch-agent.sh"
-echo ""
-bash "$SCRIPT_DIR/agents/admin-review-analysis-agent.sh"
-echo ""
-bash "$SCRIPT_DIR/agents/admin-email-content-agent.sh"
-echo ""
-bash "$SCRIPT_DIR/agents/admin-catalog-suggestion-agent.sh"
-echo ""
-bash "$SCRIPT_DIR/agents/eshop-help-me-choose-agent.sh"
-echo ""
-# The workflow agents must be created AFTER their respective base agents because
-# they reference the base agents by name in their YAML workflow definitions.
-bash "$SCRIPT_DIR/agents/eshop-workflow-agent.sh"
-echo ""
-bash "$SCRIPT_DIR/agents/admin-promotion-workflow-agent.sh"
-echo ""
-bash "$SCRIPT_DIR/agents/admin-order-workflow-agent.sh"
+# Workflow agents must follow their base agents because their YAML definitions
+# reference those agents by name.
+agent_scripts=(
+    eshop-chat-agent
+    admin-chat-agent
+    admin-order-agent
+    admin-promotion-agent
+    admin-cart-recovery-agent
+    admin-review-agent
+    admin-customer-agent
+    admin-product-content-agent
+    admin-translation-agent
+    admin-review-batch-agent
+    admin-review-analysis-agent
+    admin-email-content-agent
+    admin-catalog-suggestion-agent
+    eshop-help-me-choose-agent
+    eshop-workflow-agent
+    admin-promotion-workflow-agent
+    admin-order-workflow-agent
+)
+
+for agent_script in "${agent_scripts[@]}"; do
+    if ! agent_output=$(bash "$SCRIPT_DIR/agents/$agent_script.sh" 2>&1); then
+        printf '%s\n' "$agent_output" >&2
+        error "Could not configure $agent_script."
+        exit 1
+    fi
+done
 
 # NOTE: manufacturing-agent is a Foundry Hosted Agent deployed via:
 #   cd manufacturing-agent/mcp-tools && azd deploy
 # It is no longer a kind:prompt agent managed by this script.
 
-echo ""
-echo "=========================================="
-echo "All agents created/updated successfully"
-echo "Agent IDs stored in azd environment:"
-echo "  AI_AGENT_CHAT_ID                   = $(get_azd_value AI_AGENT_CHAT_ID)"
-echo "  AI_AGENT_ORDER_ID                  = $(get_azd_value AI_AGENT_ORDER_ID)"
-echo "  AI_AGENT_PROMOTION_ID              = $(get_azd_value AI_AGENT_PROMOTION_ID)"
-echo "  AI_AGENT_CART_RECOVERY_ID          = $(get_azd_value AI_AGENT_CART_RECOVERY_ID)"
-echo "  AI_AGENT_PRODUCT_CONTENT_ID        = $(get_azd_value AI_AGENT_PRODUCT_CONTENT_ID)"
-echo "  AI_AGENT_HELP_ME_CHOOSE_ID         = $(get_azd_value AI_AGENT_HELP_ME_CHOOSE_ID)"
-echo "  AI_AGENT_WORKFLOW_CHAT_ID          = $(get_azd_value AI_AGENT_WORKFLOW_CHAT_ID)"
-echo "  AI_AGENT_WORKFLOW_PROMOTION_ID     = $(get_azd_value AI_AGENT_WORKFLOW_PROMOTION_ID)"
-echo "  AI_AGENT_WORKFLOW_ORDER_ID         = $(get_azd_value AI_AGENT_WORKFLOW_ORDER_ID)"
-echo "  AI_AGENT_REVIEW_ID                 = $(get_azd_value AI_AGENT_REVIEW_ID)"
-echo "  AI_AGENT_TRANSLATION_ID            = $(get_azd_value AI_AGENT_TRANSLATION_ID)"
-echo "  AI_AGENT_REVIEW_BATCH_ID           = $(get_azd_value AI_AGENT_REVIEW_BATCH_ID)"
-echo "  AI_AGENT_REVIEW_ANALYSIS_ID        = $(get_azd_value AI_AGENT_REVIEW_ANALYSIS_ID)"
-echo "  AI_AGENT_EMAIL_CONTENT_ID          = $(get_azd_value AI_AGENT_EMAIL_CONTENT_ID)"
-echo "  AI_AGENT_CATALOG_SUGGESTION_ID     = $(get_azd_value AI_AGENT_CATALOG_SUGGESTION_ID)"
-echo ""
-echo "NOTE: manufacturing-agent is a Foundry Hosted Agent — it will be deployed by the postup hook after application services finish."
+success "Configured ${#agent_scripts[@]} Azure AI agents."

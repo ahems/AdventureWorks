@@ -10,7 +10,7 @@ This is a **3-tier Azure application** demonstrating enterprise patterns with pa
 
 - **Frontend** (`app/`): React + TypeScript + Vite SPA deployed as Azure Static Web App
 - **Backend API** (`api/`): Microsoft Data API Builder (DAB) providing GraphQL + REST, running in Azure Container Apps
-- **Serverless Functions** (`api-functions/`): .NET 10 Azure Functions in Container Apps for custom business logic
+- **Serverless Functions** (`api-functions/`): .NET 10 isolated Azure Functions on Flex Consumption for custom business logic, provisioned by `infra/modules/flex-api-functions.bicep`; published directly without a container image
 - **Database**: Azure SQL with AdventureWorks schema using Entra ID authentication
 - **Infrastructure** (`infra/`): Bicep modules with modular service definitions
 
@@ -68,7 +68,6 @@ Testin is done against the Azure-hosted services, so the following environment v
 - COMMUNICATION_SERVICE_NAME - the Communication Service name
 - EMAIL_SENDER_DOMAIN - the email sender domain
 - MCP_SERVICE_URL - the MCP service URL
-- SERVICE_API_FUNCTIONS_IMAGE_NAME - the API Functions image name
 - SERVICE_API_FUNCTIONS_NAME - the API Functions service name
 - SERVICE_API_IMAGE_NAME - the API image name
 - SERVICE_API_MCP_IMAGE_NAME - the API MCP image name
@@ -124,10 +123,10 @@ azd up --no-prompt  # Full deploy: preup → provision → deploy → postdeploy
 1. `preup.ps1` - Creates Entra ID app registrations, discovers OpenAI models
 2. `azd provision` - Deploys Bicep infrastructure (~21 minutes)
 3. `postprovision.sh` - Configures SQL database roles, deploys seed-job for data import (~2-3 min + seed-job runs ~8 min asynchronously)
-4. `azd deploy` - Builds containers via ACR remote build, deploys to Container Apps
+4. `azd deploy` - Builds Container Apps images via ACR remote build and publishes the Functions project to Flex Consumption
 5. `postdeploy.ps1` - Updates redirect URIs, sets runtime CORS config
 
-**Key distinction**: `api/` and `api-functions/` build with **remote build** in ACR (see `azure.yaml`). The `app/` builds locally then deploys to Static Web Apps.
+**Key distinction**: Container services such as `api/` and `api-mcp/` build with **remote build** in ACR (see `azure.yaml`). The `api-functions/` .NET project publishes directly to Azure Functions Flex Consumption (`host: function`); it has no Dockerfile or Container App deployment. The `app/` builds locally then deploys to Static Web Apps.
 
 **Note:** The seed-job runs asynchronously in the background. Monitor its progress with:
 
@@ -148,7 +147,7 @@ azd env get-values
 Key values include:
 
 - `API_URL` - DAB GraphQL/REST API endpoint in Azure Container Apps
-- `FUNCTION_URL` - Azure Functions endpoint in Container Apps
+- `API_FUNCTIONS_URL` - Azure Functions Flex Consumption endpoint
 - `AZURE_RESOURCE_GROUP` - Resource group name
 - `DATABASE_CONNECTION_STRING` - SQL connection string with Managed Identity auth
 
@@ -428,7 +427,7 @@ az monitor app-insights query --app <app-name> --analytics-query "requests | top
 10. **Shopping Simulator AI requirement**: The `no-order-customer`, `cart-recovery`, and `b2b-store` order modes require `AI_AGENT_ORDER_ID` to be configured. Without it, those messages will hard-fail to the poison queue with full diagnostics. The `new-persona` and `existing-repeat` modes fall back to random generation if AI is unavailable.
 11. **Shopping Simulator auto-stop**: The simulator always auto-stops after the configured `durationHours` (default 24h, max 72h). It never runs forever — this is a cost protection feature checked every timer tick (1 minute).
 12. **Order Status=7 is "Delivered"**: Orders are automatically promoted from Shipped (5) to Delivered (7) by the hourly `OrderDelivery_Timer` function. Terminal statuses are now 4 (Rejected), 6 (Cancelled), and 7 (Delivered) — Status=5 (Shipped) is no longer a terminal state. Delivery windows are configurable per order type via `PUT /api/orders/pipeline/config`.
-13. **Order notification emails disabled by default**: `ORDER_NOTIFICATIONS_EMAIL_ENABLED` must be explicitly set to `"true"` to send Shipped/Delivered emails via Azure Communication Services. When unset or `"false"`, the intended email content is logged at Info level instead (look for `[EmailNotifications disabled]` in Application Insights). This prevents the Shopping Simulator from generating email spam. The flag is hardcoded to `"false"` in the Bicep infra — enabling it requires a manual Azure Portal or CLI override. See [docs/features/email/ORDER_NOTIFICATIONS.md](docs/features/email/ORDER_NOTIFICATIONS.md).
+13. **Order notification emails disabled by default**: `ORDER_NOTIFICATIONS_EMAIL_ENABLED` must be explicitly set to `"true"` to send Shipped/Delivered emails via Azure Communication Services. When unset or `"false"`, the intended email content is logged at Info level instead (look for `[EmailNotifications disabled]` in Application Insights). This prevents the Shopping Simulator from generating email spam. The Flex Consumption template does not enable the flag; enabling it requires an explicit Function App setting via Azure Portal or CLI. See [docs/features/email/ORDER_NOTIFICATIONS.md](docs/features/email/ORDER_NOTIFICATIONS.md).
 14. **Web PubSub Free tier limits**: 20 concurrent connections, 20K messages/day — sufficient for a single-user demo. All three frontend apps share one instance via groups. If `WEB_PUBSUB_HOST_NAME` is empty or the negotiate endpoint fails, apps fall back to slow polling (60–120s) automatically.
 15. **No runtime infra creation**: Application code must not call `CreateIfNotExistsAsync` or `CreateIfNotExists` on storage resources (queues, tables, containers). All storage infrastructure is provisioned by `infra/modules/storage.bicep` via `azd up`. If you need a new queue or table, add it to the Bicep file. A startup health check in `Program.cs` logs App Insights warnings for any missing resources.
 

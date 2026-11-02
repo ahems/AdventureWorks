@@ -216,7 +216,7 @@ Generating translations via Azure Functions + OpenAI is expensive. This CSV expo
 azd up
 
 # 2. Run translation function
-curl -X POST "https://av-func-[env].azurecontainerapps.io/api/TranslateProductDescriptions_HttpStart" \
+curl -X POST "https://av-func-[env].azurewebsites.net/api/TranslateProductDescriptions_HttpStart" \
   -H "Content-Type: application/json" \
   -d '{"productModelIds": [1,2,3,...,128]}'
 

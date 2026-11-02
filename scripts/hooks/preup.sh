@@ -531,7 +531,7 @@ chat_model_name_regex=$(get_azd_value "CHAT_MODEL_NAME_REGEX" "")
 chat_model_cost_tier=$(get_azd_value "CHAT_MODEL_COST_TIER" "balanced")
 chat_min_capacity=$(get_azd_value "CHAT_MODEL_MIN_CAPACITY" "1")
 
-chat_pick=$(echo "$all_quota" | jq -c   --arg preferred "$chat_model_name_regex"   --arg tier "$chat_model_cost_tier"   --argjson mincap "$chat_min_capacity" '
+if ! chat_pick=$(echo "$all_quota" | jq -c   --arg preferred "$chat_model_name_regex"   --arg tier "$chat_model_cost_tier"   --argjson mincap "$chat_min_capacity" '
   def lname: (.ModelName | ascii_downcase);
   def is_chat:
     (lname | test("embedding|dall-e|image|tts|whisper|audio|realtime|transcri|moderation"; "i") | not);
@@ -545,10 +545,10 @@ chat_pick=$(echo "$all_quota" | jq -c   --arg preferred "$chat_model_name_regex"
   def family_rank:
     if (lname | test("^gpt-([6-9]|[1-9][0-9])")) then 600
     elif (lname | test("^gpt-5")) then 500
-    elif (lname | test("^gpt-4\.1")) then 410
+    elif (lname | test("^gpt-4\\.1")) then 410
     elif (lname | test("^gpt-4o")) then 400
     elif (lname | test("^gpt-4")) then 390
-    elif (lname | test("^gpt-3\.5|^gpt-35")) then 300
+    elif (lname | test("^gpt-3\\.5|^gpt-35")) then 300
     else 350 end;
   def version_rank:
     # Azure versions are commonly YYYY-MM-DD; removing punctuation preserves order.
@@ -570,7 +570,10 @@ chat_pick=$(echo "$all_quota" | jq -c   --arg preferred "$chat_model_name_regex"
                      sku_rank, .AvailableCapacity] }
   ] | sort_by(._rank) | reverse | first // null
   | if . == null then null else del(._rank) end
-' 2>/dev/null || echo "null")
+'); then
+  color_red "Error: Failed to evaluate preferred chat policy. Check CHAT_MODEL_NAME_REGEX, CHAT_MODEL_COST_TIER, and CHAT_MODEL_MIN_CAPACITY and the jq diagnostics above."
+  exit 1
+fi
 
 # If a strict override or tier produced no match, retain safety by falling back to
 # any non-specialized, non-nano chat model, newest version first.

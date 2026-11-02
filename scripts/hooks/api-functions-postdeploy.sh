@@ -96,28 +96,7 @@ if az functionapp config appsettings set \
     ${manufacturing_agent_endpoint:+"MANUFACTURING_AGENT_ENDPOINT=$manufacturing_agent_endpoint"} \
     ${api_functions_url:+"API_FUNCTIONS_URL=$api_functions_url"} \
   --output none; then
-  color_green "✓ Successfully injected agent IDs into $functions_service_name"
-  echo "  AI_AGENT_CHAT_ID                      = $chat_id"
-  echo "  AI_AGENT_ORDER_ID                     = $order_id"
-  echo "  AI_AGENT_PROMOTION_ID                 = $promotion_id"
-  echo "  AI_AGENT_HELP_ME_CHOOSE_ID            = $help_me_choose_id"
-  [[ -n "$workflow_chat_id" ]] && echo "  AI_AGENT_WORKFLOW_CHAT_ID             = $workflow_chat_id" || true
-  [[ -n "$workflow_promotion_id" ]] && echo "  AI_AGENT_WORKFLOW_PROMOTION_ID        = $workflow_promotion_id" || true
-  [[ -n "$workflow_order_id" ]] && echo "  AI_AGENT_WORKFLOW_ORDER_ID            = $workflow_order_id" || true
-  [[ -n "$workflow_help_me_choose_id" ]] && echo "  AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID   = $workflow_help_me_choose_id" || true
-  echo "  AI_AGENT_CART_RECOVERY_ID             = $cart_recovery_id"
-  [[ -n "$review_id" ]] && echo "  AI_AGENT_REVIEW_ID                    = $review_id" || true
-  echo "  AI_AGENT_PRODUCT_CONTENT_ID           = $product_content_id"
-  [[ -n "$customer_id" ]] && echo "  AI_AGENT_CUSTOMER_ID                  = $customer_id" || true
-  [[ -n "$admin_chat_id" ]] && echo "  AI_AGENT_ADMIN_CHAT_ID                = $admin_chat_id" || true
-  [[ -n "$translation_id" ]] && echo "  AI_AGENT_TRANSLATION_ID               = $translation_id" || true
-  [[ -n "$review_batch_id" ]] && echo "  AI_AGENT_REVIEW_BATCH_ID              = $review_batch_id" || true
-  [[ -n "$review_analysis_id" ]] && echo "  AI_AGENT_REVIEW_ANALYSIS_ID           = $review_analysis_id" || true
-  [[ -n "$email_content_id" ]] && echo "  AI_AGENT_EMAIL_CONTENT_ID             = $email_content_id" || true
-  [[ -n "$catalog_suggestion_id" ]] && echo "  AI_AGENT_CATALOG_SUGGESTION_ID        = $catalog_suggestion_id" || true
-  [[ -n "$mcp_service_url" ]] && echo "  MCP_SERVICE_URL                       = $mcp_service_url" || true
-  [[ -n "$manufacturing_agent_endpoint" ]] && echo "  MANUFACTURING_AGENT_ENDPOINT          = $manufacturing_agent_endpoint" || true
-  [[ -n "$api_functions_url" ]] && echo "  API_FUNCTIONS_URL                     = $api_functions_url" || true
+  color_green "✓ Azure Functions configured with the demo's AI agents."
 else
   color_red "✗ Failed to update Function App settings."
   exit 1

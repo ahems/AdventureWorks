@@ -8,7 +8,7 @@ The Reports page in the admin portal provides pre-aggregated charts across the f
 app-admin (Container App)
   └── /reports page (React + Recharts)
         └── useReportingData hooks
-              └── Azure Functions (api-functions Container App)
+              └── Azure Functions (api-functions, Flex Consumption)
                     └── ReportingFunctions.cs → ReportingService.cs
                           └── Azure SQL (GROUP BY / SUM aggregates)
 ```

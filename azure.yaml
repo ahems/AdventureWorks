@@ -78,6 +78,10 @@ services:
               value: ${chatGptDeploymentName}
             - name: MCP_SERVICE_URL
               value: ${MCP_SERVICE_URL}
+            - name: APPLICATIONINSIGHTS_CONNECTION_STRING
+              value: ${APPLICATIONINSIGHTS_CONNECTION_STRING}
+            - name: OTEL_SERVICE_NAME
+              value: manufacturing-agent
         kind: hosted
         metadata:
             tags:

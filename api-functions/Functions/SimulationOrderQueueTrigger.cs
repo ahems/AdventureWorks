@@ -23,8 +23,8 @@ namespace api_functions.Functions;
 /// or load-testing without going through the admin UI.
 ///
 /// Scale-out:
-///   KEDA watches the queue with <c>queueLength: 5</c>; the Container App scales out to
-///   <c>maxReplica</c> instances as the queue fills, processing each order in parallel.
+///   Azure Functions Flex Consumption scales queue-triggered processing with demand,
+///   subject to the Function App's configured maximum instance count.
 /// </summary>
 public class SimulationOrderQueueTrigger
 {

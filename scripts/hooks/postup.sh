@@ -52,8 +52,6 @@ if [[ -z "$agent_endpoint" ]]; then
   color_cyan "Deploying the Manufacturing Hosted Agent..."
   AZURE_DEV_USER_AGENT=microsoft_foundry_skill azd deploy manufacturing-agent --no-prompt
   color_green "Manufacturing Hosted Agent deployed successfully."
-else
-  color_green "Manufacturing Hosted Agent already deployed; skipping fallback deployment."
 fi
 
 # All deployment-time SQL work has completed. Close the public SQL endpoint only
@@ -70,6 +68,7 @@ if ! az sql server update \
   --name "$sql_server" \
   --resource-group "$resource_group" \
   --enable-public-network false \
+  --only-show-errors \
   --output none; then
   echo "ERROR: Could not disable public SQL access. Removing the temporary client firewall rule." >&2
   if ! az sql server firewall-rule delete \
@@ -91,16 +90,11 @@ az sql server firewall-rule delete \
 color_green "Azure SQL public network access disabled."
 
 echo ""
-color_bold "╔════════════════════════════════════════════════════════════════════╗"
-color_bold "║                                                                    ║"
-color_bold "║          🎉  AdventureWorks Demo Deployment Complete!  🎉          ║"
-color_bold "║                                                                    ║"
-color_bold "╚════════════════════════════════════════════════════════════════════╝"
-echo ""
 
 # Get URLs from azd environment
 static_web_url=$(get_azd_value "SERVICE_APP_URL")
 api_url=$(get_azd_value "API_URL")
+api_functions_url=$(get_azd_value "API_FUNCTIONS_URL")
 admin_url=$(get_azd_value "APP_ADMIN_URL")
 manufacturing_url=$(get_azd_value "APP_MANUFACTURING_URL")
 mcp_inspector_url=$(get_azd_value "MCP_INSPECTOR_URL")
@@ -126,67 +120,54 @@ if [[ -z "$static_web_url" ]]; then
   fi
 fi
 
-color_green "Your AdventureWorks Demo is now live!"
 echo ""
-color_cyan "📋 Next Steps:"
+color_bold "AdventureWorks Azure demo is deployed."
 echo ""
-
-step=1
 
 if [[ -n "$static_web_url" ]]; then
-  color_yellow "$step. Verify all services are healthy, and awake:"
-  echo "   🔍 $static_web_url/health"
+  color_cyan "Start here — storefront:"
+  echo "  $static_web_url"
   echo ""
-  ((step++))
-  color_yellow "$step. E-Shop (Static Web App):"
-  echo "   🛒 $static_web_url"
+  color_cyan "Service and seed-data status:"
+  echo "  $static_web_url/health"
+  echo "  Wait for the seed job to report completed before exploring the demo data."
   echo ""
-  ((step++))
+else
+  echo "WARNING: The storefront URL was not found. Check the azd deployment output." >&2
 fi
 
 if [[ -n "$admin_url" ]]; then
-  color_yellow "$step. Admin Portal (Container App — scales to zero):"
-  echo "   🔧 $admin_url"
+  color_cyan "Admin portal (may take a moment to wake from scale-to-zero):"
+  echo "  $admin_url"
   echo ""
-  ((step++))
 fi
 
 if [[ -n "$manufacturing_url" ]]; then
-  color_yellow "$step. Manufacturing Dashboard (Container App — scales to zero):"
-  echo "   🏭 $manufacturing_url"
+  color_cyan "Manufacturing dashboard (may take a moment to wake from scale-to-zero):"
+  echo "  $manufacturing_url"
   echo ""
-  ((step++))
-fi
-
-if [[ -n "$mcp_inspector_url" ]]; then
-  color_yellow "$step. MCP Inspector (Container App):"
-  echo "   🔬 $mcp_inspector_url"
-  echo ""
-  ((step++))
 fi
 
 if [[ -n "$api_url" ]]; then
   # Strip /graphql and any trailing slashes to get base URL
   api_base_url="${api_url%/graphql*}"
   api_base_url="${api_base_url%/}"
-  color_yellow "$step. Browse the REST API:"
-  echo "   📚 $api_base_url/swagger/index.html"
+  color_cyan "API exploration:"
+  echo "  GraphQL endpoint: $api_url"
+  echo "  REST API browser: $api_base_url/swagger/index.html"
+  if [[ -n "$api_functions_url" ]]; then
+    echo "  Functions API browser: ${api_functions_url%/}/api/swagger/ui"
+  fi
   echo ""
 fi
 
-color_cyan "💡 Tips:"
-echo "   • Check Application Insights for telemetry and diagnostics"
-echo "   • Use 'azd env get-values' to see all environment variables"
-echo ""
-color_cyan "📚 Documentation:"
-echo "   • Quick Start Guide: ./QUICKSTART.md"
-echo "   • Frontend Development: ./app/README.md"
-echo "   • GraphQL API (DAB): ./api/README.md"
-echo "   • Azure Functions: ./api-functions/README.md"
-echo "   • Infrastructure (Bicep): ./infra/README.md"
-echo "   • Feature Documentation: ./docs/README.md"
-echo "   • Utility Scripts: ./scripts/README.md"
-echo ""
+if [[ -n "$mcp_inspector_url" ]]; then
+  color_cyan "Optional — MCP Inspector:"
+  echo "  $mcp_inspector_url"
+  echo ""
+fi
 
-color_green "Happy exploring! 🚀"
+color_yellow "When the demo is finished, delete its Azure resources to stop ongoing costs:"
+echo "  azd down --no-prompt"
+echo "Run that command from this project directory. Deploy again later with 'azd up --no-prompt'."
 echo ""

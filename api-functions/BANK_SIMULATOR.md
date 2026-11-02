@@ -12,7 +12,7 @@ The bank simulator provides a multi-currency virtual banking layer for the Adven
 - **Exchange rate conversion**: a total USD-equivalent figure is calculated on-demand using the most recent `Sales.CurrencyRate` record for each non-USD currency (`AverageRate` = foreign units per 1 USD, so `USD = foreignAmount / AverageRate`).
 - **Negative balances allowed**: no overdraft limits, interest, or transaction fees.
 - **Optimistic concurrency**: account updates use Azure Table Storage ETags to prevent lost-update races.
-- **Scale-to-zero safe**: all state lives in Table Storage; the underlying Azure Functions container can scale to zero between requests.
+- **Instance-independent state**: all state lives in Table Storage, so Flex Consumption can scale bank-processing instances with demand. The separate SQL-trigger always-ready instance still incurs idle compute cost.
 
 ---
 

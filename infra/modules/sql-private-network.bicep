@@ -130,3 +130,5 @@ resource sqlPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZo
 
 output containerAppsSubnetId string = virtualNetwork::containerAppsSubnet.id
 output functionsSubnetId string = virtualNetwork::functionsSubnet.id
+output virtualNetworkId string = virtualNetwork.id
+output privateEndpointSubnetId string = virtualNetwork::privateEndpointSubnet.id

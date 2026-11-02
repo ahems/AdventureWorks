@@ -67,6 +67,8 @@ module storage 'modules/storage.bicep' = {
     location: location
     identityId: identity.outputs.principalId
     aadAdminObjectId: aadAdminObjectId
+    virtualNetworkId: sqlPrivateNetwork.outputs.virtualNetworkId
+    privateEndpointSubnetId: sqlPrivateNetwork.outputs.privateEndpointSubnetId
   }
 }
 
@@ -133,9 +135,6 @@ module aifoundry 'modules/aiservices.bicep' = {
     storageAccountConnectionName: 'av-storage-connection-${resourceToken}'
     skipLocalDevRoleAssignments: skipLocalDevRoleAssignments
   }
-  dependsOn: [
-    identity
-  ]
 }
 
 module database 'modules/database.bicep' = {
@@ -213,9 +212,7 @@ module containerApp 'modules/aca.bicep' = {
   }
   dependsOn: [
     appinsights
-    identity
     acr
-    storage
   ]
 }
 
@@ -253,9 +250,10 @@ module containerAppApiMcp 'modules/aca-api-mcp.bicep' = {
     apiMcpName: 'av-mcp-${resourceToken}'
     containerRegistryName: acrName
     identityName: identityName
+    storageAccountName: storage.outputs.storageAccountName
     sqlConnectionString: database.outputs.connectionString
     aiFoundryEndpoint: aifoundry.outputs.endpoint
-    apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
+    apiFunctionsUrl: apiFunctions.outputs.apiFunctionsUrl
     minReplica: 0
     maxReplica: 1
     revisionSuffix: revisionSuffix
@@ -266,7 +264,7 @@ module containerAppApiMcp 'modules/aca-api-mcp.bicep' = {
   }
 }
 
-module containerAppApiFunctions 'modules/flex-api-functions.bicep' = {
+module apiFunctions 'modules/flex-api-functions.bicep' = {
   name: 'Deploy-Flex-API-Functions'
   params: {
     location: location
@@ -308,9 +306,7 @@ module containerAppSeedJob 'modules/aca-seed-job.bicep' = {
     // and get updated with actual image during azd deploy
   }
   dependsOn: [
-    containerApp
     database
-    identity
     acr
     appinsights
   ]
@@ -323,7 +319,7 @@ module staticWebAppFrontend 'modules/swa-app.bicep' = {
     location: 'eastus2'
     identityName: identityName
     apiUrl: containerAppApi.outputs.apiUrl
-    apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
+    apiFunctionsUrl: apiFunctions.outputs.apiFunctionsUrl
     apiMcpUrl: containerAppApiMcp.outputs.apiMcpUrl
     appInsightsConnectionString: appinsights.outputs.connectionString
     webPubSubHostName: webpubsub.outputs.webPubSubHostName
@@ -352,12 +348,11 @@ module containerAppAdmin 'modules/aca-app-admin.bicep' = {
   name: 'Deploy-Container-App-Admin'
   params: {
     location: location
-    appInsightsName: appInsightsName
     appAdminName: 'av-app-admin-${resourceToken}'
     containerRegistryName: acrName
     identityName: identityName
     apiUrl: containerAppApi.outputs.apiUrl
-    apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
+    apiFunctionsUrl: apiFunctions.outputs.apiFunctionsUrl
     apiMcpUrl: containerAppApiMcp.outputs.apiMcpUrl
     appInsightsConnectionString: appinsights.outputs.connectionString
     appUrl: staticWebAppFrontend.outputs.appRedirectUri
@@ -375,12 +370,11 @@ module containerAppManufacturing 'modules/aca-app-manufacturing.bicep' = {
   name: 'Deploy-Container-App-Manufacturing'
   params: {
     location: location
-    appInsightsName: appInsightsName
     appManufacturingName: 'av-app-manufactur-${resourceToken}'
     containerRegistryName: acrName
     identityName: identityName
     apiUrl: containerAppApi.outputs.apiUrl
-    apiFunctionsUrl: containerAppApiFunctions.outputs.apiFunctionsUrl
+    apiFunctionsUrl: apiFunctions.outputs.apiFunctionsUrl
     apiMcpUrl: containerAppApiMcp.outputs.apiMcpUrl
     appInsightsConnectionString: appinsights.outputs.connectionString
     webPubSubHostName: webpubsub.outputs.webPubSubHostName
@@ -430,7 +424,7 @@ output SERVICE_API_MCP_NAME string = 'av-mcp-${resourceToken}'
 output SERVICE_SEED_JOB_NAME string = containerAppSeedJob.outputs.seedJobName
 output SERVICE_MCP_INSPECTOR_NAME string = containerAppMcpInspector.outputs.mcpInspectorName
 
-output API_FUNCTIONS_URL string = containerAppApiFunctions.outputs.apiFunctionsUrl
+output API_FUNCTIONS_URL string = apiFunctions.outputs.apiFunctionsUrl
 output MCP_SERVICE_URL string = containerAppApiMcp.outputs.apiMcpUrl
 output API_MCP_URL string = containerAppApiMcp.outputs.apiMcpUrl
 output MCP_INSPECTOR_URL string = containerAppMcpInspector.outputs.mcpInspectorUrl

@@ -4,6 +4,24 @@
 
 Application Insights has been successfully integrated into the AdventureWorks e-commerce application to provide comprehensive telemetry tracking for user behavior, performance monitoring, and business analytics.
 
+## Telemetry coverage by service
+
+Every app and API sends telemetry to the single solution-wide Application Insights instance (`av-appinsights-<token>`). Each service uses a distinct `cloud_RoleName` so it appears as its own node in the Application Map.
+
+| Service | SDK / mechanism | `cloud_RoleName` | Connection string source |
+| --- | --- | --- | --- |
+| `app` (eshop) | `@microsoft/applicationinsights-web` ([appInsights.ts](../../../app/src/lib/appInsights.ts)) | `app-eshop` | `window.APP_CONFIG.APPINSIGHTS_CONNECTIONSTRING` (SWA app setting) |
+| `app-admin` | `@microsoft/applicationinsights-web` ([appInsights.ts](../../../app-admin/src/lib/appInsights.ts)) | `app-admin` | `window.APP_CONFIG.APPINSIGHTS_CONNECTIONSTRING` (container env → `config.js`) |
+| `app-manufacturing` | `@microsoft/applicationinsights-web` ([appInsights.ts](../../../app-manufacturing/src/lib/appInsights.ts)) | `app-manufacturing` | `window.APP_CONFIG.APPINSIGHTS_CONNECTIONSTRING` (container env → `config.js`) |
+| `api` (DAB) | Built-in DAB telemetry (`runtime.telemetry` in `dab-config.json`) | `DataApiBuilder` | `APPLICATIONINSIGHTS_CONNECTION_STRING` |
+| `api-functions` | `Microsoft.ApplicationInsights.WorkerService` + Functions host | `av-func-<token>` | `APPLICATIONINSIGHTS_CONNECTION_STRING` |
+| `api-mcp` | `Microsoft.ApplicationInsights.AspNetCore` (`TelemetryClient`) | `api-mcp` | `APPLICATIONINSIGHTS_CONNECTION_STRING` |
+| `manufacturing-agent` | Azure AI AgentServer built-in OpenTelemetry | `manufacturing-agent` | `APPLICATIONINSIGHTS_CONNECTION_STRING` (`azure.yaml` agent env) |
+
+The browser apps send W3C correlation headers only to the solution's own API hosts, so browser page views link end to end with DAB, Functions, and MCP requests. Do not add the OpenTelemetry Azure Monitor distro (`UseAzureMonitor`) to `api-mcp`: combining it with the classic Application Insights SDK suppresses request telemetry and duplicates dependencies.
+
+`mcp-inspector` (third-party developer tool) and `seed-job` (one-off container job) are not instrumented; their console output is available in the Container Apps Log Analytics workspace.
+
 ## Manufacturing WorkOrder HTTP 500 diagnostics
 
 For failures from `GET /api/WorkOrder`, correlate the DAB request with its SQL dependency using `operation_Id`:

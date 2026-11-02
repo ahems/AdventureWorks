@@ -17,6 +17,7 @@ param revisionSuffix string
 @secure()
 param sqlConnectionString string
 param aiFoundryEndpoint string
+param storageAccountName string
 
 @description('Managed environment default domain, used to derive this app FQDN for the OAuth issuer/resource without a self-reference.')
 param containerAppEnvDefaultDomain string = ''
@@ -112,6 +113,10 @@ resource apiMcp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'AZURE_CLIENT_ID'
               value: azidentity.properties.clientId
+            }
+            {
+              name: 'AzureWebJobsStorage__accountName'
+              value: storageAccountName
             }
             {
               name: 'AZURE_OPENAI_ENDPOINT'

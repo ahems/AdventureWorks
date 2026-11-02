@@ -10,6 +10,7 @@ param aadAdminObjectId string
 param skipLocalDevRoleAssignments bool = false
 param projectName string
 param appInsightsId string
+@secure()
 param appInsightConnectionString string
 param appInsightConnectionName string
 param aoaiConnectionName string

@@ -80,7 +80,7 @@ if az containerapp update \
   --resource-group "$resource_group_name" \
   --set-env-vars "${set_env_args[@]}" \
   --output none; then
-  color_green "✓ Successfully updated APP_URL for CORS (value: $app_url)"
+  color_green "✓ API CORS configured for the storefront."
 else
   color_red "✗ Failed to update Container App environment variables."
   exit 1

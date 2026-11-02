@@ -9,7 +9,7 @@ The manufacturing simulation generates realistic production runs for AdventureWo
 3. Driving those work orders through their routing operations using a **self-rescheduling Azure Storage Queue pattern** — no timer triggers, no sleeps, no polling
 4. Enforcing location capacity constraints, purchased-component inventory consumption, and probabilistic scrap/failure at each station
 
-The container hosting these functions has `minReplicas = 0`. Because all simulation work is queue-driven, the container **scales to zero** when the queue is empty and scales back up automatically (via KEDA) when a run begins.
+These functions run on Azure Functions Flex Consumption. Queue-triggered processing scales with demand without Container Apps scaling rules. The Function App also retains one always-ready instance for `OrderPlacedSqlTrigger`, so an empty simulation queue does not mean the whole app has zero compute cost.
 
 ---
 
@@ -60,7 +60,7 @@ POST /api/manufacturing/begin
 | -------------------------------- | ----------------------------------------------------------- |
 | `production-wo-queue`            | Azure Storage Queue; drives all simulation work             |
 | `awManufacturing`                | Azure Table Storage table; 6 logical partitions (see below) |
-| KEDA scale rule on Container App | Scales replicas 0→5 when `queueLength >= 5`                 |
+| Flex Consumption Function App | Queue-triggered scaling; maximum instance count of 5 |
 
 ### Table Storage Partitions (`awManufacturing`)
 
@@ -133,7 +133,7 @@ Starts a new production run. Validates the product, explodes the BOM, creates al
 
 ### `POST /api/manufacturing/stop`
 
-Clears all pending messages from `production-wo-queue`. In-flight operations (currently being processed by a running container instance) will complete, then the container scales to zero.
+Clears all pending messages from `production-wo-queue`. In-flight operations finish processing; Flex Consumption adjusts queue-triggered capacity as demand falls. The separate always-ready SQL-trigger instance remains.
 
 **No request body required.**
 
@@ -141,7 +141,7 @@ Clears all pending messages from `production-wo-queue`. In-flight operations (cu
 
 ```json
 {
-  "message": "Production queue cleared. Container will scale to zero once in-flight messages complete."
+  "message": "Production queue cleared. In-flight operations will finish processing."
 }
 ```
 
@@ -561,7 +561,7 @@ where `Location.Availability` is the weekly available hours in the AdventureWork
 4. Write the updated slot's `BusyUntilUtc` back using the original ETag
 5. On `412 Precondition Failed` (another replica claimed the slot simultaneously): retry up to 3 times, then re-enqueue with 5-second backoff
 
-When a slot is not available until a future time, the queue message is re-enqueued with `visibilityTimeout = startDelay`, so the container is not blocked by a busy station — it can process other work orders instead.
+When a slot is not available until a future time, the queue message is re-enqueued with `visibilityTimeout = startDelay`, so the Functions worker is not blocked by a busy station — it can process other work orders instead.
 
 ---
 
@@ -749,26 +749,9 @@ If all children are done, the parent assembly's first routing operation is immed
 
 ## Scale-to-Zero Behaviour
 
-The Container App is configured with:
+`infra/modules/flex-api-functions.bicep` configures Azure Functions Flex Consumption with `maximumInstanceCount: 5`. Azure Functions manages queue-triggered scaling as messages arrive and the backlog drains; no Container Apps replica settings or KEDA rules are deployed for Functions.
 
-```
-minReplicas: 0
-maxReplicas: 5
-```
-
-And a KEDA scale rule on `production-wo-queue`:
-
-```yaml
-queueLength: "5"
-```
-
-This means:
-
-- With 0 messages: 0 replicas (fully scaled to zero)
-- With 5+ messages: KEDA scales up to handle the backlog
-- After `POST /stop` (queue cleared): any running instances finish their in-flight messages, then the container scales back to zero
-
-**Cost:** When no simulation is running, the Container App costs nothing for compute.
+After `POST /stop` clears the queue, in-flight operations finish processing and queue-triggered capacity can scale down. However, the app keeps one always-ready instance for `function:OrderPlacedSqlTrigger` to poll SQL Change Tracking reliably. This instance incurs idle compute cost and can keep the serverless SQL database from auto-pausing, even when no manufacturing simulation is running.
 
 ---
 

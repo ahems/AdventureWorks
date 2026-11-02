@@ -220,7 +220,7 @@ For local development and testing:
 
 ## Azure Deployment
 
-The password functions are automatically deployed with the api-functions container:
+The password functions are automatically published with the api-functions Flex Consumption Function App:
 
 ```bash
 azd deploy api-functions

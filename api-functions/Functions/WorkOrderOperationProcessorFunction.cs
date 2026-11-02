@@ -32,7 +32,7 @@ namespace api_functions.Functions;
 ///     4. Get next routing op → enqueue Phase 1 for it (visibility 0).
 ///        OR if last op: CompleteWorkOrder, then check for newly unblocked parent assemblies.
 ///
-/// The container scales to zero once the queue drains.
+/// Flex Consumption adjusts queue-triggered capacity as the queue drains.
 /// </summary>
 public class WorkOrderOperationProcessorFunction
 {

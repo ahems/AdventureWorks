@@ -17,6 +17,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
       - name: app
         id: app
         continue-on-error: true
@@ -35,7 +40,7 @@ jobs:
       - name: api-functions
         id: api-functions
         continue-on-error: true
-        run: docker build ./api-functions
+        run: dotnet publish api-functions/api-functions.csproj --configuration Release --output "${{ runner.temp }}/api-functions-publish"
 
       - name: api-mcp
         id: api-mcp
@@ -68,10 +73,10 @@ jobs:
                 "${{ steps.app-admin.outcome }}" == "failure" || \
                 "${{ steps.app-manufacturing.outcome }}" == "failure" || \
                 "${{ steps.devcontainer.outcome }}" == "failure" ]]; then
-            echo "One or more Docker builds failed."
+            echo "One or more service builds failed."
             exit 1
           fi
-          echo "All Docker builds succeeded."
+          echo "All service builds succeeded."
 
   # Reproduces the azd `package-app` step for the e-shop Static Web App, which
   # runs `swa build` (Azure Static Web Apps CLI) rather than `docker build`.

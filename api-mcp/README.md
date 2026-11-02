@@ -427,7 +427,7 @@ All tools are defined in `AdventureWorks/Tools/SimulatorMcpTools.cs`. They provi
 
 Deployment automation (see [docs/AI_AGENT_AUTOMATION.md](../docs/AI_AGENT_AUTOMATION.md)) creates and configures an AI agent in Azure AI that is wired to this MCP server. The agent:
 
-- Connects to the MCP endpoint exposed by the Container App (e.g., `https://<func-app>.azurecontainerapps.io/mcp`).
+- Connects to the MCP endpoint exposed by the MCP Container App (e.g., `https://<mcp-app>.azurecontainerapps.io/mcp`).
 - Exposes the tools above to the model as **MCP tools** (names like `get_customer_orders`, `search_products`, etc.).
 - Uses the tools to fetch grounded data and incorporate it into chat responses.
 

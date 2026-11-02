@@ -47,9 +47,9 @@ New standalone script (called from `postprovision.sh`) that creates all four age
 
 Agent IDs are written back to the azd environment (`AI_AGENT_CHAT_ID`, `AI_AGENT_ORDER_ID`, `AI_AGENT_PROMOTION_ID`, `AI_AGENT_HELP_ME_CHOOSE_ID`).
 
-### 3. **Container App Patching** ([scripts/hooks/api-functions-postdeploy.sh](scripts/hooks/api-functions-postdeploy.sh))
+### 3. **Function App Configuration** ([scripts/hooks/api-functions-postdeploy.sh](scripts/hooks/api-functions-postdeploy.sh))
 
-New post-deploy hook that reads the four agent IDs from `azd env` and patches the Container App environment variables so the running Functions app can resolve `AI_AGENT_*_ID`.
+The post-deploy hook reads the agent IDs from `azd env` and updates the Flex Consumption Function App settings so the running Functions app can resolve `AI_AGENT_*_ID`.
 
 ### 4. **AIAgentService.cs** ([Services/AIAgentService.cs](api-functions/Services/AIAgentService.cs))
 
@@ -171,9 +171,8 @@ empty-text recovery). Merely setting `tool_choice: none` can still cause Foundry
 configured remote MCP servers and fail authentication. Trusted per-request instructions tell
 the promotion agent to use the supplied product data rather than its portal-defined tool.
 
-For an optional Functions container build, use the repository root as context:
-`docker build -f api-functions/Dockerfile .`. The current `azd` Functions deployment publishes
-the .NET project directly and includes the linked shared query source automatically.
+`azd deploy api-functions` publishes the .NET project directly to Azure Functions Flex
+Consumption and includes the linked shared query source automatically.
 
 ### 3. **OrderGenerationAgentService.cs** — Multi-turn refinement
 
@@ -212,7 +211,7 @@ New queue-driven entry point for the manufacturing simulator:
 - `api-functions/Models/SimulationOrderMessage.cs` — `{ customerId: int, personaHint?: string }`
 - `api-functions/Functions/SimulationOrderQueueTrigger.cs` — queue trigger on `simulation-order-queue`; also exposes `POST /api/simulation/orders/start` for batch enqueue with pace control
 - `infra/modules/storage.bicep` — added `simulation-order-queue`
-- `infra/modules/aca-api-functions.bicep` — KEDA rule scales 0→N on queue depth ≥ 5
+- `infra/modules/flex-api-functions.bicep` — Azure Functions Flex Consumption manages queue-triggered scaling, with a maximum instance count of 5
 
 The Order agent is invoked identically whether triggered from the admin UI, the bulk endpoint, or the simulation queue.
 

@@ -83,7 +83,7 @@ The email is sent asynchronously using `WaitUntil.Started`, meaning:
 ### Simple Email
 
 ```bash
-curl -X POST "https://your-functions-app.azurecontainerapps.io/api/customers/1/send-email" \
+curl -X POST "https://your-functions-app.azurewebsites.net/api/customers/1/send-email" \
   -H "Content-Type: application/json" \
   -d '{
     "emailAddressId": 1,
@@ -95,7 +95,7 @@ curl -X POST "https://your-functions-app.azurecontainerapps.io/api/customers/1/s
 ### Email with Attachment
 
 ```bash
-curl -X POST "https://your-functions-app.azurecontainerapps.io/api/customers/1/send-email" \
+curl -X POST "https://your-functions-app.azurewebsites.net/api/customers/1/send-email" \
   -H "Content-Type: application/json" \
   -d '{
     "emailAddressId": 1,

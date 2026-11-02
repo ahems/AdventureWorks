@@ -28,7 +28,7 @@ Output will show:
 
 ```
 ✨ Using deployed Azure Functions
-Using Functions endpoint: https://av-func-xxxxx.azurecontainerapps.io
+Using Functions endpoint: https://av-func-xxxxx.azurewebsites.net
 ```
 
 ### Using Local Functions
@@ -57,7 +57,7 @@ Force a specific endpoint with the `FUNCTIONS_URL` environment variable:
 
 ```bash
 # Use specific Azure deployment
-FUNCTIONS_URL="https://my-functions.azurecontainerapps.io" ./generate-reviews-with-embeddings.sh
+FUNCTIONS_URL="https://my-functions.azurewebsites.net" ./generate-reviews-with-embeddings.sh
 
 # Force local
 FUNCTIONS_URL="http://localhost:7071" ./generate-reviews-with-embeddings.sh
@@ -76,7 +76,7 @@ azd env get-values | grep API_FUNCTIONS_URL
 Should return something like:
 
 ```
-API_FUNCTIONS_URL="https://av-func-xxxxx.azurecontainerapps.io"
+API_FUNCTIONS_URL="https://av-func-xxxxx.azurewebsites.net"
 ```
 
 If empty, deploy functions:

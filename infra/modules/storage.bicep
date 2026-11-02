@@ -2,6 +2,52 @@ param storageName string = 'avstorage${uniqueString(resourceGroup().id)}'
 param location string = resourceGroup().location
 param identityId string
 param aadAdminObjectId string
+param virtualNetworkId string
+param privateEndpointSubnetId string
+
+var storageServices = [
+  'blob'
+  'queue'
+  'table'
+  'file'
+]
+
+var durableSettings = loadJsonContent('../../api-functions/host.json').extensions.durableTask
+var durableHubName = durableSettings.hubName
+var durableStoragePrefix = toLower(durableHubName)
+var durablePartitionCount = union({ partitionCount: 4 }, durableSettings.storageProvider).partitionCount
+
+var applicationQueueDescriptions = {
+  'order-receipt-generation': 'Queue for generating PDF receipts for customer orders'
+  'order-email-generation': 'Queue for sending order confirmation emails with receipt attachments'
+  'ai-job-image-queue': 'Serial job queue for DALL-E image generation (one message at a time)'
+  'ai-job-chat-queue': 'Serial job queue for GPT chat operations: translations and review generation'
+  'ai-job-embeddings-queue': 'Serial job queue for text-embedding operations: product and review embeddings'
+  'product-thumbnail-generation': 'Queue for generating product thumbnails from large images'
+  'sales-order-status': 'Queue for tracking the status of sales orders'
+  'production-wo-queue': 'Event-driven queue that drives the manufacturing simulation: each message represents one WorkOrder routing-operation phase'
+  'supply-chain-orders-queue': 'Event-driven queue driving purchase order state transitions (placed-confirmed-picking-shipped-delivered) and vendor restock events'
+  'simulation-order-queue': 'Autonomous order simulation queue: each message carries a CustomerId (0 = new customer) and optional PersonaHint. The AI agent generates a realistic order for the specified customer or persona.'
+  'warehouse-ops-queue': 'Event-driven queue driving the warehouse simulation: each message represents one store/retrieve/receive operation phase for a warehouse worker at Finished Goods Storage (LocationID 7)'
+  'review-moderation-queue': 'Background queue for review auto-moderation: analyze pending unreplied reviews with AI, create staff reply, and approve.'
+  'manufacturing-agent-queue': 'Queue for manufacturing AI agent invocations triggered by new sales orders'
+  'auto-promotion-queue': 'Queue for automatic AI promotion generation triggered by order volume thresholds'
+}
+
+var applicationQueues = [for queue in items(applicationQueueDescriptions): {
+  name: queue.key
+  metadata: {
+    description: queue.value
+  }
+}]
+
+var poisonQueues = [for queue in items(applicationQueueDescriptions): {
+  name: '${queue.key}-poison'
+}]
+
+var durableControlQueues = [for partition in range(0, durablePartitionCount): {
+  name: '${durableStoragePrefix}-control-${padLeft(partition, 2, '0')}'
+}]
 
 // Use Azure Verified Module for Storage Account
 module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
@@ -14,11 +60,11 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
     allowBlobPublicAccess: false
     allowSharedKeyAccess: true // Required for Container Apps file share mounts
     minimumTlsVersion: 'TLS1_2'
-    publicNetworkAccess: 'Enabled'
+    publicNetworkAccess: 'Disabled'
     requireInfrastructureEncryption: true
     accessTier: 'Cool'
     networkAcls: {
-      defaultAction: 'Allow'
+      defaultAction: 'Deny'
     }
     
     // Enable services needed for Durable Functions
@@ -59,98 +105,34 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
             description: 'Deployment packages for Flex Consumption function app'
           }
         }
+        {
+          name: '${durableStoragePrefix}-leases'
+          publicAccess: 'None'
+        }
+        {
+          name: '${durableStoragePrefix}-applease'
+          publicAccess: 'None'
+        }
+        {
+          name: '${durableStoragePrefix}-largemessages'
+          publicAccess: 'None'
+        }
       ]
     }
     
     queueServices: {
-      queues: [
-        {
-          name: 'order-receipt-generation'
-          metadata: {
-            description: 'Queue for generating PDF receipts for customer orders'
+      queues: concat(
+        applicationQueues,
+        poisonQueues,
+        durableControlQueues,
+        [
+          {
+            name: '${durableStoragePrefix}-workitems'
           }
-        }
-        {
-          name: 'order-email-generation'
-          metadata: {
-            description: 'Queue for sending order confirmation emails with receipt attachments'
-          }
-        }
-        {
-          name: 'ai-job-image-queue'
-          metadata: {
-            description: 'Serial job queue for DALL-E image generation (one message at a time)'
-          }
-        }
-        {
-          name: 'ai-job-chat-queue'
-          metadata: {
-            description: 'Serial job queue for GPT chat operations: translations and review generation'
-          }
-        }
-        {
-          name: 'ai-job-embeddings-queue'
-          metadata: {
-            description: 'Serial job queue for text-embedding operations: product and review embeddings'
-          }
-        }
-        {
-          name: 'product-thumbnail-generation'
-          metadata: {
-            description: 'Queue for generating product thumbnails from large images'
-          }
-        }
-        {
-          name: 'sales-order-status'
-          metadata: {
-            description: 'Queue for tracking the status of sales orders'
-          }
-        }
-        {
-          name: 'production-wo-queue'
-          metadata: {
-            description: 'Event-driven queue that drives the manufacturing simulation: each message represents one WorkOrder routing-operation phase'
-          }
-        }
-        {
-          name: 'supply-chain-orders-queue'
-          metadata: {
-            description: 'Event-driven queue driving purchase order state transitions (placed-confirmed-picking-shipped-delivered) and vendor restock events'
-          }
-        }
-        {
-          name: 'simulation-order-queue'
-          metadata: {
-            description: 'Autonomous order simulation queue: each message carries a CustomerId (0 = new customer) and optional PersonaHint. The AI agent generates a realistic order for the specified customer or persona.'
-          }
-        }
-        {
-          name: 'warehouse-ops-queue'
-          metadata: {
-            description: 'Event-driven queue driving the warehouse simulation: each message represents one store/retrieve/receive operation phase for a warehouse worker at Finished Goods Storage (LocationID 7)'
-          }
-        }
-        {
-          name: 'review-moderation-queue'
-          metadata: {
-            description: 'Background queue for review auto-moderation: analyze pending unreplied reviews with AI, create staff reply, and approve.'
-          }
-        }
-        {
-          name: 'manufacturing-agent-queue'
-          metadata: {
-            description: 'Queue for manufacturing AI agent invocations triggered by new sales orders'
-          }
-        }
-        {
-          name: 'auto-promotion-queue'
-          metadata: {
-            description: 'Queue for automatic AI promotion generation triggered by order volume thresholds'
-          }
-        }
-      ]
+        ]
+      )
     }
-    
+
     tableServices: {
       tables: [
         {
@@ -195,6 +177,18 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
         {
           name: 'awMcpTasks'
         }
+        {
+          name: '${durableHubName}History'
+        }
+        {
+          name: '${durableHubName}Instances'
+        }
+        {
+          name: '${durableHubName}Partitions'
+        }
+        {
+          name: 'AzureFunctionsDiagnosticEvents'
+        }
       ]
     }
     
@@ -213,7 +207,7 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
     roleAssignments: [
       {
         principalId: identityId
-        roleDefinitionIdOrName: 'Storage Blob Data Contributor'
+        roleDefinitionIdOrName: 'Storage Blob Data Owner'
         principalType: 'ServicePrincipal'
       }
       {
@@ -256,6 +250,60 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
     ]
   }
 }
+
+resource privateDnsZones 'Microsoft.Network/privateDnsZones@2020-06-01' = [for service in storageServices: {
+  name: 'privatelink.${service}.${environment().suffixes.storage}'
+  location: 'global'
+}]
+
+resource privateDnsZoneLinks 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = [for (service, index) in storageServices: {
+  name: '${privateDnsZones[index].name}/${storageName}-${service}-link'
+  location: 'global'
+  properties: {
+    registrationEnabled: false
+    virtualNetwork: {
+      id: virtualNetworkId
+    }
+  }
+}]
+
+resource privateEndpoints 'Microsoft.Network/privateEndpoints@2024-05-01' = [for service in storageServices: {
+  name: '${storageName}-${service}-private-endpoint'
+  location: location
+  properties: {
+    subnet: {
+      id: privateEndpointSubnetId
+    }
+    privateLinkServiceConnections: [
+      {
+        name: '${storageName}-${service}-private-link'
+        properties: {
+          privateLinkServiceId: storageAccount.outputs.resourceId
+          groupIds: [
+            service
+          ]
+        }
+      }
+    ]
+  }
+  dependsOn: [
+    privateDnsZoneLinks
+  ]
+}]
+
+resource privateDnsZoneGroups 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2024-05-01' = [for (service, index) in storageServices: {
+  name: '${privateEndpoints[index].name}/default'
+  properties: {
+    privateDnsZoneConfigs: [
+      {
+        name: service
+        properties: {
+          privateDnsZoneId: privateDnsZones[index].id
+        }
+      }
+    ]
+  }
+}]
 
 output storageAccountName string = storageAccount.outputs.name
 output storageAccountId string = storageAccount.outputs.resourceId

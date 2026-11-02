@@ -8,9 +8,9 @@ At a high level, these templates provision:
 
 - An Azure Container Apps environment hosting:
   - Data API Builder (`api`) container
-  - Azure Functions (`api-functions`) container
   - MCP server (`api-mcp`) container
   - Admin portal (`app-admin`) container (scale-to-zero)
+- An Azure Functions Flex Consumption app (`api-functions`) for the .NET isolated backend
 - An Azure Static Web App for the React frontend (`app`)
 - Azure SQL Database with the AdventureWorks schema
 - Azure OpenAI / Azure AI resources
@@ -26,6 +26,14 @@ At a high level, these templates provision:
 SQL public access is enabled while `azd up` runs, but the former `AllowAll` firewall rule is removed. The `postprovision.sh` hook discovers the deployment host's public IPv4 address (or accepts `SQL_CLIENT_IP` as an override), grants a temporary single-IP firewall rule for its SQL setup, then removes the rule on exit. Once service deployments finish, `postup.sh` disables SQL public network access. The deployment principal therefore needs permission to create/delete SQL firewall rules and disable public network access. A failed/interrupted `azd up` can leave public network access enabled; if the postup hook cannot complete, check SQL networking and remove any `AllowClient` rule manually.
 
 After successful deployment, direct SQL clients outside the VNet (including local data-management scripts) cannot connect. Run those tools from a VNet-connected host or temporarily arrange approved access; do not restore the broad `AllowAll` rule.
+
+## Private Azure Storage connectivity
+
+`modules/storage.bicep` creates private endpoints for the shared account's blob, queue, table, and file services in the private-endpoint subnet provided by `modules/sql-private-network.bicep`. Each service has a corresponding `privatelink.<service>.core.windows.net` private DNS zone linked to the VNet. Existing storage endpoint URLs continue to work: clients within the integrated network resolve them to private endpoint addresses without changing application URLs.
+
+The Flex Consumption Functions app uses its VNet integration for host storage, deployment packages, Durable Functions state, application queues and tables, receipts, and translations. The api-mcp Container App accesses its task table through the integrated Container Apps environment. The Seed Job mounts the `seed-job-logs` file share over SMB using the account key, while the seed-status Function reads it over HTTPS using its managed identity. Network connectivity does not replace authorization: the existing managed identity roles and file-share credentials are still required.
+
+Unlike SQL's temporary deployment access, Storage public network access remains disabled throughout provisioning and deployment, the default network action is `Deny`, and anonymous blob access is disabled. Local Functions, Storage Explorer, utility scripts, and deployment agents that directly access storage require a VNet-connected host or a VPN with routing and private DNS forwarding. Managed identity, account keys, and SAS tokens do not bypass these network restrictions. Browser receipt downloads go through the Functions API rather than directly to blob storage. Do not re-enable public storage access to work around connectivity failures; check private DNS, network reachability, and authorization instead. See the Storage Consumer Inventory below for the resource-to-consumer mapping.
 
 ## Serverless SQL and idle cost behavior
 
@@ -111,7 +119,7 @@ Each module focuses on a single Azure resource or closely related resource set. 
 
 - **Purpose**: Creates an **Azure Container Registry**.
 - **Typical resources**:
-  - ACR instance used for remote container builds of `api`, `api-functions`, and `api-mcp`.
+  - ACR instance used for remote container builds of `api`, `api-mcp`, and the frontend Container Apps.
 - **Notes**: `azure.yaml` is configured so azd uses this registry for remote builds.
 
 ### `aca.bicep`
@@ -120,7 +128,7 @@ Each module focuses on a single Azure resource or closely related resource set. 
 - **Typical resources**:
   - Container Apps environment (vNet‑integrated as appropriate).
   - Shared networking and logging configuration.
-- **Notes**: Other modules (aca-api, aca-api-functions, aca-api-mcp) deploy apps into this environment.
+- **Notes**: Other Container Apps modules (including aca-api and aca-api-mcp) deploy apps into this environment. Azure Functions uses its own Flex Consumption plan and VNet integration.
 
 ### `aca-api.bicep`
 
@@ -130,11 +138,12 @@ Each module focuses on a single Azure resource or closely related resource set. 
   - Configure environment variables (connection strings via managed identity, DAB config, CORS for prod).
   - Wire to the Container Apps environment and ACR image.
 
-### `aca-api-functions.bicep`
+### `flex-api-functions.bicep`
 
-- **Purpose**: Deploys the **Azure Functions** container app (`api-functions`).
+- **Purpose**: Deploys the **Azure Functions Flex Consumption** app (`api-functions`).
 - **Typical responsibilities**:
-  - Define the Container App running the .NET isolated Functions.
+  - Define the Flex Consumption plan and .NET isolated Function App with VNet integration.
+  - Configure deployment-package storage and managed identity authentication.
   - Pass environment values (SQL connection string using AAD, MCP service URL, storage settings, AI endpoints, etc.).
   - Attach managed identity for SQL, Storage, and OpenAI access.
 
@@ -169,6 +178,38 @@ Each module focuses on a single Azure resource or closely related resource set. 
   - Blob containers for receipts, images, logs, and translations.
   - Queue storage for background jobs (image generation, thumbnailing, receipts, email, etc.).
   - Appropriate access policies for managed identities.
+  - Policy-compliant network settings: `networkAcls.defaultAction: 'Deny'`, `publicNetworkAccess: 'Disabled'`, and `allowBlobPublicAccess: false`.
+  - Private endpoints and VNet-linked private DNS zones for blob, queue, table, and file services, using the VNet and private-endpoint subnet from `sql-private-network.bicep`.
+
+Storage data-plane access requires network connectivity to that VNet and private DNS resolution, in addition to the existing authorization. The deployed Container Apps and Functions environments are VNet-integrated. Local Functions, storage utility scripts, and deployment agents that directly access storage must run from a VNet-connected environment (or use a VPN with private DNS forwarding). Public blob URLs, including SAS URLs, are not reachable from outside the private network; serve externally consumed content through an authorized application endpoint. Foundry storage connections also require a supported private network path before they can access data; configuring a connection or managed identity alone does not provide network access.
+
+#### Storage Consumer Inventory
+
+All containers, queues, tables, and file shares are provisioned in `modules/storage.bicep`. Application code accesses existing resources; it does not provision them.
+
+| Resource | Consumer | Network and Authorization |
+| --- | --- | --- |
+| File share `seed-job-logs` | Seed job mounts `/logs`; `SeedJobStatusFunction` reads logs for the admin portal | Container Apps VNet to file private endpoint over SMB/445 with account key; Flex VNet to file endpoint over HTTPS/443 with Storage File Data Privileged Reader and backup intent |
+| Containers `azure-webjobs-hosts`, `azure-webjobs-secrets` | Functions host coordination and secrets | Flex VNet to blob private endpoint; runtime identity has Storage Blob Data Owner |
+| Container `function-releases` | Flex Consumption deployment packages | Flex VNet to blob private endpoint; deployment storage uses the configured user-assigned identity |
+| Container `adventureworks-receipts` | `PdfReceiptGenerator`, receipt checks/downloads, missing-receipt scans, and email attachment downloads | Flex VNet to blob private endpoint; runtime blob role. Browsers download via `DownloadOrderReceipt`, not directly from storage |
+| Container `locales` | `TranslateLanguageFile` saves generated translations | Flex VNet to blob private endpoint; runtime blob role. Storefront translations are bundled; local translation-download utilities require private network access |
+| Queues `order-receipt-generation`, `order-email-generation` | Receipt generation and confirmation-email Functions | Flex VNet to queue private endpoint; Storage Queue Data Contributor |
+| Queues `ai-job-image-queue`, `ai-job-chat-queue`, `ai-job-embeddings-queue`, `product-thumbnail-generation` | AI job processor and thumbnail Functions | Same queue endpoint and runtime role |
+| Queues `sales-order-status`, `production-wo-queue`, `supply-chain-orders-queue`, `simulation-order-queue`, `warehouse-ops-queue` | Order pipeline, manufacturing, purchasing, shopping, and warehouse Functions | Same queue endpoint and runtime role; Flex supports VNet-protected triggers and scaling |
+| Queues `review-moderation-queue`, `manufacturing-agent-queue`, `auto-promotion-queue` | Moderation, manufacturing agent, and promotion queue Functions | Same queue endpoint and runtime role |
+| Each application queue's `-poison` queue | Functions queue-trigger failure handling; AI-job cleanup and manufacturing-agent status/cleanup | Same queue endpoint and runtime role; provisioned alongside each primary queue |
+| Tables `shoppingSimulator`, `awOrderPipelineConfig`, `awSupplyChain`, `awManufacturing`, `awWarehouse` | Shopping, order pipeline, supply-chain, manufacturing/workforce, and warehouse services | Flex VNet to table private endpoint; Storage Table Data Contributor |
+| Tables `awBankAccounts`, `awBankTransactions` | Bank simulator service | Same table endpoint and runtime role |
+| Tables `awManufacturingAgentConfig`, `awManufacturingAgentRuns`, `awManufacturingProposals`, `awAutoPromotionConfig` | Agent configuration, runs, proposals, and automatic promotions | Same table endpoint and runtime role |
+| Tables `verifiedReviewsJob`, `reviewModerationJob` | Review service job state | Same table endpoint and runtime role |
+| Table `awMcpTasks` | MCP `AzureTableMcpTaskStore` | MCP Container App VNet to table private endpoint; shared managed identity and account name configured in `aca-api-mcp.bicep` |
+| Task-hub tables `AdventureWorksFunctionsHistory`, `AdventureWorksFunctionsInstances`, `AdventureWorksFunctionsPartitions`; queues `adventureworksfunctions-workitems`, `adventureworksfunctions-control-00` through `-03`; containers `adventureworksfunctions-leases`, `adventureworksfunctions-applease`, `adventureworksfunctions-largemessages` | Durable Functions Azure Storage provider (partition table is available if table partition management is used) | Flex VNet to blob/queue/table private endpoints; runtime blob owner, queue contributor, and table contributor roles |
+| Table `AzureFunctionsDiagnosticEvents` | Functions host storage diagnostics | Flex VNet to table private endpoint; runtime table contributor role |
+
+Task-hub resource names and partition count are derived at Bicep build time from `api-functions/host.json` (default partition count: four). Keep any deployed host-setting overrides consistent with that file. Do not change the partition count of an existing task hub.
+
+The Foundry storage connection is registered in `aiservices.bicep`, but no current application or agent code consumes it directly. It must not be treated as proof of Foundry-managed network access to this private account. Adding a Foundry-hosted feature that directly reads storage requires its own supported private networking configuration.
 
 ### `applicationinsights.bicep`
 

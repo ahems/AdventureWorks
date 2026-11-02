@@ -11,7 +11,7 @@ This is a **3-tier Azure application** demonstrating enterprise patterns with pa
 
 - **Frontend** (`app/`): React + TypeScript + Vite SPA deployed as Azure Static Web App
 - **Backend API** (`api/`): Microsoft Data API Builder (DAB) providing GraphQL + REST, running in Azure Container Apps
-- **Serverless Functions** (`api-functions/`): .NET 8 Azure Functions in Container Apps for custom business logic
+- **Serverless Functions** (`api-functions/`): .NET 10 isolated Azure Functions on Flex Consumption for custom business logic, provisioned by `infra/modules/flex-api-functions.bicep`; published directly without a container image
 - **MCP Server** (`mcp/`): .NET 8 Azure MCP Server for user initiated chat requests running in Azure Container Apps
 - **Seed Job** (`seed-job/`): Powershell and SQL scripts that empty and populate the SQL Database with AdventureWorks base data and some additional AI-generated data and images.
 - **Database**: Azure SQL with AdventureWorks schema using Entra ID authentication
@@ -79,10 +79,10 @@ azd up  # Full deploy: preup → provision → deploy → postdeploy
 1. `preup.ps1` - Creates Entra ID app registrations, discovers OpenAI models
 2. `azd provision` - Deploys Bicep infrastructure
 3. `postprovision.ps1` - Configures SQL database roles, imports sample data
-4. `azd deploy` - Builds containers via ACR remote build, deploys to Container Apps
+4. `azd deploy` - Builds Container Apps images via ACR remote build and publishes the Functions project to Flex Consumption
 5. `postdeploy.ps1` - Updates redirect URIs, sets runtime CORS config
 
-**Key distinction**: `api/` and `api-functions/` build with **remote build** in ACR (see `azure.yaml`). The `app/` builds locally then deploys to Static Web Apps.
+**Key distinction**: Container services such as `api/` and `api-mcp/` build with **remote build** in ACR (see `azure.yaml`). The `api-functions/` .NET project publishes directly to Azure Functions Flex Consumption (`host: function`); it has no Dockerfile or Container App deployment. The `app/` builds locally then deploys to Static Web Apps.
 
 ### Getting Azure Resource Information
 
@@ -95,7 +95,7 @@ azd env get-values
 Key values include:
 
 - `API_URL` - DAB GraphQL/REST API endpoint in Azure Container Apps
-- `FUNCTION_URL` - Azure Functions endpoint in Container Apps
+- `API_FUNCTIONS_URL` - Azure Functions Flex Consumption endpoint
 - `AZURE_RESOURCE_GROUP` - Resource group name
 - `DATABASE_CONNECTION_STRING` - SQL connection string with Managed Identity auth
 

@@ -19,7 +19,7 @@ Automated Azure AI Foundry Agent creation has been fully integrated into the Azu
 2. **`scripts/hooks/api-functions-postdeploy.sh`**
    - Post-deploy hook for `api-functions` service
    - Reads all seven agent IDs from azd env
-   - Patches the Container App with `AI_AGENT_*_ID` and `AI_AGENT_WORKFLOW_*_ID` environment variables
+  - Updates the Flex Consumption Function App settings with `AI_AGENT_*_ID` and `AI_AGENT_WORKFLOW_*_ID`
 
 ### Modified Files
 
@@ -29,10 +29,10 @@ Automated Azure AI Foundry Agent creation has been fully integrated into the Azu
 2. **`azure.yaml`**
    - Added `postdeploy` hook for `api-functions` service → `api-functions-postdeploy.sh`
 
-3. **`infra/modules/aca-api-functions.bicep`**
+3. **`infra/modules/flex-api-functions.bicep`**
    - Added `AI_FOUNDRY_PROJECT_ENDPOINT` env var
    - Added `AI_AGENT_WORKFLOW_PROMOTION_ID`, `AI_AGENT_WORKFLOW_ORDER_ID`, `AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID` parameter bindings
-   - Added KEDA scaling rule for `simulation-order-queue` (queue-length threshold: 5)
+  - Configures Flex Consumption queue-triggered scaling with a maximum instance count of 5
 
 4. **`infra/modules/storage.bicep`**
    - Added `simulation-order-queue` for autonomous AI-driven order simulation
@@ -70,7 +70,7 @@ azd deploy (application code)
 api-functions-postdeploy.sh hook
   ↓
 ┌────────────────────────────────────────────────┐
-│ Patches Container App with AI_AGENT_*_ID vars  │
+│ Updates Function App with AI_AGENT_*_ID vars  │
 └────────────────────────────────────────────────┘
   ↓
 ✅ Ready to use!

@@ -29,13 +29,23 @@ export const initAppInsights = () => {
         enableAutoRouteTracking: true,
         disableAjaxTracking: false,
         autoTrackPageVisitTime: true,
+        enableUnhandledPromiseRejectionTracking: true,
         enableCorsCorrelation: true,
         enableRequestHeaderTracking: true,
         enableResponseHeaderTracking: true,
+        // Browsers are deprecating the 'unload' event (Permissions Policy violation).
+        // Telemetry is still flushed via 'beforeunload', 'pagehide' and 'visibilitychange'.
+        disablePageUnloadEvents: ["unload"],
       },
     });
 
     appInsights.loadAppInsights();
+    appInsights.addTelemetryInitializer((item) => {
+      item.tags = item.tags ?? {};
+      item.tags["ai.cloud.role"] = "app-eshop";
+    });
+    // Auto route tracking only covers SPA navigations, so record the initial load explicitly.
+    appInsights.trackPageView();
 
     // Set authenticated user context if available
     const user = localStorage.getItem("user");

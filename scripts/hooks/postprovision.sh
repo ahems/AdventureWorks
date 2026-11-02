@@ -4,26 +4,23 @@
 
 set -e
 
-echo "Starting post-provision script at $(date '+%Y-%m-%d %H:%M:%S')"
+echo "Configuring Azure resources for the demo..."
 
-# Set VITE_API_URL for Static Web App build
 API_URL=$(azd env get-value 'API_URL' 2>/dev/null | head -n1 | tr -d '\n\r ')
 if [ -n "$API_URL" ]; then
-    echo ""
-    echo "Setting VITE_API_URL for Static Web App build: $API_URL"
     azd env set 'VITE_API_URL' "$API_URL"
 else
     echo "WARNING: API_URL not found in environment. VITE_API_URL will not be set."
 fi
 
-# Set VITE_API_FUNCTIONS_URL for Static Web App build
 API_FUNCTIONS_URL=$(azd env get-value 'API_FUNCTIONS_URL' 2>/dev/null | head -n1 | tr -d '\n\r ')
 if [ -n "$API_FUNCTIONS_URL" ]; then
-    echo ""
-    echo "Setting VITE_API_FUNCTIONS_URL for Static Web App build: $API_FUNCTIONS_URL"
     azd env set 'VITE_API_FUNCTIONS_URL' "$API_FUNCTIONS_URL"
 else
     echo "WARNING: API_FUNCTIONS_URL not found in environment. VITE_API_FUNCTIONS_URL will not be set."
+fi
+if [ -n "$API_URL" ] && [ -n "$API_FUNCTIONS_URL" ]; then
+    echo "Configured frontend API endpoints."
 fi
 
 # Grant current user Contributor role on Container Apps Environment for Aspire Dashboard access
@@ -78,10 +75,7 @@ else
     echo "  WARNING: CONTAINER_APP_ENVIRONMENT_NAME not found in environment. Skipping Aspire Dashboard configuration."
 fi
 
-echo ""
-echo "=========================================="
-echo "Creating MCP OAuth signing certificate in Key Vault..."
-echo "=========================================="
+echo "Preparing the MCP OAuth signing certificate..."
 # NOTE: This runs EARLY — before the database-role, seed-job, and Foundry-agent
 # steps below — on purpose. The api-mcp OAuth server fail-fasts at startup if this
 # signing certificate is missing, so creating it must NOT be gated behind the more
@@ -101,8 +95,8 @@ SIGNING_CERT_NAME=$(azd env get-value 'MCP_SIGNING_CERTIFICATE_NAME' 2>/dev/null
 [ -z "$SIGNING_CERT_NAME" ] && SIGNING_CERT_NAME="mcp-signing"
 
 if [ -z "$KEY_VAULT_NAME" ] || [[ "$KEY_VAULT_NAME" == ERROR:* ]]; then
-    echo "  WARNING: MCP_SIGNING_KEY_VAULT_NAME not found. Skipping signing certificate creation."
-    echo "           The api-mcp OAuth server will fail to start until a signing certificate exists."
+    echo "ERROR: MCP_SIGNING_KEY_VAULT_NAME is missing; the MCP OAuth server cannot start without its signing certificate." >&2
+    exit 1
 else
     SUBSCRIPTION_ID=$(az account show --query id -o tsv 2>/dev/null || echo "")
     VAULT_RESOURCE_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.KeyVault/vaults/${KEY_VAULT_NAME}"
@@ -116,12 +110,22 @@ else
             --role "Key Vault Certificates Officer" \
             --query "[].id" -o tsv 2>/dev/null || echo "")
         if [ -z "$EXISTING_CERT_OFFICER" ]; then
-            az role assignment create \
+            if az role assignment create \
                 --scope "$VAULT_RESOURCE_ID" \
                 --assignee "$DEPLOYER_OBJECT_ID" \
                 --role "Key Vault Certificates Officer" \
-                --output none 2>/dev/null || echo "  WARNING: Could not create Certificates Officer assignment (may already exist)."
-            echo "  Granted deployer 'Key Vault Certificates Officer' on $KEY_VAULT_NAME"
+                --output none 2>/dev/null; then
+                echo "  Granted deployer 'Key Vault Certificates Officer' on $KEY_VAULT_NAME"
+            elif az role assignment list \
+                --scope "$VAULT_RESOURCE_ID" \
+                --assignee "$DEPLOYER_OBJECT_ID" \
+                --role "Key Vault Certificates Officer" \
+                --query "[0].id" -o tsv 2>/dev/null | grep -q .; then
+                echo "  Deployer already has 'Key Vault Certificates Officer' on $KEY_VAULT_NAME"
+            else
+                echo "ERROR: Could not grant Key Vault certificate permissions to the deployer." >&2
+                exit 1
+            fi
         else
             echo "  Deployer already has 'Key Vault Certificates Officer' on $KEY_VAULT_NAME"
         fi
@@ -158,6 +162,7 @@ else
 POLICY
         # Bounded retries handle RBAC role propagation (Certificates Officer) which
         # can take up to a minute or two after assignment.
+        echo "  Creating '$SIGNING_CERT_NAME' in Key Vault (waiting for permissions if needed)..."
         CERT_CREATED="false"
         for attempt in $(seq 1 12); do
             if az keyvault certificate create \
@@ -166,10 +171,9 @@ POLICY
                 --policy @"$CERT_POLICY_FILE" \
                 --output none 2>/tmp/mcp-cert-err.txt; then
                 CERT_CREATED="true"
-                echo "  Created signing certificate '$SIGNING_CERT_NAME' in $KEY_VAULT_NAME (attempt $attempt)"
+                echo "  Signing certificate ready (attempt $attempt/12)."
                 break
             fi
-            echo "  Waiting for Key Vault RBAC propagation before creating certificate (attempt $attempt/12)..."
             sleep 15
         done
         rm -f "$CERT_POLICY_FILE"
@@ -184,10 +188,7 @@ POLICY
     fi
 fi
 
-echo ""
-echo "=========================================="
-echo "Assigning database roles to Managed Identity..."
-echo "=========================================="
+echo "Configuring Azure SQL access..."
 
 # Check if user is logged in to Azure CLI
 echo "Verifying Azure CLI login status..."
@@ -235,7 +236,7 @@ if [ -n "$SQL_SERVER_NAME" ] && [ -n "$SQL_DATABASE_NAME" ] && [ -n "$USER_MANAG
     SQL_CLIENT_FIREWALL_RULE_ACTIVE=true
     trap cleanup_sql_firewall_rule EXIT
 
-    echo "Adding temporary SQL firewall rule for deployment client $SQL_CLIENT_IP..."
+    echo "Temporarily allowing the deployment host to configure Azure SQL..."
     if az sql server firewall-rule show \
         --server "$SQL_SERVER_NAME" \
         --resource-group "$RESOURCE_GROUP" \
@@ -258,12 +259,7 @@ if [ -n "$SQL_SERVER_NAME" ] && [ -n "$SQL_DATABASE_NAME" ] && [ -n "$USER_MANAG
             --output none
     fi
 
-    echo "SQL Server: $SQL_SERVER_NAME"
-    echo "Database: $SQL_DATABASE_NAME"
-    echo "Managed Identity: $USER_MANAGED_IDENTITY_NAME"
-    
-    echo ""
-    echo "Executing database role assignment..."
+    echo "Assigning database permissions to the application identity..."
 
     # PowerShell 7+ ('pwsh') is required on the host running 'azd up' to execute the
     # role-assignment SQL. The Dev Container / Codespaces image installs it automatically
@@ -341,16 +337,11 @@ if [ -n "$SQL_SERVER_NAME" ] && [ -n "$SQL_DATABASE_NAME" ] && [ -n "$USER_MANAG
     fi
     echo ""
 else
-    echo "WARNING: Missing required environment variables for database role assignment"
-    echo "  SQL_SERVER_NAME: ${SQL_SERVER_NAME:-[NOT SET]}"
-    echo "  SQL_DATABASE_NAME: ${SQL_DATABASE_NAME:-[NOT SET]}"
-    echo "  USER_MANAGED_IDENTITY_NAME: ${USER_MANAGED_IDENTITY_NAME:-[NOT SET]}"
+    echo "ERROR: SQL server, database, or managed identity name is missing; cannot configure Azure SQL access." >&2
+    exit 1
 fi
 
-echo ""
-echo "=========================================="
-echo "Enabling SQL Change Tracking for order trigger..."
-echo "=========================================="
+echo "Configuring SQL Change Tracking for order processing..."
 
 if [ -n "$SQL_SERVER_NAME" ] && [ -n "$SQL_DATABASE_NAME" ]; then
     # Use 'if' to capture exit code safely under 'set -e'; prevents premature script exit
@@ -412,16 +403,15 @@ if [ -n "$SQL_SERVER_NAME" ] && [ -n "$SQL_DATABASE_NAME" ]; then
     else
         PWSH_CT_EXIT=$?
         echo "$PWSH_CT_OUTPUT"
-        echo "  WARNING: SQL Change Tracking setup failed (non-fatal, exit $PWSH_CT_EXIT). Re-run manually if needed."
+        echo "ERROR: SQL Change Tracking setup failed (exit $PWSH_CT_EXIT); order processing cannot be configured." >&2
+        exit 1
     fi
 else
-    echo "  WARNING: SQL_SERVER_NAME or SQL_DATABASE_NAME not set — skipping Change Tracking setup."
+    echo "ERROR: SQL_SERVER_NAME or SQL_DATABASE_NAME is missing; cannot configure Change Tracking." >&2
+    exit 1
 fi
 
-echo ""
-echo "=========================================="
-echo "Building and deploying seed-job image..."
-echo "=========================================="
+echo "Preparing the database seed job..."
 
 # Get Azure environment values for seed job deployment
 ACR_ENDPOINT=$(azd env get-value AZURE_CONTAINER_REGISTRY_ENDPOINT 2>/dev/null | head -n1 | tr -d '\n\r ')
@@ -438,63 +428,72 @@ fi
 # Extract ACR name from endpoint (e.g., "avacragtyjfry4y6w6.azurecr.io" -> "avacragtyjfry4y6w6")
 ACR_NAME="${ACR_ENDPOINT%%.*}"
 
-echo "Resource Group: $RESOURCE_GROUP"
-echo "ACR Name: $ACR_NAME"
-echo "ACR Endpoint: $ACR_ENDPOINT"
-echo "Seed Job Name: $SEED_JOB_NAME"
-
 # Ensure Git LFS files (e.g. seed-job/sql/ProductNames-ai.csv) are present so the build context includes real content, not pointers
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-if [ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/.git" ] && git lfs version &>/dev/null; then
-    echo ""
-    echo "Pulling Git LFS files for seed-job build context..."
-    (cd "$REPO_ROOT" && git lfs pull) || true
-    echo "  LFS pull done."
+if [ -n "$REPO_ROOT" ] && [ -e "$REPO_ROOT/.git" ]; then
+    if ! git lfs version &>/dev/null; then
+        echo "ERROR: Git LFS is required to fetch the seed-job assets." >&2
+        exit 1
+    fi
+    echo "Checking required seed-job assets..."
+    if LFS_OUTPUT=$(cd "$REPO_ROOT" && git lfs pull 2>&1); then
+        echo "  Seed-job assets ready."
+    else
+        echo "$LFS_OUTPUT" >&2
+        echo "ERROR: Could not download Git LFS assets required to build the seed job." >&2
+        exit 1
+    fi
 fi
 
 # Build and push the image to ACR
-echo ""
-echo "Building and pushing seed-job image to ACR..."
-az acr build \
+echo "Building and publishing the seed-job image..."
+if BUILD_OUTPUT=$(az acr build \
     --registry "$ACR_NAME" \
     --image seed-job:latest \
     --file seed-job/dockerfile \
     seed-job \
-    --no-logs 2>&1 | grep -E "(Run ID|Queued|Started|Finished)" || true
+    --no-logs 2>&1); then
+    BUILD_ID=$(printf '%s\n' "$BUILD_OUTPUT" | sed -nE 's/.*build with ID: ([[:alnum:]-]+).*/\1/p' | tail -n1)
+    if [ -n "$BUILD_ID" ]; then
+        echo "  Seed-job image build succeeded ($BUILD_ID)."
+    else
+        echo "  Seed-job image build succeeded."
+    fi
+else
+    echo "$BUILD_OUTPUT" >&2
+    echo "ERROR: Seed-job image build failed." >&2
+    exit 1
+fi
 
 # Use the endpoint directly for the image name
 IMAGE_NAME="${ACR_ENDPOINT}/seed-job:latest"
 
-echo ""
-echo "Updating Container App Job image..."
-
 # Simple approach: Just update the container image for the specific container
 # This preserves ALL other configuration including env vars and volume mounts
-# Suppress verbose JSON output and filter extension warnings
-(az containerapp job update \
+# Suppress verbose JSON output.
+if ! JOB_UPDATE_OUTPUT=$(az containerapp job update \
     --name "$SEED_JOB_NAME" \
     --resource-group "$RESOURCE_GROUP" \
     --container-name "$SEED_JOB_NAME" \
     --image "$IMAGE_NAME" \
-    --output none 2>&1) | grep -v "The behavior of this command" | grep -v "^$" || true
+    --output none 2>&1); then
+    echo "$JOB_UPDATE_OUTPUT" >&2
+    echo "ERROR: Could not update the seed-job image." >&2
+    exit 1
+fi
 
-echo "  ✓ Seed job image deployed successfully!"
-
-echo ""
-echo "Starting seed job to populate database..."
-(az containerapp job start \
+if ! JOB_START_OUTPUT=$(az containerapp job start \
     --name "$SEED_JOB_NAME" \
     --resource-group "$RESOURCE_GROUP" \
-    --output none 2>&1) | grep -v "The behavior of this command" | grep -v "^$" || true
+    --output none 2>&1); then
+    echo "$JOB_START_OUTPUT" >&2
+    echo "ERROR: Could not start the database seed job." >&2
+    exit 1
+fi
 
-echo "  ✓ Seed job started successfully"
-echo "  Note: The job runs asynchronously. Check execution status with:"
-echo "    az containerapp job execution list --name $SEED_JOB_NAME --resource-group $RESOURCE_GROUP --query \"[0].properties.status\" -o tsv"
+echo "  Seed-job image updated; database seeding is running in the background."
 
-echo ""
-echo "=========================================="
-echo "Assigning project-scoped RBAC for AI Foundry Agents..."
-echo "=========================================="
+echo "Configuring Azure AI permissions..."
 # The Agents data-plane API requires Azure AI Developer role at the project scope.
 # Account-level roles (assigned by Bicep) do not cascade for agents/write operations.
 _AI_ACCOUNT=$(azd env get-value AZURE_OPENAI_ACCOUNT_NAME 2>/dev/null | head -n1 | tr -d '\n\r ')
@@ -510,33 +509,56 @@ if [[ -z "$_AI_PROJECT" ]]; then
   _AI_PROJECT=$(echo "$_PROJ_ENDPOINT" | grep -oP '/projects/\K[^/?#]+' || true)
 fi
 
+ensure_project_role() {
+  local principal_id=$1 principal_type=$2 role=$3 assignment create_error
+
+  assignment=$(az role assignment list \
+    --scope "$_PROJECT_SCOPE" \
+    --assignee "$principal_id" \
+    --role "$role" \
+    --query "[0].id" -o tsv 2>/dev/null || true)
+  [[ -n "$assignment" ]] && return 0
+
+  if create_error=$(az role assignment create \
+    --scope "$_PROJECT_SCOPE" \
+    --assignee-object-id "$principal_id" \
+    --assignee-principal-type "$principal_type" \
+    --role "$role" \
+    --output none 2>&1); then
+    return 0
+  fi
+
+  assignment=$(az role assignment list \
+    --scope "$_PROJECT_SCOPE" \
+    --assignee "$principal_id" \
+    --role "$role" \
+    --query "[0].id" -o tsv 2>/dev/null || true)
+  if [[ -z "$assignment" ]]; then
+    echo "$create_error" >&2
+    echo "ERROR: Could not assign '$role' at the Azure AI project scope." >&2
+    return 1
+  fi
+}
+
 if [[ -n "$_AI_ACCOUNT" ]] && [[ -n "$_AI_PROJECT" ]] && [[ -n "$_USER_OID" ]]; then
   _PROJECT_SCOPE="/subscriptions/${_SUBSCRIPTION}/resourceGroups/${_RG}/providers/Microsoft.CognitiveServices/accounts/${_AI_ACCOUNT}/projects/${_AI_PROJECT}"
 
-  echo "  Project scope: $_AI_ACCOUNT/projects/$_AI_PROJECT"
-
-  # Assign Azure AI Developer to the current user at project scope
-  az role assignment create --scope "$_PROJECT_SCOPE" --assignee "$_USER_OID" \
-    --role "64702f94-c441-49e6-a78b-ef80e0188fee" --output none 2>/dev/null && \
-    echo "  ✓ Azure AI Developer → current user (project scope)" || \
-    echo "  ✓ Azure AI Developer → current user (already exists)"
-
-  # Assign Cognitive Services OpenAI Contributor to the current user at project scope
-  az role assignment create --scope "$_PROJECT_SCOPE" --assignee "$_USER_OID" \
-    --role "a001fd3d-188f-4b5d-821b-7da978bf7442" --output none 2>/dev/null && \
-    echo "  ✓ OpenAI Contributor → current user (project scope)" || \
-    echo "  ✓ OpenAI Contributor → current user (already exists)"
+  ensure_project_role "$_USER_OID" User "64702f94-c441-49e6-a78b-ef80e0188fee" || exit 1
+  ensure_project_role "$_USER_OID" User "a001fd3d-188f-4b5d-821b-7da978bf7442" || exit 1
 
   # Assign Azure AI Developer to the managed identity at project scope
+  _MI_PRINCIPAL=""
   if [[ -n "$_MI_NAME" ]]; then
     _MI_PRINCIPAL=$(az identity show -n "$_MI_NAME" -g "$_RG" --query principalId -o tsv 2>/dev/null || true)
     if [[ -n "$_MI_PRINCIPAL" ]]; then
-      az role assignment create --scope "$_PROJECT_SCOPE" \
-        --assignee-object-id "$_MI_PRINCIPAL" --assignee-principal-type ServicePrincipal \
-        --role "64702f94-c441-49e6-a78b-ef80e0188fee" --output none 2>/dev/null && \
-        echo "  ✓ Azure AI Developer → managed identity (project scope)" || \
-        echo "  ✓ Azure AI Developer → managed identity (already exists)"
+      ensure_project_role "$_MI_PRINCIPAL" ServicePrincipal "64702f94-c441-49e6-a78b-ef80e0188fee" || exit 1
+    else
+      echo "ERROR: Could not resolve the application's managed identity for Azure AI permissions." >&2
+      exit 1
     fi
+  else
+    echo "ERROR: USER_MANAGED_IDENTITY_NAME is missing; cannot configure Azure AI permissions." >&2
+    exit 1
   fi
 
   # Assign the custom AIServices data-plane role (covers agents/write, memory stores, etc.)
@@ -545,48 +567,33 @@ if [[ -n "$_AI_ACCOUNT" ]] && [[ -n "$_AI_PROJECT" ]] && [[ -n "$_USER_OID" ]]; 
     --scope "/subscriptions/${_SUBSCRIPTION}/resourceGroups/${_RG}" \
     --custom-role-only true --query "[?contains(roleName,'Foundry Agents')].roleName | [0]" -o tsv 2>/dev/null || true)
   if [[ -n "$_CUSTOM_ROLE_NAME" ]]; then
-    az role assignment create --scope "$_PROJECT_SCOPE" --assignee "$_USER_OID" \
-      --role "$_CUSTOM_ROLE_NAME" --output none 2>/dev/null && \
-      echo "  ✓ $_CUSTOM_ROLE_NAME → current user (project scope)" || \
-      echo "  ✓ $_CUSTOM_ROLE_NAME → current user (already exists)"
-    if [[ -n "$_MI_PRINCIPAL" ]]; then
-      az role assignment create --scope "$_PROJECT_SCOPE" \
-        --assignee-object-id "$_MI_PRINCIPAL" --assignee-principal-type ServicePrincipal \
-        --role "$_CUSTOM_ROLE_NAME" --output none 2>/dev/null && \
-        echo "  ✓ $_CUSTOM_ROLE_NAME → managed identity (project scope)" || \
-        echo "  ✓ $_CUSTOM_ROLE_NAME → managed identity (already exists)"
-    fi
+    ensure_project_role "$_USER_OID" User "$_CUSTOM_ROLE_NAME" || exit 1
+    ensure_project_role "$_MI_PRINCIPAL" ServicePrincipal "$_CUSTOM_ROLE_NAME" || exit 1
+    echo "Azure AI permissions configured."
   else
-    echo "  ⚠ Custom AIServices role not found — Bicep will create it on next provision"
+    echo "ERROR: The Foundry Agents custom role was not found in the Azure resource group." >&2
+    exit 1
   fi
 
   # Allow time for RBAC propagation before agent creation
-  echo "  Waiting 60s for RBAC propagation..."
+  echo "  Waiting for Azure AI permissions to propagate..."
   sleep 60
 else
-  echo "  WARNING: Missing AI Foundry account/project info — skipping project RBAC."
+  echo "ERROR: Missing Azure AI account, project, or deployer identity; cannot configure agents." >&2
+  exit 1
 fi
 
-echo ""
-echo "=========================================="
-echo "Creating / Updating Azure AI Foundry Agents..."
-echo "=========================================="
-bash "$(git rev-parse --show-toplevel)/scripts/utilities/create-foundry-agents.sh" || {
-    echo "  WARNING: Foundry agent creation failed. Re-run 'bash scripts/utilities/create-foundry-agents.sh' after provisioning."
-}
+if ! bash "$(git rev-parse --show-toplevel)/scripts/utilities/create-foundry-agents.sh"; then
+    echo "ERROR: Could not configure Azure AI agents; deployment cannot continue." >&2
+    exit 1
+fi
 
-echo ""
-echo "=========================================="
-echo "Refreshing azd environment with deployment outputs..."
-echo "=========================================="
-if azd env refresh --no-prompt 2>/dev/null; then
-    echo "  ✓ Environment refreshed; deployment outputs are available."
+if ENV_REFRESH_OUTPUT=$(azd env refresh --no-prompt 2>&1); then
+    echo "Refreshed Azure deployment outputs."
 else
-    echo "  Note: azd env refresh skipped or failed; Bicep outputs may already be present."
+    echo "$ENV_REFRESH_OUTPUT" >&2
+    echo "ERROR: Could not refresh azd environment values from the Azure deployment." >&2
+    exit 1
 fi
 
-echo ""
-echo "=========================================="
-echo "Post-provision script completed"
-echo "Finished at: $(date '+%Y-%m-%d %H:%M:%S')"
-echo "=========================================="
+echo "Azure resource configuration complete."

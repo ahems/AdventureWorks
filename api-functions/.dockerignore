@@ -1,9 +1,0 @@
-bin/
-obj/
-.vs/
-.vscode/
-*.user
-*.suo
-.git/
-.gitignore
-README.md

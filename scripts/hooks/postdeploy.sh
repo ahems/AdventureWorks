@@ -65,13 +65,13 @@ else
   append_redirect "OAUTH_INSPECTOR_REDIRECT_URIS" "$inspector_url"
 
   if [[ ${#redirect_env_pairs[@]} -gt 0 ]]; then
-    echo "Wiring OAuth redirect URIs onto ${mcp_app_name}: ${redirect_env_pairs[*]}"
+    echo "Configuring OAuth redirects for deployed apps..."
     az containerapp update \
       --name "$mcp_app_name" \
       --resource-group "$resource_group" \
       --set-env-vars "${redirect_env_pairs[@]}" \
       --output none
-    echo "Updated api-mcp OAuth redirect URIs (a new revision was created)."
+    echo "OAuth redirects configured."
   else
     echo "Warning: no app URLs resolved; api-mcp OAuth clients will use development redirect URIs only."
   fi

@@ -29,13 +29,13 @@ When suppressed, logs include the prefix `[EmailNotifications disabled]` and con
 
 ### Infrastructure Default
 
-`ORDER_NOTIFICATIONS_EMAIL_ENABLED` is hardcoded to `"false"` in [`infra/modules/aca-api-functions.bicep`](../../../infra/modules/aca-api-functions.bicep). It is not exposed as a Bicep parameter — enabling it in Azure requires a manual override via the Azure Portal or CLI after deployment:
+`ORDER_NOTIFICATIONS_EMAIL_ENABLED` defaults to disabled when unset. The Flex Consumption template [`infra/modules/flex-api-functions.bicep`](../../../infra/modules/flex-api-functions.bicep) does not enable it. To enable it in Azure, add a Function App setting via the Azure Portal or CLI after deployment:
 
 ```bash
-az containerapp update \
-  --name <api-functions-container-app-name> \
+az functionapp config appsettings set \
+  --name <function-app-name> \
   --resource-group <resource-group> \
-  --set-env-vars ORDER_NOTIFICATIONS_EMAIL_ENABLED=true
+  --settings ORDER_NOTIFICATIONS_EMAIL_ENABLED=true
 ```
 
 For local development, add to `api-functions/local.settings.json`:

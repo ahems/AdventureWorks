@@ -78,7 +78,7 @@ Results are saved to `test-results/robots-sitemap-test-<timestamp>.txt` with:
 
 - **Function**: `api-functions/Functions/SitemapFunction.cs`
 - **Endpoint**: `/api/sitemap.xml`
-- **Hosted by**: Azure Container Apps (Functions)
+- **Hosted by**: Azure Functions Flex Consumption
 - **Dynamic**: Generated on-demand from Azure SQL database
 
 ### Redirect Flow
@@ -108,7 +108,7 @@ Results are saved to `test-results/robots-sitemap-test-<timestamp>.txt` with:
 
    ```
    GET https://your-app.azurestaticapps.net/sitemap.xml
-   → 301 https://functions.azurecontainerapps.io/api/sitemap.xml
+   → 301 https://functions.azurewebsites.net/api/sitemap.xml
    ```
 
 4. **Sitemap provides all URLs to crawl**

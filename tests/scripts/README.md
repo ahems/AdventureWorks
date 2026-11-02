@@ -14,6 +14,14 @@ These scripts test the AdventureWorks APIs and Azure Functions directly using cu
 
 ## Available Test Scripts
 
+### Local Hook Tests
+
+- **test-chat-model-selection.sh** - Runs the actual preup chat-selection block
+  against fixture quotas, covering ranking, overrides, tiers, capacity, fallback,
+  and explicit policy errors. Requires only Bash and jq; does not access Azure or
+  modify the `azd` environment. Run with `bash tests/scripts/test-chat-model-selection.sh`
+  from the repository root.
+
 ### AI & MCP Tests
 
 - **test-ai-and-mcp-complete.sh** - Comprehensive test of AI Agent and MCP integration

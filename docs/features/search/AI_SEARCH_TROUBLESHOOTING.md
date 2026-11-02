@@ -26,7 +26,7 @@ AI search tests are failing because the semantic search API endpoint (`/api/sear
 1. **Semantic search endpoint returns 500**:
 
    ```bash
-   curl -X POST "https://av-func-ewphuc52etkbc.purplesky-9d5d92b9.eastus2.azurecontainerapps.io/api/search/semantic" \
+    curl -X POST "$API_FUNCTIONS_URL/api/search/semantic" \
      -H "Content-Type: application/json" \
      -d '{"query":"bike","topN":5}'
    # Returns: HTTP/2 500
@@ -228,7 +228,7 @@ After applying fixes, test with:
 
 ```bash
 # Test semantic search directly
-curl -X POST "https://av-func-ewphuc52etkbc.purplesky-9d5d92b9.eastus2.azurecontainerapps.io/api/search/semantic" \
+curl -X POST "$API_FUNCTIONS_URL/api/search/semantic" \
   -H "Content-Type: application/json" \
   -d '{"query":"bike for mountain trails","topN":5}'
 

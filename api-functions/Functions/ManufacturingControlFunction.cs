@@ -206,7 +206,7 @@ public class ManufacturingControlFunction
         _logger.LogInformation("Manufacturing queue cleared — simulation stopped.");
         await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "simulation-stopped" });
         var response = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(new { message = "Production queue cleared. Container will scale to zero once in-flight messages complete." });
+        await response.WriteAsJsonAsync(new { message = "Production queue cleared. In-flight operations will finish processing." });
         return response;
     }
 

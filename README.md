@@ -1,6 +1,6 @@
 # AdventureWorks E‑Commerce (Azure Reference Solution)
 
-AdventureWorks is an e‑commerce sample app and API built upon the sample [AdventureWorks dataset](https://learn.microsoft.com/en-us/sql/samples/adventureworks-install-configure) that demonstrates a modern, AI‑powered web application on Azure using this 'heritage' (real-world!) data set. It combines a React 19 + Vite with TypeScript and Tailwind CSS SPA frontend, GraphQL/REST data access using Data API Builder, Azure Functions in Containers for business logic, and Azure OpenAI–powered experiences such as semantic search, AI agents with an MCP Server, and automated content generation to enhance the original data set (particularly product images).
+AdventureWorks is an e‑commerce sample app and API built upon the sample [AdventureWorks dataset](https://learn.microsoft.com/en-us/sql/samples/adventureworks-install-configure) that demonstrates a modern, AI‑powered web application on Azure using this 'heritage' (real-world!) data set. It combines a React 19 + Vite with TypeScript and Tailwind CSS SPA frontend, GraphQL/REST data access using Data API Builder, Azure Functions on Flex Consumption for business logic, and Azure OpenAI–powered experiences such as semantic search, AI agents with an MCP Server, and automated content generation to enhance the original data set (particularly product images).
 
 All the scripts, markup, tests, docs and code for this entire app - meaning, everything in this repo - was created entirely using AI: GitHub Copilot in Agent mode, using mostly the Claude Sonnet 4.5 model.
 
@@ -52,7 +52,7 @@ Admin → Container App (app-admin) → Azure Functions → Azure SQL
   - Enforces DAB naming conventions and pagination limits (100 items per query).
 
 - **Serverless Functions** (`api-functions/`)
-  - .NET 10 **Azure Functions (isolated worker)** in Container Apps.
+  - .NET 10 **Azure Functions (isolated worker)** on **Flex Consumption**, published directly from the .NET project.
   - Implements custom business logic not suited for DAB, including:
     - AI agent endpoints (via Model Context Protocol).
     - Password & password‑reset workflows.
@@ -160,9 +160,9 @@ This command will:
 - Configure database schema and load sample data via seed-job Container App Job — **~8 minutes**
 - Set up managed identity authentication across all services
 
-**Total deployment time: ~29 minutes** (infrastructure provisioning + seed-job execution)
+Deployment time varies with Azure region, model quota, and resource provisioning. The seed job runs asynchronously and may continue after provisioning finishes; use the printed `/health` URL and wait for its seed status to report completion before exploring the demo data.
 
-Once deployed, you can access the application via the Static Web App URL shown in the deployment output.
+No local app startup or testing is required. After deployment, use the printed storefront, Admin, Manufacturing, health, and API URLs. Start at the storefront's `/health` page and wait for the seed job to report completion before exploring database-backed features.
 
 ### Demo idle behavior and Azure SQL cost
 
@@ -176,7 +176,7 @@ For this demo, the simplest cost control is to remove the deployment when it is 
 azd down --no-prompt
 ```
 
-Run `azd up --no-prompt` when the demo is needed again. Do not use `azd down` while following the local-development steps that depend on the deployed Azure services. A future code change could replace the SQL trigger with an explicit queue/outbox workflow, disable the background timers when idle, or isolate the SQL-trigger function in a separately managed Function App; those options trade lower idle cost for more implementation and operational complexity.
+Run `azd up --no-prompt` when the demo is needed again. `azd down` deletes the deployed Azure resources; it does not merely pause them.
 
 ---
 
@@ -212,25 +212,7 @@ The `docs/` folder contains comprehensive documentation organized by feature are
   - [docs/features/seo/](docs/features/seo/) – SEO implementation
   - [docs/features/monitoring/](docs/features/monitoring/) – Application Insights integration
 
-### Testing Best Practices
-
-The test suite uses **dynamic product selection** to ensure comprehensive coverage across the entire product catalog. For complete testing documentation, see:
-
-- [tests/scripts/README.md](tests/scripts/README.md) – All test scripts with usage examples
-- [docs/testing/](docs/testing/) – Testing guides and analysis
-
-**Quick Commands:**
-
-```bash
-# API and integration tests (see tests/scripts/README.md for all available tests)
-cd tests/scripts
-./test-telemetry.sh              # Validate telemetry
-./test-product-comparison.sh     # Test product comparison
-./test-password-reset-flow.sh    # Test password reset flow
-./test-ai-and-mcp-complete.sh    # Test AI agent and MCP integration
-```
-
-See [docs/testing/TEST_DATA_RANDOMIZATION_ANALYSIS.md](docs/testing/TEST_DATA_RANDOMIZATION_ANALYSIS.md) for detailed analysis and implementation details.
+The tests and testing guides in this repository are for maintainers. Running local tests is not required to deploy or explore the Azure-hosted demo.
 
 ---
 

@@ -46,7 +46,7 @@ resource appInsightsReaderRoleAssignment 'Microsoft.Authorization/roleAssignment
   scope: appInsightsResource
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7') // Reader
-    principalId: azidentity.properties.principalId
+    principalId: azidentity!.properties.principalId
     principalType: 'ServicePrincipal'
   }
   dependsOn: [appInsights]

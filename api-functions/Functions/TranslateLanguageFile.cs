@@ -129,7 +129,7 @@ public class TranslateLanguageFile
             // Return simple response with instance ID for custom polling
             var response = req.CreateResponse(HttpStatusCode.Accepted);
 
-            // Always use https in Container Apps (reverse proxy handles TLS)
+            // The hosted Function App terminates TLS before forwarding requests to the worker.
             var statusUrl = $"https://{req.Url.Host}/api/TranslateLanguageFile_Status?instanceId={instanceId}";
 
             var responseData = new

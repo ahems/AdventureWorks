@@ -1,6 +1,6 @@
 # AdventureWorks Azure Functions (`api-functions`)
 
-This project contains the serverless backend for the AdventureWorks e‑commerce demo. It runs as .NET 10 isolated Azure Functions (usually hosted in Azure Container Apps) and complements the Data API Builder (`api/`) and Static Web App frontend (`app/`).
+This project contains the serverless backend for the AdventureWorks e‑commerce demo. It runs as .NET 10 isolated Azure Functions on Azure Functions Flex Consumption and complements the Data API Builder (`api/`) and Static Web App frontend (`app/`). The .NET project is published directly by `azd` (`host: function`); no Functions container image is built or deployed.
 
 High‑level responsibilities:
 
@@ -440,7 +440,7 @@ These endpoints power the AI-driven generation features in the admin portal (`ap
 - **Trigger / Route**: HTTP `POST /api/GeneratePromotion`
 - **Purpose**: Generates a promotion campaign suggestion using the Foundry Promotion agent. Accepts `promotionType`, `offerCategory`, `categoryId`, `categoryName`, `subcategoryId`, and `subcategoryName`. Returns a promotion strategy with discount percentage, conditions, headline, and body copy, plus a `threadId` for multi-turn refinement turns.
 - **Data access**: Functions retrieves live inventory, costs, 90-day sales, and active discounts via its SQL managed identity on every turn. It reuses the same query as the MCP `GetProductsForPromotion` tool, but supplies the data directly to Foundry with no remote tools. Interactive and unattended auto-promotions therefore need no delegated MCP user token; Functions route authorization still follows its configured audit/enforced mode.
-- **Container build**: If building the optional Functions image, use the repository root as context: `docker build -f api-functions/Dockerfile .`. The current `azd` Function App deployment publishes the .NET project directly.
+- **Deployment**: `azd deploy api-functions` publishes the .NET project to the Flex Consumption Function App and includes the linked shared query source automatically.
 
 ### `GenerateOrdersBulk`
 

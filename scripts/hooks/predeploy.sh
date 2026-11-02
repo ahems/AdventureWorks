@@ -8,13 +8,8 @@ API_URL=$(azd env get-value API_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
 API_FUNC_URL=$(azd env get-value API_FUNCTIONS_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
 API_MCP_URL=$(azd env get-value API_MCP_URL 2>/dev/null | head -n1 | tr -d '\n\r ')
 APPINSIGHTS_CONN_STR=$(azd env get-value APPINSIGHTS_CONNECTIONSTRING 2>/dev/null | head -n1 | tr -d '\n\r ')
-APP_URL=$(azd env get-value APP_REDIRECT_URI 2>/dev/null | head -n1 | tr -d '\n\r ')
 
-echo "[PreDeploy] Setting environment variables for SWA build"
-echo "  VITE_API_URL: $API_URL"
-echo "  VITE_API_FUNCTIONS_URL: $API_FUNC_URL"
-echo "  VITE_API_MCP_URL: $API_MCP_URL"
-echo "  VITE_APPINSIGHTS_CONNECTIONSTRING: $(if [ -n "$APPINSIGHTS_CONN_STR" ]; then echo "***set***"; else echo "not set"; fi)"
+echo "Preparing the storefront build configuration..."
 
 # Export for any subsequent commands (though azd may not pass these to SWA CLI)
 export VITE_API_URL="$API_URL"
@@ -30,16 +25,12 @@ VITE_API_MCP_URL=$API_MCP_URL
 VITE_APPINSIGHTS_CONNECTIONSTRING=$APPINSIGHTS_CONN_STR
 EOF
 
-echo "[PreDeploy] Created app/.env.production with Azure URLs"
-
 # Clean dist to force fresh build
 if [ -d "app/dist" ]; then
-  echo "[PreDeploy] Cleaning dist folder to force fresh build"
   rm -rf app/dist
 fi
 
 # Generate staticwebapp.config.json from template with dynamic Functions URL
-echo "[PreDeploy] Generating staticwebapp.config.json with Functions URL: $API_FUNC_URL"
 sed "s|{{API_FUNCTIONS_URL}}|$API_FUNC_URL|g" app/staticwebapp.config.template.json > app/staticwebapp.config.json
 
-echo "[PreDeploy] Configuration completed"
+echo "Storefront build configuration ready."
