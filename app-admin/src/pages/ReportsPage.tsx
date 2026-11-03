@@ -309,7 +309,7 @@ const OrdersByStatusChart: React.FC<{ channel: SalesChannel }> = ({ channel }) =
                         `${v.toLocaleString()} (${((v / total) * 100).toFixed(1)}%)`,
                         "Orders",
                       ]
-                    : [v, "Orders"]
+                    : [String(v ?? ""), "Orders"]
                 }
               />
             </PieChart>
@@ -403,7 +403,7 @@ const InventoryByCategoryChart: React.FC = () => {
               <YAxis tick={{ fontFamily: "inherit", fontSize: 11 }} />
               <Tooltip
                 formatter={(v: unknown, name: string) => [
-                  typeof v === "number" ? v.toLocaleString() : v,
+                  typeof v === "number" ? v.toLocaleString() : String(v ?? ""),
                   name === "totalQuantity" ? "Units in Stock" : name,
                 ]}
               />

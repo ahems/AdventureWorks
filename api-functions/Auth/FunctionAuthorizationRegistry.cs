@@ -10,7 +10,7 @@ using System.Collections.Frozen;
 namespace ApiFunctions.Auth;
 
 /// <summary>
-/// Authoritative, per-function authorization policy for every api-functions HTTP route (185
+/// Authoritative, per-function authorization policy for every api-functions HTTP route (186
 /// routes). Keyed by the <c>[Function]</c> name. Mirrors the committed route-to-scope matrix and
 /// the pattern of api-mcp's <c>ToolAuthorizationRegistry</c>.
 /// </summary>
@@ -18,7 +18,7 @@ public static class FunctionAuthorizationRegistry
 {
     private static readonly FrozenDictionary<string, FunctionPolicy> Policies = new FunctionPolicy[]
     {
-        // ---- Tier P — anonymous (19) ----
+        // ---- Tier P — anonymous (18) ----
         new("AIAgentChat", AccessTier.Public, null, AccessMode.Anonymous, null),  // Validates MCP-audience OAuth inside the function.
         new("AIAgentStatus", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/agent/status
         new("GetOpenApiSpec", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/openapi.json
@@ -35,11 +35,12 @@ public static class FunctionAuthorizationRegistry
         new("ResetPassword", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/password/reset/complete
         new("SeedJobStatus", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/seed/status
         new("SemanticSearch", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/search/semantic
-        new("SetPassword", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/password
+        new("Signup", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/signup (server-side consumer registration)
         new("ValidateResetToken", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/password/reset/validate
-        new("VerifyPassword", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/password/verify
 
-        // ---- Tier C — consumer self-or-internal, ownership (10) ----
+        // ---- Tier C — consumer self-or-internal, ownership (12) ----
+        new("SetPassword", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityID(self; internal → customers only)"),  // /api/password
+        new("VerifyPassword", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal, "businessEntityID(self only)"),  // /api/password/verify
         new("CheckOrderReceipt", AccessTier.Consumer, FunctionScopes.OrdersRead, AccessMode.SelfOrInternal, "salesOrderId(owner CustomerID)"),  // /api/orders/{salesOrderId:int}/receipt-status
         new("CreateAddress", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses
         new("DeleteAddress", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses/{id:int}
@@ -169,47 +170,48 @@ public static class FunctionAuthorizationRegistry
         new("WarehouseWorkforce", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/warehouse/workforce
         new("WarehouseWorkforceDetail", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/warehouse/workforce/detail
 
-        // ---- Tier M — v1-descoped MCP-proxied anonymous (40) ----
-        new("BankDeposit", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/bank/deposit
-        new("BankGetAccount", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/bank/accounts/{currencyCode}
-        new("BankGetCurrencies", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/bank/currencies
-        new("BankGetStatus", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/bank/status
-        new("BankGetTransactions", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/bank/transactions
-        new("BankGetTransactionsByCurrency", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/bank/transactions/{currencyCode}
-        new("BankWithdraw", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/bank/withdraw
-        new("CreateManufacturingProposal", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/proposals
-        new("FinancialManufacturing", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/financials/manufacturing
-        new("FinancialProcurement", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/financials/procurement
-        new("FinancialSummary", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/financials/summary
-        new("GetLocationConfig", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/location-config
-        new("GetScrapConfig", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/scrap-config
-        new("ManufacturingBegin", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/begin
-        new("ManufacturingGetScrapEvents", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/scrap-events
-        new("ManufacturingGetVendorQuality", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/vendor-quality
-        new("ManufacturingGetVendorQualityById", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/vendor-quality/{vendorId:int}
-        new("ManufacturingStatus", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/status
-        new("ManufacturingStop", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/stop
-        new("ManufacturingWorkforce", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/workforce
-        new("PlanCatalog", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/plan/catalog
-        new("PlanCostAnalysis", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/plan/cost/{productId:int}
-        new("PlanCurrentManufacturingCost", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/plan/cost/{productId:int}/current
-        new("PlanFeasibility", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/plan/feasibility/{productId:int}
-        new("PlanFeasibilityAll", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/plan/feasibility
-        new("PlanOverstock", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/plan/overstock
-        new("PlanReorderRecommendations", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/plan/reorder-recommendations
-        new("PlanShortageForeceast", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/plan/shortage-forecast
-        new("PlanThinMargin", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/plan/thin-margin
-        new("PutLocationConfig", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/location-config/{locationId:int}
-        new("PutScrapConfig", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/manufacturing/scrap-config/{locationId:int}
-        new("SimulatorsReset", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/simulators/reset
-        new("SupplyChainCancelOrder", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/order/{orderId}
-        new("SupplyChainGetCatalog", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/catalog
-        new("SupplyChainGetCatalogByProduct", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/catalog/{productId:int}
-        new("SupplyChainGetQuote", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/quote
-        new("SupplyChainGetVendor", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/vendors/{vendorId}
-        new("SupplyChainGetVendors", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/vendors
-        new("SupplyChainPlaceOrder", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/order
-        new("SupplyChainRestock", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous, null),  // /api/supply/restock/{vendorId}
+        // ---- Tier I — internal-only, MCP-proxied (40). Called by api-mcp with its Functions-audience
+        //      service token (scopes mirror the MCP tool policy) and by the manufacturing portal. ----
+        new("BankDeposit", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // /api/bank/deposit
+        new("BankGetAccount", AccessTier.Internal, FunctionScopes.SalesRead, AccessMode.InternalOnly, null),  // /api/bank/accounts/{currencyCode}
+        new("BankGetCurrencies", AccessTier.Internal, FunctionScopes.SalesRead, AccessMode.InternalOnly, null),  // /api/bank/currencies
+        new("BankGetStatus", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/bank/status
+        new("BankGetTransactions", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/bank/transactions
+        new("BankGetTransactionsByCurrency", AccessTier.Internal, FunctionScopes.SalesRead, AccessMode.InternalOnly, null),  // /api/bank/transactions/{currencyCode}
+        new("BankWithdraw", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // /api/bank/withdraw
+        new("CreateManufacturingProposal", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),  // /api/manufacturing/proposals
+        new("FinancialManufacturing", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/financials/manufacturing
+        new("FinancialProcurement", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/financials/procurement
+        new("FinancialSummary", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/financials/summary
+        new("GetLocationConfig", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/manufacturing/location-config
+        new("GetScrapConfig", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/manufacturing/scrap-config
+        new("ManufacturingBegin", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),  // /api/manufacturing/begin
+        new("ManufacturingGetScrapEvents", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/manufacturing/scrap-events
+        new("ManufacturingGetVendorQuality", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/manufacturing/vendor-quality
+        new("ManufacturingGetVendorQualityById", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/manufacturing/vendor-quality/{vendorId:int}
+        new("ManufacturingStatus", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/manufacturing/status
+        new("ManufacturingStop", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),  // /api/manufacturing/stop
+        new("ManufacturingWorkforce", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/manufacturing/workforce
+        new("PlanCatalog", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/plan/catalog
+        new("PlanCostAnalysis", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/plan/cost/{productId:int}
+        new("PlanCurrentManufacturingCost", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/plan/cost/{productId:int}/current
+        new("PlanFeasibility", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/plan/feasibility/{productId:int}
+        new("PlanFeasibilityAll", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/plan/feasibility
+        new("PlanOverstock", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/plan/overstock
+        new("PlanReorderRecommendations", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/plan/reorder-recommendations
+        new("PlanShortageForeceast", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/plan/shortage-forecast
+        new("PlanThinMargin", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/plan/thin-margin
+        new("PutLocationConfig", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),  // /api/manufacturing/location-config/{locationId:int}
+        new("PutScrapConfig", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),  // /api/manufacturing/scrap-config/{locationId:int}
+        new("SimulatorsReset", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // /api/simulators/reset
+        new("SupplyChainCancelOrder", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),  // /api/supply/order/{orderId}
+        new("SupplyChainGetCatalog", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/supply/catalog
+        new("SupplyChainGetCatalogByProduct", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/supply/catalog/{productId:int}
+        new("SupplyChainGetQuote", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/supply/quote
+        new("SupplyChainGetVendor", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/supply/vendors/{vendorId}
+        new("SupplyChainGetVendors", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/supply/vendors
+        new("SupplyChainPlaceOrder", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),  // /api/supply/order
+        new("SupplyChainRestock", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),  // /api/supply/restock/{vendorId}
 
     }.ToFrozenDictionary(p => p.FunctionName, StringComparer.Ordinal);
 

@@ -2327,84 +2327,86 @@ INNER JOIN RankedPhotos rp ON pp.ProductID = rp.ProductID AND pp.ProductPhotoID 
     }
     
     # -------------------------------------------------------------------------
-    # Demo Admin User: create a known employee with a verifiable password so the
-    # admin UI can be demonstrated without any signup flow.
+    # Demo portal logins: give two EXISTING AdventureWorks employees a known password
+    # so each portal can be demonstrated with a realistic, least-privilege account.
+    # The api-mcp authorization server derives the role from the employee's current
+    # department (HumanResources.EmployeeDepartmentHistory), and each portal only
+    # accepts its own user category:
+    #
+    #   Admin portal          ken0@adventure-works.com    / Admin1234!
+    #     Ken Sánchez, Chief Executive Officer (dept 16 Executive) -> executive-admin
+    #   Manufacturing portal  peter0@adventure-works.com  / Factory1234!
+    #     Peter Krebs, Production Control Manager (dept 8)        -> manufacturing-engineer
     #
     # Algorithm mirrors PasswordService.cs exactly:
     #   SaltSize=6, HashSize=96, Iterations=100000, SHA256
     # Fixed salt bytes "AWDemo" (0x41,0x57,0x44,0x65,0x6D,0x6F) -> base64 "QVdEZW1v"
-    # Password: Admin1234!
-    # BusinessEntityID: 99001 (well above seeded CSV data range)
+    # Runs after the bulk demo-password step so these values win.
     # -------------------------------------------------------------------------
-    Write-Log "`nSeeding demo admin user (demo.admin@adventureworks.com)..."
-    try {
-        # Pick random first and last name from Person.csv (field delimiter +|, row terminator &|)
-        # Field indices (0-based): 4 = FirstName, 6 = LastName
-        $personCsvPath = Join-Path $PSScriptRoot 'sql/Person.csv'
-        $personRows = (Get-Content $personCsvPath -Raw) -split '&\|' |
-                      Where-Object { $_.Trim() -ne '' }
-        $fnFields    = ($personRows | Get-Random) -split '\+\|'
-        $lnFields    = ($personRows | Get-Random) -split '\+\|'
-        $demoFirstName = ($fnFields[4].Trim()) -replace "'", "''"
-        $demoLastName  = ($lnFields[6].Trim()) -replace "'", "''"
-        Write-Log "  Random name chosen: $demoFirstName $demoLastName"
+    Write-Log "`nSeeding demo portal logins (Ken Sánchez = admin, Peter Krebs = manufacturing)..."
+    $demoSaltB64 = 'QVdEZW1v'  # base64([byte[]](0x41,0x57,0x44,0x65,0x6D,0x6F))
+    $demoLogins = @(
+        @{ Email = 'ken0@adventure-works.com';   Password = 'Admin1234!';   Label = 'admin portal (executive-admin)' },
+        @{ Email = 'peter0@adventure-works.com'; Password = 'Factory1234!'; Label = 'manufacturing portal (manufacturing-engineer)' }
+    )
+    foreach ($demo in $demoLogins) {
+        try {
+            $saltBytes = [System.Convert]::FromBase64String($demoSaltB64)
+            $pbkdf2 = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
+                $demo.Password,
+                $saltBytes,
+                100000,
+                [System.Security.Cryptography.HashAlgorithmName]::SHA256
+            )
+            $demoHashB64 = [System.Convert]::ToBase64String($pbkdf2.GetBytes(96))
+            $pbkdf2.Dispose()
 
-        $demoId      = 99001
-        $demoEmail   = 'demo.admin@adventureworks.com'
-        $demoPass    = 'Admin1234!'
-        $demoSaltB64 = 'QVdEZW1v'  # base64([byte[]](0x41,0x57,0x44,0x65,0x6D,0x6F))
-
-        # Compute the PBKDF2-SHA256 hash using .NET (identical to PasswordService.cs)
-        $saltBytes = [System.Convert]::FromBase64String($demoSaltB64)
-        $pbkdf2 = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
-            $demoPass,
-            $saltBytes,
-            100000,
-            [System.Security.Cryptography.HashAlgorithmName]::SHA256
-        )
-        $hashBytes   = $pbkdf2.GetBytes(96)
-        $demoHashB64 = [System.Convert]::ToBase64String($hashBytes)
-        $pbkdf2.Dispose()
-
-        $cmd.CommandText = @"
--- BusinessEntity
-MERGE Person.BusinessEntity AS tgt
-USING (SELECT $demoId AS BusinessEntityID) AS src ON tgt.BusinessEntityID = src.BusinessEntityID
-WHEN NOT MATCHED THEN
-    INSERT (rowguid, ModifiedDate) VALUES (NEWID(), GETDATE());
-
--- Person (EM = Employee)
-MERGE Person.Person AS tgt
-USING (SELECT $demoId AS BusinessEntityID) AS src ON tgt.BusinessEntityID = src.BusinessEntityID
-WHEN MATCHED THEN
-    UPDATE SET FirstName='$demoFirstName', LastName='$demoLastName', PersonType='EM', ModifiedDate=GETDATE()
-WHEN NOT MATCHED THEN
-    INSERT (BusinessEntityID, PersonType, FirstName, LastName, rowguid, ModifiedDate)
-    VALUES ($demoId, 'EM', '$demoFirstName', '$demoLastName', NEWID(), GETDATE());
-
--- EmailAddress (EmailAddressID is IDENTITY – omit it from INSERT)
-MERGE Person.EmailAddress AS tgt
-USING (SELECT $demoId AS BusinessEntityID) AS src ON tgt.BusinessEntityID = src.BusinessEntityID
-WHEN MATCHED THEN
-    UPDATE SET EmailAddress='$demoEmail', ModifiedDate=GETDATE()
-WHEN NOT MATCHED THEN
-    INSERT (BusinessEntityID, EmailAddress, rowguid, ModifiedDate)
-    VALUES ($demoId, '$demoEmail', NEWID(), GETDATE());
-
--- Password
-MERGE Person.Password AS tgt
-USING (SELECT $demoId AS BusinessEntityID) AS src ON tgt.BusinessEntityID = src.BusinessEntityID
-WHEN MATCHED THEN
-    UPDATE SET PasswordHash='$demoHashB64', PasswordSalt='$demoSaltB64', ModifiedDate=GETDATE()
-WHEN NOT MATCHED THEN
-    INSERT (BusinessEntityID, PasswordHash, PasswordSalt, rowguid, ModifiedDate)
-    VALUES ($demoId, '$demoHashB64', '$demoSaltB64', NEWID(), GETDATE());
+            $cmd.CommandText = @"
+DECLARE @id INT = (
+    SELECT TOP 1 e.BusinessEntityID
+    FROM Person.EmailAddress e
+    JOIN Person.Person p ON p.BusinessEntityID = e.BusinessEntityID AND p.PersonType = 'EM'
+    WHERE e.EmailAddress = '$($demo.Email)'
+    ORDER BY e.BusinessEntityID);
+IF @id IS NULL
+    SELECT CAST(NULL AS INT);
+ELSE
+BEGIN
+    MERGE Person.Password AS tgt
+    USING (SELECT @id AS BusinessEntityID) AS src ON tgt.BusinessEntityID = src.BusinessEntityID
+    WHEN MATCHED THEN
+        UPDATE SET PasswordHash='$demoHashB64', PasswordSalt='$demoSaltB64', ModifiedDate=GETDATE()
+    WHEN NOT MATCHED THEN
+        INSERT (BusinessEntityID, PasswordHash, PasswordSalt, rowguid, ModifiedDate)
+        VALUES (@id, '$demoHashB64', '$demoSaltB64', NEWID(), GETDATE());
+    SELECT @id;
+END
 "@
-        $null = $cmd.ExecuteNonQuery()
-        Write-Log "  ✓ Demo admin user seeded (BusinessEntityID=$demoId, name=$demoFirstName $demoLastName, email=$demoEmail)"
+            $seededId = $cmd.ExecuteScalar()
+            if ($seededId -is [System.DBNull] -or $null -eq $seededId) {
+                Write-Log "  WARNING: Employee $($demo.Email) not found; demo login for the $($demo.Label) not seeded."
+            } else {
+                Write-Log "  ✓ $($demo.Email) (BusinessEntityID=$seededId) ready for the $($demo.Label)"
+            }
+        }
+        catch {
+            Write-Log "  WARNING: Failed to seed demo login $($demo.Email): $($_.Exception.Message)"
+        }
+    }
+
+    # Retire the former shared synthetic demo account (demo.admin@adventureworks.com,
+    # BusinessEntityID 99001) by removing its password so it can no longer sign in.
+    try {
+        $cmd.CommandText = @"
+DELETE pw FROM Person.Password pw
+JOIN Person.EmailAddress e ON e.BusinessEntityID = pw.BusinessEntityID
+WHERE e.EmailAddress = 'demo.admin@adventureworks.com';
+"@
+        $retired = $cmd.ExecuteNonQuery()
+        if ($retired -gt 0) { Write-Log "  ✓ Retired legacy demo.admin@adventureworks.com login" }
     }
     catch {
-        Write-Log "  WARNING: Failed to seed demo admin user: $($_.Exception.Message)"
+        Write-Log "  WARNING: Failed to retire legacy demo.admin login: $($_.Exception.Message)"
     }
 
     # -------------------------------------------------------------------------

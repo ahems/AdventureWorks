@@ -60,23 +60,26 @@ builder.Services.AddScoped<AIService>(sp =>
 // Register CustomerGeneratorService for random fake customer data (Bogus)
 builder.Services.AddSingleton<CustomerGeneratorService>();
 
-// Register HttpClient factories for api-functions proxy services
+// Register HttpClient factories for api-functions proxy services. Every call carries a
+// short-lived Functions-audience service token signed by this authorization server.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddTransient<AdventureWorks.Auth.FunctionsServiceTokenHandler>();
 builder.Services.AddHttpClient<ManufacturingService>(client =>
 {
 	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
-});
+}).AddHttpMessageHandler<AdventureWorks.Auth.FunctionsServiceTokenHandler>();
 builder.Services.AddHttpClient<SupplyChainService>(client =>
 {
 	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
-});
+}).AddHttpMessageHandler<AdventureWorks.Auth.FunctionsServiceTokenHandler>();
 builder.Services.AddHttpClient<BankService>(client =>
 {
 	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
-});
+}).AddHttpMessageHandler<AdventureWorks.Auth.FunctionsServiceTokenHandler>();
 builder.Services.AddHttpClient<SimulatorService>(client =>
 {
 	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
-});
+}).AddHttpMessageHandler<AdventureWorks.Auth.FunctionsServiceTokenHandler>();
 
 // Resolve task store: durable Azure Table Storage when a storage account is configured, else in-memory
 var storageAccountName = builder.Configuration["AzureWebJobsStorage:accountName"]

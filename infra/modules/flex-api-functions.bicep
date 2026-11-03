@@ -29,10 +29,14 @@ param webPubSubHostName string = ''
 // standalone deploy) the resource server cannot resolve metadata and stays in passthrough mode.
 param functionsJwtIssuer string = ''
 param functionsJwtAudience string = ''
-// Enforcement mode for the Functions OAuth middleware. Keep audit as the safe default until
-// every first-party app attaches resource-bound tokens; explicit public and MCP-proxied route
-// tiers remain available without one in every mode.
-param functionsOAuthMode string = 'audit'
+// Enforcement mode for the Functions OAuth middleware (audit | enforced). main.bicep passes
+// 'enforced'; only explicit Public-tier routes are reachable without a token in that mode.
+@allowed([
+  'disabled'
+  'audit'
+  'enforced'
+])
+param functionsOAuthMode string = 'enforced'
 param virtualNetworkSubnetId string
 
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {

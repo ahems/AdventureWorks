@@ -1116,7 +1116,12 @@ export const useCreateProductBatch = () => {
       items: CreateProductVars[];
       onProgress?: (p: BatchProgress) => void;
     }) => {
-      const results: Array<{ ProductID: number; Name: string }> = [];
+      const results: Array<{
+        ProductID: number;
+        Name: string;
+        Color: string | null;
+        Style: string | null;
+      }> = [];
 
       // Create one shared ProductModel for the whole batch so all variants
       // are properly grouped when displayed on the category page.
@@ -1161,7 +1166,11 @@ export const useCreateProductBatch = () => {
           quantity: vars.InitialQuantity ?? 0,
           modifiedDate,
         });
-        results.push(result.createProduct);
+        results.push({
+          ...result.createProduct,
+          Color: vars.Color ?? null,
+          Style: vars.Style ?? null,
+        });
         onProgress?.({ completed: i + 1, total: items.length });
       }
       return { results, sharedModelId };

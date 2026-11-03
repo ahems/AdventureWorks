@@ -51,6 +51,7 @@ const mapToReview = (r: RawProductReview): Review => ({
   createdAt: r.ReviewDate ?? new Date().toISOString().split("T")[0],
   helpful: r.HelpfulVotes ?? 0,
   markedUsefulBy: [], // DB has no per-user vote tracking
+  isModerated: false,
 });
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -71,7 +72,10 @@ export const useReviews = (productId: number) => {
   });
 
   const addReview = async (
-    review: Omit<Review, "id" | "createdAt" | "helpful" | "markedUsefulBy">,
+    review: Omit<
+      Review,
+      "id" | "createdAt" | "helpful" | "markedUsefulBy" | "isModerated"
+    >,
   ): Promise<Review | null> => {
     try {
       const restUrl = getRestApiUrl();

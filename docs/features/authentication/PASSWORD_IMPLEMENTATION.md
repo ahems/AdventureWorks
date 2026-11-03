@@ -69,6 +69,15 @@ CREATE TABLE [Person].[Password](
 
 ## API Endpoints
 
+> **Authorization (Functions OAuth enforced).** Both endpoints require an api-mcp-issued
+> Functions-audience bearer token (see
+> [functions-oauth](../functions-oauth/README.md)). `POST /api/password` needs `customers.write`:
+> a consumer may only set their **own** password, and staff may only reset passwords for
+> individual customers (PersonType `IN`) — never employee accounts. `POST /api/password/verify`
+> needs `customers.read` and is **self-only**, so it cannot be used as an anonymous password
+> oracle. Sign-in itself never calls these endpoints; it goes through the api-mcp login page.
+> New customers are created with the anonymous `POST /api/signup` endpoint.
+
 ### 1. Set Password
 
 **Endpoint**: `POST /api/password`
@@ -136,13 +145,18 @@ If password is incorrect:
 # Get the Azure Functions URL
 FUNCTION_URL=$(azd env get-values | grep "^API_FUNCTIONS_URL=" | cut -d'=' -f2 | tr -d '"')
 
-# Set a password
+# A Functions-audience token for the signed-in user (e.g. the e-shop's functionsFetch token)
+TOKEN="<functions access token>"
+
+# Set a password (own account, or a customer account when called by staff)
 curl -X POST "$FUNCTION_URL/api/password" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"businessEntityID": 1, "password": "SecurePassword123!"}'
 
-# Verify a password
+# Verify a password (own account only)
 curl -X POST "$FUNCTION_URL/api/password/verify" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"businessEntityID": 1, "password": "SecurePassword123!"}'
 ```
@@ -154,21 +168,28 @@ curl -X POST "$FUNCTION_URL/api/password/verify" \
 const FUNCTIONS_URL =
   window.config?.API_FUNCTIONS_URL || import.meta.env.VITE_API_FUNCTIONS_URL;
 
+// In the e-shop, prefer functionsFetch (app/src/services/functionsAuth.ts), which attaches the token.
 // Set password
-async function setPassword(businessEntityId: number, password: string) {
+async function setPassword(businessEntityId: number, password: string, functionsToken: string) {
   const response = await fetch(`${FUNCTIONS_URL}/api/password`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${functionsToken}`,
+    },
     body: JSON.stringify({ businessEntityID: businessEntityId, password }),
   });
   return await response.json();
 }
 
 // Verify password
-async function verifyPassword(businessEntityId: number, password: string) {
+async function verifyPassword(businessEntityId: number, password: string, functionsToken: string) {
   const response = await fetch(`${FUNCTIONS_URL}/api/password/verify`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${functionsToken}`,
+    },
     body: JSON.stringify({ businessEntityID: businessEntityId, password }),
   });
   const result = await response.json();
@@ -243,11 +264,10 @@ azd env get-values | grep API_FUNCTIONS_URL
 
 To integrate with the React frontend:
 
-1. Add password fields to the registration/login forms
-2. Call the appropriate endpoints during:
-   - User registration → `POST /api/password`
-   - User login → `POST /api/password/verify`
-3. Store only the BusinessEntityID in session/token (never store passwords)
+1. User registration → `POST /api/signup` (anonymous; creates the customer and password server-side)
+2. User login → the api-mcp OAuth login (never a direct password check from the browser)
+3. Change password → `POST /api/password/verify` then `POST /api/password` with the user's Functions token
+4. Store only the issued tokens in session storage (never store passwords)
 
 ## Important Notes
 

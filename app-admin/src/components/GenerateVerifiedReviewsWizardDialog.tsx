@@ -137,6 +137,7 @@ const GenerateVerifiedReviewsWizardDialog: React.FC = () => {
         productsProcessed: 0,
         productsTotal: result.productsTotal,
         startedAt: new Date().toISOString(),
+        lastProgressAt: null,
         lastError: null,
       };
       setJobState(initialState);

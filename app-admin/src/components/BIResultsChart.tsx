@@ -63,7 +63,7 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps) => {
         <p className="font-doodle text-sm text-doodle-accent">
           {typeof payload[0].value === "number"
             ? `$${payload[0].value.toLocaleString()}`
-            : payload[0].value}
+            : String(payload[0].value ?? "")}
         </p>
       </div>
     );
@@ -222,10 +222,10 @@ const BIResultsChart: React.FC<BIResultsChartProps> = ({ result }) => {
             className="text-center p-4 border-2 border-doodle-text/20 rounded-lg"
           >
             <p className="font-doodle text-2xl font-bold text-doodle-accent">
-              {item.value}
+              {String(item.value ?? "")}
             </p>
             <p className="font-doodle text-sm text-doodle-text/60">
-              {item.label}
+              {String(item.label ?? "")}
             </p>
           </div>
         ))}

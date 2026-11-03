@@ -6,6 +6,7 @@ import {
   signInWithEshopCredentials,
 } from "@/services/eshopOAuth";
 import { trackError } from "@/lib/appInsights";
+import { functionsFetch } from "@/services/functionsAuth";
 
 export interface AuthUser {
   businessEntityId: number;
@@ -49,28 +50,6 @@ interface GetPersonByIdResponse {
   };
 }
 
-interface CreateBusinessEntityResponse {
-  createBusinessEntity: {
-    BusinessEntityID: number;
-  };
-}
-
-interface CreatePersonResponse {
-  createPerson: {
-    BusinessEntityID: number;
-    FirstName: string;
-    LastName: string;
-  };
-}
-
-interface CreateEmailAddressResponse {
-  createEmailAddress: {
-    EmailAddressID: number;
-    BusinessEntityID: number;
-    EmailAddress: string;
-  };
-}
-
 interface UpdatePersonResponse {
   updateperson: {
     BusinessEntityID: number;
@@ -106,47 +85,6 @@ const GET_PERSON_BY_ID = gql`
           }
         }
       }
-    }
-  }
-`;
-
-const CREATE_BUSINESS_ENTITY = gql`
-  mutation CreateBusinessEntity {
-    createBusinessEntity(item: {}) {
-      BusinessEntityID
-    }
-  }
-`;
-
-const CREATE_PERSON = gql`
-  mutation CreatePerson(
-    $businessEntityId: Int!
-    $firstName: String!
-    $lastName: String!
-  ) {
-    createPerson(
-      item: {
-        BusinessEntityID: $businessEntityId
-        FirstName: $firstName
-        LastName: $lastName
-        PersonType: "IN"
-      }
-    ) {
-      BusinessEntityID
-      FirstName
-      LastName
-    }
-  }
-`;
-
-const CREATE_EMAIL_ADDRESS = gql`
-  mutation CreateEmailAddress($businessEntityId: Int!, $emailAddress: String!) {
-    createEmailAddress(
-      item: { BusinessEntityID: $businessEntityId, EmailAddress: $emailAddress }
-    ) {
-      EmailAddressID
-      BusinessEntityID
-      EmailAddress
     }
   }
 `;
@@ -275,98 +213,57 @@ export async function signupUser(
 
   async function doSignup(): Promise<AuthResult> {
     try {
-      // Check if user already exists
-      const checkResponse = await graphqlClient.request<CheckUserLoginResponse>(
-        CHECK_USER_LOGIN,
-        {
-          email,
-        },
-      );
-      const existingEmails = checkResponse.emailAddresses?.items || [];
-
-      if (existingEmails.length > 0) {
-        return {
-          success: false,
-          error: "An account with this email already exists.",
-        };
-      }
-
-      // Create business entity first (required by Person table)
-      const businessEntityResponse =
-        await graphqlClient.request<CreateBusinessEntityResponse>(
-          CREATE_BUSINESS_ENTITY,
-        );
-
-      const businessEntityId =
-        businessEntityResponse.createBusinessEntity.BusinessEntityID;
-
-      // Create person record
-      const personResponse = await graphqlClient.request<CreatePersonResponse>(
-        CREATE_PERSON,
-        {
-          businessEntityId,
-          firstName,
-          lastName,
-        },
-      );
-
-      const newPerson = personResponse.createPerson;
-
-      if (!newPerson) {
-        return {
-          success: false,
-          error: "Failed to create account. Please try again.",
-        };
-      }
-
-      // Create email address record
-      const emailResponse =
-        await graphqlClient.request<CreateEmailAddressResponse>(
-          CREATE_EMAIL_ADDRESS,
-          {
-            businessEntityId: newPerson.BusinessEntityID,
-            emailAddress: email,
-          },
-        );
-
-      const newEmailAddress = emailResponse.createEmailAddress;
-
-      // Create password using password functions API (timeout for cold start / hung backend)
+      // One server-side transaction creates BusinessEntity, Person, EmailAddress and the
+      // hashed password, so the identity tables need no anonymous DAB access.
       const functionsUrl = getFunctionsApiUrl();
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 75000);
-      let passwordResponse: Response;
+      let signupResponse: Response;
       try {
-        passwordResponse = await fetch(`${functionsUrl}/api/password`, {
+        signupResponse = await fetch(`${functionsUrl}/api/signup`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            businessEntityID: newPerson.BusinessEntityID,
-            password: password,
-          }),
+          body: JSON.stringify({ email, password, firstName, lastName }),
           signal: controller.signal,
         });
       } finally {
         clearTimeout(timeoutId);
       }
 
-      if (!passwordResponse.ok) {
+      if (signupResponse.status === 409) {
         return {
           success: false,
-          error: "Failed to create account password. Please try again.",
+          error: "An account with this email already exists.",
         };
       }
+      if (!signupResponse.ok) {
+        const body = await signupResponse.json().catch(() => null);
+        return {
+          success: false,
+          error:
+            signupResponse.status === 400 && body?.error
+              ? body.error
+              : "Failed to create account. Please try again.",
+        };
+      }
+
+      const created = (await signupResponse.json()) as {
+        businessEntityId: number;
+        emailAddressId: number;
+        firstName: string;
+        lastName: string;
+      };
 
       await signInWithEshopCredentials(email, password);
 
       return {
         success: true,
         user: {
-          businessEntityId: newPerson.BusinessEntityID,
-          email: email,
-          firstName: newPerson.FirstName,
-          lastName: newPerson.LastName,
-          emailAddressId: newEmailAddress?.EmailAddressID,
+          businessEntityId: created.businessEntityId,
+          email,
+          firstName: created.firstName,
+          lastName: created.lastName,
+          emailAddressId: created.emailAddressId,
         },
       };
     } catch (error) {
@@ -463,7 +360,9 @@ export async function changePassword(
     const functionsUrl = getFunctionsApiUrl();
 
     // First verify the current password
-    const verifyResponse = await fetch(`${functionsUrl}/api/password/verify`, {
+    // Both calls carry the consumer's Functions token; the API only lets a consumer
+    // verify or change their own password.
+    const verifyResponse = await functionsFetch(`${functionsUrl}/api/password/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -489,7 +388,7 @@ export async function changePassword(
     }
 
     // Update to new password
-    const updateResponse = await fetch(`${functionsUrl}/api/password`, {
+    const updateResponse = await functionsFetch(`${functionsUrl}/api/password`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

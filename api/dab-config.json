@@ -1386,13 +1386,6 @@
       ],
       "permissions": [
         {
-          "role": "anonymous",
-          "actions": [
-            "create",
-            "read"
-          ]
-        },
-        {
           "role": "authenticated",
           "actions": [
             {
@@ -1681,30 +1674,6 @@
       ],
       "permissions": [
         {
-          "role": "anonymous",
-          "actions": [
-            {
-              "action": "create",
-              "fields": {
-                "exclude": [
-                  "rowguid",
-                  "ModifiedDate"
-                ]
-              }
-            },
-            {
-              "action": "read",
-              "fields": {
-                "exclude": [
-                  "Demographics",
-                  "AdditionalContactInfo",
-                  "rowguid"
-                ]
-              }
-            }
-          ]
-        },
-        {
           "role": "authenticated",
           "actions": [
             {
@@ -1909,19 +1878,6 @@
         }
       ],
       "permissions": [
-        {
-          "role": "anonymous",
-          "actions": [
-            "create",
-            "read"
-          ],
-          "fields": {
-            "exclude": [
-              "rowguid",
-              "ModifiedDate"
-            ]
-          }
-        },
         {
           "role": "authenticated",
           "actions": [
@@ -7301,9 +7257,6 @@
                 "include": [
                   "HelpfulVotes"
                 ]
-              },
-              "policy": {
-                "database": "@item.UserID eq null or @item.UserID ne @claims.business_entity_id"
               }
             }
           ]
@@ -7319,9 +7272,6 @@
                 "include": [
                   "HelpfulVotes"
                 ]
-              },
-              "policy": {
-                "database": "@item.UserID eq null or @item.UserID ne @claims.business_entity_id"
               }
             }
           ]

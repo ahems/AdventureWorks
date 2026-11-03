@@ -274,7 +274,7 @@ const AdminHeader: React.FC = () => {
                             {user.email}
                           </p>
                           <p className="font-doodle text-xs text-doodle-green mt-1">
-                            {user.department}
+                            {user.appRole}
                           </p>
                         </div>
                         <button

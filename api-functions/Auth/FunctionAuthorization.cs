@@ -14,13 +14,6 @@ public enum AccessTier
 
     /// <summary>Tier I — internal-only. Valid token + scope + non-consumer category.</summary>
     Internal,
-
-    /// <summary>
-    /// Tier M — reachable through an api-mcp proxy tool; left anonymous in v1 because api-mcp
-    /// cannot yet mint a Functions-audience token (documented descope). Still protected at the
-    /// MCP layer.
-    /// </summary>
-    ProxiedAnonymous,
 }
 
 /// <summary>Access mode describing who may call a route once scope is satisfied.</summary>
@@ -84,5 +77,5 @@ public sealed record FunctionPolicy(
     string? OwnershipKey)
 {
     /// <summary>True when the route requires no access token (Tier P or the v1-descoped Tier M).</summary>
-    public bool IsAnonymous => Tier is AccessTier.Public or AccessTier.ProxiedAnonymous;
+    public bool IsAnonymous => Tier is AccessTier.Public;
 }

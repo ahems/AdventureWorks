@@ -29,11 +29,13 @@
 #   SMOKE_AI_TIMEOUT      per-attempt max seconds for the AI agent endpoints (default 120).
 #                         A real Azure OpenAI agent turn (Generate Promotion) can take tens of
 #                         seconds, so it gets a longer budget than the plain-HTTP checks.
-#   SMOKE_DEMO_USER       seeded demo admin email used by the authenticated OAuth login flow
-#                         (default demo.admin@adventureworks.com — seeded by
-#                         seed-job/seed-database.ps1; override if the seed values changed)
+#   SMOKE_DEMO_USER       seeded demo user email used by the authenticated OAuth login flow
+#                         (default peter0@adventure-works.com — the manufacturing demo login whose
+#                         password is set by seed-job/seed-database.ps1)
 #   SMOKE_DEMO_PASS       password for SMOKE_DEMO_USER (default is the documented demo password
 #                         already committed in seed-job/seed-database.ps1 — NOT a real secret)
+#   SMOKE_ADMIN_USER /    admin demo login used to call admin-only Functions routes
+#   SMOKE_ADMIN_PASS      (default ken0@adventure-works.com / the documented demo password)
 set -u
 
 TIMEOUT="${SMOKE_TIMEOUT:-60}"
@@ -240,6 +242,39 @@ print(v + " " + c)') || return 1
     PKCE_CHALLENGE="${out##* }"
 }
 
+# Non-interactive login + Authorization Code + PKCE for (user, password, scope, resource) using
+# the inspector client; prints the access token (empty on failure). Used to obtain a
+# Functions-audience token for checks that call protected api-functions routes.
+obtain_token() {
+    local user="$1" pass="$2" scope="$3" resource="$4" jar loc code
+    jar=$(mktemp)
+    curl -s -o /dev/null -c "$jar" --max-time "$TIMEOUT" \
+        -H 'content-type: application/x-www-form-urlencoded' \
+        --data-urlencode "username=$user" --data-urlencode "password=$pass" \
+        --data-urlencode "returnUrl=/" "$mcp_base/login"
+    gen_pkce || { rm -f "$jar"; return 0; }
+    loc=$(curl -s -o /dev/null -D - -b "$jar" --max-time "$TIMEOUT" \
+        -H 'content-type: application/x-www-form-urlencoded' \
+        --data-urlencode "client_id=$OAUTH_CLIENT" --data-urlencode "response_type=code" \
+        --data-urlencode "redirect_uri=$OAUTH_REDIRECT" --data-urlencode "scope=$scope" \
+        --data-urlencode "resource=$resource" --data-urlencode "state=$(rand_state)" \
+        --data-urlencode "code_challenge=$PKCE_CHALLENGE" --data-urlencode "code_challenge_method=S256" \
+        --data-urlencode "decision=allow" "$mcp_base/authorize" \
+        | grep -i '^location:' | head -1 | tr -d '\r')
+    rm -f "$jar"
+    code=$(printf '%s' "$loc" | sed -n 's/.*[?&]code=\([^&]*\).*/\1/p' | urldecode)
+    [ -n "$code" ] || return 0
+    curl -s --max-time "$TIMEOUT" -H 'content-type: application/x-www-form-urlencoded' \
+        --data-urlencode "grant_type=authorization_code" --data-urlencode "code=$code" \
+        --data-urlencode "client_id=$OAUTH_CLIENT" --data-urlencode "redirect_uri=$OAUTH_REDIRECT" \
+        --data-urlencode "code_verifier=$PKCE_VERIFIER" --data-urlencode "resource=$resource" \
+        "$mcp_base/token" | python3 -c 'import sys, json
+try:
+    print(json.load(sys.stdin).get("access_token", ""))
+except Exception:
+    print("")' 2>/dev/null
+}
+
 # Opaque anti-forgery 'state' value.
 rand_state() { python3 -c 'import secrets; print(secrets.token_urlsafe(16))'; }
 
@@ -300,12 +335,15 @@ admin=$(getv APP_ADMIN_URL)
 mfg=$(getv APP_MANUFACTURING_URL)
 insp=$(getv MCP_INSPECTOR_URL)
 
-# Seeded demo admin used by the authenticated OAuth login flow. Defaults to the documented demo
-# values committed in seed-job/seed-database.ps1 (BusinessEntityID 99001, PersonType 'EM', which
-# resolves to role 'operations-admin' / category 'employee'). Override via SMOKE_DEMO_USER /
+# Demo user for the authenticated OAuth login flow. Defaults to the documented manufacturing demo
+# login whose password is set in seed-job/seed-database.ps1 (Peter Krebs, BusinessEntityID 26,
+# role 'manufacturing-engineer' / category 'manufacturing'). Override via SMOKE_DEMO_USER /
 # SMOKE_DEMO_PASS. This is a demonstration credential, never a real secret.
-DEMO_USER="${SMOKE_DEMO_USER:-demo.admin@adventureworks.com}"
-DEMO_PASS="${SMOKE_DEMO_PASS:-Admin1234!}"
+DEMO_USER="${SMOKE_DEMO_USER:-peter0@adventure-works.com}"
+DEMO_PASS="${SMOKE_DEMO_PASS:-Factory1234!}"
+# Admin demo login (Ken Sánchez, executive-admin) — used to call admin-only Functions routes.
+ADMIN_USER="${SMOKE_ADMIN_USER:-ken0@adventure-works.com}"
+ADMIN_PASS="${SMOKE_ADMIN_PASS:-Admin1234!}"
 # First-party PUBLIC client (PKCE, loopback redirect) always registered at deploy time, so the
 # login flow is deployment-independent — no secret and no hard-coded Azure hostname.
 OAUTH_CLIENT="mcp-inspector"
@@ -536,12 +574,13 @@ else
 fi
 
 echo
-echo "=== Authenticated Data Access (demo.admin) ==="
+echo "=== Authenticated Data Access (manufacturing demo user) ==="
 # End-to-end proof that a REAL seeded AdventureWorks user can complete the Authorization Code +
 # PKCE (S256) flow and that the issued, resource-bound JWT lets that user READ seeded data via
-# MCP — while tool-level authorization still DENIES tools outside the user's role. The demo admin
-# is seeded by seed-job/seed-database.ps1 (BusinessEntityID 99001, PersonType 'EM'); with no
-# department history it resolves to role 'operations-admin' (category 'employee'). The loopback
+# MCP — while tool-level authorization still DENIES tools outside the user's role. The demo user
+# is the existing AdventureWorks employee Peter Krebs (Production Control, BusinessEntityID 26),
+# whose password is set by seed-job/seed-database.ps1; his department resolves to role
+# 'manufacturing-engineer' (category 'manufacturing'). The loopback
 # redirect is never followed — only the authorization code in the 302 Location is read.
 ACCESS_TOKEN=""
 PKCE_VERIFIER=""
@@ -563,9 +602,9 @@ try:
 except Exception:
     print("")' 2>/dev/null)
     fi
-    # demo.admin (operations-admin) owns exactly these scopes; request the set the user has so the
+    # manufacturing-engineer owns exactly these scopes; request the set the user has so the
     # grant is non-empty and the token carries the business scopes the MCP checks below rely on.
-    scope_req="mcp.access products.read sales.read customers.read customers.write orders.read inventory.read admin.read"
+    scope_req="mcp.access products.read inventory.read manufacturing.read manufacturing.write"
 
     # (a) NEGATIVE — wrong password must NOT establish a session: /login redirects back to
     #     /login?error=1 and sets no auth cookie. Proves credentials are actually verified.
@@ -579,9 +618,9 @@ except Exception:
     neg_loc=$(header_value location)
     if [ "$R_CODE" = "302" ] && printf '%s' "$neg_loc" | grep -q 'error=1' \
         && ! grep -q 'aw_mcp_login' "$neg_jar" 2>/dev/null; then
-        pass "demo.admin wrong password → rejected (302 /login?error=1, no session)"
+        pass "demo user wrong password → rejected (302 /login?error=1, no session)"
     else
-        fail "demo.admin wrong password rejection ($R_CODE)"
+        fail "demo user wrong password rejection ($R_CODE)"
         diag "$mcp_base/login"
         note "expected: 302 to /login?error=1 and NO aw_mcp_login cookie."
         note "location:   ${neg_loc:-(none)}"
@@ -599,12 +638,12 @@ except Exception:
         --data-urlencode "password=$DEMO_PASS" \
         --data-urlencode "returnUrl=/"
     if [ "$R_CODE" = "302" ] && grep -q 'aw_mcp_login' "$jar" 2>/dev/null; then
-        pass "demo.admin login → AdventureWorks session issued"
+        pass "demo user login → AdventureWorks session issued"
     else
-        fail "demo.admin login ($R_CODE)"
+        fail "demo user login ($R_CODE)"
         diag "$mcp_base/login"
         note "expected: 302 with an aw_mcp_login session cookie. Check SMOKE_DEMO_USER/PASS and"
-        note "          that the demo admin user was seeded (seed-job/seed-database.ps1)."
+        note "          that the demo user's password was seeded (seed-job/seed-database.ps1)."
     fi
 
     # (c) /authorize consent — Authorization Code + PKCE S256. Mirror the consent form: POST every
@@ -686,13 +725,13 @@ client = os.environ.get("OAUTH_CLIENT", "")
 errs = []
 if not d.get("sub"):
     errs.append("missing sub")
-if d.get("category") != "employee":
-    errs.append("category=%r (want employee)" % d.get("category"))
+if d.get("category") != "manufacturing":
+    errs.append("category=%r (want manufacturing)" % d.get("category"))
 if d.get("app") != client:
     errs.append("app=%r (want %s)" % (d.get("app"), client))
 roles = set(aslist(d.get("roles"))) | set(aslist(d.get("role")))
-if "operations-admin" not in roles:
-    errs.append("roles=%s (want operations-admin)" % sorted(roles))
+if "manufacturing-engineer" not in roles:
+    errs.append("roles=%s (want manufacturing-engineer)" % sorted(roles))
 if res:
     if res not in aslist(d.get("aud")):
         errs.append("aud=%r (want %s)" % (d.get("aud"), res))
@@ -702,7 +741,7 @@ print("; ".join(errs))
 sys.exit(1 if errs else 0)' 2>&1)
         rc=$?
         if [ "$rc" -eq 0 ]; then
-            pass "access token claims: sub + category=employee + operations-admin + aud=resource"
+            pass "access token claims: sub + category=manufacturing + manufacturing-engineer + aud=resource"
         else
             fail "access token claims (identity/role/audience)"
             [ -n "$out" ] && note "reason:     $out"
@@ -714,13 +753,13 @@ d = json.load(sys.stdin)
 sc = d.get("scope")
 scopes = set(sc.split()) if isinstance(sc, str) else set(sc or [])
 errs = []
-need = set("mcp.access products.read sales.read admin.read".split())
+need = set("mcp.access products.read inventory.read manufacturing.read".split())
 missing = need - scopes
 if missing:
     errs.append("missing scopes %s" % sorted(missing))
-forbidden = set(["manufacturing.read", "manufacturing.write", "admin.write", "mcp.admin"]) & scopes
+forbidden = set(["sales.read", "customers.read", "customers.write", "admin.read", "admin.write", "mcp.admin"]) & scopes
 if forbidden:
-    errs.append("unexpected scopes %s (demo.admin is operations-admin)" % sorted(forbidden))
+    errs.append("unexpected scopes %s (demo user is manufacturing-engineer)" % sorted(forbidden))
 life = int(d.get("exp", 0)) - int(d.get("iat", 0))
 if not (0 < life <= 1800):
     errs.append("lifetime %ss (want 0 < exp-iat <= 1800)" % life)
@@ -741,55 +780,56 @@ sys.exit(1 if errs else 0)' 2>&1)
         note "the access token payload could not be base64url-decoded as JSON."
     fi
 
-    # (f) Authenticated MCP tool call the role PERMITS: get_business_stats needs sales.read
-    #     (InternalOnly) — demo.admin (employee) qualifies — and returns seeded business data.
+    # (f) Authenticated MCP tool call the role PERMITS: get_manufacturing_status needs
+    #     manufacturing.read. The tool proxies to api-functions with the api-mcp service token, so
+    #     success also proves the enforced Functions resource server accepts that token.
     if [ -n "$ACCESS_TOKEN" ]; then
         do_request POST "$mcp_base/mcp" \
             -H 'content-type: application/json' \
             -H 'accept: application/json, text/event-stream' \
             -H "authorization: Bearer $ACCESS_TOKEN" \
-            --data '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_business_stats","arguments":{}}}'
+            --data '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_manufacturing_status","arguments":{}}}'
         if [ "$R_CODE" = "200" ]; then
             msg=$(printf '%s' "$R_BODY_FULL" | mcp_unwrap)
             if [ -n "$msg" ]; then
-                check_json "MCP get_business_stats (sales.read) → seeded data returned" "$msg" \
+                check_json "MCP get_manufacturing_status (manufacturing.read, via service token) → data returned" "$msg" \
                     "'result' in d and not d['result'].get('isError', False) and len(d['result'].get('content') or []) > 0 and any((c.get('text') or '') != '' for c in d['result']['content'])"
             else
-                fail "MCP get_business_stats (unparseable MCP response)"
+                fail "MCP get_manufacturing_status (unparseable MCP response)"
                 diag "$mcp_base/mcp"
                 note "response body:"
                 blk "$R_BODY"
             fi
         else
-            fail "MCP get_business_stats ($R_CODE)"
+            fail "MCP get_manufacturing_status ($R_CODE)"
             diag "$mcp_base/mcp"
-            note "expected: 200 JSON-RPC result — demo.admin has mcp.access + sales.read."
+            note "expected: 200 JSON-RPC result — demo user has mcp.access + manufacturing.read."
         fi
 
-        # (g) Authenticated MCP tool call the role DENIES: get_manufacturing_status needs
-        #     manufacturing.read, which operations-admin lacks. Tool-level authorization returns a
+        # (g) Authenticated MCP tool call the role DENIES: get_business_stats needs sales.read,
+        #     which manufacturing-engineer lacks. Tool-level authorization returns a
         #     JSON-RPC result with isError=true (a safe refusal) — not the data, and not a 500.
         do_request POST "$mcp_base/mcp" \
             -H 'content-type: application/json' \
             -H 'accept: application/json, text/event-stream' \
             -H "authorization: Bearer $ACCESS_TOKEN" \
-            --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_manufacturing_status","arguments":{}}}'
+            --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_business_stats","arguments":{}}}'
         msg=$(printf '%s' "$R_BODY_FULL" | mcp_unwrap)
         if [ "$R_CODE" = "200" ] && [ -n "$msg" ] && printf '%s' "$msg" | python3 -c 'import sys, json
 d = json.load(sys.stdin)
 r = d.get("result") or {}
 sys.exit(0 if r.get("isError") is True else 1)' 2>/dev/null; then
-            pass "MCP get_manufacturing_status → denied by tool-level authz (isError)"
+            pass "MCP get_business_stats → denied by tool-level authz (isError)"
         else
-            fail "MCP get_manufacturing_status denial (code=$R_CODE)"
+            fail "MCP get_business_stats denial (code=$R_CODE)"
             diag "$mcp_base/mcp"
-            note "expected: 200 JSON-RPC result with isError=true — operations-admin lacks"
-            note "          manufacturing.read, so the tool must be refused, not executed."
+            note "expected: 200 JSON-RPC result with isError=true — manufacturing-engineer lacks"
+            note "          sales.read, so the tool must be refused, not executed."
             [ -n "$msg" ] && { note "mcp message:"; blk "$(printf '%s' "$msg" | head -c "$BODY_MAX")"; }
         fi
     else
         fail "MCP authenticated tool calls skipped (no access token)"
-        note "the token steps above must succeed first; these checks require the demo.admin token."
+        note "the token steps above must succeed first; these checks require the demo user token."
     fi
     rm -f "$jar"
 fi
@@ -835,8 +875,8 @@ done
 
 echo
 echo "=== AI Agent Endpoints ==="
-# 'Generate Promotion with AI' and 'Help Me Choose' are ANONYMOUS Azure Functions (no OAuth)
-# whose backends authenticate to Azure OpenAI and Azure SQL via MANAGED IDENTITY. "Auth
+# 'Help Me Choose' is an ANONYMOUS Azure Function and 'Generate Promotion with AI' is an
+# admin-only (admin.write) Function called with the admin demo user's Functions token. Both backends authenticate to Azure OpenAI and Azure SQL via MANAGED IDENTITY. "Auth
 # correctly" here means those managed-identity backends SUCCEED (HTTP 200) rather than failing
 # (500) on a token/role error. catalog-meta exercises the SQL path (fast, deterministic) and
 # GeneratePromotion exercises SQL product context + Azure OpenAI (a real model call).
@@ -874,10 +914,23 @@ else
     # (c) Generate Promotion with AI — Azure OpenAI agent via managed identity. The service
     #     Supplies live SQL product context without calling the protected MCP server.
     #     Allow extra time (SMOKE_AI_TIMEOUT) for the multi-step agent turn.
+    #     Functions OAuth is enforced: anonymous calls must be rejected with 401 first.
     url="$func/api/GeneratePromotion"
+    do_request POST "$url" -H 'content-type: application/json' --data '{}'
+    if [ "$R_CODE" = "401" ]; then
+        pass "Generate Promotion anonymous → 401 (Functions OAuth enforced)"
+    else
+        fail "Generate Promotion anonymous rejection ($R_CODE)"
+        note "expected: 401 — FUNCTIONS_OAUTH_MODE should be 'enforced' on the Function App."
+    fi
+    fn_resource="${mcp_base%/}/functions"
+    ADMIN_FN_TOKEN=""
+    [ -n "$mcp_base" ] && ADMIN_FN_TOKEN=$(obtain_token "$ADMIN_USER" "$ADMIN_PASS" "admin.write" "$fn_resource")
+    [ -n "$ADMIN_FN_TOKEN" ] || note "WARNING: could not obtain an admin Functions token for $ADMIN_USER."
     _saved_timeout="$TIMEOUT"
     TIMEOUT="$AI_TIMEOUT"
     do_request POST "$url" -H 'content-type: application/json' \
+        -H "authorization: Bearer $ADMIN_FN_TOKEN" \
         --data '{"PromotionType":"percentage","OfferCategory":"Customer"}'
     TIMEOUT="$_saved_timeout"
     if [ "$R_CODE" = "200" ]; then

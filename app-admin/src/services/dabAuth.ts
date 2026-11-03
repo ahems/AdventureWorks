@@ -23,6 +23,7 @@ const CLIENT_ID = "adventureworks-admin";
 const PKCE_KEY = "dab_oauth_pkce";
 const TOKEN_KEY = "dab_oauth_token";
 const MCP_TOKEN_KEY = "mcp_oauth_token";
+const FUNCTIONS_TOKEN_KEY = "fn_oauth_token";
 
 // Scopes the admin client may request for DAB access. The authorization server
 // intersects these with the signed-in employee's seeded role-derived scopes, so
@@ -35,6 +36,7 @@ export const DAB_ADMIN_REQUESTED_SCOPES = [
   "products.read",
   "sales.read",
   "customers.read",
+  "customers.write",
   "inventory.read",
   "orders.read",
   "orders.write",
@@ -396,50 +398,64 @@ export function getMcpResourceIdentifier(): string {
   return getApiMcpUrl().replace(/\/$/, "");
 }
 
-interface StoredMcpToken {
+/**
+ * Canonical Functions resource indicator (RFC 8707): `{api-mcp origin}/functions`, matching
+ * the authorization server's Functions audience and api-functions' expected `aud`.
+ */
+export function getFunctionsResourceIdentifier(): string {
+  const base = getOAuthBaseUrl();
+  return base ? `${base}/functions` : "";
+}
+
+interface StoredResourceToken {
   accessToken: string;
   expiresAt: number;
   subject?: string;
 }
 
-function readMcpToken(): StoredMcpToken | null {
-  const raw = localStorage.getItem(MCP_TOKEN_KEY);
+function readResourceToken(key: string): StoredResourceToken | null {
+  const raw = localStorage.getItem(key);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as StoredMcpToken;
+    return JSON.parse(raw) as StoredResourceToken;
   } catch {
-    localStorage.removeItem(MCP_TOKEN_KEY);
+    localStorage.removeItem(key);
     return null;
   }
 }
 
-let inFlightMcp: Promise<string | null> | null = null;
+const inFlightResource = new Map<string, Promise<string | null>>();
 
 /**
- * Returns a per-user access token for the MCP server, minted silently from the
- * sign-in refresh token (RFC 8707 resource switch). Lets the AI agent call MCP
- * tools as the signed-in admin so role-based tool authorization applies.
- * Returns null when no session exists or the mint fails (agent falls back to
- * its service identity).
+ * Mints (and caches) an access token for another resource from the sign-in refresh
+ * token (RFC 8707 resource switch). The DAB access token is kept; only the rotated
+ * refresh token is persisted. Returns null when there is no session or the mint fails.
  */
-export async function getMcpAccessToken(): Promise<string | null> {
+async function getResourceAccessToken(
+  resource: string,
+  cacheKey: string,
+  force = false,
+): Promise<string | null> {
   const session = readSession();
-  if (!session) return null;
+  if (!session || !resource) return null;
   const subject = decodeTokenClaims(session.accessToken)?.sub as string | undefined;
-  const cached = readMcpToken();
-  if (cached && cached.subject === subject && cached.expiresAt - REFRESH_SKEW_SECONDS > nowSeconds()) {
-    return cached.accessToken;
-  }
-  if (inFlightMcp) return inFlightMcp;
+  const isFresh = (t: StoredResourceToken | null): t is StoredResourceToken =>
+    !!t && t.subject === subject && t.expiresAt - REFRESH_SKEW_SECONDS > nowSeconds();
 
-  inFlightMcp = withRefreshLock(async () => {
-    const again = readMcpToken();
-    if (again && again.subject === subject && again.expiresAt - REFRESH_SKEW_SECONDS > nowSeconds()) {
-      return again.accessToken;
+  if (!force) {
+    const cached = readResourceToken(cacheKey);
+    if (isFresh(cached)) return cached.accessToken;
+  }
+  const pending = inFlightResource.get(cacheKey);
+  if (pending) return pending;
+
+  const request = withRefreshLock(async () => {
+    if (!force) {
+      const again = readResourceToken(cacheKey);
+      if (isFresh(again)) return again.accessToken;
     }
     const current = readSession();
-    const resource = getMcpResourceIdentifier();
-    if (!current?.refreshToken || !resource) return null;
+    if (!current?.refreshToken) return null;
 
     const body = new URLSearchParams({
       grant_type: "refresh_token",
@@ -455,25 +471,41 @@ export async function getMcpAccessToken(): Promise<string | null> {
       });
       if (!res.ok) return null;
       const token = (await res.json()) as TokenResponse;
-      // Keep the DAB access token; persist only the rotated refresh token.
       if (token.refresh_token) {
         localStorage.setItem(TOKEN_KEY, JSON.stringify({ ...current, refreshToken: token.refresh_token }));
       }
-      const stored: StoredMcpToken = {
+      const stored: StoredResourceToken = {
         accessToken: token.access_token,
         expiresAt: nowSeconds() + (token.expires_in ?? 600),
         subject,
       };
-      localStorage.setItem(MCP_TOKEN_KEY, JSON.stringify(stored));
+      localStorage.setItem(cacheKey, JSON.stringify(stored));
       return stored.accessToken;
     } catch {
       return null;
     }
   }).finally(() => {
-    inFlightMcp = null;
+    inFlightResource.delete(cacheKey);
   });
 
-  return inFlightMcp;
+  inFlightResource.set(cacheKey, request);
+  return request;
+}
+
+/**
+ * Returns a per-user access token for the MCP server so the AI agent calls MCP tools
+ * as the signed-in admin (role-based tool authorization applies).
+ */
+export function getMcpAccessToken(): Promise<string | null> {
+  return getResourceAccessToken(getMcpResourceIdentifier(), MCP_TOKEN_KEY);
+}
+
+/**
+ * Returns a per-user access token for api-functions (scopes + category enforced by the
+ * Functions authorization middleware). Pass `force` to re-mint after a 401.
+ */
+export function getFunctionsAccessToken(force = false): Promise<string | null> {
+  return getResourceAccessToken(getFunctionsResourceIdentifier(), FUNCTIONS_TOKEN_KEY, force);
 }
 
 /** Returns a DAB access token, silently renewing it first when it is about to expire. */
@@ -520,6 +552,7 @@ export function isAuthorized(): boolean {
 export function clearAuthorization(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(MCP_TOKEN_KEY);
+  localStorage.removeItem(FUNCTIONS_TOKEN_KEY);
   sessionStorage.removeItem(TOKEN_KEY); // legacy tab-scoped storage
   sessionStorage.removeItem(PKCE_KEY);
 }

@@ -389,7 +389,7 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
       // Same Color+Style across sizes = visually identical → backend will reuse the photos.
       const seenVisualKeys = new Set<string>();
       for (const p of batchResult.results) {
-        const visualKey = `${p.Color ?? "none"}:${(p as { Style?: string | null }).Style ?? "none"}`;
+        const visualKey = `${p.Color ?? "none"}:${p.Style ?? "none"}`;
         if (!seenVisualKeys.has(visualKey)) {
           seenVisualKeys.add(visualKey);
           fetch(

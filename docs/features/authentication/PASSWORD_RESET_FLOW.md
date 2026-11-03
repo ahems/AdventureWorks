@@ -376,10 +376,8 @@ curl -X POST "$FUNCTION_URL/api/password/reset/complete" \
     "newPassword": "NewPassword123!"
   }'
 
-# 4. Verify new password works
-curl -X POST "$FUNCTION_URL/api/password/verify" \
-  -H "Content-Type: application/json" \
-  -d '{"businessEntityID": 1, "password": "NewPassword123!"}'
+# 4. Verify the new password works by signing in through the e-shop / api-mcp login page.
+#    (POST /api/password/verify now requires the user's own Functions bearer token.)
 ```
 
 ### Using Frontend

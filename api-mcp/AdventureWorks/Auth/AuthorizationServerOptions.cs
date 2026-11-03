@@ -5,7 +5,20 @@ namespace AdventureWorks.Auth;
 /// <param name="DisplayName">Human-readable name shown on the consent page.</param>
 /// <param name="RedirectUris">Exact redirect URIs (no wildcards).</param>
 /// <param name="Scopes">Scopes the client is permitted to request.</param>
-public sealed record OAuthClient(string ClientId, string DisplayName, IReadOnlyList<string> RedirectUris, IReadOnlyList<string> Scopes);
+/// <param name="AllowedCategories">
+/// User categories (see <see cref="UserCategories"/>) that may sign in to this client. Null allows
+/// any category (e.g. developer tools such as the MCP Inspector, which still see the consent page).
+/// </param>
+public sealed record OAuthClient(
+    string ClientId,
+    string DisplayName,
+    IReadOnlyList<string> RedirectUris,
+    IReadOnlyList<string> Scopes,
+    IReadOnlyList<string>? AllowedCategories = null)
+{
+    public bool AllowsCategory(string category) =>
+        AllowedCategories is null || AllowedCategories.Contains(category, StringComparer.Ordinal);
+}
 
 /// <summary>
 /// Deployment-derived configuration for the self-contained authorization server.
@@ -68,6 +81,21 @@ public sealed class AuthorizationServerOptions
         "adventureworks-eshop",
         "adventureworks-manufacturing",
     };
+
+    /// <summary>Finds a registered client by id, or null.</summary>
+    public OAuthClient? FindClient(string? clientId) =>
+        string.IsNullOrEmpty(clientId)
+            ? null
+            : Clients.FirstOrDefault(c => string.Equals(c.ClientId, clientId, StringComparison.Ordinal));
+
+    /// <summary>
+    /// True when a user of <paramref name="category"/> may sign in to <paramref name="clientId"/>.
+    /// Portals are category-scoped (e-shop = consumers, admin = employees, manufacturing =
+    /// manufacturing staff) so a valid AdventureWorks account cannot obtain a token for a portal
+    /// it does not belong to. Unknown clients are denied.
+    /// </summary>
+    public bool IsCategoryAllowed(string? clientId, string category) =>
+        FindClient(clientId)?.AllowsCategory(category) ?? false;
 
     // ---- Service (workload) tokens via managed-identity assertion ----
 

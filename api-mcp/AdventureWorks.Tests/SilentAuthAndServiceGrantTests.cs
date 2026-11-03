@@ -28,10 +28,10 @@ public class SilentAuthAndServiceGrantTests : IClassFixture<OAuthTestFactory>
         _factory.Directory.Add("silent@demo.test", "pw-silent", new ResolvedUser
         {
             Subject = Subject,
-            Category = UserCategories.Employee,
-            Roles = new[] { ApplicationRoles.SalesAdmin },
+            Category = UserCategories.Consumer,
+            Roles = new[] { ApplicationRoles.Consumer },
             Scopes = new[] { OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.OrdersRead },
-            DisplayName = "Silent Admin",
+            DisplayName = "Silent Consumer",
             BusinessEntityId = 3001,
         });
         _factory.Directory.Add("eshop@demo.test", "pw-eshop", new ResolvedUser

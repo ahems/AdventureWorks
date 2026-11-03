@@ -3,6 +3,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using AddressFunctions.Models;
 using AddressFunctions.Services;
+using ApiFunctions.Auth;
 using System.Net;
 using System.Text.Json;
 
@@ -22,6 +23,82 @@ public class PasswordFunctions
         _passwordService = passwordService;
     }
 
+    private static async Task<HttpResponseData> ForbiddenAsync(HttpRequestData req, string message)
+    {
+        var response = req.CreateResponse(HttpStatusCode.Forbidden);
+        await response.WriteAsJsonAsync(new { error = "forbidden", error_description = message });
+        return response;
+    }
+
+    /// <summary>
+    /// Registers a new e-shop customer in one transaction: BusinessEntity, Person (PersonType IN),
+    /// EmailAddress and a PBKDF2 password. Replaces the former browser-side sequence of anonymous
+    /// DAB creates + an anonymous password set, so the identity tables need no anonymous access.
+    /// </summary>
+    /// <response code="201">Account created</response>
+    /// <response code="400">Invalid request body</response>
+    /// <response code="409">An account with this email already exists</response>
+    [Function("Signup")]
+    public async Task<HttpResponseData> Signup(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "signup")] HttpRequestData req)
+    {
+        SignupRequest? body;
+        try
+        {
+            body = await req.ReadFromJsonAsync<SignupRequest>();
+        }
+        catch (JsonException)
+        {
+            body = null;
+        }
+
+        var email = body?.Email?.Trim() ?? string.Empty;
+        var firstName = body?.FirstName?.Trim() ?? string.Empty;
+        var lastName = body?.LastName?.Trim() ?? string.Empty;
+        if (body is null
+            || !System.Net.Mail.MailAddress.TryCreate(email, out _) || email.Length > 50
+            || firstName.Length is 0 or > 50 || lastName.Length is 0 or > 50
+            || string.IsNullOrEmpty(body.Password) || body.Password.Length < 8)
+        {
+            var bad = req.CreateResponse(HttpStatusCode.BadRequest);
+            await bad.WriteAsJsonAsync(new
+            {
+                error = "Invalid request. A valid email, first and last name, and a password of at least 8 characters are required."
+            });
+            return bad;
+        }
+
+        try
+        {
+            var created = await _passwordService.CreateCustomerAccountAsync(email, body.Password, firstName, lastName);
+            if (created is null)
+            {
+                var conflict = req.CreateResponse(HttpStatusCode.Conflict);
+                await conflict.WriteAsJsonAsync(new { error = "An account with this email already exists." });
+                return conflict;
+            }
+
+            _logger.LogInformation("Created customer account BusinessEntityID {BusinessEntityId}", created.BusinessEntityId);
+            var response = req.CreateResponse(HttpStatusCode.Created);
+            await response.WriteAsJsonAsync(new
+            {
+                businessEntityId = created.BusinessEntityId,
+                emailAddressId = created.EmailAddressId,
+                email,
+                firstName,
+                lastName,
+            });
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating customer account");
+            var error = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await error.WriteAsJsonAsync(new { error = "An error occurred while creating the account" });
+            return error;
+        }
+    }
+
     /// <summary>
     /// Sets or updates a password for a business entity
     /// </summary>
@@ -39,7 +116,8 @@ public class PasswordFunctions
     /// </example>
     [Function("SetPassword")]
     public async Task<HttpResponseData> SetPassword(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "password")] HttpRequestData req)
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "password")] HttpRequestData req,
+        FunctionContext executionContext)
     {
         _logger.LogInformation("SetPassword function processing request");
 
@@ -69,6 +147,18 @@ public class PasswordFunctions
                     error = "Password must be at least 8 characters long."
                 });
                 return badRequestResponse;
+            }
+
+            // Ownership: a consumer may only change their own password; staff (customers.write)
+            // may reset customer passwords but never another employee's.
+            var user = FunctionUser.Current(executionContext);
+            if (user.IsConsumer && user.BusinessEntityId != setPasswordRequest.BusinessEntityID)
+            {
+                return await ForbiddenAsync(req, "You can only change your own password.");
+            }
+            if (user.IsInternal && !await _passwordService.IsIndividualCustomerAsync(setPasswordRequest.BusinessEntityID))
+            {
+                return await ForbiddenAsync(req, "Staff may only reset passwords for customer accounts.");
             }
 
             // Store the password
@@ -138,7 +228,8 @@ public class PasswordFunctions
     /// </example>
     [Function("VerifyPassword")]
     public async Task<HttpResponseData> VerifyPassword(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "password/verify")] HttpRequestData req)
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "password/verify")] HttpRequestData req,
+        FunctionContext executionContext)
     {
         _logger.LogInformation("VerifyPassword function processing request");
 
@@ -156,6 +247,14 @@ public class PasswordFunctions
                     error = "Invalid request. BusinessEntityID must be positive and Password must not be empty."
                 });
                 return badRequestResponse;
+            }
+
+            // Self-only: verifying someone else's password would be a password-guessing oracle.
+            // Sign-in itself happens at the api-mcp authorization server, not here.
+            var user = FunctionUser.Current(executionContext);
+            if (user.IsAuthenticated && user.BusinessEntityId != verifyPasswordRequest.BusinessEntityID)
+            {
+                return await ForbiddenAsync(req, "You can only verify your own password.");
             }
 
             // Verify the password

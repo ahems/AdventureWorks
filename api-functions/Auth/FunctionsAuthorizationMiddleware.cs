@@ -21,7 +21,7 @@ namespace ApiFunctions.Auth;
 /// <item><c>Audit</c> — validate-if-present and log the decision, but never block.</item>
 /// <item><c>Enforced</c> — protected routes require a valid, in-audience, correctly-scoped token.</item>
 /// </list>
-/// Anonymous tiers (Public and the v1-descoped MCP-proxied set) are always allowed. Unknown
+/// The anonymous tier (Public) is always allowed. Unknown
 /// functions fail closed under enforcement.
 /// </para>
 /// </summary>
@@ -79,7 +79,7 @@ public sealed class FunctionsAuthorizationMiddleware : IFunctionsWorkerMiddlewar
             return;
         }
 
-        // Anonymous tiers (Public + v1-descoped ProxiedAnonymous) require no token.
+        // The anonymous tier (Public) requires no token.
         if (policy.IsAnonymous)
         {
             await next(context);

@@ -282,11 +282,11 @@ module apiFunctions 'modules/flex-api-functions.bicep' = {
     // The Functions resource server validates api-mcp-issued bearer tokens against the shared
     // OAuth issuer and the dedicated Functions audience ({issuer}/functions). Both are derived
     // from the deployed api-mcp FQDN (same value api-mcp advertises as MCP_PUBLIC_BASE_URL); no
-    // hard-coded hostnames. Keep audit mode until every first-party app attaches Functions
-    // tokens; the e-shop now does so without an additional login redirect.
+    // hard-coded hostnames. Enforced: all three first-party apps attach per-user Functions
+    // tokens and api-mcp attaches a self-minted service token to its proxied calls.
     functionsJwtIssuer: mcpPublicBaseUrl
     functionsJwtAudience: '${mcpPublicBaseUrl}/functions'
-    functionsOAuthMode: 'audit'
+    functionsOAuthMode: 'enforced'
     virtualNetworkSubnetId: sqlPrivateNetwork.outputs.functionsSubnetId
   }
 }

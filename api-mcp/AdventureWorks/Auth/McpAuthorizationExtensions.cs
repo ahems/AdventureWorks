@@ -37,6 +37,7 @@ public static class McpAuthorizationExtensions
         builder.Services.AddSingleton<OneTimeUseCache>();
         builder.Services.AddRateLimiter(rateLimiter =>
         {
+            rateLimiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             rateLimiter.AddPolicy("eshop-credentials", context =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -44,6 +45,18 @@ public static class McpAuthorizationExtensions
                     {
                         AutoReplenishment = true,
                         PermitLimit = 20,
+                        QueueLimit = 0,
+                        Window = TimeSpan.FromMinutes(1),
+                    }));
+
+            // Interactive /login form posts: slow online password guessing per client IP.
+            rateLimiter.AddPolicy("login", context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        AutoReplenishment = true,
+                        PermitLimit = 10,
                         QueueLimit = 0,
                         Window = TimeSpan.FromMinutes(1),
                     }));
@@ -332,15 +345,18 @@ public static class McpAuthorizationExtensions
             {
                 OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.OrdersRead, OAuthScopes.OrdersWrite,
                 OAuthScopes.CustomersRead, OAuthScopes.CustomersWrite,
-            }));
+            },
+            allowedCategories: new[] { UserCategories.Consumer }));
 
         options.Clients.Add(BuildClient("adventureworks-admin", "AdventureWorks Admin",
             config, new[] { "OAUTH_ADMIN_REDIRECT_URIS", "ADMIN_APP_URL", "SERVICE_APP_ADMIN_URL" },
-            OAuthScopes.All.ToArray()));
+            OAuthScopes.All.ToArray(),
+            allowedCategories: new[] { UserCategories.Employee }));
 
         options.Clients.Add(BuildClient("adventureworks-manufacturing", "AdventureWorks Manufacturing",
             config, new[] { "OAUTH_MANUFACTURING_REDIRECT_URIS", "MANUFACTURING_APP_URL", "SERVICE_APP_MANUFACTURING_URL" },
-            new[] { OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.InventoryRead, OAuthScopes.ManufacturingRead, OAuthScopes.ManufacturingWrite }));
+            new[] { OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.InventoryRead, OAuthScopes.ManufacturingRead, OAuthScopes.ManufacturingWrite },
+            allowedCategories: new[] { UserCategories.Manufacturing }));
 
         options.Clients.Add(BuildClient("mcp-inspector", "MCP Inspector",
             config, new[] { "OAUTH_INSPECTOR_REDIRECT_URIS" },
@@ -361,7 +377,8 @@ public static class McpAuthorizationExtensions
         IConfiguration config,
         string[] urlKeys,
         string[] scopes,
-        string[]? extraRedirects = null)
+        string[]? extraRedirects = null,
+        string[]? allowedCategories = null)
     {
         var redirects = new List<string>();
 
@@ -393,7 +410,7 @@ public static class McpAuthorizationExtensions
             AddRedirect(redirects, dev);
         }
 
-        return new OAuthClient(clientId, displayName, redirects, scopes);
+        return new OAuthClient(clientId, displayName, redirects, scopes, allowedCategories);
     }
 
     private static void AddRedirect(List<string> redirects, string raw)

@@ -192,8 +192,11 @@ const SortTh: React.FC<{
 
 // ─── Sales Trend Panel (lazy fetch per product) ────────────────────────────────
 
-const SalesTrendPanel: React.FC<{ productId: number }> = ({ productId }) => {
-  const { data, isLoading } = useSalesTrendsData(productId);
+const SalesTrendPanel: React.FC<{
+  productId: number;
+  channel: SalesChannel;
+}> = ({ productId, channel }) => {
+  const { data, isLoading } = useSalesTrendsData(productId, channel);
   if (isLoading)
     return (
       <div className="flex items-center justify-center py-4">

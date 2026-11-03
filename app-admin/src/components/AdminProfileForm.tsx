@@ -4,7 +4,7 @@ import {
   useAdminCustomerProfile,
   useAdminUpdateCustomerProfile,
 } from "@/hooks/useAdminCustomerProfile";
-import { parsePhoneNumber } from "@/lib/phoneFormatter";
+import { splitPhoneNumber } from "@/lib/phoneFormatter";
 
 interface AdminProfileFormProps {
   businessEntityId: number;
@@ -52,7 +52,7 @@ export const AdminProfileForm: React.FC<AdminProfileFormProps> = ({
 
   useEffect(() => {
     if (profileData) {
-      const { countryCode, localNumber } = parsePhoneNumber(
+      const { countryCode, localNumber } = splitPhoneNumber(
         profileData.PhoneNumber || "",
       );
       setFormData({

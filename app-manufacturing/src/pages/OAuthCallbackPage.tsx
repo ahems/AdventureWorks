@@ -1,7 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
-import { handleCallback as handleDabCallback } from "@/services/dabAuth";
+import {
+  clearAuthorization,
+  handleCallback as handleDabCallback,
+} from "@/services/dabAuth";
 import { useAuth } from "@/context/AuthContext";
 
 /**
@@ -11,7 +14,7 @@ import { useAuth } from "@/context/AuthContext";
  */
 const OAuthCallbackPage: React.FC = () => {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { completeSignIn } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const ran = useRef(false);
 
@@ -20,13 +23,23 @@ const OAuthCallbackPage: React.FC = () => {
     ran.current = true;
     (async () => {
       const result = await handleDabCallback();
-      if (result.ok) {
+      if (result.ok && completeSignIn()) {
         navigate(result.returnTo || "/", { replace: true });
+        return;
+      }
+      // Wrong password, or an account that may not use the manufacturing portal:
+      // the authorization server redirects back here with error=access_denied.
+      clearAuthorization();
+      const message = result.ok
+        ? "Sign-in did not return a usable token."
+        : result.error ?? "Authorization failed.";
+      if (new URL(window.location.href).searchParams.get("error") === "access_denied") {
+        navigate("/login", { replace: true, state: { authError: message } });
       } else {
-        setError(result.error ?? "Authorization failed.");
+        setError(message);
       }
     })();
-  }, [navigate]);
+  }, [navigate, completeSignIn]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-doodle-bg p-6">
@@ -38,10 +51,7 @@ const OAuthCallbackPage: React.FC = () => {
             <p className="text-sm text-doodle-text/70 break-words">{error}</p>
             <button
               className="text-sm underline text-doodle-accent"
-              onClick={() => {
-                logout();
-                navigate("/login", { replace: true });
-              }}
+              onClick={() => navigate("/login", { replace: true })}
             >
               Back to sign in
             </button>

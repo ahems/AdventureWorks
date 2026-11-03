@@ -28,7 +28,7 @@ public static class AuthorizationEndpoints
             (HttpContext ctx) => ProtectedResourceMetadata(ctx, options)).AllowAnonymous();
 
         app.MapGet("/login", LoginPage).AllowAnonymous();
-        app.MapPost("/login", LoginSubmit).AllowAnonymous();
+        app.MapPost("/login", LoginSubmit).AllowAnonymous().RequireRateLimiting("login");
 
         app.MapMethods("/authorize", new[] { "GET", "POST" },
             (HttpContext ctx, IUserDirectory directory) => AuthorizeAsync(ctx, directory, options));
@@ -68,7 +68,7 @@ public static class AuthorizationEndpoints
         return Results.Content(RenderLogin(returnUrl, hint, hasError), "text/html");
     }
 
-    private static async Task<IResult> LoginSubmit(HttpContext ctx, IUserDirectory directory)
+    private static async Task<IResult> LoginSubmit(HttpContext ctx, IUserDirectory directory, AuthorizationServerOptions options)
     {
         var form = await ctx.Request.ReadFormAsync();
         var username = form["username"].ToString();
@@ -78,6 +78,15 @@ public static class AuthorizationEndpoints
         var user = await directory.AuthenticateAsync(username, password, ctx.RequestAborted);
         if (user is null)
         {
+            // First-party portals post their own sign-in form here; send the failure straight
+            // back to the app (RFC 6749 §4.1.2.1 error response) instead of stranding the user
+            // on the api-mcp login page.
+            if (TryBuildClientErrorRedirect(returnUrl, options, Errors.AccessDenied,
+                    "The email address or password is incorrect.", out var clientRedirect))
+            {
+                return Results.Redirect(clientRedirect);
+            }
+
             var retry = "/login?error=1&returnUrl=" + Uri.EscapeDataString(returnUrl)
                 + "&login_hint=" + Uri.EscapeDataString(username);
             return Results.Redirect(retry);
@@ -137,6 +146,15 @@ public static class AuthorizationEndpoints
         if (user is null)
         {
             return Forbid("The signed-in AdventureWorks user could not be resolved.", Errors.AccessDenied);
+        }
+
+        // Portal gating: each first-party app only admits its own user category (consumers →
+        // e-shop, employees → admin, manufacturing staff → manufacturing). End the api-mcp login
+        // session so the next attempt can use a different account.
+        if (!options.IsCategoryAllowed(request.ClientId, user.Category))
+        {
+            await ctx.SignOutAsync(McpAuthorizationExtensions.LoginScheme);
+            return Forbid(PortalDeniedMessage(request.ClientId), Errors.AccessDenied);
         }
 
         var requested = request.GetScopes();
@@ -309,6 +327,10 @@ public static class AuthorizationEndpoints
         }
 
         var clientId = previous.GetClaim(AwClaims.Application) ?? previous.GetPresenters().FirstOrDefault() ?? string.Empty;
+        if (!options.IsCategoryAllowed(clientId, user.Category))
+        {
+            return Forbid(PortalDeniedMessage(clientId), Errors.InvalidGrant);
+        }
 
         string resource;
         bool includeOwnerClaims;
@@ -417,6 +439,60 @@ public static class AuthorizationEndpoints
     }
 
     // ----------------------------------------------------------------- helpers
+
+    private static string PortalDeniedMessage(string? clientId) => clientId switch
+    {
+        "adventureworks-admin" => "This portal is restricted to AdventureWorks administrators.",
+        "adventureworks-manufacturing" => "This portal is restricted to AdventureWorks manufacturing staff.",
+        "adventureworks-eshop" => "Employee accounts cannot sign in to the shop. Please use a customer account.",
+        _ => "Your AdventureWorks account may not sign in to this application.",
+    };
+
+    /// <summary>
+    /// When <paramref name="returnUrl"/> is a pending <c>/authorize</c> request from a trusted
+    /// first-party client with a registered redirect URI, builds that redirect URI carrying an
+    /// OAuth error (and the client's <c>state</c>). Returns false for anything else so the caller
+    /// falls back to the api-mcp login page.
+    /// </summary>
+    private static bool TryBuildClientErrorRedirect(
+        string returnUrl,
+        AuthorizationServerOptions options,
+        string error,
+        string description,
+        out string redirect)
+    {
+        redirect = string.Empty;
+        if (!Uri.TryCreate(new Uri("https://localhost"), returnUrl, out var parsed)
+            || !string.Equals(parsed.AbsolutePath, "/authorize", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(parsed.Query);
+        var clientId = query.TryGetValue("client_id", out var c) ? c.ToString() : null;
+        var redirectUri = query.TryGetValue("redirect_uri", out var r) ? r.ToString() : null;
+        var client = options.FindClient(clientId);
+        if (client is null
+            || !options.TrustedFirstPartyClientIds.Contains(client.ClientId)
+            || string.IsNullOrEmpty(redirectUri)
+            || !client.RedirectUris.Contains(redirectUri, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var parameters = new Dictionary<string, string?>
+        {
+            ["error"] = error,
+            ["error_description"] = description,
+        };
+        if (query.TryGetValue("state", out var state) && !string.IsNullOrEmpty(state))
+        {
+            parameters["state"] = state.ToString();
+        }
+
+        redirect = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(redirectUri, parameters);
+        return true;
+    }
 
     private static ClaimsIdentity BuildAccessIdentity(ResolvedUser user, OpenIddictRequest request, bool includeOwnerClaims) =>
         BuildAccessIdentity(user, request.ClientId ?? string.Empty, includeOwnerClaims);

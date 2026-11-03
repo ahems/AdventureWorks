@@ -103,7 +103,7 @@ public class FunctionAuthorizationRegistryTests
     {
         foreach (var policy in FunctionAuthorizationRegistry.All)
         {
-            if (policy.Tier is AccessTier.Public or AccessTier.ProxiedAnonymous)
+            if (policy.Tier is AccessTier.Public)
             {
                 Assert.True(policy.IsAnonymous, $"{policy.FunctionName} should be anonymous.");
                 Assert.Null(policy.RequiredScope);
@@ -131,19 +131,23 @@ public class FunctionAuthorizationRegistryTests
     }
 
     [Theory]
-    // Tier P — anonymous (incl. all pre-auth password endpoints, which must never require a token).
+    // Tier P — anonymous (pre-auth password-reset endpoints and consumer signup never require a token).
     [InlineData("HealthCheck", AccessTier.Public, null, AccessMode.Anonymous)]
     [InlineData("RequestPasswordReset", AccessTier.Public, null, AccessMode.Anonymous)]
     [InlineData("ResetPassword", AccessTier.Public, null, AccessMode.Anonymous)]
-    [InlineData("SetPassword", AccessTier.Public, null, AccessMode.Anonymous)]
-    [InlineData("VerifyPassword", AccessTier.Public, null, AccessMode.Anonymous)]
+    [InlineData("Signup", AccessTier.Public, null, AccessMode.Anonymous)]
     // Tier C — consumer self-service with record-level ownership.
+    [InlineData("SetPassword", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal)]
+    [InlineData("VerifyPassword", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal)]
     [InlineData("GetAddressById", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal)]
     [InlineData("CreateAddress", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal)]
     // Tier I — internal-only.
     [InlineData("AIJobQueue_Status", AccessTier.Internal, FunctionScopes.AdminRead, AccessMode.InternalOnly)]
-    // Tier M — proxied, left anonymous in v1 (documented descope).
-    [InlineData("BankDeposit", AccessTier.ProxiedAnonymous, null, AccessMode.Anonymous)]
+    // MCP-proxied routes — internal-only; scopes mirror the MCP tool policy.
+    [InlineData("BankDeposit", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly)]
+    [InlineData("ManufacturingStatus", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly)]
+    [InlineData("ManufacturingBegin", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly)]
+    [InlineData("SimulatorsReset", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly)]
     public void Known_routes_are_classified_as_expected(
         string functionName, AccessTier tier, string? scope, AccessMode mode)
     {

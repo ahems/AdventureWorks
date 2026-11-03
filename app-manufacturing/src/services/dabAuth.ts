@@ -24,6 +24,7 @@ import { API_MCP_URL } from "@/config/api";
 const CLIENT_ID = "adventureworks-manufacturing";
 const PKCE_KEY = "mfg_dab_oauth_pkce";
 const TOKEN_KEY = "mfg_dab_oauth_token";
+const FUNCTIONS_TOKEN_KEY = "mfg_fn_oauth_token";
 
 // Scopes the manufacturing client is permitted to request. The authorization server
 // intersects these with the signed-in employee's role-derived scopes. DAB authorizes
@@ -40,6 +41,7 @@ const REQUESTED_SCOPES = [
 
 interface DabTokenClaims {
   sub?: string;
+  name?: string;
   exp?: number;
   category?: string;
   role?: string;
@@ -383,6 +385,103 @@ export async function refreshAccessToken(force = false): Promise<string | null> 
   return inFlightRefresh;
 }
 
+/**
+ * Canonical Functions resource indicator (RFC 8707): `{api-mcp origin}/functions`, matching
+ * the authorization server's Functions audience and api-functions' expected `aud`.
+ */
+export function getFunctionsResourceIdentifier(): string {
+  const base = getOAuthBaseUrl();
+  return base ? `${base}/functions` : "";
+}
+
+interface StoredResourceToken {
+  accessToken: string;
+  expiresAt: number;
+  subject?: string;
+}
+
+function readFunctionsToken(): StoredResourceToken | null {
+  const raw = localStorage.getItem(FUNCTIONS_TOKEN_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as StoredResourceToken;
+  } catch {
+    localStorage.removeItem(FUNCTIONS_TOKEN_KEY);
+    return null;
+  }
+}
+
+let inFlightFunctions: Promise<string | null> | null = null;
+
+/**
+ * Returns a per-user access token for api-functions, minted silently from the sign-in
+ * refresh token (RFC 8707 resource switch) and cached until shortly before expiry.
+ * Functions enforces scope + category on every manufacturing route. Pass `force` to
+ * re-mint after a 401. Returns null when there is no session or the mint fails.
+ */
+export async function getFunctionsAccessToken(force = false): Promise<string | null> {
+  const session = readSession();
+  const resource = getFunctionsResourceIdentifier();
+  if (!session || !resource) return null;
+  const subject = decodeTokenClaims(session.accessToken)?.sub;
+  const isFresh = (t: StoredResourceToken | null): t is StoredResourceToken =>
+    !!t && t.subject === subject && t.expiresAt - REFRESH_SKEW_SECONDS > nowSeconds();
+
+  if (!force) {
+    const cached = readFunctionsToken();
+    if (isFresh(cached)) return cached.accessToken;
+  }
+  if (inFlightFunctions) return inFlightFunctions;
+
+  inFlightFunctions = withRefreshLock(async () => {
+    if (!force) {
+      const again = readFunctionsToken();
+      if (isFresh(again)) return again.accessToken;
+    }
+    const current = readSession();
+    if (!current?.refreshToken) return null;
+
+    const body = new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: current.refreshToken,
+      client_id: CLIENT_ID,
+      resource,
+    });
+    try {
+      const res = await fetch(`${getOAuthBaseUrl()}/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      });
+      if (!res.ok) return null;
+      const token = (await res.json()) as TokenResponse;
+      // Keep the DAB access token; persist only the rotated refresh token.
+      if (token.refresh_token) {
+        localStorage.setItem(TOKEN_KEY, JSON.stringify({ ...current, refreshToken: token.refresh_token }));
+      }
+      const stored: StoredResourceToken = {
+        accessToken: token.access_token,
+        expiresAt: nowSeconds() + (token.expires_in ?? 600),
+        subject,
+      };
+      localStorage.setItem(FUNCTIONS_TOKEN_KEY, JSON.stringify(stored));
+      return stored.accessToken;
+    } catch {
+      return null;
+    }
+  }).finally(() => {
+    inFlightFunctions = null;
+  });
+
+  return inFlightFunctions;
+}
+
+/** Decoded claims of the current DAB token (display only; no signature validation). */
+export function getCurrentClaims(): DabTokenClaims | null {
+  const t = readStoredToken();
+  return t ? decodeTokenClaims(t.accessToken) : null;
+}
+
 /** Returns a DAB access token, silently renewing it first when it is about to expire. */
 export async function getValidAccessToken(): Promise<string | null> {
   const t = readSession();
@@ -416,5 +515,6 @@ export function getDabRole(): string | null {
 /** Clears all DAB authorization context. Call on logout / user switch. */
 export function clearAuthorization(): void {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(FUNCTIONS_TOKEN_KEY);
   sessionStorage.removeItem(PKCE_KEY);
 }

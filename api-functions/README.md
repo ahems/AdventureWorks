@@ -106,11 +106,18 @@ All AI Foundry agent calls share the `FoundryAgentClient` singleton, which lever
 
 - **Trigger / Route**: HTTP `POST /api/password`
 - **Purpose**: Sets or updates a PBKDF2‑hashed password for a `BusinessEntityID` via `PasswordService`. Performs basic validation (non‑empty, min length) before persisting hash and salt into the `Person.Password` table.
+- **Authorization**: Bearer token with `customers.write`. Consumers may only set their **own** password; staff may only reset passwords for individual customers (PersonType `IN`), never employee accounts.
 
 ### `VerifyPassword`
 
 - **Trigger / Route**: HTTP `POST /api/password/verify`
 - **Purpose**: Verifies a plaintext password for a given `BusinessEntityID` by recomputing the PBKDF2 hash and comparing it with stored values. Returns a structured `IsValid`/`Message` payload.
+- **Authorization**: Bearer token with `customers.read`; the caller may only verify their **own** password (no anonymous password oracle).
+
+### `Signup`
+
+- **Trigger / Route**: HTTP `POST /api/signup` (anonymous)
+- **Purpose**: Creates a new individual e-shop customer server-side (`BusinessEntity`, `Person` with PersonType `IN`, `EmailAddress`, `Password`) in one serializable transaction. Validates email (≤ 50 chars), first/last name (1–50 chars) and password (≥ 8 chars). Returns `201` with `{ businessEntityId, emailAddressId, email, firstName, lastName }`, `409` for a duplicate email, `400` for invalid input. Replaces the former anonymous DAB create mutations.
 
 ### `RequestPasswordReset`
 

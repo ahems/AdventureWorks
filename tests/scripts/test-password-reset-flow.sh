@@ -7,7 +7,8 @@
 # 3. Complete password reset with new password
 # 4. Verify new password works
 #
-# Usage: ./test-password-reset-flow.sh [function-url]
+# Usage: FUNCTIONS_TOKEN=<token> TEST_BUSINESS_ENTITY_ID=<id> TEST_EMAIL=<email> \
+#        ./test-password-reset-flow.sh [function-url]
 
 set -e  # Exit on error
 
@@ -38,10 +39,18 @@ echo "========================================="
 echo "Function URL: $FUNCTION_URL"
 echo ""
 
-# Test data - using a known test user from AdventureWorks database
-# Default test: BusinessEntityID 1 with email ken0@adventure-works.com
-TEST_EMAIL="ken0@adventure-works.com"
-TEST_BUSINESS_ENTITY_ID=1
+# POST /api/password and /api/password/verify require the caller's OWN Functions bearer token
+# (Functions OAuth is enforced). Use a disposable e-shop CUSTOMER account — never the admin or
+# manufacturing demo logins (ken0@ / peter0@), whose passwords this script would overwrite.
+# Obtain the token from the signed-in e-shop session (sessionStorage key for the Functions token).
+if [ -z "$FUNCTIONS_TOKEN" ] || [ -z "$TEST_BUSINESS_ENTITY_ID" ]; then
+    echo "Error: set FUNCTIONS_TOKEN and TEST_BUSINESS_ENTITY_ID for a test e-shop customer account"
+    exit 1
+fi
+if [ -z "$TEST_EMAIL" ]; then
+    echo "Error: set TEST_EMAIL to the test customer's email address"
+    exit 1
+fi
 ORIGINAL_PASSWORD="TestPassword123!"
 NEW_PASSWORD="NewSecurePassword456!"
 WRONG_PASSWORD="WrongPassword789!"
@@ -55,6 +64,7 @@ echo ""
 echo -e "${YELLOW}Step 0: Setting up initial password...${NC}"
 echo "-------------------------------------------"
 curl -s -X POST "${FUNCTION_URL}/api/password" \
+  -H "Authorization: Bearer $FUNCTIONS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"businessEntityID": '"$TEST_BUSINESS_ENTITY_ID"', "password": "'"$ORIGINAL_PASSWORD"'"}' > /dev/null
 
@@ -180,6 +190,7 @@ echo -e "${YELLOW}Step 4: Verifying old password no longer works...${NC}"
 echo "-------------------------------------------"
 echo "Request: POST ${FUNCTION_URL}/api/password/verify"
 OLD_PASSWORD_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/verify" \
+  -H "Authorization: Bearer $FUNCTIONS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"businessEntityID": '"$TEST_BUSINESS_ENTITY_ID"', "password": "'"$ORIGINAL_PASSWORD"'"}')
 
@@ -201,6 +212,7 @@ echo -e "${YELLOW}Step 5: Verifying new password works...${NC}"
 echo "-------------------------------------------"
 echo "Request: POST ${FUNCTION_URL}/api/password/verify"
 NEW_PASSWORD_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/verify" \
+  -H "Authorization: Bearer $FUNCTIONS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"businessEntityID": '"$TEST_BUSINESS_ENTITY_ID"', "password": "'"$NEW_PASSWORD"'"}')
 
@@ -312,6 +324,7 @@ echo ""
 echo -e "${YELLOW}Cleanup: Restoring original password...${NC}"
 echo "-------------------------------------------"
 curl -s -X POST "${FUNCTION_URL}/api/password" \
+  -H "Authorization: Bearer $FUNCTIONS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"businessEntityID": '"$TEST_BUSINESS_ENTITY_ID"', "password": "'"$ORIGINAL_PASSWORD"'"}' > /dev/null
 

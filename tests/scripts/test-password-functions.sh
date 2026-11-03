@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Test script for password hashing functions
-# Usage: ./test-password-functions.sh [function-url]
+# Usage: FUNCTIONS_TOKEN=<token> TEST_BUSINESS_ENTITY_ID=<id> ./test-password-functions.sh [function-url]
 
 # Get the function URL from argument, azd env, or fail
 if [ -n "$1" ]; then
@@ -24,8 +24,17 @@ echo "========================================="
 echo "Function URL: $FUNCTION_URL"
 echo ""
 
+# POST /api/password and /api/password/verify require the caller's OWN Functions bearer token
+# (Functions OAuth is enforced). Use a disposable e-shop CUSTOMER account — never the admin or
+# manufacturing demo logins (ken0@ / peter0@), whose passwords this script would overwrite.
+# Obtain the token from the signed-in e-shop session (sessionStorage key for the Functions token).
+if [ -z "$FUNCTIONS_TOKEN" ] || [ -z "$TEST_BUSINESS_ENTITY_ID" ]; then
+    echo "Error: set FUNCTIONS_TOKEN and TEST_BUSINESS_ENTITY_ID for a test e-shop customer account"
+    exit 1
+fi
+
 # Test data
-BUSINESS_ENTITY_ID=1
+BUSINESS_ENTITY_ID=$TEST_BUSINESS_ENTITY_ID
 TEST_PASSWORD="TestPassword123!"
 WRONG_PASSWORD="WrongPassword456!"
 
@@ -33,6 +42,7 @@ echo "1. Setting password for BusinessEntityID $BUSINESS_ENTITY_ID..."
 echo "-------------------------------------------"
 echo "Request: POST ${FUNCTION_URL}/api/password"
 SET_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password" \
+  -H "Authorization: Bearer $FUNCTIONS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"businessEntityID": '"$BUSINESS_ENTITY_ID"', "password": "'"$TEST_PASSWORD"'"}')
 
@@ -59,6 +69,7 @@ echo "2. Verifying correct password..."
 echo "-------------------------------------------"
 echo "Request: POST ${FUNCTION_URL}/api/password/verify"
 VERIFY_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/verify" \
+  -H "Authorization: Bearer $FUNCTIONS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"businessEntityID": '"$BUSINESS_ENTITY_ID"', "password": "'"$TEST_PASSWORD"'"}')
 
@@ -85,6 +96,7 @@ echo "3. Verifying wrong password..."
 echo "-------------------------------------------"
 echo "Request: POST ${FUNCTION_URL}/api/password/verify"
 VERIFY_WRONG_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/verify" \
+  -H "Authorization: Bearer $FUNCTIONS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"businessEntityID": '"$BUSINESS_ENTITY_ID"', "password": "'"$WRONG_PASSWORD"'"}')
 
@@ -112,6 +124,7 @@ echo "-------------------------------------------"
 NEW_PASSWORD="NewPassword789!"
 echo "Request: POST ${FUNCTION_URL}/api/password (update)"
 UPDATE_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password" \
+  -H "Authorization: Bearer $FUNCTIONS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"businessEntityID": '"$BUSINESS_ENTITY_ID"', "password": "'"$NEW_PASSWORD"'"}')
 
@@ -124,6 +137,7 @@ echo ""
 
 # Verify old password no longer works
 VERIFY_OLD_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/verify" \
+  -H "Authorization: Bearer $FUNCTIONS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"businessEntityID": '"$BUSINESS_ENTITY_ID"', "password": "'"$TEST_PASSWORD"'"}')
 
@@ -142,6 +156,7 @@ fi
 
 # Verify new password works
 VERIFY_NEW_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password/verify" \
+  -H "Authorization: Bearer $FUNCTIONS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"businessEntityID": '"$BUSINESS_ENTITY_ID"', "password": "'"$NEW_PASSWORD"'"}')
 
@@ -163,6 +178,7 @@ echo "5. Testing validation (password too short)..."
 echo "-------------------------------------------"
 echo "Request: POST ${FUNCTION_URL}/api/password (short password)"
 SHORT_PASSWORD_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "${FUNCTION_URL}/api/password" \
+  -H "Authorization: Bearer $FUNCTIONS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"businessEntityID": '"$BUSINESS_ENTITY_ID"', "password": "short"}')
 

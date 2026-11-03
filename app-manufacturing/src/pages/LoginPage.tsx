@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
-import { Loader2, Eye, EyeOff, HardHat } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { Loader2, Eye, EyeOff, HardHat, MousePointerClick, Check } from "lucide-react";
 import ManufacturingLogo from "@/components/ManufacturingLogo";
 import { useAuth } from "@/context/AuthContext";
 import { z } from "zod";
@@ -10,6 +10,26 @@ const loginSchema = z.object({
   password: z.string().min(1, { message: "Password is required" }),
 });
 
+const ClickToFillBadge: React.FC<{ filled: boolean }> = ({ filled }) => (
+  <span
+    className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+      filled
+        ? "border-green-600/40 bg-green-600/10 text-green-700"
+        : "border-doodle-accent/50 bg-doodle-accent/10 text-doodle-accent group-hover:bg-doodle-accent group-hover:text-white"
+    }`}
+  >
+    {filled ? (
+      <>
+        <Check className="w-3 h-3" /> Filled
+      </>
+    ) : (
+      <>
+        <MousePointerClick className="w-3 h-3" /> Click to fill
+      </>
+    )}
+  </span>
+);
+
 const LoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -18,6 +38,8 @@ const LoginPage: React.FC = () => {
   const [password, setPassword] = useState("");
 
   const { login, isLoading } = useAuth();
+  const location = useLocation();
+  const authError = (location.state as { authError?: string } | null)?.authError;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +100,15 @@ const LoginPage: React.FC = () => {
                 Sign in with your corporate credentials
               </p>
             </div>
+
+            {authError && (
+              <div
+                role="alert"
+                className="mb-4 border-2 border-doodle-accent bg-doodle-accent/10 p-3 font-doodle text-sm text-doodle-text"
+              >
+                {authError}
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Email */}
@@ -162,28 +193,32 @@ const LoginPage: React.FC = () => {
                 Demo Credentials
               </p>
               <div className="doodle-border-light p-3 bg-doodle-text/5 space-y-2">
-                <p className="font-doodle text-xs text-doodle-text">
-                  <span className="text-doodle-text/60">Email:</span>{" "}
-                  <button
-                    type="button"
-                    className="underline hover:no-underline"
-                    onClick={() => setEmail("demo.admin@adventureworks.com")}
-                  >
-                    demo.admin@adventureworks.com
-                  </button>
-                </p>
-                <p className="font-doodle text-xs text-doodle-text">
-                  <span className="text-doodle-text/60">Password:</span>{" "}
-                  <button
-                    type="button"
-                    className="underline hover:no-underline"
-                    onClick={() => setPassword("Admin1234!")}
-                  >
-                    Admin1234!
-                  </button>
-                </p>
+                <button
+                  type="button"
+                  onClick={() => setEmail("peter0@adventure-works.com")}
+                  className="group w-full flex items-center justify-between gap-2 font-doodle text-xs text-doodle-text text-left"
+                  title="Click to fill email"
+                >
+                  <span>
+                    <span className="text-doodle-text/60">Email:</span>{" "}
+                    <span className="underline group-hover:no-underline">peter0@adventure-works.com</span>
+                  </span>
+                  <ClickToFillBadge filled={email === "peter0@adventure-works.com"} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPassword("Factory1234!")}
+                  className="group w-full flex items-center justify-between gap-2 font-doodle text-xs text-doodle-text text-left"
+                  title="Click to fill password"
+                >
+                  <span>
+                    <span className="text-doodle-text/60">Password:</span>{" "}
+                    <span className="underline group-hover:no-underline">Factory1234!</span>
+                  </span>
+                  <ClickToFillBadge filled={password === "Factory1234!"} />
+                </button>
                 <p className="font-doodle text-xs text-doodle-text/50 italic pt-1">
-                  Seeded into the database at deploy time. Click to fill.
+                  Peter Krebs, Production Control Manager (manufacturing-engineer).
                 </p>
               </div>
             </div>

@@ -141,6 +141,66 @@ public class PasswordService
     }
 
     /// <summary>
+    /// True when the business entity is an individual e-shop customer (Person.PersonType = 'IN').
+    /// </summary>
+    public async Task<bool> IsIndividualCustomerAsync(int businessEntityId)
+    {
+        using var connection = await CreateConnectionAsync();
+        var personType = await connection.ExecuteScalarAsync<string?>(
+            "SELECT PersonType FROM [Person].[Person] WHERE BusinessEntityID = @BusinessEntityId",
+            new { BusinessEntityId = businessEntityId });
+        return string.Equals(personType?.Trim(), "IN", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Creates an individual customer (BusinessEntity, Person 'IN', EmailAddress, Password) in a
+    /// single serializable transaction. Returns null when the email address is already registered.
+    /// </summary>
+    public async Task<CreatedCustomerAccount?> CreateCustomerAccountAsync(
+        string email, string password, string firstName, string lastName)
+    {
+        string salt = GenerateSalt();
+        string hash = HashPassword(password, salt);
+
+        using var connection = await CreateConnectionAsync();
+        using var transaction = connection.BeginTransaction(System.Data.IsolationLevel.Serializable);
+
+        var exists = await connection.ExecuteScalarAsync<int>(
+            "SELECT COUNT(1) FROM [Person].[EmailAddress] WITH (UPDLOCK, HOLDLOCK) WHERE EmailAddress = @Email",
+            new { Email = email }, transaction) > 0;
+        if (exists)
+        {
+            transaction.Rollback();
+            return null;
+        }
+
+        var businessEntityId = await connection.ExecuteScalarAsync<int>(@"
+            INSERT INTO [Person].[BusinessEntity] (rowguid, ModifiedDate)
+            OUTPUT INSERTED.BusinessEntityID
+            VALUES (NEWID(), GETDATE())", transaction: transaction);
+
+        await connection.ExecuteAsync(@"
+            INSERT INTO [Person].[Person]
+                (BusinessEntityID, PersonType, NameStyle, FirstName, LastName, EmailPromotion, rowguid, ModifiedDate)
+            VALUES (@Id, 'IN', 0, @FirstName, @LastName, 0, NEWID(), GETDATE())",
+            new { Id = businessEntityId, FirstName = firstName, LastName = lastName }, transaction);
+
+        var emailAddressId = await connection.ExecuteScalarAsync<int>(@"
+            INSERT INTO [Person].[EmailAddress] (BusinessEntityID, EmailAddress, rowguid, ModifiedDate)
+            OUTPUT INSERTED.EmailAddressID
+            VALUES (@Id, @Email, NEWID(), GETDATE())",
+            new { Id = businessEntityId, Email = email }, transaction);
+
+        await connection.ExecuteAsync(@"
+            INSERT INTO [Person].[Password] (BusinessEntityID, PasswordHash, PasswordSalt, rowguid, ModifiedDate)
+            VALUES (@Id, @Hash, @Salt, NEWID(), GETDATE())",
+            new { Id = businessEntityId, Hash = hash, Salt = salt }, transaction);
+
+        transaction.Commit();
+        return new CreatedCustomerAccount(businessEntityId, emailAddressId);
+    }
+
+    /// <summary>
     /// Retrieves a password record for a business entity
     /// </summary>
     public async Task<Password?> GetPasswordAsync(int businessEntityId)

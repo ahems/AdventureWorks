@@ -148,7 +148,7 @@
       "problemMatcher": []
     },
     {
-      "label": "reseed-demo-admin",
+      "label": "reseed-demo-logins",
       "type": "shell",
       "command": "bash",
       "args": [

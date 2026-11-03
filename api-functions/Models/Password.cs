@@ -22,6 +22,22 @@ public class SetPasswordRequest
 }
 
 /// <summary>
+/// DTO for server-side e-shop customer registration
+/// </summary>
+public class SignupRequest
+{
+    public string? Email { get; set; }
+    public string Password { get; set; } = string.Empty;
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+}
+
+/// <summary>
+/// Identifiers of a newly registered customer
+/// </summary>
+public sealed record CreatedCustomerAccount(int BusinessEntityId, int EmailAddressId);
+
+/// <summary>
 /// DTO for verifying a password
 /// </summary>
 public class VerifyPasswordRequest

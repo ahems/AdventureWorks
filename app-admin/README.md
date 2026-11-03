@@ -38,7 +38,7 @@ The admin portal gives store managers and employees visibility into every corner
 | State / Data | TanStack Query (React Query)                                         |
 | Charts       | Recharts                                                             |
 | Routing      | React Router v6                                                      |
-| Auth         | Custom `AuthContext` with credential-based login via Azure Functions |
+| Auth         | `AuthContext` over the api-mcp OAuth server (authorization code + PKCE)  |
 | Build        | `npm run build` → `dist/`                                            |
 | Container    | Docker multi-stage build (`node:20-bookworm-slim` via MCR mirror)    |
 | Hosting      | Azure Container App (remote ACR build, `minReplicas: 0`)             |
@@ -93,7 +93,11 @@ app-admin/src/
 
 ## Authentication
 
-Authentication uses a custom `AuthContext` that calls `POST /api/password/verify` on the Azure Functions backend. Credentials are stored in `localStorage` for session persistence. There is no OAuth/Entra ID integration for the admin portal — it uses the AdventureWorks `Person.Password` table directly.
+Sign-in is performed entirely by the AdventureWorks OAuth authorization server hosted in `api-mcp` (authorization code + PKCE). The login page forwards the credentials to the server-rendered login endpoint; the server verifies the password **and** requires the user to be an **employee** — customers and other portals' users are redirected back with `error=access_denied` and shown an error. The signed-in user's name and role are read from the issued token claims (nothing is trusted from the browser).
+
+After sign-in the app silently switches its refresh token to DAB, MCP and Functions resource tokens. [`functionsAuthInterceptor.ts`](src/services/functionsAuthInterceptor.ts) attaches the Functions bearer token to every request sent to the Functions API and re-mints it once on a `401`.
+
+Demo login: `ken0@adventure-works.com` / `Admin1234!` (Ken Sánchez, CEO → `executive-admin`).
 
 All pages check `useAuth().isAuthenticated`. Unauthenticated users are redirected to `/login`.
 

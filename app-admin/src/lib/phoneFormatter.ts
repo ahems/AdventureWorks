@@ -38,3 +38,17 @@ export function formatPhoneNumber(
 export function parsePhoneNumber(phoneNumber: string): string {
   return phoneNumber.replace(/\D/g, "");
 }
+
+/**
+ * Split a stored phone number ("+44 20 7946 0958" or "697-555-0142") into
+ * country code (digits only, defaults to "1") and the local part.
+ */
+export function splitPhoneNumber(phoneNumber: string): {
+  countryCode: string;
+  localNumber: string;
+} {
+  const trimmed = phoneNumber.trim();
+  const match = /^\+(\d{1,3})\s+(.*)$/.exec(trimmed);
+  if (match) return { countryCode: match[1], localNumber: match[2] };
+  return { countryCode: "1", localNumber: trimmed };
+}
