@@ -17,6 +17,19 @@ The MCP server is implemented as an ASP.NET Core service with SSE transport and 
 
 ## Role in the Overall Architecture
 
+### Health endpoints
+
+- `/health` and `/alive` remain anonymous process-liveness probes.
+- `/ready` is an anonymous, sanitized JSON readiness report: HTTP 200 when the
+  MCP catalog SQL read and task-store read checks pass, 503 otherwise. With no
+  configured storage account, the existing local in-memory task store is valid
+  but explicitly reported as non-durable.
+- Results are cached per process for 60 seconds; checks are bounded to 12 seconds.
+  No tasks or infrastructure are created. A read pass does not prove write
+  permission, authenticated tool execution, or model/agent runtime health.
+- The storefront obtains these results through Functions, not a browser-to-MCP
+  cross-origin request. See [Health diagnostics](../docs/features/monitoring/HEALTH_DIAGNOSTICS.md).
+
 - The **frontend** talks to the AI Functions (`api-functions`) via HTTP (e.g., `/api/agent/chat`).
 - The **AI agent** inside `api-functions` uses the Microsoft Agent Framework and is configured (via deployment scripts) to use this MCP server as a tools endpoint.
 - The **MCP server** (`api-mcp`) connects to:

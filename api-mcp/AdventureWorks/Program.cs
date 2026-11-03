@@ -132,6 +132,7 @@ builder.Services
 	   });
 
 builder.AddServiceDefaults();
+builder.Services.AddSingleton<McpReadinessService>();
 
 // Azure Container Apps (and any TLS-terminating ingress) forward requests to Kestrel over
 // plain HTTP while setting X-Forwarded-Proto: https. Honor that header so Request.Scheme is
@@ -162,6 +163,12 @@ app.UseForwardedHeaders();
 app.UseMcpAuthorization(authOptions);
 
 app.MapDefaultEndpoints();
+app.MapGet("/ready", async (McpReadinessService health, HttpContext context) =>
+{
+    var report = await health.GetReportAsync(context.RequestAborted);
+    context.Response.Headers.CacheControl = "no-store";
+    return Results.Json(report, statusCode: report.Status == "healthy" ? 200 : 503);
+});
 
 // /mcp requires a valid resource-bound token carrying the mcp.access scope.
 app.MapMcp("/mcp").RequireAuthorization(McpAuthorizationExtensions.McpPolicy);

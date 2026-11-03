@@ -14,6 +14,18 @@ These scripts test the AdventureWorks APIs and Azure Functions directly using cu
 
 ## Available Test Scripts
 
+### Health Diagnostics
+
+- **[test-health-diagnostics.sh](test-health-diagnostics.sh)** - Read-only Azure
+  smoke test for unchanged Functions/MCP liveness plus the sanitized readiness
+  contracts, required SQL/storage/MCP/OAuth checks, and expected check IDs.
+  Resolves endpoints from `azd` (or `API_FUNCTIONS_URL` / `API_MCP_URL` overrides).
+  Run `bash tests/scripts/test-health-diagnostics.sh` from the repository root.
+  Does not invoke models or mutate data; returns nonzero for dependency failures.
+- **[Health diagnostics guide](../../docs/features/monitoring/HEALTH_DIAGNOSTICS.md)** -
+  Frontend regression tests, optional capability/data checks, limitations,
+  deployment, and browser smoke-test steps.
+
 ### Local Hook Tests
 
 - **test-chat-model-selection.sh** - Runs the actual preup chat-selection block

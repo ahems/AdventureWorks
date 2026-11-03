@@ -1,857 +1,245 @@
-import React, { useState, useEffect } from "react";
-import { Check, X, Clock, AlertCircle, Activity } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Activity, ArrowLeft, Check, Clock, AlertCircle } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { getGraphQLApiUrl, getFunctionsApiUrl } from "@/lib/utils";
-
-interface AppConfig {
-  API_URL: string;
-  API_FUNCTIONS_URL?: string;
-  API_MCP_URL?: string;
-  APPINSIGHTS_CONNECTIONSTRING?: string;
-}
-
-interface HealthCheckResult {
-  name: string;
-  status: "checking" | "healthy" | "unhealthy" | "timeout";
-  message?: string;
-  responseTime?: number;
-  endpoint?: string;
-}
-
-interface FunctionEndpoint {
-  name: string;
-  path: string;
-  method: string;
-  requiresBody?: boolean;
-}
-
-const HealthCheckPage: React.FC = () => {
-  const [checks, setChecks] = useState<HealthCheckResult[]>([]);
-  const [progress, setProgress] = useState(0);
-  const [startTime, setStartTime] = useState<number>(0);
-  const [refreshCountdown, setRefreshCountdown] = useState<number | null>(null);
-
-  // Define all function endpoints to check
-  const functionEndpoints: FunctionEndpoint[] = [
-    { name: "Health Check", path: "/api/health", method: "GET" },
-    { name: "Agent Status", path: "/api/agent/status", method: "GET" },
-    {
-      name: "Search Suggestions",
-      path: "/api/search/suggestions?q=bike",
-      method: "GET",
-    },
-    { name: "Sitemap", path: "/api/sitemap.xml", method: "GET" },
-    { name: "OpenAPI Spec", path: "/api/openapi.json", method: "GET" },
-  ];
-
-  const updateCheckStatus = (
-    name: string,
-    status: HealthCheckResult["status"],
-    message?: string,
-    responseTime?: number,
-    endpoint?: string,
-  ) => {
-    setChecks((prev) => {
-      const existing = prev.find((c) => c.name === name);
-      if (existing) {
-        return prev.map((c) =>
-          c.name === name
-            ? { ...c, status, message, responseTime, endpoint }
-            : c,
-        );
-      }
-      return [...prev, { name, status, message, responseTime, endpoint }];
-    });
-  };
-
-  const checkGraphQLAPI = async (): Promise<void> => {
-    const name = "GraphQL API (DAB)";
-    const start = performance.now();
-    updateCheckStatus(name, "checking");
-
-    try {
-      const apiUrl = getGraphQLApiUrl();
-      updateCheckStatus(name, "checking", undefined, undefined, apiUrl);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
-
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: "{ productCategories { items { ProductCategoryID Name } } }",
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      const responseTime = Math.round(performance.now() - start);
-
-      if (!response.ok) {
-        updateCheckStatus(
-          name,
-          "unhealthy",
-          `HTTP ${response.status}: ${response.statusText}`,
-          responseTime,
-          apiUrl,
-        );
-        return;
-      }
-
-      const data = await response.json();
-
-      if (data.errors) {
-        updateCheckStatus(
-          name,
-          "unhealthy",
-          `GraphQL errors: ${data.errors.map((e: { message: string }) => e.message).join(", ")}`,
-          responseTime,
-          apiUrl,
-        );
-        return;
-      }
-
-      if (data.data?.productCategories?.items) {
-        updateCheckStatus(
-          name,
-          "healthy",
-          `Returned ${data.data.productCategories.items.length} categories`,
-          responseTime,
-          apiUrl,
-        );
-      } else {
-        updateCheckStatus(
-          name,
-          "unhealthy",
-          "Invalid response structure",
-          responseTime,
-          apiUrl,
-        );
-      }
-    } catch (error: unknown) {
-      const responseTime = Math.round(performance.now() - start);
-      if ((error as Error).name === "AbortError") {
-        updateCheckStatus(
-          name,
-          "timeout",
-          "Request timeout (>60s)",
-          responseTime,
-        );
-      } else {
-        updateCheckStatus(
-          name,
-          "unhealthy",
-          (error as Error).message,
-          responseTime,
-        );
-      }
-    }
-  };
-
-  const checkFunction = async (func: FunctionEndpoint): Promise<void> => {
-    const name = `Function: ${func.name}`;
-    const start = performance.now();
-    updateCheckStatus(name, "checking");
-
-    try {
-      const functionsUrl = getFunctionsApiUrl();
-      const endpoint = `${functionsUrl}${func.path}`;
-      updateCheckStatus(name, "checking", undefined, undefined, endpoint);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
-
-      const options: RequestInit = {
-        method: func.method,
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-      };
-
-      const response = await fetch(endpoint, options);
-
-      clearTimeout(timeoutId);
-      const responseTime = Math.round(performance.now() - start);
-
-      // Check for successful responses (200-299)
-      if (response.ok) {
-        updateCheckStatus(
-          name,
-          "healthy",
-          `HTTP ${response.status} - Service operational`,
-          responseTime,
-          endpoint,
-        );
-      } else if (response.status < 500) {
-        // 4xx errors indicate the endpoint exists but may need authentication or proper data
-        updateCheckStatus(
-          name,
-          "healthy",
-          `HTTP ${response.status} - Endpoint responding (may require auth/data)`,
-          responseTime,
-          endpoint,
-        );
-      } else {
-        // 5xx errors indicate server problems
-        updateCheckStatus(
-          name,
-          "unhealthy",
-          `HTTP ${response.status}: ${response.statusText}`,
-          responseTime,
-          endpoint,
-        );
-      }
-    } catch (error: unknown) {
-      const responseTime = Math.round(performance.now() - start);
-      if ((error as Error).name === "AbortError") {
-        updateCheckStatus(
-          name,
-          "timeout",
-          "Request timeout (>60s)",
-          responseTime,
-        );
-      } else {
-        updateCheckStatus(
-          name,
-          "unhealthy",
-          (error as Error).message,
-          responseTime,
-        );
-      }
-    }
-  };
-
-  const checkMCPAPI = async (): Promise<void> => {
-    const name = "MCP API";
-    const start = performance.now();
-    updateCheckStatus(name, "checking");
-
-    try {
-      // Get MCP URL from window config or environment
-      const mcpUrl =
-        (window as Window & { APP_CONFIG?: AppConfig }).APP_CONFIG
-          ?.API_MCP_URL || import.meta.env.VITE_API_MCP_URL;
-
-      if (!mcpUrl) {
-        updateCheckStatus(name, "unhealthy", "MCP URL not configured");
-        return;
-      }
-
-      // Extract base URL (remove /mcp path if present) for health check
-      const baseUrl = mcpUrl.replace(/\/mcp$/, "");
-      const endpoint = `${baseUrl}/health`;
-      updateCheckStatus(name, "checking", undefined, undefined, endpoint);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
-
-      const response = await fetch(endpoint, {
-        method: "GET",
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      const responseTime = Math.round(performance.now() - start);
-
-      if (!response.ok) {
-        updateCheckStatus(
-          name,
-          "unhealthy",
-          `HTTP ${response.status}: ${response.statusText}`,
-          responseTime,
-          endpoint,
-        );
-        return;
-      }
-
-      const data = await response.text();
-      updateCheckStatus(
-        name,
-        "healthy",
-        `Health check passed: ${data}`,
-        responseTime,
-        endpoint,
-      );
-    } catch (error: unknown) {
-      const responseTime = Math.round(performance.now() - start);
-      if ((error as Error).name === "AbortError") {
-        updateCheckStatus(
-          name,
-          "timeout",
-          "Request timeout (>60s)",
-          responseTime,
-        );
-      } else {
-        updateCheckStatus(
-          name,
-          "unhealthy",
-          (error as Error).message,
-          responseTime,
-        );
-      }
-    }
-  };
-
-  const checkAIGeneratedImages = async (): Promise<void> => {
-    const name = "AI Generated Images";
-    const start = performance.now();
-    updateCheckStatus(name, "checking");
-
-    try {
-      const apiUrl = getGraphQLApiUrl();
-      updateCheckStatus(name, "checking", undefined, undefined, apiUrl);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
-
-      // Query for ProductPhoto records with ProductPhotoID >= 1000 (AI-generated images)
-      // Use first: 5000 to override the default 100-item pagination limit
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: `{
-            productPhotos(filter: { ProductPhotoID: { gte: 1000 } }, first: 5000) {
-              items {
-                ProductPhotoID
-              }
-              hasNextPage
-            }
-          }`,
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      const responseTime = Math.round(performance.now() - start);
-
-      if (!response.ok) {
-        updateCheckStatus(
-          name,
-          "unhealthy",
-          `HTTP ${response.status}: ${response.statusText}`,
-          responseTime,
-          apiUrl,
-        );
-        return;
-      }
-
-      const data = await response.json();
-
-      if (data.errors) {
-        updateCheckStatus(
-          name,
-          "unhealthy",
-          `GraphQL errors: ${data.errors.map((e: { message: string }) => e.message).join(", ")}`,
-          responseTime,
-          apiUrl,
-        );
-        return;
-      }
-
-      if (data.data?.productPhotos?.items) {
-        const count = data.data.productPhotos.items.length;
-        const hasNextPage = data.data.productPhotos.hasNextPage;
-        const expectedCount = 885;
-
-        if (hasNextPage) {
-          updateCheckStatus(
-            name,
-            "unhealthy",
-            `Found ${count}+ AI-generated images but pagination indicates more exist (may need to increase query limit)`,
-            responseTime,
-            apiUrl,
-          );
-        } else if (count >= expectedCount) {
-          updateCheckStatus(
-            name,
-            "healthy",
-            `Found ${count} AI-generated images (expected ~${expectedCount})`,
-            responseTime,
-            apiUrl,
-          );
-        } else if (count > 0) {
-          updateCheckStatus(
-            name,
-            "unhealthy",
-            `Only ${count} of ~${expectedCount} AI-generated images found (upload may be in progress)`,
-            responseTime,
-            apiUrl,
-          );
-        } else {
-          updateCheckStatus(
-            name,
-            "unhealthy",
-            `No AI-generated images found (expected ~${expectedCount})`,
-            responseTime,
-            apiUrl,
-          );
-        }
-      } else {
-        updateCheckStatus(
-          name,
-          "unhealthy",
-          "Invalid response structure",
-          responseTime,
-          apiUrl,
-        );
-      }
-    } catch (error: unknown) {
-      const responseTime = Math.round(performance.now() - start);
-      if ((error as Error).name === "AbortError") {
-        updateCheckStatus(
-          name,
-          "timeout",
-          "Request timeout (>60s)",
-          responseTime,
-        );
-      } else {
-        updateCheckStatus(
-          name,
-          "unhealthy",
-          (error as Error).message,
-          responseTime,
-        );
-      }
-    }
-  };
-
-  const checkSeedJobStatus = async (): Promise<void> => {
-    const name = "Seed Job";
-    const start = performance.now();
-    updateCheckStatus(name, "checking");
-
-    try {
-      const functionsUrl = getFunctionsApiUrl();
-      const endpoint = `${functionsUrl}/api/seed/status`;
-      updateCheckStatus(name, "checking", undefined, undefined, endpoint);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
-
-      const response = await fetch(endpoint, {
-        method: "GET",
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      const responseTime = Math.round(performance.now() - start);
-
-      if (!response.ok) {
-        updateCheckStatus(
-          name,
-          "unhealthy",
-          `HTTP ${response.status}: ${response.statusText}`,
-          responseTime,
-          endpoint,
-        );
-        return;
-      }
-
-      const data = await response.json();
-      const status = data.status as string;
-      const message = (data.message as string) || "";
-      const durationHuman = data.durationHuman as string | undefined;
-
-      if (status === "completed") {
-        const completedMessage =
-          durationHuman != null
-            ? `Seed job completed successfully (ran for ${durationHuman})`
-            : message || "Seed job completed successfully";
-        updateCheckStatus(
-          name,
-          "healthy",
-          completedMessage,
-          responseTime,
-          endpoint,
-        );
-      } else if (status === "running") {
-        const runningMessage =
-          data.runningForHuman != null
-            ? `Running for ${data.runningForHuman}`
-            : "Seed job running";
-        updateCheckStatus(name, "unhealthy", runningMessage, responseTime, endpoint);
-      } else if (status === "failed") {
-        updateCheckStatus(
-          name,
-          "unhealthy",
-          message || "Seed job failed",
-          responseTime,
-          endpoint,
-        );
-      } else {
-        // unknown
-        updateCheckStatus(
-          name,
-          "healthy",
-          message || "No seed log found (or unable to read)",
-          responseTime,
-          endpoint,
-        );
-      }
-    } catch (error: unknown) {
-      const responseTime = Math.round(performance.now() - start);
-      if ((error as Error).name === "AbortError") {
-        updateCheckStatus(
-          name,
-          "timeout",
-          "Request timeout (>60s)",
-          responseTime,
-        );
-      } else {
-        updateCheckStatus(
-          name,
-          "unhealthy",
-          (error as Error).message,
-          responseTime,
-        );
-      }
-    }
-  };
-
-  const checkSemanticSearch = async (): Promise<void> => {
-    const name = "Function: Semantic Search";
-    const start = performance.now();
-    updateCheckStatus(name, "checking");
-
-    const functionsUrl = getFunctionsApiUrl();
-    const endpoint = `${functionsUrl}/api/search/semantic`;
-    updateCheckStatus(name, "checking", undefined, undefined, endpoint);
-
-    const doFetch = (timeoutMs: number): Promise<Response> => {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-      return fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: "red bikes",
-          topN: 5,
-          cultureId: "en",
-        }),
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timeoutId));
-    };
-
-    const timeoutMs = 90000; // 90s for cold start
-    let lastResponseTime = 0;
-
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const response = await doFetch(timeoutMs);
-        lastResponseTime = Math.round(performance.now() - start);
-
-        if (!response.ok) {
-          if (response.status >= 500 && attempt < 2) {
-            await new Promise((r) => setTimeout(r, 15000)); // wait 15s before retry
-            continue;
-          }
-          updateCheckStatus(
-            name,
-            "unhealthy",
-            `HTTP ${response.status}: ${response.statusText}`,
-            lastResponseTime,
-            endpoint,
-          );
-          return;
-        }
-
-        const data = await response.json();
-        const results = data.results as unknown[] | undefined;
-        const count = Array.isArray(results) ? results.length : 0;
-
-        updateCheckStatus(
-          name,
-          "healthy",
-          `${count} results for 'red bikes'`,
-          lastResponseTime,
-          endpoint,
-        );
-        return;
-      } catch (error: unknown) {
-        lastResponseTime = Math.round(performance.now() - start);
-        lastError = error;
-        if ((error as Error).name === "AbortError") {
-          if (attempt < 2) {
-            await new Promise((r) => setTimeout(r, 15000)); // wait 15s before retry
-            continue;
-          }
-          updateCheckStatus(
-            name,
-            "timeout",
-            "Request timeout (>90s)",
-            lastResponseTime,
-          );
-          return;
-        } else {
-          updateCheckStatus(
-            name,
-            "unhealthy",
-            (error as Error).message,
-            lastResponseTime,
-          );
-          return;
-        }
-      }
-    }
-  };
-
-  useEffect(() => {
-    const runHealthChecks = async () => {
-      setStartTime(Date.now());
-      setChecks([]);
-      setProgress(0);
-      setRefreshCountdown(null);
-
-      const totalChecks = 4 + functionEndpoints.length + 1; // DAB + MCP + AI Images + Seed Job + Functions + Semantic Search
-      let completedChecks = 0;
-
-      const updateProgress = () => {
-        completedChecks++;
-        setProgress((completedChecks / totalChecks) * 100);
-      };
-
-      // Run all checks in parallel
-      await Promise.all([
-        checkGraphQLAPI().finally(updateProgress),
-        checkMCPAPI().finally(updateProgress),
-        checkAIGeneratedImages().finally(updateProgress),
-        checkSeedJobStatus().finally(updateProgress),
-        checkSemanticSearch().finally(updateProgress),
-        ...functionEndpoints.map((func) =>
-          checkFunction(func).finally(updateProgress),
-        ),
-      ]);
-    };
-
-    runHealthChecks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Auto-refresh effect when checks fail
-  useEffect(() => {
-    const allChecksComplete =
-      checks.length > 0 &&
-      checks.filter((c) => c.status === "checking").length === 0;
-    const hasFailures =
-      checks.filter((c) => c.status === "unhealthy" || c.status === "timeout")
-        .length > 0;
-
-    if (allChecksComplete && hasFailures) {
-      // Start countdown from 10 seconds
-      setRefreshCountdown(10);
-
-      const countdownInterval = setInterval(() => {
-        setRefreshCountdown((prev) => {
-          if (prev === null || prev <= 1) {
-            clearInterval(countdownInterval);
-            window.location.reload();
-            return null;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-
-      return () => clearInterval(countdownInterval);
-    } else if (allChecksComplete && !hasFailures) {
-      // All healthy, stop any countdown
-      setRefreshCountdown(null);
-    }
-  }, [checks]);
-
-  const getStatusIcon = (status: HealthCheckResult["status"]) => {
-    switch (status) {
-      case "checking":
-        return <Clock className="w-5 h-5 text-blue-500 animate-spin" />;
-      case "healthy":
-        return <Check className="w-5 h-5 text-green-500" />;
-      case "unhealthy":
-        return <X className="w-5 h-5 text-red-500" />;
-      case "timeout":
-        return <AlertCircle className="w-5 h-5 text-orange-500" />;
-    }
-  };
-
-  const getStatusBadge = (status: HealthCheckResult["status"]) => {
-    switch (status) {
-      case "checking":
-        return <Badge variant="outline">Checking...</Badge>;
-      case "healthy":
-        return <Badge className="bg-green-500">Healthy</Badge>;
-      case "unhealthy":
-        return <Badge variant="destructive">Unhealthy</Badge>;
-      case "timeout":
-        return <Badge className="bg-orange-500">Timeout</Badge>;
-    }
-  };
-
-  const healthyCount = checks.filter((c) => c.status === "healthy").length;
-  const unhealthyCount = checks.filter(
-    (c) => c.status === "unhealthy" || c.status === "timeout",
-  ).length;
-  const checkingCount = checks.filter((c) => c.status === "checking").length;
-
-  const allChecksComplete = checkingCount === 0 && checks.length > 0;
-  const allHealthy = allChecksComplete && unhealthyCount === 0;
-
-  const elapsedTime =
-    startTime > 0 ? ((Date.now() - startTime) / 1000).toFixed(1) : "0.0";
-
-  return (
-    <div className="min-h-screen bg-doodle-bg">
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-8">
-            <div className="flex items-center gap-3 mb-4">
-              <Activity className="w-8 h-8 text-doodle-accent" />
-              <h1 className="font-doodle text-4xl font-bold text-doodle-text">
-                System Health Check
-              </h1>
-            </div>
-            <p className="font-doodle text-lg text-doodle-text/70">
-              Monitoring backend services and key API endpoints. Initial
-              requests may take up to 60 seconds as services scale up from zero.
-            </p>
-          </div>
-
-          {/* Overall Status Card */}
-          <Card className="mb-6 border-2 border-doodle-text">
-            <CardHeader>
-              <CardTitle className="font-doodle flex items-center justify-between">
-                <span>Overall Status</span>
-                {allChecksComplete &&
-                  (allHealthy ? (
-                    <Badge
-                      className="bg-green-500 text-lg"
-                      data-testid="overall-status-success"
-                    >
-                      All Systems Operational
-                    </Badge>
-                  ) : (
-                    <Badge
-                      variant="destructive"
-                      className="text-lg"
-                      data-testid="overall-status-failure"
-                    >
-                      Issues Detected
-                    </Badge>
-                  ))}
-              </CardTitle>
-              <CardDescription className="font-doodle">
-                {allChecksComplete
-                  ? `Completed in ${elapsedTime}s`
-                  : `Running health checks... (${elapsedTime}s elapsed)`}
-                {refreshCountdown !== null && (
-                  <span className="block mt-2 text-orange-600 font-semibold">
-                    Auto-refreshing in {refreshCountdown} seconds...
-                  </span>
-                )}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Progress
-                value={progress}
-                className="mb-4"
-                data-testid="health-check-progress"
-              />
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <div
-                    className="text-2xl font-bold text-green-500"
-                    data-testid="healthy-count"
-                  >
-                    {healthyCount}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Healthy</div>
-                </div>
-                <div>
-                  <div
-                    className="text-2xl font-bold text-red-500"
-                    data-testid="unhealthy-count"
-                  >
-                    {unhealthyCount}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Issues</div>
-                </div>
-                <div>
-                  <div
-                    className="text-2xl font-bold text-blue-500"
-                    data-testid="checking-count"
-                  >
-                    {checkingCount}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Checking</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Individual Service Checks */}
-          <div className="space-y-4" data-testid="service-checks">
-            {checks.map((check) => (
-              <Card
-                key={check.name}
-                className="border-2 border-doodle-text"
-                data-testid={`check-${check.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
-              >
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      {getStatusIcon(check.status)}
-                      <div>
-                        <CardTitle className="font-doodle text-lg">
-                          {check.name}
-                        </CardTitle>
-                        {check.endpoint && (
-                          <CardDescription className="font-mono text-xs mt-1">
-                            {check.endpoint}
-                          </CardDescription>
-                        )}
-                      </div>
-                    </div>
-                    {getStatusBadge(check.status)}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {check.message && (
-                      <p className="font-doodle text-sm text-doodle-text/70">
-                        {check.message}
-                      </p>
-                    )}
-                    {check.responseTime !== undefined && (
-                      <p className="font-mono text-xs text-doodle-text/50">
-                        Response time: {check.responseTime}ms
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {checks.length === 0 && (
-            <Card className="border-2 border-doodle-text">
-              <CardContent className="py-12 text-center">
-                <Clock className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
-                <p className="font-doodle text-lg text-doodle-text/70">
-                  Initializing health checks...
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+import { trackError } from "@/lib/appInsights";
+import {
+  checkIdsForMode, initialHealthChecks, overallHealth, runHealthChecks,
+  type CheckMode, type HealthCheck, type HealthStatus,
+} from "@/lib/healthChecks";
+import { getWebPubSubStatus, subscribeWebPubSubStatus } from "@/hooks/useWebPubSub";
+
+const statusLabels: Record<HealthStatus, string> = {
+  checking: "Checking", healthy: "Passed", unhealthy: "Failed", timeout: "Timeout",
+  unknown: "Unknown", running: "Running", configured: "Configured only",
+  "not-configured": "Not configured", "not-run": "Not run",
 };
 
-export default HealthCheckPage;
+const statusColors: Record<HealthStatus, string> = {
+  healthy: "border-green-600 bg-green-50 text-green-800",
+  unhealthy: "border-red-600 bg-red-50 text-red-800",
+  timeout: "border-red-600 bg-red-50 text-red-800",
+  checking: "border-amber-600 bg-amber-50 text-amber-800",
+  running: "border-amber-600 bg-amber-50 text-amber-800",
+  unknown: "border-amber-600 bg-amber-50 text-amber-800",
+  "not-configured": "border-amber-600 bg-amber-50 text-amber-800",
+  configured: "border-slate-400 bg-slate-100 text-slate-700",
+  "not-run": "border-slate-400 bg-slate-100 text-slate-700",
+};
+
+const testTypes: Record<CheckMode, {
+  label: string; section: string; card: string; badge: string; button: string;
+}> = {
+  quick: {
+    label: "Quick checks", section: "border-sky-300 bg-sky-50/60",
+    card: "border-sky-200 border-l-sky-600", badge: "border-sky-600 bg-sky-100 text-sky-900",
+    button: "border-sky-700 bg-sky-700 text-white hover:bg-sky-800 hover:text-white",
+  },
+  capabilities: {
+    label: "Capability checks", section: "border-violet-300 bg-violet-50/60",
+    card: "border-violet-200 border-l-violet-600", badge: "border-violet-600 bg-violet-100 text-violet-900",
+    button: "border-violet-700 bg-violet-700 text-white hover:bg-violet-800 hover:text-white",
+  },
+  data: {
+    label: "Demo readiness", section: "border-teal-300 bg-teal-50/60",
+    card: "border-teal-200 border-l-teal-600", badge: "border-teal-600 bg-teal-100 text-teal-900",
+    button: "border-teal-700 bg-teal-700 text-white hover:bg-teal-800 hover:text-white",
+  },
+};
+
+function StatusBadge({ status }: { status: HealthStatus }) {
+  return <Badge variant="outline" className={statusColors[status]}>
+    {statusLabels[status]}
+  </Badge>;
+}
+
+function CheckCard({ check, testType }: { check: HealthCheck; testType: CheckMode }) {
+  return (
+    <Card className={`border-2 border-l-4 ${testTypes[testType].card}`}
+      data-test-type={testType} data-testid={`check-${check.id}`}>
+      <CardHeader>
+        <Badge variant="outline" className={`w-fit ${testTypes[testType].badge}`}>
+          {testTypes[testType].label}
+        </Badge>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <CardTitle className="font-doodle text-lg flex items-center gap-2">
+            {check.status === "checking" ? <Clock className="w-5 h-5 animate-spin" />
+              : check.status === "healthy" ? <Check className="w-5 h-5 text-green-600" />
+              : <AlertCircle className="w-5 h-5 text-muted-foreground" />}
+            {check.name}
+          </CardTitle>
+          <StatusBadge status={check.status} />
+        </div>
+        {check.endpoint && <CardDescription className="font-mono text-xs break-all">{check.endpoint}</CardDescription>}
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-sm">{check.message || "Run this diagnostic when needed."}</p>
+        {check.checkedAt && <p className="text-xs text-muted-foreground">
+          Checked {new Date(check.checkedAt).toLocaleString()}
+          {check.responseTimeMs !== undefined && ` | ${check.responseTimeMs}ms`}
+        </p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+const sections: Array<{ testType: CheckMode; title: string; description: string }> = [
+  { testType: "quick", title: "Quick checks: services and configuration",
+    description: "Core service availability plus optional dependency and configuration checks. Only core services determine overall availability; configured-only badges do not prove operation." },
+  { testType: "capabilities", title: "Capability checks: functional diagnostics",
+    description: "Opt-in search, agent status, catalog, sitemap, and API documentation checks. May incur embedding costs. No chat, autonomous agent, order, email, or receipt is generated." },
+  { testType: "data", title: "Demo readiness: seed and image metadata",
+    description: "Seed progress and sampled AI photo metadata are separate from service availability. No fixed image-count requirement." },
+];
+
+export default function HealthCheckPage() {
+  const [checks, setChecks] = useState(initialHealthChecks);
+  const [mode, setMode] = useState<CheckMode | null>(null);
+  const [runIds, setRunIds] = useState<string[]>([]);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [finishedAt, setFinishedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const controllerRef = useRef<AbortController | null>(null);
+  const sectionRefs = useRef<Partial<Record<CheckMode, HTMLElement>>>({});
+  const webSocket = useSyncExternalStore(subscribeWebPubSubStatus, getWebPubSubStatus);
+
+  async function run(nextMode: CheckMode, revealTests = false) {
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    const ids = checkIdsForMode(nextMode);
+    setRunIds(ids);
+    setMode(nextMode);
+    setStartedAt(Date.now());
+    setFinishedAt(null);
+    setChecks(previous => previous.map(check => ids.includes(check.id)
+      ? { ...check, status: "checking", message: undefined, checkedAt: undefined, responseTimeMs: undefined }
+      : check));
+    if (revealTests) {
+      const section = sectionRefs.current[nextMode];
+      section?.focus({ preventScroll: true });
+      section?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+        block: "start",
+      });
+    }
+    await runHealthChecks({
+      graphqlUrl: getGraphQLApiUrl(), functionsUrl: getFunctionsApiUrl(),
+    }, nextMode, controller.signal, result => {
+      if (result.status === "unhealthy" || result.status === "timeout")
+        trackError("Health diagnostic failed", new Error(result.message), { checkId: result.id });
+      setChecks(previous => previous.map(check => check.id === result.id ? result : check));
+    });
+    if (!controller.signal.aborted) {
+      setFinishedAt(Date.now());
+      setMode(null);
+    }
+  }
+
+  useEffect(() => {
+    void run("quick");
+    return () => controllerRef.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!mode) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [mode]);
+
+  const completed = checks.filter(check => runIds.includes(check.id) && check.status !== "checking").length;
+  const progress = runIds.length ? completed / runIds.length * 100 : 0;
+  const elapsed = startedAt === null ? "0" : (Math.max(0, (finishedAt ?? now) - startedAt) / 1000).toFixed(1);
+  const summary = overallHealth(checks);
+
+  return (
+    <main className="min-h-screen bg-doodle-bg">
+      <div className="container mx-auto px-4 py-8 max-w-5xl space-y-6">
+        <Link to="/" className="inline-flex items-center gap-2 text-sm underline">
+          <ArrowLeft className="w-4 h-4" /> Back to shop
+        </Link>
+        <header>
+          <h1 className="font-doodle text-4xl font-bold flex items-center gap-3">
+            <Activity className="w-8 h-8" /> System diagnostics
+          </h1>
+          <p className="mt-3 text-muted-foreground">
+            A point-in-time check, not continuous monitoring. Quick checks run on entry.
+            Cold starts can take up to 60s; optional functional checks allow 90s.
+            Results stay visible until you rerun them. This page never reloads or polls services.
+          </p>
+        </header>
+        <Card className="border-2 border-doodle-text">
+          <CardHeader>
+            <CardTitle className="font-doodle" aria-live="polite" data-testid="overall-status">
+              {summary}
+            </CardTitle>
+            <CardDescription>
+              {mode ? `Running ${mode} diagnostics` : "Latest diagnostic run complete"} | {elapsed}s
+              <span className="block">Backend dependency results are cached for up to 60s; each card shows its observation time.</span>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Progress value={progress} aria-label="Diagnostic progress"
+              aria-valuenow={Math.round(progress)} aria-valuemin={0} aria-valuemax={100}
+              data-testid="health-check-progress" />
+            <div className="flex flex-wrap gap-3">
+              <Button variant="outline" className={testTypes.quick.button}
+                aria-controls="quick-tests" disabled={mode !== null}
+                onClick={() => void run("quick", true)}>Run quick checks again</Button>
+              <Button variant="outline" className={`h-auto min-h-10 max-w-full whitespace-normal ${testTypes.capabilities.button}`}
+                aria-controls="capabilities-tests" disabled={mode !== null}
+                onClick={() => void run("capabilities", true)}>Run capability checks (may incur AI cost)</Button>
+              <Button variant="outline" className={testTypes.data.button}
+                aria-controls="data-tests" disabled={mode !== null}
+                onClick={() => void run("data", true)}>Check demo readiness</Button>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Button colors match test sections and card labels. Result badges: green = passed;
+              red = failed/timeout; amber = checking/running/warning; gray = configured only/not run.
+            </p>
+            <p className="text-sm text-muted-foreground">{completed} / {runIds.length} checks completed in the latest run.</p>
+          </CardContent>
+        </Card>
+        {sections.map(section => (
+          <section key={section.testType} id={`${section.testType}-tests`}
+            ref={element => { sectionRefs.current[section.testType] = element ?? undefined; }}
+            tabIndex={-1} aria-labelledby={`${section.testType}-heading`}
+            className={`space-y-4 rounded-lg border-2 p-4 sm:p-6 scroll-mt-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 ${testTypes[section.testType].section}`}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 id={`${section.testType}-heading`} className="font-doodle text-2xl font-bold">{section.title}</h2>
+              <Badge variant="outline" className={testTypes[section.testType].badge} aria-live="polite">
+                {mode === section.testType ? "Running" : `${checkIdsForMode(section.testType).length} tests`}
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">{section.description}</p>
+            {section.testType === "quick" && (
+              <Card data-testid="websocket-status" className={`border-2 border-l-4 ${testTypes.quick.card}`}>
+                <CardHeader>
+                  <Badge variant="outline" className={`w-fit ${testTypes.quick.badge}`}>Quick checks | Live connection</Badge>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <CardTitle className="font-doodle text-lg">Browser real-time connection: {webSocket}</CardTitle>
+                    <StatusBadge status={webSocket === "connected" ? "healthy" : webSocket === "connecting"
+                      ? "checking" : webSocket === "not-configured" ? "not-configured" : "unhealthy"} />
+                  </div>
+                  <CardDescription>
+                    Uses the existing app WebSocket; no additional connection opened.
+                    Connected does not prove mutations are publishing events.
+                    {webSocket !== "connected" && " Live cache invalidation is unavailable; returning to the tab provides the normal React Query focus-refetch fallback."}
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            )}
+            <div className="grid gap-4 md:grid-cols-2" data-testid={`${section.testType}-checks`}>
+              {checks.filter(check => checkIdsForMode(section.testType).includes(check.id))
+                .map(check => <CheckCard key={check.id} check={check} testType={section.testType} />)}
+            </div>
+          </section>
+        ))}
+      </div>
+    </main>
+  );
+}

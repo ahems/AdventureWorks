@@ -110,6 +110,21 @@ public class OAuthMetadataTests : IClassFixture<OAuthTestFactory>
         Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Readiness_is_anonymous_sanitized_and_does_not_replace_liveness()
+    {
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync("/ready");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal("unhealthy", doc.RootElement.GetProperty("status").GetString());
+        Assert.DoesNotContain("Server=", json);
+        Assert.DoesNotContain("Trusted_Connection", json);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/health")).StatusCode);
+        Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+    }
+
     private static async Task<JsonElement> GetJsonAsync(HttpClient client, string path)
     {
         var response = await client.GetAsync(path);

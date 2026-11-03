@@ -81,6 +81,7 @@ _Production reference architecture showing all Azure components with enterprise 
 - [APP_INSIGHTS_CONNECTION_STRING_FLOW.md](features/monitoring/APP_INSIGHTS_CONNECTION_STRING_FLOW.md) - Connection string configuration
 - [APP_INSIGHTS_INTEGRATION.md](features/monitoring/APP_INSIGHTS_INTEGRATION.md) - Application Insights setup
 - [TELEMETRY_GENERATION.md](features/monitoring/TELEMETRY_GENERATION.md) - Telemetry generation for testing
+- [HEALTH_DIAGNOSTICS.md](features/monitoring/HEALTH_DIAGNOSTICS.md) - Storefront quick service/dependency diagnostics, optional capabilities, data readiness, and deployment/smoke tests
 
 ### Product Reviews
 

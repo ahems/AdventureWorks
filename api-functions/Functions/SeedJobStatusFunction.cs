@@ -153,7 +153,8 @@ public class SeedJobStatusFunction
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to read seed job log");
-            await WriteStatus(response, "unknown", isRunning: false, message: $"Unable to read seed log: {ex.Message}");
+            await WriteStatus(response, "unknown", isRunning: false,
+                message: "Unable to read seed log. See Application Insights for details.");
         }
 
         return response;

@@ -10,7 +10,7 @@ using System.Collections.Frozen;
 namespace ApiFunctions.Auth;
 
 /// <summary>
-/// Authoritative, per-function authorization policy for every api-functions HTTP route (183
+/// Authoritative, per-function authorization policy for every api-functions HTTP route (185
 /// routes). Keyed by the <c>[Function]</c> name. Mirrors the committed route-to-scope matrix and
 /// the pattern of api-mcp's <c>ToolAuthorizationRegistry</c>.
 /// </summary>
@@ -18,7 +18,7 @@ public static class FunctionAuthorizationRegistry
 {
     private static readonly FrozenDictionary<string, FunctionPolicy> Policies = new FunctionPolicy[]
     {
-        // ---- Tier P — anonymous (18) ----
+        // ---- Tier P — anonymous (19) ----
         new("AIAgentChat", AccessTier.Public, null, AccessMode.Anonymous, null),  // Validates MCP-audience OAuth inside the function.
         new("AIAgentStatus", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/agent/status
         new("GetOpenApiSpec", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/openapi.json
@@ -26,6 +26,7 @@ public static class FunctionAuthorizationRegistry
         new("GetSitemap", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/sitemap.xml
         new("GetSwaggerUI", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/swagger/ui
         new("HealthCheck", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/health
+        new("DependencyReadiness", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/health/readiness (sanitized)
         new("HelpMeChooseCatalogMeta", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/helpme/catalog-meta
         new("HelpMeChooseQuestions", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/helpme/questions
         new("HelpMeChooseRecommend", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/helpme/recommend

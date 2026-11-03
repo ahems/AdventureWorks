@@ -58,6 +58,7 @@ builder.Services.AddSingleton(defaultCredential);
 
 // Register HttpClient (retained for services that still need it)
 builder.Services.AddHttpClient();
+builder.Services.AddSingleton<DependencyHealthService>();
 
 // Aspire SQL Client with automatic tracing and health checks
 builder.AddSqlServerClient("SQL_CONNECTION_STRING");
@@ -626,22 +627,9 @@ if (!string.IsNullOrEmpty(storageAccountName))
     var tableSvc = new Azure.Data.Tables.TableServiceClient(new Uri(tableUri), credential);
     var blobSvc  = new Azure.Storage.Blobs.BlobServiceClient(new Uri(blobUri), credential);
 
-    string[] expectedQueues = [
-        "order-receipt-generation", "order-email-generation",
-        "ai-job-image-queue", "ai-job-chat-queue", "ai-job-embeddings-queue",
-        "product-thumbnail-generation", "sales-order-status", "production-wo-queue",
-        "supply-chain-orders-queue", "simulation-order-queue", "warehouse-ops-queue",
-        "review-moderation-queue", "manufacturing-agent-queue", "auto-promotion-queue"
-    ];
-    string[] expectedTables = [
-        "shoppingSimulator", "awOrderPipelineConfig", "awSupplyChain", "awManufacturing",
-        "awBankAccounts", "awBankTransactions", "awWarehouse",
-        "awManufacturingAgentConfig", "awManufacturingAgentRuns", "awManufacturingProposals",
-        "verifiedReviewsJob", "reviewModerationJob", "awAutoPromotionConfig"
-    ];
-    string[] expectedContainers = [
-        "adventureworks-receipts", "locales", "function-releases"
-    ];
+    var expectedQueues = DependencyHealthService.ApplicationQueues;
+    var expectedTables = DependencyHealthService.ApplicationTables;
+    var expectedContainers = DependencyHealthService.ApplicationContainers;
 
     foreach (var q in expectedQueues)
     {

@@ -381,6 +381,21 @@ Notification emails (Shipped, Delivered) are gated behind the `ORDER_NOTIFICATIO
 
 ## SEO & Documentation Functions
 
+### `HealthCheck` and `DependencyReadiness`
+
+- **Routes**: HTTP `GET /api/health` (unchanged process liveness) and
+  `GET /api/health/readiness` (anonymous, sanitized dependency report).
+- **Readiness**: Uses managed identity to check SQL catalog reads, application
+  blob containers/queues/tables, optional seed-log Azure Files and Web PubSub;
+  probes MCP liveness/readiness and OAuth discovery from the backend. Separately
+  reports AI, hosted-agent, email, and telemetry configuration without claiming
+  runtime health or sending emails/invoking agents.
+- **Performance**: 60-second per-process report cache; 20-second dependency
+  deadlines. HTTP 200/503 depends only on required core checks. No resources are
+  created and no business data or exception details are returned.
+- See [Health diagnostics](../docs/features/monitoring/HEALTH_DIAGNOSTICS.md)
+  for exact checks, caveats, test commands, and deployment.
+
 ### `GetSitemap`
 
 - **Trigger / Route**: HTTP `GET /api/sitemap.xml`

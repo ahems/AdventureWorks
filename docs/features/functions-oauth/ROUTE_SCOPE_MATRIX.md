@@ -5,7 +5,7 @@
 > [`TOOL_SCOPE_MATRIX.md`](../mcp-oauth/TOOL_SCOPE_MATRIX.md). It reuses the same
 > business-domain scopes ([`OAuthScopes.cs`](../../../api-mcp/AdventureWorks/Auth/OAuthScopes.cs))
 > and the same authorization server in `api-mcp`. It classifies **every** one of the
-> **183** HTTP-triggered routes discovered in `api-functions` — no route is left
+> **185** HTTP-triggered routes discovered in `api-functions` — no route is left
 > unclassified. Non-HTTP triggers (queue / SQL / timer) are internal and not part of
 > this matrix.
 
@@ -27,11 +27,11 @@ frontend token attachment, tests). No runtime behavior changes with this documen
 
 | Tier | Access | Count |
 | ---- | ------ | ----- |
-| **P** | Anonymous | 18 |
+| **P** | Anonymous | 19 |
 | **C** | Consumer (ownership) | 10 |
 | **I** | Internal-only | 116 |
 | **M** | Anonymous — v1 descope (MCP-proxied) | 40 |
-| | **Total** | **184** |
+| | **Total** | **185** |
 
 ### Routes per required scope (protected routes only)
 
@@ -77,11 +77,12 @@ These reads are no longer part of the Functions authorization surface.
 
 ## Matrix by functional area
 
-### Platform & discovery (public) (6)
+### Platform & discovery (public) (7)
 
 | Method / route | Tier | Required scope | Access mode | Ownership key |
 | -------------- | ---- | -------------- | ----------- | ------------- |
 | `GET /api/health` | P | — | Anonymous | — |
+| `GET /api/health/readiness` | P | — | Anonymous | — |
 | `GET /api/openapi.json` | P | — | Anonymous | — |
 | `GET /api/seed/status` | P | — | Anonymous | — |
 | `GET /api/sitemap.xml` | P | — | Anonymous | — |

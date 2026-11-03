@@ -118,22 +118,20 @@ const Footer: React.FC = () => {
 
         {/* Bottom Bar */}
         <div className="mt-12 pt-6 border-t-2 border-dashed border-doodle-bg/30">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="font-doodle text-sm opacity-60">
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-4 font-doodle text-sm text-center">
+            <p className="opacity-60 md:text-left">
               {t("copyright", { year: new Date().getFullYear() })}
             </p>
-            <div className="flex items-center gap-4">
-              <Link
-                to="/health"
-                className="font-doodle text-xs opacity-40 hover:opacity-100 transition-opacity"
-                title="System Health Check"
-              >
-                Health
-              </Link>
-              <p className="font-doodle text-sm opacity-60">
-                <TwemojiText text={t("builtWith")} size="0.875rem" />
-              </p>
-            </div>
+            <Link
+              to="/health"
+              className="justify-self-center opacity-60 hover:opacity-100 transition-opacity"
+              title="System Health Check"
+            >
+              Health
+            </Link>
+            <p className="opacity-60 md:text-right">
+              <TwemojiText text={t("builtWith")} size="0.875rem" />
+            </p>
           </div>
         </div>
       </div>

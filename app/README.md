@@ -12,7 +12,7 @@ A modern e-commerce web application built with React, TypeScript, and Vite, feat
 - ⭐ Product reviews and ratings
 - 🔐 User authentication
 - 🌐 GraphQL API integration
-- 🏥 **Health page** (`/health`) — status of all backend services (GraphQL API, MCP, Azure Functions) and the **Seed Job** (whether the database seed has finished; when running, shows “Running for X minutes Y seconds”)
+- 🏥 **Health diagnostics** (`/health`) — quick, read-only DAB/Functions/SQL/storage/MCP/OAuth checks; existing browser WebSocket status; neutral AI/email/telemetry configuration indicators; separate opt-in functional checks and seed/AI-image data readiness. No automatic reloads or polling. See [Health diagnostics](../docs/features/monitoring/HEALTH_DIAGNOSTICS.md) for coverage, limits, and deployment/smoke tests.
 
 ## GraphQL API Integration
 
@@ -40,6 +40,12 @@ npm run dev
 ```
 
 ## Project info
+
+### Health regression tests
+
+Run `node --test scripts/health-checks.test.mjs` from this directory.
+These cover status and payload validation, optional readiness, request deadlines,
+cancellation, pagination, and the semantic-search network-failure regression.
 
 ### Sale cart regression tests
 
