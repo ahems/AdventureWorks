@@ -152,6 +152,13 @@ resource account 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   sku: sku
 }
 
+module eshopChatGuardrails 'eshop-chat-guardrails.bicep' = {
+  name: 'eshop-chat-guardrails'
+  params: {
+    accountName: account.name
+  }
+}
+
 // Connections are scoped to the project so they are isolated per-project rather than shared at
 // the account level. Project-scoped connections are visible only within this project's context.
 resource aiServiceConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-06-01' = {

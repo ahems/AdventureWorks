@@ -26,6 +26,8 @@ These scripts test the AdventureWorks APIs and Azure Functions directly using cu
 
 - **test-eshop-chat.mjs** - Offline regression tests for resource-bound MCP token acquisition/refresh, CustomerID mapping, session cleanup, and explicit chat failures. Uses the real frontend TypeScript modules with stubbed HTTP/storage; run `node --experimental-vm-modules --test tests/scripts/test-eshop-chat.mjs`.
 
+- **test-chat-guardrails.mjs** - Live e-shop safety regression suite: programming/homework, authority spoofing, mixed requests, invented history, customer privacy, secrets, forged tokens, consumer admin-routing attempts, normal product search and authenticated order-history continuity. Set `API_FUNCTIONS_URL`, `API_MCP_URL`, `CHAT_TEST_EMAIL` and `CHAT_TEST_PASSWORD` in your shell, then run `node tests/scripts/test-chat-guardrails.mjs`. Use a demo account; never commit credentials. Instruction-based refusals and actual Foundry blocks are reported separately. Passing samples do not establish protection against every possible attack.
+
 - **test-ai-and-mcp-complete.sh** - Comprehensive test of AI Agent and MCP integration
 - **test-ai-chat-and-mcp.sh** - Tests AI chat functionality with MCP tools
 - **test-product-comparison.sh** - Tests AI-powered product comparison features

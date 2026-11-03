@@ -65,6 +65,28 @@ When you run `azd up` or `azd provision`, the system automatically:
 
 ## Agent Configuration
 
+### E-shop chat guardrails
+
+The storefront demonstrates several distinct layers, without adding a prompt/keyword filter to the MCP server:
+
+- **Foundry RAI policy**: `infra/modules/eshop-chat-guardrails.bicep` provisions `AdventureWorks-Eshop` on the existing AI account. It retains standard harm filtering and adds blocking Prompt Shields (the `Jailbreak` prompt control), protected-text filtering, and a completion blocklist for common code syntax. The policy is wired into `aiservices.bicep` for normal provisioning.
+- **Explicit policy selection**: `FoundryAgentClient` loads the prompt agent's instructions and tools, then calls the project Responses API directly. It is not a native named-agent invocation. Every customer-chat inference, MCP approval and empty-text continuation sends `x-policy-id: AdventureWorks-Eshop`; merely assigning a policy to an agent in the portal would not protect this execution path. Other agents retain their existing policy.
+- **Shopping-only instructions**: `scripts/utilities/agents/eshop-chat-agent.sh` refuses programming, debugging, homework, claimed developer authority, fabricated prior assistance, third-party customer requests and secrets. Mixed questions decline the prohibited portion and offer legitimate shopping help. Publish changes through the normal agent-creation scripts; restart/deploy Functions to refresh cached definitions.
+- **Real authorization boundaries**: Functions derives customer identity from the validated delegated token, ignores browser-supplied identity/history, restricts admin-agent routing, and binds stored conversations to the signed subject and selected agent. MCP's existing scope and customer-ownership authorization remains essential; a model refusal is not an access-control boundary.
+- **Honest demo indicators**: The storefront has normal shopping suggestions and a collapsible **Try the safety demo** section. Safety examples fill the message box for review before sending. Only structured platform blocks receive the **Blocked by Microsoft Foundry** badge; ordinary instruction-based refusals do not. Platform blocks emit `Agent.GuardrailBlocked` telemetry, return no partial output, and reset the conversation continuation.
+
+Prompt Shields detect recognized prompt-injection attacks, not every off-topic request. The output regex is supplemental and is not a complete detector for every programming language or code format. Protected Material Code is enabled for annotation, not misrepresented as a general no-code filter. Task Adherence preview is not enabled or claimed as a shopping-topic classifier. Agent instructions handle business scope; test and monitor them rather than claiming an absolute guarantee.
+
+To update only these guardrail resources without reprovisioning the application:
+
+```bash
+az deployment group create --resource-group "$AZURE_RESOURCE_GROUP" \
+  --template-file infra/modules/eshop-chat-guardrails.bicep \
+  --parameters accountName="$AZURE_OPENAI_ACCOUNT_NAME"
+```
+
+Run the live regression suite described in [tests/scripts/README.md](../../../tests/scripts/README.md), as well as the focused `FoundryAgentClientTests`, `AIAgentServiceTests` and `FunctionsOAuthOptionsTests` backend tests. Include legitimate shopping and order-history follow-ups, not just attack prompts.
+
 ### Agent Details
 
 Each agent is created via `az rest --method PUT` to the Foundry data plane API with:

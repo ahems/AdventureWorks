@@ -17,15 +17,18 @@ public class AIAgentFunctions
     private readonly ILogger<AIAgentFunctions> _logger;
     private readonly AIAgentService _agentService;
     private readonly TelemetryClient _telemetryClient;
+    private readonly ChatIdentityService _chatIdentity;
 
     public AIAgentFunctions(
         ILogger<AIAgentFunctions> logger,
         AIAgentService agentService,
-        TelemetryClient telemetryClient)
+        TelemetryClient telemetryClient,
+        ChatIdentityService chatIdentity)
     {
         _logger = logger;
         _agentService = agentService;
         _telemetryClient = telemetryClient;
+        _chatIdentity = chatIdentity;
     }
 
     /// <summary>
@@ -62,22 +65,23 @@ public class AIAgentFunctions
                 return badRequest;
             }
 
-            _logger.LogInformation($"Processing message for customer {chatRequest.CustomerId}: {chatRequest.Message}");
+            if (chatRequest.Message.Length > 4000)
+            {
+                _logger.LogWarning("Chat request exceeded the 4000-character input limit");
+                var tooLong = req.CreateResponse(HttpStatusCode.BadRequest);
+                await tooLong.WriteAsJsonAsync(new { error = "Please keep your shopping question under 4000 characters." });
+                return tooLong;
+            }
 
             // Track the incoming chat request
             _telemetryClient.TrackEvent("Agent.ChatRequest", new Dictionary<string, string>
             {
-                ["CustomerId"] = chatRequest.CustomerId?.ToString() ?? "anonymous",
                 ["CultureId"] = chatRequest.CultureId ?? "default",
                 ["MessageLength"] = chatRequest.Message.Length.ToString(),
                 ["HasHistory"] = (chatRequest.ConversationHistory?.Count > 0).ToString()
             });
 
-            // Forward the caller's delegated OAuth access token (if any) to the MCP
-            // resource. The frontends obtain a user-bound token via Authorization
-            // Code + PKCE or refresh grant and send it as a standard Authorization header. This
-            // endpoint is Anonymous at the Functions layer; the token is used only
-            // for downstream api-mcp authorization as the actual AdventureWorks user.
+            // This route validates the MCP-audience token explicitly before forwarding it.
             string? mcpAccessToken = null;
             if (req.Headers.TryGetValues("Authorization", out var authValues))
             {
@@ -98,17 +102,32 @@ public class AIAgentFunctions
                 await unauthorized.WriteAsJsonAsync(new { error = "Sign in again to use the AI assistant." });
                 return unauthorized;
             }
+            var caller = await _chatIdentity.ResolveAsync(mcpAccessToken, req.FunctionContext.CancellationToken);
+            if (caller is null)
+            {
+                var unauthorized = req.CreateResponse(HttpStatusCode.Unauthorized);
+                await unauthorized.WriteAsJsonAsync(new { error = "Please sign in again to use the AI assistant." });
+                return unauthorized;
+            }
+            if (chatRequest.IsAdmin && (!caller.IsInternal || !caller.HasScope("sales.read")))
+            {
+                _logger.LogWarning("Chat admin routing denied for caller category {Category}", caller.Category);
+                var forbidden = req.CreateResponse(HttpStatusCode.Forbidden);
+                await forbidden.WriteAsJsonAsync(new { error = "I can help with shopping and your own orders, but not internal business data." });
+                return forbidden;
+            }
 
             // Process with AI agent
             var result = await _agentService.ProcessMessageAsync(
                 chatRequest.Message,
-                chatRequest.ConversationHistory ?? new List<AgentChatMessage>(),
-                chatRequest.CustomerId,
-                chatRequest.UserName,
+                new List<AgentChatMessage>(),
+                caller.CustomerId,
+                caller.DisplayName,
                 chatRequest.CultureId,
                 chatRequest.ThreadId,
                 isAdmin: chatRequest.IsAdmin,
-                mcpAccessToken: mcpAccessToken);
+                mcpAccessToken: mcpAccessToken,
+                conversationOwner: caller.SubjectId);
 
             var requestDuration = DateTimeOffset.UtcNow - requestStartTime;
 
@@ -122,7 +141,7 @@ public class AIAgentFunctions
 
             _telemetryClient.TrackEvent("Agent.ChatSuccess", new Dictionary<string, string>
             {
-                ["CustomerId"] = chatRequest.CustomerId?.ToString() ?? "anonymous",
+                ["CustomerId"] = caller.CustomerId?.ToString() ?? "internal",
                 ["ResponseLength"] = result.Response.Length.ToString(),
                 ["ToolsUsed"] = string.Join(",", result.ToolsUsed),
                 ["SuggestionCount"] = result.SuggestedQuestions.Count.ToString(),
@@ -155,8 +174,7 @@ public class AIAgentFunctions
             var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
             await errorResponse.WriteAsJsonAsync(new
             {
-                error = "An error occurred processing your request",
-                message = ex.Message
+                error = "An error occurred processing your request. Please try again."
             });
             return errorResponse;
         }

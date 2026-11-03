@@ -25,6 +25,7 @@ namespace api_functions.Services;
 /// </summary>
 public class AIAgentService
 {
+    public const string EshopContentFilterPolicy = "AdventureWorks-Eshop";
     private readonly ILogger<AIAgentService> _logger;
     private readonly FoundryAgentClient _foundryClient;
     private readonly TelemetryClient _telemetryClient;
@@ -73,7 +74,8 @@ public class AIAgentService
         string? cultureId = null,
         string? threadId = null,
         bool isAdmin = false,
-        string? mcpAccessToken = null)
+        string? mcpAccessToken = null,
+        string? conversationOwner = null)
     {
         var resolvedAgentId = isAdmin && _adminAgentId != null ? _adminAgentId : _agentId;
         var sessionId = isAdmin ? "admin" : (customerId.HasValue ? $"customer-{customerId.Value}" : Guid.NewGuid().ToString());
@@ -131,7 +133,9 @@ public class AIAgentService
                 previousResponseId: string.IsNullOrEmpty(threadId) ? null : threadId,
                 userId: customerId.HasValue ? customerId.Value.ToString() : null,
                 structuredInputs: structuredInputs,
-                mcpAccessToken: mcpAccessToken);
+                mcpAccessToken: mcpAccessToken,
+                contentFilterPolicy: resolvedAgentId == _agentId ? EshopContentFilterPolicy : null,
+                conversationOwner: conversationOwner);
 
             // ── Suggested follow-up questions ─────────────────────────────────────
             var suggestions = await GenerateSuggestedQuestionsAsync(message, agentResponse.ResponseText, customerId);
@@ -157,6 +161,30 @@ public class AIAgentService
                 SuggestedQuestions = suggestions,
                 ToolsUsed = agentResponse.ToolsUsed.Distinct().ToList(),
                 ThreadId = agentResponse.ResponseId  // Foundry response ID — pass back as threadId for next turn
+            };
+        }
+        catch (FoundryGuardrailException)
+        {
+            _logger.LogWarning("Foundry guardrail blocked a chat request or response; policy {Policy}", EshopContentFilterPolicy);
+            _telemetryClient.TrackEvent("Agent.GuardrailBlocked", new Dictionary<string, string>
+            {
+                ["Policy"] = EshopContentFilterPolicy,
+                ["Source"] = "foundry"
+            });
+            return new AgentResponse
+            {
+                Response = "I can help with AdventureWorks products and your own orders, but I can't help with programming, homework, private customer data, or sensitive account information. Would you like help finding a product?",
+                SuggestedQuestions = ["Show my orders", "Search products"],
+                Safety = new ChatSafetyResult("foundry", EshopContentFilterPolicy, true)
+            };
+        }
+        catch (ChatConversationException)
+        {
+            _logger.LogWarning("Chat conversation access denied; starting a new conversation is required");
+            return new AgentResponse
+            {
+                Response = "I can't access that conversation. Please start a new chat; I can help with products and your own orders.",
+                Safety = new ChatSafetyResult("conversation-ownership", null, true)
             };
         }
         catch (Exception ex)
@@ -198,6 +226,7 @@ public class AgentChatMessage
 /// <summary>Agent response returned to the caller.</summary>
 public class AgentResponse
 {
+    public ChatSafetyResult? Safety { get; set; }
     public string Response { get; set; } = string.Empty;
     public List<string> SuggestedQuestions { get; set; } = new();
     public List<string> ToolsUsed { get; set; } = new();
@@ -208,3 +237,5 @@ public class AgentResponse
     /// </summary>
     public string? ThreadId { get; set; }
 }
+
+public sealed record ChatSafetyResult(string Source, string? Policy, bool Blocked);

@@ -12,6 +12,132 @@ namespace ApiFunctions.Tests;
 
 public class FoundryAgentClientTests
 {
+    [Theory]
+    [InlineData("""{"error":{"code":"content_filter","message":"private prompt must not be echoed"}}""", 400)]
+    [InlineData("""{"error":{"innererror":{"code":"ResponsibleAIPolicyViolation"}}}""", 400)]
+    [InlineData("""{"status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[{"type":"message","content":[{"type":"output_text","text":"partial code that must never escape"}]}]}""", 200)]
+    public async Task Foundry_blocks_never_return_partial_content_or_retry_with_weaker_tools(string body, int status)
+    {
+        using var handler = new FoundryHandler { CustomResponse = body, ResponseStatus = (HttpStatusCode)status };
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        var client = CreateClient(handler, telemetry);
+
+        var error = await Assert.ThrowsAsync<FoundryGuardrailException>(() => client.InvokeAsync(
+            "eshop-chat-agent", "Misuse prompt", mcpAccessToken: "user", contentFilterPolicy: "AdventureWorks-Eshop"));
+
+        Assert.DoesNotContain("private", error.Message);
+        Assert.DoesNotContain("partial", error.Message);
+        Assert.Single(handler.ResponseRequests);
+        Assert.Equal("AdventureWorks-Eshop", handler.Policies.Single());
+    }
+
+    [Fact]
+    public async Task Guarded_chat_applies_policy_on_continuation_without_affecting_other_agents()
+    {
+        using var handler = new FoundryHandler { FirstResponseIsToolOnly = true };
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        var client = CreateClient(handler, telemetry);
+        await client.InvokeAsync("eshop-chat-agent", "Orders", mcpAccessToken: "user",
+            contentFilterPolicy: "AdventureWorks-Eshop", conversationOwner: "signed-subject");
+
+        Assert.Equal(new[] { "AdventureWorks-Eshop", "AdventureWorks-Eshop" }, handler.Policies);
+        Assert.All(handler.ResponseRequests, body =>
+            Assert.Equal("signed-subject", body.GetProperty("metadata").GetProperty("aw_chat_owner").GetString()));
+        await client.InvokeAsync("promotion-agent", "Generate", toolChoice: "none");
+        Assert.Null(handler.Policies.Last());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Guardrail_blocks_on_approval_or_empty_text_continuations_never_expose_partial_output(bool approval)
+    {
+        using var handler = new FoundryHandler
+        {
+            FirstResponseNeedsApproval = approval,
+            FirstResponseIsToolOnly = !approval,
+            CustomResponseRound = 2,
+            CustomResponse = """{"status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[{"type":"message","content":[{"type":"output_text","text":"partial code"}]}]}"""
+        };
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        await Assert.ThrowsAsync<FoundryGuardrailException>(() => CreateClient(handler, telemetry).InvokeAsync(
+            "eshop-chat-agent", "Misuse", mcpAccessToken: "user", contentFilterPolicy: "AdventureWorks-Eshop"));
+        Assert.Equal(2, handler.ResponseRequests.Count);
+        Assert.All(handler.Policies, policy => Assert.Equal("AdventureWorks-Eshop", policy));
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task Guarded_chat_rejects_missing_instructions_or_tools(bool instructions, bool tools)
+    {
+        using var handler = new FoundryHandler { DefinitionHasInstructions = instructions, DefinitionHasTools = tools };
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => CreateClient(handler, telemetry).InvokeAsync(
+            "eshop-chat-agent", "Hello", contentFilterPolicy: "AdventureWorks-Eshop"));
+        Assert.Empty(handler.ResponseRequests);
+    }
+
+    [Fact]
+    public async Task Guarded_chat_rejects_a_cached_instructionless_fallback()
+    {
+        using var handler = new FoundryHandler { DefinitionStatus = HttpStatusCode.Forbidden };
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        var client = CreateClient(handler, telemetry);
+        await client.InvokeAsync("eshop-chat-agent", "Unguarded call", toolChoice: "none");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.InvokeAsync(
+            "eshop-chat-agent", "Guarded call", contentFilterPolicy: "AdventureWorks-Eshop"));
+        Assert.Single(handler.ResponseRequests);
+    }
+
+    [Fact]
+    public async Task Chat_resumes_only_responses_owned_by_the_same_subject_and_agent()
+    {
+        using var handler = new FoundryHandler();
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        var client = CreateClient(handler, telemetry);
+        await client.InvokeAsync("eshop-chat-agent", "Continue", previousResponseId: "resp-owned",
+            conversationOwner: "owner", contentFilterPolicy: "AdventureWorks-Eshop", mcpAccessToken: "user");
+        Assert.Equal(1, handler.OwnershipRequests);
+        Assert.Single(handler.ResponseRequests);
+
+        await Assert.ThrowsAsync<ChatConversationException>(() => client.InvokeAsync(
+            "eshop-chat-agent", "Read another person's chat", previousResponseId: "resp-owned",
+            conversationOwner: "someone-else", contentFilterPolicy: "AdventureWorks-Eshop"));
+        await Assert.ThrowsAsync<ChatConversationException>(() => client.InvokeAsync(
+            "admin-chat-agent", "Read consumer chat", previousResponseId: "resp-owned", conversationOwner: "owner"));
+        Assert.Single(handler.ResponseRequests);
+    }
+
+    [Fact]
+    public async Task Missing_policy_is_a_configuration_error_not_a_friendly_safety_refusal()
+    {
+        using var handler = new FoundryHandler
+        {
+            ResponseStatus = HttpStatusCode.BadRequest,
+            CustomResponse = """{"error":{"code":"InvalidContentFilterPolicy"}}"""
+        };
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        var client = CreateClient(handler, telemetry);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => client.InvokeAsync(
+            "eshop-chat-agent", "Hello", contentFilterPolicy: "missing"));
+        Assert.Contains("400", error.Message);
+        Assert.Single(handler.ResponseRequests);
+    }
+
+    [Fact]
+    public async Task Guarded_chat_does_not_restore_unrestricted_fallback_tools_on_enumeration_failure()
+    {
+        using var handler = new FoundryHandler { ResponseStatus = HttpStatusCode.BadRequest };
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        var client = CreateClient(handler, telemetry);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.InvokeAsync(
+            "eshop-chat-agent", "Orders", contentFilterPolicy: "AdventureWorks-Eshop", mcpAccessToken: "user"));
+        Assert.Equal(3, handler.ResponseRequests.Count);
+        Assert.All(handler.ResponseRequests, body =>
+            Assert.Equal("https://mcp.test/mcp", body.GetProperty("tools")[0].GetProperty("server_url").GetString()));
+    }
+
     [Fact]
     public async Task Workflow_definitions_are_rejected_instead_of_becoming_instructionless_prompts()
     {
@@ -197,20 +323,43 @@ public class FoundryAgentClientTests
         public List<JsonElement> ResponseRequests { get; } = [];
         public HttpStatusCode ResponseStatus { get; init; } = HttpStatusCode.OK;
         public bool FirstResponseIsToolOnly { get; init; }
+        public bool FirstResponseNeedsApproval { get; init; }
         public string DefinitionKind { get; init; } = "prompt";
+        public bool DefinitionHasInstructions { get; init; } = true;
+        public bool DefinitionHasTools { get; init; } = true;
+        public HttpStatusCode DefinitionStatus { get; init; } = HttpStatusCode.OK;
         public string? ToolResult { get; init; }
+        public string? CustomResponse { get; init; }
+        public int CustomResponseRound { get; init; }
+        public List<string?> Policies { get; } = [];
+        public int OwnershipRequests { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri!.AbsolutePath;
+            if (request.Method == HttpMethod.Get && path.Contains("/responses/", StringComparison.Ordinal))
+            {
+                OwnershipRequests++;
+                return JsonResponse(HttpStatusCode.OK, """
+                    {"metadata":{"aw_chat_owner":"owner","aw_chat_agent":"eshop-chat-agent"}}
+                    """);
+            }
             if (path.Contains("/agents/", StringComparison.Ordinal))
             {
                 DefinitionRequests++;
-                return JsonResponse(HttpStatusCode.OK, """
-                    {"versions":{"latest":{"definition":{"kind":"DEFINITION_KIND","model":"chat","instructions":"Generate JSON.",
-                    "tools":[{"type":"mcp","server_label":"aw","server_url":"https://mcp.test/mcp"}]}}}}
-                    """.Replace("DEFINITION_KIND", DefinitionKind));
+                return JsonResponse(DefinitionStatus, JsonSerializer.Serialize(new
+                {
+                    versions = new { latest = new { definition = new
+                    {
+                        kind = DefinitionKind,
+                        model = "chat",
+                        instructions = DefinitionHasInstructions ? "Generate JSON." : null,
+                        tools = DefinitionHasTools
+                            ? new[] { new { type = "mcp", server_label = "aw", server_url = "https://mcp.test/mcp" } }
+                            : []
+                    } } }
+                }));
             }
 
             if (path == "/mcp")
@@ -222,11 +371,18 @@ public class FoundryAgentClientTests
             Assert.EndsWith("/openai/v1/responses", path);
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
             ResponseRequests.Add(body.RootElement.Clone());
+            Policies.Add(request.Headers.TryGetValues("x-policy-id", out var policies) ? policies.Single() : null);
+            if (CustomResponse is not null && (CustomResponseRound == 0 || CustomResponseRound == ResponseRequests.Count))
+                return JsonResponse(ResponseStatus, CustomResponse);
 
             if (ResponseStatus != HttpStatusCode.OK)
             {
                 return JsonResponse(ResponseStatus, """{"error":{"message":"tool_user_error enumerating tools"}}""");
             }
+            if (FirstResponseNeedsApproval && ResponseRequests.Count == 1)
+                return JsonResponse(HttpStatusCode.OK, """
+                    {"id":"resp-approval","output":[{"type":"mcp_approval_request","id":"approval-1","name":"get_customer_orders","server_label":"aw"}]}
+                    """);
             if (FirstResponseIsToolOnly && ResponseRequests.Count == 1)
             {
                 return JsonResponse(HttpStatusCode.OK, """

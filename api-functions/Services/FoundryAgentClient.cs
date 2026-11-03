@@ -136,6 +136,8 @@ public class FoundryAgentClient
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="additionalInstructions">Trusted server instructions appended for this invocation only.</param>
+    /// <param name="contentFilterPolicy">Server-selected Foundry RAI policy applied to every inference round.</param>
+    /// <param name="conversationOwner">Validated caller subject; binds stored responses to that caller and agent.</param>
     public async Task<FoundryAgentResponse> InvokeAsync(
         string agentId,
         string userMessage,
@@ -146,10 +148,13 @@ public class FoundryAgentClient
         string? toolChoice = null,
         string? mcpAccessToken = null,
         CancellationToken cancellationToken = default,
-        string? additionalInstructions = null)
+        string? additionalInstructions = null,
+        string? contentFilterPolicy = null,
+        string? conversationOwner = null)
     {
         // --- Fetch agent definition (cached) ------------------------------------
-        var def = await GetOrFetchAgentDefinitionAsync(agentId, cancellationToken);
+        var def = await GetOrFetchAgentDefinitionAsync(agentId, cancellationToken,
+            requireConfiguredDefinition: contentFilterPolicy is not null);
 
         // --- Apply delegated MCP authorization (per-request, never cached) ------
         // When a caller supplies the end user's OAuth access token, inject it as an
@@ -188,6 +193,13 @@ public class FoundryAgentClient
 
         using var httpClient = _httpClientFactory.CreateClient();
         httpClient.Timeout = TimeSpan.FromMinutes(5);
+        var metadata = conversationOwner is null ? null : new Dictionary<string, string>
+        {
+            ["aw_chat_owner"] = conversationOwner,
+            ["aw_chat_agent"] = agentId
+        };
+        if (metadata is not null && !string.IsNullOrEmpty(previousResponseId))
+            await VerifyConversationOwnerAsync(httpClient, previousResponseId, metadata, cancellationToken);
 
         // Resolve instructions once before the loop so the same resolved system prompt
         // is re-sent in every approval round. The Responses API `instructions` field
@@ -276,6 +288,7 @@ public class FoundryAgentClient
                 StructuredInputs = round == 0 && structuredInputs?.Count > 0 ? structuredInputs : null,
                 ToolChoice = effectiveToolChoice
             };
+            requestBody.Metadata = metadata;
 
             var json = JsonSerializer.Serialize(requestBody, _serializeOptions);
 
@@ -295,12 +308,15 @@ public class FoundryAgentClient
                     Content = new StringContent(json, Encoding.UTF8, "application/json")
                 };
                 retryRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
+                if (contentFilterPolicy is not null)
+                    retryRequest.Headers.Add("x-policy-id", contentFilterPolicy);
                 if (!string.IsNullOrEmpty(userId))
                     retryRequest.Headers.TryAddWithoutValidation("x-memory-user-id", userId);
 
                 var httpResponse = await httpClient.SendAsync(retryRequest, cancellationToken);
                 responseBody = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
 
+                ThrowIfGuardrailBlocked(responseBody);
                 if (httpResponse.IsSuccessStatusCode)
                     break;
 
@@ -324,6 +340,7 @@ public class FoundryAgentClient
                 // MCP config (from MCP_SERVICE_URL) once and retry the round.
                 // This recovers from stale/broken MCP URLs in the agent definition.
                 if (isToolEnumError
+                    && contentFilterPolicy is null
                     && !usingFallbackTools
                     && !string.IsNullOrEmpty(_fallbackMcpServiceUrl))
                 {
@@ -350,9 +367,9 @@ public class FoundryAgentClient
 
                 _logger.LogError("Foundry Responses API returned {Status}: {Body}",
                     (int)httpResponse.StatusCode,
-                    responseBody.Length > 500 ? responseBody[..500] : responseBody);
+                    contentFilterPolicy is null ? responseBody[..Math.Min(500, responseBody.Length)] : "(guarded chat payload omitted)");
                 throw new InvalidOperationException(
-                    $"Foundry Responses API failed ({(int)httpResponse.StatusCode}): {responseBody[..Math.Min(300, responseBody.Length)]}");
+                    $"Foundry Responses API failed ({(int)httpResponse.StatusCode})");
             }
 
             lastResponseBody = responseBody;
@@ -430,7 +447,8 @@ public class FoundryAgentClient
                 Stream = false,
                 Store = true,
                 PreviousResponseId = parsedResponse.ResponseId,
-                ToolChoice = "none"
+                ToolChoice = "none",
+                Metadata = metadata
             };
 
             var continuationJson = JsonSerializer.Serialize(continuationBody, _serializeOptions);
@@ -439,11 +457,14 @@ public class FoundryAgentClient
                 Content = new StringContent(continuationJson, Encoding.UTF8, "application/json")
             };
             continuationRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", continuationToken.Token);
+            if (contentFilterPolicy is not null)
+                continuationRequest.Headers.Add("x-policy-id", contentFilterPolicy);
             if (!string.IsNullOrEmpty(userId))
                 continuationRequest.Headers.TryAddWithoutValidation("x-memory-user-id", userId);
 
             var continuationHttpResponse = await httpClient.SendAsync(continuationRequest, cancellationToken);
             var continuationResponseBody = await continuationHttpResponse.Content.ReadAsStringAsync(cancellationToken);
+            ThrowIfGuardrailBlocked(continuationResponseBody);
 
             if (continuationHttpResponse.IsSuccessStatusCode)
             {
@@ -485,6 +506,7 @@ public class FoundryAgentClient
 
     private FoundryAgentResponse ParseResponse(string responseBody, string agentId)
     {
+        ThrowIfGuardrailBlocked(responseBody);
         using var doc = JsonDocument.Parse(responseBody);
         var root = doc.RootElement;
 
@@ -531,6 +553,10 @@ public class FoundryAgentClient
                                     && c.TryGetProperty("text", out var textVal))
                                 {
                                     responseText.Append(textVal.GetString());
+                                }
+                                else if (contentType == "refusal" && c.TryGetProperty("refusal", out var refusal))
+                                {
+                                    responseText.Append(refusal.GetString());
                                 }
                             }
                         }
@@ -603,6 +629,49 @@ public class FoundryAgentClient
 
     // ── Agent definition fetching ─────────────────────────────────────────────
 
+    private static void ThrowIfGuardrailBlocked(string responseBody)
+    {
+        using var doc = JsonDocument.Parse(responseBody);
+        var root = doc.RootElement;
+        if (root.TryGetProperty("error", out var error) && IsContentFilterError(error))
+            throw new FoundryGuardrailException();
+        if (root.TryGetProperty("incomplete_details", out var details)
+            && details.ValueKind == JsonValueKind.Object
+            && details.TryGetProperty("reason", out var reason)
+            && reason.GetString() == "content_filter")
+            throw new FoundryGuardrailException();
+    }
+
+    private static bool IsContentFilterError(JsonElement error)
+    {
+        if (error.ValueKind != JsonValueKind.Object) return false;
+        if (error.TryGetProperty("code", out var code)
+            && code.GetString() is "content_filter" or "content_policy_violation" or "ResponsibleAIPolicyViolation")
+            return true;
+        return (error.TryGetProperty("innererror", out var inner) && IsContentFilterError(inner))
+            || (error.TryGetProperty("inner_error", out var innerError) && IsContentFilterError(innerError));
+    }
+
+    private async Task VerifyConversationOwnerAsync(
+        HttpClient client, string responseId, Dictionary<string, string> expected, CancellationToken cancellationToken)
+    {
+        var token = await _credential.GetTokenAsync(new TokenRequestContext([FoundryTokenScope]), cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{_responsesUrl}/{Uri.EscapeDataString(responseId)}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
+        using var response = await client.SendAsync(request, cancellationToken);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            throw new ChatConversationException();
+        response.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        if (!doc.RootElement.TryGetProperty("metadata", out var metadata)
+            || metadata.ValueKind != JsonValueKind.Object
+            || expected.Any(pair => !metadata.TryGetProperty(pair.Key, out var value) || value.GetString() != pair.Value))
+        {
+            _logger.LogWarning("Chat continuation rejected: conversation owner or agent mismatch");
+            throw new ChatConversationException();
+        }
+    }
+
     private static bool McpCallFailed(JsonElement item)
     {
         if (item.TryGetProperty("error", out var error)
@@ -632,10 +701,15 @@ public class FoundryAgentClient
 
     private async Task<CachedAgentDefinition> GetOrFetchAgentDefinitionAsync(
         string agentId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool requireConfiguredDefinition = false)
     {
         if (_agentDefCache.TryGetValue(agentId, out var cached))
+        {
+            if (requireConfiguredDefinition && (cached.IsFallback || string.IsNullOrWhiteSpace(cached.Instructions)))
+                throw new InvalidOperationException("Guarded chat requires a configured agent policy.");
             return cached;
+        }
 
         var url = $"{_projectEndpoint}/agents/{agentId}?api-version=v1";
         var token = await _credential.GetTokenAsync(
@@ -655,7 +729,7 @@ public class FoundryAgentClient
             _logger.LogError("Failed to fetch agent definition for '{AgentId}': {Status} {Body}",
                 agentId, (int)resp.StatusCode, body.Length > 500 ? body[..500] : body);
 
-            if (isPermissionDenied && !string.IsNullOrEmpty(_fallbackMcpServiceUrl))
+            if (!requireConfiguredDefinition && isPermissionDenied && !string.IsNullOrEmpty(_fallbackMcpServiceUrl))
             {
                 // The managed identity lacks the 'AIServices/agents/read' data action.
                 // Fall back to pre-configured tool URLs derived from environment variables.
@@ -693,6 +767,8 @@ public class FoundryAgentClient
 
         var model = definition.TryGetProperty("model", out var m) ? m.GetString() ?? "chat" : "chat";
         var instructions = definition.TryGetProperty("instructions", out var inst) ? inst.GetString() : null;
+        if (requireConfiguredDefinition && string.IsNullOrWhiteSpace(instructions))
+            throw new InvalidOperationException("Guarded chat requires configured agent instructions.");
 
         // Clone tools so they outlive the JsonDocument lifetime
         var tools = new List<JsonElement>();
@@ -706,8 +782,12 @@ public class FoundryAgentClient
         // If the agent definition has no MCP tools configured but fallback MCP URLs are
         // available via environment variables, inject them so the agent can reach live data.
         // This handles agents created in the Foundry portal without explicit MCP server setup.
+        if (requireConfiguredDefinition && tools.Count == 0)
+            throw new InvalidOperationException("Guarded chat requires configured agent tools.");
         if (tools.Count == 0 && !string.IsNullOrEmpty(_fallbackMcpServiceUrl))
         {
+            if (requireConfiguredDefinition)
+                throw new InvalidOperationException("Guarded chat requires explicitly configured customer-facing tools.");
             _logger.LogWarning(
                 "Agent '{AgentId}' has no tools in its Foundry definition. " +
                 "Augmenting with MCP tools from MCP_SERVICE_URL environment variable. " +
@@ -727,7 +807,7 @@ public class FoundryAgentClient
                   "data questions rather than asking the user to provide data. " +
                   "Respond concisely and in plain language suitable for a business analyst.";
 
-            var def = new CachedAgentDefinition(model, effectiveInstructions, augmented.Tools);
+            var def = new CachedAgentDefinition(model, effectiveInstructions, augmented.Tools, IsFallback: true);
             _agentDefCache.TryAdd(agentId, def);
             _logger.LogInformation(
                 "Cached augmented agent definition for '{AgentId}': model={Model}, tools={ToolCount} (from MCP_SERVICE_URL)",
@@ -971,7 +1051,7 @@ public class FoundryAgentClient
             "Fallback agent definition: model={Model}, tools={ToolCount} (mcp={Mcp}, dab={Dab})",
             _fallbackModelDeployment, tools.Count, _fallbackMcpServiceUrl, _fallbackDabMcpUrl);
 
-        return new CachedAgentDefinition(_fallbackModelDeployment, null, tools);
+        return new CachedAgentDefinition(_fallbackModelDeployment, null, tools, IsFallback: true);
     }
 }
 
@@ -981,7 +1061,8 @@ public class FoundryAgentClient
 internal sealed record CachedAgentDefinition(
     string Model,
     string? Instructions,
-    IReadOnlyList<JsonElement> Tools
+    IReadOnlyList<JsonElement> Tools,
+    bool IsFallback = false
 );
 
 // ── Wire-format request DTO ──────────────────────────────────────────────────
@@ -1002,6 +1083,7 @@ internal sealed class FoundryResponsesRequest
     public bool Stream { get; set; }
     public bool Store { get; set; } = true;
     public string? PreviousResponseId { get; set; }
+    public Dictionary<string, string>? Metadata { get; set; }
 
     /// <summary>Tools (MCP servers) from the agent definition, serialised as-is.</summary>
     public IReadOnlyList<JsonElement>? Tools { get; set; }
@@ -1019,6 +1101,10 @@ internal sealed class FoundryResponsesRequest
     /// </summary>
     public string? ToolChoice { get; set; }
 }
+
+public sealed class FoundryGuardrailException() : Exception("Foundry blocked this content under the configured safety policy.");
+
+public sealed class ChatConversationException() : Exception("This conversation is not available to the signed-in user.");
 
 // ── Public types ─────────────────────────────────────────────────────────────
 

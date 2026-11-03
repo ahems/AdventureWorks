@@ -19,7 +19,7 @@ public static class FunctionAuthorizationRegistry
     private static readonly FrozenDictionary<string, FunctionPolicy> Policies = new FunctionPolicy[]
     {
         // ---- Tier P — anonymous (18) ----
-        new("AIAgentChat", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/agent/chat
+        new("AIAgentChat", AccessTier.Public, null, AccessMode.Anonymous, null),  // Validates MCP-audience OAuth inside the function.
         new("AIAgentStatus", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/agent/status
         new("GetOpenApiSpec", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/openapi.json
         new("GetSearchSuggestions", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/search/suggestions

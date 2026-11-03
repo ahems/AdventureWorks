@@ -42,6 +42,11 @@ interface AgentChatResponse {
   suggestedQuestions: string[];
   toolsUsed: string[];
   threadId?: string;
+  safety?: {
+    source: string;
+    policy?: string;
+    blocked: boolean;
+  };
 }
 
 /**
@@ -104,6 +109,7 @@ export const chatWithAgent = async (
         data.SuggestedQuestions || data.suggestedQuestions || [],
       toolsUsed: data.ToolsUsed || data.toolsUsed || [],
       threadId: data.ThreadId || data.threadId,
+      safety: data.safety || data.Safety,
     };
     if (!result.response.trim()) {
       throw new Error("The AI agent returned an empty response.");

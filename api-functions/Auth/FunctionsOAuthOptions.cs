@@ -65,20 +65,28 @@ public sealed class FunctionsOAuthOptions
             .Select(k => config[k] ?? Environment.GetEnvironmentVariable(k))
             .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim();
 
-        var issuer = Get("FUNCTIONS_JWT_ISSUER", "API_MCP_URL", "MCP_PUBLIC_BASE_URL", "MCP_SERVICE_URL")?.TrimEnd('/');
+        var issuerBase = Get("FUNCTIONS_JWT_ISSUER")?.TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(issuerBase))
+        {
+            issuerBase = Get("API_MCP_URL", "MCP_PUBLIC_BASE_URL", "MCP_SERVICE_URL")?.TrimEnd('/');
+            if (issuerBase?.EndsWith("/mcp", StringComparison.OrdinalIgnoreCase) == true)
+                issuerBase = issuerBase[..^4];
+        }
+        // OpenIddict publishes its absolute issuer URI with a trailing slash.
+        var issuer = string.IsNullOrWhiteSpace(issuerBase) ? null : issuerBase + "/";
 
         // Audience = the Functions resource identifier. Default to {issuer}/functions so it matches
         // AuthorizationServerOptions.GetFunctionsResourceIdentifier() on the api-mcp side.
         var audience = Get("FUNCTIONS_JWT_AUDIENCE", "FUNCTIONS_RESOURCE_IDENTIFIER")?.TrimEnd('/');
         if (string.IsNullOrWhiteSpace(audience) && !string.IsNullOrWhiteSpace(issuer))
         {
-            audience = issuer + "/functions";
+            audience = issuerBase + "/functions";
         }
 
         var metadata = Get("FUNCTIONS_JWT_METADATA_ADDRESS");
         if (string.IsNullOrWhiteSpace(metadata) && !string.IsNullOrWhiteSpace(issuer))
         {
-            metadata = issuer + "/.well-known/openid-configuration";
+            metadata = issuerBase + "/.well-known/openid-configuration";
         }
 
         var requested = ParseMode(Get("FUNCTIONS_OAUTH_MODE"));

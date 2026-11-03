@@ -6,7 +6,7 @@ import vm from "node:vm";
 
 const ts = createRequire(new URL("../../app/package.json", import.meta.url))("typescript");
 
-async function loadChat({ claims = { customer_id: "123", business_entity_id: "456" }, chatStatus = 200, answer = "Your orders", refreshStatus = 200 } = {}) {
+async function loadChat({ claims = { customer_id: "123", business_entity_id: "456" }, chatStatus = 200, answer = "Your orders", refreshStatus = 200, safety } = {}) {
   const storage = new Map();
   const calls = [];
   const errors = [];
@@ -30,7 +30,7 @@ async function loadChat({ claims = { customer_id: "123", business_entity_id: "45
           access_token: "mcp-user-token", refresh_token: "refresh-rotated", expires_in: 600,
         }), { status: refreshStatus });
       }
-      return new Response(JSON.stringify({ response: answer, threadId: "resp-next", toolsUsed: ["get_customer_orders"] }), { status: chatStatus });
+      return new Response(JSON.stringify({ response: answer, threadId: safety ? undefined : "resp-next", toolsUsed: safety ? [] : ["get_customer_orders"], safety }), { status: chatStatus });
     },
   });
   const modules = new Map();
@@ -117,4 +117,16 @@ test("HTTP failures and empty AI replies are logged and rejected", async () => {
     await assert.rejects(chat.chatWithAgent("Show my orders", [], 456), /HTTP 500|empty response/);
     assert.equal(errors.length, 1);
   }
+});
+
+test("Foundry safety refusals preserve their explicit source and do not look like transport errors", async () => {
+  const { chat, errors } = await loadChat({
+    answer: "I can help with shopping, but not programming.",
+    safety: { source: "foundry", policy: "AdventureWorks-Eshop", blocked: true },
+  });
+  const result = await chat.chatWithAgent("Write Python", [], 456);
+  assert.equal(result.safety.source, "foundry");
+  assert.equal(result.safety.blocked, true);
+  assert.equal(result.threadId, undefined);
+  assert.equal(errors.length, 0);
 });

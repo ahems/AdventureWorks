@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Send, MessageCircle, Loader2, Sparkles } from "lucide-react";
+import { X, Send, MessageCircle, Loader2, Sparkles, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -14,6 +14,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  safetySource?: string;
 }
 
 export const AIChatOverlay = () => {
@@ -50,11 +51,8 @@ export const AIChatOverlay = () => {
   useEffect(() => {
     setSuggestedQuestions([
       t("chat.suggestedQuestions.orderHistory"),
+      t("chat.suggestedQuestions.search"),
       t("chat.suggestedQuestions.recommendations"),
-      t("chat.suggestedQuestions.findAccessories"),
-      t("chat.suggestedQuestions.productReviews", { productId: "937" }),
-      t("chat.suggestedQuestions.checkStock", { productId: "680" }),
-      t("chat.suggestedQuestions.recentOrders"),
     ]);
   }, [selectedLanguage, t]);
 
@@ -144,9 +142,7 @@ export const AIChatOverlay = () => {
       if (requestSession !== sessionVersion.current) return;
 
       // Persist the thread for continued conversation
-      if (agentResponse.threadId) {
-        setThreadId(agentResponse.threadId);
-      }
+      setThreadId(agentResponse.threadId);
 
       // Add assistant response
       const assistantMessage: Message = {
@@ -154,6 +150,7 @@ export const AIChatOverlay = () => {
         role: "assistant",
         content: agentResponse.response,
         timestamp: new Date(),
+        safetySource: agentResponse.safety?.blocked ? agentResponse.safety.source : undefined,
       };
       setMessages((prev) => [...prev, assistantMessage]);
 
@@ -202,9 +199,9 @@ export const AIChatOverlay = () => {
 
       {/* Chat Overlay */}
       {isOpen && (
-        <div className="fixed bottom-6 right-6 w-96 h-[600px] bg-background border rounded-lg shadow-2xl flex flex-col z-50">
+        <div className="fixed bottom-6 right-6 w-[min(28rem,calc(100vw-3rem))] h-[min(720px,calc(100dvh-3rem))] bg-background border rounded-lg shadow-2xl flex flex-col z-50">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b bg-primary text-primary-foreground rounded-t-lg">
+          <div className="flex shrink-0 items-center justify-between p-4 border-b bg-primary text-primary-foreground rounded-t-lg">
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5" />
               <h3 className="font-semibold">{t("chat.title")}</h3>
@@ -223,26 +220,54 @@ export const AIChatOverlay = () => {
           </div>
 
           {/* Suggested Questions */}
-          <div className="p-3 border-b bg-muted/30">
-            <p className="text-xs text-muted-foreground mb-2">
-              {t("chat.quickQuestions")}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {suggestedQuestions.map((question, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleSuggestedQuestion(question)}
-                  disabled={isLoading}
-                  className="text-xs px-2.5 py-1.5 rounded-full border bg-background hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {question}
-                </button>
-              ))}
+          <div className="max-h-[35%] shrink-0 overflow-y-auto">
+            <div className="p-3 border-b bg-muted/30">
+              <p className="text-xs text-muted-foreground mb-2">
+                {t("chat.quickQuestions")}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {suggestedQuestions.map((question, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleSuggestedQuestion(question)}
+                    disabled={isLoading}
+                    className="text-xs px-2.5 py-1.5 rounded-full border bg-background hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            <details className="border-b bg-muted/20 p-3 text-xs">
+              <summary className="cursor-pointer font-medium">
+                <ShieldCheck className="inline h-4 w-4 mr-1" />
+                {t("chat.safetyDemo.title")}
+              </summary>
+              <p className="text-muted-foreground mt-2">{t("chat.safetyDemo.description")}</p>
+              <div className="flex flex-wrap gap-2 mt-2 max-h-32 overflow-y-auto">
+                {["code", "diagnostics", "homework", "otherCustomer", "secrets", "injection"].map((example) => (
+                  <button
+                    key={example}
+                    type="button"
+                    disabled={isLoading}
+                    onClick={() => {
+                      setInput(t(`chat.safetyDemo.examples.${example}.prompt`));
+                      textareaRef.current?.focus();
+                    }}
+                    className="rounded-full border bg-background px-2.5 py-1.5 hover:bg-accent disabled:opacity-50"
+                    data-testid={`chat-safety-example-${example}`}
+                  >
+                    {t(`chat.safetyDemo.examples.${example}.label`)}
+                  </button>
+                ))}
+              </div>
+              <p className="text-muted-foreground mt-2">{t("chat.safetyDemo.hint")}</p>
+            </details>
           </div>
 
           {/* Messages */}
-          <ScrollArea className="flex-1 p-4">
+          <ScrollArea className="flex-1 min-h-0 p-4">
             <div className="space-y-4">
               {messages.map((message) => (
                 <div
@@ -262,6 +287,12 @@ export const AIChatOverlay = () => {
                     )}
                   >
                     <p className="text-sm">{message.content}</p>
+                    {message.safetySource && (
+                      <p className="text-xs font-medium mt-2 flex items-center gap-1" data-testid="chat-safety-block">
+                        <ShieldCheck className="h-3 w-3" />
+                        {t(message.safetySource === "foundry" ? "chat.safetyDemo.foundryBlock" : "chat.safetyDemo.ownershipBlock")}
+                      </p>
+                    )}
                     <p className="text-xs opacity-70 mt-1">
                       {message.timestamp.toLocaleTimeString([], {
                         hour: "2-digit",
@@ -283,7 +314,7 @@ export const AIChatOverlay = () => {
           </ScrollArea>
 
           {/* Input */}
-          <div className="p-4 border-t">
+          <div className="shrink-0 p-4 border-t">
             <div className="flex gap-2">
               <Textarea
                 ref={textareaRef}
@@ -293,6 +324,7 @@ export const AIChatOverlay = () => {
                 placeholder={t("chat.messagePlaceholder")}
                 className="min-h-[60px] max-h-[120px] resize-none"
                 disabled={isLoading}
+                maxLength={4000}
               />
               <Button
                 onClick={() => handleSubmit()}

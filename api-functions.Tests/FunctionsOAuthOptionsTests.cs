@@ -79,7 +79,7 @@ public class FunctionsOAuthOptionsTests
             ["FUNCTIONS_OAUTH_MODE"] = "audit",
         }));
 
-        Assert.Equal("https://mcp.example.test", options.Issuer);
+        Assert.Equal("https://mcp.example.test/", options.Issuer);
         Assert.Equal("https://mcp.example.test/functions", options.Audience);
         Assert.Equal("https://mcp.example.test/.well-known/openid-configuration", options.MetadataAddress);
     }
@@ -98,6 +98,20 @@ public class FunctionsOAuthOptionsTests
 
         Assert.Equal("https://mcp.example.test/custom-functions", options.Audience);
         Assert.Equal(OAuthEnforcementMode.Enforced, options.Mode);
+    }
+
+    [Theory]
+    [InlineData("API_MCP_URL", "https://mcp.example.test/mcp")]
+    [InlineData("MCP_SERVICE_URL", "https://mcp.example.test/mcp/")]
+    [InlineData("MCP_PUBLIC_BASE_URL", "https://mcp.example.test")]
+    public void Derives_issuer_from_the_server_not_the_mcp_resource(string key, string url)
+    {
+        using var _ = new EnvScope(RelevantEnvKeys);
+        var options = FunctionsOAuthOptions.FromConfiguration(Config(new() { [key] = url }));
+
+        Assert.Equal("https://mcp.example.test/", options.Issuer);
+        Assert.Equal("https://mcp.example.test/functions", options.Audience);
+        Assert.Equal("https://mcp.example.test/.well-known/openid-configuration", options.MetadataAddress);
     }
 
     /// <summary>Saves, clears and restores a set of environment variables for deterministic tests.</summary>

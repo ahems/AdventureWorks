@@ -48,7 +48,14 @@ public sealed class FunctionsAccessTokenValidator
     }
 
     /// <summary>Validates a raw bearer token. Returns the principal on success, or a reason on failure.</summary>
-    public async Task<AccessTokenValidationResult> ValidateAsync(string token, CancellationToken cancellationToken)
+    public Task<AccessTokenValidationResult> ValidateAsync(string token, CancellationToken cancellationToken) =>
+        ValidateAudienceAsync(token, _options.Audience, cancellationToken);
+
+    public Task<AccessTokenValidationResult> ValidateMcpAsync(string token, CancellationToken cancellationToken) =>
+        ValidateAudienceAsync(token, $"{_options.Issuer?.TrimEnd('/')}/mcp", cancellationToken);
+
+    private async Task<AccessTokenValidationResult> ValidateAudienceAsync(
+        string token, string? audience, CancellationToken cancellationToken)
     {
         if (_configurationManager is null)
         {
@@ -77,7 +84,7 @@ public sealed class FunctionsAccessTokenValidator
             ValidateIssuer = true,
             ValidIssuer = _options.Issuer,
             ValidateAudience = true,
-            ValidAudience = _options.Audience,
+            ValidAudience = audience,
             ValidateLifetime = true,
             RequireExpirationTime = true,
             RequireSignedTokens = true,
