@@ -5,7 +5,7 @@
 > [`TOOL_SCOPE_MATRIX.md`](../mcp-oauth/TOOL_SCOPE_MATRIX.md). It reuses the same
 > business-domain scopes ([`OAuthScopes.cs`](../../../api-mcp/AdventureWorks/Auth/OAuthScopes.cs))
 > and the same authorization server in `api-mcp`. It classifies **every** one of the
-> **186** HTTP-triggered routes discovered in `api-functions` — no route is left
+> **187** HTTP-triggered routes discovered in `api-functions` — no route is left
 > unclassified. Non-HTTP triggers (queue / SQL / timer) are internal and not part of
 > this matrix.
 
@@ -30,15 +30,15 @@ reachable without a valid Functions-audience token.
 | ---- | ------ | ----- |
 | **P** | Anonymous | 18 |
 | **C** | Consumer (ownership) | 12 |
-| **I** | Internal-only (40 of them also MCP-proxied) | 156 |
-| | **Total** | **186** |
+| **I** | Internal-only (40 of them also MCP-proxied) | 157 |
+| | **Total** | **187** |
 
 ### Routes per required scope (protected routes only)
 
 | Required scope | Route count | In existing catalog? |
 | -------------- | ----------- | -------------------- |
 | `admin.write` | 42 | yes |
-| `manufacturing.read` | 41 | yes |
+| `manufacturing.read` | 42 | yes |
 | `sales.read` | 23 | yes |
 | `manufacturing.write` | 23 | yes |
 | `admin.read` | 19 | yes |
@@ -232,6 +232,7 @@ routes. Only the pre-auth reset flow and consumer signup are anonymous.
 | `POST /api/GenerateOrdersBulk` | I | `admin.write` | Internal-only | — |
 | `POST /api/GenerateProductEmbeddings_HttpStart` | I | `admin.write` | Internal-only | — |
 | `POST /api/GenerateProductImages_HttpStart` | I | `admin.write` | Internal-only | — |
+| `GET, POST /api/manufacturing/illustrations/export` | I | `manufacturing.read` | Internal-only | — |
 | `POST /api/GenerateProductNameEmbeddings` | I | `admin.write` | Internal-only | — |
 | `POST /api/GenerateProductReviewEmbeddings_HttpStart` | I | `admin.write` | Internal-only | — |
 | `POST /api/GenerateProductReviewsUsingAI_HttpStart` | I | `admin.write` | Internal-only | — |

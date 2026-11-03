@@ -10,7 +10,7 @@ using System.Collections.Frozen;
 namespace ApiFunctions.Auth;
 
 /// <summary>
-/// Authoritative, per-function authorization policy for every api-functions HTTP route (186
+/// Authoritative, per-function authorization policy for every api-functions HTTP route (187
 /// routes). Keyed by the <c>[Function]</c> name. Mirrors the committed route-to-scope matrix and
 /// the pattern of api-mcp's <c>ToolAuthorizationRegistry</c>.
 /// </summary>
@@ -52,7 +52,8 @@ public static class FunctionAuthorizationRegistry
         new("SetAddressType", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses/{id:int}/type
         new("UpdateAddress", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses/{id:int}
 
-        // ---- Tier I — internal-only (116) ----
+        // ---- Tier I — internal-only (117) ----
+        new("ExportManufacturingIllustrations", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),
         new("AIJobQueue_Status", AccessTier.Internal, FunctionScopes.AdminRead, AccessMode.InternalOnly, null),  // /api/ai-job-queue/status
         new("AnalyzeCartRecovery", AccessTier.Internal, FunctionScopes.AdminRead, AccessMode.InternalOnly, null),  // /api/carts/analyze-recovery
         new("AnalyzeReviewsBatch", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // /api/reviews/analyze-batch

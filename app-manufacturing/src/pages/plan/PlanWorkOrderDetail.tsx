@@ -11,6 +11,7 @@ import {
   fetchRoutingByProduct,
 } from "@/services/api";
 import { DetailPageSkeleton } from "@/components/LoadingSkeletons";
+import ManufacturingInstructionsLink from "@/components/ManufacturingInstructionsLink";
 import type { WorkOrder } from "@/types/production";
 
 const getStatus = (wo: WorkOrder) => {
@@ -121,6 +122,7 @@ const PlanWorkOrderDetail = () => {
             >
               {product?.Name || `Product #${wo.ProductID}`}
             </Link>
+            {product && <div className="mt-2"><ManufacturingInstructionsLink modelId={product.ProductModelID} /></div>}
           </div>
           <div className="flex gap-6 text-center">
             <div>

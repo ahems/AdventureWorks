@@ -72,7 +72,9 @@ const DefineModels = () => {
                     </Link>
                   </td>
                   <td className="py-3 px-4">{m.CatalogDescription ? '✓' : '—'}</td>
-                  <td className="py-3 px-4">{m.Instructions ? '✓' : '—'}</td>
+                  <td className="py-3 px-4">{m.Instructions?.trim() ? (
+                    <Link to={`/define/models/${m.ProductModelID}/instructions`} className="text-doodle-blue hover:underline">View instructions</Link>
+                  ) : <span className="text-muted-foreground">Not available</span>}</td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-2 justify-center">
                       <CreateModelDialog model={m} />

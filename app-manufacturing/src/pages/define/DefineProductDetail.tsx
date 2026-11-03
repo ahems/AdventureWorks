@@ -4,6 +4,7 @@ import { fetchProduct, fetchProductModel, fetchProductCategories, fetchProductSu
 import { fetchCurrentCost } from '@/services/planningApi';
 import { ArrowLeft, Info } from 'lucide-react';
 import { DetailPageSkeleton } from '@/components/LoadingSkeletons';
+import ManufacturingInstructionsLink from '@/components/ManufacturingInstructionsLink';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -64,6 +65,7 @@ const DefineProductDetail = () => {
           <div>
             <h1 className="font-doodle text-2xl font-bold text-doodle-text">{product.Name}</h1>
             <p className="font-doodle text-sm text-muted-foreground">{product.ProductNumber}</p>
+            <ManufacturingInstructionsLink modelId={product.ProductModelID} />
             {category && subcategory && (
               <p className="font-doodle text-xs text-muted-foreground mt-1">{category.Name} → {subcategory.Name}</p>
             )}

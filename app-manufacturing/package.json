@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "illustrations:export": "node scripts/export-illustrations.mjs"
   },
   "dependencies": {
     "@azure/web-pubsub-client": "^1.1.0",

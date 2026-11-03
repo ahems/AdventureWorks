@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, Fragment } from 'react';
 import { ArrowLeft, Activity, Clock, AlertTriangle, CheckCircle2, Circle, Timer } from 'lucide-react';
 import { DetailPageSkeleton } from '@/components/LoadingSkeletons';
+import ManufacturingInstructionsLink from '@/components/ManufacturingInstructionsLink';
 import { fetchWorkOrder, fetchWorkOrderRouting, fetchProduct, fetchLocations, fetchScrapReasons, fetchActiveBOM, fetchAllProducts, fetchActiveOperations, fetchProductInventory } from '@/services/api';
 import type { Product, ProductInventory } from '@/types/production';
 
@@ -88,6 +89,7 @@ const ExecuteWorkOrder = () => {
           <div>
             <h1 className="font-doodle text-2xl font-bold text-doodle-text">WO #{wo.WorkOrderID}</h1>
             <p className="font-doodle text-doodle-blue">{product?.Name}</p>
+            {product && <ManufacturingInstructionsLink modelId={product.ProductModelID} locationId={activeOp?.locationId} />}
           </div>
           <span className={`font-doodle text-xs font-bold px-3 py-1 rounded-full border-2 border-doodle-text ${
             simStatus === 'In Progress' ? 'bg-doodle-green/20 text-doodle-green' :

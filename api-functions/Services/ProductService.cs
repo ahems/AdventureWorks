@@ -24,6 +24,14 @@ public class ProductService
         return connection;
     }
 
+    public async Task<List<IllustrationSource>> GetIllustrationsAsync()
+    {
+        using var connection = await GetConnectionAsync();
+        var rows = await connection.QueryAsync<IllustrationSource>(
+            "SELECT IllustrationID AS IllustrationId, CONVERT(nvarchar(max), Diagram) AS Diagram FROM Production.Illustration WHERE Diagram IS NOT NULL ORDER BY IllustrationID");
+        return rows.ToList();
+    }
+
     public async Task<List<ProductData>> GetFinishedGoodsProductsAsync(List<int>? productIds = null)
     {
         using var connection = await GetConnectionAsync();

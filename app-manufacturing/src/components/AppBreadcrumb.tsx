@@ -20,6 +20,7 @@ const routeMap: Record<string, string> = {
   departments: 'Departments & Shifts',
   products: 'Products',
   models: 'Models',
+  instructions: 'Manufacturing Instructions',
   categories: 'Categories',
   bom: 'Bill of Materials',
   routing: 'Routing',

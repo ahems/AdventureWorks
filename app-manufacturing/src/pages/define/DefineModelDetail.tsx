@@ -4,6 +4,7 @@ import { fetchProductModel, fetchProductsByModel, fetchProducts, updateProduct }
 import { ArrowLeft, LinkIcon, Unlink } from 'lucide-react';
 import { DetailPageSkeleton } from '@/components/LoadingSkeletons';
 import CreateModelDialog from '@/components/CreateModelDialog';
+import ManufacturingInstructionsLink from '@/components/ManufacturingInstructionsLink';
 import { toast } from '@/hooks/use-toast';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -69,12 +70,10 @@ const DefineModelDetail = () => {
             <p className="font-doodle text-sm text-doodle-text mt-1">{model.CatalogDescription}</p>
           </div>
         )}
-        {model.Instructions && (
-          <div className="mt-4">
-            <h3 className="font-doodle text-sm font-bold text-muted-foreground">Instructions</h3>
-            <p className="font-doodle text-xs text-doodle-text/70 mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap">{model.Instructions.substring(0, 500)}...</p>
-          </div>
-        )}
+        <div className="mt-4">
+          <h3 className="mb-2 font-doodle text-sm font-bold text-muted-foreground">Manufacturing Instructions</h3>
+          <ManufacturingInstructionsLink modelId={modelId} />
+        </div>
       </div>
 
       {/* Associated Products */}
