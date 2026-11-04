@@ -54,8 +54,8 @@ if [[ -z "$agent_endpoint" ]]; then
   color_green "Manufacturing Hosted Agent deployed successfully."
 fi
 
-# All deployment-time SQL work has completed. Close the public SQL endpoint only
-# after every azd deploy operation succeeds; runtime traffic uses the private endpoint.
+# Host-side SQL setup has completed. The seed job and runtime services use the
+# private endpoint, so an ongoing seed does not require public SQL access.
 sql_server=$(get_azd_value "SQL_SERVER_NAME")
 resource_group=$(get_azd_value "AZURE_RESOURCE_GROUP")
 if [[ -z "$sql_server" || -z "$resource_group" ]]; then
@@ -130,7 +130,7 @@ if [[ -n "$static_web_url" ]]; then
   echo ""
   color_cyan "Service and seed-data status:"
   echo "  $static_web_url/health"
-  echo "  Database seed and manufacturing overlays were verified before service deployment."
+  echo "  Seeding runs independently and may still be in progress. Check this page for completion or failure."
   echo ""
 else
   echo "WARNING: The storefront URL was not found. Check the azd deployment output." >&2

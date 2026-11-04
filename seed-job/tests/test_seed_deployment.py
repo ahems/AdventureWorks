@@ -60,75 +60,54 @@ pwsh() { printf 'UNEXPECTED_HOST_SQL\n' >&2; return 93; }
         self.assertIn("UNEXPECTED_IP_DISCOVERY", result.stderr)
         self.assertNotIn("preserving private-only networking", result.stdout)
 
-    def run_hook(self, status="Succeeded", scenario="normal", timeout="2400"):
+    def run_hook(self, scenario="normal"):
         script = r'''
 source "$1"
-MOCK_STATUS="$2"
-SCENARIO="$3"
-export SEED_JOB_WAIT_TIMEOUT_SECONDS="$4"
+SCENARIO="$2"
 az() {
     printf 'MOCK_AZ: %s\n' "$*" >&2
     case "$*" in
         "containerapp job start "*)
             [[ "$SCENARIO" != start-failure ]] || return 1
-            [[ "$SCENARIO" != missing-name ]] || return 0
-            printf 'seed-exact-123\r\n'
-            ;;
-        "containerapp job execution show "*)
-            [[ "$SCENARIO" != observe-failure ]] || return 1
-            printf '%s\n' "$MOCK_STATUS"
+            case "$SCENARIO" in
+                missing-name) return 0 ;;
+                null-name) printf 'null\n' ;;
+                none-name) printf 'None\n' ;;
+                *) printf 'seed-exact-123\r\n' ;;
+            esac
             ;;
         *) return 99 ;;
     esac
 }
-sleep() {
-    if [[ "$SCENARIO" == timeout ]]; then
-        SECONDS=$((SECONDS + 2401))
-    else
-        MOCK_STATUS=Succeeded
-    fi
-}
-start_and_wait_for_seed_job seed-job test-rg
+sleep() { printf 'UNEXPECTED_WAIT\n' >&2; return 98; }
+start_seed_job seed-job test-rg
 '''
         return subprocess.run(
-            ["bash", "-c", script, "test-seed-hook", str(HELPER), status, scenario, timeout],
+            ["bash", "-c", script, "test-seed-hook", str(HELPER), scenario],
             capture_output=True,
             text=True,
             check=False,
         )
 
-    def test_waits_for_exact_execution_not_latest_job(self):
-        result = self.run_hook("Running")
+    def test_starts_exact_execution_without_waiting_or_polling(self):
+        result = self.run_hook()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("seed-exact-123 succeeded", result.stdout)
-        self.assertEqual(result.stderr.count("containerapp job execution show"), 2)
-        self.assertIn("--job-execution-name seed-exact-123", result.stderr)
-        self.assertIn("--query properties.status --output tsv", result.stderr)
+        self.assertIn("Started seed-job execution seed-exact-123", result.stdout)
+        self.assertIn("without waiting for completion", result.stdout)
+        self.assertIn("Database readiness is separate", result.stdout)
+        self.assertEqual(result.stderr.count("MOCK_AZ:"), 1)
+        self.assertIn("--query name --output tsv", result.stderr)
+        self.assertNotIn("execution show", result.stderr)
+        self.assertNotIn("UNEXPECTED_WAIT", result.stderr)
+        self.assertNotIn("succeeded", result.stdout)
 
-    def test_immediate_success(self):
-        self.assertEqual(self.run_hook().returncode, 0)
-
-    def test_terminal_failure_statuses_are_not_success(self):
-        for status in ("Failed", "Stopped", "Canceled", "Cancelled", "Degraded", "Surprise"):
-            with self.subTest(status=status):
-                result = self.run_hook(status)
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn("ERROR:", result.stderr)
-
-    def test_start_observation_and_timeout_failures(self):
-        for scenario in ("start-failure", "missing-name", "observe-failure", "timeout"):
+    def test_start_failure_or_missing_execution_fails_hook(self):
+        for scenario in ("start-failure", "missing-name", "null-name", "none-name"):
             with self.subTest(scenario=scenario):
-                result = self.run_hook("Running", scenario)
+                result = self.run_hook(scenario)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("ERROR:", result.stderr)
-                self.assertNotIn("succeeded", result.stdout)
-
-    def test_invalid_timeout_never_starts_job(self):
-        for timeout in ("0", "-1", "abc"):
-            with self.subTest(timeout=timeout):
-                result = self.run_hook(timeout=timeout)
-                self.assertNotEqual(result.returncode, 0)
-                self.assertNotIn("MOCK_AZ:", result.stderr)
+                self.assertNotIn("Started seed-job", result.stdout)
 
     def test_actual_lifecycle_and_build_wiring(self):
         azure_yaml = (ROOT / "azure.yaml").read_text()
@@ -137,10 +116,15 @@ start_and_wait_for_seed_job seed-job test-rg
         self.assertIn("run: bash scripts/hooks/postprovision.sh", azure_yaml)
         self.assertIn('--set-env-vars SEED_SKIP_EXISTING=true', hook)
         self.assertIn('source "$(dirname "${BASH_SOURCE[0]}")/seed-job-execution.sh"', hook)
-        self.assertIn('if ! start_and_wait_for_seed_job "$SEED_JOB_NAME" "$RESOURCE_GROUP"; then\n    exit 1', hook)
-        self.assertLess(hook.index("az acr build"), hook.index("start_and_wait_for_seed_job"))
+        self.assertIn('if ! start_seed_job "$SEED_JOB_NAME" "$RESOURCE_GROUP"; then\n    exit 1', hook)
+        self.assertLess(hook.index("az acr build"), hook.index("start_seed_job"))
         self.assertIn("COPY ManufacturingOverlays.psm1 /app/ManufacturingOverlays.psm1", dockerfile)
         self.assertIn("COPY sql/ /app/sql/", dockerfile)
+
+    def test_final_status_does_not_claim_seed_completion(self):
+        hook = (ROOT / "scripts/hooks/postup.sh").read_text()
+        self.assertIn("Seeding runs independently and may still be in progress", hook)
+        self.assertNotIn("were verified before service deployment", hook)
 
     def test_fresh_private_sql_bootstraps_with_existing_seed_identity(self):
         database = (ROOT / "infra/modules/database.bicep").read_text()

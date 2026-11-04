@@ -430,7 +430,7 @@ else
     echo "SQL public network access is disabled; preserving private-only networking."
     echo "Skipping public firewall rules and deployment-host SQL role/Change Tracking setup."
     echo "Reusing existing managed-identity database permissions through the private-network seed job."
-    echo "The seed execution must succeed; missing database access or overlay conflicts will fail deployment."
+    echo "Monitor seed execution logs for database access failures or overlay conflicts; deployment does not wait for completion."
 fi
 
 echo "Preparing the database seed job..."
@@ -506,7 +506,7 @@ if ! JOB_UPDATE_OUTPUT=$(az containerapp job update \
 fi
 
 source "$(dirname "${BASH_SOURCE[0]}")/seed-job-execution.sh"
-if ! start_and_wait_for_seed_job "$SEED_JOB_NAME" "$RESOURCE_GROUP"; then
+if ! start_seed_job "$SEED_JOB_NAME" "$RESOURCE_GROUP"; then
     exit 1
 fi
 

@@ -19,7 +19,7 @@ The seed job is automatically deployed and executed during `azd up` by the `post
 
 Deployment hooks do not run the offline manufacturing asset validator. It remains available as an explicit content-generation/publication tool: `python3 scripts/data-management/validate-manufacturing-assets.py`. The seed importer still validates its artifacts and database integrity during import.
 
-The post-provision hook waits for its **specific seed-job execution** to succeed before service deployment. An existing populated database is preserved: only the manufacturing overlays are imported. An empty database receives the full base seed first. No AI generation runs during deployment.
+The post-provision hook starts the seed job and continues service deployment **without waiting for completion**. Failure to start the job fails the hook; later seed failures are reported through the job logs and the site's `/health` page, not the `azd up` exit status. The site may be unavailable until seeding finishes. An existing populated database is preserved: only the manufacturing overlays are imported. An empty database receives the full base seed first. No AI generation runs during deployment.
 
 Fresh provisioning configures SQL with **public access disabled from creation** and makes a **dedicated seed/bootstrap user-assigned managed identity** (`av-seed-identity-*`) its Microsoft Entra administrator (`principalType: Application`, SID = identity object/principal ID). Only the existing seed job attaches this identity; runtime applications retain their separate existing identity. The seed job uses the dedicated identity for SQL authentication and ACR pull, reaches SQL through the existing Container Apps private network, and can initialize the empty database without host grants. This adds one identity and its ACR pull assignment, but no compute/service/job. Identity creation precedes SQL and job deployment; no dependency cycle is introduced.
 
@@ -29,7 +29,7 @@ Fresh provisioning configures SQL with **public access disabled from creation** 
 
 The identity resource is named `av-seed-identity-${resourceToken}`. Provisioning exports `SEED_MANAGED_IDENTITY_NAME`, `SEED_MANAGED_IDENTITY_CLIENT_ID`, and `SEED_MANAGED_IDENTITY_PRINCIPAL_ID` to azd. Existing global `AZURE_CLIENT_ID`/`USER_MANAGED_IDENTITY_NAME` still identify the runtime UAMI; only the seed container receives its dedicated client ID/name under those container-local names. The container also receives runtime bootstrap inputs as `RUNTIME_MANAGED_IDENTITY_NAME` and `RUNTIME_MANAGED_IDENTITY_CLIENT_ID`.
 
-When SQL has public network access disabled, postprovision preserves that setting and skips public firewall rules, public-IP discovery, and deployment-host SQL role/Change Tracking commands. Fresh deployments use the IaC-established administrator above; legacy databases can reuse their existing identity grants. Missing permissions cause the awaited seed execution to fail rather than opening public access. A legacy public-enabled server retains the existing temporary client-firewall/role setup. The hook fails closed if it cannot determine the network setting. Full fresh seeding enables Change Tracking inside the private-network job; the incremental overlay path does not migrate Change Tracking on an existing database.
+When SQL has public network access disabled, postprovision preserves that setting and skips public firewall rules, public-IP discovery, and deployment-host SQL role/Change Tracking commands. Fresh deployments use the IaC-established administrator above; legacy databases can reuse their existing identity grants. Missing permissions cause the asynchronous seed execution to fail rather than opening public access; inspect the job logs or `/health`. A legacy public-enabled server retains the existing temporary client-firewall/role setup. The hook fails closed if it cannot determine the network setting. Full fresh seeding enables Change Tracking inside the private-network job; the incremental overlay path does not migrate Change Tracking on an existing database.
 
 ---
 
@@ -157,11 +157,11 @@ Generation and deployment are separate operations. Before deployment, publish/re
 
 Do not delete those local artifacts when removing Azure resources. They must be present in the checkout used for the next deployment (including hydrated Git LFS content where applicable). `seed-job/dockerfile` copies the whole `sql/` directory plus the importer module. The existing manufacturing frontend Docker build copies its public assets into Vite's output; no separate SVG resource or infrastructure is required.
 
-If you deliberately remove the environment, perform `azd down` **manually**, understanding that it destroys Azure data/resources. Then run `azd up --no-prompt` from this prepared checkout. The normal hooks rebuild the existing seed-job image, recreate the base data on the empty database, apply and verify **every record in the packaged overlays**, and wait for that execution to succeed before deploying services/static SVGs. `azd up` never calls the expensive AI instruction/diagram generation endpoints.
+If you deliberately remove the environment, perform `azd down` **manually**, understanding that it destroys Azure data/resources. Then run `azd up --no-prompt` from this prepared checkout. The normal hooks rebuild the existing seed-job image and start it asynchronously while service/static SVG deployment continues. The job recreates the base data on the empty database and applies and verifies **every record in the packaged overlays**. `azd up` never calls the expensive AI instruction/diagram generation endpoints.
 
-For an existing deployment, run `azd up --no-prompt` without removing anything: the hook sets `SEED_SKIP_EXISTING=true`, preserves existing base data, and imports/verifies the same overlays using the existing private-network seed job. Repeated identical imports report zero changes. Different non-NULL instructions/diagrams or conflicting mappings abort deployment rather than overwriting them. Existing user tables are not sufficient evidence of a base seed: `Production.ProductModel`, `Production.Product`, `Person.Person`, and `Sales.SalesOrderHeader` must all exist and contain data; otherwise deployment fails as an incomplete seed and never wipes it. The importer additionally requires every overlay model to exist. This is a conservative readiness guard, not a complete audit of every base table. Resolve a partial seed explicitly before retrying.
+For an existing deployment, run `azd up --no-prompt` without removing anything: the hook sets `SEED_SKIP_EXISTING=true`, preserves existing base data, and imports/verifies the same overlays using the existing private-network seed job. Repeated identical imports report zero changes. Different non-NULL instructions/diagrams or conflicting mappings fail the seed job rather than overwriting them. Existing user tables are not sufficient evidence of a base seed: `Production.ProductModel`, `Production.Product`, `Person.Person`, and `Sales.SalesOrderHeader` must all exist and contain data; otherwise the seed job fails as an incomplete seed and never wipes it. The importer additionally requires every overlay model to exist. This is a conservative readiness guard, not a complete audit of every base table. Resolve a partial seed explicitly before retrying.
 
-The hook checks the exact execution returned by `job start`, not an older successful execution. Start/observation errors, terminal failures, unknown statuses, or timeout fail the hook. The default wait limit is 2400 seconds (`SEED_JOB_WAIT_TIMEOUT_SECONDS` can override it with a positive integer); the existing job replica timeout remains 2000 seconds. A timeout does not stop the job: inspect its execution status and logs before retrying. This adds a synchronous seed wait to deployment instead of reporting success while seeding runs unseen.
+The hook prints the execution name returned by `job start` for monitoring and does not poll its status. A failed start or missing execution name fails the hook. The existing job replica timeout remains 2000 seconds. Later failures do not fail `azd up`; check `/health` or that execution's status/logs before using the site or retrying the seed.
 
 All three artifacts share one serializable transaction with parameterized commands and update/range locks:
 
@@ -310,8 +310,8 @@ az containerapp job update \
     --image "$ACR_ENDPOINT/seed-job:latest" \
     --set-env-vars SEED_SKIP_EXISTING=true
 
-# The hook calls seed-job-execution.sh to start and await this exact execution.
-# It fails deployment unless the execution succeeds.
+# The hook calls seed-job-execution.sh to start this execution without polling.
+# A failed start fails deployment; later seed failures must be monitored separately.
 az containerapp job start \
     --name $SEED_JOB_NAME \
     --resource-group $RESOURCE_GROUP
@@ -325,7 +325,7 @@ Once started, the Container App Job:
 2. Creates a container instance with managed identity
 3. Runs `seed-database.ps1`
 4. Executes the full seed for an empty database (approximately **8 minutes**), or only manufacturing overlays for an existing populated database
-5. Terminates upon completion; `postprovision.sh` verifies execution success before returning
+5. Terminates upon completion, independently of `azd up`; monitor `/health` or execution logs for success/failure
 
 ---
 
