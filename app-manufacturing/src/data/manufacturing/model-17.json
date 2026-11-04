@@ -1,0 +1,143 @@
+{
+  "modelId": 17,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. ML Road Frame-W. Fictional workshop demonstration for model 17, ML Road Frame-W, using representative product 822, FR-R72Y-38, Yellow, size 38. The scope covers the frame, finish, decals and accompanying fork.<Location LocationID=\"10\" SetupHours=\"0.2\" LaborHours=\"1.5\" MachineHours=\"0.8\" LotSize=\"1\">Work Center 10 - Frame Forming. Estimates are fictional demo assumptions. Frame Forming: prepare the manufactured frame components from their supplied nested BOM materials in an inferred demonstration process.<step>For each of 2 EA <material>Chain Stays (Product Number CS-2812)</material>, form 1 EA <material>Metal Sheet 5 (Product Number MS-2341)</material> using an assumed <tool>forming jig</tool>.</step><step>For 1 EA <material>Head Tube (Product Number HT-8019)</material>, form 1 EA <material>Metal Sheet 4 (Product Number MS-2259)</material>; for 1 EA <material>Down Tube (Product Number DT-2377)</material>, form 1 EA <material>Metal Sheet 3 (Product Number MS-1256)</material>.</step><step>For each of 4 EA <material>Seat Stays (Product Number SS-2985)</material>, form 1 EA <material>Metal Sheet 7 (Product Number MS-1981)</material>.</step><step>Prepare 1 EA <material>Seat Tube (Product Number ST-9828)</material> from 1 EA <material>Metal Bar 2 (Product Number MB-6061)</material>, and 1 EA <material>Top Tube (Product Number TO-2301)</material> from 1 EA <material>Metal Sheet 2 (Product Number MS-0253)</material>. Check the prepared pieces visually for obvious damage.</step></Location><Location LocationID=\"20\" SetupHours=\"0.2\" LaborHours=\"1.2\" MachineHours=\"0.5\" LotSize=\"1\">Work Center 20 - Frame Welding. Estimates are fictional demo assumptions. Frame Welding: arrange and join the representative frame components in an assumed jig setup.<step>Arrange 1 EA <material>Head Tube (Product Number HT-8019)</material>, 1 EA <material>Down Tube (Product Number DT-2377)</material>, 1 EA <material>Seat Tube (Product Number ST-9828)</material> and 1 EA <material>Top Tube (Product Number TO-2301)</material> in an assumed <tool>frame jig</tool>. See schematic <diag>100171</diag>.</step><step>Position 2 EA <material>Chain Stays (Product Number CS-2812)</material> and 4 EA <material>Seat Stays (Product Number SS-2985)</material> for the rear frame arrangement. Their exact placement is not supplied; do not treat the schematic as a joint specification.</step><step>Demonstrate joining the positioned frame pieces with an assumed <tool>welding setup</tool>, then visually check the joints and overall alignment.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.6\" MachineHours=\"0.1\" LotSize=\"1\">Work Center 30 - Debur and Polish. Estimates are fictional demo assumptions. Debur and Polish: clean the demonstration frame and check its visible surfaces.<step>Use an assumed <tool>deburring tool</tool> to remove obvious sharp edges around the joined frame, then smooth accessible surfaces.</step><step>Visually check the frame for rough areas and clean off loose debris before finishing.</step></Location><Location LocationID=\"40\" SetupHours=\"0.2\" LaborHours=\"0.5\" MachineHours=\"0.2\" LotSize=\"1\">Work Center 40 - Paint. Estimates are fictional demo assumptions. Paint: demonstrate the representative yellow finish on the prepared frame.<step>Set up the frame on an assumed <tool>paint fixture</tool> and account for 8.00 OZ of <material>Paint - Yellow (Product Number PA-823Y)</material> as listed in the BOM.</step><step>Demonstrate applying the yellow finish with an assumed <tool>spray setup</tool>. Allow the finish to dry or cure according to the paint supplier's directions, then visually check coverage.</step></Location><Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.3\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: inspect the listed fork subassembly and stage it with the finished frame.<step>Inspect 1 EA <material>ML Fork (Product Number FK-5136)</material> for visible damage and stage it beside the frame as shown in <diag>100171</diag>. The view does not specify fork-retention hardware or an installation method.</step></Location><Location LocationID=\"60\" SetupHours=\"0.1\" LaborHours=\"0.4\" MachineHours=\"0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final Assembly: apply the purchased decals and review the staged frame and fork.<step>Apply 2 EA <material>Decal 1 (Product Number DC-8732)</material> and 1 EA <material>Decal 2 (Product Number DC-9824)</material> to clean, finished surfaces; exact decal placement is an assumed demonstration choice.</step><step>Check the finish and decals visually, confirm the fork is present, and keep it with the frame. Do not represent the fork as secured without a specified retention method.</step></Location></root>",
+  "processNotes": [
+    "The center sequence follows the representative product's historical routing; the operations assigned to those centers are inferred, not an engineering specification.",
+    "The BOM does not establish exact frame geometry, stay placement, joint details or fork-retention hardware. The illustration is schematic, and the fork is presented with the frame rather than claimed to be secured to it.",
+    "Times are estimates for a lot of one; paint drying or curing duration is not specified."
+  ],
+  "variantNotes": [
+    "The representative is Yellow, size 38. The other listed variants are also Yellow: 833 size 40, 834 size 42, 835 size 44 and 836 size 48.",
+    "The supplied direct BOMs list the same component IDs and quantities for all five variants, including the same fork and yellow paint; no variant-specific component substitutions are shown.",
+    "Use the selected variant's own size-specific geometry and product identity. The snapshot does not supply dimensions or explain how shared component IDs accommodate each size.",
+    "The catalog description describes the size 48 variant; it does not establish dimensions for the size 38 representative."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0017",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 822,
+      "ProductModelID": 17,
+      "MakeFlag": true,
+      "Name": "ML Road Frame-W - Yellow, 38",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-017-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2024-12-05",
+        "changeRequest": "ECN-2024-017-02",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2025-04-02",
+        "changeRequest": "ECN-2025-017-03",
+        "description": "Moved variant-selection notes ahead of the first operation to reduce wrong-kit changeovers.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2025-04-16",
+        "changeRequest": "ECN-2025-017-04",
+        "description": "Reordered the Chain Stays receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2025-06-19",
+        "changeRequest": "ECN-2025-017-05",
+        "description": "Clarified identification of Top Tube; retained the source part number in the point-of-use checklist.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-08-03",
+        "changeRequest": "ECN-2026-017-06",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "7.0",
+        "effectiveDate": "2026-09-14",
+        "changeRequest": "ECN-2026-017-07",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "8.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-017-08",
+        "description": "Released the illustrated workstation edition: Frame components and staged fork. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      }
+    ]
+  },
+  "figures": {
+    "100171": {
+      "title": "Frame components and staged fork",
+      "guidance": [
+        "Arrange 1 EA Head Tube (Product Number HT-8019), 1 EA Down Tube (Product Number DT-2377), 1 EA Seat Tube (Product Number ST-9828) and 1 EA Top Tube (Product Number TO-2301) in an assumed frame jig.",
+        "Position 2 EA Chain Stays (Product Number CS-2812) and 4 EA Seat Stays (Product Number SS-2985) for the rear frame arrangement. Their exact placement is not supplied; do not treat the schematic as a joint specification.",
+        "Inspect 1 EA ML Fork (Product Number FK-5136) for visible damage and stage it beside the frame as shown in 100171. The view does not specify fork-retention hardware or an installation method."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Head Tube",
+          "productNumber": "HT-8019"
+        },
+        {
+          "number": 2,
+          "name": "Down Tube",
+          "productNumber": "DT-2377"
+        },
+        {
+          "number": 3,
+          "name": "Seat Tube",
+          "productNumber": "ST-9828"
+        },
+        {
+          "number": 4,
+          "name": "Top Tube",
+          "productNumber": "TO-2301"
+        },
+        {
+          "number": 5,
+          "name": "Chain Stays",
+          "productNumber": "CS-2812"
+        },
+        {
+          "number": 6,
+          "name": "Seat Stays",
+          "productNumber": "SS-2985"
+        },
+        {
+          "number": 7,
+          "name": "ML Fork",
+          "productNumber": "FK-5136"
+        }
+      ]
+    }
+  }
+}

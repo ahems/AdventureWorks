@@ -207,6 +207,22 @@ SQL_SERVER_NAME=$(azd env get-value SQL_SERVER_NAME 2>/dev/null | head -n1 | tr 
 SQL_DATABASE_NAME=$(azd env get-value SQL_DATABASE_NAME 2>/dev/null | head -n1 | tr -d '\n\r ')
 USER_MANAGED_IDENTITY_NAME=$(azd env get-value USER_MANAGED_IDENTITY_NAME 2>/dev/null | head -n1 | tr -d '\n\r ')
 
+if ! SQL_PUBLIC_NETWORK_ACCESS=$(az sql server show \
+    --name "$SQL_SERVER_NAME" --resource-group "$RESOURCE_GROUP" \
+    --query publicNetworkAccess --output tsv); then
+    echo "ERROR: Could not determine SQL public network access; refusing firewall changes." >&2
+    exit 1
+fi
+SQL_PUBLIC_NETWORK_ACCESS="${SQL_PUBLIC_NETWORK_ACCESS//$'\r'/}"
+case "$SQL_PUBLIC_NETWORK_ACCESS" in
+    Enabled|Disabled) ;;
+    *)
+        echo "ERROR: Unexpected SQL public network access '$SQL_PUBLIC_NETWORK_ACCESS'; refusing firewall changes." >&2
+        exit 1
+        ;;
+esac
+
+if [ "$SQL_PUBLIC_NETWORK_ACCESS" = "Enabled" ]; then
 if [ -n "$SQL_SERVER_NAME" ] && [ -n "$SQL_DATABASE_NAME" ] && [ -n "$USER_MANAGED_IDENTITY_NAME" ]; then
     # The deployment host still needs SQL access during azd up. Restrict the temporary
     # public firewall exception to its IPv4 egress address; postup disables public access.
@@ -410,6 +426,12 @@ else
     echo "ERROR: SQL_SERVER_NAME or SQL_DATABASE_NAME is missing; cannot configure Change Tracking." >&2
     exit 1
 fi
+else
+    echo "SQL public network access is disabled; preserving private-only networking."
+    echo "Skipping public firewall rules and deployment-host SQL role/Change Tracking setup."
+    echo "Reusing existing managed-identity database permissions through the private-network seed job."
+    echo "The seed execution must succeed; missing database access or overlay conflicts will fail deployment."
+fi
 
 echo "Preparing the database seed job..."
 
@@ -445,6 +467,9 @@ if [ -n "$REPO_ROOT" ] && [ -e "$REPO_ROOT/.git" ]; then
     fi
 fi
 
+# Check CSV/SVG/metadata consistency after LFS hydration, before publishing seed artifacts.
+python3 scripts/data-management/validate-manufacturing-assets.py
+
 # Build and push the image to ACR
 echo "Building and publishing the seed-job image..."
 if BUILD_OUTPUT=$(az acr build \
@@ -469,29 +494,24 @@ fi
 IMAGE_NAME="${ACR_ENDPOINT}/seed-job:latest"
 
 # Simple approach: Just update the container image for the specific container
-# This preserves ALL other configuration including env vars and volume mounts
+# Preserve existing configuration; automatic deployment must never reset a populated database.
 # Suppress verbose JSON output.
 if ! JOB_UPDATE_OUTPUT=$(az containerapp job update \
     --name "$SEED_JOB_NAME" \
     --resource-group "$RESOURCE_GROUP" \
     --container-name "$SEED_JOB_NAME" \
     --image "$IMAGE_NAME" \
+    --set-env-vars SEED_SKIP_EXISTING=true \
     --output none 2>&1); then
     echo "$JOB_UPDATE_OUTPUT" >&2
     echo "ERROR: Could not update the seed-job image." >&2
     exit 1
 fi
 
-if ! JOB_START_OUTPUT=$(az containerapp job start \
-    --name "$SEED_JOB_NAME" \
-    --resource-group "$RESOURCE_GROUP" \
-    --output none 2>&1); then
-    echo "$JOB_START_OUTPUT" >&2
-    echo "ERROR: Could not start the database seed job." >&2
+source "$(dirname "${BASH_SOURCE[0]}")/seed-job-execution.sh"
+if ! start_and_wait_for_seed_job "$SEED_JOB_NAME" "$RESOURCE_GROUP"; then
     exit 1
 fi
-
-echo "  Seed-job image updated; database seeding is running in the background."
 
 echo "Configuring Azure AI permissions..."
 # The Agents data-plane API requires Azure AI Developer role at the project scope.

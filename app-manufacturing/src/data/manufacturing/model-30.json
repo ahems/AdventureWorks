@@ -1,0 +1,116 @@
+{
+  "modelId": 30,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Road-650. Fictional assembly demonstration for Road-650 model 30, using Road-650 Red, 58 (BK-R50R-58, product 759). The scope starts with the finished frame and completed subassemblies and ends with a visual and hand-function check.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Inferred subassembly staging: identify and visually check the completed frame and components before final assembly.<step>Stage 1 EA of <material>LL Road Frame - Red, 58 (Product Number FR-R38R-58)</material> and check its finish and visible surfaces. Its supplied frame BOM includes the fork; use the completed frame for this demonstration.</step><step>Stage and visually check 1 EA each of <material>LL Road Front Wheel (Product Number FW-R623)</material> and <material>LL Road Rear Wheel (Product Number RW-R623)</material>; distinguish front from rear before fitting.</step><step>Stage 1 EA each of <material>ML Headset (Product Number HS-2451)</material>, <material>LL Road Handlebars (Product Number HB-R504)</material> and <material>LL Road Seat Assembly (Product Number SA-R127)</material>; check for visible damage.</step><step>Stage 1 EA each of <material>LL Bottom Bracket (Product Number BB-7421)</material>, <material>ML Crankset (Product Number CS-6583)</material>, <material>Front Derailleur (Product Number FD-2342)</material> and <material>Rear Derailleur (Product Number RD-2308)</material>; check the completed subassemblies visually.</step><step>Identify and inspect the purchased items: 1 EA each of <material>Front Brakes (Product Number FB-9873)</material>, <material>Rear Brakes (Product Number RB-9231)</material>, <material>Chain (Product Number CH-0234)</material> and <material>LL Road Pedal (Product Number PD-R347)</material>.</step></Location><Location LocationID=\"60\" SetupHours=\"0.15\" LaborHours=\"1.5\" MachineHours=\"0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final assembly: fit the staged components to the representative frame and perform demonstration checks. This center appears in the historical routing; the operations are inferred.<step>Support <material>LL Road Frame - Red, 58 (Product Number FR-R38R-58)</material> in an <tool>assumed assembly stand</tool>. Fit <material>ML Headset (Product Number HS-2451)</material> with the frame's supplied fork, then fit <material>LL Road Handlebars (Product Number HB-R504)</material>. Check that the steering moves freely; the snapshot does not establish headset internal assembly order.</step><step>Fit <material>LL Road Seat Assembly (Product Number SA-R127)</material> to the frame. Place <material>LL Road Front Wheel (Product Number FW-R623)</material> at the fork and <material>LL Road Rear Wheel (Product Number RW-R623)</material> at the rear of the frame. See the orientation in illustration <diag>100301</diag>.</step><step>Fit <material>LL Bottom Bracket (Product Number BB-7421)</material> and <material>ML Crankset (Product Number CS-6583)</material> to the frame, then fit the supplied 1 EA of <material>LL Road Pedal (Product Number PD-R347)</material> using appropriate <tool>assumed hand tools</tool>.</step><step>Fit <material>Front Derailleur (Product Number FD-2342)</material> and <material>Rear Derailleur (Product Number RD-2308)</material>, then route <material>Chain (Product Number CH-0234)</material> through the drivetrain as compatible with the supplied assemblies.</step><step>Fit <material>Front Brakes (Product Number FB-9873)</material> at the front and <material>Rear Brakes (Product Number RB-9231)</material> at the rear. Do not infer unspecified control connections or settings.</step><step>Visually check component placement and clearances. Turn the wheels and crank by hand and check steering movement; check brake and shifting operation only where the necessary connections are present. Record any missing details or interference rather than treating this demonstration as a release inspection.</step></Location></root>",
+  "processNotes": [
+    "Historical routing records final assembly at work center 60 for product 759; the preceding subassembly stage and the detailed sequence are inferred.",
+    "The frame and manufactured subassemblies are supplied complete for this demonstration; their fabrication and finishing are outside its scope.",
+    "The BOM specifies 1 EA of the pedal product. Do not infer a second pedal or its handedness.",
+    "Connection details and settings not supplied in the snapshot must be resolved before any real bicycle is released for use."
+  ],
+  "variantNotes": [
+    "The representative uses red size 58 frame FR-R38R-58 (product 728). Red sizes 44, 48, 52, 60 and 62 instead use frames FR-R38R-44 (725), FR-R38R-48 (726), FR-R38R-52 (727), FR-R38R-60 (729) and FR-R38R-62 (730), respectively.",
+    "Black sizes 44, 48, 52, 58, 60 and 62 use frames FR-R38B-44 (736), FR-R38B-48 (737), FR-R38B-52 (738), FR-R38B-58 (722), FR-R38B-60 (723) and FR-R38B-62 (724), respectively. Do not substitute the representative red frame.",
+    "All listed variants use the same direct non-frame components and quantities, including front wheel 818 and rear wheel 826. The representative frame BOM specifies 8 OZ of red paint; paint BOMs for the other frames are not supplied, so do not assume their paint identities or quantities."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0030",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 759,
+      "ProductModelID": 30,
+      "MakeFlag": true,
+      "Name": "Road-650 Red, 58",
+      "SellStartDate": "2023-06-10T00:00:00",
+      "SellEndDate": "2025-06-08T00:00:00",
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2023-06-10",
+        "changeRequest": "ECN-2023-030-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2023-08-11",
+        "changeRequest": "ECN-2023-030-02",
+        "description": "Clarified identification of Rear Derailleur; retained the source part number in the point-of-use checklist.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2023-09-18",
+        "changeRequest": "ECN-2023-030-03",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2024-08-14",
+        "changeRequest": "ECN-2024-030-04",
+        "description": "Reordered the Chain receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2024-11-18",
+        "changeRequest": "ECN-2024-030-05",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-030-06",
+        "description": "Released the illustrated workstation edition: Frame, wheels and riding-position assemblies. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      }
+    ]
+  },
+  "figures": {
+    "100301": {
+      "title": "Frame, wheels and riding-position assemblies",
+      "guidance": [
+        "Support LL Road Frame - Red, 58 (Product Number FR-R38R-58) in an assumed assembly stand. Fit ML Headset (Product Number HS-2451) with the frame's supplied fork, then fit LL Road Handlebars (Product Number HB-R504). Check that the steering moves freely; the snapshot does not establish headset internal assembly order.",
+        "Fit LL Road Seat Assembly (Product Number SA-R127) to the frame. Place LL Road Front Wheel (Product Number FW-R623) at the fork and LL Road Rear Wheel (Product Number RW-R623) at the rear of the frame. See the orientation in illustration 100301."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "LL Road Frame - Red, 58",
+          "productNumber": "FR-R38R-58"
+        },
+        {
+          "number": 2,
+          "name": "LL Road Front Wheel",
+          "productNumber": "FW-R623"
+        },
+        {
+          "number": 3,
+          "name": "LL Road Rear Wheel",
+          "productNumber": "RW-R623"
+        },
+        {
+          "number": 4,
+          "name": "LL Road Seat Assembly",
+          "productNumber": "SA-R127"
+        },
+        {
+          "number": 5,
+          "name": "LL Road Handlebars",
+          "productNumber": "HB-R504"
+        }
+      ]
+    }
+  }
+}

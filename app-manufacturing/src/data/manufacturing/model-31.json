@@ -1,0 +1,89 @@
+{
+  "modelId": 31,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Road-750. Fictional workshop demonstration for Road-750 model 31, using Road-750 Black, 58 (product 977, BK-R19B-58) as the representative build.<Location LocationID=\"20\" SetupHours=\"0.3\" LaborHours=\"1.5\" MachineHours=\"0.8\" LotSize=\"1\">Work Center 20 - Frame Welding. Estimates are fictional demo assumptions. Inferred frame-welding stage using supplied formed members for the representative frame.<step>In an assumed <tool>frame assembly jig</tool>, position 1 EA <material>Top Tube (Product Number TO-2301)</material>, 1 EA <material>Seat Tube (Product Number ST-9828)</material>, 1 EA <material>Down Tube (Product Number DT-2377)</material> and 1 EA <material>Head Tube (Product Number HT-8019)</material> as the main frame structure.</step><step>Position 4 EA <material>Seat Stays (Product Number SS-2985)</material> and 2 EA <material>Chain Stays (Product Number CS-2812)</material> with the frame structure. Join the positioned members using assumed workshop welding equipment; inspect the visible joints and alignment.</step><step>Keep 1 EA <material>LL Fork (Product Number FK-1639)</material> with the frame for subsequent assembly; it is a component of the representative frame BOM.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.1\" LotSize=\"1\">Work Center 30 - Debur and Polish. Estimates are fictional demo assumptions. Inferred cleanup and visual inspection of the joined frame structure.<step>Use an assumed <tool>deburring tool</tool> to remove accessible sharp edges, then visually check the joined frame for obvious surface defects.</step></Location><Location LocationID=\"40\" SetupHours=\"0.2\" LaborHours=\"0.6\" MachineHours=\"0.3\" LotSize=\"1\">Work Center 40 - Paint. Estimates are fictional demo assumptions. Inferred black finishing and decoration of the representative frame.<step>Prepare the frame surface and apply <material>Paint - Black (Product Number PA-187B)</material> using assumed finishing equipment. The frame BOM allocates 8 OZ; the actual application and curing process are not specified.</step><step>After the finish is ready, apply 2 EA <material>Decal 1 (Product Number DC-8732)</material> and 1 EA <material>Decal 2 (Product Number DC-9824)</material>; visually inspect the finish and decoration.</step></Location><Location LocationID=\"50\" SetupHours=\"0.2\" LaborHours=\"1.8\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Inferred preparation and inspection of representative subassemblies.<step>For each of <material>LL Road Front Wheel (Product Number FW-R623)</material> and <material>LL Road Rear Wheel (Product Number RW-R623)</material>, assemble 1 EA <material>LL Hub (Product Number HU-6280)</material> to 1 EA <material>LL Road Rim (Product Number RM-R436)</material> with 36 EA <material>Spokes (Product Number SK-9283)</material> and 36 EA <material>LL Nipple (Product Number NI-4127)</material> using an assumed <tool>wheel jig</tool>. Check that each wheel turns freely and appears true.</step><step>For each wheel, fit 1 EA <material>Road Tire Tube (Product Number TT-R982)</material>, 1 EA <material>LL Road Tire (Product Number TI-R092)</material> and 2 EA <material>Reflector (Product Number RF-9198)</material>; inspect their seating.</step><step>Prepare <material>LL Road Seat Assembly (Product Number SA-R127)</material> from 1 EA <material>LL Road Seat/Saddle (Product Number SE-R581)</material>, 1 EA <material>Seat Lug (Product Number SL-0931)</material>, 1 EA <material>Seat Post (Product Number SP-2981)</material> and 4 EA <material>Pinch Bolt (Product Number PB-6109)</material>; check that the assembled parts are secure.</step><step>Prepare <material>LL Road Handlebars (Product Number HB-R504)</material> from 1 EA <material>Handlebar Tube (Product Number HT-2981)</material>, 1 EA <material>Stem (Product Number SM-9087)</material>, 2 EA <material>Road End Caps (Product Number EC-R098)</material> and 40 IN <material>LL Grip Tape (Product Number GT-0820)</material>; inspect the assembled parts.</step><step>Inspect the supplied <material>LL Headset (Product Number HS-0296)</material>, <material>LL Bottom Bracket (Product Number BB-7421)</material>, <material>LL Crankset (Product Number CS-4759)</material>, <material>Front Derailleur (Product Number FD-2342)</material> and <material>Rear Derailleur (Product Number RD-2308)</material> as complete subassemblies before fitting.</step></Location><Location LocationID=\"60\" SetupHours=\"0.2\" LaborHours=\"2.0\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final assembly of the representative bicycle; this work center appears in its historical routing.<step>Support 1 EA <material>LL Road Frame - Black, 58 (Product Number FR-R38B-58)</material> in an assumed <tool>assembly stand</tool>. Fit 1 EA <material>LL Headset (Product Number HS-0296)</material> with the frame's fork, then fit 1 EA <material>LL Road Handlebars (Product Number HB-R504)</material> and 1 EA <material>LL Road Seat Assembly (Product Number SA-R127)</material>. See the overall arrangement in illustration <diag>100311</diag>.</step><step>Fit 1 EA <material>LL Bottom Bracket (Product Number BB-7421)</material> and 1 EA <material>LL Crankset (Product Number CS-4759)</material>, followed by the BOM-listed 1 EA <material>LL Road Pedal (Product Number PD-R347)</material>.</step><step>Fit 1 EA <material>LL Road Front Wheel (Product Number FW-R623)</material> at the front and 1 EA <material>LL Road Rear Wheel (Product Number RW-R623)</material> at the rear; check that both turn freely.</step><step>Fit 1 EA <material>Front Derailleur (Product Number FD-2342)</material>, 1 EA <material>Rear Derailleur (Product Number RD-2308)</material> and 1 EA <material>Chain (Product Number CH-0234)</material> to the drivetrain, checking movement by hand.</step><step>Fit and inspect 1 EA <material>Front Brakes (Product Number FB-9873)</material> and 1 EA <material>Rear Brakes (Product Number RB-9231)</material>. Check visible seating and clearances, steering movement, wheel rotation and basic brake operation; identify any unresolved issues rather than releasing the demonstration as ride-ready.</step></Location></root>",
+  "processNotes": [
+    "The historical routing records work center 60 for product 977; the other centers and their sequence are inferred.",
+    "Formed frame members, the fork and other components not assembled in these steps are assumed to arrive ready for the demonstration. Purchased components are fitted or inspected, not manufactured.",
+    "BOM quantities are allocations, not instructions to consume an exact amount of paint or infer unlisted hardware. Actual joining, finishing and adjustment methods require appropriate product information."
+  ],
+  "variantNotes": [
+    "All four supplied variants are black. The representative size 58 uses frame 722, FR-R38B-58.",
+    "Size 44 product 997 uses frame 736, FR-R38B-44; size 48 product 998 uses frame 737, FR-R38B-48; and size 52 product 999 uses frame 738, FR-R38B-52. Do not substitute the size 58 frame for these variants.",
+    "The supplied direct BOMs list the same other components and quantities for all four variants, including front wheel 818 and rear wheel 826. No alternate paint component or wheel substitution is specified for the other sizes."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0031",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 977,
+      "ProductModelID": 31,
+      "MakeFlag": true,
+      "Name": "Road-750 Black, 58",
+      "SellStartDate": "2025-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2025-06-09",
+        "changeRequest": "ECN-2025-031-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-031-02",
+        "description": "Released the illustrated workstation edition: Representative bicycle assembly overview. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "M. Chen"
+      }
+    ]
+  },
+  "figures": {
+    "100311": {
+      "title": "Representative bicycle assembly overview",
+      "guidance": [
+        "Support 1 EA LL Road Frame - Black, 58 (Product Number FR-R38B-58) in an assumed assembly stand. Fit 1 EA LL Headset (Product Number HS-0296) with the frame's fork, then fit 1 EA LL Road Handlebars (Product Number HB-R504) and 1 EA LL Road Seat Assembly (Product Number SA-R127). See the overall arrangement in illustration 100311.",
+        "Fit 1 EA LL Bottom Bracket (Product Number BB-7421) and 1 EA LL Crankset (Product Number CS-4759), followed by the BOM-listed 1 EA LL Road Pedal (Product Number PD-R347).",
+        "Fit 1 EA LL Road Front Wheel (Product Number FW-R623) at the front and 1 EA LL Road Rear Wheel (Product Number RW-R623) at the rear; check that both turn freely."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "LL Road Frame - Black, 58",
+          "productNumber": "FR-R38B-58"
+        },
+        {
+          "number": 2,
+          "name": "LL Road Front Wheel",
+          "productNumber": "FW-R623"
+        },
+        {
+          "number": 3,
+          "name": "LL Road Rear Wheel",
+          "productNumber": "RW-R623"
+        },
+        {
+          "number": 4,
+          "name": "LL Road Handlebars",
+          "productNumber": "HB-R504"
+        },
+        {
+          "number": 5,
+          "name": "LL Road Seat Assembly",
+          "productNumber": "SA-R127"
+        },
+        {
+          "number": 6,
+          "name": "LL Crankset",
+          "productNumber": "CS-4759"
+        }
+      ]
+    }
+  }
+}

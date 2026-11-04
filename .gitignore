@@ -178,6 +178,9 @@ __tablestorage__/
 # Downloaded product images
 product-images/
 
+# Local AI manufacturing instruction review runs
+review-output/
+
 # Generated config files
 app/staticwebapp.config.json
 app/.env.production
@@ -205,4 +208,3 @@ tests/test-results/
 
 # .NET SDK runfile discovery cache
 dotnet/runfile-discovery/
-

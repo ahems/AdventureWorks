@@ -1,0 +1,111 @@
+{
+  "modelId": 124,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. ML Mountain Rear Wheel. Fictional workshop demonstration for model 124, ML Mountain Rear Wheel, using representative product RW-M762. The draft covers hub preparation, wheel assembly, tire fitting, and simple checks.<Location LocationID=\"50\" SetupHours=\"0.2\" LaborHours=\"2.0\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: prepare the hub and assemble and check the representative wheel. This detailed routing is inferred from the historical work-center record.<step>Inspect 1 EA <material>HL Spindle/Axle (Product Number SD-9872)</material> and 1 EA <material>HL Shell (Product Number SH-9312)</material>; bring them together as the supplied hub components, without assuming unlisted internals. Check fit and movement before using the resulting <material>HL Hub (Product Number HU-8998)</material>.</step><step>Inspect 1 EA <material>ML Mountain Rim (Product Number RM-M692)</material>, 36 EA <material>Spokes (Product Number SK-9283)</material>, and 36 EA <material>LL Nipple (Product Number NI-4127)</material> for visible damage and verify the quantities.</step><step>Place the hub and rim in an assumed <tool>wheel-building stand</tool>. Connect the spokes between hub and rim with the nipples; illustration <diag>101241</diag> shows the component relationships, not a specified lacing pattern.</step><step>Using an assumed <tool>spoke wrench</tool>, adjust the nipples gradually. Spin the wheel in the stand and check for obvious wobble, loose connections, and interference.</step><step>Fit 1 EA <material>Mountain Tire Tube (Product Number TT-M928)</material> inside 1 EA <material>ML Mountain Tire (Product Number TI-M602)</material> and fit them to the rim, taking care not to pinch the tube. Follow the component manufacturer's directions for inflation.</step><step>Fit 2 EA <material>Reflector (Product Number RF-9198)</material> at compatible attachment points according to their supplied directions. Check that both are secure and clear adjacent parts.</step><step>Inspect the completed wheel for visible damage and seating irregularities; spin it and check for obvious rubbing or wobble. Set aside any assembly with an unresolved issue.</step></Location></root>",
+  "processNotes": [
+    "All inferred tooling, processes, routing details, and times are demo estimates.",
+    "Historical routing records product 824 at work center 50; the detailed operations assigned there are inferred, not an engineering specification.",
+    "The hub's nested BOM identifies a spindle/axle and shell but does not describe their internal geometry or assembly method. The demonstration does not assume additional internal components.",
+    "The wheel diagram is schematic; its illustrated spoke pattern is not an approved lacing specification."
+  ],
+  "variantNotes": [
+    "The supplied snapshot lists only product 824, RW-M762, in black, with no size specified.",
+    "No other variants or variant-specific component substitutions are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0124",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 824,
+      "ProductModelID": 124,
+      "MakeFlag": true,
+      "Name": "ML Mountain Rear Wheel",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": "2025-06-08T00:00:00",
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-124-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2024-06-15",
+        "changeRequest": "ECN-2024-124-02",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2024-08-09",
+        "changeRequest": "ECN-2024-124-03",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2024-12-08",
+        "changeRequest": "ECN-2024-124-04",
+        "description": "Reordered the HL Hub receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2025-12-23",
+        "changeRequest": "ECN-2025-124-05",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-124-06",
+        "description": "Released the illustrated workstation edition: Wheel lacing component relationships. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "S. Brooks"
+      }
+    ]
+  },
+  "figures": {
+    "101241": {
+      "title": "Wheel lacing component relationships",
+      "guidance": [
+        "Inspect 1 EA HL Spindle/Axle (Product Number SD-9872) and 1 EA HL Shell (Product Number SH-9312); bring them together as the supplied hub components, without assuming unlisted internals. Check fit and movement before using the resulting HL Hub (Product Number HU-8998).",
+        "Inspect 1 EA ML Mountain Rim (Product Number RM-M692), 36 EA Spokes (Product Number SK-9283), and 36 EA LL Nipple (Product Number NI-4127) for visible damage and verify the quantities.",
+        "Place the hub and rim in an assumed wheel-building stand. Connect the spokes between hub and rim with the nipples; illustration 101241 shows the component relationships, not a specified lacing pattern."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "HL Hub",
+          "productNumber": "HU-8998"
+        },
+        {
+          "number": 2,
+          "name": "ML Mountain Rim",
+          "productNumber": "RM-M692"
+        },
+        {
+          "number": 3,
+          "name": "Spokes",
+          "productNumber": "SK-9283"
+        },
+        {
+          "number": 4,
+          "name": "LL Nipple",
+          "productNumber": "NI-4127"
+        }
+      ]
+    }
+  }
+}

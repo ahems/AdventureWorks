@@ -1,0 +1,76 @@
+{
+  "modelId": 57,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. ML Road Handlebars. Fictional workshop demonstration for model 57, ML Road Handlebars, using representative product HB-R720 (812).<Location LocationID=\"10\" SetupHours=\"0.25\" LaborHours=\"1.0\" MachineHours=\"0.5\" LotSize=\"1\">Work Center 10 - Frame Forming. Estimates are fictional demo assumptions. Frame Forming: demonstrate inferred preparation and forming of the three manufactured components from their listed inputs.<step>For 1 EA of <material>Handlebar Tube (Product Number HT-2981)</material>, prepare 1 EA of <material>Metal Sheet 6 (Product Number MS-2348)</material> and demonstrate forming a curved tube with an <tool>assumed forming jig</tool>.</step><step>For 1 EA of <material>Stem (Product Number SM-9087)</material>, prepare 1 EA of <material>Metal Bar 1 (Product Number MB-2024)</material> and demonstrate shaping it with an <tool>assumed forming fixture</tool>.</step><step>For 2 EA of <material>Road End Caps (Product Number EC-R098)</material>, prepare 2 EA of <material>Metal Sheet 2 (Product Number MS-0253)</material> in total and demonstrate forming one cap from each sheet with an <tool>assumed forming fixture</tool>.</step></Location><Location LocationID=\"20\" SetupHours=\"0.15\" LaborHours=\"0.3\" MachineHours=\"0.2\" LotSize=\"1\">Work Center 20 - Frame Welding. Estimates are fictional demo assumptions. Frame Welding: illustrate a possible tube-seam joining operation; the historical route includes this center but does not establish the joint or process.<step>Demonstrate the hypothetical joining of a formed seam on <material>Handlebar Tube (Product Number HT-2981)</material> using an <tool>assumed welding fixture</tool>; the actual joint and method are not supplied.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.4\" MachineHours=\"0.1\" LotSize=\"1\">Work Center 30 - Debur and Polish. Estimates are fictional demo assumptions. Debur and Polish: demonstrate an inferred finishing and visual-check stage.<step>Remove apparent rough edges from <material>Handlebar Tube (Product Number HT-2981)</material>, <material>Stem (Product Number SM-9087)</material> and <material>Road End Caps (Product Number EC-R098)</material> with an <tool>assumed deburring tool</tool>.</step><step>Demonstrate polishing the exposed surfaces and visually check for obvious defects.</step></Location><Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: demonstrate the assumed arrangement and fitting of the direct BOM components.<step>Position 1 EA of <material>Stem (Product Number SM-9087)</material> at the center of 1 EA of <material>Handlebar Tube (Product Number HT-2981)</material> in an <tool>assumed assembly jig</tool>. The attachment detail is unspecified; see illustration <diag>100571</diag>.</step><step>Demonstrate wrapping 40 IN total of purchased <material>ML Grip Tape (Product Number GT-1209)</material> around the grip regions, then position 2 EA of <material>Road End Caps (Product Number EC-R098)</material>, one at each tube end. The tape allocation and cap fit are assumed.</step><step>Visually check the arrangement for obvious damage, loose tape and displaced caps.</step></Location></root>",
+  "processNotes": [
+    "The historical route records centers 10, 20 and 50; the operations below and the addition of center 30 are inferred, not established by that history.",
+    "Forming a tube from sheet, joining a possible seam, positioning the stem at the bar center, and fitting tape and caps are demonstration assumptions. Actual construction and attachment details are not supplied.",
+    "The nested BOM lists 1 EA of sheet per end cap; making the representative product's 2 EA of end caps therefore uses 2 EA of that sheet."
+  ],
+  "variantNotes": [
+    "The snapshot lists only product 812, HB-R720. Its color and size are unspecified; no variant-specific substitutions are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0057",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 812,
+      "ProductModelID": 57,
+      "MakeFlag": true,
+      "Name": "ML Road Handlebars",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-057-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-057-02",
+        "description": "Released the illustrated workstation edition: Handlebar component arrangement. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      }
+    ]
+  },
+  "figures": {
+    "100571": {
+      "title": "Handlebar component arrangement",
+      "guidance": [
+        "Position 1 EA of Stem (Product Number SM-9087) at the center of 1 EA of Handlebar Tube (Product Number HT-2981) in an assumed assembly jig. The attachment detail is unspecified; see illustration 100571.",
+        "Demonstrate wrapping 40 IN total of purchased ML Grip Tape (Product Number GT-1209) around the grip regions, then position 2 EA of Road End Caps (Product Number EC-R098), one at each tube end. The tape allocation and cap fit are assumed."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Handlebar Tube",
+          "productNumber": "HT-2981"
+        },
+        {
+          "number": 2,
+          "name": "Stem",
+          "productNumber": "SM-9087"
+        },
+        {
+          "number": 3,
+          "name": "Road End Caps",
+          "productNumber": "EC-R098"
+        },
+        {
+          "number": 4,
+          "name": "ML Grip Tape",
+          "productNumber": "GT-1209"
+        }
+      ]
+    }
+  }
+}

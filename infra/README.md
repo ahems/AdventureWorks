@@ -23,7 +23,9 @@ At a high level, these templates provision:
 
 `modules/sql-private-network.bicep` creates the VNet, the Container Apps and Flex Consumption integration subnets, an Azure SQL private endpoint, and the `privatelink.database.windows.net` zone linked to that VNet. The Data API Builder API, api-mcp server, and Seed Job use the integrated Container Apps environment; the Flex Consumption Functions app has its own VNet integration. Their existing SQL server FQDN continues to work through private DNS.
 
-SQL public access is enabled while `azd up` runs, but the former `AllowAll` firewall rule is removed. The `postprovision.sh` hook discovers the deployment host's public IPv4 address (or accepts `SQL_CLIENT_IP` as an override), grants a temporary single-IP firewall rule for its SQL setup, then removes the rule on exit. Once service deployments finish, `postup.sh` disables SQL public network access. The deployment principal therefore needs permission to create/delete SQL firewall rules and disable public network access. A failed/interrupted `azd up` can leave public network access enabled; if the postup hook cannot complete, check SQL networking and remove any `AllowClient` rule manually.
+SQL public access is disabled from creation and remains disabled throughout `azd up`. A dedicated seed/bootstrap user-assigned managed identity is the SQL server's Entra administrator and is attached only to the existing seed job. That job initializes the database through the private endpoint, grants the separate runtime identity reader/writer/EXECUTE and object-scoped Change Tracking access, and imports the manufacturing overlays. The postprovision hook waits for the exact seed execution to succeed before deployment continues; it never opens private-only SQL to the deployment host. See [seed-job/README.md](../seed-job/README.md) for identity and incremental-import details.
+
+Legacy public-enabled SQL servers retain the temporary single-IP setup path in `postprovision.sh`, with firewall cleanup on exit; `postup.sh` disables public access after deployment. Normal Bicep provisioning now disables that public path before the hook runs.
 
 After successful deployment, direct SQL clients outside the VNet (including local data-management scripts) cannot connect. Run those tools from a VNet-connected host or temporarily arrange approved access; do not restore the broad `AllowAll` rule.
 
@@ -33,7 +35,7 @@ After successful deployment, direct SQL clients outside the VNet (including loca
 
 The Flex Consumption Functions app uses its VNet integration for host storage, deployment packages, Durable Functions state, application queues and tables, receipts, and translations. The api-mcp Container App accesses its task table through the integrated Container Apps environment. The Seed Job mounts the `seed-job-logs` file share over SMB using the account key, while the seed-status Function reads it over HTTPS using its managed identity. Network connectivity does not replace authorization: the existing managed identity roles and file-share credentials are still required.
 
-Unlike SQL's temporary deployment access, Storage public network access remains disabled throughout provisioning and deployment, the default network action is `Deny`, and anonymous blob access is disabled. Local Functions, Storage Explorer, utility scripts, and deployment agents that directly access storage require a VNet-connected host or a VPN with routing and private DNS forwarding. Managed identity, account keys, and SAS tokens do not bypass these network restrictions. Browser receipt downloads go through the Functions API rather than directly to blob storage. Do not re-enable public storage access to work around connectivity failures; check private DNS, network reachability, and authorization instead. See the Storage Consumer Inventory below for the resource-to-consumer mapping.
+Like SQL, Storage public network access remains disabled throughout provisioning and deployment, the default network action is `Deny`, and anonymous blob access is disabled. Local Functions, Storage Explorer, utility scripts, and deployment agents that directly access storage require a VNet-connected host or a VPN with routing and private DNS forwarding. Managed identity, account keys, and SAS tokens do not bypass these network restrictions. Browser receipt downloads go through the Functions API rather than directly to blob storage. Do not re-enable public storage access to work around connectivity failures; check private DNS, network reachability, and authorization instead. See the Storage Consumer Inventory below for the resource-to-consumer mapping.
 
 ## Serverless SQL and idle cost behavior
 
@@ -223,6 +225,7 @@ The Foundry storage connection is registered in `aiservices.bicep`, but no curre
 - **Purpose**: Provisions **Azure OpenAI / Azure AI Services** used for embeddings, chat, translations, and image generation.
 - **Typical responsibilities**:
   - Azure OpenAI resource and deployments for chat + embeddings models.
+  - Foundry account child writes are serialized to avoid parent-resource `RequestConflict`: RAI blocklist/items/policy → Application Insights connection → project → Azure OpenAI connection → storage connection → model deployments (batch size one). Explicit ARM dependencies wait for real operations; no sleep/retry resource is used. Azure RBAC assignments remain independent.
   - Key endpoints and model names exported as outputs/parameters into the app layer.
 
 ### `communication.bicep` / `communication.json`

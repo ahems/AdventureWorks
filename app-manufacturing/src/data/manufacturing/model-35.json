@@ -1,0 +1,126 @@
+{
+  "modelId": 35,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Touring-2000. Fictional assembly demonstration for Touring-2000 model 35, using representative Touring-2000 Blue, 60 (BK-T44U-60).<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: prepare the seat assembly and check the other supplied assemblies before final fitting.<step>Prepare 1 EA <material>ML Touring Seat Assembly (Product Number SA-T612)</material> from 1 EA <material>Seat Post (Product Number SP-2981)</material>, 1 EA <material>Seat Lug (Product Number SL-0931)</material>, 1 EA <material>ML Touring Seat/Saddle (Product Number SE-T762)</material>, and 4 EA <material>Pinch Bolt (Product Number PB-6109)</material>, using an <tool>assumed hand-tool set</tool>. Fit the lug and saddle to the post and check that the fasteners are present.</step><step>Visually check 1 EA <material>Touring Front Wheel (Product Number FW-T905)</material> and 1 EA <material>Touring Rear Wheel (Product Number RW-T905)</material> for visible damage and free rotation before fitting.</step></Location><Location LocationID=\"60\" SetupHours=\"0.15\" LaborHours=\"1.5\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final Assembly: fit the representative product's components and perform simple demonstration checks.<step>Support 1 EA <material>HL Touring Frame - Blue, 60 (Product Number FR-T98U-60)</material> in an <tool>assumed assembly stand</tool>. Fit 1 EA <material>ML Headset (Product Number HS-2451)</material> at the steering interface and 1 EA <material>HL Touring Handlebars (Product Number HB-T928)</material> at the front. See illustration <diag>100351</diag>.</step><step>Fit 1 EA <material>ML Touring Seat Assembly (Product Number SA-T612)</material> to the frame and check its alignment.</step><step>Fit 1 EA <material>ML Bottom Bracket (Product Number BB-8107)</material> and 1 EA <material>ML Crankset (Product Number CS-6583)</material> at the frame's crank area. Fit 1 EA <material>Touring Pedal (Product Number PD-T852)</material> to the crankset; the source specifies 1 EA.</step><step>Fit 1 EA <material>Touring Front Wheel (Product Number FW-T905)</material> at the front and 1 EA <material>Touring Rear Wheel (Product Number RW-T905)</material> at the rear. Check that both wheels rotate without obvious rubbing.</step><step>Fit 1 EA <material>Front Derailleur (Product Number FD-2342)</material> and 1 EA <material>Rear Derailleur (Product Number RD-2308)</material>; route 1 EA <material>Chain (Product Number CH-0234)</material> through the drivetrain and check its movement by hand.</step><step>Fit 1 EA <material>Front Brakes (Product Number FB-9873)</material> at the front and 1 EA <material>Rear Brakes (Product Number RB-9231)</material> at the rear. Check their visible alignment and operation.</step><step>Inspect the completed demonstration assembly for visible damage, loose fittings, steering movement, and wheel clearance.</step></Location></root>",
+  "processNotes": [
+    "Historical routing records final assembly at work center 60 for product 953; subassembly at work center 50 and the operation sequence are inferred.",
+    "The frame and other manufactured subassemblies are available for fitting; only the seat assembly is shown being assembled from its supplied nested BOM."
+  ],
+  "variantNotes": [
+    "The representative product is blue, size 60, and uses frame 893, FR-T98U-60.",
+    "Blue size 46 product 970 uses frame 890, FR-T98U-46; blue size 50 product 971 uses frame 891, FR-T98U-50; blue size 54 product 972 uses frame 892, FR-T98U-54. Do not substitute the size 60 frame.",
+    "The supplied direct BOMs list the same remaining components and quantities for all four variants, including front wheel 821 and rear wheel 829. No other color or variant-specific paint substitution is supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0035",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 953,
+      "ProductModelID": 35,
+      "MakeFlag": true,
+      "Name": "Touring-2000 Blue, 60",
+      "SellStartDate": "2025-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2025-06-09",
+        "changeRequest": "ECN-2025-035-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2025-10-22",
+        "changeRequest": "ECN-2025-035-02",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2025-11-14",
+        "changeRequest": "ECN-2025-035-03",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-03-29",
+        "changeRequest": "ECN-2026-035-04",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2026-05-24",
+        "changeRequest": "ECN-2026-035-05",
+        "description": "Reordered the Chain receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-035-06",
+        "description": "Released the illustrated workstation edition: Touring-2000 assembly overview. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "S. Brooks"
+      }
+    ]
+  },
+  "figures": {
+    "100351": {
+      "title": "Touring-2000 assembly overview",
+      "guidance": [
+        "Support 1 EA HL Touring Frame - Blue, 60 (Product Number FR-T98U-60) in an assumed assembly stand. Fit 1 EA ML Headset (Product Number HS-2451) at the steering interface and 1 EA HL Touring Handlebars (Product Number HB-T928) at the front.",
+        "Fit 1 EA ML Touring Seat Assembly (Product Number SA-T612) to the frame and check its alignment.",
+        "Fit 1 EA ML Bottom Bracket (Product Number BB-8107) and 1 EA ML Crankset (Product Number CS-6583) at the frame's crank area. Fit 1 EA Touring Pedal (Product Number PD-T852) to the crankset; the source specifies 1 EA.",
+        "Fit 1 EA Touring Front Wheel (Product Number FW-T905) at the front and 1 EA Touring Rear Wheel (Product Number RW-T905) at the rear. Check that both wheels rotate without obvious rubbing."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "HL Touring Frame - Blue, 60",
+          "productNumber": "FR-T98U-60"
+        },
+        {
+          "number": 2,
+          "name": "Touring Front Wheel",
+          "productNumber": "FW-T905"
+        },
+        {
+          "number": 3,
+          "name": "Touring Rear Wheel",
+          "productNumber": "RW-T905"
+        },
+        {
+          "number": 4,
+          "name": "HL Touring Handlebars",
+          "productNumber": "HB-T928"
+        },
+        {
+          "number": 5,
+          "name": "ML Touring Seat Assembly",
+          "productNumber": "SA-T612"
+        },
+        {
+          "number": 6,
+          "name": "ML Crankset",
+          "productNumber": "CS-6583"
+        },
+        {
+          "number": 7,
+          "name": "ML Headset",
+          "productNumber": "HS-2451"
+        }
+      ]
+    }
+  }
+}

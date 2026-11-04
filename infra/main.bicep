@@ -12,7 +12,6 @@ param keyVaultName string = 'av-kv-${toLower(resourceToken)}'
 param foundryLocation string = resourceGroup().location
 param location string = resourceGroup().location
 param adminUserEnabled bool = true
-param aadAdminLogin string
 param aadAdminObjectId string
 @description('Wether to restore the OpenAI service or not. If set to true, the OpenAI service will be restored from a soft-deleted backup. Use this only if you have previously deleted the OpenAI service created with this script, as you will need to restore it.')
 param restoreOpenAi bool
@@ -50,6 +49,11 @@ module identity 'modules/identity.bicep' = {
     identityName: identityName
     location: location
   }
+}
+
+resource seedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'av-seed-identity-${resourceToken}'
+  location: location
 }
 
 module keyvault 'modules/keyvault.bicep' = {
@@ -141,10 +145,9 @@ module database 'modules/database.bicep' = {
   name: 'Deploy-Database'
   params: {
     sqlServerName: sqlServerName
-    aadAdminLogin: aadAdminLogin
-    aadAdminObjectId: aadAdminObjectId
     location: location
     identityName: identityName
+    seedIdentityName: seedIdentity.name
     useFreeLimit: useFreeLimit
     sqlDatabaseName: sqlDatabaseName
   }
@@ -299,6 +302,7 @@ module containerAppSeedJob 'modules/aca-seed-job.bicep' = {
     seedJobName: 'av-seed-job-${resourceToken}'
     containerRegistryName: acrName
     identityName: identityName
+    seedIdentityName: seedIdentity.name
     sqlServerName: sqlServerName
     sqlDatabaseName: sqlDatabaseName
     containerAppEnvId: containerApp.outputs.containerAppEnvId
@@ -409,6 +413,10 @@ output API_URL string = containerAppApi.outputs.apiUrl
 output AZURE_CLIENT_ID string = identity.outputs.clientId
 
 output USER_MANAGED_IDENTITY_NAME string = identityName
+
+output SEED_MANAGED_IDENTITY_NAME string = seedIdentity.name
+output SEED_MANAGED_IDENTITY_CLIENT_ID string = seedIdentity.properties.clientId
+output SEED_MANAGED_IDENTITY_PRINCIPAL_ID string = seedIdentity.properties.principalId
 
 output SQL_SERVER_NAME string = sqlServerName
 

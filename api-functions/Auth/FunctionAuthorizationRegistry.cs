@@ -10,7 +10,7 @@ using System.Collections.Frozen;
 namespace ApiFunctions.Auth;
 
 /// <summary>
-/// Authoritative, per-function authorization policy for every api-functions HTTP route (187
+/// Authoritative, per-function authorization policy for every api-functions HTTP route (189
 /// routes). Keyed by the <c>[Function]</c> name. Mirrors the committed route-to-scope matrix and
 /// the pattern of api-mcp's <c>ToolAuthorizationRegistry</c>.
 /// </summary>
@@ -52,7 +52,9 @@ public static class FunctionAuthorizationRegistry
         new("SetAddressType", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses/{id:int}/type
         new("UpdateAddress", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses/{id:int}
 
-        // ---- Tier I — internal-only (117) ----
+        // ---- Tier I — internal-only (119) ----
+        new("GenerateManufacturingDiagram", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),
+        new("GenerateManufacturingInstructions", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),
         new("ExportManufacturingIllustrations", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),
         new("AIJobQueue_Status", AccessTier.Internal, FunctionScopes.AdminRead, AccessMode.InternalOnly, null),  // /api/ai-job-queue/status
         new("AnalyzeCartRecovery", AccessTier.Internal, FunctionScopes.AdminRead, AccessMode.InternalOnly, null),  // /api/carts/analyze-recovery

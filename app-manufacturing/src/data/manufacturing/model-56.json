@@ -1,0 +1,79 @@
+{
+  "modelId": 56,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. LL Road Handlebars. Fictional assembly demonstration for model 56, LL Road Handlebars, representative product HB-R504, using its direct BOM components.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: inspect and demonstrate the arrangement of the representative handlebar components.<step>Inspect 1 EA <material>Handlebar Tube (Product Number HT-2981)</material> and 1 EA <material>Stem (Product Number SM-9087)</material> for visible damage.</step><step>Use <tool>an assumed padded assembly jig</tool> to position <material>Stem (Product Number SM-9087)</material> at the center of <material>Handlebar Tube (Product Number HT-2981)</material> for illustration only; the fastening method is not supplied. See <diag>100561</diag>.</step><step>Demonstrate wrapping 40 IN of <material>LL Grip Tape (Product Number GT-0820)</material> over the two grip areas, with the distribution and overlap treated as demo assumptions.</step><step>Demonstrate positioning 2 EA <material>Road End Caps (Product Number EC-R098)</material> at the open ends; the detailed retention method is not supplied.</step></Location><Location LocationID=\"60\" SetupHours=\"0\" LaborHours=\"0.15\" MachineHours=\"0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final assembly: visually review the demonstration arrangement and identify unresolved fastening details.<step>Check visually for damage, tape coverage, and the presence of both end caps. Keep the arrangement in its jig and flag the unspecified stem and cap retention methods for review.</step></Location></root>",
+  "processNotes": [
+    "Historical routing records work centers 10, 20, and 50 for one work order; this draft infers assembly and inspection at centers 50 and 60 and does not establish a manufacturing route.",
+    "The supplied data does not establish the stem fastening method or detailed cap and tape installation geometry. Their positioning is illustrative; the result is not presented as ride-ready.",
+    "Manufactured components are received for this demonstration; their internal manufacturing operations are not inferred."
+  ],
+  "variantNotes": [
+    "The snapshot lists only product 811, HB-R504; no other variants or component substitutions are supplied.",
+    "Color and size fields are unspecified. The catalog describes a smooth matte black finish, but does not establish a variant-specific color or size."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0056",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 811,
+      "ProductModelID": 56,
+      "MakeFlag": true,
+      "Name": "LL Road Handlebars",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-056-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-056-02",
+        "description": "Released the illustrated workstation edition: Road handlebar component arrangement. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      }
+    ]
+  },
+  "figures": {
+    "100561": {
+      "title": "Road handlebar component arrangement",
+      "guidance": [
+        "Inspect 1 EA Handlebar Tube (Product Number HT-2981) and 1 EA Stem (Product Number SM-9087) for visible damage.",
+        "Use an assumed padded assembly jig to position Stem (Product Number SM-9087) at the center of Handlebar Tube (Product Number HT-2981) for illustration only; the fastening method is not supplied.",
+        "Demonstrate wrapping 40 IN of LL Grip Tape (Product Number GT-0820) over the two grip areas, with the distribution and overlap treated as demo assumptions.",
+        "Demonstrate positioning 2 EA Road End Caps (Product Number EC-R098) at the open ends; the detailed retention method is not supplied."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Handlebar Tube",
+          "productNumber": "HT-2981"
+        },
+        {
+          "number": 2,
+          "name": "Stem",
+          "productNumber": "SM-9087"
+        },
+        {
+          "number": 3,
+          "name": "LL Grip Tape",
+          "productNumber": "GT-0820"
+        },
+        {
+          "number": 4,
+          "name": "Road End Caps",
+          "productNumber": "EC-R098"
+        }
+      ]
+    }
+  }
+}

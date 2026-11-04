@@ -1,0 +1,113 @@
+{
+  "modelId": 103,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Front Derailleur. Fictional workshop demonstration for model 103, Front Derailleur, using representative product 945 (FD-2342). The scope is inspection and tentative assembly of its two purchased components.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.25\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: inspect the purchased components and demonstrate their tentative fit. This routing is inferred from historical evidence.<step>Check one EA of <material>Front Derailleur Cage (Product Number FC-3982)</material> and one EA of <material>Front Derailleur Linkage (Product Number FL-2301)</material> for visible damage. See the component inventory in illustration <diag>101031</diag>.</step><step>Using <tool>an assumed padded hand-held assembly jig</tool>, support the components and check whether their actual interfaces are compatible. Do not force a fit; hold them for review if the connection is unclear.</step><step>If the interfaces permit assembly without unspecified parts, fit the components together and gently check for free movement and visible damage. Otherwise, retain them separately for review.</step></Location></root>",
+  "processNotes": [
+    "The route through Subassembly is inferred from historical routing, not an engineering specification. The historical Frame Forming entry is omitted because the supplied BOM identifies both components as purchased and supplies no forming materials.",
+    "Component geometry, attachment details, and assembly method are not supplied. Attempt fitting only if the actual components present compatible interfaces; otherwise hold them for review."
+  ],
+  "variantNotes": [
+    "The only supplied variant is product 945, FD-2342, in Silver; no size is specified.",
+    "No other variants or variant-specific component substitutions are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0103",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 945,
+      "ProductModelID": 103,
+      "MakeFlag": true,
+      "Name": "Front Derailleur",
+      "SellStartDate": "2025-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2025-06-09",
+        "changeRequest": "ECN-2025-103-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2025-08-28",
+        "changeRequest": "ECN-2025-103-02",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2025-10-12",
+        "changeRequest": "ECN-2025-103-03",
+        "description": "Clarified identification of Front Derailleur Linkage; retained the source part number in the point-of-use checklist.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-01-16",
+        "changeRequest": "ECN-2026-103-04",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2026-05-22",
+        "changeRequest": "ECN-2026-103-05",
+        "description": "Moved variant-selection notes ahead of the first operation to reduce wrong-kit changeovers.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-07-06",
+        "changeRequest": "ECN-2026-103-06",
+        "description": "Reordered the Front Derailleur Cage receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "7.0",
+        "effectiveDate": "2026-09-25",
+        "changeRequest": "ECN-2026-103-07",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "8.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-103-08",
+        "description": "Released the illustrated workstation edition: Front derailleur component inventory. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      }
+    ]
+  },
+  "figures": {
+    "101031": {
+      "title": "Front derailleur component inventory",
+      "guidance": [
+        "Check one EA of Front Derailleur Cage (Product Number FC-3982) and one EA of Front Derailleur Linkage (Product Number FL-2301) for visible damage. See the component inventory in illustration 101031."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Front Derailleur Cage",
+          "productNumber": "FC-3982"
+        },
+        {
+          "number": 2,
+          "name": "Front Derailleur Linkage",
+          "productNumber": "FL-2301"
+        }
+      ]
+    }
+  }
+}

@@ -1,6 +1,14 @@
 #!/bin/bash
 set -e
 
+echo "Validating published manufacturing assets before frontend builds..."
+if [[ "${MANUFACTURING_CONTENT_ALLOW_PARTIAL:-false}" == "true" ]]; then
+    echo "WARNING: Partial manufacturing assets allowed for generation-backend bootstrap only. Use only with azd deploy api-functions; never azd up or frontend deployment." >&2
+    python3 scripts/data-management/validate-manufacturing-assets.py --allow-partial
+else
+    python3 scripts/data-management/validate-manufacturing-assets.py
+fi
+
 # Set environment variables for the SWA build process
 # This ensures that when npm run build is called, the VITE_* variables are available
 

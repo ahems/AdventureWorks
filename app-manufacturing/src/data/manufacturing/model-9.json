@@ -1,0 +1,144 @@
+{
+  "modelId": 9,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. LL Road Frame. Fictional workshop demonstration for LL Road Frame model 9, using the Black, 58 representative product 722 (FR-R38B-58). Scope covers frame components, fork subassembly, finishing and a final presentation check.<Location LocationID=\"10\" SetupHours=\"0.25\" LaborHours=\"1.5\" MachineHours=\"1.0\" LotSize=\"1\">Work Center 10 - Frame Forming. Estimates are fictional demo assumptions. Frame Forming: prepare and check the manufactured components for the representative frame and fork.<step>Prepare 1.00 EA <material>Top Tube (Product Number TO-2301)</material>, 1.00 EA <material>Seat Tube (Product Number ST-9828)</material>, 1.00 EA <material>Down Tube (Product Number DT-2377)</material> and 1.00 EA <material>Head Tube (Product Number HT-8019)</material> using an <tool>assumed forming setup</tool>; visually check the forms.</step><step>Prepare 4.00 EA <material>Seat Stays (Product Number SS-2985)</material> and 2.00 EA <material>Chain Stays (Product Number CS-2812)</material>; count and visually check them.</step><step>Prepare the fork's listed components: 2.00 EA <material>Fork End (Product Number FE-3760)</material>, 1.00 EA <material>Steerer (Product Number SR-2098)</material>, 1.00 EA <material>Fork Crown (Product Number FC-3654)</material> and 2.00 EA <material>Blade (Product Number BL-2036)</material>. Check their counts before subassembly.</step></Location><Location LocationID=\"50\" SetupHours=\"0.15\" LaborHours=\"0.75\" MachineHours=\"0.25\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: demonstrate preparation of the listed fork subassembly.<step>Arrange 1.00 EA <material>Steerer (Product Number SR-2098)</material>, 1.00 EA <material>Fork Crown (Product Number FC-3654)</material>, 2.00 EA <material>Blade (Product Number BL-2036)</material> and 2.00 EA <material>Fork End (Product Number FE-3760)</material> in an <tool>assumed fork assembly jig</tool> for the inferred subassembly demonstration.</step><step>Join and visually inspect the components as 1.00 EA <material>LL Fork (Product Number FK-1639)</material>; exact joints and settings are not specified in the source.</step></Location><Location LocationID=\"20\" SetupHours=\"0.25\" LaborHours=\"1.25\" MachineHours=\"0.75\" LotSize=\"1\">Work Center 20 - Frame Welding. Estimates are fictional demo assumptions. Frame Welding: arrange and demonstrate joining the representative frame components.<step>Arrange <material>Top Tube (Product Number TO-2301)</material>, <material>Seat Tube (Product Number ST-9828)</material>, <material>Down Tube (Product Number DT-2377)</material> and <material>Head Tube (Product Number HT-8019)</material> in an <tool>assumed frame jig</tool>. See the schematic arrangement in illustration <diag>100091</diag>.</step><step>Stage 2.00 EA <material>Chain Stays (Product Number CS-2812)</material> and 4.00 EA <material>Seat Stays (Product Number SS-2985)</material> with the frame. Their exact placement, especially for the four seat stays, is not specified.</step><step>Demonstrate the inferred welding operation using an <tool>assumed welding setup</tool>, then visually check the represented joints. The schematic is not a joining specification.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 30 - Debur and Polish. Estimates are fictional demo assumptions. Debur and Polish: demonstrate surface cleanup before finishing.<step>Use an <tool>assumed hand deburring tool</tool> to tidy accessible edges and inspect the frame visually for obvious surface defects.</step></Location><Location LocationID=\"40\" SetupHours=\"0.2\" LaborHours=\"0.75\" MachineHours=\"0.25\" LotSize=\"1\">Work Center 40 - Paint. Estimates are fictional demo assumptions. Paint: demonstrate the representative black finish and decal application.<step>Stage the BOM allowance of 8.00 OZ <material>Paint - Black (Product Number PA-187B)</material> and demonstrate finishing with an <tool>assumed paint setup</tool>. Inspect the finish visually after it is ready for handling.</step><step>Apply 2.00 EA <material>Decal 1 (Product Number DC-8732)</material> and 1.00 EA <material>Decal 2 (Product Number DC-9824)</material>; their exact positions are not supplied. Check for visible lifting or damage.</step></Location><Location LocationID=\"60\" SetupHours=\"0.1\" LaborHours=\"0.4\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final Assembly: present the finished frame with its listed fork and check the representative BOM.<step>Position 1.00 EA <material>LL Fork (Product Number FK-1639)</material> near the front of the frame for the demonstration, as in illustration <diag>100091</diag>. Do not claim a secured attachment: mating hardware and details are not supplied.</step><step>Check the component counts and visually review the finish and represented joints. Identify the result as the Black, 58 demonstration variant.</step></Location></root>",
+  "processNotes": [
+    "No historical routing was supplied.",
+    "Formed components may be prepared in advance; the demonstration does not prescribe dimensions or manufacturing settings.",
+    "The BOM lists 4 EA seat stays but does not establish their individual placement. Fork attachment hardware and mating details are not supplied, so the final view does not claim a secured fork assembly.",
+    "The paint quantity is the BOM allowance, not a specified application amount or finish schedule."
+  ],
+  "variantNotes": [
+    "Black and red variants are listed in sizes 44, 48, 52, 58, 60 and 62. This recipe remains specific to Black, 58.",
+    "All listed black variants use 8.00 OZ of Paint - Black, product 492; all listed red variants substitute 8.00 OZ of Paint - Red, product 493.",
+    "The supplied direct BOMs otherwise list the same component IDs and quantities across variants. Size-specific geometry or adjustments are not supplied and should not be inferred.",
+    "The supplied descriptive text concerns the Black, 48 variant; it is not a specification for the representative frame."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0009",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 722,
+      "ProductModelID": 9,
+      "MakeFlag": true,
+      "Name": "LL Road Frame - Black, 58",
+      "SellStartDate": "2023-06-10T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2023-06-10",
+        "changeRequest": "ECN-2023-009-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2023-06-24",
+        "changeRequest": "ECN-2023-009-02",
+        "description": "Clarified identification of Top Tube; retained the source part number in the point-of-use checklist.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2024-03-20",
+        "changeRequest": "ECN-2024-009-03",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2024-06-26",
+        "changeRequest": "ECN-2024-009-04",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2024-12-09",
+        "changeRequest": "ECN-2024-009-05",
+        "description": "Reordered the Chain Stays receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2025-05-03",
+        "changeRequest": "ECN-2025-009-06",
+        "description": "Moved variant-selection notes ahead of the first operation to reduce wrong-kit changeovers.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "7.0",
+        "effectiveDate": "2025-07-14",
+        "changeRequest": "ECN-2025-009-07",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "8.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-009-08",
+        "description": "Released the illustrated workstation edition: Frame component arrangement and fork. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      }
+    ]
+  },
+  "figures": {
+    "100091": {
+      "title": "Frame component arrangement and fork",
+      "guidance": [
+        "Arrange Top Tube (Product Number TO-2301), Seat Tube (Product Number ST-9828), Down Tube (Product Number DT-2377) and Head Tube (Product Number HT-8019) in an assumed frame jig. See the schematic arrangement in illustration 100091.",
+        "Stage 2.00 EA Chain Stays (Product Number CS-2812) and 4.00 EA Seat Stays (Product Number SS-2985) with the frame. Their exact placement, especially for the four seat stays, is not specified.",
+        "Position 1.00 EA LL Fork (Product Number FK-1639) near the front of the frame for the demonstration, as in illustration 100091. Do not claim a secured attachment: mating hardware and details are not supplied."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Top Tube",
+          "productNumber": "TO-2301"
+        },
+        {
+          "number": 2,
+          "name": "Seat Tube",
+          "productNumber": "ST-9828"
+        },
+        {
+          "number": 3,
+          "name": "Down Tube",
+          "productNumber": "DT-2377"
+        },
+        {
+          "number": 4,
+          "name": "Head Tube",
+          "productNumber": "HT-8019"
+        },
+        {
+          "number": 5,
+          "name": "Chain Stays",
+          "productNumber": "CS-2812"
+        },
+        {
+          "number": 6,
+          "name": "Seat Stays",
+          "productNumber": "SS-2985"
+        },
+        {
+          "number": 7,
+          "name": "LL Fork",
+          "productNumber": "FK-1639"
+        }
+      ]
+    }
+  }
+}

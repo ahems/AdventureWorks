@@ -1,0 +1,123 @@
+{
+  "modelId": 78,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. HL Road Rear Wheel. Fictional assembly demonstration for model 78, HL Road Rear Wheel, representative product 828 (RW-R820).<Location LocationID=\"50\" SetupHours=\"0.15\" LaborHours=\"1.5\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: demonstrate preparation of the hub, wheel build and finishing checks. The specific routing and operations are inferred from historical evidence.<step>Inspect 1 EA <material>HL Spindle/Axle (Product Number SD-9872)</material> and 1 EA <material>HL Shell (Product Number SH-9312)</material>. Conceptually fit them as the 1 EA <material>HL Hub (Product Number HU-8998)</material>; actual internal assembly requires verified component instructions.</step><step>Inspect 1 EA <material>HL Road Rim (Product Number RM-R800)</material>, 36 EA <material>Spokes (Product Number SK-9283)</material> and 36 EA <material>HL Nipple (Product Number NI-9522)</material> for visible damage and count them.</step><step>Using an assumed <tool>wheel-building stand</tool>, demonstrate connecting the spokes between the hub and rim with the nipples. The lacing pattern and tension require verification; see illustration <diag>100781</diag>.</step><step>Inspect 1 EA <material>Road Tire Tube (Product Number TT-R982)</material> and 1 EA <material>HL Road Tire (Product Number TI-R982)</material>, then demonstrate fitting the tube inside the tire and the tire onto the rim. Verify fit and inflation instructions; see illustration <diag>100782</diag>.</step><step>Inspect 2 EA <material>Reflector (Product Number RF-9198)</material> and demonstrate their placement using the verified mounting provisions. Illustration <diag>100782</diag> shows them separately because mounting details are not supplied.</step><step>Check the wheel visually for damage and even tire seating. Rotate it in the stand to observe any obvious wobble; resolve concerns using verified instructions before use.</step></Location></root>",
+  "processNotes": [
+    "Work center 50 is supported by a historical routing record; the operations and their sequence are inferred, not an engineering specification.",
+    "The hub BOM identifies an axle and shell but does not specify their internal geometry or assembly method. The hub step is conceptual and requires verified component instructions before physical assembly.",
+    "Spoke pattern, tension, reflector mounting details and tire inflation settings are not supplied; verify compatibility and applicable component instructions before physical assembly."
+  ],
+  "variantNotes": [
+    "The supplied snapshot lists only product 828, RW-R820, in black, with no size specified. No other variant or component substitutions are listed."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0078",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 828,
+      "ProductModelID": 78,
+      "MakeFlag": true,
+      "Name": "HL Road Rear Wheel",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": "2025-06-08T00:00:00",
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-078-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2024-09-16",
+        "changeRequest": "ECN-2024-078-02",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2025-04-13",
+        "changeRequest": "ECN-2025-078-03",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-078-04",
+        "description": "Released the illustrated workstation edition: Wheel build overview; Tire, tube and reflector overview. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "R. Alvarez"
+      }
+    ]
+  },
+  "figures": {
+    "100781": {
+      "title": "Wheel build overview",
+      "guidance": [
+        "Inspect 1 EA HL Spindle/Axle (Product Number SD-9872) and 1 EA HL Shell (Product Number SH-9312). Conceptually fit them as the 1 EA HL Hub (Product Number HU-8998); actual internal assembly requires verified component instructions.",
+        "Inspect 1 EA HL Road Rim (Product Number RM-R800), 36 EA Spokes (Product Number SK-9283) and 36 EA HL Nipple (Product Number NI-9522) for visible damage and count them.",
+        "Using an assumed wheel-building stand, demonstrate connecting the spokes between the hub and rim with the nipples. The lacing pattern and tension require verification; see illustration 100781."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "HL Road Rim",
+          "productNumber": "RM-R800"
+        },
+        {
+          "number": 2,
+          "name": "HL Hub",
+          "productNumber": "HU-8998"
+        },
+        {
+          "number": 3,
+          "name": "Spokes",
+          "productNumber": "SK-9283"
+        },
+        {
+          "number": 4,
+          "name": "HL Nipple",
+          "productNumber": "NI-9522"
+        }
+      ]
+    },
+    "100782": {
+      "title": "Tire, tube and reflector overview",
+      "guidance": [
+        "Inspect 1 EA HL Road Rim (Product Number RM-R800), 36 EA Spokes (Product Number SK-9283) and 36 EA HL Nipple (Product Number NI-9522) for visible damage and count them.",
+        "Inspect 1 EA Road Tire Tube (Product Number TT-R982) and 1 EA HL Road Tire (Product Number TI-R982), then demonstrate fitting the tube inside the tire and the tire onto the rim. Verify fit and inflation instructions; see illustration 100782.",
+        "Inspect 2 EA Reflector (Product Number RF-9198) and demonstrate their placement using the verified mounting provisions. Illustration 100782 shows them separately because mounting details are not supplied."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "HL Road Rim",
+          "productNumber": "RM-R800"
+        },
+        {
+          "number": 2,
+          "name": "HL Road Tire",
+          "productNumber": "TI-R982"
+        },
+        {
+          "number": 3,
+          "name": "Road Tire Tube",
+          "productNumber": "TT-R982"
+        },
+        {
+          "number": 4,
+          "name": "Reflector",
+          "productNumber": "RF-9198"
+        }
+      ]
+    }
+  }
+}

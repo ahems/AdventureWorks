@@ -1,0 +1,81 @@
+{
+  "modelId": 95,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. LL Bottom Bracket. Fictional demonstration draft for model 95, LL Bottom Bracket, representative product BB-7421. It covers staging, conditional trial fitting and basic inspection of the direct BOM components.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: stage the direct components, conditionally trial-fit them and perform a simple visual check.<step>Stage 1 EA of <material>LL Shell (Product Number SH-4562)</material> and 10 EA of <material>BB Ball Bearing (Product Number BE-2349)</material>; visually check their condition and count them. See inventory illustration <diag>100951</diag>.</step><step>Confirm the actual parts' compatible placement and attachment before using an <tool>assumed hand-held assembly jig</tool> to trial-fit them; stop if their relationship cannot be established. Do not force the parts.</step><step>If trial-fitted, visually check for damage or obvious interference and gently check any intended rotation by hand. Set aside an unresolved fit for review.</step></Location></root>",
+  "processNotes": [
+    "Work center 50 is supported by historical routing; the steps and their sequence are inferred, not an engineering specification.",
+    "The BOM does not establish bearing placement, orientation or attachment geometry. Confirm these from the actual parts before any trial fit; the inventory diagram does not specify them."
+  ],
+  "variantNotes": [
+    "The snapshot lists only BB-7421; its color and size are unspecified.",
+    "No other variants or variant-specific component substitutions are listed."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0095",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 994,
+      "ProductModelID": 95,
+      "MakeFlag": true,
+      "Name": "LL Bottom Bracket",
+      "SellStartDate": "2025-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2025-06-09",
+        "changeRequest": "ECN-2025-095-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2025-07-09",
+        "changeRequest": "ECN-2025-095-02",
+        "description": "Moved variant-selection notes ahead of the first operation to reduce wrong-kit changeovers.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-10-28",
+        "changeRequest": "ECN-2026-095-03",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-095-04",
+        "description": "Released the illustrated workstation edition: Bottom bracket component inventory. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      }
+    ]
+  },
+  "figures": {
+    "100951": {
+      "title": "Bottom bracket component inventory",
+      "guidance": [
+        "Stage 1 EA of LL Shell (Product Number SH-4562) and 10 EA of BB Ball Bearing (Product Number BE-2349); visually check their condition and count them. See inventory illustration 100951."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "LL Shell",
+          "productNumber": "SH-4562"
+        },
+        {
+          "number": 2,
+          "name": "BB Ball Bearing",
+          "productNumber": "BE-2349"
+        }
+      ]
+    }
+  }
+}

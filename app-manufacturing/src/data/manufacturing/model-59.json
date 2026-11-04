@@ -1,0 +1,101 @@
+{
+  "modelId": 59,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. LL Headset. Demo draft for model 59, LL Headset HS-0296, covering component staging and inspection at Subassembly. Final fitting is deferred until the component arrangement is confirmed.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.25\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: stage and inspect the purchased components for one representative headset.<step>On an <tool>assumed clean parts tray</tool>, stage 1 EA of <material>Adjustable Race (Product Number AR-5381)</material>, 1 EA of <material>Keyed Washer (Product Number KW-4091)</material>, and 1 EA of <material>Lock Nut 19 (Product Number LN-9080)</material>.</step><step>Stage 1 EA of <material>Crown Race (Product Number CR-9981)</material>, 8 EA of <material>Headset Ball Bearings (Product Number BE-2908)</material>, and 1 EA of <material>Lower Head Race (Product Number LR-8520)</material>. See the component inventory view <diag>100591</diag>.</step><step>Check the staged quantities and visually inspect the purchased components for obvious damage or contamination.</step><step>Hold the kit for confirmation of the mating order, bearing placement and fitting method before assembly; the supplied BOM alone does not establish those details.</step></Location></root>",
+  "processNotes": [
+    "The routing through Subassembly is inferred from historical routing, which is evidence rather than an engineering specification.",
+    "The source does not specify the component mating order, bearing allocation or fitting method. Do not infer these from the diagram."
+  ],
+  "variantNotes": [
+    "The snapshot lists only product 805, HS-0296; its color and size fields are unspecified.",
+    "The description calls the finish matte silver, but the variant color field is null. No variant-specific substitutions are listed.",
+    "The description calls the headset threadless, while the BOM includes a keyed washer and lock nut. Their fitting arrangement is not established by the supplied data."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0059",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 805,
+      "Name": "LL Headset",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": "2025-06-08T00:00:00",
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-059-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2024-09-04",
+        "changeRequest": "ECN-2024-059-02",
+        "description": "Clarified identification of Lower Head Race; retained the source part number in the point-of-use checklist.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-04-07",
+        "changeRequest": "ECN-2026-059-03",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-059-04",
+        "description": "Released the illustrated workstation edition: Headset component inventory. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "S. Brooks"
+      }
+    ]
+  },
+  "figures": {
+    "100591": {
+      "title": "Headset component inventory",
+      "guidance": [
+        "On an assumed clean parts tray, stage 1 EA of Adjustable Race (Product Number AR-5381), 1 EA of Keyed Washer (Product Number KW-4091), and 1 EA of Lock Nut 19 (Product Number LN-9080).",
+        "Stage 1 EA of Crown Race (Product Number CR-9981), 8 EA of Headset Ball Bearings (Product Number BE-2908), and 1 EA of Lower Head Race (Product Number LR-8520). See the component inventory view 100591."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Adjustable Race",
+          "productNumber": "AR-5381"
+        },
+        {
+          "number": 2,
+          "name": "Keyed Washer",
+          "productNumber": "KW-4091"
+        },
+        {
+          "number": 3,
+          "name": "Lock Nut 19",
+          "productNumber": "LN-9080"
+        },
+        {
+          "number": 4,
+          "name": "Crown Race",
+          "productNumber": "CR-9981"
+        },
+        {
+          "number": 5,
+          "name": "Headset Ball Bearings",
+          "productNumber": "BE-2908"
+        },
+        {
+          "number": 6,
+          "name": "Lower Head Race",
+          "productNumber": "LR-8520"
+        }
+      ]
+    }
+  }
+}

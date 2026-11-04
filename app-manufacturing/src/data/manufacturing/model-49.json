@@ -1,0 +1,100 @@
+{
+  "modelId": 49,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. LL Road Front Wheel. Fictional workshop demonstration for model 49, assembling the representative LL Road Front Wheel, product FW-R623, from its direct BOM components.<Location LocationID=\"50\" SetupHours=\"0.15\" LaborHours=\"1.5\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: prepare the hub and rim, assemble the wheel, and fit the tire, tube, and reflectors.<step>Inspect 1 EA <material>LL Hub (Product Number HU-6280)</material> and 1 EA <material>LL Road Rim (Product Number RM-R436)</material> for visible damage before assembly.</step><step>Using an assumed <tool>wheel-building stand</tool>, connect 36 EA <material>Spokes (Product Number SK-9283)</material> between the hub and rim with 36 EA <material>LL Nipple (Product Number NI-4127)</material>, following suitable product-specific lacing guidance. See illustration <diag>100491</diag>.</step><step>Use an assumed <tool>spoke wrench</tool> to adjust the assembled wheel; spin it in the stand and check visually for obvious side-to-side and radial wobble.</step><step>Fit 1 EA <material>Road Tire Tube (Product Number TT-R982)</material> inside 1 EA <material>LL Road Tire (Product Number TI-R092)</material> on the rim, taking care not to pinch the tube. See illustration <diag>100492</diag>.</step><step>Inflate with an assumed <tool>hand pump</tool> using the tire manufacturer's guidance; check that the tire is seated evenly and holds air.</step><step>Fit 2 EA <material>Reflector (Product Number RF-9198)</material> using compatible mounting guidance. Check that they are secure and that the wheel spins freely.</step></Location></root>",
+  "processNotes": [
+    "Work center 50 is supported by a historical routing entry; the detailed sequence is inferred, not an engineering specification.",
+    "The hub is treated as a prepared manufactured subassembly. Spoke lacing, reflector mounting, and tire installation details require suitable product-specific guidance."
+  ],
+  "variantNotes": [
+    "The supplied snapshot lists only product 818, FW-R623: black, with no size specified.",
+    "No other variants or variant-specific component substitutions are listed."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0049",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 818,
+      "ProductModelID": 49,
+      "MakeFlag": true,
+      "Name": "LL Road Front Wheel",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": "2025-06-08T00:00:00",
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-049-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-049-02",
+        "description": "Released the illustrated workstation edition: Wheel lacing overview; Tire, tube, and reflector fitting. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "J. Patel"
+      }
+    ]
+  },
+  "figures": {
+    "100491": {
+      "title": "Wheel lacing overview",
+      "guidance": [
+        "Inspect 1 EA LL Hub (Product Number HU-6280) and 1 EA LL Road Rim (Product Number RM-R436) for visible damage before assembly.",
+        "Using an assumed wheel-building stand, connect 36 EA Spokes (Product Number SK-9283) between the hub and rim with 36 EA LL Nipple (Product Number NI-4127), following suitable product-specific lacing guidance."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "LL Road Rim",
+          "productNumber": "RM-R436"
+        },
+        {
+          "number": 2,
+          "name": "LL Hub",
+          "productNumber": "HU-6280"
+        },
+        {
+          "number": 3,
+          "name": "Spokes",
+          "productNumber": "SK-9283"
+        },
+        {
+          "number": 4,
+          "name": "LL Nipple",
+          "productNumber": "NI-4127"
+        }
+      ]
+    },
+    "100492": {
+      "title": "Tire, tube, and reflector fitting",
+      "guidance": [
+        "Fit 1 EA Road Tire Tube (Product Number TT-R982) inside 1 EA LL Road Tire (Product Number TI-R092) on the rim, taking care not to pinch the tube.",
+        "Fit 2 EA Reflector (Product Number RF-9198) using compatible mounting guidance. Check that they are secure and that the wheel spins freely."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "LL Road Tire",
+          "productNumber": "TI-R092"
+        },
+        {
+          "number": 2,
+          "name": "Road Tire Tube",
+          "productNumber": "TT-R982"
+        },
+        {
+          "number": 3,
+          "name": "Reflector",
+          "productNumber": "RF-9198"
+        }
+      ]
+    }
+  }
+}

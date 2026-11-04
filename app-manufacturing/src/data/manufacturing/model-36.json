@@ -1,0 +1,123 @@
+{
+  "modelId": 36,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Touring-3000. Fictional workshop demonstration for Touring-3000 model 36, using the Blue, 54 representative product BK-T18U-54. The draft covers frame preparation, finishing, subassembly and final fitting; it is not a certified manufacturing procedure.<Location LocationID=\"20\" SetupHours=\"0.25\" LaborHours=\"1.5\" MachineHours=\"0.75\" LotSize=\"1\">Work Center 20 - Frame Welding. Estimates are fictional demo assumptions. Frame Welding: inferred preparation of the representative frame from its listed formed members; the fork is treated as a separate completed subassembly.<step>Collect 1 EA <material>Top Tube (Product Number TO-2301)</material>, 1 EA <material>Seat Tube (Product Number ST-9828)</material>, 1 EA <material>Down Tube (Product Number DT-2377)</material> and 1 EA <material>Head Tube (Product Number HT-8019)</material> for the frame demonstration.</step><step>Arrange those members with 4 EA <material>Seat Stays (Product Number SS-2985)</material> and 2 EA <material>Chain Stays (Product Number CS-2812)</material> in an assumed <tool>frame jig</tool>. The source does not define their exact joint geometry.</step><step>Demonstrate joining the arranged frame members using an assumed <tool>welding station</tool>; inspect the visible joints for obvious irregularities. Hold 1 EA <material>LL Fork (Product Number FK-1639)</material> separately for later fitting.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.1\" LotSize=\"1\">Work Center 30 - Debur and Polish. Estimates are fictional demo assumptions. Debur and Polish: inferred surface preparation of the in-process representative frame.<step>Use an assumed <tool>deburring tool</tool> to smooth accessible rough edges on the in-process <material>LL Touring Frame - Blue, 54 (Product Number FR-T67U-54)</material>, then visually check its surfaces.</step></Location><Location LocationID=\"40\" SetupHours=\"0.2\" LaborHours=\"0.5\" MachineHours=\"0.3\" LotSize=\"1\">Work Center 40 - Paint. Estimates are fictional demo assumptions. Paint: inferred finishing of the representative blue frame using its nested BOM.<step>Prepare the in-process <material>LL Touring Frame - Blue, 54 (Product Number FR-T67U-54)</material> for finishing. Its BOM lists 8 OZ of <material>Paint - Blue (Product Number PA-632U)</material>; demonstrate applying the finish with an assumed <tool>paint station</tool> without inventing application settings.</step><step>After the finish is ready for handling, apply 2 EA <material>Decal 1 (Product Number DC-8732)</material> and 1 EA <material>Decal 2 (Product Number DC-9824)</material>; visually check coverage and placement. Exact decal positions are not supplied.</step></Location><Location LocationID=\"50\" SetupHours=\"0.15\" LaborHours=\"0.75\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: inferred preparation and inspection of components for the representative bicycle.<step>For 1 EA <material>LL Touring Seat Assembly (Product Number SA-T467)</material>, collect 1 EA <material>Seat Lug (Product Number SL-0931)</material>, 1 EA <material>Seat Post (Product Number SP-2981)</material>, 4 EA <material>Pinch Bolt (Product Number PB-6109)</material> and 1 EA <material>LL Touring Seat/Saddle (Product Number SE-T312)</material>. Arrange them for assembly with an assumed <tool>hand-held assembly jig</tool>; exact fastener locations are not supplied.</step><step>Inspect the supplied 1 EA <material>LL Headset (Product Number HS-0296)</material>, 1 EA <material>Touring Front Wheel (Product Number FW-T905)</material> and 1 EA <material>Touring Rear Wheel (Product Number RW-T905)</material> for visible damage before final fitting.</step></Location><Location LocationID=\"60\" SetupHours=\"0.2\" LaborHours=\"2\" MachineHours=\"0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final Assembly: fit the representative product's listed components and perform simple demonstration checks.<step>Support 1 EA <material>LL Touring Frame - Blue, 54 (Product Number FR-T67U-54)</material> in an assumed <tool>assembly stand</tool>. Fit 1 EA <material>LL Headset (Product Number HS-0296)</material> at the frame's steering area and position the frame's supplied fork; the internal mating order is not specified. See illustration <diag>100361</diag>.</step><step>Fit 1 EA <material>Touring Front Wheel (Product Number FW-T905)</material> at the fork and 1 EA <material>Touring Rear Wheel (Product Number RW-T905)</material> at the rear of the frame. Check that each turns without obvious rubbing; see illustration <diag>100361</diag>.</step><step>Fit 1 EA <material>LL Touring Handlebars (Product Number HB-T721)</material> at the steering area and 1 EA <material>LL Touring Seat Assembly (Product Number SA-T467)</material> at the seat tube, using an assumed <tool>set of hand tools</tool>. See illustration <diag>100361</diag>.</step><step>Fit 1 EA <material>LL Bottom Bracket (Product Number BB-7421)</material> at the frame's crank area, then position 1 EA <material>LL Crankset (Product Number CS-4759)</material> and fit the listed 1 EA <material>Touring Pedal (Product Number PD-T852)</material>.</step><step>Position 1 EA <material>Front Derailleur (Product Number FD-2342)</material> and 1 EA <material>Rear Derailleur (Product Number RD-2308)</material>, then route 1 EA <material>Chain (Product Number CH-0234)</material> through the drivetrain as a demonstration. Exact routing and adjustment details are not supplied.</step><step>Position 1 EA <material>Front Brakes (Product Number FB-9873)</material> at the front and 1 EA <material>Rear Brakes (Product Number RB-9231)</material> at the rear. Check visible alignment and component clearance without claiming a completed control system.</step><step>Review the listed components, visible finish and wheel movement. Record unresolved installation details and do not present the demonstration as ride-ready.</step></Location></root>",
+  "processNotes": [
+    "Historical routing records operation sequence 7 at Final Assembly for product 958; the other selected centers and their order are inferred.",
+    "Frame joint geometry, headset installation details, fastener locations and required settings are not supplied. The demonstration does not establish a complete or ride-ready bicycle.",
+    "The frame tubes and stays, fork, wheels and other manufactured subassemblies are assumed available in their listed forms. Purchased components are fitted or inspected, not manufactured.",
+    "The direct BOM lists the touring pedal as 1 EA; no additional pedal quantity is assumed. Unlisted controls, cables and other hardware are not inferred."
+  ],
+  "variantNotes": [
+    "The primary recipe uses Blue, 54 product 958 and its Blue, 54 frame FR-T67U-54, product 896.",
+    "Other blue variants use frame products 903, 895, 897 and 898 for sizes 44, 50, 58 and 62 respectively.",
+    "Yellow variants use frame products 899, 900, 901, 902 and 886 for sizes 44, 50, 54, 58 and 62 respectively. Do not substitute the blue frame or its blue paint for a yellow variant.",
+    "The supplied direct BOMs otherwise list the same components and quantities across the variants, including front wheel 821 and rear wheel 829. Variant-specific frame paint BOMs are not supplied, so their paint identities and quantities cannot be inferred."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0036",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 958,
+      "ProductModelID": 36,
+      "MakeFlag": true,
+      "Name": "Touring-3000 Blue, 54",
+      "SellStartDate": "2025-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2025-06-09",
+        "changeRequest": "ECN-2025-036-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2025-07-01",
+        "changeRequest": "ECN-2025-036-02",
+        "description": "Clarified identification of Touring Rear Wheel; retained the source part number in the point-of-use checklist.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2025-08-08",
+        "changeRequest": "ECN-2025-036-03",
+        "description": "Moved variant-selection notes ahead of the first operation to reduce wrong-kit changeovers.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2025-08-29",
+        "changeRequest": "ECN-2025-036-04",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2026-03-28",
+        "changeRequest": "ECN-2026-036-05",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-036-06",
+        "description": "Released the illustrated workstation edition: Representative bicycle fitting overview. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      }
+    ]
+  },
+  "figures": {
+    "100361": {
+      "title": "Representative bicycle fitting overview",
+      "guidance": [
+        "Support 1 EA LL Touring Frame - Blue, 54 (Product Number FR-T67U-54) in an assumed assembly stand. Fit 1 EA LL Headset (Product Number HS-0296) at the frame's steering area and position the frame's supplied fork; the internal mating order is not specified.",
+        "Fit 1 EA Touring Front Wheel (Product Number FW-T905) at the fork and 1 EA Touring Rear Wheel (Product Number RW-T905) at the rear of the frame. Check that each turns without obvious rubbing; see illustration 100361.",
+        "Fit 1 EA LL Touring Handlebars (Product Number HB-T721) at the steering area and 1 EA LL Touring Seat Assembly (Product Number SA-T467) at the seat tube, using an assumed set of hand tools."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "LL Touring Frame - Blue, 54",
+          "productNumber": "FR-T67U-54"
+        },
+        {
+          "number": 2,
+          "name": "Touring Front Wheel",
+          "productNumber": "FW-T905"
+        },
+        {
+          "number": 3,
+          "name": "Touring Rear Wheel",
+          "productNumber": "RW-T905"
+        },
+        {
+          "number": 4,
+          "name": "LL Headset",
+          "productNumber": "HS-0296"
+        },
+        {
+          "number": 5,
+          "name": "LL Touring Handlebars",
+          "productNumber": "HB-T721"
+        },
+        {
+          "number": 6,
+          "name": "LL Touring Seat Assembly",
+          "productNumber": "SA-T467"
+        }
+      ]
+    }
+  }
+}

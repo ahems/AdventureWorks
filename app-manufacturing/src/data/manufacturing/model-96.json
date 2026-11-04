@@ -1,0 +1,99 @@
+{
+  "modelId": 96,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. ML Bottom Bracket. Fictional subassembly demonstration for model 96, ML Bottom Bracket, representative product BB-8107 (995). The draft covers inventory, inspection, and a conditional fitting demonstration; the supplied BOM does not establish the mating arrangement.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"1.0\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: inventory and inspect the representative product's direct BOM components, then demonstrate fitting only if their arrangement is confirmed.<step>Set out 10 EA of <material>BB Ball Bearing (Product Number BE-2349)</material> and 1 EA of <material>HL Shell (Product Number SH-9312)</material>. Use inventory view <diag>100961</diag> to check the direct BOM quantities.</step><step>Visually inspect the components for obvious damage or contamination and set aside any questionable items.</step><step>If the mating arrangement has been independently confirmed, use <tool>an assumed hand-held assembly jig</tool> to support a trial fit without forcing the components. Otherwise, hold the set for clarification.</step><step>After any confirmed trial fit, check for visible damage or interference; do not treat the demonstration as a release inspection.</step></Location></root>",
+  "processNotes": [
+    "Work center 50 is inferred for this demonstration from a historical routing entry; that entry is evidence, not an engineering specification.",
+    "The BOM lists 10 EA of product 3 as bearing subassemblies, not 10 individual bearing balls. Its nested BOM lists 10 EA bearing balls per subassembly.",
+    "The catalog description mentions aluminum-alloy cups and a spindle, but the direct BOM does not identify them as separate components. Their identities and mating geometry must not be assumed.",
+    "Fitting is conditional on confirming the component arrangement from authoritative product information not supplied here."
+  ],
+  "variantNotes": [
+    "Only product 995, BB-8107, is supplied as a variant; its color and size are unspecified.",
+    "No variant-specific component substitutions are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0096",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 995,
+      "ProductModelID": 96,
+      "MakeFlag": true,
+      "Name": "ML Bottom Bracket",
+      "SellStartDate": "2025-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2025-06-09",
+        "changeRequest": "ECN-2025-096-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2025-09-16",
+        "changeRequest": "ECN-2025-096-02",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-01-06",
+        "changeRequest": "ECN-2026-096-03",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-04-28",
+        "changeRequest": "ECN-2026-096-04",
+        "description": "Moved variant-selection notes ahead of the first operation to reduce wrong-kit changeovers.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2026-07-20",
+        "changeRequest": "ECN-2026-096-05",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-096-06",
+        "description": "Released the illustrated workstation edition: Direct BOM inventory. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      }
+    ]
+  },
+  "figures": {
+    "100961": {
+      "title": "Direct BOM inventory",
+      "guidance": [
+        "Set out 10 EA of BB Ball Bearing (Product Number BE-2349) and 1 EA of HL Shell (Product Number SH-9312). Use inventory view 100961 to check the direct BOM quantities."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "BB Ball Bearing",
+          "productNumber": "BE-2349"
+        },
+        {
+          "number": 2,
+          "name": "HL Shell",
+          "productNumber": "SH-9312"
+        }
+      ]
+    }
+  }
+}

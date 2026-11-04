@@ -1,15 +1,18 @@
 param sqlServerName string = 'av-sql-${toLower(uniqueString(resourceGroup().id))}'
 param location string = resourceGroup().location
-param aadAdminLogin string
-param aadAdminObjectId string
 param tenantId string = subscription().tenantId
 param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
+param seedIdentityName string
 param useFreeLimit bool
 param sqlDatabaseName string
 
 // Existing user-assigned identity
 resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
+}
+
+resource seedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+  name: seedIdentityName
 }
 
 // Using deterministic FQDN pattern rather than module output to keep secret name stable.
@@ -20,13 +23,14 @@ module sqlServerModule 'br/public:avm/res/sql/server:0.14.0' = {
   params: {
     name: sqlServerName
     location: location
-    // AAD admin mapping
+    // Only the dedicated seed UAMI bootstraps SQL over the private endpoint.
+    // No deployment-host SQL connection or Graph lookup is required.
     administrators: {
       azureADOnlyAuthentication: true
-      login: aadAdminLogin
-      sid: aadAdminObjectId
+      login: seedIdentity.name
+      sid: seedIdentity.properties.principalId
       tenantId: tenantId
-      principalType: 'User'
+      principalType: 'Application'
     }
     // Identity assignment
     managedIdentities: {
@@ -34,8 +38,7 @@ module sqlServerModule 'br/public:avm/res/sql/server:0.14.0' = {
     }
   // AVM expects primaryUserAssignedIdentityId (not *ResourceId*) when specifying a UAI as primary
   primaryUserAssignedIdentityId: azidentity.id
-    // Public access is used temporarily during azd up; postup disables it after deployment.
-    publicNetworkAccess: 'Enabled'
+    publicNetworkAccess: 'Disabled'
     firewallRules: []
     // Single database definition replicating previous properties
     databases: [

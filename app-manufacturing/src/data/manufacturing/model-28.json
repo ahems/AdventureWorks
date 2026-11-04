@@ -1,0 +1,97 @@
+{
+  "modelId": 28,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Road-450. Fictional assembly demonstration for Road-450 Red, 58, product BK-R68R-58. The scope is inspection and fitting of supplied components, not fabrication of the frame or other subassemblies.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: receive and visually check the supplied assemblies before final fitting.<step>Check the identity and visible finish of <material>ML Road Frame - Red, 58 (Product Number FR-R72R-58)</material>; its supplied nested BOM includes the fork and red paint.</step><step>Inspect <material>ML Road Front Wheel (Product Number FW-R762)</material> and <material>ML Road Rear Wheel (Product Number RW-R762)</material> for visible damage and free rotation.</step><step>Check the supplied <material>ML Road Seat Assembly (Product Number SA-R430)</material>, <material>ML Road Handlebars (Product Number HB-R720)</material> and <material>ML Headset (Product Number HS-2451)</material> for visible damage and completeness before fitting.</step><step>Inspect the remaining supplied components for visible damage and set them aside with the representative frame.</step></Location><Location LocationID=\"60\" SetupHours=\"0.15\" LaborHours=\"2.0\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final Assembly: fit the representative product's direct BOM components and perform simple demonstration checks.<step>Support 1 EA of <material>ML Road Frame - Red, 58 (Product Number FR-R72R-58)</material> in an <tool>assumed assembly stand</tool>. The overall fitting relationships are shown in illustration <diag>100281</diag>.</step><step>Fit 1 EA of <material>ML Headset (Product Number HS-2451)</material> at the frame steering area, then fit 1 EA of <material>ML Road Handlebars (Product Number HB-R720)</material>; verify that steering moves freely.</step><step>Fit 1 EA of <material>ML Road Seat Assembly (Product Number SA-R430)</material> to the frame and check its alignment.</step><step>Fit 1 EA of <material>ML Bottom Bracket (Product Number BB-8107)</material> and 1 EA of <material>ML Crankset (Product Number CS-6583)</material> at the frame's crank area using <tool>assumed hand tools</tool>; check for free movement.</step><step>Fit the BOM quantity of 1 EA of <material>ML Road Pedal (Product Number PD-R563)</material> to the crank assembly where compatible.</step><step>Fit 1 EA of <material>ML Road Front Wheel (Product Number FW-R762)</material> at the front fork and 1 EA of <material>ML Road Rear Wheel (Product Number RW-R762)</material> at the rear of the frame; check that both rotate without visible interference.</step><step>Fit 1 EA of <material>Front Derailleur (Product Number FD-2342)</material> and 1 EA of <material>Rear Derailleur (Product Number RD-2308)</material> at their compatible front and rear drivetrain positions.</step><step>Fit 1 EA of <material>Chain (Product Number CH-0234)</material> through the compatible drivetrain path and check movement by hand.</step><step>Fit 1 EA of <material>Front Brakes (Product Number FB-9873)</material> at the front and 1 EA of <material>Rear Brakes (Product Number RB-9231)</material> at the rear; check alignment and clearance visually.</step><step>Inspect the completed demonstration for visible damage, loose fittings and interference. Resolve any missing control or attachment information before attempting functional tests or use.</step></Location></root>",
+  "processNotes": [
+    "The manufactured frame and other manufactured subassemblies are supplied complete for this demonstration; purchased components are supplied ready to fit.",
+    "The historical record places product 754 at Final Assembly, location 60. The preceding Subassembly routing and the operations at both centers are inferred, not engineering specifications.",
+    "The direct BOM lists 1 EA of the pedal; the demonstration does not assume that this means a pair.",
+    "The snapshot does not establish every attachment or control detail. Stop and resolve missing compatibility or operating information rather than inventing hardware or treating the result as road-ready."
+  ],
+  "variantNotes": [
+    "The representative is red, size 58, and uses frame FR-R72R-58.",
+    "The other supplied variants are also red: size 60 uses frame FR-R72R-60, size 44 uses FR-R72R-44, size 48 uses FR-R72R-48, and size 52 uses FR-R72R-52.",
+    "The supplied direct BOMs use the same other components and quantities across these variants, including front wheel FW-R762 and rear wheel RW-R762. Select the matching frame rather than substituting the size 58 frame."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0028",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 754,
+      "ProductModelID": 28,
+      "MakeFlag": true,
+      "Name": "Road-450 Red, 58",
+      "SellStartDate": "2023-06-10T00:00:00",
+      "SellEndDate": "2024-06-08T00:00:00",
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2023-06-10",
+        "changeRequest": "ECN-2023-028-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-028-02",
+        "description": "Released the illustrated workstation edition: Road-450 overall fitting view. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "R. Alvarez"
+      }
+    ]
+  },
+  "figures": {
+    "100281": {
+      "title": "Road-450 overall fitting view",
+      "guidance": [
+        "Support 1 EA of ML Road Frame - Red, 58 (Product Number FR-R72R-58) in an assumed assembly stand. The overall fitting relationships are shown in illustration 100281.",
+        "Fit 1 EA of ML Headset (Product Number HS-2451) at the frame steering area, then fit 1 EA of ML Road Handlebars (Product Number HB-R720); verify that steering moves freely.",
+        "Fit 1 EA of ML Road Seat Assembly (Product Number SA-R430) to the frame and check its alignment.",
+        "Fit 1 EA of ML Bottom Bracket (Product Number BB-8107) and 1 EA of ML Crankset (Product Number CS-6583) at the frame's crank area using assumed hand tools; check for free movement.",
+        "Fit 1 EA of ML Road Front Wheel (Product Number FW-R762) at the front fork and 1 EA of ML Road Rear Wheel (Product Number RW-R762) at the rear of the frame; check that both rotate without visible interference."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "ML Road Frame - Red, 58",
+          "productNumber": "FR-R72R-58"
+        },
+        {
+          "number": 2,
+          "name": "ML Headset",
+          "productNumber": "HS-2451"
+        },
+        {
+          "number": 3,
+          "name": "ML Road Handlebars",
+          "productNumber": "HB-R720"
+        },
+        {
+          "number": 4,
+          "name": "ML Road Seat Assembly",
+          "productNumber": "SA-R430"
+        },
+        {
+          "number": 5,
+          "name": "ML Road Front Wheel",
+          "productNumber": "FW-R762"
+        },
+        {
+          "number": 6,
+          "name": "ML Road Rear Wheel",
+          "productNumber": "RW-R762"
+        },
+        {
+          "number": 7,
+          "name": "ML Crankset",
+          "productNumber": "CS-6583"
+        }
+      ]
+    }
+  }
+}

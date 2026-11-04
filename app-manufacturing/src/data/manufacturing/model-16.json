@@ -1,0 +1,120 @@
+{
+  "modelId": 16,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. ML Road Frame. Fictional workshop demonstration for ML Road Frame model 16, centered on product 731, ML Road Frame - Red, 44 (FR-R72R-44). The scope is frame fabrication, finishing, fork fit check, and final inspection.<Location LocationID=\"20\" SetupHours=\"0.25\" LaborHours=\"1.5\" MachineHours=\"0.5\" LotSize=\"1\">Work Center 20 - Frame Welding. Estimates are fictional demo assumptions. Frame Welding: an inferred stage for arranging and joining the supplied frame components.<step>Arrange 1 EA <material>Top Tube (Product Number TO-2301)</material>, 1 EA <material>Seat Tube (Product Number ST-9828)</material>, 1 EA <material>Down Tube (Product Number DT-2377)</material>, and 1 EA <material>Head Tube (Product Number HT-8019)</material> in an assumed <tool>frame alignment jig</tool>. See the schematic arrangement in illustration <diag>100161</diag>.</step><step>Account for 2 EA <material>Chain Stays (Product Number CS-2812)</material> and 4 EA <material>Seat Stays (Product Number SS-2985)</material>; position them for the rear frame arrangement. Their exact attachment geometry is not supplied.</step><step>For the demonstration, join the arranged frame components using assumed <tool>welding equipment</tool>; visually check the joints and alignment afterward.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.1\" LotSize=\"1\">Work Center 30 - Debur and Polish. Estimates are fictional demo assumptions. Debur and Polish: an inferred stage for preparing the joined frame for finishing.<step>Use an assumed <tool>deburring tool</tool> to smooth accessible rough edges and visually check the frame surface.</step></Location><Location LocationID=\"40\" SetupHours=\"0.15\" LaborHours=\"0.5\" MachineHours=\"0.2\" LotSize=\"1\">Work Center 40 - Paint. Estimates are fictional demo assumptions. Paint: an inferred stage for the representative red finish.<step>Apply the BOM allowance of 8 OZ <material>Paint - Red (Product Number PA-361R)</material> to the prepared frame using assumed <tool>paint equipment</tool>; allow the finish to dry and visually check coverage.</step></Location><Location LocationID=\"60\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final Assembly: an inferred stage for decals, fork fit check, and a visual review.<step>Apply 2 EA <material>Decal 1 (Product Number DC-8732)</material> and 1 EA <material>Decal 2 (Product Number DC-9824)</material>; exact placement is not supplied.</step><step>Check 1 EA <material>ML Fork (Product Number FK-5136)</material> for visible damage and its apparent alignment with the frame. Keep it with the frame pending a documented mounting method; retention hardware is not specified in the supplied BOM.</step><step>Visually review the finish, decals, joints, and component count before setting the representative product aside.</step></Location></root>",
+  "processNotes": [
+    "The routing is inferred; no historical routing is supplied.",
+    "The manufactured tubes, stays, and fork are assumed available as completed components; their production is outside this draft.",
+    "The supplied BOM does not establish exact joint geometry, decal placement, or fork retention hardware. The illustration is schematic, and the fork is kept with the frame pending a documented mounting method."
+  ],
+  "variantNotes": [
+    "The representative product is red, size 44. The other supplied variants are red in sizes 48, 52, 58, and 60.",
+    "All five variants have the same listed direct component IDs, quantities, and units; no variant-specific component substitutions are shown. Size-specific geometry is not supplied and must not be inferred from shared component IDs.",
+    "The catalog description mentions a 60 cm frame; that description is not a size specification for the representative size 44."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0016",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 731,
+      "ProductModelID": 16,
+      "MakeFlag": true,
+      "Name": "ML Road Frame - Red, 44",
+      "SellStartDate": "2023-06-10T00:00:00",
+      "SellEndDate": "2024-06-08T00:00:00",
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2023-06-10",
+        "changeRequest": "ECN-2023-016-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2025-01-14",
+        "changeRequest": "ECN-2025-016-02",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2025-10-11",
+        "changeRequest": "ECN-2025-016-03",
+        "description": "Clarified identification of Top Tube; retained the source part number in the point-of-use checklist.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-01-26",
+        "changeRequest": "ECN-2026-016-04",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2026-02-19",
+        "changeRequest": "ECN-2026-016-05",
+        "description": "Reordered the Chain Stays receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-016-06",
+        "description": "Released the illustrated workstation edition: Frame component arrangement. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      }
+    ]
+  },
+  "figures": {
+    "100161": {
+      "title": "Frame component arrangement",
+      "guidance": [
+        "Arrange 1 EA Top Tube (Product Number TO-2301), 1 EA Seat Tube (Product Number ST-9828), 1 EA Down Tube (Product Number DT-2377), and 1 EA Head Tube (Product Number HT-8019) in an assumed frame alignment jig. See the schematic arrangement in illustration 100161.",
+        "Account for 2 EA Chain Stays (Product Number CS-2812) and 4 EA Seat Stays (Product Number SS-2985); position them for the rear frame arrangement. Their exact attachment geometry is not supplied."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Top Tube",
+          "productNumber": "TO-2301"
+        },
+        {
+          "number": 2,
+          "name": "Seat Tube",
+          "productNumber": "ST-9828"
+        },
+        {
+          "number": 3,
+          "name": "Down Tube",
+          "productNumber": "DT-2377"
+        },
+        {
+          "number": 4,
+          "name": "Head Tube",
+          "productNumber": "HT-8019"
+        },
+        {
+          "number": 5,
+          "name": "Chain Stays",
+          "productNumber": "CS-2812"
+        },
+        {
+          "number": 6,
+          "name": "Seat Stays",
+          "productNumber": "SS-2985"
+        }
+      ]
+    }
+  }
+}

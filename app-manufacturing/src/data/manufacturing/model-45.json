@@ -1,0 +1,125 @@
+{
+  "modelId": 45,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. ML Mountain Front Wheel. Fictional workshop demonstration for model 45, assembling the black ML Mountain Front Wheel, product 816 (FW-M762), from its direct BOM components.<Location LocationID=\"50\" SetupHours=\"0.2\" LaborHours=\"1.5\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: prepare the supplied components, assemble the wheel and perform simple visual checks. This operation sequence is inferred from the historical routing.<step>Check the supplied 1 EA <material>HL Hub (Product Number HU-8998)</material> and 1 EA <material>ML Mountain Rim (Product Number RM-M692)</material> for visible damage before assembly.</step><step>Arrange 36 EA <material>Spokes (Product Number SK-9283)</material> and 36 EA <material>LL Nipple (Product Number NI-4127)</material> with the hub and rim. Use the applicable component guidance for the lacing pattern; illustration <diag>100451</diag> shows the component relationships only.</step><step>Lace the wheel and use an assumed <tool>spoke wrench and wheel truing stand</tool> to adjust it according to applicable component guidance. Check for visible wobble and loose spokes.</step><step>Fit 1 EA <material>Mountain Tire Tube (Product Number TT-M928)</material> inside 1 EA <material>ML Mountain Tire (Product Number TI-M602)</material> and fit them to the rim, taking care not to pinch the tube. Follow component guidance for seating and inflation.</step><step>Fit 2 EA <material>Reflector (Product Number RF-9198)</material> using the applicable supplied mounting guidance; the mounting details are not specified in the snapshot.</step><step>Inspect the assembled wheel for visible damage, tire seating and secure reflectors. Set aside any wheel with visible defects or unresolved assembly questions.</step></Location></root>",
+  "processNotes": [
+    "Work center 50 is supported by a historical routing entry; the operations assigned to it here are inferred, not an engineering specification.",
+    "The lacing pattern, spoke tension, reflector mounting details and inflation setting are not supplied. Obtain applicable component guidance before a real assembly; the diagram is schematic.",
+    "The manufactured hub is treated as a supplied subassembly. Its internal construction is not inferred."
+  ],
+  "variantNotes": [
+    "The snapshot lists only product 816, in black, with no size specified. No other variant or component substitutions are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0045",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 816,
+      "ProductModelID": 45,
+      "MakeFlag": true,
+      "Name": "ML Mountain Front Wheel",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": "2025-06-08T00:00:00",
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-045-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2024-09-01",
+        "changeRequest": "ECN-2024-045-02",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2025-02-28",
+        "changeRequest": "ECN-2025-045-03",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2025-08-11",
+        "changeRequest": "ECN-2025-045-04",
+        "description": "Moved variant-selection notes ahead of the first operation to reduce wrong-kit changeovers.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2025-10-22",
+        "changeRequest": "ECN-2025-045-05",
+        "description": "Reordered the HL Hub receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-045-06",
+        "description": "Released the illustrated workstation edition: Front wheel component relationships. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      }
+    ]
+  },
+  "figures": {
+    "100451": {
+      "title": "Front wheel component relationships",
+      "guidance": [
+        "Check the supplied 1 EA HL Hub (Product Number HU-8998) and 1 EA ML Mountain Rim (Product Number RM-M692) for visible damage before assembly.",
+        "Arrange 36 EA Spokes (Product Number SK-9283) and 36 EA LL Nipple (Product Number NI-4127) with the hub and rim. Use the applicable component guidance for the lacing pattern; illustration 100451 shows the component relationships only.",
+        "Fit 1 EA Mountain Tire Tube (Product Number TT-M928) inside 1 EA ML Mountain Tire (Product Number TI-M602) and fit them to the rim, taking care not to pinch the tube. Follow component guidance for seating and inflation.",
+        "Fit 2 EA Reflector (Product Number RF-9198) using the applicable supplied mounting guidance; the mounting details are not specified in the snapshot."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "HL Hub",
+          "productNumber": "HU-8998"
+        },
+        {
+          "number": 2,
+          "name": "ML Mountain Rim",
+          "productNumber": "RM-M692"
+        },
+        {
+          "number": 3,
+          "name": "Spokes",
+          "productNumber": "SK-9283"
+        },
+        {
+          "number": 4,
+          "name": "LL Nipple",
+          "productNumber": "NI-4127"
+        },
+        {
+          "number": 5,
+          "name": "Mountain Tire Tube",
+          "productNumber": "TT-M928"
+        },
+        {
+          "number": 6,
+          "name": "ML Mountain Tire",
+          "productNumber": "TI-M602"
+        },
+        {
+          "number": 7,
+          "name": "Reflector",
+          "productNumber": "RF-9198"
+        }
+      ]
+    }
+  }
+}

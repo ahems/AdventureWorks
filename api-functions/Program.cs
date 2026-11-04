@@ -237,6 +237,10 @@ builder.Services.AddScoped<ProductContentAgentService>(sp =>
         telemetryClient);
 });
 
+builder.Services.AddScoped<ManufacturingContentGroundingService>();
+builder.Services.AddScoped<ManufacturingContentAgentService>();
+builder.Services.AddScoped<ManufacturingDiagramService>();
+
 // Register Cart Recovery Agent Service for abandoned-cart analysis via Foundry
 builder.Services.AddScoped<CartRecoveryAgentService>(sp =>
 {

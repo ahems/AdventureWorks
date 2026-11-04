@@ -1,0 +1,139 @@
+{
+  "modelId": 25,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Road-150. Fictional workshop demonstration for Road-150 model 25, using Road-150 Red, 62 (product 749, BK-R93R-62) as the representative bicycle.<Location LocationID=\"20\" SetupHours=\"0.3\" LaborHours=\"1.5\" MachineHours=\"0.8\" LotSize=\"1\">Work Center 20 - Frame Welding. Estimates are fictional demo assumptions. Frame Welding: an inferred demonstration stage for joining the prepared members of the representative frame.<step>For <material>HL Road Frame - Red, 62 (Product Number FR-R92R-62)</material>, arrange 1 EA <material>Top Tube (Product Number TO-2301)</material>, 1 EA <material>Seat Tube (Product Number ST-9828)</material>, 1 EA <material>Down Tube (Product Number DT-2377)</material>, and 1 EA <material>Head Tube (Product Number HT-8019)</material> in an assumed <tool>frame fixture</tool>.</step><step>Position 4 EA <material>Seat Stays (Product Number SS-2985)</material> and 2 EA <material>Chain Stays (Product Number CS-2812)</material> with the frame members; join the frame in the assumed fixture using an assumed <tool>welding station</tool>. Check the joints visually.</step><step>Stage 1 EA <material>HL Fork (Product Number FK-9939)</material> with the frame for later headset fitting; do not weld it to the frame.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.1\" LotSize=\"1\">Work Center 30 - Debur and Polish. Estimates are fictional demo assumptions. Debur and Polish: inferred preparation of the joined frame before finishing.<step>Carefully deburr accessible joined areas of <material>HL Road Frame - Red, 62 (Product Number FR-R92R-62)</material> with an assumed <tool>deburring tool</tool>; inspect the surface for visible defects.</step></Location><Location LocationID=\"40\" SetupHours=\"0.2\" LaborHours=\"0.6\" MachineHours=\"0.3\" LotSize=\"1\">Work Center 40 - Paint. Estimates are fictional demo assumptions. Paint: inferred red finishing and decal placement for the representative frame.<step>Prepare <material>HL Road Frame - Red, 62 (Product Number FR-R92R-62)</material> for finishing and apply its BOM allocation of 8 OZ <material>Paint - Red (Product Number PA-361R)</material> using an assumed <tool>paint station</tool>. Allow the finish to dry before handling; visually check coverage.</step><step>Apply 2 EA <material>Decal 1 (Product Number DC-8732)</material> and 1 EA <material>Decal 2 (Product Number DC-9824)</material>; check that they are visibly secure.</step></Location><Location LocationID=\"50\" SetupHours=\"0.2\" LaborHours=\"2.0\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: inferred wheel construction and preparation of the remaining completed assemblies.<step>For each of 1 EA <material>HL Road Front Wheel (Product Number FW-R820)</material> and 1 EA <material>HL Road Rear Wheel (Product Number RW-R820)</material>, assemble 1 EA <material>HL Hub (Product Number HU-8998)</material>, 1 EA <material>HL Road Rim (Product Number RM-R800)</material>, 36 EA <material>Spokes (Product Number SK-9283)</material>, and 36 EA <material>HL Nipple (Product Number NI-9522)</material> using an assumed <tool>wheel assembly stand</tool>.</step><step>For each wheel, fit 1 EA <material>Road Tire Tube (Product Number TT-R982)</material>, 1 EA <material>HL Road Tire (Product Number TI-R982)</material>, and 2 EA <material>Reflector (Product Number RF-9198)</material>. Check that the wheel turns freely and the tire is seated.</step><step>Stage and visually inspect 1 EA <material>HL Headset (Product Number HS-3479)</material>, 1 EA <material>HL Road Handlebars (Product Number HB-R956)</material>, and 1 EA <material>HL Road Seat Assembly (Product Number SA-R522)</material> as prepared subassemblies.</step></Location><Location LocationID=\"60\" SetupHours=\"0.2\" LaborHours=\"2.5\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final Assembly: the recorded historical location for product 749; the operations below are inferred demonstration steps.<step>Secure 1 EA <material>HL Road Frame - Red, 62 (Product Number FR-R92R-62)</material> in an assumed <tool>bicycle assembly stand</tool>. Fit its staged fork with 1 EA <material>HL Headset (Product Number HS-3479)</material> and install 1 EA <material>HL Road Handlebars (Product Number HB-R956)</material>. See the assembled relationship in diagram <diag>100251</diag>.</step><step>Fit 1 EA <material>HL Road Front Wheel (Product Number FW-R820)</material> at the fork and 1 EA <material>HL Road Rear Wheel (Product Number RW-R820)</material> at the rear of the frame.</step><step>Fit 1 EA <material>HL Bottom Bracket (Product Number BB-9108)</material> and 1 EA <material>HL Crankset (Product Number CS-9183)</material>; fit 1 EA <material>HL Road Pedal (Product Number PD-R853)</material> as supplied.</step><step>Fit 1 EA <material>Front Derailleur (Product Number FD-2342)</material>, 1 EA <material>Rear Derailleur (Product Number RD-2308)</material>, and 1 EA <material>Chain (Product Number CH-0234)</material>; check that the drivetrain moves without obvious interference.</step><step>Fit 1 EA <material>Front Brakes (Product Number FB-9873)</material> at the front and 1 EA <material>Rear Brakes (Product Number RB-9231)</material> at the rear; check their operation.</step><step>Fit 1 EA <material>HL Road Seat Assembly (Product Number SA-R522)</material>. Inspect the completed bicycle for visible damage, secure fittings, free wheel rotation, steering movement, and brake operation.</step></Location></root>",
+  "processNotes": [
+    "The historical record shows location 60 for product 749; the other selected work centers and their sequence are inferred.",
+    "Frame members and other manufactured subassemblies not built in these steps arrive prepared. The catalog describes a heat-treated frame, but the snapshot does not specify a heat-treatment route or settings.",
+    "Quantities are per representative bicycle or its indicated subassembly. Safety, fit, and service requirements must be established separately before real production."
+  ],
+  "variantNotes": [
+    "All supplied Road-150 variants are red. The representative size 62 uses frame 717, FR-R92R-62.",
+    "Size 44 uses frame 718, FR-R92R-44; size 48 uses 719, FR-R92R-48; size 52 uses 720, FR-R92R-52; and size 56 uses 721, FR-R92R-56. Do not substitute the size 62 frame for these variants.",
+    "The supplied direct BOMs use the same other components, including front wheel 820 and rear wheel 828, for all five sizes. Nested frame BOMs for the other sizes were not supplied, so their paint and internal component substitutions are not assumed.",
+    "The separate glossy-red description refers to size 56, not the representative size 62."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0025",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 749,
+      "ProductModelID": 25,
+      "MakeFlag": true,
+      "Name": "Road-150 Red, 62",
+      "SellStartDate": "2023-06-10T00:00:00",
+      "SellEndDate": "2024-06-08T00:00:00",
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2023-06-10",
+        "changeRequest": "ECN-2023-025-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2023-07-12",
+        "changeRequest": "ECN-2023-025-02",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2023-09-05",
+        "changeRequest": "ECN-2023-025-03",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2024-08-22",
+        "changeRequest": "ECN-2024-025-04",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2024-11-15",
+        "changeRequest": "ECN-2024-025-05",
+        "description": "Moved variant-selection notes ahead of the first operation to reduce wrong-kit changeovers.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2025-02-24",
+        "changeRequest": "ECN-2025-025-06",
+        "description": "Clarified identification of Rear Derailleur; retained the source part number in the point-of-use checklist.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "7.0",
+        "effectiveDate": "2026-02-04",
+        "changeRequest": "ECN-2026-025-07",
+        "description": "Reordered the Chain receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "8.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-025-08",
+        "description": "Released the illustrated workstation edition: Representative Road-150 assembly overview. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      }
+    ]
+  },
+  "figures": {
+    "100251": {
+      "title": "Representative Road-150 assembly overview",
+      "guidance": [
+        "Secure 1 EA HL Road Frame - Red, 62 (Product Number FR-R92R-62) in an assumed bicycle assembly stand. Fit its staged fork with 1 EA HL Headset (Product Number HS-3479) and install 1 EA HL Road Handlebars (Product Number HB-R956). See the assembled relationship in diagram 100251.",
+        "Fit 1 EA HL Road Front Wheel (Product Number FW-R820) at the fork and 1 EA HL Road Rear Wheel (Product Number RW-R820) at the rear of the frame.",
+        "Fit 1 EA HL Bottom Bracket (Product Number BB-9108) and 1 EA HL Crankset (Product Number CS-9183); fit 1 EA HL Road Pedal (Product Number PD-R853) as supplied.",
+        "Fit 1 EA HL Road Seat Assembly (Product Number SA-R522). Inspect the completed bicycle for visible damage, secure fittings, free wheel rotation, steering movement, and brake operation."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "HL Road Frame - Red, 62",
+          "productNumber": "FR-R92R-62"
+        },
+        {
+          "number": 2,
+          "name": "HL Road Front Wheel",
+          "productNumber": "FW-R820"
+        },
+        {
+          "number": 3,
+          "name": "HL Road Rear Wheel",
+          "productNumber": "RW-R820"
+        },
+        {
+          "number": 4,
+          "name": "HL Road Handlebars",
+          "productNumber": "HB-R956"
+        },
+        {
+          "number": 5,
+          "name": "HL Road Seat Assembly",
+          "productNumber": "SA-R522"
+        },
+        {
+          "number": 6,
+          "name": "HL Crankset",
+          "productNumber": "CS-9183"
+        }
+      ]
+    }
+  }
+}

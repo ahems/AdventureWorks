@@ -22,6 +22,7 @@ param agentReviewBatchId string = ''
 param agentReviewAnalysisId string = ''
 param agentEmailContentId string = ''
 param agentCatalogSuggestionId string = ''
+param agentManufacturingContentId string = 'manufacturing-content-agent'
 param webPubSubHostName string = ''
 // api-mcp OAuth issuer + dedicated Functions audience used by the Functions resource server
 // to validate bearer tokens (api-functions/Auth reads FUNCTIONS_JWT_ISSUER / FUNCTIONS_JWT_AUDIENCE).
@@ -214,6 +215,10 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'AI_AGENT_CATALOG_SUGGESTION_ID'
           value: agentCatalogSuggestionId
+        }
+        {
+          name: 'AI_AGENT_MANUFACTURING_CONTENT_ID'
+          value: agentManufacturingContentId
         }
         {
           // Self-referencing URL so the queue trigger can POST step callbacks

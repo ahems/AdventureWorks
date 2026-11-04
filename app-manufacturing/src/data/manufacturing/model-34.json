@@ -1,0 +1,116 @@
+{
+  "modelId": 34,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Touring-1000. Fictional assembly demonstration for Touring-1000 model 34, using the Yellow, 46 representative product 954 (BK-T79Y-46). Scope is inspection of supplied subassemblies and final bicycle assembly.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Inferred subassembly center: receive and visually check the representative bicycle's supplied assemblies before final assembly.<step>Check the finish and visible condition of 1 EA <material>HL Touring Frame - Yellow, 46 (Product Number FR-T98Y-46)</material>; its supplied frame BOM includes the fork.</step><step>Inspect 1 EA each of <material>Touring Front Wheel (Product Number FW-T905)</material> and <material>Touring Rear Wheel (Product Number RW-T905)</material> for visible damage and free rotation.</step><step>Check 1 EA each of <material>HL Headset (Product Number HS-3479)</material>, <material>HL Touring Handlebars (Product Number HB-T928)</material>, and <material>HL Touring Seat Assembly (Product Number SA-T872)</material> for visible damage before fitting.</step></Location><Location LocationID=\"60\" SetupHours=\"0.15\" LaborHours=\"2.0\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final assembly center: fit the representative product's direct BOM components and make simple functional checks. This center appears in the historical routing.<step>Support 1 EA <material>HL Touring Frame - Yellow, 46 (Product Number FR-T98Y-46)</material> in an <tool>assumed bicycle assembly stand</tool>. Fit 1 EA <material>HL Headset (Product Number HS-3479)</material> at the steering assembly and check that it turns freely.</step><step>Fit 1 EA <material>HL Touring Handlebars (Product Number HB-T928)</material> at the steering assembly and 1 EA <material>HL Touring Seat Assembly (Product Number SA-T872)</material> at the frame's seat tube. See the overall arrangement in illustration <diag>100341</diag>.</step><step>Fit 1 EA <material>Touring Front Wheel (Product Number FW-T905)</material> at the front fork and 1 EA <material>Touring Rear Wheel (Product Number RW-T905)</material> at the rear of the frame. Check that both rotate freely; see illustration <diag>100341</diag>.</step><step>Fit 1 EA <material>HL Bottom Bracket (Product Number BB-9108)</material> and 1 EA <material>HL Crankset (Product Number CS-9183)</material> at the frame's crank area, then fit the BOM-listed 1 EA <material>Touring Pedal (Product Number PD-T852)</material>.</step><step>Fit 1 EA <material>Front Derailleur (Product Number FD-2342)</material> and 1 EA <material>Rear Derailleur (Product Number RD-2308)</material>; install 1 EA <material>Chain (Product Number CH-0234)</material> in the drivetrain and check for free movement.</step><step>Fit 1 EA <material>Front Brakes (Product Number FB-9873)</material> at the front and 1 EA <material>Rear Brakes (Product Number RB-9231)</material> at the rear. Check their visible alignment and operation.</step><step>Inspect the completed demonstration assembly for visible damage, secure fittings, wheel clearance, steering movement, and drivetrain movement. Set aside any assembly with a concern for review.</step></Location></root>",
+  "processNotes": [
+    "The historical record shows product 954 at work center 60; the preceding subassembly inspection at center 50 is inferred, not a documented routing requirement.",
+    "Manufactured subassemblies are assumed to arrive complete; this draft does not invent their internal construction. The direct BOM lists each component as 1 EA, including the touring pedal."
+  ],
+  "variantNotes": [
+    "The representative uses yellow size 46 frame 887 (FR-T98Y-46). Yellow sizes 50, 54, and 60 use frames 888 (FR-T98Y-50), 889 (FR-T98Y-54), and 885 (FR-T98Y-60), respectively.",
+    "Blue sizes 46, 50, 54, and 60 use frames 890 (FR-T98U-46), 891 (FR-T98U-50), 892 (FR-T98U-54), and 893 (FR-T98U-60), respectively. Do not substitute the representative yellow frame or its yellow paint for a blue variant.",
+    "All listed variants use front wheel 821 and rear wheel 829 and share the other listed direct components at 1 EA each. No variant-specific wheel substitution is shown in the snapshot.",
+    "The blue size 60 catalog description is specific to that variant; its appearance should not be assumed for the yellow representative."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0034",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 954,
+      "ProductModelID": 34,
+      "MakeFlag": true,
+      "Name": "Touring-1000 Yellow, 46",
+      "SellStartDate": "2025-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2025-06-09",
+        "changeRequest": "ECN-2025-034-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2025-07-08",
+        "changeRequest": "ECN-2025-034-02",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2025-07-10",
+        "changeRequest": "ECN-2025-034-03",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-01-30",
+        "changeRequest": "ECN-2026-034-04",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2026-07-13",
+        "changeRequest": "ECN-2026-034-05",
+        "description": "Moved variant-selection notes ahead of the first operation to reduce wrong-kit changeovers.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-034-06",
+        "description": "Released the illustrated workstation edition: Touring bicycle assembly overview. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      }
+    ]
+  },
+  "figures": {
+    "100341": {
+      "title": "Touring bicycle assembly overview",
+      "guidance": [
+        "Support 1 EA HL Touring Frame - Yellow, 46 (Product Number FR-T98Y-46) in an assumed bicycle assembly stand. Fit 1 EA HL Headset (Product Number HS-3479) at the steering assembly and check that it turns freely.",
+        "Fit 1 EA HL Touring Handlebars (Product Number HB-T928) at the steering assembly and 1 EA HL Touring Seat Assembly (Product Number SA-T872) at the frame's seat tube. See the overall arrangement in illustration 100341.",
+        "Fit 1 EA Touring Front Wheel (Product Number FW-T905) at the front fork and 1 EA Touring Rear Wheel (Product Number RW-T905) at the rear of the frame. Check that both rotate freely; see illustration 100341."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "HL Touring Frame - Yellow, 46",
+          "productNumber": "FR-T98Y-46"
+        },
+        {
+          "number": 2,
+          "name": "Touring Front Wheel",
+          "productNumber": "FW-T905"
+        },
+        {
+          "number": 3,
+          "name": "Touring Rear Wheel",
+          "productNumber": "RW-T905"
+        },
+        {
+          "number": 4,
+          "name": "HL Touring Seat Assembly",
+          "productNumber": "SA-T872"
+        },
+        {
+          "number": 5,
+          "name": "HL Touring Handlebars",
+          "productNumber": "HB-T928"
+        }
+      ]
+    }
+  }
+}

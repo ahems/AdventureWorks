@@ -1,0 +1,118 @@
+{
+  "modelId": 60,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. ML Headset. Fictional workshop demonstration for model 60, ML Headset HS-2451: inventory and inspect its purchased components at Subassembly. Assembly is held pending verified component relationships and instructions.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.25\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: inferred location for receiving, counting, and visually inspecting the purchased headset components.<step>Lay out 1 EA of <material>Adjustable Race (Product Number AR-5381)</material>, 1 EA of <material>Keyed Washer (Product Number KW-4091)</material>, and 1 EA of <material>Lock Nut 19 (Product Number LN-9080)</material> on an assumed <tool>clean parts tray</tool>. See inventory illustration <diag>100601</diag>.</step><step>Count 8 EA of <material>Headset Ball Bearings (Product Number BE-2908)</material>, 1 EA of <material>Lower Head Race (Product Number LR-8520)</material>, and 1 EA of <material>Crown Race (Product Number CR-9981)</material>; keep them separated on the tray.</step><step>Visually check the supplied pieces for obvious damage or contamination and set aside any questionable pieces. Hold the set for a verified assembly procedure; the supplied data does not establish how the parts mate.</step></Location></root>",
+  "processNotes": [
+    "Work center 50 is an inferred route supported by historical routing, not an engineering specification.",
+    "The catalog describes a sealed cartridge bearing system, while the BOM lists eight individual ball bearings. Their relationship and the assembly geometry are not established by the supplied data; do not assume an assembly order or mating arrangement."
+  ],
+  "variantNotes": [
+    "The supplied snapshot lists only ML Headset HS-2451, product 806. Its color and size fields are unspecified.",
+    "The catalog describes a gunmetal grey finish, but no separate color or size variant or variant-specific component substitution is supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0060",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 806,
+      "ProductModelID": 60,
+      "MakeFlag": true,
+      "Name": "ML Headset",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": "2025-06-08T00:00:00",
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-060-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2024-11-14",
+        "changeRequest": "ECN-2024-060-02",
+        "description": "Clarified identification of Lower Head Race; retained the source part number in the point-of-use checklist.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2025-03-08",
+        "changeRequest": "ECN-2025-060-03",
+        "description": "Reordered the Adjustable Race receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2025-03-27",
+        "changeRequest": "ECN-2025-060-04",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2026-01-22",
+        "changeRequest": "ECN-2026-060-05",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-060-06",
+        "description": "Released the illustrated workstation edition: Headset component inventory. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      }
+    ]
+  },
+  "figures": {
+    "100601": {
+      "title": "Headset component inventory",
+      "guidance": [
+        "Lay out 1 EA of Adjustable Race (Product Number AR-5381), 1 EA of Keyed Washer (Product Number KW-4091), and 1 EA of Lock Nut 19 (Product Number LN-9080) on an assumed clean parts tray. See inventory illustration 100601.",
+        "Count 8 EA of Headset Ball Bearings (Product Number BE-2908), 1 EA of Lower Head Race (Product Number LR-8520), and 1 EA of Crown Race (Product Number CR-9981); keep them separated on the tray."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Adjustable Race",
+          "productNumber": "AR-5381"
+        },
+        {
+          "number": 2,
+          "name": "Keyed Washer",
+          "productNumber": "KW-4091"
+        },
+        {
+          "number": 3,
+          "name": "Lock Nut 19",
+          "productNumber": "LN-9080"
+        },
+        {
+          "number": 4,
+          "name": "Headset Ball Bearings",
+          "productNumber": "BE-2908"
+        },
+        {
+          "number": 5,
+          "name": "Lower Head Race",
+          "productNumber": "LR-8520"
+        },
+        {
+          "number": 6,
+          "name": "Crown Race",
+          "productNumber": "CR-9981"
+        }
+      ]
+    }
+  }
+}

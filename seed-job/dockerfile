@@ -15,6 +15,8 @@ WORKDIR /app
 # Copy your job script + assets into the image
 # Note: Paths are relative to the seed-job folder (build context)
 COPY seed-database.ps1 /app/seed-database.ps1
+COPY ManufacturingOverlays.psm1 /app/ManufacturingOverlays.psm1
+COPY RuntimeDatabaseAccess.psm1 /app/RuntimeDatabaseAccess.psm1
 
 # Copy SQL scripts
 COPY sql/ /app/sql/

@@ -1,0 +1,139 @@
+{
+  "modelId": 27,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Road-350-W. Fictional workshop assembly demonstration for Road-350-W, model 27, using representative product 973, Road-350-W Yellow, 40 (BK-R79Y-40).<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: receive and check the supplied subassemblies and purchased components before final assembly.<step>Check the identity and visible condition of 1 EA <material>ML Road Frame-W - Yellow, 40 (Product Number FR-R72Y-40)</material> and stage it for assembly.</step><step>Check and stage 1 EA each of <material>ML Road Front Wheel (Product Number FW-R762)</material> and <material>ML Road Rear Wheel (Product Number RW-R762)</material>; distinguish front from rear.</step><step>Check the remaining supplied components for visible damage and match them to the representative bill of materials.</step></Location><Location LocationID=\"60\" SetupHours=\"0.2\" LaborHours=\"2.5\" MachineHours=\"0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final Assembly: fit the staged components to the representative frame and perform simple demonstration checks.<step>Support 1 EA <material>ML Road Frame-W - Yellow, 40 (Product Number FR-R72Y-40)</material> in an <tool>assumed bicycle assembly stand</tool>. The overview in <diag>100271</diag> shows the principal component relationships.</step><step>Fit 1 EA <material>ML Headset (Product Number HS-2451)</material> at the frame's steering area, then fit 1 EA <material>ML Road Handlebars (Product Number HB-R720)</material>. The frame subassembly includes its fork; the source does not specify headset internal assembly order.</step><step>Fit 1 EA <material>ML Road Seat Assembly (Product Number SA-R430)</material> to the frame and check its visible alignment.</step><step>Fit 1 EA <material>ML Bottom Bracket (Product Number BB-8107)</material> at the frame's lower junction, followed by 1 EA <material>ML Crankset (Product Number CS-6583)</material> and 1 EA <material>ML Road Pedal (Product Number PD-R563)</material>.</step><step>Fit 1 EA <material>ML Road Front Wheel (Product Number FW-R762)</material> at the fork and 1 EA <material>ML Road Rear Wheel (Product Number RW-R762)</material> at the rear of the frame.</step><step>Fit 1 EA <material>Front Derailleur (Product Number FD-2342)</material> and 1 EA <material>Rear Derailleur (Product Number RD-2308)</material> at their respective front and rear drivetrain positions. Fit 1 EA <material>Chain (Product Number CH-0234)</material> along the drivetrain.</step><step>Fit 1 EA <material>Front Brakes (Product Number FB-9873)</material> at the front and 1 EA <material>Rear Brakes (Product Number RB-9231)</material> at the rear.</step><step>Visually check component placement and clearances; rotate the wheels and crank by hand and check for obvious interference. Set aside any issue for review.</step></Location></root>",
+  "processNotes": [
+    "Tooling, process order and times are inferred demo estimates. The historical routing records final assembly at work center 60; it does not establish this complete routing.",
+    "The demonstration receives the frame and other manufactured subassemblies already made. It does not infer their internal manufacturing processes or unspecified hardware.",
+    "Quantities are per representative bicycle and retain the source units. The pedal entry is 1 EA; the source does not establish a pair."
+  ],
+  "variantNotes": [
+    "All four listed variants are Yellow, in sizes 40, 42, 44 and 48. The primary recipe uses the size 40 frame, product 833 (FR-R72Y-40).",
+    "For size 42, product 974 uses frame 834 (FR-R72Y-42); for size 44, product 975 uses frame 835 (FR-R72Y-44); for size 48, product 976 uses frame 836 (FR-R72Y-48). Do not substitute the size 40 frame for these variants.",
+    "The listed direct components other than the frame, including both wheels, are shared across the four variants at the same quantities. No other color variant is supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0027",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 973,
+      "ProductModelID": 27,
+      "MakeFlag": true,
+      "Name": "Road-350-W Yellow, 40",
+      "SellStartDate": "2025-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2025-06-09",
+        "changeRequest": "ECN-2025-027-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2025-08-15",
+        "changeRequest": "ECN-2025-027-02",
+        "description": "Reordered the Chain receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2025-08-24",
+        "changeRequest": "ECN-2025-027-03",
+        "description": "Moved variant-selection notes ahead of the first operation to reduce wrong-kit changeovers.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2025-12-28",
+        "changeRequest": "ECN-2025-027-04",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2026-02-25",
+        "changeRequest": "ECN-2026-027-05",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-03-20",
+        "changeRequest": "ECN-2026-027-06",
+        "description": "Clarified identification of Rear Derailleur; retained the source part number in the point-of-use checklist.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "7.0",
+        "effectiveDate": "2026-03-29",
+        "changeRequest": "ECN-2026-027-07",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "8.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-027-08",
+        "description": "Released the illustrated workstation edition: Representative bicycle assembly overview. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      }
+    ]
+  },
+  "figures": {
+    "100271": {
+      "title": "Representative bicycle assembly overview",
+      "guidance": [
+        "Support 1 EA ML Road Frame-W - Yellow, 40 (Product Number FR-R72Y-40) in an assumed bicycle assembly stand. The overview in 100271 shows the principal component relationships.",
+        "Fit 1 EA ML Headset (Product Number HS-2451) at the frame's steering area, then fit 1 EA ML Road Handlebars (Product Number HB-R720). The frame subassembly includes its fork; the source does not specify headset internal assembly order.",
+        "Fit 1 EA ML Road Seat Assembly (Product Number SA-R430) to the frame and check its visible alignment.",
+        "Fit 1 EA ML Bottom Bracket (Product Number BB-8107) at the frame's lower junction, followed by 1 EA ML Crankset (Product Number CS-6583) and 1 EA ML Road Pedal (Product Number PD-R563).",
+        "Fit 1 EA ML Road Front Wheel (Product Number FW-R762) at the fork and 1 EA ML Road Rear Wheel (Product Number RW-R762) at the rear of the frame."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "ML Road Frame-W - Yellow, 40",
+          "productNumber": "FR-R72Y-40"
+        },
+        {
+          "number": 2,
+          "name": "ML Road Front Wheel",
+          "productNumber": "FW-R762"
+        },
+        {
+          "number": 3,
+          "name": "ML Road Rear Wheel",
+          "productNumber": "RW-R762"
+        },
+        {
+          "number": 4,
+          "name": "ML Road Seat Assembly",
+          "productNumber": "SA-R430"
+        },
+        {
+          "number": 5,
+          "name": "ML Road Handlebars",
+          "productNumber": "HB-R720"
+        },
+        {
+          "number": 6,
+          "name": "ML Crankset",
+          "productNumber": "CS-6583"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "modelId": 44,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">\n                Adventure Works CyclesWA-151C Instructions for Assembling Touring Rear Wheel Summary: This document contains manufacturing instructions for assembling the Touring Rear Wheel, Product Model 44. Instructions are work center specific and are identified by work center ID. These instructions must be followed in the order presented. Deviation from the instructions is not permitted unless an authorized Change Order detailing the deviation is provided by the Engineering Manager.<Location LaborHours=\"3\" LotSize=\"1\" LocationID=\"50\">\n                    Work Center - 50 Frame Forming. The following instructions pertain to Work Center 10. (Setup hours = .0, Labor Hours = 3, Machine Hours = 0, Lot Sizing = 1)<step>\n                        Inspect the <material>rim</material> for dents, cracks or other damage.\n                    </step><step>\n                        Slide each <material>spoke</material> through the <material>hub flange</material> working in a clockwise direction.\n                    </step><step>\n                        For each spoke, screw on the <material>spoke nipple (NI-9525)</material>. Do not over tighten.\n                    </step><step>\n                        Place the wheel in the <tool>truing stand</tool>.\n                    </step><step>Pluck each spoke. The sound from each spoke should be consistent. Adjust as needed.</step><step>Inflate the tire tube to one-quarter pressure.</step><step>\n                        Insert the <material>valve stem</material> through <material>Rim RM-M825</material>.\n                    </step><step>Tuck the tube into the tire ensuring there are no wrinkles or kinks.</step><step>Inflate the tube to half pressure. </step><step>Spin the wheel and ensure the bead line is just above the rim.</step><step>Inflate the tube to 35 PSI.</step></Location></root>",
+  "processNotes": [
+    "All inferred tooling, processes, and times are demo estimates.",
+    "Work center 50 is inferred from the historical routing and the original document’s location attribute; historical routing is not an engineering specification.",
+    "The original calls the product a rear wheel, conflicts about work center 50 versus 10, and names a different rim and nipple. The live front-wheel BOM is used for these supplemental captions.",
+    "Spoke pattern, reflector attachment, and tire inflation details are not established by the live BOM; the diagrams are schematic rather than assembly specifications."
+  ],
+  "variantNotes": [
+    "The only supplied variant is product 821, FW-T905, listed as Black with no size specified. The catalog describes a matte black finish.",
+    "No other variants or variant-specific component substitutions are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0044",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 821,
+      "ProductModelID": 44,
+      "MakeFlag": true,
+      "Name": "Touring Front Wheel",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": "2025-06-08T00:00:00",
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-044-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2024-10-07",
+        "changeRequest": "ECN-2024-044-02",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2024-12-07",
+        "changeRequest": "ECN-2024-044-03",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2025-07-03",
+        "changeRequest": "ECN-2025-044-04",
+        "description": "Moved variant-selection notes ahead of the first operation to reduce wrong-kit changeovers.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2025-11-24",
+        "changeRequest": "ECN-2025-044-05",
+        "description": "Reordered the HL Hub receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2025-12-16",
+        "changeRequest": "ECN-2025-044-06",
+        "description": "Clarified identification of Touring Tire Tube; retained the source part number in the point-of-use checklist.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "7.0",
+        "effectiveDate": "2026-05-29",
+        "changeRequest": "ECN-2026-044-07",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "8.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-044-08",
+        "description": "Released the illustrated workstation edition: Front wheel: hub, spokes and rim; Tire, tube and reflector overview. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "R. Alvarez"
+      }
+    ]
+  },
+  "figures": {
+    "100441": {
+      "title": "Front wheel: hub, spokes and rim",
+      "guidance": [
+        "Figure caption: Inspect 1 EA Touring Rim (Product Number RM-T801) for visible damage before relating it to 1 EA HL Hub (Product Number HU-8998).",
+        "Figure caption: The wheel view shows the general relationship of 36 EA Spokes (Product Number SK-9283) and 36 EA LL Nipple (Product Number NI-4127) to the hub and rim; the spoke pattern is illustrative. A truing stand is an assumed demo tool for checking the wheel."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Touring Rim",
+          "productNumber": "RM-T801"
+        },
+        {
+          "number": 2,
+          "name": "HL Hub",
+          "productNumber": "HU-8998"
+        },
+        {
+          "number": 3,
+          "name": "Spokes",
+          "productNumber": "SK-9283"
+        },
+        {
+          "number": 4,
+          "name": "LL Nipple",
+          "productNumber": "NI-4127"
+        }
+      ]
+    },
+    "100442": {
+      "title": "Tire, tube and reflector overview",
+      "guidance": [
+        "Figure caption: Inspect 1 EA Touring Rim (Product Number RM-T801) for visible damage before relating it to 1 EA HL Hub (Product Number HU-8998).",
+        "Figure caption: The outer-wheel view relates 1 EA Touring Tire (Product Number TI-T723) and 1 EA Touring Tire Tube (Product Number TT-T092) to the rim.",
+        "Figure caption: 2 EA Reflector (Product Number RF-9198) are shown separately for identification; their attachment positions are not specified in the supplied data."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Touring Rim",
+          "productNumber": "RM-T801"
+        },
+        {
+          "number": 2,
+          "name": "Touring Tire Tube",
+          "productNumber": "TT-T092"
+        },
+        {
+          "number": 3,
+          "name": "Touring Tire",
+          "productNumber": "TI-T723"
+        },
+        {
+          "number": 4,
+          "name": "Reflector",
+          "productNumber": "RF-9198"
+        }
+      ]
+    }
+  },
+  "supplementalFigures": true
+}

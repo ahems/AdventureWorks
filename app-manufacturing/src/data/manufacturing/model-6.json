@@ -1,0 +1,96 @@
+{
+  "modelId": 6,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. HL Road Frame. Fictional workshop draft for model 6, HL Road Frame, using representative product 680, HL Road Frame - Black, 58 (FR-R92B-58). Scope covers component preparation, illustrative frame and fork work, finishing, decals, and final review.<Location LocationID=\"10\" SetupHours=\"0.3\" LaborHours=\"2.5\" MachineHours=\"1.5\" LotSize=\"1\">Work Center 10 - Frame Forming. Estimates are fictional demo assumptions. Frame Forming: demonstrate preparation of the manufactured frame and fork components from their listed nested inputs.<step>For 1 EA of <material>Top Tube (Product Number TO-2301)</material>, demonstrate forming its listed input, 1 EA of <material>Metal Sheet 2 (Product Number MS-0253)</material>, with an <tool>assumed forming jig</tool>.</step><step>For 1 EA of <material>Down Tube (Product Number DT-2377)</material> and 1 EA of <material>Head Tube (Product Number HT-8019)</material>, demonstrate forming their respective listed inputs: 1 EA of <material>Metal Sheet 3 (Product Number MS-1256)</material> and 1 EA of <material>Metal Sheet 4 (Product Number MS-2259)</material>.</step><step>For 1 EA of <material>Seat Tube (Product Number ST-9828)</material>, demonstrate forming its listed input, 1 EA of <material>Metal Bar 2 (Product Number MB-6061)</material>.</step><step>Prepare 4 EA of <material>Seat Stays (Product Number SS-2985)</material> and 2 EA of <material>Chain Stays (Product Number CS-2812)</material>. Their nested BOMs each list 1 EA of <material>Metal Sheet 7 (Product Number MS-1981)</material> per seat stay and 1 EA of <material>Metal Sheet 5 (Product Number MS-2341)</material> per chain stay.</step><step>For 1 EA of <material>HL Fork (Product Number FK-9939)</material>, prepare its listed 2 EA of <material>Blade (Product Number BL-2036)</material>, 2 EA of <material>Fork End (Product Number FE-3760)</material>, 1 EA of <material>Fork Crown (Product Number FC-3654)</material>, and 1 EA of <material>Steerer (Product Number SR-2098)</material>. Their respective nested inputs are 1 EA of <material>Metal Sheet 5 (Product Number MS-2341)</material> per blade, 1 EA of <material>Metal Sheet 2 (Product Number MS-0253)</material> per fork end, 1 EA of <material>Metal Sheet 5 (Product Number MS-2341)</material> per crown, and 1 EA of <material>Metal Sheet 6 (Product Number MS-2348)</material> per steerer.</step><step>Visually check the prepared pieces for obvious damage and keep each group identified for the mock-up.</step></Location><Location LocationID=\"20\" SetupHours=\"0.3\" LaborHours=\"2.0\" MachineHours=\"1.0\" LotSize=\"1\">Work Center 20 - Frame Welding. Estimates are fictional demo assumptions. Frame Welding: use an inferred jigging and joining sequence for the frame and its manufactured fork subassembly.<step>Arrange 1 EA each of <material>Top Tube (Product Number TO-2301)</material>, <material>Seat Tube (Product Number ST-9828)</material>, <material>Down Tube (Product Number DT-2377)</material>, and <material>Head Tube (Product Number HT-8019)</material> in an <tool>assumed frame jig</tool>. Use diagram <diag>100061</diag> as a conceptual layout, not a joint specification.</step><step>Stage 2 EA of <material>Chain Stays (Product Number CS-2812)</material> and 4 EA of <material>Seat Stays (Product Number SS-2985)</material> at the rear of the mock-up. The exact arrangement and joints for the four seat stays are not established by the supplied data.</step><step>Demonstrate the inferred welding operation on the resolved mock-up joints using <tool>assumed welding equipment</tool>; leave unspecified stay joints unresolved rather than inventing their geometry.</step><step>For the separate fork mock-up, arrange 2 EA of <material>Blade (Product Number BL-2036)</material>, 2 EA of <material>Fork End (Product Number FE-3760)</material>, 1 EA of <material>Fork Crown (Product Number FC-3654)</material>, and 1 EA of <material>Steerer (Product Number SR-2098)</material> in an <tool>assumed fork jig</tool>; demonstrate joining them as an inferred process.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.6\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 30 - Debur and Polish. Estimates are fictional demo assumptions. Debur and Polish: demonstrate surface cleanup and visual review of the mock-up pieces.<step>Use an <tool>assumed deburring tool</tool> to demonstrate removal of obvious burrs, then visually review the worked joints and surfaces.</step></Location><Location LocationID=\"40\" SetupHours=\"0.2\" LaborHours=\"0.5\" MachineHours=\"0.3\" LotSize=\"1\">Work Center 40 - Paint. Estimates are fictional demo assumptions. Paint: demonstrate the representative black finish on the frame mock-up.<step>Allocate the BOM quantity of 8 OZ of <material>Paint - Black (Product Number PA-187B)</material> and demonstrate application to the prepared frame with an <tool>assumed paint applicator</tool>.</step><step>Allow the finish to dry according to the product's directions, then visually check for obvious uneven coverage.</step></Location><Location LocationID=\"60\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final Assembly: apply the listed decals, stage the fork, and review the representative mock-up.<step>Apply 2 EA of <material>Decal 1 (Product Number DC-8732)</material> and 1 EA of <material>Decal 2 (Product Number DC-9824)</material> to the finished mock-up; exact placement is an unverified demonstration assumption.</step><step>Stage 1 EA of <material>HL Fork (Product Number FK-9939)</material> alongside the frame as in diagram <diag>100061</diag>. Do not claim installation without supplied mating details.</step><step>Visually review the finish and component count, and identify the unresolved stay arrangement and fork mounting before presenting the mock-up.</step></Location></root>",
+  "processNotes": [
+    "No historical routing was supplied.",
+    "Forming and joining methods and the frame layout are inferred. The supplied BOM does not define joint geometry or the arrangement of the four seat stays; the illustration and mock-up do not resolve those details.",
+    "The fork is staged alongside the frame for review. Its mounting hardware and mating details are not supplied, so this draft does not claim a completed fork installation.",
+    "Nested BOM quantities are per parent component. Times are illustrative estimates for a lot of one representative product, not validated cycle times."
+  ],
+  "variantNotes": [
+    "The representative is black, size 58. Other listed black variants are sizes 44, 48, 52, and 62; red variants are sizes 44, 48, 52, 56, 58, and 62.",
+    "For every red variant with a supplied BOM, 8 OZ of Paint - Red (493, PA-361R) replaces the representative's 8 OZ of Paint - Black (492, PA-187B). The other listed direct components and quantities match the representative BOM.",
+    "The supplied BOMs for black sizes 44, 48, and 52 list the same direct components and quantities as the representative. No variant BOM was supplied for black size 62 (837), so its component substitutions cannot be confirmed.",
+    "Select the requested product and size explicitly. The supplied component records do not establish size-specific dimensions or geometry, and the red size 56 catalog description should not be treated as a specification for the representative."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0006",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 680,
+      "ProductModelID": 6,
+      "MakeFlag": true,
+      "Name": "HL Road Frame - Black, 58",
+      "SellStartDate": "2020-05-10T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-10",
+        "changeRequest": "ECN-2020-006-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-006-02",
+        "description": "Released the illustrated workstation edition: Frame mock-up and staged fork. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "J. Patel"
+      }
+    ]
+  },
+  "figures": {
+    "100061": {
+      "title": "Frame mock-up and staged fork",
+      "guidance": [
+        "Arrange 1 EA each of Top Tube (Product Number TO-2301), Seat Tube (Product Number ST-9828), Down Tube (Product Number DT-2377), and Head Tube (Product Number HT-8019) in an assumed frame jig. Use diagram 100061 as a conceptual layout, not a joint specification.",
+        "Stage 2 EA of Chain Stays (Product Number CS-2812) and 4 EA of Seat Stays (Product Number SS-2985) at the rear of the mock-up. The exact arrangement and joints for the four seat stays are not established by the supplied data.",
+        "Stage 1 EA of HL Fork (Product Number FK-9939) alongside the frame as in diagram 100061. Do not claim installation without supplied mating details."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Top Tube",
+          "productNumber": "TO-2301"
+        },
+        {
+          "number": 2,
+          "name": "Seat Tube",
+          "productNumber": "ST-9828"
+        },
+        {
+          "number": 3,
+          "name": "Down Tube",
+          "productNumber": "DT-2377"
+        },
+        {
+          "number": 4,
+          "name": "Head Tube",
+          "productNumber": "HT-8019"
+        },
+        {
+          "number": 5,
+          "name": "Chain Stays",
+          "productNumber": "CS-2812"
+        },
+        {
+          "number": 6,
+          "name": "Seat Stays",
+          "productNumber": "SS-2985"
+        },
+        {
+          "number": 7,
+          "name": "HL Fork",
+          "productNumber": "FK-9939"
+        }
+      ]
+    }
+  }
+}

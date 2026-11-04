@@ -1,0 +1,118 @@
+{
+  "modelId": 23,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Mountain-500. Fictional assembly demonstration for Mountain-500 model 23, using representative product 984, Mountain-500 Silver, 40 (BK-M18S-40).<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.35\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Inferred Subassembly stop: receive and visually check the completed major subassemblies before final assembly.<step>Receive 1 EA <material>LL Mountain Frame - Silver, 40 (Product Number FR-M21S-40)</material> and visually check its silver finish and size identification.</step><step>Check 1 EA each of <material>LL Mountain Front Wheel (Product Number FW-M423)</material> and <material>LL Mountain Rear Wheel (Product Number RW-M423)</material> for visible damage and free rotation.</step><step>Inspect 1 EA each of <material>LL Headset (Product Number HS-0296)</material>, <material>LL Mountain Handlebars (Product Number HB-M243)</material> and <material>LL Mountain Seat Assembly (Product Number SA-M198)</material> for visible damage; keep the completed subassemblies together.</step></Location><Location LocationID=\"60\" SetupHours=\"0.15\" LaborHours=\"2.0\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final Assembly: assemble the representative bicycle using the checked subassemblies and supplied components. A historical work order records this work center for product 984; the detailed sequence below is inferred.<step>Support <material>LL Mountain Frame - Silver, 40 (Product Number FR-M21S-40)</material> in an assumed <tool>assembly stand</tool>. Fit <material>LL Headset (Product Number HS-0296)</material> at the frame's steering interface; the fork is part of the frame's nested BOM.</step><step>Fit <material>LL Mountain Handlebars (Product Number HB-M243)</material> and <material>LL Mountain Seat Assembly (Product Number SA-M198)</material> to the supported frame. See the schematic in illustration <diag>100231</diag>.</step><step>Fit <material>LL Bottom Bracket (Product Number BB-7421)</material> at the bottom-bracket interface, followed by <material>LL Crankset (Product Number CS-4759)</material> and the supplied 1 EA <material>LL Mountain Pedal (Product Number PD-M282)</material>, using assumed <tool>appropriate hand tools</tool>.</step><step>Position <material>LL Mountain Front Wheel (Product Number FW-M423)</material> at the fork and <material>LL Mountain Rear Wheel (Product Number RW-M423)</material> at the rear of the frame, as shown in illustration <diag>100231</diag>. Fit them using the available interfaces.</step><step>Fit <material>Front Derailleur (Product Number FD-2342)</material> and <material>Rear Derailleur (Product Number RD-2308)</material> at their respective drivetrain positions, then fit <material>Chain (Product Number CH-0234)</material> and check its movement by hand.</step><step>Fit <material>Front Brakes (Product Number FB-9873)</material> and <material>Rear Brakes (Product Number RB-9231)</material> at their respective wheel positions. Check visible alignment and clearance.</step><step>Inspect the assembled demonstration for visible damage, wheel rotation and steering movement. Identify missing control or attachment details for authorized review rather than assuming the bicycle is ready to ride.</step></Location></root>",
+  "processNotes": [
+    "Tooling, processes, routing beyond the historical evidence, and all times are demo estimates.",
+    "The historical record places product 984 at Final Assembly, location 60; the preceding Subassembly stop at location 50 is inferred, not a documented routing.",
+    "Manufactured subassemblies are assumed to arrive complete. Purchased components are received ready for fitting; their manufacture is outside this draft.",
+    "Each direct component has a source quantity of 1 EA. In particular, the pedal is listed as 1 EA; no additional pedal is assumed.",
+    "The snapshot does not identify all control or attachment details. The demonstration does not establish a ride-ready bicycle; actual assembly and safety verification require authorized product-specific procedures."
+  ],
+  "variantNotes": [
+    "The representative Silver, 40 uses frame 944, FR-M21S-40. Silver sizes 42, 44, 48 and 52 instead use frames 917 (FR-M21S-42), 918 (FR-M21S-44), 919 (FR-M21S-48) and 920 (FR-M21S-52), respectively.",
+    "Black sizes 40, 42, 44, 48 and 52 use frames 943 (FR-M21B-40), 924 (FR-M21B-42), 925 (FR-M21B-44), 926 (FR-M21B-48) and 927 (FR-M21B-52), respectively. Do not substitute the representative silver frame.",
+    "All listed variants use the same front wheel 815 and rear wheel 823 and the same remaining direct components, each at 1 EA. Variant-specific frame finishing details are not supplied and are not inferred."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0023",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 984,
+      "ProductModelID": 23,
+      "MakeFlag": true,
+      "Name": "Mountain-500 Silver, 40",
+      "SellStartDate": "2025-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2025-06-09",
+        "changeRequest": "ECN-2025-023-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2025-06-27",
+        "changeRequest": "ECN-2025-023-02",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2025-09-03",
+        "changeRequest": "ECN-2025-023-03",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-04-20",
+        "changeRequest": "ECN-2026-023-04",
+        "description": "Reordered the Chain receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2026-08-17",
+        "changeRequest": "ECN-2026-023-05",
+        "description": "Clarified identification of Rear Derailleur; retained the source part number in the point-of-use checklist.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-023-06",
+        "description": "Released the illustrated workstation edition: Frame and wheel placement. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "R. Alvarez"
+      }
+    ]
+  },
+  "figures": {
+    "100231": {
+      "title": "Frame and wheel placement",
+      "guidance": [
+        "Support LL Mountain Frame - Silver, 40 (Product Number FR-M21S-40) in an assumed assembly stand. Fit LL Headset (Product Number HS-0296) at the frame's steering interface; the fork is part of the frame's nested BOM.",
+        "Fit LL Mountain Handlebars (Product Number HB-M243) and LL Mountain Seat Assembly (Product Number SA-M198) to the supported frame. See the schematic in illustration 100231.",
+        "Position LL Mountain Front Wheel (Product Number FW-M423) at the fork and LL Mountain Rear Wheel (Product Number RW-M423) at the rear of the frame, as shown in illustration 100231. Fit them using the available interfaces."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "LL Mountain Frame - Silver, 40",
+          "productNumber": "FR-M21S-40"
+        },
+        {
+          "number": 2,
+          "name": "LL Mountain Rear Wheel",
+          "productNumber": "RW-M423"
+        },
+        {
+          "number": 3,
+          "name": "LL Mountain Front Wheel",
+          "productNumber": "FW-M423"
+        },
+        {
+          "number": 4,
+          "name": "LL Mountain Seat Assembly",
+          "productNumber": "SA-M198"
+        },
+        {
+          "number": 5,
+          "name": "LL Mountain Handlebars",
+          "productNumber": "HB-M243"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "modelId": 8,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. LL Mountain Frame. Fictional workshop demonstration for LL Mountain Frame model 8, using the silver size 42 representative product 917 (FR-M21S-42). The scope covers frame joining, finishing, decals, and a non-retained fork fit check.<Location LocationID=\"20\" SetupHours=\"0.25\" LaborHours=\"1.5\" MachineHours=\"0.75\" LotSize=\"1\">Work Center 20 - Frame Welding. Estimates are fictional demo assumptions. Frame Welding: inferred positioning and joining of the representative frame components.<step>Position 1 EA of <material>Top Tube (Product Number TO-2301)</material>, 1 EA of <material>Seat Tube (Product Number ST-9828)</material>, 1 EA of <material>Down Tube (Product Number DT-2377)</material>, and 1 EA of <material>Head Tube (Product Number HT-8019)</material> in an <tool>assumed frame jig</tool>. See the illustrative arrangement in <diag>100081</diag>.</step><step>Position 4 EA of <material>Seat Stays (Product Number SS-2985)</material> and 2 EA of <material>Chain Stays (Product Number CS-2812)</material> at the rear of the frame in the assumed jig arrangement.</step><step>Demonstrate joining the positioned frame members with an <tool>assumed welding setup</tool>, then visually check the joints and overall alignment. The drawing is not a weld specification.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.1\" LotSize=\"1\">Work Center 30 - Debur and Polish. Estimates are fictional demo assumptions. Debur and Polish: inferred cleanup and visual review of the joined frame.<step>Use an <tool>assumed deburring tool</tool> to clean accessible rough edges, then inspect the frame surface and joints visually.</step></Location><Location LocationID=\"40\" SetupHours=\"0.2\" LaborHours=\"0.5\" MachineHours=\"0.2\" LotSize=\"1\">Work Center 40 - Paint. Estimates are fictional demo assumptions. Paint: inferred silver finishing of the representative frame.<step>Prepare the frame surface and demonstrate application of <material>Paint - Silver (Product Number PA-529S)</material>; the representative BOM lists 8 OZ. Use an <tool>assumed paint setup</tool> without treating this demonstration as a chemical process specification.</step><step>After the finish is ready for handling, visually check for coverage and obvious defects.</step></Location><Location LocationID=\"60\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final Assembly: inferred decal application, fork fit check, and final visual review.<step>Apply 2 EA of <material>Decal 1 (Product Number DC-8732)</material> and 1 EA of <material>Decal 2 (Product Number DC-9824)</material> to the finished frame; exact placement is an illustrative assumption.</step><step>Present 1 EA of <material>LL Fork (Product Number FK-1639)</material> beneath the head tube for a non-retained fit check, as in <diag>100081</diag>. Do not infer retention hardware or a completed fork installation.</step><step>Visually review the finish, decals, frame, and fork; keep the fork with the frame as an unretained component.</step></Location></root>",
+  "processNotes": [
+    "All tooling, processes, routing, and times are inferred demo estimates.",
+    "No historical routing was supplied. The work-center order is inferred; manufactured components are assumed to arrive formed and ready for the demonstrated operations.",
+    "The frame geometry and component placement shown are illustrative, not confirmed dimensions or joining specifications. No heat-treatment process is specified for the representative product.",
+    "The supplied BOM does not identify fork-retention hardware, so the fork is checked without claiming a completed retained installation."
+  ],
+  "variantNotes": [
+    "The representative is silver, size 42. Silver variants are available in sizes 40, 42, 44, 48, and 52; their supplied direct BOMs use 8 OZ of Paint - Silver, product 494.",
+    "Black variants are available in sizes 40, 42, 44, 48, and 52. Their supplied direct BOMs substitute 8 OZ of Paint - Black, product 492, for the representative's silver paint.",
+    "All supplied variants list the same other direct component IDs and quantities. The snapshot does not specify size-dependent geometry or additional component substitutions; do not assume one size is interchangeable with another."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0008",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 917,
+      "ProductModelID": 8,
+      "MakeFlag": true,
+      "Name": "LL Mountain Frame - Silver, 42",
+      "SellStartDate": "2025-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2025-06-09",
+        "changeRequest": "ECN-2025-008-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-06-24",
+        "changeRequest": "ECN-2026-008-02",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-06-29",
+        "changeRequest": "ECN-2026-008-03",
+        "description": "Clarified identification of Top Tube; retained the source part number in the point-of-use checklist.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-008-04",
+        "description": "Released the illustrated workstation edition: Illustrative frame arrangement and fork fit check. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      }
+    ]
+  },
+  "figures": {
+    "100081": {
+      "title": "Illustrative frame arrangement and fork fit check",
+      "guidance": [
+        "Position 1 EA of Top Tube (Product Number TO-2301), 1 EA of Seat Tube (Product Number ST-9828), 1 EA of Down Tube (Product Number DT-2377), and 1 EA of Head Tube (Product Number HT-8019) in an assumed frame jig. See the illustrative arrangement in 100081.",
+        "Position 4 EA of Seat Stays (Product Number SS-2985) and 2 EA of Chain Stays (Product Number CS-2812) at the rear of the frame in the assumed jig arrangement.",
+        "Present 1 EA of LL Fork (Product Number FK-1639) beneath the head tube for a non-retained fit check, as in 100081. Do not infer retention hardware or a completed fork installation."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Top Tube",
+          "productNumber": "TO-2301"
+        },
+        {
+          "number": 2,
+          "name": "Seat Tube",
+          "productNumber": "ST-9828"
+        },
+        {
+          "number": 3,
+          "name": "Down Tube",
+          "productNumber": "DT-2377"
+        },
+        {
+          "number": 4,
+          "name": "Head Tube",
+          "productNumber": "HT-8019"
+        },
+        {
+          "number": 5,
+          "name": "Seat Stays",
+          "productNumber": "SS-2985"
+        },
+        {
+          "number": 6,
+          "name": "Chain Stays",
+          "productNumber": "CS-2812"
+        },
+        {
+          "number": 7,
+          "name": "LL Fork",
+          "productNumber": "FK-1639"
+        }
+      ]
+    }
+  }
+}

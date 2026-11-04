@@ -130,7 +130,7 @@ if [[ -n "$static_web_url" ]]; then
   echo ""
   color_cyan "Service and seed-data status:"
   echo "  $static_web_url/health"
-  echo "  Wait for the seed job to report completed before exploring the demo data."
+  echo "  Database seed and manufacturing overlays were verified before service deployment."
   echo ""
 else
   echo "WARNING: The storefront URL was not found. Check the azd deployment output." >&2

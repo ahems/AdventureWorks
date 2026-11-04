@@ -138,6 +138,8 @@ public class FoundryAgentClient
     /// <param name="additionalInstructions">Trusted server instructions appended for this invocation only.</param>
     /// <param name="contentFilterPolicy">Server-selected Foundry RAI policy applied to every inference round.</param>
     /// <param name="conversationOwner">Validated caller subject; binds stored responses to that caller and agent.</param>
+    /// <param name="requireConfiguredDefinition">Reject missing prompt definitions rather than using a generic fallback.</param>
+    /// <param name="retryTransientResponses">Use the bounded retry budget for throttled or unavailable model responses.</param>
     public async Task<FoundryAgentResponse> InvokeAsync(
         string agentId,
         string userMessage,
@@ -150,11 +152,13 @@ public class FoundryAgentClient
         CancellationToken cancellationToken = default,
         string? additionalInstructions = null,
         string? contentFilterPolicy = null,
-        string? conversationOwner = null)
+        string? conversationOwner = null,
+        bool requireConfiguredDefinition = false,
+        bool retryTransientResponses = false)
     {
         // --- Fetch agent definition (cached) ------------------------------------
         var def = await GetOrFetchAgentDefinitionAsync(agentId, cancellationToken,
-            requireConfiguredDefinition: contentFilterPolicy is not null);
+            requireConfiguredDefinition: requireConfiguredDefinition || contentFilterPolicy is not null);
 
         // --- Apply delegated MCP authorization (per-request, never cached) ------
         // When a caller supplies the end user's OAuth access token, inject it as an
@@ -319,6 +323,17 @@ public class FoundryAgentClient
                 ThrowIfGuardrailBlocked(responseBody);
                 if (httpResponse.IsSuccessStatusCode)
                     break;
+
+                if (retryTransientResponses && retry < maxToolRetries &&
+                    (int)httpResponse.StatusCode is 429 or 502 or 503 or 504)
+                {
+                    var delay = httpResponse.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(3 * (retry + 1));
+                    delay = TimeSpan.FromSeconds(Math.Clamp(delay.TotalSeconds, 1, 15));
+                    _logger.LogWarning("Foundry agent {AgentId} returned {Status}; retrying after {Seconds}s",
+                        agentId, (int)httpResponse.StatusCode, delay.TotalSeconds);
+                    await Task.Delay(delay, cancellationToken);
+                    continue;
+                }
 
                 // Check if this is a retryable MCP tool enumeration error
                 var isToolEnumError = !toolsDisabled && (int)httpResponse.StatusCode == 400

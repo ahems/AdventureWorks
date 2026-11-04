@@ -1,0 +1,76 @@
+{
+  "modelId": 104,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. LL Fork. Fictional workshop demonstration for LL Fork model 104, representative product FK-1639 (802), from component forming through assembly, finishing, and inspection.<Location LocationID=\"10\" SetupHours=\"0.3\" LaborHours=\"1.5\" MachineHours=\"1.0\" LotSize=\"1\">Work Center 10 - Frame Forming. Estimates are fictional demo assumptions. Frame Forming: demonstrate forming the manufactured fork components from their listed nested BOM materials.<step>For two EA of <material>Blade (Product Number BL-2036)</material>, use one EA of <material>Metal Sheet 5 (Product Number MS-2341)</material> per blade and form with an <tool>assumed forming jig</tool>.</step><step>For two EA of <material>Fork End (Product Number FE-3760)</material>, use one EA of <material>Metal Sheet 2 (Product Number MS-0253)</material> per end and form with an <tool>assumed forming jig</tool>.</step><step>Form one EA of <material>Fork Crown (Product Number FC-3654)</material> from one EA of <material>Metal Sheet 5 (Product Number MS-2341)</material> using an <tool>assumed forming jig</tool>.</step><step>Form one EA of <material>Steerer (Product Number SR-2098)</material> from one EA of <material>Metal Sheet 6 (Product Number MS-2348)</material> using an <tool>assumed forming jig</tool>. Visually check the formed pieces for obvious damage.</step></Location><Location LocationID=\"20\" SetupHours=\"0.2\" LaborHours=\"0.8\" MachineHours=\"0.4\" LotSize=\"1\">Work Center 20 - Frame Welding. Estimates are fictional demo assumptions. Frame Welding: an inferred center for positioning and joining the fork components.<step>Position one EA of <material>Steerer (Product Number SR-2098)</material>, one EA of <material>Fork Crown (Product Number FC-3654)</material>, two EA of <material>Blade (Product Number BL-2036)</material>, and two EA of <material>Fork End (Product Number FE-3760)</material> in an <tool>assumed fork assembly jig</tool> as schematically shown in illustration <diag>101041</diag>.</step><step>Demonstrate joining the positioned components with <tool>assumed welding equipment</tool>; joint design and settings are not supplied. Allow the assembly to cool before handling.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.4\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 30 - Debur and Polish. Estimates are fictional demo assumptions. Debur and Polish: an inferred center for cleaning the joined assembly.<step>Remove obvious burrs with an <tool>assumed hand deburring tool</tool> and visually check the joints and surfaces for apparent defects.</step></Location><Location LocationID=\"40\" SetupHours=\"0.2\" LaborHours=\"0.4\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 40 - Paint. Estimates are fictional demo assumptions. Paint: an inferred center for demonstrating the described matte black finish.<step>Prepare the assembly and demonstrate an assumed matte black finish using an <tool>assumed finishing fixture</tool>. The coating material and process settings are not supplied.</step><step>Once the finish is ready for handling, visually check coverage and look for obvious blemishes.</step></Location><Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.2\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: complete a simple demonstration inspection of the finished fork.<step>Using an <tool>assumed inspection fixture</tool>, visually check the fork for obvious misalignment, damage, and finish defects; set aside any questionable assembly for review.</step></Location></root>",
+  "processNotes": [
+    "Historical routing records Frame Forming followed by Subassembly; the intervening welding, deburring, and painting centers and their operations are inferred, not specified by that routing.",
+    "Forming each manufactured component from its listed sheet and joining the components as a fork are assumed demonstration processes; actual forming and joint details are not supplied.",
+    "The matte black finish is taken from the English description; the product's structured color field is null."
+  ],
+  "variantNotes": [
+    "The snapshot lists only product 802, FK-1639, with no structured color or size value. The English description describes a matte black finish.",
+    "No other variants or variant-specific component substitutions are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0104",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 802,
+      "ProductModelID": 104,
+      "MakeFlag": true,
+      "Name": "LL Fork",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": "2025-06-08T00:00:00",
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-104-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-104-02",
+        "description": "Released the illustrated workstation edition: LL Fork component positioning. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "M. Chen"
+      }
+    ]
+  },
+  "figures": {
+    "101041": {
+      "title": "LL Fork component positioning",
+      "guidance": [
+        "Position one EA of Steerer (Product Number SR-2098), one EA of Fork Crown (Product Number FC-3654), two EA of Blade (Product Number BL-2036), and two EA of Fork End (Product Number FE-3760) in an assumed fork assembly jig as schematically shown in illustration 101041."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Steerer",
+          "productNumber": "SR-2098"
+        },
+        {
+          "number": 2,
+          "name": "Fork Crown",
+          "productNumber": "FC-3654"
+        },
+        {
+          "number": 3,
+          "name": "Blade",
+          "productNumber": "BL-2036"
+        },
+        {
+          "number": 4,
+          "name": "Fork End",
+          "productNumber": "FE-3760"
+        }
+      ]
+    }
+  }
+}

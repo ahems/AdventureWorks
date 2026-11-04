@@ -1,0 +1,128 @@
+{
+  "modelId": 19,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Mountain-100. Fictional assembly demonstration for Mountain-100 model 19, using Mountain-100 Silver, 38 (product 771, BK-M82S-38) as the representative product.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Inferred subassembly preparation: inspect and stage complete components for the representative bike.<step>Inspect and stage 1 EA of <material>HL Mountain Frame - Silver, 38 (Product Number FR-M94S-38)</material>; its nested BOM includes 1 EA of <material>HL Fork (Product Number FK-9939)</material>. Check the finish and visible interfaces for damage.</step><step>Inspect and stage 1 EA each of <material>HL Mountain Front Wheel (Product Number FW-M928)</material> and <material>HL Mountain Rear Wheel (Product Number RW-M928)</material>; check their visible condition and rotation.</step><step>Stage the remaining direct BOM components and check their identities and visible condition before final assembly.</step></Location><Location LocationID=\"60\" SetupHours=\"0.15\" LaborHours=\"2\" MachineHours=\"0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final assembly and demonstration checks. The work center is supported by historical routing; the operations below are inferred.<step>Support 1 EA of <material>HL Mountain Frame - Silver, 38 (Product Number FR-M94S-38)</material> in <tool>an assumed bicycle assembly stand</tool>. Position its included fork for the steering assembly.</step><step>Fit 1 EA of <material>HL Headset (Product Number HS-3479)</material> at the frame and fork steering interface, then fit 1 EA of <material>HL Mountain Handlebars (Product Number HB-M918)</material>. See illustration <diag>100191</diag>.</step><step>Fit 1 EA of <material>HL Mountain Seat Assembly (Product Number SA-M687)</material> to the frame and check its alignment.</step><step>Fit 1 EA of <material>HL Mountain Front Wheel (Product Number FW-M928)</material> at the front fork and 1 EA of <material>HL Mountain Rear Wheel (Product Number RW-M928)</material> at the rear frame. Check that both rotate freely.</step><step>Fit 1 EA of <material>HL Bottom Bracket (Product Number BB-9108)</material> to the frame, followed by 1 EA of <material>HL Crankset (Product Number CS-9183)</material> and 1 EA of <material>HL Mountain Pedal (Product Number PD-M562)</material>. See illustration <diag>100192</diag>.</step><step>Fit 1 EA of <material>Front Derailleur (Product Number FD-2342)</material> and 1 EA of <material>Rear Derailleur (Product Number RD-2308)</material>, then route 1 EA of <material>Chain (Product Number CH-0234)</material> through the drivetrain. Check movement by hand.</step><step>Fit 1 EA of <material>Front Brakes (Product Number FB-9873)</material> at the front and 1 EA of <material>Rear Brakes (Product Number RB-9231)</material> at the rear. Check their alignment and operation.</step><step>Perform a visual check of the assembly, steering movement, wheel rotation, braking and shifting. Set aside any bike with a visible defect or failed check for qualified review.</step></Location></root>",
+  "processNotes": [
+    "Historical routing records final assembly at work center 60 for product 771. Preparation at work center 50 and the detailed sequence at both centers are inferred, not engineering specifications.",
+    "Manufactured subassemblies are presented as complete for this demonstration. The representative frame BOM includes one fork; no separate fork is added to the bike BOM.",
+    "Each direct component is listed as 1 EA in the representative BOM. The pedal entry is preserved as 1 EA without assuming whether it represents a pair."
+  ],
+  "variantNotes": [
+    "The representative Silver, 38 uses frame 748, FR-M94S-38. Silver, 42 uses frame 739, FR-M94S-42; Silver, 44 uses frame 740, FR-M94S-44; Silver, 48 uses frame 741, named Silver, 48 but numbered FR-M94S-52 in the snapshot. Verify that discrepancy before selecting the frame.",
+    "Black, 38 uses frame 747, FR-M94B-38; Black, 42 uses frame 743, FR-M94B-42; Black, 44 uses frame 744, FR-M94B-44; Black, 48 uses frame 745, FR-M94B-48.",
+    "All eight variant BOMs list the same other 13 direct components, including front wheel 817 and rear wheel 825, each at 1 EA. Do not substitute the representative silver frame for a different color or size.",
+    "The representative frame BOM specifies 8 OZ of silver paint. Paint BOMs for the other variant frames are not supplied, so their paint selections are not inferred."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0019",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 771,
+      "Name": "Mountain-100 Silver, 38",
+      "SellStartDate": "2023-06-10T00:00:00",
+      "SellEndDate": "2024-06-08T00:00:00",
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2023-06-10",
+        "changeRequest": "ECN-2023-019-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-019-02",
+        "description": "Released the illustrated workstation edition: Frame, steering and wheel assembly; Drivetrain placement. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "S. Brooks"
+      }
+    ]
+  },
+  "figures": {
+    "100191": {
+      "title": "Frame, steering and wheel assembly",
+      "guidance": [
+        "Support 1 EA of HL Mountain Frame - Silver, 38 (Product Number FR-M94S-38) in an assumed bicycle assembly stand. Position its included fork for the steering assembly.",
+        "Fit 1 EA of HL Headset (Product Number HS-3479) at the frame and fork steering interface, then fit 1 EA of HL Mountain Handlebars (Product Number HB-M918).",
+        "Fit 1 EA of HL Mountain Seat Assembly (Product Number SA-M687) to the frame and check its alignment.",
+        "Fit 1 EA of HL Mountain Front Wheel (Product Number FW-M928) at the front fork and 1 EA of HL Mountain Rear Wheel (Product Number RW-M928) at the rear frame. Check that both rotate freely."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "HL Mountain Frame - Silver, 38",
+          "productNumber": "FR-M94S-38"
+        },
+        {
+          "number": 2,
+          "name": "HL Headset",
+          "productNumber": "HS-3479"
+        },
+        {
+          "number": 3,
+          "name": "HL Mountain Handlebars",
+          "productNumber": "HB-M918"
+        },
+        {
+          "number": 4,
+          "name": "HL Mountain Seat Assembly",
+          "productNumber": "SA-M687"
+        },
+        {
+          "number": 5,
+          "name": "HL Mountain Front Wheel",
+          "productNumber": "FW-M928"
+        },
+        {
+          "number": 6,
+          "name": "HL Mountain Rear Wheel",
+          "productNumber": "RW-M928"
+        }
+      ]
+    },
+    "100192": {
+      "title": "Drivetrain placement",
+      "guidance": [
+        "Fit 1 EA of HL Bottom Bracket (Product Number BB-9108) to the frame, followed by 1 EA of HL Crankset (Product Number CS-9183) and 1 EA of HL Mountain Pedal (Product Number PD-M562).",
+        "Fit 1 EA of Front Derailleur (Product Number FD-2342) and 1 EA of Rear Derailleur (Product Number RD-2308), then route 1 EA of Chain (Product Number CH-0234) through the drivetrain. Check movement by hand."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "HL Bottom Bracket",
+          "productNumber": "BB-9108"
+        },
+        {
+          "number": 2,
+          "name": "HL Crankset",
+          "productNumber": "CS-9183"
+        },
+        {
+          "number": 3,
+          "name": "HL Mountain Pedal",
+          "productNumber": "PD-M562"
+        },
+        {
+          "number": 4,
+          "name": "Front Derailleur",
+          "productNumber": "FD-2342"
+        },
+        {
+          "number": 5,
+          "name": "Rear Derailleur",
+          "productNumber": "RD-2308"
+        },
+        {
+          "number": 6,
+          "name": "Chain",
+          "productNumber": "CH-0234"
+        }
+      ]
+    }
+  }
+}

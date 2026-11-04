@@ -1,0 +1,95 @@
+{
+  "modelId": 54,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. ML Mountain Handlebars. Fictional workshop demonstration for model 54, ML Mountain Handlebars, representative product HB-M763: form the listed manufactured components, finish the bar and stage the direct BOM components for assembly.<Location LocationID=\"10\" SetupHours=\"0.3\" LaborHours=\"1.2\" MachineHours=\"0.5\" LotSize=\"1\">Work Center 10 - Frame Forming. Estimates are fictional demo assumptions. Frame Forming: illustrative preparation of the manufactured tube, end caps and stem from their listed nested BOM inputs.<step>Demonstrate forming 1 EA of <material>Metal Sheet 6 (Product Number MS-2348)</material> into 1 EA of <material>Handlebar Tube (Product Number HT-2981)</material> using an assumed <tool>forming jig</tool>; the actual forming and joining method is not supplied.</step><step>Demonstrate forming 2 EA of <material>Metal Sheet 2 (Product Number MS-0253)</material> into 2 EA of <material>Mountain End Caps (Product Number EC-M092)</material>, allowing the listed 1 EA of sheet per cap.</step><step>Demonstrate shaping 1 EA of <material>Metal Bar 1 (Product Number MB-2024)</material> into 1 EA of <material>Stem (Product Number SM-9087)</material> with an assumed <tool>shaping fixture</tool>.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.4\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 30 - Debur and Polish. Estimates are fictional demo assumptions. Debur and Polish: illustrative edge and surface preparation before finishing and staging.<step>Use an assumed <tool>hand deburring tool</tool> to remove rough edges from <material>Handlebar Tube (Product Number HT-2981)</material>, <material>Mountain End Caps (Product Number EC-M092)</material> and <material>Stem (Product Number SM-9087)</material>; visually check their surfaces.</step></Location><Location LocationID=\"40\" SetupHours=\"0.1\" LaborHours=\"0.3\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 40 - Paint. Estimates are fictional demo assumptions. Paint: illustrative satin black finish on the tube, based on the catalog description.<step>Apply an assumed satin black finish to <material>Handlebar Tube (Product Number HT-2981)</material> using an assumed <tool>finishing fixture</tool>; inspect the finished surface visually.</step></Location><Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: fit the grip tape and end caps, then stage the stem at the bar center for an unverified interface check.<step>Inspect and fit 40 IN of <material>ML Grip Tape (Product Number GT-1209)</material> around the grip areas of <material>Handlebar Tube (Product Number HT-2981)</material>; the division between sides is assumed.</step><step>Fit 2 EA of <material>Mountain End Caps (Product Number EC-M092)</material>, one at each end of <material>Handlebar Tube (Product Number HT-2981)</material>, and check their seating by hand. See illustration <diag>100541</diag>.</step><step>Stage 1 EA of <material>Stem (Product Number SM-9087)</material> near the center of <material>Handlebar Tube (Product Number HT-2981)</material> using an assumed <tool>assembly jig</tool>. Check the apparent fit without claiming attachment; the interface and hardware are unverified.</step></Location></root>",
+  "processNotes": [
+    "Historical routing for product 809 records centers 10, 20 and 50. The proposed use of centers 10 and 50 and the additional finishing centers is inferred; no specific welding operation is established, so center 20 is omitted.",
+    "Forming the listed sheet and bar stock into the manufactured components is illustrative; material compatibility, forming methods, joints and tooling are not verified.",
+    "The catalog describes a satin black finish, but the finish process and its application to the tube are assumed. No finishing material is identified in the supplied BOM.",
+    "The stem interface, attachment method and any required hardware are not supplied. Its central placement is illustrative only; the demonstration does not establish a ride-ready assembly."
+  ],
+  "variantNotes": [
+    "The snapshot lists only product 809, HB-M763. Its variant color and size fields are null; the catalog description separately describes a satin black finish.",
+    "No other variants or variant-specific component substitutions are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0054",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 809,
+      "ProductModelID": 54,
+      "MakeFlag": true,
+      "Name": "ML Mountain Handlebars",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-054-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2025-09-02",
+        "changeRequest": "ECN-2025-054-02",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2025-12-31",
+        "changeRequest": "ECN-2025-054-03",
+        "description": "Reordered the Handlebar Tube receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-054-04",
+        "description": "Released the illustrated workstation edition: Handlebar components and illustrative staging. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      }
+    ]
+  },
+  "figures": {
+    "100541": {
+      "title": "Handlebar components and illustrative staging",
+      "guidance": [
+        "Inspect and fit 40 IN of ML Grip Tape (Product Number GT-1209) around the grip areas of Handlebar Tube (Product Number HT-2981); the division between sides is assumed.",
+        "Fit 2 EA of Mountain End Caps (Product Number EC-M092), one at each end of Handlebar Tube (Product Number HT-2981), and check their seating by hand.",
+        "Stage 1 EA of Stem (Product Number SM-9087) near the center of Handlebar Tube (Product Number HT-2981) using an assumed assembly jig. Check the apparent fit without claiming attachment; the interface and hardware are unverified."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Handlebar Tube",
+          "productNumber": "HT-2981"
+        },
+        {
+          "number": 2,
+          "name": "ML Grip Tape",
+          "productNumber": "GT-1209"
+        },
+        {
+          "number": 3,
+          "name": "Mountain End Caps",
+          "productNumber": "EC-M092"
+        },
+        {
+          "number": 4,
+          "name": "Stem",
+          "productNumber": "SM-9087"
+        }
+      ]
+    }
+  }
+}

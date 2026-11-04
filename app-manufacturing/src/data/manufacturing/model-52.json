@@ -1,0 +1,109 @@
+{
+  "modelId": 52,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. LL Mountain Handlebars. Fictional workshop demonstration for model 52, LL Mountain Handlebars, using representative product 808 (HB-M243). The draft covers component preparation, finishing, assembly and simple visual checks.<Location LocationID=\"10\" SetupHours=\"0.25\" LaborHours=\"0.75\" MachineHours=\"0.5\" LotSize=\"1\">Work Center 10 - Frame Forming. Estimates are fictional demo assumptions. Frame Forming: inferred preparation of the three manufactured components from their supplied nested BOM materials.<step>Using an assumed <tool>forming fixture</tool>, form 1 EA of <material>Metal Sheet 6 (Product Number MS-2348)</material> into 1 EA of <material>Handlebar Tube (Product Number HT-2981)</material> with a slight rise, as a demonstration assumption.</step><step>Form 2 EA of <material>Mountain End Caps (Product Number EC-M092)</material> from <material>Metal Sheet 2 (Product Number MS-0253)</material>; the nested BOM lists 1 EA of sheet per end cap. Use an assumed <tool>forming fixture</tool>.</step><step>Shape 1 EA of <material>Metal Bar 1 (Product Number MB-2024)</material> into 1 EA of <material>Stem (Product Number SM-9087)</material> using an assumed <tool>forming fixture</tool>. The exact geometry is not supplied.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.35\" MachineHours=\"0\" LotSize=\"1\">Work Center 30 - Debur and Polish. Estimates are fictional demo assumptions. Debur and Polish: inferred edge cleanup and visual examination before finishing and assembly.<step>Use an assumed <tool>hand deburring tool</tool> to clean accessible edges of <material>Handlebar Tube (Product Number HT-2981)</material>, <material>Mountain End Caps (Product Number EC-M092)</material> and <material>Stem (Product Number SM-9087)</material>; visually check for obvious damage and rough edges.</step></Location><Location LocationID=\"40\" SetupHours=\"0.15\" LaborHours=\"0.25\" MachineHours=\"0.1\" LotSize=\"1\">Work Center 40 - Paint. Estimates are fictional demo assumptions. Paint: inferred matte black finishing of the tube, based on the product description.<step>Support <material>Handlebar Tube (Product Number HT-2981)</material> in an assumed <tool>finishing fixture</tool> and apply an assumed matte black finish. Allow it to dry before handling, then visually check coverage.</step></Location><Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: inferred fitting of the direct BOM components to the finished tube.<step>Place 1 EA of <material>Handlebar Tube (Product Number HT-2981)</material> in an assumed <tool>assembly jig</tool>. Position 1 EA of <material>Stem (Product Number SM-9087)</material> at the central area and check its apparent fit. The attachment geometry and hardware are not specified. See illustration <diag>100521</diag>.</step><step>Fit 2 EA of <material>Mountain End Caps (Product Number EC-M092)</material>, one at each end of <material>Handlebar Tube (Product Number HT-2981)</material>; check that each sits evenly.</step><step>Apply 40 IN of purchased <material>LL Grip Tape (Product Number GT-0820)</material> across the two grip zones as an assumed demonstration arrangement; check for loose edges.</step></Location><Location LocationID=\"60\" SetupHours=\"0\" LaborHours=\"0.15\" MachineHours=\"0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final Assembly: inferred visual review of the representative product.<step>Visually review the finish, grip coverage, end-cap seating and central component fit. Set aside any assembly with obvious damage or loose parts for review.</step></Location></root>",
+  "processNotes": [
+    "Historical routing records centers 10, 20 and 50 for product 808; the routing below is inferred rather than a specification. Center 20 is omitted because the supplied BOM does not establish a weld joint.",
+    "Forming the manufactured components from their nested BOM materials, finishing the tube matte black, and distributing the grip tape across both ends are demonstration assumptions. Actual geometry, joining details and process settings are not supplied."
+  ],
+  "variantNotes": [
+    "The snapshot lists only product 808, HB-M243. Its color and size fields are null; the English description calls for a matte black finish.",
+    "No other variants or variant-specific component substitutions are listed."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0052",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 808,
+      "ProductModelID": 52,
+      "MakeFlag": true,
+      "Name": "LL Mountain Handlebars",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-052-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2024-08-04",
+        "changeRequest": "ECN-2024-052-02",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2025-10-18",
+        "changeRequest": "ECN-2025-052-03",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2025-11-16",
+        "changeRequest": "ECN-2025-052-04",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2026-06-23",
+        "changeRequest": "ECN-2026-052-05",
+        "description": "Reordered the Handlebar Tube receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-052-06",
+        "description": "Released the illustrated workstation edition: Handlebar component arrangement. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      }
+    ]
+  },
+  "figures": {
+    "100521": {
+      "title": "Handlebar component arrangement",
+      "guidance": [
+        "Place 1 EA of Handlebar Tube (Product Number HT-2981) in an assumed assembly jig. Position 1 EA of Stem (Product Number SM-9087) at the central area and check its apparent fit. The attachment geometry and hardware are not specified.",
+        "Fit 2 EA of Mountain End Caps (Product Number EC-M092), one at each end of Handlebar Tube (Product Number HT-2981); check that each sits evenly.",
+        "Apply 40 IN of purchased LL Grip Tape (Product Number GT-0820) across the two grip zones as an assumed demonstration arrangement; check for loose edges."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Handlebar Tube",
+          "productNumber": "HT-2981"
+        },
+        {
+          "number": 2,
+          "name": "Stem",
+          "productNumber": "SM-9087"
+        },
+        {
+          "number": 3,
+          "name": "Mountain End Caps",
+          "productNumber": "EC-M092"
+        },
+        {
+          "number": 4,
+          "name": "LL Grip Tape",
+          "productNumber": "GT-0820"
+        }
+      ]
+    }
+  }
+}

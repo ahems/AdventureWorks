@@ -1,0 +1,125 @@
+{
+  "modelId": 5,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. HL Mountain Frame. Fictional workshop demonstration for HL Mountain Frame, model 5, using the Silver, 42 representative product FR-M94S-42. Scope covers frame joining, finishing, fork fit checking and final inspection.<Location LocationID=\"20\" SetupHours=\"0.25\" LaborHours=\"1.5\" MachineHours=\"1.0\" LotSize=\"1\">Work Center 20 - Frame Welding. Estimates are fictional demo assumptions. Frame Welding: an inferred sequence for positioning and joining the representative frame components.<step>Position 1.00 EA of <material>Top Tube (Product Number TO-2301)</material>, 1.00 EA of <material>Seat Tube (Product Number ST-9828)</material>, 1.00 EA of <material>Down Tube (Product Number DT-2377)</material> and 1.00 EA of <material>Head Tube (Product Number HT-8019)</material> in an <tool>assumed frame assembly jig</tool>. See schematic <diag>100051</diag>.</step><step>Position 2.00 EA of <material>Chain Stays (Product Number CS-2812)</material> and 4.00 EA of <material>Seat Stays (Product Number SS-2985)</material>; their exact attachment geometry requires confirmation.</step><step>Demonstrate joining the positioned frame components with <tool>assumed welding equipment</tool>; visually check the joints and alignment.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.1\" LotSize=\"1\">Work Center 30 - Debur and Polish. Estimates are fictional demo assumptions. Debur and Polish: demonstrate surface cleanup after joining.<step>Clean up accessible rough edges with an <tool>assumed deburring tool</tool> and visually check the joined surfaces.</step></Location><Location LocationID=\"40\" SetupHours=\"0.2\" LaborHours=\"0.75\" MachineHours=\"0.5\" LotSize=\"1\">Work Center 40 - Paint. Estimates are fictional demo assumptions. Paint: demonstrate the representative silver finish and decal placement.<step>Allocate the BOM quantity of 8.00 OZ of <material>Paint - Silver (Product Number PA-529S)</material> for the frame; demonstrate application using <tool>assumed finishing equipment</tool> and inspect the finished surface.</step><step>Demonstrate placement of 2.00 EA of <material>Decal 1 (Product Number DC-8732)</material> and 1.00 EA of <material>Decal 2 (Product Number DC-9824)</material> on the finished frame; exact positions are not supplied.</step></Location><Location LocationID=\"60\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final Assembly: check the supplied fork against the finished frame and review the demonstration assembly.<step>Check the fit and alignment of 1.00 EA of <material>HL Fork (Product Number FK-9939)</material> with the <material>Head Tube (Product Number HT-8019)</material> without assuming unspecified retention hardware. See <diag>100051</diag>.</step><step>Visually review the frame, finish, decals and fork for obvious damage or misalignment; retain the fork separately if it cannot be secured with the supplied information.</step></Location></root>",
+  "processNotes": [
+    "The routing is inferred; no historical routing was supplied.",
+    "The manufactured frame components and fork are assumed available as completed components. Exact geometry, joint locations, heat treatment, finish details and fork-retention hardware are not established by the supplied BOM.",
+    "The diagram is schematic, especially for the four seat stays; it does not establish their precise arrangement."
+  ],
+  "variantNotes": [
+    "The representative product is Silver, size 42. Silver and Black variants are listed in sizes 38, 42, 44, 46 and 48.",
+    "All listed variants have the same direct BOM components and quantities except paint: Silver uses Paint - Silver PA-529S, 8.00 OZ; Black uses Paint - Black PA-187B, 8.00 OZ.",
+    "The Silver size 48 variant is listed as FR-M94S-52. Its stated size and product number are reproduced as supplied, without resolving the mismatch.",
+    "The BOM does not specify size-dependent component geometry or additional substitutions; do not assume the size 42 assembly geometry applies to other sizes."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0005",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 739,
+      "Name": "HL Mountain Frame - Silver, 42",
+      "SellStartDate": "2023-06-10T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2023-06-10",
+        "changeRequest": "ECN-2023-005-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2023-08-09",
+        "changeRequest": "ECN-2023-005-02",
+        "description": "Clarified identification of Top Tube; retained the source part number in the point-of-use checklist.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2025-06-14",
+        "changeRequest": "ECN-2025-005-03",
+        "description": "Moved variant-selection notes ahead of the first operation to reduce wrong-kit changeovers.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-01-19",
+        "changeRequest": "ECN-2026-005-04",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2026-05-31",
+        "changeRequest": "ECN-2026-005-05",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-005-06",
+        "description": "Released the illustrated workstation edition: Schematic frame and fork relationship. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      }
+    ]
+  },
+  "figures": {
+    "100051": {
+      "title": "Schematic frame and fork relationship",
+      "guidance": [
+        "Position 1.00 EA of Top Tube (Product Number TO-2301), 1.00 EA of Seat Tube (Product Number ST-9828), 1.00 EA of Down Tube (Product Number DT-2377) and 1.00 EA of Head Tube (Product Number HT-8019) in an assumed frame assembly jig.",
+        "Position 2.00 EA of Chain Stays (Product Number CS-2812) and 4.00 EA of Seat Stays (Product Number SS-2985); their exact attachment geometry requires confirmation.",
+        "Check the fit and alignment of 1.00 EA of HL Fork (Product Number FK-9939) with the Head Tube (Product Number HT-8019) without assuming unspecified retention hardware."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Top Tube",
+          "productNumber": "TO-2301"
+        },
+        {
+          "number": 2,
+          "name": "Seat Tube",
+          "productNumber": "ST-9828"
+        },
+        {
+          "number": 3,
+          "name": "Down Tube",
+          "productNumber": "DT-2377"
+        },
+        {
+          "number": 4,
+          "name": "Head Tube",
+          "productNumber": "HT-8019"
+        },
+        {
+          "number": 5,
+          "name": "Chain Stays",
+          "productNumber": "CS-2812"
+        },
+        {
+          "number": 6,
+          "name": "Seat Stays",
+          "productNumber": "SS-2985"
+        },
+        {
+          "number": 7,
+          "name": "HL Fork",
+          "productNumber": "FK-9939"
+        }
+      ]
+    }
+  }
+}

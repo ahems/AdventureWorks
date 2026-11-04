@@ -13,6 +13,30 @@ namespace ApiFunctions.Tests;
 public class FoundryAgentClientTests
 {
     [Theory]
+    [InlineData(false, 1)]
+    [InlineData(true, 3)]
+    public async Task Draft_generation_retries_transient_failures_only_when_requested(bool retry, int attempts)
+    {
+        using var handler = new FoundryHandler { ResponseStatus = HttpStatusCode.ServiceUnavailable };
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => CreateClient(handler, telemetry).InvokeAsync(
+            "manufacturing-content-agent", "Draft", toolChoice: "none",
+            requireConfiguredDefinition: true, retryTransientResponses: retry));
+        Assert.Equal(attempts, handler.ResponseRequests.Count);
+        Assert.Equal(0, handler.McpRequests);
+    }
+
+    [Fact]
+    public async Task Draft_generation_rejects_missing_agent_definition_without_fallback()
+    {
+        using var handler = new FoundryHandler { DefinitionStatus = HttpStatusCode.Forbidden };
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => CreateClient(handler, telemetry).InvokeAsync(
+            "manufacturing-content-agent", "Draft", toolChoice: "none", requireConfiguredDefinition: true));
+        Assert.Empty(handler.ResponseRequests);
+    }
+
+    [Theory]
     [InlineData("""{"error":{"code":"content_filter","message":"private prompt must not be echoed"}}""", 400)]
     [InlineData("""{"error":{"innererror":{"code":"ResponsibleAIPolicyViolation"}}}""", 400)]
     [InlineData("""{"status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[{"type":"message","content":[{"type":"output_text","text":"partial code that must never escape"}]}]}""", 200)]

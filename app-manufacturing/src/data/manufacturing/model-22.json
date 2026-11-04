@@ -1,0 +1,90 @@
+{
+  "modelId": 22,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Mountain-400-W. Fictional assembly demonstration for Mountain-400-W model 22, using Mountain-400-W Silver, 38, product 980 (BK-M38S-38), as the representative product.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.4\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: receive and visually check the completed frame and wheel subassemblies before final assembly.<step>Check 1 EA <material>ML Mountain Frame-W - Silver, 38 (Product Number FR-M63S-38)</material> for visible damage and confirm its size and color.</step><step>Check 1 EA <material>LL Mountain Front Wheel (Product Number FW-M423)</material> and 1 EA <material>LL Mountain Rear Wheel (Product Number RW-M423)</material> for visible damage and free rotation using an assumed <tool>wheel stand</tool>.</step></Location><Location LocationID=\"60\" SetupHours=\"0.2\" LaborHours=\"2.0\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final Assembly: fit the representative components and perform simple demonstration checks.<step>Support 1 EA <material>ML Mountain Frame-W - Silver, 38 (Product Number FR-M63S-38)</material> in an assumed <tool>bicycle assembly stand</tool>. Fit 1 EA <material>ML Headset (Product Number HS-2451)</material> at the frame and fork steering interface, then fit 1 EA <material>LL Mountain Handlebars (Product Number HB-M243)</material> and check that steering moves freely.</step><step>Fit 1 EA <material>LL Mountain Seat Assembly (Product Number SA-M198)</material> to the frame and check that it is held securely.</step><step>Fit 1 EA <material>LL Mountain Front Wheel (Product Number FW-M423)</material> at the fork and 1 EA <material>LL Mountain Rear Wheel (Product Number RW-M423)</material> at the rear of the frame. Check that both rotate freely; see <diag>100221</diag>.</step><step>Fit 1 EA <material>LL Bottom Bracket (Product Number BB-7421)</material> to the frame, followed by 1 EA <material>ML Crankset (Product Number CS-6583)</material> and the BOM-listed 1 EA <material>LL Mountain Pedal (Product Number PD-M282)</material>.</step><step>Fit 1 EA <material>Front Derailleur (Product Number FD-2342)</material> and 1 EA <material>Rear Derailleur (Product Number RD-2308)</material>, then fit 1 EA <material>Chain (Product Number CH-0234)</material> through the drivetrain. Check movement by hand.</step><step>Fit 1 EA <material>Front Brakes (Product Number FB-9873)</material> at the front and 1 EA <material>Rear Brakes (Product Number RB-9231)</material> at the rear. Check their operation and wheel clearance.</step><step>Visually check the assembled bicycle for loose or damaged components and confirm that the wheels and steering move freely. Record any issue for review; these checks do not certify the bicycle for use.</step></Location></root>",
+  "processNotes": [
+    "Historical routing records final assembly at work center 60 for product 980; the preceding subassembly work at center 50 and the operations shown are inferred.",
+    "Manufactured components are supplied as completed subassemblies for this demonstration. Purchased components are fitted and inspected, not manufactured here.",
+    "Each direct component is listed as 1 EA in the representative BOM, including the pedal. The record does not establish whether that pedal entry represents one pedal or a set; do not assume an additional quantity."
+  ],
+  "variantNotes": [
+    "All four listed variants are silver: product 980 is size 38, 981 is size 40, 982 is size 42, and 983 is size 46.",
+    "The size 38 recipe uses frame 942 (FR-M63S-38). Size 40 uses frame 904 (FR-M63S-40), size 42 uses frame 905 (FR-M63S-42), and size 46 uses frame 906 (FR-M63S-46); do not substitute the size 38 frame for another size.",
+    "The listed direct BOMs use the same other components and quantities across these variants, including front wheel 815 and rear wheel 823. No wheel or color substitution is indicated.",
+    "The semi-gloss finish description is specifically for the size 46 variant; the snapshot does not establish that finish for the other sizes."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0022",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 980,
+      "ProductModelID": 22,
+      "MakeFlag": true,
+      "Name": "Mountain-400-W Silver, 38",
+      "SellStartDate": "2025-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2025-06-09",
+        "changeRequest": "ECN-2025-022-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2025-07-04",
+        "changeRequest": "ECN-2025-022-02",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-02-13",
+        "changeRequest": "ECN-2026-022-03",
+        "description": "Reordered the Chain receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-022-04",
+        "description": "Released the illustrated workstation edition: Frame and wheel placement. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      }
+    ]
+  },
+  "figures": {
+    "100221": {
+      "title": "Frame and wheel placement",
+      "guidance": [
+        "Support 1 EA ML Mountain Frame-W - Silver, 38 (Product Number FR-M63S-38) in an assumed bicycle assembly stand. Fit 1 EA ML Headset (Product Number HS-2451) at the frame and fork steering interface, then fit 1 EA LL Mountain Handlebars (Product Number HB-M243) and check that steering moves freely.",
+        "Fit 1 EA LL Mountain Front Wheel (Product Number FW-M423) at the fork and 1 EA LL Mountain Rear Wheel (Product Number RW-M423) at the rear of the frame. Check that both rotate freely; see 100221."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "ML Mountain Frame-W - Silver, 38",
+          "productNumber": "FR-M63S-38"
+        },
+        {
+          "number": 2,
+          "name": "LL Mountain Front Wheel",
+          "productNumber": "FW-M423"
+        },
+        {
+          "number": 3,
+          "name": "LL Mountain Rear Wheel",
+          "productNumber": "RW-M423"
+        }
+      ]
+    }
+  }
+}

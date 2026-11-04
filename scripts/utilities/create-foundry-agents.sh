@@ -55,6 +55,7 @@ agent_scripts=(
     admin-review-agent
     admin-customer-agent
     admin-product-content-agent
+    manufacturing-content-agent
     admin-translation-agent
     admin-review-batch-agent
     admin-review-analysis-agent

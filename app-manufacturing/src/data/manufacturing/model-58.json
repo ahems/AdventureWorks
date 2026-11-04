@@ -1,0 +1,94 @@
+{
+  "modelId": 58,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. HL Road Handlebars. Fictional workshop demonstration for model 58, HL Road Handlebars, representative product 813 (HB-R956), from component forming through assembly and inspection.<Location LocationID=\"10\" SetupHours=\"0.3\" LaborHours=\"1.2\" MachineHours=\"0.8\" LotSize=\"1\">Work Center 10 - Frame Forming. Estimates are fictional demo assumptions. Frame Forming: demonstrate inferred forming of the manufactured components from their nested BOM inputs.<step>Using 1 EA of <material>Metal Sheet 6 (Product Number MS-2348)</material>, demonstrate forming <material>Handlebar Tube (Product Number HT-2981)</material> with an assumed <tool>forming jig</tool>; any necessary joining method is unspecified.</step><step>Using 1 EA of <material>Metal Bar 1 (Product Number MB-2024)</material>, demonstrate forming <material>Stem (Product Number SM-9087)</material> with an assumed <tool>forming fixture</tool>.</step><step>Demonstrate forming 2 EA of <material>Road End Caps (Product Number EC-R098)</material> using 1 EA of <material>Metal Sheet 2 (Product Number MS-0253)</material> per cap, with an assumed <tool>forming fixture</tool>.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.1\" LotSize=\"1\">Work Center 30 - Debur and Polish. Estimates are fictional demo assumptions. Debur and Polish: prepare the formed components and check their visible condition.<step>Use an assumed <tool>deburring tool</tool> to remove sharp edges from <material>Handlebar Tube (Product Number HT-2981)</material>, <material>Stem (Product Number SM-9087)</material> and <material>Road End Caps (Product Number EC-R098)</material>; visually check for obvious damage.</step><step>Polish the visible surfaces with an assumed <tool>polishing tool</tool> and set the components aside for the separately arranged finish.</step></Location><Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.3\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: position the finished stem and handlebar tube in their assumed central relationship.<step>Inspect the finish, then position 1 EA of <material>Stem (Product Number SM-9087)</material> at the center of 1 EA of <material>Handlebar Tube (Product Number HT-2981)</material> using an assumed <tool>assembly jig</tool>. The attachment details are unspecified; see illustration <diag>100581</diag>.</step></Location><Location LocationID=\"60\" SetupHours=\"0.1\" LaborHours=\"0.4\" MachineHours=\"0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final Assembly: add the purchased tape and end caps, then perform a simple visual check.<step>Apply a total of 40 IN of <material>HL Grip Tape (Product Number GT-2908)</material> to the grip areas of <material>Handlebar Tube (Product Number HT-2981)</material> as a demonstration; see illustration <diag>100581</diag>.</step><step>Fit 2 EA of <material>Road End Caps (Product Number EC-R098)</material>, one at each tube end. Visually check the tape, caps and overall alignment; set aside any visibly damaged assembly.</step></Location></root>",
+  "processNotes": [
+    "The routing is inferred: historical routing records centers 10, 20 and 50, but does not establish required operations or joining methods. This demonstration does not assume a welding operation.",
+    "Forming and any necessary joining of the tube are conceptual; the actual methods and equipment are unspecified. The stem-to-bar interface is depicted as an assumed central attachment without invented hardware.",
+    "Anodised finishing is described in the catalog; this demonstration assumes it is arranged separately, without specifying its method or location."
+  ],
+  "variantNotes": [
+    "The snapshot lists only product 813 (HB-R956); its color and size are unspecified.",
+    "No other variants or variant-specific component substitutions are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0058",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 813,
+      "ProductModelID": 58,
+      "MakeFlag": true,
+      "Name": "HL Road Handlebars",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-058-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2025-01-06",
+        "changeRequest": "ECN-2025-058-02",
+        "description": "Clarified identification of Stem; retained the source part number in the point-of-use checklist.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-07-06",
+        "changeRequest": "ECN-2026-058-03",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-058-04",
+        "description": "Released the illustrated workstation edition: Handlebar assembly overview. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      }
+    ]
+  },
+  "figures": {
+    "100581": {
+      "title": "Handlebar assembly overview",
+      "guidance": [
+        "Inspect the finish, then position 1 EA of Stem (Product Number SM-9087) at the center of 1 EA of Handlebar Tube (Product Number HT-2981) using an assumed assembly jig. The attachment details are unspecified; see illustration 100581.",
+        "Apply a total of 40 IN of HL Grip Tape (Product Number GT-2908) to the grip areas of Handlebar Tube (Product Number HT-2981) as a demonstration; see illustration 100581.",
+        "Fit 2 EA of Road End Caps (Product Number EC-R098), one at each tube end. Visually check the tape, caps and overall alignment; set aside any visibly damaged assembly."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Stem",
+          "productNumber": "SM-9087"
+        },
+        {
+          "number": 2,
+          "name": "Handlebar Tube",
+          "productNumber": "HT-2981"
+        },
+        {
+          "number": 3,
+          "name": "HL Grip Tape",
+          "productNumber": "GT-2908"
+        },
+        {
+          "number": 4,
+          "name": "Road End Caps",
+          "productNumber": "EC-R098"
+        }
+      ]
+    }
+  }
+}

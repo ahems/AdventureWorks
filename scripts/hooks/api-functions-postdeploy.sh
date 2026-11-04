@@ -44,6 +44,7 @@ workflow_help_me_choose_id=$(get_azd_value "AI_AGENT_WORKFLOW_HELP_ME_CHOOSE_ID"
 cart_recovery_id=$(get_azd_value "AI_AGENT_CART_RECOVERY_ID")
 review_id=$(get_azd_value "AI_AGENT_REVIEW_ID")
 product_content_id=$(get_azd_value "AI_AGENT_PRODUCT_CONTENT_ID")
+manufacturing_content_id=$(get_azd_value "AI_AGENT_MANUFACTURING_CONTENT_ID")
 customer_id=$(get_azd_value "AI_AGENT_CUSTOMER_ID")
 admin_chat_id=$(get_azd_value "AI_AGENT_ADMIN_CHAT_ID")
 translation_id=$(get_azd_value "AI_AGENT_TRANSLATION_ID")
@@ -85,6 +86,7 @@ if az functionapp config appsettings set \
     "AI_AGENT_CART_RECOVERY_ID=$cart_recovery_id" \
     ${review_id:+"AI_AGENT_REVIEW_ID=$review_id"} \
     "AI_AGENT_PRODUCT_CONTENT_ID=$product_content_id" \
+    ${manufacturing_content_id:+"AI_AGENT_MANUFACTURING_CONTENT_ID=$manufacturing_content_id"} \
     ${customer_id:+"AI_AGENT_CUSTOMER_ID=$customer_id"} \
     ${admin_chat_id:+"AI_AGENT_ADMIN_CHAT_ID=$admin_chat_id"} \
     ${translation_id:+"AI_AGENT_TRANSLATION_ID=$translation_id"} \

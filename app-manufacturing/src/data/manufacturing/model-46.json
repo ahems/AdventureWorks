@@ -1,0 +1,94 @@
+{
+  "modelId": 46,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. HL Mountain Front Wheel. Fictional workshop demonstration for model 46, HL Mountain Front Wheel, using representative product FW-M928. Scope covers assembly and simple checks, not a certified manufacturing procedure.<Location LocationID=\"50\" SetupHours=\"0.2\" LaborHours=\"1.5\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: inferred location for building and checking the representative wheel from its supplied components.<step>Inspect 1 EA <material>HL Hub (Product Number HU-8998)</material> and 1 EA <material>HL Mountain Rim (Product Number RM-M823)</material> for visible damage. Place them in an assumed <tool>wheel-building stand</tool>. See the schematic component relationships in illustration <diag>100461</diag>.</step><step>Fit 36 EA <material>Spokes (Product Number SK-9283)</material> between the hub and rim, using 36 EA <material>HL Nipple (Product Number NI-9522)</material> at the rim. The lacing pattern is not specified in the supplied data; confirm it before assembly.</step><step>Using an assumed <tool>spoke wrench</tool>, adjust the wheel incrementally in the stand and check visually for obvious lateral and radial wobble.</step><step>Inspect and fit 1 EA <material>Mountain Tire Tube (Product Number TT-M928)</material> inside 1 EA <material>HL Mountain Tire (Product Number TI-M823)</material>, then fit both to the rim, taking care not to pinch the tube. Inflate according to applicable manufacturer guidance and check seating.</step><step>Fit 2 EA <material>Reflector (Product Number RF-9198)</material> using their applicable attachment guidance; their precise mounting arrangement is not supplied.</step><step>Spin the finished wheel in the stand and check for obvious wobble, loose components, tire seating and visible damage. Set aside any wheel needing correction.</step></Location></root>",
+  "processNotes": [
+    "The routing is inferred: historical routing records product 817 at Subassembly, but does not specify these operations.",
+    "The manufactured hub is treated as a supplied subassembly; its internal assembly is outside this demonstration.",
+    "Confirm component compatibility, attachment details and inflation requirements using the applicable manufacturer guidance."
+  ],
+  "variantNotes": [
+    "The only supplied variant is FW-M928, Black; no size is recorded.",
+    "No other variants or variant-specific component substitutions are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0046",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 817,
+      "ProductModelID": 46,
+      "MakeFlag": true,
+      "Name": "HL Mountain Front Wheel",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": "2025-06-08T00:00:00",
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-046-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-046-02",
+        "description": "Released the illustrated workstation edition: Front wheel component relationships. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "S. Brooks"
+      }
+    ]
+  },
+  "figures": {
+    "100461": {
+      "title": "Front wheel component relationships",
+      "guidance": [
+        "Inspect 1 EA HL Hub (Product Number HU-8998) and 1 EA HL Mountain Rim (Product Number RM-M823) for visible damage. Place them in an assumed wheel-building stand. See the schematic component relationships in illustration 100461.",
+        "Fit 36 EA Spokes (Product Number SK-9283) between the hub and rim, using 36 EA HL Nipple (Product Number NI-9522) at the rim. The lacing pattern is not specified in the supplied data; confirm it before assembly.",
+        "Inspect and fit 1 EA Mountain Tire Tube (Product Number TT-M928) inside 1 EA HL Mountain Tire (Product Number TI-M823), then fit both to the rim, taking care not to pinch the tube. Inflate according to applicable manufacturer guidance and check seating.",
+        "Fit 2 EA Reflector (Product Number RF-9198) using their applicable attachment guidance; their precise mounting arrangement is not supplied."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "HL Hub",
+          "productNumber": "HU-8998"
+        },
+        {
+          "number": 2,
+          "name": "HL Mountain Rim",
+          "productNumber": "RM-M823"
+        },
+        {
+          "number": 3,
+          "name": "Spokes",
+          "productNumber": "SK-9283"
+        },
+        {
+          "number": 4,
+          "name": "HL Nipple",
+          "productNumber": "NI-9522"
+        },
+        {
+          "number": 5,
+          "name": "Mountain Tire Tube",
+          "productNumber": "TT-M928"
+        },
+        {
+          "number": 6,
+          "name": "HL Mountain Tire",
+          "productNumber": "TI-M823"
+        },
+        {
+          "number": 7,
+          "name": "Reflector",
+          "productNumber": "RF-9198"
+        }
+      ]
+    }
+  }
+}

@@ -71,11 +71,254 @@ Future AI enrichment should use `ProductModel-ai.csv` for new model records or
 an explicit seed-job update path for instructions on existing model IDs (inserting
 duplicate IDs would fail). Add `Illustration-ai.csv` records with globally unique
 illustration IDs and refer to those IDs using `<diag>` in the instruction XML.
-The exporter already recognizes that optional illustration file, but neither
-AI generation nor new seed import/update rules are implemented in this iteration.
+The exporter already recognizes that optional illustration file. Draft instruction
+and diagram generation are available below; new seed import/update rules are not
+implemented yet.
 Keep original and AI illustrations in the same ID-based asset namespace, without
 adding database columns or storing SVGs in SQL. After enrichment is imported,
 the database export also includes it automatically.
+
+### AI manufacturing instruction drafts (review stage)
+
+`POST /api/manufacturing/content/instructions/generate` accepts
+`{ "productModelId": 19 }` and requires an internal Functions-audience token with
+`manufacturing.write`. It uses the dedicated `manufacturing-content-agent` on the
+existing Foundry chat deployment (`AI_AGENT_MANUFACTURING_CONTENT_ID`).
+Provision that agent with `scripts/utilities/agents/manufacturing-content-agent.sh`;
+the normal agent orchestrator and Functions postdeploy hook also configure it.
+
+The Function reads **live SQL**, not CSV snapshots: current English descriptions,
+manufactured variants, effective BOM (including nested parts), actual manufacturing
+work centers, latest representative-product routing evidence, and the typed XML
+schema. It refuses models with existing instructions, purchased-only models, and
+missing/incomplete grounding. The lowest-ID manufactured variant with an effective
+BOM is the representative. Limits are 100 variants, eight BOM levels, 1,500 combined
+BOM edges, and a 180,000-character grounding context; oversized data is rejected,
+not silently truncated.
+
+The agent has no tool calls or cross-product memory. It returns instructions and
+one to three **diagram briefs**, not drawings. Server-side validation enforces
+known work-center/component IDs, coverage of direct representative components,
+resolved diagram references, and the live manufacturing XML schema. Material names
+and numbers are inserted from SQL. A single repair attempt is allowed for invalid
+output; transient model failures have bounded retries within the 200-second request
+budget. Estimated routing/times/tools are explicitly fictional demo assumptions,
+not validated engineering or safety guidance.
+
+The response includes the XML, validated draft, complete grounding, source SHA-256,
+Foundry response ID, and prospective illustration reservations:
+`100000 + ProductModelID * 10 + slot` (slots 1–3), named
+`illustration-{ID}.svg`. IDs are checked against existing SQL illustrations but
+**not persisted/reserved in SQL**. No database rows, seed CSVs, SVGs, or running
+frontend assets are changed.
+
+For the initial review samples:
+
+```bash
+# Supply API_FUNCTIONS_URL and FUNCTIONS_ACCESS_TOKEN via your environment.
+python3 scripts/data-management/generate-manufacturing-drafts.py --models 19 5 59
+```
+
+The standard-library CLI accepts at most three explicit model IDs per run and
+writes a timestamped directory under `review-output/manufacturing-content/`
+(override with `--output`). Its `index.html` links to readable per-model HTML;
+each model also includes XML, grounding JSON, diagram briefs/reservations, metadata,
+and the complete API response. HTML escapes all generated text and displays
+diagram placeholders. A run manifest records progress/failures without deleting
+earlier results. **Review and approve the instructions/briefs before generating
+XAML/SVG diagrams; review those separately before any seed integration.**
+
+### AI manufacturing diagram drafts (second review stage)
+
+After explicit instruction approval, `POST /api/manufacturing/content/diagrams/generate`
+accepts `{ "approvedDraft": <complete saved instruction response>, "slot": 1 }`.
+It uses the same internal `manufacturing.write` authorization and dedicated chat
+agent, with a separate diagram-stage contract and no tools or memory.
+
+The Function revalidates the structured draft against its XML and deterministic
+reservations, re-reads live SQL, and verifies the original source fingerprint.
+Changed descriptions, BOM, variants, work centers or illustration IDs produce a
+conflict; elapsed time and newer work orders alone do not invalidate historical
+routing evidence. SQL decimal values are compared independently of JSON trailing
+zeroes so the local review export round-trip preserves the source binding.
+This is a user-supplied review workflow, not a cryptographically signed approval.
+
+One call generates one diagram from its approved brief, actual component callouts,
+instruction steps and a bounded original-XAML style excerpt. The chat model returns
+constrained inert XAML plus callout positions. The server validates finite canvas
+bounds, visible nondegenerate paths, supported absolute geometry, margins and
+callout completeness/spacing. It adds numbered bubbles and digits as paths and
+converts through `IllustrationSvgConverter`. No WPF execution, arbitrary SVG,
+fonts, images, scripts or external references are permitted. One repair attempt is
+allowed within the 200-second request budget. Geometry validity does not establish
+engineering or visual accuracy: every resulting drawing still requires review.
+
+```bash
+# Supply API_FUNCTIONS_URL and FUNCTIONS_ACCESS_TOKEN via your environment.
+python3 scripts/data-management/generate-manufacturing-diagrams.py \
+  --run review-output/manufacturing-content/<instruction-run-id> \
+  --approved-instructions --models 19 5 59
+```
+
+The CLI checks instruction hashes and response bindings, saves each successful
+`illustration-{ID}.xaml`, `.svg`, and response `.json` in a timestamped
+`model-{ID}/diagram-attempts/` directory, and retains run progress/failure manifests
+under `diagram-attempts/`. It creates a separate `diagrams.html` review index and
+per-model `instructions-diagrams.html` pages embedding the SVGs with captions and
+numbered legends. Original instruction files and the original review index remain
+unchanged. Previous drawing attempts are retained; failed calls do not publish
+assets. No seed CSVs, SQL records or bundled frontend assets are modified.
+**Stop here for diagram review before seed/export integration.**
+
+Local instruction previews use the Manufacturing Hub gear mark, AdventureWorks
+wordmark and a Manufacturing Engineering document header/footer. A formal revision
+history replaces the standalone creation date. Visible disclaimer banners/boilerplate are
+omitted from these branded previews; source limitations, variant discrepancies and
+operational notes remain. Original XML, provenance and generation safeguards are
+preserved in the saved metadata, not displayed as a provenance section. Diagram
+captions contain operation guidance from the approved work-center steps, not the
+image-generation purpose/composition briefs. Numbered component legends remain.
+Re-render saved responses to restyle a sample without new model calls.
+
+To refresh the local documents and their fabricated change-management histories:
+
+```bash
+# API_URL is the deployed HTTPS DAB service base URL.
+python3 scripts/data-management/refresh-manufacturing-previews.py \
+  --run review-output/manufacturing-content/<instruction-run-id>
+```
+
+The script reads each representative product's actual lifecycle dates from live
+DAB. The initial issue date is its `SellStartDate`; later change dates, ECN numbers,
+staff names, approvals and change descriptions are invented presentation content,
+not actual audit records. Histories have reproducibly varied lengths by model,
+culminating in an illustrated-document revision on the current local date. Products
+no longer on sale may still have documentation revisions. `change-history.json`
+retains the live lifecycle source and explicit fabricated-content metadata without
+altering approved instruction/diagram source files or SQL. Diagram regeneration
+preserves an existing local history.
+
+### Publishing approved manufacturing content
+
+Only publish after reviewing the instructions, diagrams and change histories.
+No unreviewed full-catalog generation is launched automatically. Candidate selection
+is bounded; generation still checks live English descriptions, effective BOM and
+actual work centers:
+
+```bash
+python3 scripts/data-management/verify-manufacturing-content.py --list-candidates --limit 3
+python3 scripts/data-management/generate-manufacturing-drafts.py --models <up-to-three-model-ids>
+# Resume a failed/partial run, retaining validated saved models and their provenance:
+python3 scripts/data-management/generate-manufacturing-drafts.py --resume <instruction-run-directory>
+```
+
+After both review gates and the presentation/history review:
+
+```bash
+python3 scripts/data-management/export-manufacturing-content.py \
+  --run review-output/manufacturing-content/<instruction-run-id> \
+  --diagram-manifest review-output/manufacturing-content/<instruction-run-id>/diagram-attempts/<attempt-id>/manifest.json \
+  --models 19 5 59 --approved
+```
+
+The exporter verifies instruction and SVG hashes, model/source bindings, original
+instruction preservation, diagram references and ID collisions before writing.
+It merges sorted `ProductModelInstructions-ai.csv`, `Illustration-ai.csv` and
+`ProductModelIllustration-ai.csv` overlays into `seed-job/sql`, bundles the SVGs
+in `app-manufacturing/public/illustrations`, and saves presentation metadata under
+`app-manufacturing/src/data/manufacturing`. Identical reruns preserve records;
+conflicting existing records/assets fail instead of overwriting them. A local
+`seed-export.json` receipt records source fingerprints and published IDs.
+
+The live page continues to read instruction XML from DAB. Bundled branding,
+revision history, operation guidance and legends apply only when the parsed live
+instructions match the approved document. Original documents and models with no
+instructions retain their existing presentation. No new database columns, blob
+resources, runtime asset generation or polling are needed.
+
+Use the [targeted overlay import](../seed-job/README.md) for an existing database;
+do not rerun full seeding to publish these records. Capture and verify preservation
+through DAB before and after the targeted import (including its second,
+idempotency-check execution):
+
+```bash
+python3 scripts/data-management/verify-manufacturing-content.py \
+  --capture-baseline --baseline /tmp/manufacturing-before.json
+# Execute the targeted seed import, then:
+python3 scripts/data-management/verify-manufacturing-content.py \
+  --baseline /tmp/manufacturing-before.json
+azd deploy app-manufacturing --no-prompt
+```
+
+Commit/publish source changes manually using the repository's normal workflow.
+
+### Full manufactured-model coverage
+
+The resumable batch command uses the same protected Functions and deployed chat
+model as the reviewed samples. It inventories **all DAB pages**, preserves existing
+instructions, and requires manufactured variants, an English description and an
+effective BOM. Purchased-only models are explicitly reported rather than given
+invented manufacturing inputs. Up to three workers run concurrently; requests
+have bounded retries and resource-specific OAuth tokens renewed only in memory.
+
+```bash
+# Set API_URL, API_FUNCTIONS_URL, MCP_SERVICE_URL to this azd environment's endpoints.
+# Supply MANUFACTURING_USERNAME / MANUFACTURING_PASSWORD securely in the process environment.
+python3 scripts/data-management/populate-manufacturing-content.py \
+  --run review-output/manufacturing-content/full-coverage \
+  --inventory-only
+python3 scripts/data-management/populate-manufacturing-content.py \
+  --run review-output/manufacturing-content/full-coverage \
+  --workers 3 --supplement-originals --publish
+```
+
+Reusing `--run` resumes validated instruction and diagram files without new model
+calls for completed stages. `--models` and `--limit` bound a targeted retry. Every
+failure is recorded in `coverage.json` and makes the command fail; successful
+artifacts remain available for resumption. Do not run two publishing batches
+concurrently, because they merge the same CSV files. `--publish` is explicit
+authorization to publish the automated, validated batch rather than a claim that
+each new document has received individual human review.
+
+Original manufacturing documents without diagrams can receive supplemental
+figures without changing a byte of their database instructions. The instruction
+generation request's optional `supplementExistingInstructions: true` is accepted
+only for an existing document without diagram references; normal calls still
+reject existing instructions. Supplemental figures use the same validated BOM,
+reserved illustration IDs, existing Illustration/ModelIllustration tables, and
+bundled metadata. The manufacturing page presents them after the original steps.
+No new database tables are created.
+
+Before deploying, validate the entire durable CSV/static-asset set offline:
+
+```bash
+python3 scripts/data-management/validate-manufacturing-assets.py --write-manifest
+```
+
+This requires instruction/diagram coverage for every modeled manufactured
+product in the combined Product CSVs, checks all original and generated figure
+references, exact AI cross-references, safe SVGs, metadata binding and revision
+histories. It persists artifact hashes and coverage counts in
+`seed-job/manufacturing-content-coverage.json`. Deployment consumes these existing
+files; **`azd up` does not generate AI content or incur generation costs**. CSVs,
+metadata and SVGs must all be retained in source control by the operator before
+recreating an environment. Runtime review bundles are not deployment inputs.
+
+After import, verify actual deployed coverage and original preservation:
+
+```bash
+python3 scripts/data-management/verify-manufacturing-content.py \
+  --baseline <pre-import-baseline.json> --require-full-coverage
+```
+
+The bundled content set covers all **61 manufactured product models**: 55
+generated instruction documents plus the six original manufactured-model
+documents. There are **63 generated diagrams**, including two supplemental
+Touring Front Wheel illustrations (model 44) that leave its original XML intact.
+The other original documents are retained, including purchased-only models;
+purchased-only models are not eligible for newly invented manufacturing inputs.
+See the [durable coverage manifest](../seed-job/manufacturing-content-coverage.json)
+for model IDs and artifact hashes.
 
 ## AI Agent Functions
 

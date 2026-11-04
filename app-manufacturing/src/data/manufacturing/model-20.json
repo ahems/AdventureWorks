@@ -1,0 +1,109 @@
+{
+  "modelId": 20,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Mountain-200. Fictional workshop demonstration for Mountain-200 model 20, using the Mountain-200 Silver, 38 (BK-M68S-38) as the primary recipe. The scope is subassembly preparation and final bicycle assembly.<Location LocationID=\"50\" SetupHours=\"0.15\" LaborHours=\"0.8\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Inferred Subassembly stage: prepare the seat assembly and inspect received wheel and other subassemblies before final assembly.<step>Prepare 1 EA <material>HL Mountain Seat Assembly (Product Number SA-M687)</material> from 1 EA <material>HL Mountain Seat/Saddle (Product Number SE-M940)</material>, 1 EA <material>Seat Lug (Product Number SL-0931)</material>, 1 EA <material>Seat Post (Product Number SP-2981)</material> and 4 EA <material>Pinch Bolt (Product Number PB-6109)</material>, using an assumed <tool>hand-tool set</tool>. Check that the assembled parts are secure.</step><step>Inspect 1 EA <material>ML Mountain Front Wheel (Product Number FW-M762)</material> and 1 EA <material>ML Mountain Rear Wheel (Product Number RW-M762)</material> for visible damage and free rotation; keep front and rear identified.</step><step>Stage and visually inspect 1 EA each of <material>ML Headset (Product Number HS-2451)</material>, <material>HL Mountain Handlebars (Product Number HB-M918)</material>, <material>ML Bottom Bracket (Product Number BB-8107)</material> and <material>ML Crankset (Product Number CS-6583)</material>.</step></Location><Location LocationID=\"60\" SetupHours=\"0.2\" LaborHours=\"1.8\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 60 - Final Assembly. Estimates are fictional demo assumptions. Final Assembly: fit the representative components to the prepared silver size-38 frame and perform simple demonstration checks.<step>Support 1 EA <material>HL Mountain Frame - Silver, 38 (Product Number FR-M94S-38)</material> in an assumed <tool>bicycle assembly stand</tool>. The frame BOM includes the fork. Use illustration <diag>100201</diag> to orient the major assemblies.</step><step>Fit 1 EA <material>ML Headset (Product Number HS-2451)</material> at the frame and fork, then fit 1 EA <material>HL Mountain Handlebars (Product Number HB-M918)</material>. Check that steering moves freely.</step><step>Fit 1 EA <material>HL Mountain Seat Assembly (Product Number SA-M687)</material> to the frame and check that it is secure.</step><step>Fit 1 EA <material>ML Mountain Front Wheel (Product Number FW-M762)</material> at the front and 1 EA <material>ML Mountain Rear Wheel (Product Number RW-M762)</material> at the rear. Check seating and free rotation.</step><step>Fit 1 EA <material>ML Bottom Bracket (Product Number BB-8107)</material>, 1 EA <material>ML Crankset (Product Number CS-6583)</material> and the BOM quantity of 1 EA <material>ML Mountain Pedal (Product Number PD-M340)</material>. Check movement by hand.</step><step>Fit 1 EA <material>Front Derailleur (Product Number FD-2342)</material>, 1 EA <material>Rear Derailleur (Product Number RD-2308)</material> and 1 EA <material>Chain (Product Number CH-0234)</material>. Check the drivetrain for unobstructed movement.</step><step>Fit 1 EA <material>Front Brakes (Product Number FB-9873)</material> and 1 EA <material>Rear Brakes (Product Number RB-9231)</material>. Check their operation and inspect the assembled bicycle for visible loose or damaged parts.</step></Location></root>",
+  "processNotes": [
+    "All tooling, processes and times are inferred demo estimates.",
+    "The frame and fork, wheels and other manufactured subassemblies are received prepared unless their actual nested BOM is discussed below.",
+    "The subassembly routing is inferred. The supplied historical record places product 779 at Final Assembly, location 60; it is evidence, not an engineering specification.",
+    "The pedal quantity is preserved as 1 EA from the BOM; it is not interpreted as a pair."
+  ],
+  "variantNotes": [
+    "The representative is Silver, 38 and uses 1 EA frame FR-M94S-38, product 748.",
+    "Silver, 42 uses 1 EA frame FR-M94S-42, product 739; Silver, 46 uses 1 EA frame FR-M94S-46, product 742.",
+    "Black, 38 uses 1 EA frame FR-M94B-38, product 747; Black, 42 uses 1 EA frame FR-M94B-42, product 743; Black, 46 uses 1 EA frame FR-M94B-46, product 746.",
+    "The supplied direct BOMs show the same other components and quantities for all six variants, including front wheel 816 and rear wheel 824. The representative frame BOM specifies 8 OZ of silver paint; paint details for the other frames are not supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0020",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 779,
+      "ProductModelID": 20,
+      "MakeFlag": true,
+      "Name": "Mountain-200 Silver, 38",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-020-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2025-03-03",
+        "changeRequest": "ECN-2025-020-02",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-05-01",
+        "changeRequest": "ECN-2026-020-03",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-020-04",
+        "description": "Released the illustrated workstation edition: Major bicycle assembly orientation. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "S. Brooks"
+      }
+    ]
+  },
+  "figures": {
+    "100201": {
+      "title": "Major bicycle assembly orientation",
+      "guidance": [
+        "Support 1 EA HL Mountain Frame - Silver, 38 (Product Number FR-M94S-38) in an assumed bicycle assembly stand. The frame BOM includes the fork. Use illustration 100201 to orient the major assemblies.",
+        "Fit 1 EA ML Headset (Product Number HS-2451) at the frame and fork, then fit 1 EA HL Mountain Handlebars (Product Number HB-M918). Check that steering moves freely.",
+        "Fit 1 EA HL Mountain Seat Assembly (Product Number SA-M687) to the frame and check that it is secure.",
+        "Fit 1 EA ML Mountain Front Wheel (Product Number FW-M762) at the front and 1 EA ML Mountain Rear Wheel (Product Number RW-M762) at the rear. Check seating and free rotation.",
+        "Fit 1 EA ML Bottom Bracket (Product Number BB-8107), 1 EA ML Crankset (Product Number CS-6583) and the BOM quantity of 1 EA ML Mountain Pedal (Product Number PD-M340). Check movement by hand."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "HL Mountain Frame - Silver, 38",
+          "productNumber": "FR-M94S-38"
+        },
+        {
+          "number": 2,
+          "name": "ML Mountain Front Wheel",
+          "productNumber": "FW-M762"
+        },
+        {
+          "number": 3,
+          "name": "ML Mountain Rear Wheel",
+          "productNumber": "RW-M762"
+        },
+        {
+          "number": 4,
+          "name": "HL Mountain Seat Assembly",
+          "productNumber": "SA-M687"
+        },
+        {
+          "number": 5,
+          "name": "HL Mountain Handlebars",
+          "productNumber": "HB-M918"
+        },
+        {
+          "number": 6,
+          "name": "ML Crankset",
+          "productNumber": "CS-6583"
+        }
+      ]
+    }
+  }
+}

@@ -180,6 +180,9 @@ resource aiServiceConnection 'Microsoft.CognitiveServices/accounts/projects/conn
 resource storageAccountConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-06-01' = {
   name: storageAccountConnectionName
   parent: aiProject
+  dependsOn: [
+    aiServiceConnection
+  ]
   properties: {
     category: 'AzureStorageAccount'
     target: storageAccount.properties.primaryEndpoints.blob
@@ -201,6 +204,9 @@ resource storageAccountConnection 'Microsoft.CognitiveServices/accounts/projects
 resource appInsightsConnection 'Microsoft.CognitiveServices/accounts/connections@2025-06-01' = {
   name: appInsightConnectionName
   parent: account
+  dependsOn: [
+    eshopChatGuardrails
+  ]
   properties: {
     category: 'AppInsights'
     authType: 'ApiKey'
@@ -221,6 +227,10 @@ resource appInsightsConnection 'Microsoft.CognitiveServices/accounts/connections
 resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = {
   name: projectName
   parent: account
+  // Foundry child writes share the parent operation lock, including connections/RAI.
+  dependsOn: [
+    appInsightsConnection
+  ]
   location: location
   identity: {
     type: 'UserAssigned'
@@ -374,8 +384,7 @@ resource foundryAgentsProjectUserRoleAssignment 'Microsoft.Authorization/roleAss
 
 // Deploy models to Microsoft Foundry resource using latest API
 // Models deployed here are accessible via Azure AI Model Inference API endpoint
-// dependsOn aiProject: project creation writes to the parent account's ETag; without this
-// dependency, concurrent project + deployment operations cause IfMatchPreconditionFailed.
+// Wait for project connections too: all account child writes share the parent lock.
 @batchSize(1)
 resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = [for deployment in allDeployments: {
   parent: account
@@ -384,7 +393,7 @@ resource deployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01
     model: deployment.model
   }
   sku: deployment.sku
-  dependsOn: [aiProject]
+  dependsOn: [storageAccountConnection]
 }]
 
 output endpoint string = account.properties.endpoint

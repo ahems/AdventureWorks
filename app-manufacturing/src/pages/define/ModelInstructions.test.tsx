@@ -1,10 +1,12 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchProductModel, fetchLocations } from '@/services/api';
 import ModelInstructions from './ModelInstructions';
 import type { ProductModel } from '@/types/production';
+import generated from '@/data/manufacturing/model-59.json';
+import supplemental from '@/data/manufacturing/model-44.json';
 
 vi.mock('@/services/api', () => ({ fetchProductModel: vi.fn(), fetchLocations: vi.fn() }));
 
@@ -19,13 +21,13 @@ function show(data: ProductModel | null, error?: Error) {
   else vi.mocked(fetchProductModel).mockResolvedValue(data);
   vi.mocked(fetchLocations).mockResolvedValue([]);
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-    <MemoryRouter initialEntries={['/define/models/67/instructions']}><Routes>
+    <MemoryRouter initialEntries={[`/define/models/${data?.ProductModelID ?? 67}/instructions`]}><Routes>
       <Route path="/define/models/:id/instructions" element={<ModelInstructions />} />
     </Routes></MemoryRouter>
   </QueryClientProvider>);
 }
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe('instruction page', () => {
   it('renders steps and SVG figures with an enlargement dialog', async () => {
@@ -54,5 +56,29 @@ describe('instruction page', () => {
   it('reports database read failures', async () => {
     show(model, new Error('Database unavailable'));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Database unavailable'));
+  });
+  it('renders the approved branding, operation guidance and revision history for live matching instructions', async () => {
+    show({ ...model, ProductModelID: 59, Name: 'LL Headset', Instructions: generated.sourceInstructions });
+    expect(await screen.findByText('Document change management history')).toBeInTheDocument();
+    expect(screen.getByText(/AW-MFG-WI-0059/)).toBeInTheDocument();
+    expect(screen.getAllByText('Operation guidance').length).toBeGreaterThan(0);
+    expect(screen.getByText('AdventureWorks · Manufacturing Engineering · LL Headset · Model 59')).toBeInTheDocument();
+    expect(screen.queryByText(/AI-generated fictional demo instructions/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Provenance')).not.toBeInTheDocument();
+    expect(screen.getByText('2026-11-04')).toBeInTheDocument();
+  });
+  it('never applies bundled revision histories to changed database instructions', async () => {
+    show({ ...model, ProductModelID: 59, Name: 'LL Headset', Instructions: generated.sourceInstructions.replace('LL Headset.', 'Changed instructions.') });
+    expect(await screen.findByText(/Changed instructions/)).toBeInTheDocument();
+    expect(screen.queryByText('Document change management history')).not.toBeInTheDocument();
+  });
+  it('adds supplemental diagrams while rendering the unmodified original instruction steps', async () => {
+    show({ ...model, ProductModelID: 44, Name: 'Touring Front Wheel', Instructions: supplemental.sourceInstructions });
+    expect(await screen.findByText('Assembly illustrations')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: 'Document change management history' })).toHaveLength(1);
+    for (const id of Object.keys(supplemental.figures)) {
+      expect(screen.getByAltText(`Assembly illustration ${id}`)).toHaveAttribute('src', `/illustrations/illustration-${id}.svg`);
+    }
+    expect(screen.getByRole('heading', { name: 'Overview' })).toBeInTheDocument();
   });
 });

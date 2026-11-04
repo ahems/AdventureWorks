@@ -1,0 +1,97 @@
+{
+  "modelId": 100,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. ML Crankset. Fictional workshop draft for model 100, ML Crankset, representative product CS-6583. The scope is receipt, arrangement and conditional fitting of its purchased components.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: check the purchased components and demonstrate their arrangement, with fitting only where their interfaces are confirmed.<step>Count and visually inspect 3 EA of <material>Chainring (Product Number CR-7833)</material> and 2 EA of <material>ML Crankarm (Product Number CA-6738)</material> for visible damage.</step><step>Count and inspect 3 EA of <material>Chainring Bolts (Product Number CB-2903)</material>, 3 EA of <material>Chainring Nut (Product Number CN-6137)</material> and 1 EA of <material>Freewheel (Product Number FH-2981)</material>. Compare the kit with illustration <diag>101001</diag>.</step><step>On an assumed <tool>padded work surface</tool>, check the component interfaces against the applicable manufacturer instructions. Do not force a fit or assume how the freewheel attaches.</step><step>Only if the interfaces and fastening method are confirmed, fit the compatible components using an assumed <tool>hand tool</tool> and the applicable manufacturer instructions. Otherwise keep the checked components together as a kit and flag the unresolved fit.</step><step>Check the resulting assembly or kit for completeness and visible damage; set aside any damaged or mismatched items.</step></Location></root>",
+  "processNotes": [
+    "The historical work order records Subassembly at location 50; using it for the complete demonstration is an inferred routing, not an engineering specification.",
+    "The BOM does not establish mounting geometry, fastener placement or the freewheel's relationship to the other components. Confirm compatibility and the applicable manufacturer instructions before fitting; otherwise retain the components as a kit."
+  ],
+  "variantNotes": [
+    "The only supplied variant is product 950, CS-6583, in Black; no size is specified.",
+    "No other variants or variant-specific component substitutions are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0100",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 950,
+      "ProductModelID": 100,
+      "MakeFlag": true,
+      "Name": "ML Crankset",
+      "SellStartDate": "2025-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2025-06-09",
+        "changeRequest": "ECN-2025-100-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-09-18",
+        "changeRequest": "ECN-2026-100-02",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-09-23",
+        "changeRequest": "ECN-2026-100-03",
+        "description": "Reordered the Chainring receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-100-04",
+        "description": "Released the illustrated workstation edition: Crankset component inventory. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "J. Patel"
+      }
+    ]
+  },
+  "figures": {
+    "101001": {
+      "title": "Crankset component inventory",
+      "guidance": [
+        "Count and visually inspect 3 EA of Chainring (Product Number CR-7833) and 2 EA of ML Crankarm (Product Number CA-6738) for visible damage.",
+        "Count and inspect 3 EA of Chainring Bolts (Product Number CB-2903), 3 EA of Chainring Nut (Product Number CN-6137) and 1 EA of Freewheel (Product Number FH-2981). Compare the kit with illustration 101001."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Chainring",
+          "productNumber": "CR-7833"
+        },
+        {
+          "number": 2,
+          "name": "ML Crankarm",
+          "productNumber": "CA-6738"
+        },
+        {
+          "number": 3,
+          "name": "Chainring Bolts",
+          "productNumber": "CB-2903"
+        },
+        {
+          "number": 4,
+          "name": "Chainring Nut",
+          "productNumber": "CN-6137"
+        },
+        {
+          "number": 5,
+          "name": "Freewheel",
+          "productNumber": "FH-2981"
+        }
+      ]
+    }
+  }
+}

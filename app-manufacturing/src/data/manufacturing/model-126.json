@@ -1,0 +1,78 @@
+{
+  "modelId": 126,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. LL Road Rear Wheel. Fictional assembly demonstration for model 126, LL Road Rear Wheel, using representative product 826 (RW-R623). The scope is fitting and checking supplied components, not manufacturing purchased parts.<Location LocationID=\"50\" SetupHours=\"0.15\" LaborHours=\"1.5\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: receive the components, build the wheel, fit the tire and reflectors, and perform simple checks. This sequence is inferred from the BOM and historical routing.<step>Check 1 EA <material>LL Hub (Product Number HU-6280)</material> and 1 EA <material>LL Road Rim (Product Number RM-R436)</material> for visible damage; hold any questionable component.</step><step>Arrange 36 EA <material>Spokes (Product Number SK-9283)</material> and 36 EA <material>LL Nipple (Product Number NI-4127)</material> for the wheel build. Use <tool>an assumed wheel-building stand and spoke wrench</tool> to lace and adjust the wheel; the pattern is illustrative. See <diag>101261</diag>.</step><step>Spin the wheel in the stand and visually check for noticeable wobble, loose spokes and damage. Set aside the wheel if a concern remains.</step><step>Fit 1 EA <material>Road Tire Tube (Product Number TT-R982)</material> inside 1 EA <material>LL Road Tire (Product Number TI-R092)</material> and fit them to the wheel without pinching the tube. Follow the component guidance for inflation; check that the tire is seated evenly.</step><step>Fit 2 EA <material>Reflector (Product Number RF-9198)</material> using their available attachment features. If their placement or fit is unclear, hold the assembly rather than improvising an attachment.</step><step>Check that the wheel rotates freely, the tire remains seated and the reflectors are secure. Set aside any assembly with unresolved defects.</step></Location></root>",
+  "processNotes": [
+    "All tooling, processes and times are inferred demo estimates.",
+    "Historical routing records work center 50 for product 826; the detailed operations and their sequence here are inferred, not an engineering specification.",
+    "The manufactured hub is treated as an available assembled subassembly. Its nested BOM lists 1 EA spindle/axle and 1 EA shell, but does not establish assembly details or internal geometry.",
+    "Spoke lacing, reflector attachment and tire fitting details are illustrative; use component guidance or hold the assembly if compatibility or attachment is unclear."
+  ],
+  "variantNotes": [
+    "The supplied snapshot lists only product 826, RW-R623, in black, with no size specified.",
+    "No other variants or variant-specific component substitutions are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0126",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 826,
+      "ProductModelID": 126,
+      "MakeFlag": true,
+      "Name": "LL Road Rear Wheel",
+      "SellStartDate": "2024-06-09T00:00:00",
+      "SellEndDate": "2025-06-08T00:00:00",
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2024-06-09",
+        "changeRequest": "ECN-2024-126-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-126-02",
+        "description": "Released the illustrated workstation edition: Rear wheel lacing overview. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "R. Alvarez"
+      }
+    ]
+  },
+  "figures": {
+    "101261": {
+      "title": "Rear wheel lacing overview",
+      "guidance": [
+        "Check 1 EA LL Hub (Product Number HU-6280) and 1 EA LL Road Rim (Product Number RM-R436) for visible damage; hold any questionable component.",
+        "Arrange 36 EA Spokes (Product Number SK-9283) and 36 EA LL Nipple (Product Number NI-4127) for the wheel build. Use an assumed wheel-building stand and spoke wrench to lace and adjust the wheel; the pattern is illustrative."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "LL Road Rim",
+          "productNumber": "RM-R436"
+        },
+        {
+          "number": 2,
+          "name": "LL Hub",
+          "productNumber": "HU-6280"
+        },
+        {
+          "number": 3,
+          "name": "Spokes",
+          "productNumber": "SK-9283"
+        },
+        {
+          "number": 4,
+          "name": "LL Nipple",
+          "productNumber": "NI-4127"
+        }
+      ]
+    }
+  }
+}

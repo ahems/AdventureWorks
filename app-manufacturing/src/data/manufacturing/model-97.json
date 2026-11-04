@@ -1,0 +1,83 @@
+{
+  "modelId": 97,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. HL Bottom Bracket. Fictional assembly demonstration for model 97, HL Bottom Bracket, representative product BB-9108 (product 996).<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"1.0\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: inventory the representative product's components, then fit and check them using a confirmed configuration.<step>Check the inventory: 1 EA of <material>HL Shell (Product Number SH-9312)</material> and 10 EA of <material>BB Ball Bearing (Product Number BE-2349)</material>. See the inventory view <diag>100971</diag>.</step><step>Visually inspect the <material>HL Shell (Product Number SH-9312)</material> and each <material>BB Ball Bearing (Product Number BE-2349)</material> for visible damage or contamination; set questionable items aside.</step><step>Once the intended interface and arrangement are confirmed, use <tool>an assumed hand-held assembly jig</tool> to fit the 10 EA of <material>BB Ball Bearing (Product Number BE-2349)</material> to the 1 EA of <material>HL Shell (Product Number SH-9312)</material>. Do not infer their placement from the inventory view.</step><step>Check that the components are retained as intended and, if the confirmed configuration permits rotation, check by hand for smooth movement. Set aside any assembly with visible damage or binding.</step></Location></root>",
+  "processNotes": [
+    "Tooling, process details and times are inferred demo estimates.",
+    "Work center 50 is used as an inferred route based on one historical operation, not an engineering specification.",
+    "The BOM does not establish the bearing-to-shell interface or assembly order; confirm the intended configuration before fitting."
+  ],
+  "variantNotes": [
+    "The snapshot lists only product 996, BB-9108; its color and size are unspecified. No variant-specific component substitutions are listed."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0097",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 996,
+      "ProductModelID": 97,
+      "MakeFlag": true,
+      "Name": "HL Bottom Bracket",
+      "SellStartDate": "2025-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2025-06-09",
+        "changeRequest": "ECN-2025-097-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-06-25",
+        "changeRequest": "ECN-2026-097-02",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-08-23",
+        "changeRequest": "ECN-2026-097-03",
+        "description": "Moved variant-selection notes ahead of the first operation to reduce wrong-kit changeovers.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-097-04",
+        "description": "Released the illustrated workstation edition: Bottom bracket component inventory. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "S. Brooks"
+      }
+    ]
+  },
+  "figures": {
+    "100971": {
+      "title": "Bottom bracket component inventory",
+      "guidance": [
+        "Check the inventory: 1 EA of HL Shell (Product Number SH-9312) and 10 EA of BB Ball Bearing (Product Number BE-2349). See the inventory view 100971.",
+        "Visually inspect the HL Shell (Product Number SH-9312) and each BB Ball Bearing (Product Number BE-2349) for visible damage or contamination; set questionable items aside.",
+        "Once the intended interface and arrangement are confirmed, use an assumed hand-held assembly jig to fit the 10 EA of BB Ball Bearing (Product Number BE-2349) to the 1 EA of HL Shell (Product Number SH-9312). Do not infer their placement from the inventory view."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "HL Shell",
+          "productNumber": "SH-9312"
+        },
+        {
+          "number": 2,
+          "name": "BB Ball Bearing",
+          "productNumber": "BE-2349"
+        }
+      ]
+    }
+  }
+}

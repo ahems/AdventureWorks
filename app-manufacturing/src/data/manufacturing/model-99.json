@@ -1,0 +1,130 @@
+{
+  "modelId": 99,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. LL Crankset. Fictional assembly demonstration for model 99, LL Crankset CS-4759, using its purchased direct BOM components.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly is the historically observed work center; this demonstration uses it for component verification, conditional fitting and a basic visual check.<step>Collect and visually check 2 EA of <material>LL Crankarm (Product Number CA-5965)</material>, 3 EA of <material>Chainring (Product Number CR-7833)</material> and 1 EA of <material>Freewheel (Product Number FH-2981)</material>. Compare the inventory with illustration <diag>100991</diag>.</step><step>Count and visually check 3 EA of <material>Chainring Bolts (Product Number CB-2903)</material> and 3 EA of <material>Chainring Nut (Product Number CN-6137)</material>; set aside damaged or mismatched items.</step><step>Verify the component interfaces and arrangement before fitting. If they cannot be confirmed, hold the parts rather than guessing their orientation or connections.</step><step>If the arrangement is verified, support the components in <tool>an assumed padded assembly jig</tool> and fit the purchased components together using <tool>suitable assumed hand tools</tool> and verified fastening requirements.</step><step>Visually check the fitted components for obvious damage, missing items and apparent looseness; hold any questionable assembly for review.</step></Location></root>",
+  "processNotes": [
+    "The route through Subassembly is inferred from historical routing, not an engineering specification.",
+    "Component interfaces, crankarm orientation, ring order, freewheel placement and fastening requirements are not supplied; verify them before fitting and hold the assembly if they cannot be confirmed.",
+    "The description mentions a spindle, but none is listed as a separate direct BOM component; its configuration is not assumed."
+  ],
+  "variantNotes": [
+    "The supplied snapshot lists one variant: product 949, CS-4759, in black, with no size specified.",
+    "No other variants or variant-specific component substitutions are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0099",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 949,
+      "ProductModelID": 99,
+      "MakeFlag": true,
+      "Name": "LL Crankset",
+      "SellStartDate": "2025-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2025-06-09",
+        "changeRequest": "ECN-2025-099-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2025-10-24",
+        "changeRequest": "ECN-2025-099-02",
+        "description": "Standardized work-center hand-off notes and separated preparation time from hands-on labor.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2025-12-10",
+        "changeRequest": "ECN-2025-099-03",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2025-12-31",
+        "changeRequest": "ECN-2025-099-04",
+        "description": "Aligned component count checks with the bill of materials and removed a duplicate sign-off box.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2026-01-31",
+        "changeRequest": "ECN-2026-099-05",
+        "description": "Moved variant-selection notes ahead of the first operation to reduce wrong-kit changeovers.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-02-19",
+        "changeRequest": "ECN-2026-099-06",
+        "description": "Clarified identification of LL Crankarm; retained the source part number in the point-of-use checklist.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "7.0",
+        "effectiveDate": "2026-07-04",
+        "changeRequest": "ECN-2026-099-07",
+        "description": "Reordered the Chainring receiving check ahead of kit staging; added a missing-part hold point.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "S. Brooks"
+      },
+      {
+        "revision": "8.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-099-08",
+        "description": "Released the illustrated workstation edition: Crankset component inventory. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "J. Patel"
+      }
+    ]
+  },
+  "figures": {
+    "100991": {
+      "title": "Crankset component inventory",
+      "guidance": [
+        "Collect and visually check 2 EA of LL Crankarm (Product Number CA-5965), 3 EA of Chainring (Product Number CR-7833) and 1 EA of Freewheel (Product Number FH-2981). Compare the inventory with illustration 100991.",
+        "Count and visually check 3 EA of Chainring Bolts (Product Number CB-2903) and 3 EA of Chainring Nut (Product Number CN-6137); set aside damaged or mismatched items."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "LL Crankarm",
+          "productNumber": "CA-5965"
+        },
+        {
+          "number": 2,
+          "name": "Chainring",
+          "productNumber": "CR-7833"
+        },
+        {
+          "number": 3,
+          "name": "Freewheel",
+          "productNumber": "FH-2981"
+        },
+        {
+          "number": 4,
+          "name": "Chainring Bolts",
+          "productNumber": "CB-2903"
+        },
+        {
+          "number": 5,
+          "name": "Chainring Nut",
+          "productNumber": "CN-6137"
+        }
+      ]
+    }
+  }
+}

@@ -1,6 +1,13 @@
 # Database Seeding Script for Container App Job
 # Uses Managed Identity for authentication (configured in infrastructure)
 
+param([switch] $ManufacturingOverlaysOnly, [switch] $VerifyOnly)
+
+if ($VerifyOnly -and -not $ManufacturingOverlaysOnly) {
+    [Console]::Error.WriteLine('-VerifyOnly requires -ManufacturingOverlaysOnly; refusing to run the full seed.')
+    exit 1
+}
+
 # Script version = short hash of this file (so logs reflect exact script that ran)
 try {
     $ScriptVersion = (Get-FileHash -Path $PSCommandPath -Algorithm SHA256).Hash.Substring(0, 8)
@@ -388,7 +395,8 @@ catch {
 
 # -----------------------------------------------------------------------------
 # Connect to SQL Database and perform seeding operations
-# Note: Database roles are assigned by postprovision.sh before this runs
+# Fresh infrastructure makes this job's dedicated UAMI the Entra SQL administrator.
+# Legacy deployments may instead retain the roles granted by postprovision.sh.
 # -----------------------------------------------------------------------------
 
 # server FQDN
@@ -411,6 +419,55 @@ try {
     $conn.Open()
     Write-Log "  ✓ Successfully connected to SQL Database"
     $cmd = $conn.CreateCommand()
+
+    Import-Module (Join-Path $PSScriptRoot 'ManufacturingOverlays.psm1') -Force -ErrorAction Stop
+    # Validate all shipped artifacts before either importing or resetting a fresh database.
+    $null = Read-ManufacturingOverlays -SqlFolder (Join-Path $PSScriptRoot 'sql')
+    if ($ManufacturingOverlaysOnly) {
+        Write-Log "TARGETED MODE: importing only the three approved manufacturing overlay artifacts."
+        $result = Import-ManufacturingOverlays -Connection $conn -SqlFolder (Join-Path $PSScriptRoot 'sql') -VerifyOnly:$VerifyOnly
+        Write-Log "Manufacturing overlays verified and committed: $($result | ConvertTo-Json -Compress -Depth 5)"
+        $script:seedSuccess = $true
+        return
+    }
+
+    if ($env:RUNTIME_MANAGED_IDENTITY_CLIENT_ID) {
+        Import-Module (Join-Path $PSScriptRoot 'RuntimeDatabaseAccess.psm1') -Force -ErrorAction Stop
+        Initialize-RuntimeDatabaseAccess -Connection $conn -IdentityName $env:RUNTIME_MANAGED_IDENTITY_NAME `
+            -ClientId $env:RUNTIME_MANAGED_IDENTITY_CLIENT_ID
+        Write-Log "Runtime identity database access initialized by SID (reader/writer/EXECUTE; existing roles preserved)."
+    }
+
+    if ($env:SEED_SKIP_EXISTING -eq 'true') {
+        $cmd.CommandText = "SELECT COUNT(*) FROM sys.tables WHERE is_ms_shipped = 0"
+        $existingTables = [int]$cmd.ExecuteScalar()
+        if ($existingTables -gt 0) {
+            $cmd.CommandText = @"
+IF OBJECT_ID('Production.ProductModel', 'U') IS NULL
+    THROW 51011, 'Existing database is not a completed AdventureWorks seed; refusing automatic reset.', 1;
+IF NOT EXISTS (SELECT 1 FROM Production.ProductModel)
+    THROW 51012, 'Existing ProductModel is empty; refusing automatic reset of a partial seed.', 1;
+IF OBJECT_ID('Production.Product', 'U') IS NULL
+    OR OBJECT_ID('Person.Person', 'U') IS NULL
+    OR OBJECT_ID('Sales.SalesOrderHeader', 'U') IS NULL
+    THROW 51013, 'Existing database is missing core base-seed tables; refusing automatic reset.', 1;
+IF NOT EXISTS (SELECT 1 FROM Production.Product)
+    OR NOT EXISTS (SELECT 1 FROM Person.Person)
+    OR NOT EXISTS (SELECT 1 FROM Sales.SalesOrderHeader)
+    THROW 51014, 'Existing database has empty core base-seed data; refusing automatic reset of a partial seed.', 1;
+"@
+            $null = $cmd.ExecuteNonQuery()
+            Write-Log "Existing base seed detected; preserving schema/data and applying manufacturing overlays only."
+            $result = Import-ManufacturingOverlays -Connection $conn -SqlFolder (Join-Path $PSScriptRoot 'sql')
+            Write-Log "Manufacturing overlays verified and committed: $($result | ConvertTo-Json -Compress -Depth 5)"
+            if ($env:RUNTIME_MANAGED_IDENTITY_CLIENT_ID) {
+                Grant-RuntimeChangeTrackingAccess -Connection $conn -IdentityName $env:RUNTIME_MANAGED_IDENTITY_NAME
+            }
+            $script:seedSuccess = $true
+            return
+        }
+        Write-Log "Empty database detected; running the complete base seed and manufacturing overlays."
+    }
 
     # ---------------------------------------------------------------------
     # NUCLEAR CLEANUP: Drop ALL user objects to guarantee a clean slate.
@@ -1139,6 +1196,8 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         # AI-translated product description culture mappings (16 additional cultures beyond base AdventureWorks 7)
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture-ai.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModelIllustration'; File='ProductModelIllustration.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
+        # Atomic overlay path, after original illustrations, models, and mappings.
+        @{ ManufacturingOverlays=$true }
         @{ Table='Production.Product'; File='Product.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # AI-generated standard costs for manufactured sub-assemblies (BOM rollup + labor).
         # UpdateIfExists: rows match existing ProductIDs and UPDATE StandardCost/ListPrice columns.
@@ -1232,6 +1291,11 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
     Write-Log "  Total CSV files to process: $($csvLoadConfig.Count)"
     $csvProcessed = 0
     foreach ($config in $csvLoadConfig) {
+        if ($config.ManufacturingOverlays) {
+            $result = Import-ManufacturingOverlays -Connection $conn -SqlFolder $csvFolder
+            Write-Log "Manufacturing overlays verified and committed: $($result | ConvertTo-Json -Compress -Depth 5)"
+            continue
+        }
         $csvPath = Join-Path $csvFolder $config.File
         
         if (-not (Test-Path $csvPath)) {
@@ -2578,7 +2642,7 @@ WHERE e.EmailAddress = 'demo.admin@adventureworks.com';
         $ctOn = [int]$checkCT.ExecuteScalar()
         if ($ctOn -eq 0) {
             $alterCT = $conn.CreateCommand()
-            $alterCT.CommandText = "ALTER DATABASE [$DatabaseName] SET CHANGE_TRACKING = ON (CHANGE_RETENTION = 2 DAYS, AUTO_CLEANUP = ON)"
+            $alterCT.CommandText = "ALTER DATABASE [$sqlDatabaseName] SET CHANGE_TRACKING = ON (CHANGE_RETENTION = 2 DAYS, AUTO_CLEANUP = ON)"
             $null = $alterCT.ExecuteNonQuery()
             Write-Log "  ✓ Database Change Tracking: ENABLED"
         } else {
@@ -2601,12 +2665,19 @@ WHERE e.EmailAddress = 'demo.admin@adventureworks.com';
         Write-Log "  WARNING: Change Tracking setup failed (non-fatal): $($_.Exception.Message)"
     }
 
+    if ($env:RUNTIME_MANAGED_IDENTITY_CLIENT_ID) {
+        Grant-RuntimeChangeTrackingAccess -Connection $conn -IdentityName $env:RUNTIME_MANAGED_IDENTITY_NAME
+        Write-Log "Runtime Change Tracking access granted on Sales.SalesOrderHeader."
+    }
+
     $script:seedSuccess = $true
     $conn.Close()
 }
 catch {
     Write-Error "Failed to execute database seeding: $($_.Exception.Message)"
 } finally {
+    if ($cmd) { $cmd.Dispose() }
+    if ($conn) { $conn.Dispose() }
     $scriptEndTime = Get-Date
     $scriptDuration = $scriptEndTime - $scriptStartTime
     Write-Log "`n=========================================="
@@ -2619,4 +2690,3 @@ catch {
     Write-Log "Total duration: $([math]::Floor($scriptDuration.TotalMinutes))m $($scriptDuration.Seconds)s"
     Write-Log "=========================================="
 }
-

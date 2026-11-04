@@ -1,0 +1,70 @@
+{
+  "modelId": 127,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Rear Derailleur. Fictional demonstration draft for Rear Derailleur model 127, representative product RD-2308. Scope is limited to staging and checking the three listed purchased components; the supplied BOM does not establish a complete build.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.25\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: stage and visually check the purchased components and demonstrate their conceptual arrangement.<step>Stage 1 EA of <material>Rear Derailleur Cage (Product Number RC-0291)</material>, 1 EA of <material>Guide Pulley (Product Number GP-0982)</material> and 1 EA of <material>Tension Pulley (Product Number TP-0923)</material> on a <tool>clean work mat</tool>. Check each visually for obvious damage.</step><step>Arrange the components beside one another for a conceptual fit review using an <tool>assumed padded holding jig</tool>. See illustration <diag>101271</diag>; placement is illustrative, not a verified mounting arrangement.</step><step>Set aside any visibly damaged component. Stop before fastening or completing the derailleur because the supplied data does not establish the necessary hardware or assembly details.</step></Location></root>",
+  "processNotes": [
+    "Work center 50 is inferred as the demonstration route from one historical routing record, not an engineering specification.",
+    "The supplied BOM does not identify all features or hardware needed to complete or secure the derailleur. Do not treat this draft as a complete assembly procedure."
+  ],
+  "variantNotes": [
+    "The only supplied variant is product 894, RD-2308, in Silver; its size is not specified. No variant-specific component substitutions are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0127",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 894,
+      "ProductModelID": 127,
+      "MakeFlag": true,
+      "Name": "Rear Derailleur",
+      "SellStartDate": "2025-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2025-06-09",
+        "changeRequest": "ECN-2025-127-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-127-02",
+        "description": "Released the illustrated workstation edition: Cage and pulley staging view. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "M. Chen"
+      }
+    ]
+  },
+  "figures": {
+    "101271": {
+      "title": "Cage and pulley staging view",
+      "guidance": [
+        "Stage 1 EA of Rear Derailleur Cage (Product Number RC-0291), 1 EA of Guide Pulley (Product Number GP-0982) and 1 EA of Tension Pulley (Product Number TP-0923) on a clean work mat. Check each visually for obvious damage.",
+        "Arrange the components beside one another for a conceptual fit review using an assumed padded holding jig.; placement is illustrative, not a verified mounting arrangement."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Rear Derailleur Cage",
+          "productNumber": "RC-0291"
+        },
+        {
+          "number": 2,
+          "name": "Guide Pulley",
+          "productNumber": "GP-0982"
+        },
+        {
+          "number": 3,
+          "name": "Tension Pulley",
+          "productNumber": "TP-0923"
+        }
+      ]
+    }
+  }
+}

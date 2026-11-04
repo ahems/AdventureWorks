@@ -1,0 +1,97 @@
+{
+  "modelId": 101,
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. HL Crankset. Fictional workshop demonstration for model 101, HL Crankset, using representative product 951, CS-9183. It covers component staging, conditional fitting, and visual checks.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.5\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Estimates are fictional demo assumptions. Subassembly: stage the purchased components and demonstrate conditional fitting and inspection at the historically recorded work center.<step>Lay out 3.00 EA of <material>Chainring (Product Number CR-7833)</material> and 2.00 EA of <material>HL Crankarm (Product Number CA-7457)</material> on an <tool>assumed padded work surface</tool>; inspect for visible damage. See the inventory view <diag>101011</diag>.</step><step>Count 3.00 EA of <material>Chainring Bolts (Product Number CB-2903)</material>, 3.00 EA of <material>Chainring Nut (Product Number CN-6137)</material>, and 1.00 EA of <material>Freewheel (Product Number FH-2981)</material>; inspect them for visible damage and keep them with the staged parts.</step><step>Confirm the component interfaces and fitting sequence against applicable manufacturer information. If confirmed compatible, support the parts in an <tool>assumed padded assembly jig</tool> and fit the rings and supplied fasteners as directed there. Do not force a fit or invent fastening settings.</step><step>Confirm how the remaining components are retained before fitting them. If the necessary interfaces or hardware cannot be verified, keep the components together and hold the assembly for clarification.</step><step>Visually check the staged or fitted components for damage and obvious interference; record any unresolved fit issues.</step></Location></root>",
+  "processNotes": [
+    "Work center 50 is inferred from historical routing; that history is evidence of a work-center assignment, not an engineering specification.",
+    "The snapshot does not establish mating geometry, assembly order, fastening settings, or how the freewheel and both crankarms are retained. Confirm these from applicable manufacturer information before fitting; do not invent missing hardware."
+  ],
+  "variantNotes": [
+    "The only supplied variant is product 951, CS-9183, in black; no size is listed.",
+    "No other colors, sizes, or variant-specific component substitutions are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-WI-0101",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the representative product SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 951,
+      "ProductModelID": 101,
+      "MakeFlag": true,
+      "Name": "HL Crankset",
+      "SellStartDate": "2025-06-09T00:00:00",
+      "SellEndDate": null,
+      "DiscontinuedDate": null,
+      "ModifiedDate": "2026-02-18T10:01:36.827"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2025-06-09",
+        "changeRequest": "ECN-2025-101-01",
+        "description": "Initial controlled issue for product introduction; established the component list and work-center sequence.",
+        "preparedBy": "S. Brooks",
+        "approvedBy": "M. Chen"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-06-12",
+        "changeRequest": "ECN-2026-101-02",
+        "description": "Moved variant-selection notes ahead of the first operation to reduce wrong-kit changeovers.",
+        "preparedBy": "M. Chen",
+        "approvedBy": "R. Alvarez"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-10-01",
+        "changeRequest": "ECN-2026-101-03",
+        "description": "Reformatted shop-floor copies for clearer numbered steps and consolidated inspection comments.",
+        "preparedBy": "R. Alvarez",
+        "approvedBy": "J. Patel"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-11-04",
+        "changeRequest": "ECN-2026-101-04",
+        "description": "Released the illustrated workstation edition: HL crankset component inventory. Matched numbered component legends to the operating steps and adopted the Manufacturing Hub document layout.",
+        "preparedBy": "J. Patel",
+        "approvedBy": "S. Brooks"
+      }
+    ]
+  },
+  "figures": {
+    "101011": {
+      "title": "HL crankset component inventory",
+      "guidance": [
+        "Lay out 3.00 EA of Chainring (Product Number CR-7833) and 2.00 EA of HL Crankarm (Product Number CA-7457) on an assumed padded work surface; inspect for visible damage. See the inventory view 101011.",
+        "Count 3.00 EA of Chainring Bolts (Product Number CB-2903), 3.00 EA of Chainring Nut (Product Number CN-6137), and 1.00 EA of Freewheel (Product Number FH-2981); inspect them for visible damage and keep them with the staged parts."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Chainring",
+          "productNumber": "CR-7833"
+        },
+        {
+          "number": 2,
+          "name": "HL Crankarm",
+          "productNumber": "CA-7457"
+        },
+        {
+          "number": 3,
+          "name": "Chainring Bolts",
+          "productNumber": "CB-2903"
+        },
+        {
+          "number": 4,
+          "name": "Chainring Nut",
+          "productNumber": "CN-6137"
+        },
+        {
+          "number": 5,
+          "name": "Freewheel",
+          "productNumber": "FH-2981"
+        }
+      ]
+    }
+  }
+}
