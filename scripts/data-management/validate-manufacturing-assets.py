@@ -122,13 +122,19 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--allow-partial", action="store_true", help="Diagnostic only: report missing models without failing.")
     parser.add_argument("--write-manifest", action="store_true", help="Persist a complete validated seed/asset coverage manifest.")
+    parser.add_argument("--summary", action="store_true", help="Print one-line coverage counts instead of the full JSON report.")
     args = parser.parse_args()
     if args.allow_partial and args.write_manifest:
         parser.error("A published coverage manifest requires full validation.")
     report = validate(require_full=not args.allow_partial)
     if args.write_manifest:
         export.drafts.write_atomic(REPO / "seed-job/manufacturing-content-coverage.json", export.drafts.json_text(report))
-    print(json.dumps(report, indent=2))
+    if args.summary:
+        covered = report["manufacturedModels"] - len(report["missingManufacturedModels"])
+        print(f"Manufacturing assets validated: {covered}/{report['manufacturedModels']} manufactured models covered; "
+              f"{report['generatedModels']} generated instructions, {report['generatedDiagrams']} generated diagrams.")
+    else:
+        print(json.dumps(report, indent=2))
 
 
 if __name__ == "__main__":

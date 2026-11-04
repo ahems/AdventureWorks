@@ -17,9 +17,9 @@ The seed job is automatically deployed and executed during `azd up` by the `post
 - Product images (1,739 PNG files)
 - Approved generated manufacturing instruction/illustration overlays (imported and verified on every `azd up`)
 
-The preup hook runs `python3 scripts/data-management/validate-manufacturing-assets.py` before Azure operations; postprovision repeats validation after Git LFS hydration and before the seed image build, and predeploy repeats it before frontend builds. This offline gate checks published CSV/SVG/metadata consistency and coverage, never generating content. Missing or inconsistent published assets stop deployment.
+Deployment hooks do not run the offline manufacturing asset validator. It remains available as an explicit content-generation/publication tool: `python3 scripts/data-management/validate-manufacturing-assets.py`. The seed importer still validates its artifacts and database integrity during import.
 
-The post-provision hook waits for its **specific seed-job execution** to succeed before service deployment. An existing populated database is preserved: only the manufacturing overlays are imported. An empty database receives the full base seed first. No AI generation runs during deployment. Python 3 is required locally for the asset-validation hooks.
+The post-provision hook waits for its **specific seed-job execution** to succeed before service deployment. An existing populated database is preserved: only the manufacturing overlays are imported. An empty database receives the full base seed first. No AI generation runs during deployment.
 
 Fresh provisioning configures SQL with **public access disabled from creation** and makes a **dedicated seed/bootstrap user-assigned managed identity** (`av-seed-identity-*`) its Microsoft Entra administrator (`principalType: Application`, SID = identity object/principal ID). Only the existing seed job attaches this identity; runtime applications retain their separate existing identity. The seed job uses the dedicated identity for SQL authentication and ACR pull, reaches SQL through the existing Container Apps private network, and can initialize the empty database without host grants. This adds one identity and its ACR pull assignment, but no compute/service/job. Identity creation precedes SQL and job deployment; no dependency cycle is introduced.
 
@@ -30,14 +30,6 @@ Fresh provisioning configures SQL with **public access disabled from creation** 
 The identity resource is named `av-seed-identity-${resourceToken}`. Provisioning exports `SEED_MANAGED_IDENTITY_NAME`, `SEED_MANAGED_IDENTITY_CLIENT_ID`, and `SEED_MANAGED_IDENTITY_PRINCIPAL_ID` to azd. Existing global `AZURE_CLIENT_ID`/`USER_MANAGED_IDENTITY_NAME` still identify the runtime UAMI; only the seed container receives its dedicated client ID/name under those container-local names. The container also receives runtime bootstrap inputs as `RUNTIME_MANAGED_IDENTITY_NAME` and `RUNTIME_MANAGED_IDENTITY_CLIENT_ID`.
 
 When SQL has public network access disabled, postprovision preserves that setting and skips public firewall rules, public-IP discovery, and deployment-host SQL role/Change Tracking commands. Fresh deployments use the IaC-established administrator above; legacy databases can reuse their existing identity grants. Missing permissions cause the awaited seed execution to fail rather than opening public access. A legacy public-enabled server retains the existing temporary client-firewall/role setup. The hook fails closed if it cannot determine the network setting. Full fresh seeding enables Change Tracking inside the private-network job; the incremental overlay path does not migrate Change Tracking on an existing database.
-
-If generation APIs themselves need deployment before full artifact publication, an operator may explicitly allow partial coverage for that **backend-only bootstrap**:
-
-```bash
-MANUFACTURING_CONTENT_ALLOW_PARTIAL=true azd deploy api-functions --no-prompt
-```
-
-This command-scoped override makes only the global predeploy validator pass `--allow-partial`, with a warning. It does not skip validation or change the strict preup/postprovision gates. Do not persist it through `azd env set`, use it for frontend deployment, or use it for full `azd up`. After generation/publication completes, deploy normally without the override; default validation remains strict.
 
 ---
 

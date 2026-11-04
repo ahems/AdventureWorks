@@ -1,5 +1,6 @@
 import importlib.util
-from io import BytesIO
+from contextlib import redirect_stdout
+from io import BytesIO, StringIO
 import json
 from pathlib import Path
 import unittest
@@ -9,9 +10,38 @@ ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("verify", ROOT / "scripts/data-management/verify-manufacturing-content.py")
 verify = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(verify)
+spec = importlib.util.spec_from_file_location("assets", ROOT / "scripts/data-management/validate-manufacturing-assets.py")
+assets = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(assets)
 
 
 class ManufacturingVerificationTests(unittest.TestCase):
+    def test_asset_cli_summary_and_default_json(self):
+        report = {"manufacturedModels": 61, "missingManufacturedModels": [],
+                  "generatedModels": 55, "generatedDiagrams": 63}
+        for options in ([], ["--summary"], ["--summary", "--allow-partial"]):
+            with self.subTest(options=options):
+                output = StringIO()
+                with patch("sys.argv", ["validate-manufacturing-assets.py", *options]), \
+                     patch.object(assets, "validate", return_value=report) as validate, \
+                     redirect_stdout(output):
+                    assets.main()
+                validate.assert_called_once_with(require_full="--allow-partial" not in options)
+                if "--summary" in options:
+                    self.assertEqual(output.getvalue(), "Manufacturing assets validated: 61/61 manufactured models covered; "
+                                     "55 generated instructions, 63 generated diagrams.\n")
+                else:
+                    self.assertEqual(json.loads(output.getvalue()), report)
+
+    def test_asset_summary_does_not_hide_validation_failure(self):
+        output = StringIO()
+        with patch("sys.argv", ["validate-manufacturing-assets.py", "--summary"]), \
+             patch.object(assets, "validate", side_effect=ValueError("Missing diagram")), \
+             redirect_stdout(output):
+            with self.assertRaisesRegex(ValueError, "Missing diagram"):
+                assets.main()
+        self.assertEqual(output.getvalue(), "")
+
     def test_instruction_comparison_accepts_typed_xml_serialization_but_not_changed_text(self):
         source = '<root xmlns="urn:instructions"><Location LaborHours="0.50" LocationID="50">Stage <step>Inspect component.</step></Location></root>'
         typed = '<i:root xmlns:i="urn:instructions">\n<i:Location LocationID="50" LaborHours=".5">Stage <i:step>Inspect component.</i:step></i:Location></i:root>'

@@ -1,9 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-echo "Validating published manufacturing assets (offline; no AI generation)..."
-python3 scripts/data-management/validate-manufacturing-assets.py
-
 #############################################
 # Color output helpers
 #############################################

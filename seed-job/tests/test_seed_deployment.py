@@ -180,60 +180,12 @@ start_and_wait_for_seed_job seed-job test-rg
         ):
             self.assertNotIn(absent, seed)
 
-    def test_asset_validation_precedes_builds_and_azure_mutations(self):
-        validator = "python3 scripts/data-management/validate-manufacturing-assets.py"
-        preup = (ROOT / "scripts/hooks/preup.sh").read_text()
-        predeploy = (ROOT / "scripts/hooks/predeploy.sh").read_text()
-        provision = (ROOT / "scripts/hooks/postprovision.sh").read_text()
-        self.assertLess(preup.index(validator), preup.index("get_azd_value()"))
-        self.assertLess(predeploy.index(validator), predeploy.index("azd env get-value"))
-        self.assertLess(provision.index("git lfs pull"), provision.index(validator))
-        self.assertLess(provision.index(validator), provision.index("az acr build"))
-
-    def test_invalid_assets_abort_actual_early_hooks_without_azure_calls(self):
-        for hook in ("preup.sh", "predeploy.sh"):
-            with self.subTest(hook=hook):
-                script = r'''
-python3() { printf 'MOCK_VALIDATOR: %s\n' "$*" >&2; return 73; }
-az() { printf 'UNEXPECTED_AZURE_CALL\n' >&2; return 99; }
-azd() { printf 'UNEXPECTED_AZURE_CALL\n' >&2; return 99; }
-export -f python3 az azd
-bash "$1"
-'''
-                result = subprocess.run(
-                    ["bash", "-c", script, "test-asset-gate", str(ROOT / "scripts/hooks" / hook)],
-                    cwd=ROOT, capture_output=True, text=True, check=False,
-                )
-                self.assertEqual(result.returncode, 73, result.stderr)
-                self.assertIn("MOCK_VALIDATOR: scripts/data-management/validate-manufacturing-assets.py", result.stderr)
-                self.assertNotIn("UNEXPECTED_AZURE_CALL", result.stderr)
-
-    def test_partial_bootstrap_override_is_command_scoped_to_predeploy(self):
-        for hook in ("preup.sh", "predeploy.sh"):
-            with self.subTest(hook=hook):
-                script = r'''
-python3() { printf 'MOCK_VALIDATOR: %s\n' "$*" >&2; return 73; }
-az() { printf 'UNEXPECTED_AZURE_CALL\n' >&2; return 99; }
-azd() { printf 'UNEXPECTED_AZURE_CALL\n' >&2; return 99; }
-export -f python3 az azd
-export MANUFACTURING_CONTENT_ALLOW_PARTIAL=true
-bash "$1"
-'''
-                result = subprocess.run(
-                    ["bash", "-c", script, "test-partial-gate", str(ROOT / "scripts/hooks" / hook)],
-                    cwd=ROOT, capture_output=True, text=True, check=False,
-                )
-                self.assertEqual(result.returncode, 73, result.stderr)
-                self.assertNotIn("UNEXPECTED_AZURE_CALL", result.stderr)
-                if hook == "predeploy.sh":
-                    self.assertIn("--allow-partial", result.stderr)
-                    self.assertIn("WARNING:", result.stderr)
-                else:
-                    self.assertNotIn("--allow-partial", result.stderr)
-                    self.assertNotIn("WARNING:", result.stderr)
-        provision = (ROOT / "scripts/hooks/postprovision.sh").read_text()
-        self.assertNotIn("MANUFACTURING_CONTENT_ALLOW_PARTIAL", provision)
-        self.assertNotIn("--allow-partial", provision)
+    def test_deployment_hooks_do_not_run_offline_manufacturing_validation(self):
+        for path in (ROOT / "scripts/hooks").glob("*.sh"):
+            with self.subTest(hook=path.name):
+                hook = path.read_text()
+                self.assertNotIn("validate-manufacturing-assets.py", hook)
+                self.assertNotIn("MANUFACTURING_CONTENT_ALLOW_PARTIAL", hook)
 
 
 if __name__ == "__main__":

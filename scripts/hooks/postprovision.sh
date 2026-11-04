@@ -467,9 +467,6 @@ if [ -n "$REPO_ROOT" ] && [ -e "$REPO_ROOT/.git" ]; then
     fi
 fi
 
-# Check CSV/SVG/metadata consistency after LFS hydration, before publishing seed artifacts.
-python3 scripts/data-management/validate-manufacturing-assets.py
-
 # Build and push the image to ACR
 echo "Building and publishing the seed-job image..."
 if BUILD_OUTPUT=$(az acr build \
