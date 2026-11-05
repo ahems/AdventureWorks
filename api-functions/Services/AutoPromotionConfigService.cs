@@ -13,13 +13,15 @@ public class AutoPromotionConfigService
     private const string RowKey = "auto-promotion";
 
     private readonly ILogger<AutoPromotionConfigService> _logger;
+    private readonly WebPubSubService _publisher;
 
-    public AutoPromotionConfigService(ILogger<AutoPromotionConfigService> logger)
+    public AutoPromotionConfigService(ILogger<AutoPromotionConfigService> logger, WebPubSubService publisher)
     {
         _logger = logger;
+        _publisher = publisher;
     }
 
-    private static async Task<TableClient> GetTableClientAsync()
+    private async Task<TableClient> GetTableClientAsync()
     {
         var tableServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__tableServiceUri");
         if (string.IsNullOrEmpty(tableServiceUri))
@@ -29,8 +31,7 @@ public class AutoPromotionConfigService
             tableServiceUri = $"https://{accountName}.table.core.windows.net";
         }
 
-        var serviceClient = new TableServiceClient(new Uri(tableServiceUri), new DefaultAzureCredential());
-        return serviceClient.GetTableClient(TableName);
+        return new NotifyingTableClient(new Uri(tableServiceUri), TableName, new DefaultAzureCredential(), _publisher, "promotions");
     }
 
     public async Task<AutoPromotionConfigEntity> GetConfigAsync()

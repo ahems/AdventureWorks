@@ -141,7 +141,8 @@ public class SupplyChainService
         ILogger<SupplyChainService> logger,
         TelemetryClient telemetry,
         BankService? bank = null,
-        WarehouseService? warehouse = null)
+        WarehouseService? warehouse = null,
+        WebPubSubService? publisher = null)
     {
         _connectionString = connectionString;
         _simTimeScale     = simTimeScale;
@@ -152,7 +153,8 @@ public class SupplyChainService
         _warehouse        = warehouse;
 
         var svc = new TableServiceClient(new Uri(tableServiceUri), new DefaultAzureCredential());
-        _tableClient = svc.GetTableClient(TABLE_NAME);
+        _tableClient = publisher == null ? svc.GetTableClient(TABLE_NAME)
+            : new NotifyingTableClient(new Uri(tableServiceUri), TABLE_NAME, new DefaultAzureCredential(), publisher, "supply-chain");
     }
 
     // ── Vendor loading (replaces static list) ────────────────────────────────

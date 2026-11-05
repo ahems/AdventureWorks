@@ -576,7 +576,6 @@ const DamageEventLog: React.FC = () => {
   const { data: events, isLoading } = useQuery({
     queryKey: ["warehouse-damage-events"],
     queryFn: () => fetchWarehouseDamageEvents(),
-    refetchInterval: 120_000,
   });
 
   return (

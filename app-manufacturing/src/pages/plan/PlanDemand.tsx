@@ -86,7 +86,6 @@ const PlanDemand = () => {
   const { data: openData, isLoading: openLoading } = useQuery({
     queryKey: ["open-demand"],
     queryFn: loadOpenDemand,
-    refetchInterval: 120_000,
   });
 
   const { data: anchorISO } = useQuery({

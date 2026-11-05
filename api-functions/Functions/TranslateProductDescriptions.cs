@@ -149,6 +149,7 @@ public class TranslateProductDescriptions
         [OrchestrationTrigger] TaskOrchestrationContext context)
     {
         var logger = context.CreateReplaySafeLogger<TranslateProductDescriptions>();
+        await UtilityLifecycleNotifications.RegisterAsync(context, "translate-product-descriptions");
 
         try
         {

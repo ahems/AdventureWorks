@@ -78,6 +78,7 @@ public class GenerateProductReviewEmbeddings
         [OrchestrationTrigger] TaskOrchestrationContext context)
     {
         var logger = context.CreateReplaySafeLogger<GenerateProductReviewEmbeddings>();
+        await UtilityLifecycleNotifications.RegisterAsync(context, "product-review-embeddings");
 
         try
         {

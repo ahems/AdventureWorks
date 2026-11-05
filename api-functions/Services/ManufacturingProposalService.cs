@@ -17,13 +17,15 @@ public class ManufacturingProposalService
     private const string PartitionKey = "proposals";
 
     private readonly ILogger<ManufacturingProposalService> _logger;
+    private readonly WebPubSubService _publisher;
 
-    public ManufacturingProposalService(ILogger<ManufacturingProposalService> logger)
+    public ManufacturingProposalService(ILogger<ManufacturingProposalService> logger, WebPubSubService publisher)
     {
         _logger = logger;
+        _publisher = publisher;
     }
 
-    private static async Task<TableClient> GetTableClientAsync()
+    private async Task<TableClient> GetTableClientAsync()
     {
         var tableServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__tableServiceUri");
         if (string.IsNullOrEmpty(tableServiceUri))
@@ -33,8 +35,7 @@ public class ManufacturingProposalService
             tableServiceUri = $"https://{accountName}.table.core.windows.net";
         }
 
-        var serviceClient = new TableServiceClient(new Uri(tableServiceUri), new DefaultAzureCredential());
-        return serviceClient.GetTableClient(TableName);
+        return new NotifyingTableClient(new Uri(tableServiceUri), TableName, new DefaultAzureCredential(), _publisher, "manufacturing-agent");
     }
 
     /// <summary>Creates a new pending proposal and returns its ID.</summary>

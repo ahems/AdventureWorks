@@ -44,19 +44,16 @@ const WarehouseDashboard: React.FC = () => {
   const { data: status, isLoading: statusLoading } = useQuery({
     queryKey: ["warehouse-status"],
     queryFn: fetchWarehouseStatus,
-    refetchInterval: 60_000,
   });
 
   const { data: active } = useQuery({
     queryKey: ["warehouse-active"],
     queryFn: fetchWarehouseActive,
-    refetchInterval: 60_000,
   });
 
   const { data: damageEvents } = useQuery({
     queryKey: ["warehouse-damage-events"],
     queryFn: () => fetchWarehouseDamageEvents(),
-    refetchInterval: 120_000,
   });
 
   const recentDamage = (damageEvents ?? []).slice(0, 5);

@@ -12,7 +12,7 @@ High‑level responsibilities:
 
 ## SQL connection and idle-cost behavior
 
-Most Functions open SQL connections only while handling an HTTP request, queue message, or scheduled job. `OrderPlacedSqlTrigger` is different: it is an Azure SQL Change Tracking trigger on `Sales.SalesOrderHeader`, and the binding continuously polls SQL for changes. The infrastructure intentionally keeps one Flex Consumption instance always ready for this listener so that new orders are not missed. Consequently, the deployed Functions app can keep the serverless Azure SQL Database online even when all user-facing Container Apps have scaled to zero.
+Most Functions open SQL connections only while handling an HTTP request, queue message, or scheduled job. The SQL Change Tracking listeners are different: `OrderPlacedSqlTrigger` observes `Sales.SalesOrderHeader`, and `DatabaseChangeNotifications` observes direct DAB mutations across the cart, order details, manufacturing, inventory, catalog, reviews, purchasing and finance tables. These bindings continuously observe SQL changes. The infrastructure intentionally keeps one Flex Consumption instance always ready for these listeners so that changes are not missed. Consequently, the deployed Functions app can keep the serverless Azure SQL Database online even when all user-facing Container Apps have scaled to zero. This server-side observation is not frontend polling.
 
 The SQL Database still has serverless auto-pause enabled, but auto-pause requires zero sessions and zero user-workload CPU for the configured delay. The hourly `OrderDelivery_Timer` and weekly `ArchiveTransactionHistoryTimer` are additional scheduled SQL callers that can wake the database periodically. `ShoppingSimulator_Timer` does not query SQL when the simulator is stopped; it checks state in Table Storage and returns.
 
@@ -24,6 +24,105 @@ azd up --no-prompt
 ```
 
 See [infra/README.md](../infra/README.md) for the lifecycle guidance and the future queue/outbox, separate-function-app, and timer-disable options. Removing the always-ready setting without replacing the trigger is unsafe because new order events can be missed when the listener scales to zero.
+
+---
+
+## Web PubSub changes and polling-free frontends
+
+All three frontends subscribe once at their app root. Events are change signals,
+not data snapshots: clients batch them into authorized reads/cache invalidation.
+Do not add recurring frontend requests or manual refresh controls as a fallback.
+Connections/reconnections and visible-tab focus recover missed snapshots; failed
+connections show a stale-data notice.
+
+Backend event contracts:
+
+| Group | Event | Payload |
+| --- | --- | --- |
+| Existing domain groups | `state-changed` | `entity`, `changeType`, sent after successful Table Storage persistence |
+| Matching domain groups | `database-changed` | `entity`, `changeTypes`, observed SQL/DAB changes |
+| `reviews` | `generation-state-changed` | `productId`, `changeType`: `started`, `progress`, `terminal` |
+| `reviews` | `moderation-state-changed` | `jobId`, `changeType`: `started`, `progress`, `terminal` |
+| `utilities` | `utility-status-changed` | `instanceId`, `jobType`, `changeType`, reflecting persisted Durable runtime status |
+
+Table-backed publishers cover simulator starts/stops/results/queue counters,
+pipeline and promotion configuration, manufacturing/workforce/warehouse state,
+vendors/materials, agent runs/proposals and finance. Review publishers include
+failure/terminal states and abandoned-job expiry, not just generated-item progress.
+Direct-DAB observers cover cart writes as well as operational/catalog changes;
+cart notifications do not broadcast customer/cart identifiers. Never broadcast
+tokens, Durable management URLs, or private record bodies.
+
+The utility observer requeues active instances with a three-second visibility
+delay (actual cadence also includes queue polling/processing). It stops when the
+persisted runtime status is `Completed`, `Failed`, `Terminated`, or legacy
+`Canceled`. Pending/running/suspended instances continue to be observed: this is
+lifecycle-bounded, not a wall-clock timeout. Failed observer invocations use the
+host queue policy: five attempts, thirty-minute retry visibility, then poison.
+Monitor the poison queue and explicitly resume/terminate stuck or suspended jobs.
+Publishing is best-effort; reconnect/focus status reads recover missed signals.
+
+### Deployment order
+
+1. Provision the updated storage module, including `utility-status-queue` and its
+   poison queue. Application code does not create storage infrastructure.
+2. Run the updated seed provisioning/grants before deploying Functions. It enables
+   SQL Change Tracking on the observed tables and precreates explicit SQL lease
+   tables with runtime permissions.
+3. Drain existing **unversioned** Durable utility instances before rolling out
+   polling-free utility views. Existing histories retain their old orchestration
+   version; new HTTP starters explicitly use `push-v1`. Any future starter for a
+   dormant utility orchestrator must also specify `push-v1`. The host-wide Durable
+   default version is unchanged so old histories remain replay-compatible.
+4. Publish Functions, then deploy the three frontends. Do not treat old deployed
+   publishers as proof that the updated clients have complete live coverage.
+
+To drain old utility runs, pause new submissions and record their existing
+instance IDs. Check each retained status URL or use this authenticated one-off
+read from the repository root (set `INSTANCE_ID` to an existing run):
+
+```bash
+python3 scripts/utilities/azure-auth.py request \
+  --identity admin --resource functions \
+  --path "/api/TranslateLanguageFile_Status?instanceId=$INSTANCE_ID"
+```
+
+Resume or explicitly terminate suspended/stuck instances through their existing
+controls, then confirm terminal status. Do not purge active histories. Keep the
+old clients' monitoring until these unversioned instances are drained; they remain
+replay-compatible but do not receive the new utility lifecycle events.
+
+SQL listeners have server-side observation costs, and high-rate simulations can
+exhaust Web PubSub Free-tier message quotas. Connection failure remains explicit;
+do not silently reintroduce frontend polling.
+
+### Verification
+
+- [Offline live-update regression tests](../tests/scripts/README.md#local-hook-tests)
+  cover event bursts, in-flight follow-ups, instance filtering, reconnect/focus,
+  terminal completion, cleanup, socket errors and the no-polling source guard.
+- After deployment, use the
+  [authenticated Azure helper](../docs/testing/AZURE_AUTHENTICATED_SCRIPTS.md)
+  with Ken for admin checks and Peter for manufacturing checks.
+- In two authorized browser clients, mutate a cart/order/work order in one and
+  verify the other updates without timers or refresh buttons. Check simulator
+  auto-stop/failures and review/Durable success/failure/termination as well.
+- Disconnect/reconnect Web PubSub and return to a background tab to verify
+  snapshot recovery. With the page idle after initial requests/retries settle,
+  verify no recurring fetch/XHR requests for at least 65 seconds. Local elapsed
+  clocks are allowed and must not request data.
+
+Backend/seed/infrastructure checks from the repository root:
+
+```bash
+dotnet test api-functions.Tests/api-functions.Tests.csproj \
+  --no-restore --nologo -v:q \
+  --filter 'FullyQualifiedName~RealtimePublisherTests|FullyQualifiedName~DependencyHealthServiceTests|FullyQualifiedName~FunctionAuthorizationRegistryTests'
+pwsh -NoProfile -File seed-job/tests/Test-RuntimeDatabaseAccess.ps1
+pwsh -NoProfile -File seed-job/tests/Test-SeedLifecycle.ps1
+python3 -B -m unittest discover -s seed-job/tests -p test_seed_deployment.py -q
+az bicep build --file infra/modules/storage.bicep --stdout > /dev/null
+```
 
 ---
 

@@ -17,13 +17,15 @@ public class ManufacturingAgentConfigService
     private const string RowKey       = "manufacturing-agent";
 
     private readonly ILogger<ManufacturingAgentConfigService> _logger;
+    private readonly WebPubSubService _publisher;
 
-    public ManufacturingAgentConfigService(ILogger<ManufacturingAgentConfigService> logger)
+    public ManufacturingAgentConfigService(ILogger<ManufacturingAgentConfigService> logger, WebPubSubService publisher)
     {
         _logger = logger;
+        _publisher = publisher;
     }
 
-    private static async Task<TableClient> GetTableClientAsync()
+    private async Task<TableClient> GetTableClientAsync()
     {
         var tableServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__tableServiceUri");
         if (string.IsNullOrEmpty(tableServiceUri))
@@ -33,8 +35,7 @@ public class ManufacturingAgentConfigService
             tableServiceUri = $"https://{accountName}.table.core.windows.net";
         }
 
-        var serviceClient = new TableServiceClient(new Uri(tableServiceUri), new DefaultAzureCredential());
-        return serviceClient.GetTableClient(TableName);
+        return new NotifyingTableClient(new Uri(tableServiceUri), TableName, new DefaultAzureCredential(), _publisher, "manufacturing-agent");
     }
 
     /// <summary>Returns the current agent mode. Defaults to Off if not yet configured.

@@ -64,13 +64,20 @@ const queryClient = new QueryClient();
 
 const AuthGuard: React.FC = () => {
   const { isAuthenticated } = useAuth();
-  useRealTimeUpdates();
+  const pushStatus = useRealTimeUpdates();
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
   return (
     <div className="min-h-screen flex flex-col">
       <ProductionHeader />
+      {pushStatus !== "live" && (
+        <div role="status" className="bg-amber-50 text-amber-900 px-4 py-2 text-sm text-center">
+          {pushStatus === "connecting"
+            ? "Connecting to live updates."
+            : "Live updates unavailable — displayed data may be stale. No automatic polling."}
+        </div>
+      )}
       <main className="flex-1">
         <Outlet />
       </main>

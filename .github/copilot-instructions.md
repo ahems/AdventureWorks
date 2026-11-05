@@ -9,22 +9,36 @@
 This is a **3-tier Azure application** demonstrating enterprise patterns with passwordless authentication:
 
 - **Frontend** (`app/`): React + TypeScript + Vite SPA deployed as Azure Static Web App
+- **Internal frontends** (`app-admin/`, `app-manufacturing/`): React + TypeScript + Vite SPAs served from Azure Container Apps
 - **Backend API** (`api/`): Microsoft Data API Builder (DAB) providing GraphQL + REST, running in Azure Container Apps
 - **Serverless Functions** (`api-functions/`): .NET 10 isolated Azure Functions on Flex Consumption for custom business logic, provisioned by `infra/modules/flex-api-functions.bicep`; published directly without a container image
-- **Database**: Azure SQL with AdventureWorks schema using Entra ID authentication
+- **OAuth + MCP** (`api-mcp/`): Self-contained OpenIddict authorization server and protected MCP tools, running in Azure Container Apps
+- **AI**: Microsoft Foundry agent definitions plus the hosted `manufacturing-agent/`, deployed with `host: azure.ai.agent`
+- **Database**: Azure SQL with AdventureWorks schema, Entra ID authentication and private networking
 - **Infrastructure** (`infra/`): Bicep modules with modular service definitions
 
 ### Data Flow Pattern
 
 ```
-User → Static Web App → GraphQL (DAB) → Azure SQL
-                     ↘ Azure Functions → Azure SQL
-                     ↕ Web PubSub (real-time push)
+User → Storefront / Admin / Manufacturing → GraphQL or REST (DAB) → Azure SQL
+                                         ↘ Azure Functions → Azure SQL / Foundry agents
+                                         ↕ Web PubSub (real-time push)
+User → api-mcp OAuth → resource-bound user tokens for DAB / Functions / MCP
+Azure Functions → api-mcp tools / hosted Manufacturing agent
 ```
 
-All services authenticate via **Managed Identity** (passwordless). No connection strings in code.
+Backend Azure-resource access uses **Managed Identity** (passwordless), with
+deployment-configured SQL connection strings using `Authentication=Active Directory Default`.
+Application-user authentication is separate: api-mcp verifies AdventureWorks database
+credentials and issues audience-bound OAuth JWTs. DAB and Functions validate those
+tokens; Functions is provisioned with `FUNCTIONS_OAUTH_MODE=enforced`, while explicit
+public routes remain anonymous. Do not confuse this with Entra infrastructure authentication.
 
-**Real-time push**: Azure Web PubSub (Free tier) pushes events from Azure Functions to all three frontends via WebSocket. The `WebPubSubService` singleton fires events after each mutation. Clients use the `useWebPubSub` hook + `useRealTimeUpdates` dispatcher to invalidate React Query caches.
+**Real-time push**: Azure Web PubSub (Free tier) pushes mutation events from Azure
+Functions to all three frontends via WebSocket. The `WebPubSubService` singleton
+sends group events from participating mutation paths. Storefront/manufacturing
+dispatchers invalidate React Query caches; admin dispatches `webpubsub` DOM events
+to page listeners. New live-data mutations must wire both producer and consumer.
 
 ### No Polling / No Manual Refresh Policy
 
@@ -32,7 +46,7 @@ All services authenticate via **Managed Identity** (passwordless). No connection
 
 When adding a new query that needs live updates:
 
-1. Register the query key in the appropriate group handler in `app-manufacturing/src/hooks/useRealTimeUpdates.ts` (or the equivalent hook in `app/` or `app-admin/`)
+1. Register the query key in the appropriate group handler in `app-manufacturing/src/hooks/useRealTimeUpdates.ts` or `app/src/hooks/useRealTimeUpdates.ts`; in admin, handle the corresponding `webpubsub` DOM event in the page
 2. Ensure the server-side mutation calls `WebPubSubService.SendToGroupAsync` for the relevant group
 3. Do NOT add `refetchInterval` — the Web PubSub event-driven invalidation replaces polling entirely
 
@@ -42,69 +56,47 @@ When adding a new query that needs live updates:
 
 **IMPORTANT**: DO NOT remove the Azure Infrastructure or Azure resources while developing locally. The app relies on Azure-hosted services for authentication and data. Specifically: do not run "azd down".
 
-**Environment variables required:**
+**Environment configuration:**
 
-Testin is done against the Azure-hosted services, so the following environment variables should have been set automatically once the azd up has been run be set and available in your local environment:
+Testing normally targets Azure-hosted services. `azd up` persists deployment outputs
+and hook-generated settings in the selected azd environment; it does **not** export
+them into every interactive shell. Read only needed values using
+`azd env get-value KEY --no-prompt` or use the authenticated helper below.
 
-- AI_AGENT_MCP_ENDPOINT - the MCP service URL
-- AI_AGENT_MODEL - the ChatGPT model deployment name
-- AI_AGENT_OPENAI_ENDPOINT - the Azure OpenAI endpoint
-- API_FUNCTIONS_URL - the Azure Functions URL
-- API_MCP_URL - the MCP service URL
-- API_URL - the GraphQL API URL
-- APPINSIGHTS_CONNECTIONSTRING - the App Insights connection string
-- APPINSIGHTS_INSTRUMENTATIONKEY - the App Insights instrumentation key
-- APPLICATIONINSIGHTS_CONNECTION_STRING - the App Insights connection string
-- APP_REDIRECT_URI - the app redirect URI
-- AZURE_CLIENT_ID - the Azure client ID
-- AZURE_CONTAINER_REGISTRY_ENDPOINT - the Azure Container Registry endpoint
-- AZURE_LOCATION - the Azure location
-- AZURE_OPENAI_ACCOUNT_NAME - the Azure OpenAI account name
-- AZURE_OPENAI_ENDPOINT - the Azure OpenAI endpoint
-- AZURE_RESOURCE_GROUP - the Azure resource group
-- AZURE_STATIC_WEB_APP_DEPLOYMENT_TOKEN - the Azure Static Web App deployment token
-- AZURE_SUBSCRIPTION_ID - the Azure subscription ID
-- COMMUNICATION_SERVICE_ENDPOINT - the Communication Service endpoint
-- COMMUNICATION_SERVICE_NAME - the Communication Service name
-- EMAIL_SENDER_DOMAIN - the email sender domain
-- MCP_SERVICE_URL - the MCP service URL
-- SERVICE_API_FUNCTIONS_NAME - the API Functions service name
-- SERVICE_API_IMAGE_NAME - the API image name
-- SERVICE_API_MCP_IMAGE_NAME - the API MCP image name
-- SERVICE_API_MCP_NAME - the API MCP service name
-- SERVICE_API_NAME - the API service name
-- SERVICE_API_RESOURCE_EXISTS - indicates if the API resource exists
-- SERVICE_APP_NAME - the Static Web App service name
-- SQL_ADMIN_PASSWORD - the SQL admin password
-- SQL_ADMIN_USER - the SQL admin user
-- SQL_DATABASE_NAME - the SQL database name
-- SQL_SERVER_NAME - the SQL server name
-- STORAGE_ACCOUNT_NAME - the Storage Account name
-- TENANT_ID - the Azure tenant ID
-- USER_MANAGED_IDENTITY_NAME - the User Managed Identity name
-- VITE_API_FUNCTIONS_URL - the Azure Functions URL
-- VITE_API_URL - the GraphQL API URL
-- WEB_PUBSUB_HOST_NAME - the Azure Web PubSub host name (e.g. av-wps-xxx.webpubsub.azure.com)
-- chatGptDeploymentVersion - the ChatGPT deployment version
-- chatGptModelName - the ChatGPT model name
-- chatGptSkuName - the ChatGPT SKU name
-- cognitiveservicesLocation - the Cognitive Services location
-- embeddingDeploymentModelName - the embedding deployment model name
-- embeddingDeploymentSkuName - the embedding deployment SKU name
-- embeddingDeploymentVersion - the embedding deployment version
-- imageDeploymentModelName - the image deployment model name
-- imageDeploymentSkuName - the image deployment SKU name
-- imageDeploymentVersion - the image deployment version
-- imageModelFormat - the image model format
+- Endpoints: `API_URL` (already includes `/graphql/`), `API_FUNCTIONS_URL`,
+  `API_MCP_URL` / `MCP_SERVICE_URL` (includes `/mcp`), `APP_URL`, `APP_ADMIN_URL`,
+  `APP_MANUFACTURING_URL`, `MCP_INSPECTOR_URL`.
+- Resources: `AZURE_RESOURCE_GROUP`, `AZURE_SUBSCRIPTION_ID`, `SQL_SERVER_NAME`,
+  `SQL_DATABASE_NAME`, `STORAGE_ACCOUNT_NAME`, `USER_MANAGED_IDENTITY_NAME`,
+  `AZURE_CLIENT_ID`, `SERVICE_API_NAME`, `SERVICE_API_FUNCTIONS_NAME`,
+  `SERVICE_API_MCP_NAME`, `SERVICE_SEED_JOB_NAME`.
+- AI: `AI_FOUNDRY_PROJECT_ENDPOINT`, `AI_AGENT_*_ID`, `chatGptDeploymentName`,
+  `MANUFACTURING_AGENT_ENDPOINT` (published from
+  `AGENT_MANUFACTURING_AGENT_RESPONSES_ENDPOINT`), and model-selection inputs
+  `chatGptModelName`, `embeddingDeploymentModelName`, `imageDeploymentModelName`,
+  `FOUNDRY_LOCATION`.
+- Integration: `APPLICATIONINSIGHTS_CONNECTION_STRING` /
+  `APPINSIGHTS_CONNECTIONSTRING`, `COMMUNICATION_SERVICE_ENDPOINT`,
+  `EMAIL_SENDER_DOMAIN`, `WEB_PUBSUB_HOST_NAME`,
+  `MCP_SIGNING_KEY_VAULT_NAME`, `MCP_SIGNING_CERTIFICATE_NAME`.
+
+Not every runtime setting is an azd output. DAB reads `DATABASE_CONNECTION_STRING`
+and `DAB_JWT_ISSUER` / `DAB_JWT_AUDIENCE`; Functions reads
+`SQL_CONNECTION_STRING`, identity-based `AzureWebJobsStorage__*` and
+`FUNCTIONS_JWT_*` / `FUNCTIONS_OAUTH_MODE` from its app settings.
+For local Functions configuration, start from
+`api-functions/local.settings.example.json`; never commit populated settings.
+SQL public networking is disabled after deployment, so local credentials alone
+do not provide direct SQL connectivity. Prefer deployed APIs rather than reopening SQL.
 
 **For Azure Functions (api-functions) local development:**
 
 The Functions project requires `MCP_SERVICE_URL` to connect to the Model Context Protocol server for AI agent capabilities. **Use the Azure-hosted MCP service** rather than running it locally:
 
-````bash
+```bash
 # Get the MCP service URL from Azure
-azd env get-values | grep MCP_SERVICE_URL
-
+azd env get-value MCP_SERVICE_URL --no-prompt
+```
 
 
 ### Azure Deployment (azd)
@@ -112,19 +104,27 @@ azd env get-values | grep MCP_SERVICE_URL
 The app uses **azd lifecycle hooks** for automated deployment orchestration:
 
 ```bash
-azd up --no-prompt  # Full deploy: preup → provision → deploy → postdeploy
-                    # Total time: ~29 minutes (21 min infrastructure + 8 min seed-job)
+azd up --no-prompt  # Full lifecycle below; seed execution continues asynchronously
 ```
 
-**Important:** Always use `--no-prompt` to prevent the deployment from stalling. The `azd` preflight validation may warn about AI model catalog entries and prompt for confirmation, which causes the process to hang. `--no-prompt` auto-accepts non-destructive warnings.`
+**Important:** Always use `--no-prompt` for unattended deployment. Required missing
+values or unsupported decisions can still fail; do not assume every prompt or
+warning is automatically accepted. Deployment and seed durations vary.
 
 **Hook execution order:**
 
-1. `preup.ps1` - Creates Entra ID app registrations, discovers OpenAI models
-2. `azd provision` - Deploys Bicep infrastructure (~21 minutes)
-3. `postprovision.sh` - Configures SQL database roles, deploys seed-job for data import (~2-3 min + seed-job runs ~8 min asynchronously)
-4. `azd deploy` - Builds Container Apps images via ACR remote build and publishes the Functions project to Flex Consumption
-5. `postdeploy.ps1` - Updates redirect URIs, sets runtime CORS config
+1. `scripts/hooks/preup.sh` - Persists user context and selects available AI models/capacity
+2. `azd provision` - Deploys Bicep infrastructure
+3. `scripts/hooks/postprovision.sh` - Configures SQL roles, Key Vault signing material,
+   starts the seed job asynchronously and prepares Foundry agents
+4. `scripts/hooks/predeploy.sh` - Generates storefront build/runtime configuration
+5. `azd deploy` - Remote-builds Container Apps, publishes Functions, builds/deploys
+   the Static Web App and deploys the hosted Manufacturing agent; service-specific
+   postdeploy hooks apply their configuration
+6. `scripts/hooks/postdeploy.sh` - Wires OAuth redirects and the hosted-agent endpoint,
+   then reapplies Functions agent settings
+7. `scripts/hooks/postup.sh` - Ensures the hosted agent exists, disables public SQL
+   access/removes the temporary client firewall rule, and reports service/seed status
 
 **Key distinction**: Container services such as `api/` and `api-mcp/` build with **remote build** in ACR (see `azure.yaml`). The `api-functions/` .NET project publishes directly to Azure Functions Flex Consumption (`host: function`); it has no Dockerfile or Container App deployment. The `app/` builds locally then deploys to Static Web Apps.
 
@@ -138,23 +138,27 @@ For complete details on the seed-job architecture and data loading process, see 
 
 ### Getting Azure Resource Information
 
-All deployed Azure resource details (URLs, resource groups, connection strings, etc.) are available via:
+Read selected deployment outputs without dumping unrelated settings:
 
 ```bash
-azd env get-values
+azd env get-value API_URL --no-prompt
+azd env get-value API_FUNCTIONS_URL --no-prompt
 ```
 
 Key values include:
 
-- `API_URL` - DAB GraphQL/REST API endpoint in Azure Container Apps
+- `API_URL` - DAB GraphQL endpoint in Azure Container Apps; strip `/graphql/` for the REST base
 - `API_FUNCTIONS_URL` - Azure Functions Flex Consumption endpoint
 - `AZURE_RESOURCE_GROUP` - Resource group name
-- `DATABASE_CONNECTION_STRING` - SQL connection string with Managed Identity auth
+- `API_MCP_URL` - OAuth/MCP endpoint; strip `/mcp` for the OAuth base
 
-**Important**: The DAB API always paginates results at **100 items**. When querying large datasets, use filters or check for multiple pages:
+**Important**: DAB list queries default to **100 items per page**; this is not a
+guaranteed total count or universal hard maximum. Use GraphQL `first` / `after` with
+`hasNextPage` / `endCursor`, or REST `$first` / `$after` and the returned next link,
+to follow all pages. Filters can narrow a query but do not establish the total:
 
 ```graphql
-# This returns maximum 100 items even if more exist
+# This returns a default page, not necessarily all products
 query {
   products {
     items {
@@ -181,7 +185,10 @@ Use built-in tasks for development (accessible via `Cmd/Ctrl+Shift+B`):
 - `func: host start` - Run Azure Functions locally (depends on build task)
 - `start frontend` - Run React dev server
 - `start api (DAB)` - Run local DAB server
-- `build all` - Compile .NET projects
+- `build all` - Builds `api-functions/api-functions.csproj` only (despite the label)
+
+These are local tasks, not proof of deployed-service behavior. The frontend task
+starts only `app/`; start admin/manufacturing from their own package scripts.
 
 ## Project-Specific Conventions
 
@@ -205,15 +212,19 @@ const { productCategories } = await client.request(gql`
 `);
 ```
 
-See [docs/DAB_NAMING_CONVENTIONS.md](docs/DAB_NAMING_CONVENTIONS.md) for complete rules.
+See [DAB naming conventions](../docs/architecture/DAB_NAMING_CONVENTIONS.md) for complete rules.
 
 ### Configuration Files Pattern
 
-The project uses **environment-based config pairs**:
+The project uses deployment/build/runtime configuration:
 
-- `api/dab-config.json` (Azure demo deployment - CORS all origins, no auth)
-- `app/.env` (local API URL - not normally needed due to azd env injection)
-- `app/public/config.js` (runtime config injection for Azure)
+- `api/dab-config.json` (demo CORS allows all origins without credentials; JWT auth
+  is enabled with api-mcp issuer/audience and entity-specific role permissions)
+- `app/.env` (optional local Vite overrides; azd values are not automatically
+  inherited by `npm run dev`)
+- `app/.env.production` (generated by the predeploy hook)
+- `app/public/config.js` (generated runtime configuration for the storefront);
+  admin/manufacturing container startup scripts generate their runtime configuration
 
 **Never hardcode URLs** - always use environment variables or runtime config.
 
@@ -224,7 +235,9 @@ Functions follow **isolated worker model** with dependency injection:
 ```csharp
 // Program.cs registers services
 builder.Services.AddScoped<AddressService>(sp => {
-    var connectionString = configuration["SQL_CONNECTION_STRING"];
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
     return new AddressService(connectionString);
 });
 
@@ -286,57 +299,94 @@ All three frontends connect to Azure Web PubSub via the `useWebPubSub` hook. Whe
 await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "wo-completed", workOrderId });
 ```
 
-**Client-side pattern** — `useRealTimeUpdates()` is mounted in each app's root component. Individual pages keep a slow `refetchInterval` (60–120s) as a fallback.
+Table-backed services also publish `state-changed` after successful persistence.
+SQL Change Tracking observers publish `database-changed` for direct DAB writes;
+enable tracking and provision lease tables/grants in the seed job, not at runtime.
+Signals must not contain private records, tokens or Durable management URLs.
+For utility workflows, preserve replay safety and launch new instances with
+`push-v1`; drain old unversioned runs before deploying polling-free utility views.
+See [Functions real-time rollout](../api-functions/README.md#web-pubsub-changes-and-polling-free-frontends).
 
-**Groups**: `manufacturing-agent`, `manufacturing-ops`, `warehouse`, `supply-chain`, `orders`, `shopping-simulator`, `reviews`
+**Client-side pattern** — `useRealTimeUpdates()` is mounted in each app's root.
+Storefront/manufacturing use React Query invalidation. Admin query caches use the
+root dispatcher; status pages/jobs use `useLiveUpdates` for the `webpubsub` DOM
+event. Register listeners before the initial read. Use fixed-window event batching
+(not trailing debounce), serialize status reads and retain a follow-up when a
+change arrives during a read. Do not periodically request data or add manual
+refresh buttons to push-backed pages. Display-only elapsed/health clocks are
+allowed; they must not make network calls.
+
+Connections/reconnections invalidate the affected caches; visible-window focus
+recovers status reads and React Query provides its normal focus refetch. All apps
+show a live-updates-unavailable notice on connection failure. Negotiation failure
+does not automatically install polling. Durable utility status subscriptions
+filter `utilities` events by `instanceId` and notify completion once per instance.
+
+**Regression check**: run
+`node --experimental-vm-modules --test tests/scripts/test-live-updates.mjs`.
+It verifies batching, in-flight follow-ups, reconnect/focus recovery and cleanup,
+and rejects recurring network polling across all three frontend source trees.
+
+**Groups**: `manufacturing-agent`, `manufacturing-ops`, `warehouse`, `supply-chain`,
+`orders`, `shopping-simulator`, `reviews`, `finance`, `promotions`, `utilities`.
+The allow-list is `WebPubSubService.AllowedGroups`; each app subscribes to its subset.
 
 **Negotiate endpoint**: `GET /api/webpubsub/negotiate?groups=manufacturing-agent,warehouse,...`
 
 ### Bicep Infrastructure Patterns
 
-Infrastructure uses **modular decomposition** in `infra/modules/`:
-
-```bicep
-// main.bicep orchestrates, modules handle individual services
-module identity 'modules/identity.bicep' = { ... }
-module database 'modules/database.bicep' = { params: { identityId: identity.outputs.id } }
-```
+Infrastructure uses **modular decomposition** in `infra/modules/`.
+`infra/main.bicep` orchestrates identity, database, private networking, storage,
+Container Apps, Functions and AI modules. Follow each module's declared parameters:
+for example, the database module receives `identityName` and `seedIdentityName`,
+while the storage module receives `identityId`.
 
 **Key parameters** injected by azd from environment:
 
-- `revisionSuffix` - unique per deployment (avoids Container App conflicts)
-- `chatGptModelName`, `embeddingModelName` - discovered in preup.ps1
-- `aadAdminObjectId` - current user's Entra ID for SQL admin
+- `chatGptModelName`, `embeddingModelName`, `imageModelName` - mapped from
+  preup-selected azd values in `infra/main.parameters.json`
+- `aadAdminObjectId` - current user's Entra object ID from `OBJECT_ID`
+- `foundryLocation` - from `FOUNDRY_LOCATION`
+
+Use `infra/main.parameters.json` as the actual azd-to-Bicep mapping; do not invent
+parameter names or assume every module parameter is an azd environment value.
 
 ### Infrastructure-as-Code Policy
 
 All Azure Storage resources (queues, tables, blob containers) are provisioned **exclusively** by `infra/modules/storage.bicep` via `azd up`. Application code must **never** call `CreateIfNotExistsAsync`, `CreateIfNotExists`, or `CreateTableIfNotExistsAsync` — it must assume all infrastructure already exists at runtime.
 
-- **New queue or table needed?** Add it to the `queueServices.queues` or `tableServices.tables` array in `storage.bicep`.
+- **New queue or table needed?** Add application queues to `applicationQueueDescriptions`
+  (the module derives their queues and poison queues), or tables to
+  `tableServices.tables` in `storage.bicep`. Update the corresponding
+  `DependencyHealthService.Application*` list so startup/readiness checks stay aligned.
 - **New blob container needed?** Add it to `blobServices.containers` in `storage.bicep`.
-- **Startup health check**: `Program.cs` verifies all expected storage resources exist at cold-start using lightweight `GetPropertiesAsync()` calls and logs `ILogger.LogWarning` to App Insights for any missing resource. It does not block startup or create resources.
+- **Startup health check**: `Program.cs` uses `DependencyHealthService.Application*`
+  resource lists, checks queues/containers with `GetPropertiesAsync()` and tables with
+  `GetAccessPoliciesAsync()`, and logs warnings on failed checks. These checks run
+  during startup but do not fail startup or create resources.
 - **Why**: Each `CreateIfNotExistsAsync` adds an unnecessary HTTP round-trip (HEAD + conditional PUT). During simulation workloads that send hundreds of queue messages per minute, this overhead is significant.
 
 ## Common Integration Points
 
 ### Frontend ↔ GraphQL API
 
-Uses `graphql-request` library with React Query for caching:
+The storefront uses `graphql-request` through `app/src/data/apiService.ts`,
+with React Query hooks for caching:
 
 ```typescript
 // app/src/hooks/useProducts.ts
-export const useProducts = () =>
-  useQuery({
+export const useProducts = () => {
+  return useQuery<Product[]>({
     queryKey: ["products"],
-    queryFn: async () => {
-      const { products } = await graphqlClient.request(GET_PRODUCTS);
-      return products.items;
-    },
+    queryFn: () => apiService.getProducts(true),
     staleTime: 2 * 60 * 1000, // 2 min cache
   });
+};
 ```
 
-**All list queries** return `{ items: [] }` structure - never access data directly without `.items`.
+**DAB GraphQL list queries** return `{ items: [] }` wrappers; unwrap `.items`
+inside the data service. Hooks return application arrays, while DAB REST uses
+its own `value` / next-link response shape. Manufacturing commonly uses REST.
 
 ### Database Schema Context
 
@@ -349,61 +399,94 @@ Uses **AdventureWorks schema** with namespaced tables:
 DAB entities map to these via `dab-config.json` source definitions:
 
 ```json
-"Product": { "source": "Production.Product" }
+"Product": { "source": { "object": "Production.Product", "type": "table" } }
 ```
 
 **Note**: `Person.Address` is **excluded from DAB** because the `SpatialLocation` column uses the SQL `geography` type which DAB does not support. Address data is accessed exclusively via the `AddressFunctions` Azure Function.
 
 ### Managed Identity Authentication Flow
 
-All Azure resources use passwordless auth:
+Backend data-plane access uses passwordless auth:
 
-1. **Container Apps** get system-assigned MI at deployment
+1. **DAB, Functions and api-mcp** use the provisioned runtime user-assigned MI;
+   api-mcp reads Key Vault signing material using its configured managed identity
 2. **SQL Database** grants roles in `postprovision.sh`:
    ```sql
    CREATE USER [mi-name] FROM EXTERNAL PROVIDER;
    ALTER ROLE db_datareader ADD MEMBER [mi-name];
    ```
 3. **Connection strings** use `Authentication=Active Directory Default`
-4. **Local dev** inherits from `az login` credentials
+4. **Local SDK clients** can use `DefaultAzureCredential` / `az login` where network
+   access and RBAC permit; this does not authenticate an application user or bypass
+   the deployed private SQL network
 
 ## Testing & Debugging
 
+### Authenticated Azure Deployment Calls
+
+**Use `python3 scripts/utilities/azure-auth.py` when calling auth-protected endpoints
+in the deployed azd environment.** The helper reads the selected local azd environment
+(or `--environment NAME`), authenticates against api-mcp with login + PKCE, and obtains
+the correct resource-bound token. Do not use an Entra `az account get-access-token`
+token to impersonate an AdventureWorks database user, disable auth, or source/print
+the entire azd `.env`.
+
+- Prefer `--identity manufacturing` (seeded Peter, `manufacturing-engineer`) for
+  manufacturing/inventory/supply-chain testing. Use `--identity admin` (seeded Ken,
+  `executive-admin`) for customers/orders/reporting/admin or broader internal operations.
+  Neither account bypasses ownership, self-only checks or business rules. Do not
+  silently retry a forbidden operation as the more privileged identity.
+- Prefer `request --identity ... --resource functions|dab --path /...`; this keeps
+  tokens in memory and adds the DAB `X-MS-API-ROLE` header automatically.
+- Use `token` for curl/other scripts, `token --json` plus `refresh` for long-running
+  sessions. DAB, Functions and MCP need separate audiences. `/api/agent/chat` requires
+  an MCP-audience token for delegated calls, not the normal Functions token.
+- Never print tokens/refresh sessions/passwords, enable shell tracing, commit
+  credentials or forward bearer tokens to other hosts. Prefer read-only verification;
+  mutations, simulator starts and AI calls need intentional scope.
+- Full examples, canned demo identities, curl usage, renewal, exceptions and tests:
+  [Authenticated local scripts](../docs/testing/AZURE_AUTHENTICATED_SCRIPTS.md).
+
 ### Test Scripts
 
-The project includes several test scripts in root:
+Test scripts live under `tests/scripts/`, not the repository root:
 
-- `test-signup.sh` - Validates user registration flow
-- `test-password-functions.sh` - Tests password hashing and verification
-- `test-password-reset-flow.sh` - Tests complete password reset flow (request, validate, complete)
-- `test-discounts.sh` - Tests special offers integration
-- `test-inventory.js` - Node script for inventory checks
+- `tests/scripts/auth-smoke-tests.sh` - OAuth discovery and authenticated access;
+  includes AI calls, so it is not a purely read-only/cost-free check
+- `tests/scripts/test-health-diagnostics.sh` - Read-only deployment health checks
+- `tests/scripts/test-password-functions.sh` - Password checks; requires a disposable
+  consumer's token and BusinessEntityID, not a canned internal identity
+- `tests/scripts/test-password-reset-flow.sh` - Reset flow; requires explicit test inputs
+- `tests/scripts/README.md` - Current test prerequisites and commands
+- `.NET` tests: `api-functions.Tests/` and `api-mcp/AdventureWorks.Tests/`
 
 **Run functions locally** with the `func: host start` task, which auto-builds before starting.
 
 ### Verifying GraphQL Endpoints
 
-```bash
-cd api && ./test-graphql-endpoints.sh  # Tests all entity queries
-```
+Use the authenticated helper examples below for focused queries. There is no
+`api/test-graphql-endpoints.sh` in the current tree. Check GraphQL `errors`, role
+permissions, list `.items` and pagination rather than treating HTTP 200 as success.
 
 ### Examining the Azure Database
 
-**Direct SQL access from dev container usually fails** due to Entra ID authentication requirements. Instead, use the deployed DAB API:
+**Direct SQL access from a dev container is normally blocked by private networking
+after deployment**, even with valid Entra credentials. Use the deployed DAB API;
+do not reopen SQL public access for routine testing:
 
 ```bash
-# Get the API URL
-API_URL=$(azd env get-values | grep API_URL | cut -d'=' -f2 | tr -d '"')
+# Query via authenticated GraphQL (API_URL already contains /graphql/)
+python3 scripts/utilities/azure-auth.py request \
+  --identity manufacturing --resource dab --path /graphql --method POST \
+  --data '{"query":"{ products(first: 5) { items { ProductID Name } } }"}'
 
-# Query via GraphQL
-curl -X POST $API_URL/graphql -H "Content-Type: application/json" \
-  -d '{"query": "{ products { items { ProductID Name } } }"}'
-
-# Or use REST API
-curl "$API_URL/api/Product"
+# Or use authenticated REST
+python3 scripts/utilities/azure-auth.py request \
+  --identity manufacturing --resource dab --path '/api/Product?$first=5'
 ```
 
-**Remember**: API results are paginated at 100 items. To verify full table counts, use filters to check for records beyond the first page.
+**Remember**: Default list pages contain up to 100 items; follow all cursors/next
+links to establish full counts. Primary-key filters only test for matching records.
 
 ### Application Insights Integration
 
@@ -413,22 +496,28 @@ DAB and Functions auto-send telemetry. Check logs:
 az monitor app-insights query --app <app-name> --analytics-query "requests | top 50 by timestamp desc"
 ```
 
+The storefront has a `/health` diagnostics page; admin/manufacturing do not
+currently define that route. Use the sanitized Functions
+`/api/health/readiness` and MCP `/ready` contracts for dependency readiness;
+liveness alone does not prove SQL/storage/OAuth readiness. Keep AI/email functional
+checks opt-in. See [health diagnostics](../docs/features/monitoring/HEALTH_DIAGNOSTICS.md).
+
 ## Common Gotchas
 
-1. **CORS during local dev**: Always use `dab-config.json` (not `dab-config.prod.json`) locally
+1. **DAB config during local dev**: Use the existing `api/dab-config.json`; supply its environment placeholders and use the configured OAuth issuer/audience. Do not disable auth to fix local failures.
 2. **GraphQL query failures**: Check for `.items` in response - DAB wraps all lists
-3. **API pagination limits**: DAB API returns maximum 100 items per query - use filters or pagination to access larger datasets
+3. **API pagination**: DAB defaults to 100 items per list page; follow GraphQL cursors or REST next links, not an assumed hard maximum or a single-page count.
 4. **DAB 1.7 OData pagination parameter**: Use `$first` instead of `$top` for limiting results in REST calls (e.g. `?$first=10`). DAB 1.7+ replaced `$top` with `$first`. `$skip` is also unsupported — use `$after` for cursor-based pagination.
 5. **Address entity not in DAB**: `Person.Address` is excluded from DAB because the `SpatialLocation` (`geography`) column is unsupported. Use the `AddressFunctions` Azure Function for address data instead.
-6. **Direct SQL access**: Connecting to Azure SQL from dev container typically fails due to Entra ID auth - use the DAB API instead to query the database
-7. **Build failures**: Functions require restore before build - use `restore (functions)` task first
-8. **Connection errors**: Ensure `az login` is fresh - tokens expire after hours
-9. **Missing env vars**: DAB reads from `@env()` placeholders - check azd environment with `azd env get-values`
-10. **Shopping Simulator AI requirement**: The `no-order-customer`, `cart-recovery`, and `b2b-store` order modes require `AI_AGENT_ORDER_ID` to be configured. Without it, those messages will hard-fail to the poison queue with full diagnostics. The `new-persona` and `existing-repeat` modes fall back to random generation if AI is unavailable.
+6. **Direct SQL access**: Deployment disables public SQL access; use deployed DAB/Functions instead of reopening networking.
+7. **Build failures**: `dotnet build` restores by default; use `restore (functions)` when diagnosing missing dependencies or building with `--no-restore`.
+8. **Connection errors**: Azure SDK access may need renewed `az login`; application API tokens instead renew through api-mcp OAuth. They are different credentials.
+9. **Missing env vars**: DAB reads `@env()` placeholders from container configuration; azd state is not automatically exported into a local shell. Read only required azd values.
+10. **Shopping Simulator AI requirement**: `OrderGenerationAgentService` requires `AI_AGENT_ORDER_ID` for all modes; no random-order fallback is implemented. Structured planning failures are saved as failed simulator results with failure codes; unhandled queue exceptions are rethrown for runtime retry/poison handling.
 11. **Shopping Simulator auto-stop**: The simulator always auto-stops after the configured `durationHours` (default 24h, max 72h). It never runs forever — this is a cost protection feature checked every timer tick (1 minute).
 12. **Order Status=7 is "Delivered"**: Orders are automatically promoted from Shipped (5) to Delivered (7) by the hourly `OrderDelivery_Timer` function. Terminal statuses are now 4 (Rejected), 6 (Cancelled), and 7 (Delivered) — Status=5 (Shipped) is no longer a terminal state. Delivery windows are configurable per order type via `PUT /api/orders/pipeline/config`.
-13. **Order notification emails disabled by default**: `ORDER_NOTIFICATIONS_EMAIL_ENABLED` must be explicitly set to `"true"` to send Shipped/Delivered emails via Azure Communication Services. When unset or `"false"`, the intended email content is logged at Info level instead (look for `[EmailNotifications disabled]` in Application Insights). This prevents the Shopping Simulator from generating email spam. The Flex Consumption template does not enable the flag; enabling it requires an explicit Function App setting via Azure Portal or CLI. See [docs/features/email/ORDER_NOTIFICATIONS.md](docs/features/email/ORDER_NOTIFICATIONS.md).
-14. **Web PubSub Free tier limits**: 20 concurrent connections, 20K messages/day — sufficient for a single-user demo. All three frontend apps share one instance via groups. If `WEB_PUBSUB_HOST_NAME` is empty or the negotiate endpoint fails, apps fall back to slow polling (60–120s) automatically.
+13. **Order notification emails disabled by default**: `ORDER_NOTIFICATIONS_EMAIL_ENABLED` must be explicitly set to `"true"` to send Shipped/Delivered emails via Azure Communication Services. When unset or `"false"`, the intended email content is logged at Info level instead (look for `[EmailNotifications disabled]` in Application Insights). This prevents the Shopping Simulator from generating email spam. The Flex Consumption template does not enable the flag; enabling it requires an explicit Function App setting via Azure Portal or CLI. See [order notifications](../docs/features/email/ORDER_NOTIFICATIONS.md).
+14. **Web PubSub Free tier limits**: 20 concurrent connections, 20K messages/day across all three apps. High-rate simulations can exhaust this; do not assume the Free tier is sufficient for sustained workloads. Failed negotiation reports live updates unavailable; it does not automatically install polling. Preserve the no-polling policy above.
 15. **No runtime infra creation**: Application code must not call `CreateIfNotExistsAsync` or `CreateIfNotExists` on storage resources (queues, tables, containers). All storage infrastructure is provisioned by `infra/modules/storage.bicep` via `azd up`. If you need a new queue or table, add it to the Bicep file. A startup health check in `Program.cs` logs App Insights warnings for any missing resources.
 
 ### Shopping Simulator
@@ -444,9 +533,11 @@ The shopping simulator (`POST /api/shopping-simulator/start`) generates continuo
 
 ## Documentation Map
 
-- [QUICKSTART.md](QUICKSTART.md) - Local development walkthrough
-- [app/LOCAL_DEVELOPMENT.md](app/LOCAL_DEVELOPMENT.md) - Frontend-specific setup
-- [api/README.md](api/README.md) - DAB deployment details
-- [MIGRATION_SUMMARY.md](MIGRATION_SUMMARY.md) - GraphQL integration history
-- [docs/DAB_NAMING_CONVENTIONS.md](docs/DAB_NAMING_CONVENTIONS.md) - GraphQL schema rules
-````
+- [QUICKSTART.md](../QUICKSTART.md) - Azure deployment and exploration
+- [app/README.md](../app/README.md) - Storefront setup and features
+- [api/README.md](../api/README.md) - DAB deployment details
+- [DAB naming conventions](../docs/architecture/DAB_NAMING_CONVENTIONS.md) - GraphQL schema rules
+- [OAuth server](../docs/features/mcp-oauth/README.md) - User identities, resource tokens and tool policies
+- [Functions OAuth](../docs/features/functions-oauth/README.md) - Route scope/category/ownership enforcement
+- [Authenticated local scripts](../docs/testing/AZURE_AUTHENTICATED_SCRIPTS.md) - azd-based testing helper
+- [Health diagnostics](../docs/features/monitoring/HEALTH_DIAGNOSTICS.md) - Readiness checks and frontend diagnostics

@@ -36,6 +36,7 @@ import HealthCheckPage from "./pages/HealthCheckPage";
 import NotFound from "./pages/NotFound";
 import HelpMeChoosePage from "./pages/HelpMeChoosePage";
 import { useRealTimeUpdates } from "./hooks/useRealTimeUpdates";
+import { LiveUpdatesNotice } from "./components/LiveUpdatesNotice";
 
 const queryClient = new QueryClient();
 
@@ -45,7 +46,7 @@ initAppInsights();
 /** Wrapper component inside QueryClientProvider so hooks work. */
 const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   useRealTimeUpdates();
-  return <>{children}</>;
+  return <><LiveUpdatesNotice />{children}</>;
 };
 
 const App = () => (

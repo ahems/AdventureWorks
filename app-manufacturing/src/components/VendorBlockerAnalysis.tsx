@@ -37,7 +37,6 @@ const VendorBlockerAnalysis: React.FC = () => {
   const { data: status, isLoading: stLoading } = useQuery({
     queryKey: ['manufacturing-status-vendor-blockers'],
     queryFn: fetchManufacturingStatus,
-    refetchInterval: 60_000,
   });
   const { data: catalog, isLoading: catLoading } = useQuery({
     queryKey: ['supply-catalog-all'],

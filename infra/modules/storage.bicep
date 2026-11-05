@@ -32,6 +32,7 @@ var applicationQueueDescriptions = {
   'review-moderation-queue': 'Background queue for review auto-moderation: analyze pending unreplied reviews with AI, create staff reply, and approve.'
   'manufacturing-agent-queue': 'Queue for manufacturing AI agent invocations triggered by new sales orders'
   'auto-promotion-queue': 'Queue for automatic AI promotion generation triggered by order volume thresholds'
+  'utility-status-queue': 'Bounded Durable utility status observers; messages stop when the registered instance is terminal'
 }
 
 var applicationQueues = [for queue in items(applicationQueueDescriptions): {

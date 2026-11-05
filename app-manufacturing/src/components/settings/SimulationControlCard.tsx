@@ -26,7 +26,6 @@ export function SimulationControlCard() {
   const { data: status } = useQuery<ManufacturingStatus>({
     queryKey: ["manufacturing-status"],
     queryFn: fetchManufacturingStatus,
-    refetchInterval: 60_000,
   });
   const isRunning = status?.isRunning ?? false;
 

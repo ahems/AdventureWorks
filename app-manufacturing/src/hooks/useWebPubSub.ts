@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WebPubSubClient } from "@azure/web-pubsub-client";
 import { WEB_PUBSUB_NEGOTIATE_URL } from "@/config/api";
 
@@ -6,55 +6,78 @@ import { WEB_PUBSUB_NEGOTIATE_URL } from "@/config/api";
  * Connects to Azure Web PubSub and subscribes to the specified groups.
  * Calls `onMessage` when a server-sent group message arrives.
  *
- * Gracefully no-ops if the negotiate endpoint is unavailable (local dev
- * without Web PubSub) — the app falls back to polling intervals.
+ * An unavailable connection is surfaced to the UI; there is no polling fallback.
  */
 export function useWebPubSub(
   groups: string[],
   onMessage: (group: string, data: Record<string, unknown>) => void,
+  onConnected?: () => void,
 ) {
+  const [status, setStatus] = useState<"connecting" | "live" | "reconnecting" | "unavailable">("connecting");
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
+  const onConnectedRef = useRef(onConnected);
+  onConnectedRef.current = onConnected;
 
   const groupsKey = groups.join(",");
 
   useEffect(() => {
-    let client: WebPubSubClient | null = null;
     let cancelled = false;
+    const abortController = new AbortController();
+    setStatus("connecting");
+
+    const client = new WebPubSubClient({
+      // Renew the negotiate token on reconnect rather than reusing an expired URL.
+      getClientAccessUrl: async () => {
+        const res = await fetch(
+          `${WEB_PUBSUB_NEGOTIATE_URL}?groups=${encodeURIComponent(groupsKey)}`,
+          { signal: abortController.signal },
+        );
+        if (!res.ok) throw new Error(`Negotiate failed: ${res.status}`);
+        const { url } = (await res.json()) as { url: string };
+        if (!url || cancelled) throw new Error("Push unavailable");
+        return url;
+      },
+    });
+
+    client.on("connected", () => {
+      if (cancelled) return;
+      setStatus("live");
+      onConnectedRef.current?.();
+    });
+    client.on("disconnected", () => {
+      if (!cancelled) setStatus("reconnecting");
+    });
+    client.on("stopped", () => {
+      if (!cancelled) setStatus("unavailable");
+    });
+    client.on("rejoin-group-failed", () => {
+      if (!cancelled) setStatus("unavailable");
+    });
+    client.on("group-message", (e) => {
+      if (cancelled) return;
+      try {
+        const data =
+          typeof e.message.data === "string"
+            ? JSON.parse(e.message.data)
+            : e.message.data;
+        if (data && typeof data === "object" && !Array.isArray(data)) {
+          onMessageRef.current(e.message.group, data as Record<string, unknown>);
+        } else {
+          console.warn("[WebPubSub] Ignoring non-object group message");
+        }
+      } catch (err) {
+        console.warn("[WebPubSub] Invalid message", err);
+      }
+    });
 
     async function connect() {
       try {
-        const res = await fetch(
-          `${WEB_PUBSUB_NEGOTIATE_URL}?groups=${encodeURIComponent(groupsKey)}`,
-        );
-        if (!res.ok) {
-          console.warn(
-            "[WebPubSub] Negotiate failed:",
-            res.status,
-            "— falling back to polling.",
-          );
-          return;
-        }
-        const { url } = (await res.json()) as { url: string };
-        if (cancelled || !url) return;
-
-        client = new WebPubSubClient(url);
-
-        client.on("group-message", (e) => {
-          const data =
-            typeof e.message.data === "string"
-              ? (JSON.parse(e.message.data) as Record<string, unknown>)
-              : (e.message.data as Record<string, unknown>);
-          onMessageRef.current(e.message.group, data);
-        });
-
         await client.start();
-        // Groups are auto-joined via the negotiate token — no joinGroup needed
       } catch (err) {
-        console.warn(
-          "[WebPubSub] Connection failed — falling back to polling.",
-          err,
-        );
+        if (cancelled) return;
+        setStatus("unavailable");
+        console.warn("[WebPubSub] Connection failed — data may be stale.", err);
       }
     }
 
@@ -62,7 +85,10 @@ export function useWebPubSub(
 
     return () => {
       cancelled = true;
-      client?.stop();
+      abortController.abort();
+      client.stop();
     };
   }, [groupsKey]);
+
+  return status;
 }

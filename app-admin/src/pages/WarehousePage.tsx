@@ -1,4 +1,5 @@
 import React from "react";
+import { useLiveUpdates } from "@/hooks/useLiveUpdates";
 import {
   Card,
   CardContent,
@@ -37,8 +38,6 @@ import {
   type WarehouseActiveOperation,
   type WarehouseDamageEvent,
 } from "@/services/warehouseService";
-
-const POLL_INTERVAL_MS = 15_000;
 
 const OP_BADGE: Record<string, string> = {
   Store: "bg-blue-100 text-blue-800",
@@ -102,11 +101,7 @@ const WarehousePage: React.FC = () => {
     }
   }, []);
 
-  React.useEffect(() => {
-    load();
-    const id = setInterval(load, POLL_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [load]);
+  useLiveUpdates(["warehouse"], load);
 
   // Split active ops by direction for outbound pressure view
   const outboundOps = active.filter((op) => op.operationType === "Retrieve");
@@ -133,8 +128,8 @@ const WarehousePage: React.FC = () => {
               <Warehouse className="h-6 w-6 text-doodle-accent" /> Warehouse
             </h1>
             <p className="text-muted-foreground text-sm mt-1 max-w-2xl">
-              Read-only view of the Finished Goods Storage operation. Refreshes
-              every 15 seconds.
+              Read-only view of the Finished Goods Storage operation. Updates
+              automatically when warehouse operations change.
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">

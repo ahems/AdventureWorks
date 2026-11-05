@@ -1,4 +1,5 @@
 import React from "react";
+import { useLiveUpdates } from "@/hooks/useLiveUpdates";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -29,8 +30,6 @@ import {
   type OrderPipelineConfig,
   type OrderPipelineStatus,
 } from "@/services/utilityService";
-
-const POLL_INTERVAL_MS = 20_000;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -82,13 +81,22 @@ export default function OrderPipelinePage() {
   const [promotingApproved, setPromotingApproved] = React.useState(false);
   const [configError, setConfigError] = React.useState<string | null>(null);
   const [statusError, setStatusError] = React.useState<string | null>(null);
+  const formState = React.useRef({ config, savedConfig });
+  const configRevision = React.useRef(0);
+  formState.current = { config, savedConfig };
 
   // ── fetch helpers ─────────────────────────────────────────────────────────
 
   const fetchConfig = React.useCallback(async () => {
+    const revision = configRevision.current;
     try {
       const cfg = await getOrderPipelineConfig();
-      setConfig(cfg);
+      if (revision !== configRevision.current) return;
+      const { config: current, savedConfig: previous } = formState.current;
+      const hasEdits = Object.keys(previous).some(
+        key => current[key as keyof OrderPipelineConfig] !== previous[key as keyof OrderPipelineConfig],
+      );
+      if (!hasEdits) setConfig(cfg);
       setSavedConfig(cfg);
       setConfigError(null);
     } catch (err) {
@@ -116,12 +124,9 @@ export default function OrderPipelinePage() {
 
   // ── lifecycle ─────────────────────────────────────────────────────────────
 
-  React.useEffect(() => {
-    fetchConfig();
-    fetchStatus();
-    const id = setInterval(fetchStatus, POLL_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [fetchConfig, fetchStatus]);
+  useLiveUpdates(["orders"], async () => {
+    await Promise.all([fetchConfig(), fetchStatus()]);
+  });
 
   // ── derived ───────────────────────────────────────────────────────────────
 
@@ -144,6 +149,7 @@ export default function OrderPipelinePage() {
     setSavingConfig(true);
     try {
       const saved = await saveOrderPipelineConfig(config);
+      configRevision.current++;
       setSavedConfig(saved);
       toast({
         title: "Configuration saved",
@@ -415,18 +421,6 @@ export default function OrderPipelinePage() {
                     Pipeline Status
                   </h2>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={fetchStatus}
-                  disabled={loadingStatus}
-                  className="font-doodle text-xs"
-                >
-                  <RefreshCw
-                    className={`w-3 h-3 mr-1 ${loadingStatus ? "animate-spin" : ""}`}
-                  />
-                  Refresh
-                </Button>
               </div>
 
               {statusError && (

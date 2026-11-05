@@ -106,7 +106,8 @@ public class WorkOrderSimulationService
         double defaultScrapRate,
         ILogger<WorkOrderSimulationService> logger,
         BankService? bank = null,
-        WarehouseService? warehouse = null)
+        WarehouseService? warehouse = null,
+        WebPubSubService? publisher = null)
     {
         _connectionString = connectionString;
         _simulationTimeScale = simulationTimeScale;
@@ -118,7 +119,8 @@ public class WorkOrderSimulationService
         var tableServiceClient = new TableServiceClient(
             new Uri(tableServiceUri),
             new DefaultAzureCredential());
-        _tableClient = tableServiceClient.GetTableClient(TABLE_NAME);
+        _tableClient = publisher == null ? tableServiceClient.GetTableClient(TABLE_NAME)
+            : new NotifyingTableClient(new Uri(tableServiceUri), TABLE_NAME, new DefaultAzureCredential(), publisher, "manufacturing-ops");
     }
 
     // ── SQL helpers ──────────────────────────────────────────────────────────

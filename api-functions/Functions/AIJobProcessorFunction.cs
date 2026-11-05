@@ -368,7 +368,7 @@ public class AIJobProcessorFunction
         var connectionString = Environment.GetEnvironmentVariable("SQL_CONNECTION_STRING")
             ?? throw new InvalidOperationException("SQL_CONNECTION_STRING not configured");
         // tableServiceUri not needed here — Table Storage only used for verified-reviews job state
-        var reviewService = new ReviewService(connectionString, tableServiceUri: string.Empty);
+        var reviewService = _reviewService;
 
         var products = await reviewService.GetProductsForReviewGenerationAsync(msg.ProductIds);
         if (products == null || products.Count == 0)

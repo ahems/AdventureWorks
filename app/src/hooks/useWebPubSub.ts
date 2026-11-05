@@ -27,9 +27,12 @@ function publishStatus(status: WebPubSubStatus) {
 export function useWebPubSub(
   groups: string[],
   onMessage: (group: string, data: Record<string, unknown>) => void,
+  onConnected?: () => void,
 ) {
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
+  const onConnectedRef = useRef(onConnected);
+  onConnectedRef.current = onConnected;
 
   const groupsKey = groups.join(",");
 
@@ -65,7 +68,11 @@ export function useWebPubSub(
         if (!url || typeof url !== "string") throw new Error("Invalid Web PubSub negotiate response.");
 
         client = new WebPubSubClient(url);
-        client.on("connected", () => setStatus("connected"));
+        client.on("connected", () => {
+          if (cancelled) return;
+          setStatus("connected");
+          onConnectedRef.current?.();
+        });
         client.on("disconnected", () => setStatus("disconnected"));
         client.on("stopped", () => setStatus("disconnected"));
         client.on("rejoin-group-failed", () => {
@@ -74,11 +81,21 @@ export function useWebPubSub(
         });
 
         client.on("group-message", (e) => {
-          const data =
-            typeof e.message.data === "string"
-              ? (JSON.parse(e.message.data) as Record<string, unknown>)
-              : (e.message.data as Record<string, unknown>);
-          onMessageRef.current(e.message.group, data);
+          if (cancelled) return;
+          let data: unknown = e.message.data;
+          if (typeof data === "string") {
+            try {
+              data = JSON.parse(data);
+            } catch (error) {
+              console.warn("[WebPubSub] Invalid JSON group message.", error);
+              return;
+            }
+          }
+          if (typeof data !== "object" || data === null || Array.isArray(data)) {
+            console.warn("[WebPubSub] Group message must be an object.");
+            return;
+          }
+          onMessageRef.current(e.message.group, data as Record<string, unknown>);
         });
 
         await client.start({ abortSignal: controller.signal });

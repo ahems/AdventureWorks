@@ -35,13 +35,14 @@ import OrderPipelinePage from "./pages/OrderPipelinePage";
 import WarehousePage from "./pages/WarehousePage";
 import OAuthCallbackPage from "./pages/OAuthCallbackPage";
 import { useRealTimeUpdates } from "./hooks/useRealTimeUpdates";
+import { LiveUpdatesNotice } from "./components/LiveUpdatesNotice";
 
 const queryClient = new QueryClient();
 
 /** Wrapper component inside QueryClientProvider so hooks work. */
 const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   useRealTimeUpdates();
-  return <>{children}</>;
+  return <><LiveUpdatesNotice />{children}</>;
 };
 
 const App = () => (

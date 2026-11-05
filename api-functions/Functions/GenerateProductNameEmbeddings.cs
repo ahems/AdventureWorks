@@ -40,7 +40,9 @@ public class GenerateProductNameEmbeddings
         try
         {
             var instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
-                nameof(GenerateProductNameEmbeddings_Orchestrator));
+                nameof(GenerateProductNameEmbeddings_Orchestrator),
+                input: null,
+                options: new StartOrchestrationOptions { Version = "push-v1" });
 
             _logger.LogInformation("Started orchestration with ID = '{instanceId}'", instanceId);
 
@@ -66,6 +68,7 @@ public class GenerateProductNameEmbeddings
         [OrchestrationTrigger] TaskOrchestrationContext context)
     {
         var logger = context.CreateReplaySafeLogger<GenerateProductNameEmbeddings>();
+        await UtilityLifecycleNotifications.RegisterAsync(context, "product-name-embeddings");
 
         try
         {

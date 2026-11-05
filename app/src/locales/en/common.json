@@ -1,4 +1,8 @@
 {
+  "liveUpdates": {
+    "connecting": "Connecting live updates...",
+    "unavailable": "Live updates unavailable. Data may be stale; returning to this tab refreshes active views."
+  },
   "header": {
     "signIn": "Sign In",
     "signOut": "Sign Out",

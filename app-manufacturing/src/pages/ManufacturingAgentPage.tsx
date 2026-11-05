@@ -174,7 +174,6 @@ const QueueStatusCard: React.FC = () => {
   const { data } = useQuery({
     queryKey: ["agent-queue-status"],
     queryFn: fetchAgentQueueStatus,
-    refetchInterval: 120_000,
   });
 
   const pending = data?.pending ?? 0;
@@ -242,11 +241,9 @@ type ShutoffPreset = (typeof SHUTOFF_PRESETS)[number];
 
 const ModeSelector: React.FC = () => {
   const qc = useQueryClient();
-  const { data: config, refetch } = useQuery({
+  const { data: config } = useQuery({
     queryKey: ["manufacturing-agent-config"],
     queryFn: fetchAgentConfig,
-    // Slow fallback poll so the countdown stays current
-    refetchInterval: 60_000,
   });
   const currentMode = config?.mode ?? 0;
 
@@ -650,7 +647,6 @@ const ProposalsPanel: React.FC = () => {
   const { data: proposals = [], isLoading } = useQuery({
     queryKey: ["agent-proposals"],
     queryFn: fetchAgentProposals,
-    refetchInterval: 120_000,
   });
 
   const approveMutation = useMutation({
@@ -825,12 +821,11 @@ const ManufacturingAgentPage: React.FC = () => {
   const isOff = (config?.mode ?? 0) === 0;
   const isProposePending = config?.mode === 2;
 
-  // Runs: real-time via Web PubSub, 120s fallback poll, disabled when Off
+  // Runs: real-time via Web PubSub, disabled when Off
   const { data: runs = [] } = useQuery({
     queryKey: ["agent-runs"],
     queryFn: () => fetchAgentRuns(30),
     enabled: !isOff,
-    refetchInterval: isOff ? false : 120_000,
   });
 
   const hasActiveRun = runs.some(

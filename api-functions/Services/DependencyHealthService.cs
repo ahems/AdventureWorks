@@ -41,7 +41,7 @@ public class DependencyHealthService(
         "ai-job-chat-queue", "ai-job-embeddings-queue", "product-thumbnail-generation",
         "sales-order-status", "production-wo-queue", "supply-chain-orders-queue",
         "simulation-order-queue", "warehouse-ops-queue", "review-moderation-queue",
-        "manufacturing-agent-queue", "auto-promotion-queue"
+        "manufacturing-agent-queue", "auto-promotion-queue", "utility-status-queue"
     ];
     public static readonly string[] ApplicationTables = [
         "shoppingSimulator", "awOrderPipelineConfig", "awSupplyChain", "awManufacturing",

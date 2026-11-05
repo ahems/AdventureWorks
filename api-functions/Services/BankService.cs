@@ -119,8 +119,10 @@ public class BankService
         _webPubSub        = webPubSub;
 
         var svc = new TableServiceClient(new Uri(tableServiceUri), new DefaultAzureCredential());
-        _accountsTable      = svc.GetTableClient(ACCOUNTS_TABLE);
-        _transactionsTable  = svc.GetTableClient(TRANSACTIONS_TABLE);
+        _accountsTable = webPubSub == null ? svc.GetTableClient(ACCOUNTS_TABLE)
+            : new NotifyingTableClient(new Uri(tableServiceUri), ACCOUNTS_TABLE, new DefaultAzureCredential(), webPubSub, "finance");
+        _transactionsTable = webPubSub == null ? svc.GetTableClient(TRANSACTIONS_TABLE)
+            : new NotifyingTableClient(new Uri(tableServiceUri), TRANSACTIONS_TABLE, new DefaultAzureCredential(), webPubSub, "finance");
     }
 
     // ── Initialization ───────────────────────────────────────────────────────

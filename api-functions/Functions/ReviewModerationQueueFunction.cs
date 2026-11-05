@@ -47,6 +47,7 @@ public class ReviewModerationQueueFunction
         HttpRequestData req)
     {
         await StartLock.WaitAsync();
+        ReviewModerationJobState? startedState = null;
         try
         {
             var state = await _reviewService.GetReviewModerationJobStateAsync();
@@ -104,6 +105,7 @@ public class ReviewModerationQueueFunction
             };
 
             await _reviewService.SaveReviewModerationJobStateAsync(newState);
+            startedState = newState;
 
             foreach (var item in snapshot)
             {
@@ -139,6 +141,13 @@ public class ReviewModerationQueueFunction
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to start review moderation job");
+            if (startedState != null)
+            {
+                startedState.IsRunning = false;
+                startedState.CompletedAt = DateTimeOffset.UtcNow;
+                startedState.LastError = "Failed to enqueue review moderation job.";
+                await _reviewService.SaveReviewModerationJobStateAsync(startedState);
+            }
             var error = req.CreateResponse(HttpStatusCode.InternalServerError);
             await error.WriteAsJsonAsync(new { error = "Failed to start review moderation job." });
             return error;

@@ -45,20 +45,22 @@ public class ShoppingSimulatorService
     private readonly QueueClient _queueClient;
     private readonly string _connectionString;
     private readonly ILogger<ShoppingSimulatorService> _logger;
+    private readonly WebPubSubService _publisher;
 
     public ShoppingSimulatorService(
         string connectionString,
         string tableServiceUri,
         string queueServiceUri,
-        ILogger<ShoppingSimulatorService> logger)
+        ILogger<ShoppingSimulatorService> logger,
+        WebPubSubService publisher)
     {
         _connectionString = connectionString;
         _logger = logger;
+        _publisher = publisher;
 
         var credential = new Azure.Identity.DefaultAzureCredential();
 
-        var tableService = new TableServiceClient(new Uri(tableServiceUri), credential);
-        _tableClient = tableService.GetTableClient(TABLE_NAME);
+        _tableClient = new NotifyingTableClient(new Uri(tableServiceUri), TABLE_NAME, credential, publisher, "shopping-simulator");
 
         var queueService = new QueueServiceClient(
             new Uri(queueServiceUri),
@@ -119,6 +121,7 @@ public class ShoppingSimulatorService
     public async Task ClearQueueAsync()
     {
         await _queueClient.ClearMessagesAsync();
+        await _publisher.SendToGroupAsync("shopping-simulator", new { @event = "queue-cleared" });
     }
 
     // ── Counter increment ────────────────────────────────────────────────────

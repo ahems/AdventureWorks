@@ -28,6 +28,17 @@ These scripts test the AdventureWorks APIs and Azure Functions directly using cu
 
 ### Local Hook Tests
 
+- **[test-live-updates.mjs](test-live-updates.mjs)** - Offline regression tests
+  using the real frontend modules: initial reads, fixed-window burst batching,
+  serialized in-flight follow-ups, job identity filtering, reconnect/focus
+  recovery, once-per-instance utility completion, stale/unmounted response guards,
+  socket availability and explicit errors. Includes a TypeScript AST guard against
+  recurring network polling in all three frontends; only verified local display
+  clocks retain intervals. Run
+  `node --experimental-vm-modules --test tests/scripts/test-live-updates.mjs`.
+- Manufacturing dispatcher and socket regressions:
+  `npm --prefix app-manufacturing test -- src/hooks/useRealTimeUpdates.test.ts src/hooks/useWebPubSub.test.ts`.
+
 - **test-chat-model-selection.sh** - Runs the actual preup chat-selection block
   against fixture quotas, covering ranking, overrides, tiers, capacity, fallback,
   and explicit policy errors. Requires only Bash and jq; does not access Azure or
@@ -53,6 +64,7 @@ These scripts test the AdventureWorks APIs and Azure Functions directly using cu
 
 ### Authentication Tests
 
+- **[test_azure_auth.py](test_azure_auth.py)** - Offline regression tests for the reusable [Azure authentication helper](../../scripts/utilities/azure-auth.py): PKCE/state, identity/audience/role binding, redirects, errors and refresh rotation. Run `python3 -B -m unittest discover -s tests/scripts -p 'test_azure_auth.py'`. See the [authenticated scripting guide](../../docs/testing/AZURE_AUTHENTICATED_SCRIPTS.md) for live read-only checks.
 - **test-password-functions.sh** - Password hashing and verification (requires `FUNCTIONS_TOKEN` + `TEST_BUSINESS_ENTITY_ID` for a disposable e-shop customer — the endpoints are self-only)
 - **test-password-reset-flow.sh** - Complete password reset flow (request → validate → reset; also requires `TEST_EMAIL`)
 - **auth-smoke-tests.sh** - MCP OAuth discovery/authorization + authenticated data-access + core endpoint smoke test. Reads endpoint URLs from the current `azd` environment, prints a `PASS`/`FAIL` summary, and on failure emits per-check diagnostics (resolved URL, HTTP status, translated curl exit code, attempt count, and response headers/body). It validates three OAuth discovery/enforcement layers, a full authenticated data-access flow, and the AI agent endpoints in addition to basic reachability:

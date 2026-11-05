@@ -112,7 +112,7 @@ builder.Services.AddScoped<ReviewService>(sp =>
         ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
     var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
         ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
-    return new ReviewService(connectionString, tableServiceUri);
+    return new ReviewService(connectionString, tableServiceUri, sp.GetRequiredService<WebPubSubService>());
 });
 
 // Register OrderService for MCP Server
@@ -390,7 +390,7 @@ builder.Services.AddScoped<WorkOrderSimulationService>(sp =>
     var logger    = sp.GetRequiredService<ILogger<WorkOrderSimulationService>>();
     var bank      = sp.GetRequiredService<BankService>();
     var warehouse = sp.GetRequiredService<WarehouseService>();
-    return new WorkOrderSimulationService(connectionString, tableServiceUri, simulationTimeScale, defaultScrapRate, logger, bank, warehouse);
+    return new WorkOrderSimulationService(connectionString, tableServiceUri, simulationTimeScale, defaultScrapRate, logger, bank, warehouse, sp.GetRequiredService<WebPubSubService>());
 });
 
 // Register SupplyChainService for the procurement simulation
@@ -407,7 +407,7 @@ builder.Services.AddScoped<SupplyChainService>(sp =>
     var telemetry = sp.GetRequiredService<TelemetryClient>();
     var bank      = sp.GetRequiredService<BankService>();
     var warehouse = sp.GetRequiredService<WarehouseService>();
-    return new SupplyChainService(connectionString, tableServiceUri, simulationTimeScale, supplyChainSpeedMultiplier, logger, telemetry, bank, warehouse);
+    return new SupplyChainService(connectionString, tableServiceUri, simulationTimeScale, supplyChainSpeedMultiplier, logger, telemetry, bank, warehouse, sp.GetRequiredService<WebPubSubService>());
 });
 
 // Register ManufacturingPlanningService for planning intelligence endpoints
@@ -429,7 +429,7 @@ builder.Services.AddScoped<WorkforceService>(sp =>
     var tableServiceUri = configuration["AzureWebJobsStorage:tableServiceUri"]
         ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.table.core.windows.net";
     var logger = sp.GetRequiredService<ILogger<WorkforceService>>();
-    return new WorkforceService(connectionString, tableServiceUri, logger);
+    return new WorkforceService(connectionString, tableServiceUri, logger, sp.GetRequiredService<WebPubSubService>());
 });
 
 // Register WarehouseService — always-on, event-driven warehouse simulation
@@ -445,7 +445,7 @@ builder.Services.AddScoped<WarehouseService>(sp =>
         ?? $"https://{configuration["AzureWebJobsStorage:accountName"]}.queue.core.windows.net";
     var bank   = sp.GetRequiredService<BankService>();
     var logger = sp.GetRequiredService<ILogger<WarehouseService>>();
-    return new WarehouseService(connectionString, tableServiceUri, queueServiceUri, bank, logger);
+    return new WarehouseService(connectionString, tableServiceUri, queueServiceUri, bank, logger, sp.GetRequiredService<WebPubSubService>());
 });
 
 // Register ShoppingSimulatorService — manages Shopping Simulator state, queue depth, and
@@ -461,7 +461,7 @@ builder.Services.AddScoped<ShoppingSimulatorService>(sp =>
     var queueServiceUri  = configuration["AzureWebJobsStorage:queueServiceUri"]
         ?? $"https://{accountName}.queue.core.windows.net";
     var logger = sp.GetRequiredService<ILogger<ShoppingSimulatorService>>();
-    return new ShoppingSimulatorService(connectionString, tableServiceUri, queueServiceUri, logger);
+    return new ShoppingSimulatorService(connectionString, tableServiceUri, queueServiceUri, logger, sp.GetRequiredService<WebPubSubService>());
 });
 
 // Register OrderGenerationService for SQL write operations during AI order generation
@@ -476,13 +476,13 @@ builder.Services.AddScoped<OrderGenerationService>(sp =>
 // Register manufacturing agent infrastructure (replaces ManufacturingAgentService).
 // Orders are now queued to manufacturing-agent-queue; the queue trigger invokes the hosted agent.
 builder.Services.AddScoped<ManufacturingAgentConfigService>(sp =>
-    new ManufacturingAgentConfigService(sp.GetRequiredService<ILogger<ManufacturingAgentConfigService>>()));
+    new ManufacturingAgentConfigService(sp.GetRequiredService<ILogger<ManufacturingAgentConfigService>>(), sp.GetRequiredService<WebPubSubService>()));
 
 builder.Services.AddScoped<AutoPromotionConfigService>(sp =>
-    new AutoPromotionConfigService(sp.GetRequiredService<ILogger<AutoPromotionConfigService>>()));
+    new AutoPromotionConfigService(sp.GetRequiredService<ILogger<AutoPromotionConfigService>>(), sp.GetRequiredService<WebPubSubService>()));
 
 builder.Services.AddScoped<ManufacturingProposalService>(sp =>
-    new ManufacturingProposalService(sp.GetRequiredService<ILogger<ManufacturingProposalService>>()));
+    new ManufacturingProposalService(sp.GetRequiredService<ILogger<ManufacturingProposalService>>(), sp.GetRequiredService<WebPubSubService>()));
 
 builder.Services.AddScoped<ManufacturingAgentRunService>(sp =>
 {
@@ -493,7 +493,7 @@ builder.Services.AddScoped<ManufacturingAgentRunService>(sp =>
     var queueServiceUri = configuration["AzureWebJobsStorage:queueServiceUri"]
         ?? $"https://{accountName}.queue.core.windows.net";
     var logger = sp.GetRequiredService<ILogger<ManufacturingAgentRunService>>();
-    return new ManufacturingAgentRunService(logger, tableServiceUri, queueServiceUri);
+    return new ManufacturingAgentRunService(logger, tableServiceUri, queueServiceUri, sp.GetRequiredService<WebPubSubService>());
 });
 
 // Register OrderGenerationAgentService: AI+Foundry orchestration for order generation wizard
@@ -538,7 +538,7 @@ builder.Services.AddScoped<CustomerGenerationAgentService>(sp =>
 builder.Services.AddScoped<OrderPipelineConfigService>(sp =>
 {
     var logger = sp.GetRequiredService<ILogger<OrderPipelineConfigService>>();
-    return new OrderPipelineConfigService(logger);
+    return new OrderPipelineConfigService(logger, sp.GetRequiredService<WebPubSubService>());
 });
 
 // Register BankService for the virtual bank simulator

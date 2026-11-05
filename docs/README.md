@@ -54,6 +54,7 @@ _Production reference architecture showing all Azure components with enterprise 
 
 **Location:** `features/authentication/`
 
+- [Authenticated local Azure scripts](testing/AZURE_AUTHENTICATED_SCRIPTS.md) - Reusable azd-based helper for seeded internal-user OAuth, DAB/Functions/MCP calls, curl and rotating refresh sessions
 - [PASSWORD_IMPLEMENTATION.md](features/authentication/PASSWORD_IMPLEMENTATION.md) - Password hashing and storage
 - [PASSWORD_RESET_FLOW.md](features/authentication/PASSWORD_RESET_FLOW.md) - Password reset workflow
 
@@ -82,6 +83,17 @@ _Production reference architecture showing all Azure components with enterprise 
 - [APP_INSIGHTS_INTEGRATION.md](features/monitoring/APP_INSIGHTS_INTEGRATION.md) - Application Insights setup
 - [TELEMETRY_GENERATION.md](features/monitoring/TELEMETRY_GENERATION.md) - Telemetry generation for testing
 - [HEALTH_DIAGNOSTICS.md](features/monitoring/HEALTH_DIAGNOSTICS.md) - Storefront quick service/dependency diagnostics, optional capabilities, data readiness, and deployment/smoke tests
+
+### Real-Time Updates
+
+All three frontends use Web PubSub events instead of recurring network polling.
+Root dispatchers invalidate domain caches; admin status/job subscriptions batch
+events into authorized status reads. Initial loads, reconnections and visible-tab
+focus recover snapshots. A connection failure displays a stale-data notice;
+it does not enable a polling fallback. Local display clocks remain unchanged.
+
+- [Real-time development policy](../.github/copilot-instructions.md#real-time-push-pattern-web-pubsub) - Groups, event batching, job identity filtering and adding live queries.
+- [Offline live-update regression tests](../tests/scripts/README.md#local-hook-tests) - Event bursts, in-flight follow-ups, reconnect/focus, cleanup, utility completion, socket errors and the no-network-polling source guard.
 
 ### Product Reviews
 

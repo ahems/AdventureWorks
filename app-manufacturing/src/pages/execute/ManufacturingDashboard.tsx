@@ -61,19 +61,6 @@ import {
 import { toast } from "sonner";
 import ShortagesPanel from "@/components/ShortagesPanel";
 
-function useAutoRefresh<T>(
-  queryKey: string[],
-  fn: () => Promise<T>,
-  interval: number,
-) {
-  return useQuery({
-    queryKey,
-    queryFn: fn,
-    refetchInterval: interval,
-    refetchIntervalInBackground: true,
-  });
-}
-
 const ManufacturingDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -93,14 +80,14 @@ const ManufacturingDashboard: React.FC = () => {
     data: status,
     isLoading: statusLoading,
     error: statusError,
-  } = useAutoRefresh<ManufacturingStatus>(
-    ["manufacturing-status"],
-    fetchManufacturingStatus,
-    120_000,
-  );
-  const { data: active, isLoading: activeLoading } = useAutoRefresh<
-    ActiveOperation[]
-  >(["manufacturing-active"], fetchActiveOperations, 120_000);
+  } = useQuery<ManufacturingStatus>({
+    queryKey: ["manufacturing-status"],
+    queryFn: fetchManufacturingStatus,
+  });
+  const { data: active, isLoading: activeLoading } = useQuery<ActiveOperation[]>({
+    queryKey: ["manufacturing-active"],
+    queryFn: fetchActiveOperations,
+  });
 
   // Purchase orders for shortage cross-reference
   const { data: supplyOrders } = useQuery<PurchaseOrder[]>({
@@ -129,7 +116,6 @@ const ManufacturingDashboard: React.FC = () => {
     queryKey: ["vendor-quality"],
     queryFn: fetchVendorQuality,
     staleTime: 30_000,
-    refetchInterval: 120_000,
     enabled: activeTab === "supplier-quality",
   });
 
@@ -140,7 +126,6 @@ const ManufacturingDashboard: React.FC = () => {
     queryKey: ["scrap-events", qualityVendorFilter],
     queryFn: () => fetchScrapEvents(qualityVendorFilter ?? undefined),
     staleTime: 30_000,
-    refetchInterval: 120_000,
     enabled: activeTab === "supplier-quality" && qualityVendorFilter !== null,
   });
 
@@ -795,7 +780,6 @@ function CustomerDemandCard() {
   const { data, isLoading } = useQuery({
     queryKey: ["open-demand"],
     queryFn: loadOpenDemand,
-    refetchInterval: 120_000,
   });
   const { data: products, isLoading: productsLoading } = useQuery({
     queryKey: ["manufactured-products"],

@@ -27,6 +27,7 @@ public class WebPubSubService
         "reviews",
         "finance",
         "promotions",
+        "utilities",
     };
 
     private readonly WebPubSubServiceClient? _client;
@@ -54,7 +55,7 @@ public class WebPubSubService
     /// Sends a JSON message to all clients subscribed to the specified group.
     /// Fire-and-forget: exceptions are caught and logged, never rethrown.
     /// </summary>
-    public async Task SendToGroupAsync(string group, object payload)
+    public virtual async Task SendToGroupAsync(string group, object payload)
     {
         if (_client == null) return;
 

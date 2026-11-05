@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import { useLiveUpdates } from "@/hooks/useLiveUpdates";
 import {
   Loader2,
   CheckCircle2,
@@ -30,6 +31,16 @@ const UtilityStatusPanel: React.FC<UtilityStatusPanelProps> = ({
   const [status, setStatus] = useState<OrchestrationStatus | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const completedInstance = useRef<string | null>(null);
+  const currentInstance = useRef<string | null>(jobResponse.id);
+  useEffect(() => {
+    currentInstance.current = jobResponse.id;
+    setStatus(null);
+    setStatusError(null);
+    setElapsedTime(0);
+    return () => { currentInstance.current = null; };
+  }, [jobResponse.id]);
 
   const isDurable = jobResponse.statusQueryGetUri !== null;
 
@@ -39,30 +50,37 @@ const UtilityStatusPanel: React.FC<UtilityStatusPanelProps> = ({
       const currentStatus = await getOrchestrationStatus(
         jobResponse.statusQueryGetUri,
       );
+      if (currentInstance.current !== jobResponse.id) return;
       setStatus(currentStatus);
+      setStatusError(null);
       if (
         currentStatus.runtimeStatus === "Completed" ||
         currentStatus.runtimeStatus === "Failed" ||
         currentStatus.runtimeStatus === "Terminated"
       ) {
-        onComplete?.();
+        if (completedInstance.current !== jobResponse.id) {
+          completedInstance.current = jobResponse.id;
+          onComplete?.();
+        }
       }
-    } catch {
-      // silently ignore polling errors
+    } catch (error) {
+      if (currentInstance.current !== jobResponse.id) return;
+      setStatusError(error instanceof Error ? error.message : "Unable to load job status.");
     }
-  }, [jobResponse.statusQueryGetUri, onComplete]);
+  }, [jobResponse.statusQueryGetUri, jobResponse.id, onComplete]);
 
   useEffect(() => {
     if (!isDurable) {
       // Queue-based job: no polling, show "Queued" immediately
       setStatus({ runtimeStatus: "Completed" });
-      onComplete?.();
+      if (completedInstance.current !== jobResponse.id) {
+        completedInstance.current = jobResponse.id;
+        onComplete?.();
+      }
       return;
     }
-    fetchStatus();
-    const statusInterval = setInterval(fetchStatus, 2000);
-    return () => clearInterval(statusInterval);
-  }, [fetchStatus, isDurable, onComplete]);
+  }, [isDurable, jobResponse.id, onComplete]);
+  useLiveUpdates(["utilities"], fetchStatus, isDurable, update => update.instanceId === jobResponse.id, jobResponse.id);
 
   useEffect(() => {
     if (status?.runtimeStatus === "Running") {
@@ -129,10 +147,11 @@ const UtilityStatusPanel: React.FC<UtilityStatusPanelProps> = ({
   if (!status) {
     return (
       <div className="mt-4 p-4 doodle-card bg-muted/50">
+        {statusError ? <p role="alert" className="text-red-700">{statusError}</p> :
         <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="w-4 h-4 animate-spin" />
           <span className="font-doodle">Loading status...</span>
-        </div>
+        </div>}
       </div>
     );
   }
@@ -141,6 +160,7 @@ const UtilityStatusPanel: React.FC<UtilityStatusPanelProps> = ({
 
   return (
     <div className="mt-4 p-4 doodle-card bg-muted/50">
+      {statusError && <p role="alert" className="text-red-700">{statusError} Status may be stale.</p>}
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">

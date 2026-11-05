@@ -24,7 +24,7 @@ const ExecuteShopFloor = () => {
   const { data: workOrders, isLoading } = useQuery({ queryKey: ['work-orders'], queryFn: fetchWorkOrders });
   const { data: products } = useQuery({ queryKey: ['manufactured-products'], queryFn: fetchManufacturedProducts });
   const { data: activeOps } = useQuery({ queryKey: ['active-operations'], queryFn: fetchActiveOperations });
-  const { data: mfgStatus } = useQuery({ queryKey: ['manufacturing-status'], queryFn: fetchManufacturingStatus, refetchInterval: 60_000 });
+  const { data: mfgStatus } = useQuery({ queryKey: ['manufacturing-status'], queryFn: fetchManufacturingStatus });
   const { data: locations } = useQuery({ queryKey: ['locations'], queryFn: fetchLocations });
 
   const productMap = useMemo(() => {
@@ -81,7 +81,6 @@ const ExecuteShopFloor = () => {
     queries: activeOrders.map(wo => ({
       queryKey: ['wo-routing', wo.WorkOrderID],
       queryFn: () => fetchWorkOrderRouting(wo.WorkOrderID),
-      refetchInterval: 120_000,
     })),
   });
 

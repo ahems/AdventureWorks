@@ -30,23 +30,25 @@ public class ManufacturingAgentRunService
     private readonly ILogger<ManufacturingAgentRunService> _logger;
     private readonly string _tableServiceUri;
     private readonly string _queueServiceUri;
+    private readonly WebPubSubService _publisher;
 
     public ManufacturingAgentRunService(
         ILogger<ManufacturingAgentRunService> logger,
         string tableServiceUri,
-        string queueServiceUri)
+        string queueServiceUri,
+        WebPubSubService publisher)
     {
         _logger          = logger;
         _tableServiceUri = tableServiceUri;
         _queueServiceUri = queueServiceUri;
+        _publisher = publisher;
     }
 
     // ── Table client ──────────────────────────────────────────────────────────
 
     private async Task<TableClient> GetTableClientAsync()
     {
-        var serviceClient = new TableServiceClient(new Uri(_tableServiceUri), new DefaultAzureCredential());
-        return serviceClient.GetTableClient(TableName);
+        return new NotifyingTableClient(new Uri(_tableServiceUri), TableName, new DefaultAzureCredential(), _publisher, "manufacturing-agent");
     }
 
     // ── Run lifecycle ─────────────────────────────────────────────────────────

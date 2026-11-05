@@ -1,4 +1,5 @@
 import React from "react";
+import { useLiveUpdates } from "@/hooks/useLiveUpdates";
 import { Link } from "react-router-dom";
 import {
   Bot,
@@ -26,8 +27,6 @@ import {
   type AutoPromotionConfig,
 } from "@/services/utilityService";
 import { toast } from "@/hooks/use-toast";
-
-const POLL_INTERVAL_MS = 30_000;
 
 function formatTimestamp(iso: string | null): string {
   if (!iso) return "Never";
@@ -73,11 +72,7 @@ export default function AutoPromotionsPage() {
     }
   }, []);
 
-  React.useEffect(() => {
-    fetchConfig();
-    const id = setInterval(fetchConfig, POLL_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [fetchConfig]);
+  useLiveUpdates(["promotions", "orders"], fetchConfig);
 
   const handleSave = async () => {
     setSaving(true);
@@ -150,20 +145,6 @@ export default function AutoPromotionsPage() {
               Automatically generate AI-driven promotions when order volume
               thresholds are reached
             </p>
-          </div>
-          <div className="ml-auto">
-            <Button
-              variant="outline"
-              size="sm"
-              className="doodle-button p-1.5"
-              onClick={fetchConfig}
-              disabled={loading}
-              title="Refresh"
-            >
-              <RefreshCw
-                className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
-              />
-            </Button>
           </div>
         </div>
 

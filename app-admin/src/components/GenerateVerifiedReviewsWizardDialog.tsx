@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useCallback } from "react";
+import { useLiveUpdates } from "@/hooks/useLiveUpdates";
 import { createPortal } from "react-dom";
 import {
   Star,
@@ -39,7 +40,6 @@ const GenerateVerifiedReviewsWizardDialog: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isStarting = useRef(false);
-  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── helpers ─────────────────────────────────────────────────────────────
 
@@ -65,25 +65,10 @@ const GenerateVerifiedReviewsWizardDialog: React.FC = () => {
     setIsOpen(true);
     setStep("configure");
     setErrorMessage(null);
-    try {
-      const status = await getVerifiedReviewsJobStatus();
-      if (status.isRunning) {
-        setExistingJobRunning(true);
-        setJobState(status);
-      } else {
-        setExistingJobRunning(false);
-      }
-    } catch {
-      /* non-critical */
-    }
     await fetchSummary();
   }, [fetchSummary]);
 
   const handleClose = useCallback(() => {
-    if (pollTimer.current) {
-      clearInterval(pollTimer.current);
-      pollTimer.current = null;
-    }
     setIsOpen(false);
     setStep("configure");
     setSummary(null);
@@ -94,28 +79,19 @@ const GenerateVerifiedReviewsWizardDialog: React.FC = () => {
     isStarting.current = false;
   }, []);
 
-  const startPolling = useCallback(() => {
-    if (pollTimer.current) clearInterval(pollTimer.current);
-    pollTimer.current = setInterval(async () => {
-      try {
-        const status = await getVerifiedReviewsJobStatus();
-        setJobState(status);
-        if (!status.isRunning) {
-          clearInterval(pollTimer.current!);
-          pollTimer.current = null;
-          setStep("done");
-        }
-      } catch {
-        /* ignore poll errors */
-      }
-    }, 3000);
+  const refreshJobStatus = useCallback(async () => {
+    try {
+      const status = await getVerifiedReviewsJobStatus();
+      if (isStarting.current) return;
+      setJobState(status);
+      setExistingJobRunning(status.isRunning);
+      if (!status.isRunning) setStep(current => current === "running" ? "done" : current);
+      setErrorMessage(status.lastError);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to load generation status.");
+    }
   }, []);
-
-  useEffect(() => {
-    return () => {
-      if (pollTimer.current) clearInterval(pollTimer.current);
-    };
-  }, []);
+  useLiveUpdates(["reviews"], refreshJobStatus, isOpen);
 
   const handleStart = useCallback(async () => {
     if (!summary || summary.qualifyingProductCount === 0 || isStarting.current)
@@ -141,7 +117,8 @@ const GenerateVerifiedReviewsWizardDialog: React.FC = () => {
         lastError: null,
       };
       setJobState(initialState);
-      startPolling();
+      isStarting.current = false;
+      await refreshJobStatus();
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "Failed to start generation";
@@ -150,7 +127,7 @@ const GenerateVerifiedReviewsWizardDialog: React.FC = () => {
       isStarting.current = false;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [summary, productCount, reviewsPerProduct, startPolling]);
+  }, [summary, productCount, reviewsPerProduct, refreshJobStatus]);
 
   // ── derived values ───────────────────────────────────────────────────────
 

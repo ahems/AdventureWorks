@@ -90,7 +90,7 @@ async function startQueuedFunction(
   };
 }
 
-// ── Durable Functions (support status polling) ─────────────────────────────
+// ── Durable Functions (status refreshes from Web PubSub lifecycle events) ──
 
 export const generateProductEmbeddings = () =>
   startQueuedFunction("GenerateProductEmbeddings_HttpStart");

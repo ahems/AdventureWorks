@@ -274,14 +274,14 @@ public class WarehouseService
         string tableServiceUri,
         string queueServiceUri,
         BankService? bank,
-        ILogger<WarehouseService> logger)
+        ILogger<WarehouseService> logger,
+        WebPubSubService publisher)
     {
         _connectionString = connectionString;
         _bank             = bank;
         _logger           = logger;
 
-        var tableSvc  = new TableServiceClient(new Uri(tableServiceUri), new DefaultAzureCredential());
-        _tableClient  = tableSvc.GetTableClient(TABLE_NAME);
+        _tableClient = new NotifyingTableClient(new Uri(tableServiceUri), TABLE_NAME, new DefaultAzureCredential(), publisher, "warehouse");
 
         var queueSvc  = new QueueServiceClient(new Uri(queueServiceUri), new DefaultAzureCredential());
         _queueClient              = queueSvc.GetQueueClient(QUEUE_NAME);

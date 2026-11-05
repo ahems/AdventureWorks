@@ -2,138 +2,152 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { useWebPubSub } from "./useWebPubSub";
 
-const GROUPS = [
-  "manufacturing-agent",
-  "manufacturing-ops",
-  "warehouse",
-  "supply-chain",
-  "orders",
-  "shopping-simulator",
-  "finance",
+const INVENTORY_KEYS = [
+  "all-product-inventory", "product-inventory", "product-inventory-all",
+  "inventory-all", "plan-catalog", "fg-catalog-dashboard", "shortage-forecast",
+  "reorder-recs", "overstock", "feasibility-blocked",
+];
+const COST_KEYS = [
+  "all-cost-history", "cost-history", "product-cost-history", "current-cost",
+  "price-history", "thin-margin", "plan-catalog", "fg-catalog-dashboard",
+];
+const OPERATIONS_KEYS = [
+  "manufacturing-status", "manufacturing-active", "active-operations",
+  "manufacturing-status-vendor-detail", "manufacturing-status-vendor-blockers",
+  "work-orders", "work-order", "work-orders-active", "all-recent-wos",
+  "wos-for-product", "workforce-snapshot", "workforce", "workforce-detail",
+  "vendor-quality", "vendor-quality-detail", "scrap-events",
+  "recent-routings", "wo-routing", "all-routing", "all-routings",
+  "work-order-routing", "work-order-routing-all", "product-routing", "routing-product",
+];
+const MANUFACTURING_IMPACT_KEYS = [
+  "manufacturing-status", "manufacturing-active", "active-operations",
+  "manufacturing-status-vendor-detail", "manufacturing-status-vendor-blockers",
+  "work-orders", "work-order", "work-orders-active", "all-recent-wos",
+  "wos-for-product", "supply-orders-shortages",
+];
+const PRODUCT_KEYS = [
+  "product", "all-products", "products-all", "manufactured-products",
+  "products-by-model", "products-meta", "product-model", "product-models",
+  "active-bom", "instruction-bom", "instruction-components", "part-documents",
+  "product-categories", "product-subcategories", "categories", "subcategories",
+  "descriptions", "desc-cultures", "unit-measures", "locations", "location",
+];
+const SUPPLY_KEYS = [
+  "supply-orders", "supply-orders-dashboard", "supply-orders-history",
+  "supply-orders-shortages", "supply-orders-blocked", "supply-order",
+  "open-purchase-orders", "po-headers-all", "po-details", "vendor-purchase-orders",
+  "supply-catalog-all", "supply-catalog", "supply-catalog-product",
+  "supply-catalogs-bulk", "supply-vendors", "supply-vendor", "vendors",
+];
+const FINANCE_KEYS = [
+  "bank-status", "financial-summary", "recent-transactions",
+  "procurement-transactions", "manufacturing-transactions",
+];
+const DEMAND_KEYS = [
+  "open-demand", "open-sales-orders", "demand-anchor-date", "historical-demand",
 ];
 
-/**
- * Subscribes to Web PubSub groups and invalidates React Query caches
- * when the server pushes real-time events. Mount once at the app root.
- *
- * This replaces aggressive polling with event-driven cache invalidation.
- * Manufacturing bursts are batched without postponing refreshes indefinitely.
- */
+// Group-level coverage also handles generic state-changed/database-changed events.
+// Prefixes deliberately include inactive detail queries so later navigation is fresh.
+export const GROUP_QUERY_KEYS: Record<string, readonly string[]> = {
+  "manufacturing-agent": [
+    "agent-runs", "agent-run-items", "agent-action-history",
+    "agent-approvals-pending", "agent-queue-status", "agent-proposals",
+    "manufacturing-agent-config",
+  ],
+  "manufacturing-ops": [
+    ...OPERATIONS_KEYS, ...PRODUCT_KEYS, ...INVENTORY_KEYS, ...COST_KEYS,
+    "location-config", "scrap-config", "scrap-reasons", "departments", "shifts",
+    "supply-orders-shortages",
+  ],
+  warehouse: [
+    "warehouse-status", "warehouse-active", "warehouse-damage-events",
+    "warehouse-workforce", "warehouse-workforce-detail", "subcategory-configs",
+    "supplier-receive-configs", "warehouse-damage-config",
+    ...INVENTORY_KEYS, ...COST_KEYS, ...MANUFACTURING_IMPACT_KEYS, ...SUPPLY_KEYS,
+    "vendor-quality", "vendor-quality-detail",
+  ],
+  "supply-chain": [
+    ...SUPPLY_KEYS, ...INVENTORY_KEYS, ...COST_KEYS, ...MANUFACTURING_IMPACT_KEYS,
+    ...FINANCE_KEYS, "supply-chain-config", "vendor-quality", "vendor-quality-detail",
+  ],
+  orders: [...DEMAND_KEYS, ...INVENTORY_KEYS, ...MANUFACTURING_IMPACT_KEYS, ...FINANCE_KEYS],
+  "shopping-simulator": [...DEMAND_KEYS, ...INVENTORY_KEYS, ...MANUFACTURING_IMPACT_KEYS],
+  finance: [...FINANCE_KEYS, ...COST_KEYS, "open-sales-orders"],
+};
+
+const GROUPS = Object.keys(GROUP_QUERY_KEYS);
+const SNAPSHOT_KEYS = [...new Set(Object.values(GROUP_QUERY_KEYS).flat())];
+
+/** Mount once at the app root; timers exist only while events are pending. */
 export function useRealTimeUpdates() {
   const qc = useQueryClient();
-  const manufacturingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const supplyChainTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const supplyChainHasPoCreated = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingKeys = useRef(new Set<string>());
+  const flushing = useRef(false);
+  const epoch = useRef(0);
 
-  useEffect(() => () => {
-    if (manufacturingTimer.current) clearTimeout(manufacturingTimer.current);
-    if (supplyChainTimer.current) clearTimeout(supplyChainTimer.current);
+  const clearTimer = () => {
+    if (timer.current !== null) clearTimeout(timer.current);
+    timer.current = null;
+  };
+
+  useEffect(() => {
+    const mountedEpoch = ++epoch.current;
+    const keys = pendingKeys.current;
+    return () => {
+      epoch.current = mountedEpoch + 1;
+      clearTimer();
+      keys.clear();
+      flushing.current = false;
+    };
   }, []);
 
-  useWebPubSub(GROUPS, (group, data) => {
-    switch (group) {
-      case "manufacturing-agent":
-        qc.invalidateQueries({ queryKey: ["agent-runs"] });
-        qc.invalidateQueries({ queryKey: ["agent-run-items"] });
-        qc.invalidateQueries({ queryKey: ["agent-action-history"] });
-        qc.invalidateQueries({ queryKey: ["agent-approvals-pending"] });
-        qc.invalidateQueries({ queryKey: ["agent-queue-status"] });
-        if ((data.event as string) === "config-changed") {
-          qc.invalidateQueries({ queryKey: ["manufacturing-agent-config"] });
-        }
-        break;
-
-      case "manufacturing-ops":
-        // A fixed window keeps continuous operation events from starving updates.
-        if (manufacturingTimer.current) break;
-        manufacturingTimer.current = setTimeout(() => {
-          manufacturingTimer.current = null;
-          for (const key of [
-            "manufacturing-status",
-            "manufacturing-active",
-            "active-operations",
-            "work-orders",
-            "work-order",
-            "work-orders-active",
-            "all-recent-wos",
-            "recent-routings",
-            "wo-routing",
-            "instruction-bom",
-            "instruction-components",
-            "active-bom",
-            "product",
-            "all-routing",
-            "workforce-snapshot",
-            "workforce",
-            "workforce-detail",
-            "vendor-quality",
-            "scrap-events",
-            "supply-orders-shortages",
-            "shortage-forecast",
-            "reorder-recs",
-            "plan-catalog",
-            "overstock",
-          ]) {
-            // Reuse an in-flight read instead of restarting it on every burst.
-            qc.invalidateQueries({ queryKey: [key] }, { cancelRefetch: false });
-          }
-        }, 2000);
-        break;
-
-      case "warehouse":
-        qc.invalidateQueries({ queryKey: ["warehouse-status"] });
-        qc.invalidateQueries({ queryKey: ["warehouse-active"] });
-        qc.invalidateQueries({ queryKey: ["warehouse-damage-events"] });
-        qc.invalidateQueries({ queryKey: ["warehouse-workforce"] });
-        qc.invalidateQueries({ queryKey: ["warehouse-workforce-detail"] });
-        qc.invalidateQueries({ queryKey: ["all-product-inventory"] });
-        qc.invalidateQueries({ queryKey: ["product-inventory"] });
-        qc.invalidateQueries({ queryKey: ["plan-catalog"] });
-        break;
-
-      case "supply-chain":
-        // Debounce supply-chain events: during bulk reorder, hundreds of
-        // po-created events arrive in rapid succession. Invalidating on each
-        // one overwhelms the browser connection pool. Batch them into a single
-        // invalidation after a 2s quiet window.
-        if ((data.event as string) === "po-created") {
-          supplyChainHasPoCreated.current = true;
-        }
-        if (supplyChainTimer.current) clearTimeout(supplyChainTimer.current);
-        supplyChainTimer.current = setTimeout(() => {
-          qc.invalidateQueries({ queryKey: ["supply-orders"] });
-          qc.invalidateQueries({ queryKey: ["supply-orders-dashboard"] });
-          qc.invalidateQueries({ queryKey: ["supply-orders-history"] });
-          qc.invalidateQueries({ queryKey: ["supply-orders-shortages"] });
-          qc.invalidateQueries({ queryKey: ["supply-orders-blocked"] });
-          qc.invalidateQueries({ queryKey: ["supply-order"] });
-          qc.invalidateQueries({ queryKey: ["open-purchase-orders"] });
-          qc.invalidateQueries({ queryKey: ["po-headers-all"] });
-          qc.invalidateQueries({ queryKey: ["supply-catalog-all"] });
-          qc.invalidateQueries({ queryKey: ["supply-catalog"] });
-          if (supplyChainHasPoCreated.current) {
-            qc.invalidateQueries({ queryKey: ["manufacturing-status"] });
-            supplyChainHasPoCreated.current = false;
-          }
-          supplyChainTimer.current = null;
-        }, 2000);
-        break;
-
-      case "orders":
-        qc.invalidateQueries({ queryKey: ["open-demand"] });
-        break;
-
-      case "shopping-simulator":
-        qc.invalidateQueries({ queryKey: ["manufacturing-status"] });
-        break;
-
-      case "finance":
-        qc.invalidateQueries({ queryKey: ["bank-status"] });
-        qc.invalidateQueries({ queryKey: ["financial-summary"] });
-        qc.invalidateQueries({ queryKey: ["recent-transactions"] });
-        qc.invalidateQueries({ queryKey: ["procurement-transactions"] });
-        qc.invalidateQueries({ queryKey: ["manufacturing-transactions"] });
-        break;
+  const flush = async () => {
+    if (flushing.current) return;
+    const startedEpoch = epoch.current;
+    flushing.current = true;
+    try {
+      while (epoch.current === startedEpoch && pendingKeys.current.size) {
+        const batch = [...pendingKeys.current];
+        pendingKeys.current.clear();
+        // A read already started before this mutation may return an older
+        // snapshot. Wait for it, then retain one dirty follow-up for that root.
+        const alreadyFetching = batch.filter(
+          (key) => qc.isFetching({ queryKey: [key], type: "active" }) > 0,
+        );
+        await Promise.all(batch.map((key) =>
+          qc.invalidateQueries({ queryKey: [key] }, { cancelRefetch: false }),
+        ));
+        if (epoch.current !== startedEpoch) return;
+        alreadyFetching.forEach((key) => pendingKeys.current.add(key));
+        // Events received while awaiting reads are coalesced here, not lost.
+      }
+    } finally {
+      if (epoch.current === startedEpoch) flushing.current = false;
     }
-  });
+  };
+
+  return useWebPubSub(
+    GROUPS,
+    (group) => {
+      const keys = GROUP_QUERY_KEYS[group];
+      if (!keys) return;
+      keys.forEach((key) => pendingKeys.current.add(key));
+      if (flushing.current || timer.current !== null) return;
+      // A fixed window (not a quiet-period debounce) bounds continuous bursts.
+      timer.current = setTimeout(() => {
+        timer.current = null;
+        void flush();
+      }, 2000);
+    },
+    () => {
+      clearTimer();
+      // The token's groups are joined before "connected". Catch up once after
+      // subscribing/reconnecting so missed events cannot leave cached data stale.
+      SNAPSHOT_KEYS.forEach((key) => pendingKeys.current.add(key));
+      void flush();
+    },
+  );
 }

@@ -1,4 +1,5 @@
 import React from "react";
+import { useLiveUpdates } from "@/hooks/useLiveUpdates";
 import { Link } from "react-router-dom";
 import {
   Bot,
@@ -35,8 +36,6 @@ import {
   type ShoppingSimulatorStatus,
   type SimulationOrderResult,
 } from "@/services/utilityService";
-
-const POLL_INTERVAL_MS = 15_000;
 
 const DEFAULT_STATUS: ShoppingSimulatorStatus = {
   isRunning: false,
@@ -192,11 +191,7 @@ export default function ShoppingSimulatorPage() {
     }
   }, []);
 
-  React.useEffect(() => {
-    fetchStatus();
-    const id = setInterval(fetchStatus, POLL_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [fetchStatus]);
+  useLiveUpdates(["shopping-simulator"], fetchStatus);
 
   // ── Actions ─────────────────────────────────────────────────────────────
 
@@ -313,18 +308,6 @@ export default function ShoppingSimulatorPage() {
             >
               <Settings className="w-4 h-4" />
             </Link>
-            <Button
-              variant="outline"
-              size="sm"
-              className="doodle-button p-1.5"
-              onClick={fetchStatus}
-              disabled={loading || actionPending}
-              title="Refresh"
-            >
-              <RefreshCw
-                className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
-              />
-            </Button>
           </div>
         </div>
 

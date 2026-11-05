@@ -120,7 +120,6 @@ const WarehouseFloor: React.FC = () => {
   const { data: status } = useQuery({
     queryKey: ["warehouse-status"],
     queryFn: fetchWarehouseStatus,
-    refetchInterval: 60_000,
   });
 
   const {
@@ -130,7 +129,6 @@ const WarehouseFloor: React.FC = () => {
   } = useQuery({
     queryKey: ["warehouse-active"],
     queryFn: fetchWarehouseActive,
-    refetchInterval: 60_000,
   });
 
   const filtered = useMemo(() => {

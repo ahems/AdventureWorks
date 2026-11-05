@@ -78,6 +78,7 @@ public class GenerateProductEmbeddings
         [OrchestrationTrigger] TaskOrchestrationContext context)
     {
         var logger = context.CreateReplaySafeLogger<GenerateProductEmbeddings>();
+        await UtilityLifecycleNotifications.RegisterAsync(context, "product-embeddings");
 
         try
         {

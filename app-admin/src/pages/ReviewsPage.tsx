@@ -96,6 +96,7 @@ import {
 } from "@/services/utilityService";
 
 import { getAppUrl } from "@/lib/utils";
+import { useLiveUpdates } from "@/hooks/useLiveUpdates";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -108,8 +109,6 @@ interface ReviewWithAI extends AdminReview {
 type ViewMode = "list" | "group-product" | "group-customer";
 type SortOption = "newest" | "oldest" | "highest" | "lowest" | "helpful";
 type GroupSort = "most-reviews" | "lowest-rating" | "most-negative";
-
-const REVIEW_MODERATION_POLL_INTERVAL_MS = 3000;
 
 // ─── Sentiment UI helpers ─────────────────────────────────────────────────────
 
@@ -164,6 +163,7 @@ const ReviewsPage: React.FC = () => {
   const [analyzeProgress, setAnalyzeProgress] = useState<string>("");
   const [isAnalyzeApproveAllRunning, setIsAnalyzeApproveAllRunning] =
     useState(false);
+  const startingModerationRef = useRef(false);
   const [analyzeApproveAllProgress, setAnalyzeApproveAllProgress] =
     useState<string>("");
   const [isAnalyzeApproveAllConfirmOpen, setIsAnalyzeApproveAllConfirmOpen] =
@@ -674,9 +674,10 @@ const ReviewsPage: React.FC = () => {
     }
   }, [filteredReviews, productMap]);
 
-  const pollReviewModerationStatus = useCallback(async () => {
+  const refreshReviewModerationStatus = useCallback(async () => {
     try {
       const status = await getReviewModerationStatus();
+      if (startingModerationRef.current) return;
       setIsAnalyzeApproveAllRunning(status.isRunning);
 
       if (status.isRunning) {
@@ -709,22 +710,18 @@ const ReviewsPage: React.FC = () => {
           variant: status.failedCount > 0 ? "destructive" : undefined,
         });
       }
-    } catch {
-      // Polling failures are transient; leave current status UI as-is.
+    } catch (error) {
+      console.error("Review moderation status unavailable.", error);
+      setAnalyzeApproveAllProgress("Unable to load moderation status. Data may be stale.");
     }
   }, [queryClient]);
 
-  useEffect(() => {
-    void pollReviewModerationStatus();
-    const id = setInterval(() => {
-      void pollReviewModerationStatus();
-    }, REVIEW_MODERATION_POLL_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [pollReviewModerationStatus]);
+  useLiveUpdates(["reviews"], refreshReviewModerationStatus, isAuthenticated);
 
   const handleAnalyzeAndApproveAll = useCallback(async () => {
-    if (isAnalyzeApproveAllRunning) return;
+    if (isAnalyzeApproveAllRunning || startingModerationRef.current) return;
 
+    startingModerationRef.current = true;
     setIsAnalyzeApproveAllRunning(true);
     setAnalyzeApproveAllProgress("Queueing review moderation job...");
 
@@ -777,8 +774,11 @@ const ReviewsPage: React.FC = () => {
         description: err instanceof Error ? err.message : "Unknown error",
         variant: "destructive",
       });
+    } finally {
+      startingModerationRef.current = false;
+      await refreshReviewModerationStatus();
     }
-  }, [isAnalyzeApproveAllRunning]);
+  }, [isAnalyzeApproveAllRunning, refreshReviewModerationStatus]);
 
   const handleConfirmAnalyzeAndApproveAll = useCallback(async () => {
     setIsAnalyzeApproveAllConfirmOpen(false);

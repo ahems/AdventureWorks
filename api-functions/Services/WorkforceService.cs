@@ -98,13 +98,13 @@ public class WorkforceService
     public WorkforceService(
         string connectionString,
         string tableServiceUri,
-        ILogger<WorkforceService> logger)
+        ILogger<WorkforceService> logger,
+        WebPubSubService publisher)
     {
         _connectionString = connectionString;
         _logger           = logger;
 
-        var svc = new TableServiceClient(new Uri(tableServiceUri), new DefaultAzureCredential());
-        _tableClient = svc.GetTableClient(TABLE_NAME);
+        _tableClient = new NotifyingTableClient(new Uri(tableServiceUri), TABLE_NAME, new DefaultAzureCredential(), publisher, "manufacturing-ops");
     }
 
     // ── Initialisation ─────────────────────────────────────────────────────────

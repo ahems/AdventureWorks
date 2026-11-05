@@ -91,39 +91,33 @@ const FinanceManager: React.FC = () => {
   const { data: bankStatus, isLoading: statusLoading } = useQuery({
     queryKey: ["bank-status"],
     queryFn: fetchBankStatus,
-    refetchInterval: 60_000,
   });
 
   const { data: summary, isLoading: summaryLoading } = useQuery({
     queryKey: ["financial-summary"],
     queryFn: fetchFinancialSummary,
-    refetchInterval: 60_000,
   });
 
   const { data: allTxns } = useQuery({
     queryKey: ["recent-transactions"],
     queryFn: () => fetchRecentTransactions(50),
-    refetchInterval: 60_000,
   });
 
   const { data: procTxns } = useQuery({
     queryKey: ["procurement-transactions"],
     queryFn: () => fetchProcurementTransactions(50),
-    refetchInterval: 60_000,
     enabled: txnTab === "procurement",
   });
 
   const { data: mfgTxns } = useQuery({
     queryKey: ["manufacturing-transactions"],
     queryFn: () => fetchManufacturingTransactions(50, "all"),
-    refetchInterval: 60_000,
     enabled: txnTab === "manufacturing",
   });
 
   const { data: openOrders } = useQuery({
     queryKey: ["open-sales-orders"],
     queryFn: fetchOpenSalesOrders,
-    refetchInterval: 60_000,
   });
 
   const isLoading = statusLoading || summaryLoading;

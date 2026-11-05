@@ -57,9 +57,16 @@ public class OrderPlacedSqlTrigger
 
     [Function(nameof(OrderPlacedSqlTrigger))]
     public async Task RunAsync(
-        [SqlTrigger("[Sales].[SalesOrderHeader]", "SQL_CONNECTION_STRING")]
+        [SqlTrigger("[Sales].[SalesOrderHeader]", "SQL_CONNECTION_STRING", "Notifications_SalesOrderHeader")]
         IReadOnlyList<SqlChange<SalesOrderHeaderRow>> changes)
     {
+        if (changes.Count > 0)
+            await _webPubSub.SendToGroupAsync("orders", new
+            {
+                @event = "database-changed",
+                entity = "Sales.SalesOrderHeader",
+                changeTypes = changes.Select(c => c.Operation.ToString()).Distinct().ToArray()
+            });
         foreach (var change in changes.Where(c => c.Operation == SqlChangeOperation.Insert))
         {
             var order = change.Item;

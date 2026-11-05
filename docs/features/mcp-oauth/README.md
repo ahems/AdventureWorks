@@ -151,6 +151,10 @@ AdventureWorks user ─▶ application role ─▶ OAuth scopes ─▶ MCP tool/
 
 ## OAuth endpoints
 
+For command-line testing against an azd deployment, use the
+[authenticated local scripting guide](../../testing/AZURE_AUTHENTICATED_SCRIPTS.md)
+and its reusable helper for the seeded admin/manufacturing identities.
+
 All paths are relative to the deployed `api-mcp` base URL (the **issuer**), which is
 derived from configuration (`MCP_PUBLIC_BASE_URL`) — **no Azure hostnames are
 hard-coded**.

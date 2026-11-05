@@ -26,13 +26,11 @@ const WorkforcePage: React.FC = () => {
   const { data: snapshot, isLoading: snapshotLoading } = useQuery({
     queryKey: ['workforce'],
     queryFn: fetchWorkforce,
-    refetchInterval: 60_000,
   });
 
   const { data: workers, isLoading: workersLoading } = useQuery({
     queryKey: ['workforce-detail'],
     queryFn: fetchWorkforceDetail,
-    refetchInterval: 60_000,
   });
 
   const { data: activeOps } = useQuery({

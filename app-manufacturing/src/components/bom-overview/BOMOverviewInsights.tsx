@@ -205,7 +205,6 @@ const BOMOverviewInsights: React.FC<Props> = ({ bom, products }) => {
     queryFn: fetchWorkOrders,
     enabled: wantWoData,
     staleTime: 60_000,
-    refetchInterval: 120_000,
   });
   const aoQ = useQuery({
     queryKey: ['active-operations'],
@@ -218,14 +217,12 @@ const BOMOverviewInsights: React.FC<Props> = ({ bom, products }) => {
     queryFn: () => fetchProductInventory(),
     enabled: wantInventory,
     staleTime: 60_000,
-    refetchInterval: 120_000,
   });
   const rtQ = useQuery({
     queryKey: ['recent-routings'],
     queryFn: () => fetchWorkOrderRouting(),
     enabled: wantOps,
     staleTime: 60_000,
-    refetchInterval: 120_000,
   });
   const poQ = useQuery({
     queryKey: ['open-purchase-orders'],
@@ -238,14 +235,12 @@ const BOMOverviewInsights: React.FC<Props> = ({ bom, products }) => {
     queryFn: () => fetchCatalog(),
     enabled: wantCost,
     staleTime: 60_000,
-    refetchInterval: 120_000,
   });
   const chQ = useQuery({
     queryKey: ['all-cost-history'],
     queryFn: () => fetchProductCostHistory(),
     enabled: wantCost,
     staleTime: 60_000,
-    refetchInterval: 120_000,
   });
 
   const { data: workOrders, isLoading: woLoading } = woQ;

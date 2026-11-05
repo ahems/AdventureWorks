@@ -28,13 +28,11 @@ const PlanWorkOrderDetail = () => {
   const { data: wo, isLoading } = useQuery({
     queryKey: ["work-order", woId],
     queryFn: () => fetchWorkOrder(woId),
-    refetchInterval: 120_000,
   });
   const { data: routing } = useQuery({
     queryKey: ["wo-routing", woId],
     queryFn: () => fetchWorkOrderRouting(woId),
     enabled: !!wo,
-    refetchInterval: 120_000,
   });
   const { data: productRouting } = useQuery({
     queryKey: ["product-routing", wo?.ProductID],

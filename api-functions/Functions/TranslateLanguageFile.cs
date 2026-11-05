@@ -122,7 +122,8 @@ public class TranslateLanguageFile
 
             var instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
                 nameof(TranslateLanguageFile_Orchestrator),
-                orchestrationInput);
+                orchestrationInput,
+                new StartOrchestrationOptions { Version = "push-v1" });
 
             _logger.LogInformation("Started translation orchestration with ID = '{instanceId}'", instanceId);
 
@@ -276,6 +277,7 @@ public class TranslateLanguageFile
         [OrchestrationTrigger] TaskOrchestrationContext context)
     {
         var logger = context.CreateReplaySafeLogger<TranslateLanguageFile>();
+        await UtilityLifecycleNotifications.RegisterAsync(context, "translate-language-file");
         var input = context.GetInput<TranslationOrchestrationInput>();
 
         if (input == null)

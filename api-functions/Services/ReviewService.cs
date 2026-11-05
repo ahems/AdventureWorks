@@ -10,11 +10,17 @@ public class ReviewService
 {
     private readonly string _connectionString;
     private readonly string _tableServiceUri;
+    private readonly WebPubSubService _publisher;
 
-    public ReviewService(string connectionString, string tableServiceUri)
+    public ReviewService(string connectionString, string tableServiceUri, WebPubSubService publisher,
+        Azure.Data.Tables.TableClient? verifiedReviewsTable = null,
+        Azure.Data.Tables.TableClient? moderationTable = null)
     {
         _connectionString = connectionString;
         _tableServiceUri = tableServiceUri;
+        _publisher = publisher;
+        _tableClient = verifiedReviewsTable;
+        _reviewModerationTableClient = moderationTable;
     }
 
     private async Task<IDbConnection> GetConnectionAsync()
@@ -583,6 +589,12 @@ public class ReviewService
             ["LastError"] = state.LastError
         };
         await client.UpsertEntityAsync(entity, Azure.Data.Tables.TableUpdateMode.Replace);
+        await _publisher.SendToGroupAsync("reviews", new
+        {
+            @event = "generation-state-changed",
+            productId = state.ProductId,
+            changeType = state.IsRunning ? (state.ProcessedCount == 0 ? "started" : "progress") : "terminal"
+        });
     }
 
     // ── Review auto-moderation queue state + data access ────────────────────
@@ -742,6 +754,12 @@ public class ReviewService
             ["LastError"] = state.LastError
         };
         await client.UpsertEntityAsync(entity, Azure.Data.Tables.TableUpdateMode.Replace);
+        await _publisher.SendToGroupAsync("reviews", new
+        {
+            @event = "moderation-state-changed",
+            jobId = state.JobId,
+            changeType = state.IsRunning ? (state.ProcessedCount == 0 ? "started" : "progress") : "terminal"
+        });
     }
 
     public async Task<ReviewModerationJobState> IncrementReviewModerationProgressAsync(
@@ -792,6 +810,12 @@ public class ReviewService
             try
             {
                 await client.UpdateEntityAsync(entity, current.Value.ETag, Azure.Data.Tables.TableUpdateMode.Replace);
+                await _publisher.SendToGroupAsync("reviews", new
+                {
+                    @event = "moderation-state-changed",
+                    jobId,
+                    changeType = entity.GetBoolean("IsRunning") == true ? "progress" : "terminal"
+                });
                 return new ReviewModerationJobState
                 {
                     IsRunning = (bool)(entity["IsRunning"] ?? false),
@@ -814,6 +838,44 @@ public class ReviewService
         }
 
         throw new InvalidOperationException("Could not update review moderation state due to concurrent updates.");
+    }
+
+    public async Task ExpireAbandonedJobsAsync()
+    {
+        await ExpireAsync(GetTableClient(), _verifiedReviewsPartitionKey, _verifiedReviewsRowKey, "generation-state-changed");
+        await ExpireAsync(GetReviewModerationTableClient(), _reviewModerationPartitionKey, _reviewModerationRowKey, "moderation-state-changed");
+    }
+
+    private async Task ExpireAsync(Azure.Data.Tables.TableClient client, string partitionKey, string rowKey, string eventName)
+    {
+        try
+        {
+            var response = await client.GetEntityAsync<Azure.Data.Tables.TableEntity>(partitionKey, rowKey);
+            var entity = response.Value;
+            var lastActivity = entity.GetDateTimeOffset("LastProgressAt") ?? entity.GetDateTimeOffset("StartedAt");
+            if (entity.GetBoolean("IsRunning") != true || !lastActivity.HasValue ||
+                DateTimeOffset.UtcNow - lastActivity.Value <= TimeSpan.FromMinutes(10))
+                return;
+
+            entity["IsRunning"] = false;
+            entity["CompletedAt"] = DateTimeOffset.UtcNow;
+            entity["LastError"] = "Job auto-reset after inactivity timeout.";
+            await client.UpdateEntityAsync(entity, entity.ETag, Azure.Data.Tables.TableUpdateMode.Replace);
+            if (eventName == "generation-state-changed")
+                await _publisher.SendToGroupAsync("reviews", new
+                {
+                    @event = eventName, productId = entity.GetInt32("ProductId") ?? 0, changeType = "terminal"
+                });
+            else
+                await _publisher.SendToGroupAsync("reviews", new
+                {
+                    @event = eventName, jobId = entity.GetString("JobId") ?? string.Empty, changeType = "terminal"
+                });
+        }
+        catch (Azure.RequestFailedException ex) when (ex.Status is 404 or 412)
+        {
+            // A concurrent progress update wins over an expiry based on an older snapshot.
+        }
     }
 
     private sealed class ReviewModerationRowState

@@ -212,6 +212,16 @@ public class SimulationOrderQueueTrigger
             _logger.LogError(ex, "[simulation-order-queue] Unhandled error for persona={Persona} customerId={CustomerId}",
                 personaType, seedCustomerId);
             _telemetryClient.TrackException(ex, trackProps);
+            await _simulator.SaveResultAsync(new Models.SimulationOrderResultEntity
+            {
+                RowKey = Models.SimulationOrderResultEntity.GenerateRowKey(DateTimeOffset.UtcNow),
+                Success = false,
+                FailureCode = "processing-exception",
+                ErrorMessage = ex.Message,
+                PersonaType = personaType,
+                CompletedAt = DateTimeOffset.UtcNow,
+                OrderType = orderType
+            });
             throw; // Re-throw so the Functions runtime can retry / dead-letter
         }
     }
@@ -257,6 +267,8 @@ public class SimulationOrderQueueTrigger
                 queued++;
             }
 
+            await _simulator.IncrementCountersAsync(
+                customerId == 0 ? queued : 0, customerId > 0 ? queued : 0);
             _telemetryClient.TrackEvent("SimulationOrder.Enqueued", new Dictionary<string, string>
             {
                 ["Count"]      = queued.ToString(),
