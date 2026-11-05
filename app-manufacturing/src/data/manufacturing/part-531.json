@@ -1,0 +1,103 @@
+{
+  "productId": 531,
+  "name": "Steerer",
+  "productNumber": "SR-2098",
+  "documentNode": "/900000/531/",
+  "title": "Steerer part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Steerer (Product Number SR-2098) part sheet. Fictional shop-floor demonstration for manufacturing Steerer SR-2098, product 531, from its effective BOM.<Location LocationID=\"10\" SetupHours=\"0.1\" LaborHours=\"0.4\" MachineHours=\"0.2\" LotSize=\"1\">Work Center 10 - Frame Forming. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Frame Forming: an assumed starting point for shaping the supplied sheet into a conceptual steerer form.<step>Set out 1 EA of <material>Metal Sheet 6 (Product Number MS-2348)</material> and visually check it for obvious damage.</step><step>For the demonstration, shape the sheet using <tool>an assumed forming jig</tool>; the tubular representation and its proportions are illustrative only. See <diag>2005311</diag>.</step></Location><Location LocationID=\"30\" SetupHours=\"0.05\" LaborHours=\"0.2\" MachineHours=\"0\" LotSize=\"1\">Work Center 30 - Debur and Polish. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Debur and Polish: an assumed finishing and simple visual-check stage.<step>Remove obvious sharp edges with <tool>an assumed deburring tool</tool>.</step><step>Visually check the formed part for obvious surface damage and set it aside for review.</step></Location></root>",
+  "routingBasis": "demo-assumption",
+  "processNotes": [
+    "The work-center selection and sequence are inferred demo assumptions; no historical routing exists.",
+    "The supplied data does not establish dimensions, material alloy, finished geometry or joining method. The diagram is conceptual, not a production drawing."
+  ],
+  "variantNotes": [
+    "This product has no catalog variants; no color or size is specified.",
+    "One EA is used in each of the LL Fork FK-1639, ML Fork FK-5136 and HL Fork FK-9939 parent assemblies. The supplied data does not describe differences in their use of this part."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0531",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 531,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P531-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "D. Okafor"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2024-02-08",
+        "changeRequest": "ECN-2024-P531-02",
+        "description": "Separated first-article inspection from routine in-process checks; clarified the hold point for nonconforming parts.",
+        "preparedBy": "D. Okafor",
+        "approvedBy": "K. Novak"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P531-03",
+        "description": "Released the illustrated part sheet edition: Conceptual sheet-to-steerer view. Assigned demonstration work centres pending a routing study; marked them as demo assumptions.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "L. Moreau"
+      }
+    ]
+  },
+  "figures": {
+    "2005311": {
+      "title": "Conceptual sheet-to-steerer view",
+      "guidance": [
+        "Set out 1 EA of Metal Sheet 6 (Product Number MS-2348) and visually check it for obvious damage.",
+        "For the demonstration, shape the sheet using an assumed forming jig; the tubular representation and its proportions are illustrative only."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Metal Sheet 6",
+          "productNumber": "MS-2348"
+        },
+        {
+          "number": 2,
+          "name": "Steerer",
+          "productNumber": "SR-2098"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 802,
+      "name": "LL Fork",
+      "productNumber": "FK-1639",
+      "productModelId": 104,
+      "productModelName": "LL Fork",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 803,
+      "name": "ML Fork",
+      "productNumber": "FK-5136",
+      "productModelId": 105,
+      "productModelName": "ML Fork",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 804,
+      "name": "HL Fork",
+      "productNumber": "FK-9939",
+      "productModelId": 106,
+      "productModelName": "HL Fork",
+      "quantity": 1.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 3
+}

@@ -10,6 +10,10 @@ vi.mock('@/services/api', async importOriginal => ({
   ...await importOriginal<typeof import('@/services/api')>(),
   fetchActiveBOM: vi.fn(), fetchProductInventory: vi.fn(), fetchProductsByNumbers: vi.fn(),
 }));
+vi.mock('@/lib/generatedManufacturingContent', async importOriginal => ({
+  ...await importOriginal<typeof import('@/lib/generatedManufacturingContent')>(),
+  hasGeneratedPartSheet: (id: number) => id === 401,
+}));
 const product = { ProductID: 401, ProductNumber: 'HU-8998' } as Product;
 beforeEach(() => {
   vi.mocked(fetchProductsByNumbers).mockResolvedValue([product]);
@@ -17,9 +21,9 @@ beforeEach(() => {
   vi.mocked(fetchProductInventory).mockResolvedValue([{ ProductID: 401 } as ProductInventory]);
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
-function show() {
+function show(path = '/') {
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-    <MemoryRouter><ManufacturingComponentLegend callouts={[{ number: 2, name: 'HL Hub', productNumber: 'HU-8998' }]} /></MemoryRouter>
+    <MemoryRouter initialEntries={[path]}><ManufacturingComponentLegend callouts={[{ number: 2, name: 'HL Hub', productNumber: 'HU-8998' }]} /></MemoryRouter>
   </QueryClientProvider>);
 }
 it('links real products and available BOM/inventory', async () => {
@@ -53,4 +57,12 @@ it('omits unsupported inventory and future BOM actions', async () => {
   expect(await screen.findByRole('link', { name: 'HL Hub (HU-8998)' })).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'BOM' })).not.toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Inventory' })).not.toBeInTheDocument();
+});
+it('links part sheets except from the same part sheet', async () => {
+  show('/define/models/7/instructions');
+  expect(await screen.findByRole('link', { name: 'Part sheet' })).toHaveAttribute('href', '/define/parts/401/instructions');
+  cleanup();
+  show('/define/parts/401/instructions');
+  expect(await screen.findByRole('link', { name: 'Inventory' })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Part sheet' })).not.toBeInTheDocument();
 });

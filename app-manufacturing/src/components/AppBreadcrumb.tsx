@@ -41,12 +41,16 @@ const AppBreadcrumb: React.FC = () => {
   if (location.pathname === '/') return null;
 
   const parts = location.pathname.split('/').filter(Boolean);
+  // Part sheets have no /define/parts index; present them under their product.
+  const partSheet = parts.length === 4 && parts[0] === 'define' && parts[1] === 'parts' && parts[3] === 'instructions';
+  if (partSheet) parts[1] = 'products';
   const segments: BreadcrumbSegment[] = [{ label: 'Dashboard', href: '/' }];
 
   let path = '';
   parts.forEach((part, i) => {
     path += `/${part}`;
-    const label = routeMap[part] || (isNaN(Number(part)) ? part : `#${part}`);
+    const label = partSheet && i === parts.length - 1 ? 'Part Sheet'
+      : routeMap[part] || (isNaN(Number(part)) ? part : `#${part}`);
     if (i < parts.length - 1) {
       segments.push({ label, href: path });
     } else {

@@ -1,0 +1,86 @@
+{
+  "productId": 330,
+  "name": "Touring End Caps",
+  "productNumber": "EC-T209",
+  "documentNode": "/900000/330/",
+  "title": "Touring End Caps part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Touring End Caps (Product Number EC-T209) part sheet. Fictional shop-floor demonstration for manufacturing Touring End Caps, product EC-T209, from its effective BOM component.<Location LocationID=\"10\" SetupHours=\"0.1\" LaborHours=\"0.2\" MachineHours=\"0.1\" LotSize=\"1\">Work Center 10 - Frame Forming. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Frame Forming: demonstrate preparing and forming the sheet material into an illustrative end-cap form.<step>Prepare 1.00 EA of <material>Metal Sheet 2 (Product Number MS-0253)</material> for the demo. See illustration <diag>2003301</diag>.</step><step>Cut a blank and form it with <tool>an assumed cutting tool and forming jig</tool>; the illustrated shape is only a demo assumption.</step></Location><Location LocationID=\"30\" SetupHours=\"0.05\" LaborHours=\"0.1\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 30 - Debur and Polish. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Debur and Polish: finish and visually check the formed part.<step>Smooth the cut edges using <tool>an assumed deburring tool</tool>.</step><step>Visually check for obvious burrs, cracks, or distortion and set aside any questionable part.</step></Location></root>",
+  "routingBasis": "demo-assumption",
+  "processNotes": [
+    "No historical routing exists. The selected work centers and their sequence are demo assumptions, not an engineering specification.",
+    "Lot size is one finished part.",
+    "The shallow cap form shown is illustrative; the source does not establish its geometry or dimensions."
+  ],
+  "variantNotes": [
+    "LL Touring Handlebars, HB-T721, use 2.00 EA of this part.",
+    "HL Touring Handlebars, HB-T928, use 2.00 EA of this part."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0330",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 330,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P330-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "D. Okafor"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P330-02",
+        "description": "Released the illustrated part sheet edition: Illustrative sheet-to-end-cap forming. Assigned demonstration work centres pending a routing study; marked them as demo assumptions.",
+        "preparedBy": "D. Okafor",
+        "approvedBy": "T. Haddad"
+      }
+    ]
+  },
+  "figures": {
+    "2003301": {
+      "title": "Illustrative sheet-to-end-cap forming",
+      "guidance": [
+        "Prepare 1.00 EA of Metal Sheet 2 (Product Number MS-0253) for the demo."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Metal Sheet 2",
+          "productNumber": "MS-0253"
+        },
+        {
+          "number": 2,
+          "name": "Touring End Caps",
+          "productNumber": "EC-T209"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 946,
+      "name": "LL Touring Handlebars",
+      "productNumber": "HB-T721",
+      "productModelId": 47,
+      "productModelName": "LL Touring Handlebars",
+      "quantity": 2.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 947,
+      "name": "HL Touring Handlebars",
+      "productNumber": "HB-T928",
+      "productModelId": 48,
+      "productModelName": "HL Touring Handlebars",
+      "quantity": 2.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 2
+}

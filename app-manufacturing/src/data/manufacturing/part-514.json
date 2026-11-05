@@ -1,0 +1,245 @@
+{
+  "productId": 514,
+  "name": "LL Mountain Seat Assembly",
+  "productNumber": "SA-M198",
+  "documentNode": "/900000/514/",
+  "title": "LL Mountain Seat Assembly part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. LL Mountain Seat Assembly (Product Number SA-M198) part sheet. Fictional shop-floor demonstration for assembling LL Mountain Seat Assembly SA-M198 from its four purchased components.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.3\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Routing evidence: historical work orders for this part used this work centre. Estimates are fictional demo assumptions. Subassembly: identify and prepare the purchased components, then fit them after confirming their interfaces.<step>Collect and visually inspect 1 EA of <material>Seat Post (Product Number SP-2981)</material>, 1 EA of <material>Seat Lug (Product Number SL-0931)</material>, 1 EA of <material>LL Mountain Seat/Saddle (Product Number SE-M236)</material>, and 4 EA of <material>Pinch Bolt (Product Number PB-6109)</material>. See the component inventory in illustration <diag>2005141</diag>.</step><step>Confirm the interfaces and fastener locations against the applicable Seat Assembly document. If they cannot be confirmed, hold the components for review.</step><step>After confirmation, support the components in an <tool>assumed assembly jig</tool> and fit them using appropriate <tool>generic hand tools</tool>. Do not assign bolt locations or tightening settings from this demonstration.</step></Location><Location LocationID=\"60\" SetupHours=\"0\" LaborHours=\"0.1\" MachineHours=\"0\" LotSize=\"1\">Work Center 60 - Final Assembly. Routing evidence: historical work orders for this part used this work centre. Estimates are fictional demo assumptions. Final Assembly: check the completed seat assembly and release it for the next operation.<step>Visually check the assembly for missing components, visible damage and obvious looseness. Hold any questionable assembly for review.</step><step>Identify the accepted assembly as SA-M198 and transfer it for its next use.</step></Location></root>",
+  "routingBasis": "historical",
+  "processNotes": [
+    "All tooling, processes and times are inferred demo estimates.",
+    "The center sequence is inferred from historical routing, not an engineering specification.",
+    "The component interfaces and bolt locations are not established by the supplied BOM. Confirm them against the applicable Seat Assembly document before fitting; hold for review if unclear.",
+    "All four components are purchased and are fitted and inspected rather than fabricated."
+  ],
+  "variantNotes": [
+    "This part has no catalog variants. One assembly is used in each listed Mountain-400-W Silver parent, in sizes 38, 40, 42 and 46.",
+    "One assembly is also used in each listed Mountain-500 Silver and Black parent, in sizes 40, 42, 44, 48 and 52."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0514",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 514,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P514-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "K. Novak"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2021-10-03",
+        "changeRequest": "ECN-2021-P514-02",
+        "description": "Added a stock-identification check for LL Mountain Seat/Saddle before the first cut or fit-up.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "T. Haddad"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2021-12-07",
+        "changeRequest": "ECN-2021-P514-03",
+        "description": "Separated first-article inspection from routine in-process checks; clarified the hold point for nonconforming parts.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "D. Okafor"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2023-07-23",
+        "changeRequest": "ECN-2023-P514-04",
+        "description": "Reformatted the point-of-use copy with numbered steps and larger callout references.",
+        "preparedBy": "D. Okafor",
+        "approvedBy": "L. Moreau"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2026-01-14",
+        "changeRequest": "ECN-2026-P514-05",
+        "description": "Consolidated deburr and handling notes and removed a duplicate operator sign-off.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "K. Novak"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-06-28",
+        "changeRequest": "ECN-2026-P514-06",
+        "description": "Recorded that the part supplies 14 parent assemblies; added a kitting note to prevent mixed lots.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "T. Haddad"
+      },
+      {
+        "revision": "7.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P514-07",
+        "description": "Released the illustrated part sheet edition: Seat assembly component inventory. Confirmed the operation sequence against historical work-order routing.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "D. Okafor"
+      }
+    ]
+  },
+  "figures": {
+    "2005141": {
+      "title": "Seat assembly component inventory",
+      "guidance": [
+        "Collect and visually inspect 1 EA of Seat Post (Product Number SP-2981), 1 EA of Seat Lug (Product Number SL-0931), 1 EA of LL Mountain Seat/Saddle (Product Number SE-M236), and 4 EA of Pinch Bolt (Product Number PB-6109). See the component inventory in illustration 2005141."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "LL Mountain Seat/Saddle",
+          "productNumber": "SE-M236"
+        },
+        {
+          "number": 2,
+          "name": "Seat Post",
+          "productNumber": "SP-2981"
+        },
+        {
+          "number": 3,
+          "name": "Seat Lug",
+          "productNumber": "SL-0931"
+        },
+        {
+          "number": 4,
+          "name": "Pinch Bolt",
+          "productNumber": "PB-6109"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 980,
+      "name": "Mountain-400-W Silver, 38",
+      "productNumber": "BK-M38S-38",
+      "productModelId": 22,
+      "productModelName": "Mountain-400-W",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 981,
+      "name": "Mountain-400-W Silver, 40",
+      "productNumber": "BK-M38S-40",
+      "productModelId": 22,
+      "productModelName": "Mountain-400-W",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 982,
+      "name": "Mountain-400-W Silver, 42",
+      "productNumber": "BK-M38S-42",
+      "productModelId": 22,
+      "productModelName": "Mountain-400-W",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 983,
+      "name": "Mountain-400-W Silver, 46",
+      "productNumber": "BK-M38S-46",
+      "productModelId": 22,
+      "productModelName": "Mountain-400-W",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 984,
+      "name": "Mountain-500 Silver, 40",
+      "productNumber": "BK-M18S-40",
+      "productModelId": 23,
+      "productModelName": "Mountain-500",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 985,
+      "name": "Mountain-500 Silver, 42",
+      "productNumber": "BK-M18S-42",
+      "productModelId": 23,
+      "productModelName": "Mountain-500",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 986,
+      "name": "Mountain-500 Silver, 44",
+      "productNumber": "BK-M18S-44",
+      "productModelId": 23,
+      "productModelName": "Mountain-500",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 987,
+      "name": "Mountain-500 Silver, 48",
+      "productNumber": "BK-M18S-48",
+      "productModelId": 23,
+      "productModelName": "Mountain-500",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 988,
+      "name": "Mountain-500 Silver, 52",
+      "productNumber": "BK-M18S-52",
+      "productModelId": 23,
+      "productModelName": "Mountain-500",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 989,
+      "name": "Mountain-500 Black, 40",
+      "productNumber": "BK-M18B-40",
+      "productModelId": 23,
+      "productModelName": "Mountain-500",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 990,
+      "name": "Mountain-500 Black, 42",
+      "productNumber": "BK-M18B-42",
+      "productModelId": 23,
+      "productModelName": "Mountain-500",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 991,
+      "name": "Mountain-500 Black, 44",
+      "productNumber": "BK-M18B-44",
+      "productModelId": 23,
+      "productModelName": "Mountain-500",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 992,
+      "name": "Mountain-500 Black, 48",
+      "productNumber": "BK-M18B-48",
+      "productModelId": 23,
+      "productModelName": "Mountain-500",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 993,
+      "name": "Mountain-500 Black, 52",
+      "productNumber": "BK-M18B-52",
+      "productModelId": 23,
+      "productModelName": "Mountain-500",
+      "quantity": 1.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 14
+}

@@ -1,0 +1,94 @@
+{
+  "productId": 328,
+  "name": "Mountain End Caps",
+  "productNumber": "EC-M092",
+  "documentNode": "/900000/328/",
+  "title": "Mountain End Caps part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Mountain End Caps (Product Number EC-M092) part sheet. Fictional shop-floor demonstration for manufacturing Mountain End Caps, product 328 (EC-M092), from its direct material component.<Location LocationID=\"10\" SetupHours=\"0.1\" LaborHours=\"0.2\" MachineHours=\"0.1\" LotSize=\"1\">Work Center 10 - Frame Forming. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Frame Forming: assumed cutting and forming operation for the part.<step>Prepare 1.00 EA of <material>Metal Sheet 2 (Product Number MS-0253)</material> for the demonstration forming operation.</step><step>Using an assumed <tool>sheet-cutting tool</tool>, cut a blank; form it with an assumed <tool>forming press and die</tool>. The conceptual material-to-part relationship is shown in illustration <diag>2003281</diag>.</step></Location><Location LocationID=\"30\" SetupHours=\"0.05\" LaborHours=\"0.15\" MachineHours=\"0\" LotSize=\"1\">Work Center 30 - Debur and Polish. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Debur and Polish: assumed edge finishing and visual check of the formed part.<step>Remove sharp edges with an assumed <tool>hand deburring tool</tool> and smooth the surface with an assumed <tool>hand finishing pad</tool>.</step><step>Visually check for burrs, cracks and obvious deformation; set aside any suspect part for review.</step></Location></root>",
+  "routingBasis": "demo-assumption",
+  "processNotes": [
+    "No historical routing is available. The selected existing work centers and their order are inferred demo assumptions.",
+    "The source does not specify the end cap geometry. The diagram uses an assumed shallow round cap solely to illustrate the forming concept; it does not establish the actual shape or dimensions."
+  ],
+  "variantNotes": [
+    "The part has no catalog variants. LL Mountain Handlebars, ML Mountain Handlebars and HL Mountain Handlebars each use 2.00 EA of this part."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0328",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 328,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P328-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "L. Moreau"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P328-02",
+        "description": "Released the illustrated part sheet edition: Conceptual sheet-to-end-cap forming view. Assigned demonstration work centres pending a routing study; marked them as demo assumptions.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "K. Novak"
+      }
+    ]
+  },
+  "figures": {
+    "2003281": {
+      "title": "Conceptual sheet-to-end-cap forming view",
+      "guidance": [
+        "Prepare 1.00 EA of Metal Sheet 2 (Product Number MS-0253) for the demonstration forming operation.",
+        "Using an assumed sheet-cutting tool, cut a blank; form it with an assumed forming press and die. The conceptual material-to-part relationship is shown in illustration 2003281."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Metal Sheet 2",
+          "productNumber": "MS-0253"
+        },
+        {
+          "number": 2,
+          "name": "Mountain End Caps",
+          "productNumber": "EC-M092"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 808,
+      "name": "LL Mountain Handlebars",
+      "productNumber": "HB-M243",
+      "productModelId": 52,
+      "productModelName": "LL Mountain Handlebars",
+      "quantity": 2.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 809,
+      "name": "ML Mountain Handlebars",
+      "productNumber": "HB-M763",
+      "productModelId": 54,
+      "productModelName": "ML Mountain Handlebars",
+      "quantity": 2.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 810,
+      "name": "HL Mountain Handlebars",
+      "productNumber": "HB-M918",
+      "productModelId": 55,
+      "productModelName": "HL Mountain Handlebars",
+      "quantity": 2.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 3
+}

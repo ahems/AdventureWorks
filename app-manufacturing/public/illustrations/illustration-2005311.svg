@@ -1,0 +1,22 @@
+<svg width="1000" height="700" viewBox="0 0 1000 700" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g>
+    <path d="M 12,12 L 988,12 L 988,688 L 12,688 Z" fill-rule="evenodd" fill="#FFFFFF" />
+    <path d="M 194,423 L 401,383 L 401,392 L 194,432 Z" fill-rule="evenodd" stroke-width="2" fill="#BBCBD5" stroke="#19364D" />
+    <path d="M 105,305 L 194,423 L 194,432 L 105,314 Z" fill-rule="evenodd" stroke-width="2" fill="#D0DDE4" stroke="#19364D" />
+    <path d="M 105,305 L 312,265 L 401,383 L 194,423 Z" fill-rule="evenodd" stroke-width="2.5" fill="#E6EDF2" stroke="#19364D" />
+    <path d="M 121,309 L 309,273" fill-rule="evenodd" stroke-width="2" stroke="#F8FAFC" />
+    <path d="M 438,350 L 545,350" fill-rule="evenodd" stroke-width="3" stroke="#278A89" />
+    <path d="M 545,340 L 562,350 L 545,360 Z" fill-rule="evenodd" fill="#278A89" />
+    <path d="M 595,451 L 800,196 C 805,190 820,190 836,203 C 853,216 864,231 860,244 L 655,499 C 650,505 633,499 617,486 C 600,473 590,457 595,451 Z" fill-rule="evenodd" stroke-width="2.5" fill="#CFDDE5" stroke="#19364D" />
+    <path d="M 612,452 L 817,197 C 824,199 831,202 838,208 L 633,463 Z" fill-rule="evenodd" fill="#E7EFF3" />
+    <path d="M 643,482 L 848,227 C 854,234 858,239 860,244 L 655,499 C 654,494 650,488 643,482 Z" fill-rule="evenodd" fill="#B5C9D4" />
+    <path d="M 595,451 C 600,445 617,451 633,464 C 650,477 660,493 655,499 C 650,505 633,499 617,486 C 600,473 590,457 595,451 Z" fill-rule="evenodd" stroke-width="2.5" fill="#E6EDF2" stroke="#19364D" />
+    <path d="M 603,455 C 607,451 620,456 632,466 C 645,476 653,488 651,493 C 647,497 634,492 622,482 C 609,472 601,460 603,455 Z" fill-rule="evenodd" stroke-width="1.5" fill="#536C7B" stroke="#19364D" />
+    <path d="M 159,294 L 123,225 L 84,201" fill-rule="evenodd" stroke-width="1.4" stroke="#19364D" />
+    <path d="M 805,313 L 900,261 L 925,167" fill-rule="evenodd" stroke-width="1.4" stroke="#19364D" />
+    <path d="M 52,190 C 52,166 88,166 88,190 C 88,214 52,214 52,190 Z" fill-rule="evenodd" stroke-width="1.5" fill="#FFFFFF" stroke="#19364D" />
+    <path d="M 73.5,182 L 73.5,190 M 73.5,190 L 73.5,198" fill-rule="evenodd" stroke-width="2" stroke="#19364D" />
+    <path d="M 912,150 C 912,126 948,126 948,150 C 948,174 912,174 912,150 Z" fill-rule="evenodd" stroke-width="1.5" fill="#FFFFFF" stroke="#19364D" />
+    <path d="M 926.5,142 L 933.5,142 M 933.5,142 L 933.5,150 M 926.5,158 L 933.5,158 M 926.5,150 L 926.5,158 M 926.5,150 L 933.5,150" fill-rule="evenodd" stroke-width="2" stroke="#19364D" />
+  </g>
+</svg>

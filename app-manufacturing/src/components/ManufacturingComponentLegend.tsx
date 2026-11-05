@@ -1,10 +1,12 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchActiveBOM, fetchProductInventory, fetchProductsByNumbers, sqlUtcTimestamp } from '@/services/api';
+import { hasGeneratedPartSheet } from '@/lib/generatedManufacturingContent';
 import type { GeneratedFigure } from '@/lib/generatedManufacturingContent';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function ManufacturingComponentLegend({ callouts }: { callouts: GeneratedFigure['callouts'] }) {
+  const { pathname } = useLocation();
   const numbers = [...new Set(callouts.map(callout => callout.productNumber))].sort();
   const products = useQuery({
     queryKey: ['instruction-components', numbers], queryFn: () => fetchProductsByNumbers(numbers),
@@ -36,6 +38,8 @@ export default function ManufacturingComponentLegend({ callouts }: { callouts: G
             <Link className="text-doodle-blue underline" to={`/engineer/bom/${product.ProductID}`}>BOM</Link>}
           {inventory.data?.some(row => row.ProductID === product.ProductID) &&
             <Link className="text-doodle-blue underline" to={`/receive/inventory/${product.ProductID}`}>Inventory</Link>}
+          {hasGeneratedPartSheet(product.ProductID) && pathname !== `/define/parts/${product.ProductID}/instructions` &&
+            <Link className="text-doodle-blue underline" to={`/define/parts/${product.ProductID}/instructions`}>Part sheet</Link>}
         </span>}
       </li>;
     })}</ul>

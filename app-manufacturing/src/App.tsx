@@ -24,6 +24,7 @@ import DefineProductDetail from "@/pages/define/DefineProductDetail";
 import DefineModels from "@/pages/define/DefineModels";
 import DefineModelDetail from "@/pages/define/DefineModelDetail";
 import ModelInstructions from "@/pages/define/ModelInstructions";
+import PartInstructions from "@/pages/define/PartInstructions";
 
 import EngineerBOM from "@/pages/engineer/EngineerBOM";
 import EngineerBOMDetail from "@/pages/engineer/EngineerBOMDetail";
@@ -98,6 +99,7 @@ const App = () => (
                 />
                 <Route path="/define/models" element={<DefineModels />} />
                 <Route path="/define/models/:id/instructions" element={<ModelInstructions />} />
+                <Route path="/define/parts/:id/instructions" element={<PartInstructions />} />
                 <Route
                   path="/define/models/:id"
                   element={<DefineModelDetail />}

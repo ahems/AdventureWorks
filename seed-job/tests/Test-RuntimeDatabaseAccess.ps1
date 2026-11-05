@@ -50,6 +50,13 @@ Assert ($tracking.Command.CommandText.Contains('GRANT VIEW CHANGE TRACKING ON OB
 Assert ($tracking.Command.CommandText -match 'sys.change_tracking_tables' -and $tracking.Command.CommandText -match 'THROW 51023') 'Grant requires tracked table'
 Assert ($tracking.Command.Disposed -and $tracking.Command.Parameters.Count -eq 1) 'Tracking grant binds identity and disposes'
 
+$xmlSchema = [RuntimeTestConnection]::new()
+Grant-RuntimeXmlSchemaAccess $xmlSchema "runtime's identity"
+Assert ($xmlSchema.Command.CommandText.Contains('GRANT REFERENCES, VIEW DEFINITION ON XML SCHEMA COLLECTION::[Production].[ManuInstructionsSchemaCollection] TO')) 'XML schema grant is collection-scoped and sufficient for XML_SCHEMA_NAMESPACE'
+Assert ($xmlSchema.Command.CommandText -match 'sys.xml_schema_collections' -and $xmlSchema.Command.CommandText -match 'THROW 51024') 'XML schema grant requires the collection'
+Assert ($xmlSchema.Command.CommandText -notmatch "runtime's identity|ALTER ON|CONTROL") 'XML schema grant binds identity and stays least-privilege'
+Assert ($xmlSchema.Command.Disposed -and $xmlSchema.Command.Parameters.Count -eq 1) 'XML schema grant binds identity and disposes'
+
 $connection = [RuntimeTestConnection]::new()
 $connection.Command.Fail = $true
 $failed = $false

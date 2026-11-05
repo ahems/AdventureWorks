@@ -9,6 +9,8 @@ namespace ApiFunctions.Tests;
 
 public class ManufacturingInstructionValidatorTests
 {
+    internal static string SchemaForTests() => Schema();
+
     private static string Schema()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

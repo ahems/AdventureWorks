@@ -1,0 +1,159 @@
+{
+  "productId": 522,
+  "name": "HL Touring Seat Assembly",
+  "productNumber": "SA-T872",
+  "documentNode": "/900000/522/",
+  "title": "HL Touring Seat Assembly part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. HL Touring Seat Assembly (Product Number SA-T872) part sheet. Fictional part sheet for assembling HL Touring Seat Assembly SA-T872 from its purchased components. This is a demonstration, not an engineering or certified manufacturing procedure.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.3\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Routing evidence: historical work orders for this part used this work centre. Estimates are fictional demo assumptions. Subassembly: stage and inspect the purchased components, then provisionally fit them together.<step>Stage and visually inspect 1 EA of <material>HL Touring Seat/Saddle (Product Number SE-T924)</material>, 1 EA of <material>Seat Post (Product Number SP-2981)</material>, 1 EA of <material>Seat Lug (Product Number SL-0931)</material> and 4 EA of <material>Pinch Bolt (Product Number PB-6109)</material> for visible damage. See the component inventory in <diag>2005221</diag>.</step><step>Using <tool>an assumed padded assembly fixture</tool>, provisionally position <material>HL Touring Seat/Saddle (Product Number SE-T924)</material>, <material>Seat Post (Product Number SP-2981)</material> and <material>Seat Lug (Product Number SL-0931)</material> together; verify their actual interfaces before fitting.</step><step>Account for all 4 EA of <material>Pinch Bolt (Product Number PB-6109)</material> and fit them only at verified compatible fastening points. Do not infer their locations from the inventory view.</step></Location><Location LocationID=\"60\" SetupHours=\"0.05\" LaborHours=\"0.15\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 60 - Final Assembly. Routing evidence: historical work orders for this part used this work centre. Estimates are fictional demo assumptions. Final assembly: review completeness and condition of the seat assembly.<step>Check that the assembly contains the staged components and that all four bolts are accounted for; inspect for visible damage or loose parts.</step><step>Set aside any incomplete or questionable assembly for review. Confirm fastening requirements from an authoritative source before actual use.</step></Location></root>",
+  "routingBasis": "historical",
+  "processNotes": [
+    "The two work centers and their order come from historical routing; the operations assigned to them are inferred, not an engineering specification.",
+    "Component interfaces and fastening details must be verified before actual work.",
+    "The existing Seat Assembly document is listed in the source, but its contents were not supplied; this sheet does not reproduce or assess it."
+  ],
+  "variantNotes": [
+    "One assembly is used in each listed Touring-1000 Yellow and Blue parent, in sizes 46, 50, 54 and 60. No variants of this part are listed."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0522",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 522,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P522-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "D. Okafor",
+        "approvedBy": "L. Moreau"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2023-12-02",
+        "changeRequest": "ECN-2023-P522-02",
+        "description": "Added a stock-identification check for HL Touring Seat/Saddle before the first cut or fit-up.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "T. Haddad"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P522-03",
+        "description": "Released the illustrated part sheet edition: Seat assembly component inventory. Confirmed the operation sequence against historical work-order routing.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "K. Novak"
+      }
+    ]
+  },
+  "figures": {
+    "2005221": {
+      "title": "Seat assembly component inventory",
+      "guidance": [
+        "Stage and visually inspect 1 EA of HL Touring Seat/Saddle (Product Number SE-T924), 1 EA of Seat Post (Product Number SP-2981), 1 EA of Seat Lug (Product Number SL-0931) and 4 EA of Pinch Bolt (Product Number PB-6109) for visible damage. See the component inventory in 2005221.",
+        "Using an assumed padded assembly fixture, provisionally position HL Touring Seat/Saddle (Product Number SE-T924), Seat Post (Product Number SP-2981) and Seat Lug (Product Number SL-0931) together; verify their actual interfaces before fitting.",
+        "Account for all 4 EA of Pinch Bolt (Product Number PB-6109) and fit them only at verified compatible fastening points. Do not infer their locations from the inventory view."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "HL Touring Seat/Saddle",
+          "productNumber": "SE-T924"
+        },
+        {
+          "number": 2,
+          "name": "Seat Post",
+          "productNumber": "SP-2981"
+        },
+        {
+          "number": 3,
+          "name": "Seat Lug",
+          "productNumber": "SL-0931"
+        },
+        {
+          "number": 4,
+          "name": "Pinch Bolt",
+          "productNumber": "PB-6109"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 954,
+      "name": "Touring-1000 Yellow, 46",
+      "productNumber": "BK-T79Y-46",
+      "productModelId": 34,
+      "productModelName": "Touring-1000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 955,
+      "name": "Touring-1000 Yellow, 50",
+      "productNumber": "BK-T79Y-50",
+      "productModelId": 34,
+      "productModelName": "Touring-1000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 956,
+      "name": "Touring-1000 Yellow, 54",
+      "productNumber": "BK-T79Y-54",
+      "productModelId": 34,
+      "productModelName": "Touring-1000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 957,
+      "name": "Touring-1000 Yellow, 60",
+      "productNumber": "BK-T79Y-60",
+      "productModelId": 34,
+      "productModelName": "Touring-1000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 966,
+      "name": "Touring-1000 Blue, 46",
+      "productNumber": "BK-T79U-46",
+      "productModelId": 34,
+      "productModelName": "Touring-1000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 967,
+      "name": "Touring-1000 Blue, 50",
+      "productNumber": "BK-T79U-50",
+      "productModelId": 34,
+      "productModelName": "Touring-1000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 968,
+      "name": "Touring-1000 Blue, 54",
+      "productNumber": "BK-T79U-54",
+      "productModelId": 34,
+      "productModelName": "Touring-1000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 969,
+      "name": "Touring-1000 Blue, 60",
+      "productNumber": "BK-T79U-60",
+      "productModelId": 34,
+      "productModelName": "Touring-1000",
+      "quantity": 1.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 8
+}

@@ -17,7 +17,45 @@ public static class ManufacturingInstructionValidator
             return new ManufacturingDiagramReservation(slot, id, $"illustration-{id}.svg");
         }).ToArray();
 
-    public static string ValidateAndBuild(ManufacturingInstructionDraft draft, ManufacturingGrounding context)
+    public const string ProductDocumentFolder = "/900000/";
+    public const string UnroutedLocationLabel = "Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only.";
+    public const string RoutedLocationLabel = "Routing evidence: historical work orders for this part used this work centre.";
+
+    public static IReadOnlyList<ManufacturingDiagramReservation> ProductReservations(int productId) =>
+        Enumerable.Range(1, 3).Select(slot =>
+        {
+            var id = checked(2000000 + productId * 10 + slot);
+            return new ManufacturingDiagramReservation(slot, id, $"illustration-{id}.svg");
+        }).ToArray();
+
+    public static string ProductDocumentNode(int productId) => $"{ProductDocumentFolder}{productId}/";
+
+    public static string ValidateAndBuild(ManufacturingInstructionDraft draft, ManufacturingGrounding context) =>
+        Build(draft, context.Model.Name, context.Representative.ProductId, context.Components, context.Components,
+            context.WorkCenters, context.ExistingIllustrationIds, context.InstructionSchema,
+            Reservations(context.Model.ProductModelId), requireVariantNotes: true, routing: null, locationLabel: null);
+
+    public static string ValidateAndBuildProduct(ManufacturingInstructionDraft draft, ManufacturingProductGrounding context)
+    {
+        var product = context.Product;
+        var subject = new ManufacturingComponent(0, 0, product.ProductId, product.Name, product.ProductNumber, 1, "EA", true);
+        var routed = context.RoutingBasis == "historical";
+        if (!routed && context.RoutingBasis != "demo-assumption")
+            throw new InvalidDataException("Unknown routing basis.");
+        var routing = routed
+            ? context.HistoricalRouting.OrderBy(r => r.OperationSequence).Select(r => r.LocationId).Distinct().ToArray()
+            : null;
+        return Build(draft, $"{product.Name} (Product Number {product.ProductNumber}) part sheet",
+            product.ProductId, context.Components, [.. context.Components, subject], context.WorkCenters,
+            context.ExistingIllustrationIds, context.InstructionSchema, ProductReservations(product.ProductId),
+            requireVariantNotes: false, routing, routed ? RoutedLocationLabel : UnroutedLocationLabel);
+    }
+
+    private static string Build(ManufacturingInstructionDraft draft, string title, int rootProductId,
+        IReadOnlyList<ManufacturingComponent> components, IReadOnlyList<ManufacturingComponent> calloutComponents,
+        IReadOnlyList<ManufacturingWorkCenter> workCenters, IReadOnlyList<int> existingIllustrationIds,
+        string instructionSchema, IReadOnlyList<ManufacturingDiagramReservation> reservationList,
+        bool requireVariantNotes, IReadOnlyList<int>? routing, string? locationLabel)
     {
         static void Require(bool condition, string message)
         {
@@ -31,7 +69,8 @@ public static class ManufacturingInstructionValidator
         }
         Require(Text(draft.Summary), "A nonempty bounded summary is required.");
         Require(draft.Assumptions is { Count: > 0 and <= 20 } && draft.Assumptions.All(Text), "Explicit demo assumptions are required.");
-        Require(draft.VariantNotes is { Count: > 0 and <= 20 } && draft.VariantNotes.All(Text), "Explicit variant notes are required.");
+        Require(draft.VariantNotes != null && (requireVariantNotes ? draft.VariantNotes.Count > 0 : true) &&
+                draft.VariantNotes.Count <= 20 && draft.VariantNotes.All(Text), "Explicit variant notes are required.");
         Require(draft.Locations is { Count: > 0 and <= 10 }, "Supply 1-10 work centers.");
         Require(draft.Diagrams is { Count: > 0 and <= 3 }, "Supply 1-3 diagram briefs.");
         Require(draft.Locations.All(l => l != null && l.Steps != null && l.Steps.All(s => s != null &&
@@ -40,24 +79,28 @@ public static class ManufacturingInstructionValidator
             "Diagram briefs and callouts cannot be null.");
         Require(draft.Locations.Select(l => l.LocationId).Distinct().Count() == draft.Locations.Count, "Work centers must be unique.");
         Require(draft.Diagrams.Select(d => d.Slot).Distinct().Count() == draft.Diagrams.Count, "Diagram slots must be unique.");
-        var products = context.Components.GroupBy(c => c.ProductId).ToDictionary(g => g.Key, g => g.First());
+        var products = components.GroupBy(c => c.ProductId).ToDictionary(g => g.Key, g => g.First());
+        var calloutProducts = calloutComponents.Select(c => c.ProductId).ToHashSet();
         var materialsUsed = new HashSet<int>();
         var diagramsUsed = new HashSet<int>();
-        var reservations = Reservations(context.Model.ProductModelId).ToDictionary(r => r.Slot);
+        var reservations = reservationList.ToDictionary(r => r.Slot);
         foreach (var diagram in draft.Diagrams)
         {
             Require(diagram.Slot is >= 1 and <= 3 && Text(diagram.Title) && Text(diagram.Purpose) && Text(diagram.Composition),
                 "Each diagram requires a slot (1-3), title, purpose, and composition.");
-            Require(!context.ExistingIllustrationIds.Contains(reservations[diagram.Slot].IllustrationId), "Reserved illustration ID collides with existing data.");
+            Require(!existingIllustrationIds.Contains(reservations[diagram.Slot].IllustrationId), "Reserved illustration ID collides with existing data.");
             Require(diagram.Callouts is { Count: > 0 and <= 20 }, "Each diagram requires 1-20 component callouts.");
             Require(diagram.Callouts.Select(c => c.Number).Distinct().Count() == diagram.Callouts.Count, "Callout numbers must be unique.");
-            Require(diagram.Callouts.All(c => c.Number > 0 && products.ContainsKey(c.ProductId)), "Diagram callouts must identify actual BOM components.");
+            Require(diagram.Callouts.All(c => c.Number > 0 && calloutProducts.Contains(c.ProductId)), "Diagram callouts must identify actual BOM components.");
         }
         XNamespace ns = Namespace;
-        var root = new XElement(ns + "root", Disclaimer + " " + context.Model.Name + ". " + draft.Summary);
+        if (routing != null)
+            Require(draft.Locations.Select(l => l.LocationId).SequenceEqual(routing),
+                $"Work centers must follow the historical routing exactly: {string.Join(", ", routing)}.");
+        var root = new XElement(ns + "root", Disclaimer + " " + title + ". " + draft.Summary);
         foreach (var location in draft.Locations)
         {
-            var center = context.WorkCenters.SingleOrDefault(c => c.LocationId == location.LocationId);
+            var center = workCenters.SingleOrDefault(c => c.LocationId == location.LocationId);
             Require(center != null, $"Unknown manufacturing work center {location.LocationId}.");
             Require(Text(location.Introduction), "Every work center needs an introduction.");
             Require(location.SetupHours is >= 0 and <= 100 && location.LaborHours is > 0 and <= 100 &&
@@ -67,7 +110,7 @@ public static class ManufacturingInstructionValidator
             var element = new XElement(ns + "Location", new XAttribute("LocationID", location.LocationId),
                 new XAttribute("SetupHours", location.SetupHours), new XAttribute("LaborHours", location.LaborHours),
                 new XAttribute("MachineHours", location.MachineHours), new XAttribute("LotSize", location.LotSize),
-                $"Work Center {center!.LocationId} - {center.Name}. Estimates are fictional demo assumptions. {location.Introduction}");
+                $"Work Center {center!.LocationId} - {center.Name}. {(locationLabel == null ? "" : locationLabel + " ")}Estimates are fictional demo assumptions. {location.Introduction}");
             foreach (var step in location.Steps)
             {
                 Require(step.Parts is { Count: > 0 and <= 40 }, "Steps require 1-40 ordered parts.");
@@ -106,11 +149,11 @@ public static class ManufacturingInstructionValidator
             root.Add(element);
         }
         Require(draft.Diagrams.All(d => diagramsUsed.Contains(d.Slot)), "Every diagram brief must be referenced by an instruction step.");
-        var directParts = context.Components.Where(c => c.ParentProductId == context.Representative.ProductId).Select(c => c.ProductId);
+        var directParts = components.Where(c => c.ParentProductId == rootProductId).Select(c => c.ProductId);
         Require(directParts.All(materialsUsed.Contains), "Instructions must account for every direct BOM component of the representative product.");
         var settings = new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = 2_000_000 };
         var schemas = new XmlSchemaSet { XmlResolver = null };
-        using (var schemaReader = XmlReader.Create(new StringReader(context.InstructionSchema), settings))
+        using (var schemaReader = XmlReader.Create(new StringReader(instructionSchema), settings))
             schemas.Add(null, schemaReader);
         var document = new XDocument(root);
         document.Validate(schemas, (_, args) => throw new InvalidDataException($"Manufacturing XML schema validation failed: {args.Message}"));

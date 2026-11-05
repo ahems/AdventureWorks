@@ -1,0 +1,111 @@
+{
+  "productId": 400,
+  "name": "LL Hub",
+  "productNumber": "HU-6280",
+  "documentNode": "/900000/400/",
+  "title": "LL Hub part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. LL Hub (Product Number HU-6280) part sheet. Fictional shop-floor demonstration for assembling one LL Hub, product HU-6280, from its two purchased components.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.2\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Subassembly: inspect the purchased components and demonstrate their fit as a hub.<step>Collect 1.00 EA of <material>LL Spindle/Axle (Product Number SD-2342)</material> and 1.00 EA of <material>LL Shell (Product Number SH-4562)</material>; visually check both for damage.</step><step>Using an <tool>assumed padded assembly support</tool>, align and fit <material>LL Spindle/Axle (Product Number SD-2342)</material> with <material>LL Shell (Product Number SH-4562)</material> only after confirming their actual mating arrangement. See schematic <diag>2004001</diag>.</step><step>Visually check the fitted hub for damage and obvious misalignment; set it aside for review if the fit is uncertain.</step></Location></root>",
+  "routingBasis": "demo-assumption",
+  "processNotes": [
+    "The axle-to-shell arrangement is a schematic assumption. The source does not specify mating details or internal construction; confirm compatibility before fitting."
+  ],
+  "variantNotes": [
+    "The LL Hub is used at 1.00 EA per LL Mountain Front Wheel and LL Road Front Wheel.",
+    "The LL Hub is also used at 1.00 EA per LL Mountain Rear Wheel and LL Road Rear Wheel. No parent-specific hub substitutions are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0400",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 400,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P400-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "D. Okafor"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-05-01",
+        "changeRequest": "ECN-2026-P400-02",
+        "description": "Consolidated deburr and handling notes and removed a duplicate operator sign-off.",
+        "preparedBy": "D. Okafor",
+        "approvedBy": "T. Haddad"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P400-03",
+        "description": "Released the illustrated part sheet edition: Hub component alignment. Assigned demonstration work centres pending a routing study; marked them as demo assumptions.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "L. Moreau"
+      }
+    ]
+  },
+  "figures": {
+    "2004001": {
+      "title": "Hub component alignment",
+      "guidance": [
+        "Collect 1.00 EA of LL Spindle/Axle (Product Number SD-2342) and 1.00 EA of LL Shell (Product Number SH-4562); visually check both for damage.",
+        "Using an assumed padded assembly support, align and fit LL Spindle/Axle (Product Number SD-2342) with LL Shell (Product Number SH-4562) only after confirming their actual mating arrangement."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "LL Spindle/Axle",
+          "productNumber": "SD-2342"
+        },
+        {
+          "number": 2,
+          "name": "LL Shell",
+          "productNumber": "SH-4562"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 815,
+      "name": "LL Mountain Front Wheel",
+      "productNumber": "FW-M423",
+      "productModelId": 42,
+      "productModelName": "LL Mountain Front Wheel",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 818,
+      "name": "LL Road Front Wheel",
+      "productNumber": "FW-R623",
+      "productModelId": 49,
+      "productModelName": "LL Road Front Wheel",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 823,
+      "name": "LL Mountain Rear Wheel",
+      "productNumber": "RW-M423",
+      "productModelId": 123,
+      "productModelName": "LL Mountain Rear Wheel",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 826,
+      "name": "LL Road Rear Wheel",
+      "productNumber": "RW-R623",
+      "productModelId": 126,
+      "productModelName": "LL Road Rear Wheel",
+      "quantity": 1.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 4
+}

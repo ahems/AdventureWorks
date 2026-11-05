@@ -1,0 +1,203 @@
+{
+  "productId": 518,
+  "name": "ML Road Seat Assembly",
+  "productNumber": "SA-R430",
+  "documentNode": "/900000/518/",
+  "title": "ML Road Seat Assembly part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. ML Road Seat Assembly (Product Number SA-R430) part sheet. Fictional shop-floor demonstration for assembling ML Road Seat Assembly SA-R430, product 518, from its purchased components.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.3\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 50 - Subassembly. Routing evidence: historical work orders for this part used this work centre. Estimates are fictional demo assumptions. Subassembly: receive, inspect and prepare the purchased components for fitting.<step>Collect 4 EA of <material>Pinch Bolt (Product Number PB-6109)</material>, 1 EA of <material>Seat Lug (Product Number SL-0931)</material>, 1 EA of <material>ML Road Seat/Saddle (Product Number SE-R908)</material> and 1 EA of <material>Seat Post (Product Number SP-2981)</material>. See the component overview in illustration <diag>2005181</diag>.</step><step>Visually check the components for obvious damage and confirm their interfaces before fitting. Set aside any questionable component.</step><step>Support the components in <tool>an assumed padded assembly jig</tool> and fit them together only after verifying their interfaces against the applicable assembly instructions.</step></Location><Location LocationID=\"60\" SetupHours=\"0.05\" LaborHours=\"0.2\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 60 - Final Assembly. Routing evidence: historical work orders for this part used this work centre. Estimates are fictional demo assumptions. Final Assembly: complete and check the seat assembly.<step>Complete fastening with <tool>an assumed suitable hand tool</tool>, using the verified bolt locations and fastening requirements; do not guess the tightening settings.</step><step>Check that the assembly is complete, visibly undamaged and securely fitted; hold it for review if an interface or fastening requirement cannot be verified.</step></Location></root>",
+  "routingBasis": "historical",
+  "processNotes": [
+    "The work-center sequence is inferred from historical routing, not an engineering specification.",
+    "The listed Seat Assembly document was identified but its contents were not supplied; verify actual interfaces and fastening requirements before assembly. Do not infer bolt locations or torque from this draft."
+  ],
+  "variantNotes": [
+    "One assembly is used in each listed Road-450 Red parent in sizes 44, 48, 52, 58 and 60.",
+    "One assembly is used in each listed Road-550-W Yellow parent in sizes 38, 40, 42, 44 and 48, and Road-350-W Yellow parent in sizes 40, 42, 44 and 48."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0518",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 518,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P518-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "L. Moreau"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P518-02",
+        "description": "Released the illustrated part sheet edition: Seat assembly component overview. Confirmed the operation sequence against historical work-order routing.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "D. Okafor"
+      }
+    ]
+  },
+  "figures": {
+    "2005181": {
+      "title": "Seat assembly component overview",
+      "guidance": [
+        "Collect 4 EA of Pinch Bolt (Product Number PB-6109), 1 EA of Seat Lug (Product Number SL-0931), 1 EA of ML Road Seat/Saddle (Product Number SE-R908) and 1 EA of Seat Post (Product Number SP-2981). See the component overview in illustration 2005181."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "ML Road Seat/Saddle",
+          "productNumber": "SE-R908"
+        },
+        {
+          "number": 2,
+          "name": "Seat Post",
+          "productNumber": "SP-2981"
+        },
+        {
+          "number": 3,
+          "name": "Seat Lug",
+          "productNumber": "SL-0931"
+        },
+        {
+          "number": 4,
+          "name": "Pinch Bolt",
+          "productNumber": "PB-6109"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 754,
+      "name": "Road-450 Red, 58",
+      "productNumber": "BK-R68R-58",
+      "productModelId": 28,
+      "productModelName": "Road-450",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 755,
+      "name": "Road-450 Red, 60",
+      "productNumber": "BK-R68R-60",
+      "productModelId": 28,
+      "productModelName": "Road-450",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 756,
+      "name": "Road-450 Red, 44",
+      "productNumber": "BK-R68R-44",
+      "productModelId": 28,
+      "productModelName": "Road-450",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 757,
+      "name": "Road-450 Red, 48",
+      "productNumber": "BK-R68R-48",
+      "productModelId": 28,
+      "productModelName": "Road-450",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 758,
+      "name": "Road-450 Red, 52",
+      "productNumber": "BK-R68R-52",
+      "productModelId": 28,
+      "productModelName": "Road-450",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 797,
+      "name": "Road-550-W Yellow, 38",
+      "productNumber": "BK-R64Y-38",
+      "productModelId": 29,
+      "productModelName": "Road-550-W",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 798,
+      "name": "Road-550-W Yellow, 40",
+      "productNumber": "BK-R64Y-40",
+      "productModelId": 29,
+      "productModelName": "Road-550-W",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 799,
+      "name": "Road-550-W Yellow, 42",
+      "productNumber": "BK-R64Y-42",
+      "productModelId": 29,
+      "productModelName": "Road-550-W",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 800,
+      "name": "Road-550-W Yellow, 44",
+      "productNumber": "BK-R64Y-44",
+      "productModelId": 29,
+      "productModelName": "Road-550-W",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 801,
+      "name": "Road-550-W Yellow, 48",
+      "productNumber": "BK-R64Y-48",
+      "productModelId": 29,
+      "productModelName": "Road-550-W",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 973,
+      "name": "Road-350-W Yellow, 40",
+      "productNumber": "BK-R79Y-40",
+      "productModelId": 27,
+      "productModelName": "Road-350-W",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 974,
+      "name": "Road-350-W Yellow, 42",
+      "productNumber": "BK-R79Y-42",
+      "productModelId": 27,
+      "productModelName": "Road-350-W",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 975,
+      "name": "Road-350-W Yellow, 44",
+      "productNumber": "BK-R79Y-44",
+      "productModelId": 27,
+      "productModelName": "Road-350-W",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 976,
+      "name": "Road-350-W Yellow, 48",
+      "productNumber": "BK-R79Y-48",
+      "productModelId": 27,
+      "productModelName": "Road-350-W",
+      "quantity": 1.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 14
+}

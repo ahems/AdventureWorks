@@ -1,0 +1,429 @@
+{
+  "productId": 532,
+  "name": "Seat Stays",
+  "productNumber": "SS-2985",
+  "documentNode": "/900000/532/",
+  "title": "Seat Stays part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Seat Stays (Product Number SS-2985) part sheet. Fictional shop-floor demonstration for manufacturing Seat Stays (SS-2985, product 532) from its direct BOM material.<Location LocationID=\"10\" SetupHours=\"0.1\" LaborHours=\"0.3\" MachineHours=\"0.2\" LotSize=\"1\">Work Center 10 - Frame Forming. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Frame Forming: demonstrate preparation and forming of the supplied sheet into the representative part.<step>Select 1.00 EA of <material>Metal Sheet 7 (Product Number MS-1981)</material> and visually check it for obvious damage.</step><step>Demonstrate cutting and forming the sheet with an <tool>assumed sheet-forming setup</tool>; the illustrative transition is shown in <diag>2005321</diag>. The depicted shape is not a production geometry.</step></Location><Location LocationID=\"30\" SetupHours=\"0.05\" LaborHours=\"0.2\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 30 - Debur and Polish. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Debur and Polish: demonstrate edge finishing and a simple visual check.<step>Remove obvious sharp edges with an <tool>assumed deburring hand tool</tool>.</step><step>Visually check the formed part for obvious cracks, damage and remaining burrs; set aside any questionable part.</step></Location></root>",
+  "routingBasis": "demo-assumption",
+  "processNotes": [
+    "No historical routing exists. Frame Forming and Debur and Polish are selected as demo assumptions, not verified routing.",
+    "The finished shape and forming method are illustrative assumptions; the source does not specify geometry, dimensions or material alloy."
+  ],
+  "variantNotes": [
+    "This part has no product model or catalog variants.",
+    "The supplied where-used examples include HL Road Frame, LL Road Frame, ML Road Frame and HL Mountain Frame parents in several colors and sizes. Each listed parent uses 4.00 EA of this part.",
+    "The snapshot lists examples from a total of 78 parent uses; it does not establish any parent-specific substitution for this part."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0532",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 532,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P532-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "K. Novak"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P532-02",
+        "description": "Released the illustrated part sheet edition: Illustrative sheet-to-seat-stay transition. Assigned demonstration work centres pending a routing study; marked them as demo assumptions.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "D. Okafor"
+      }
+    ]
+  },
+  "figures": {
+    "2005321": {
+      "title": "Illustrative sheet-to-seat-stay transition",
+      "guidance": [
+        "Select 1.00 EA of Metal Sheet 7 (Product Number MS-1981) and visually check it for obvious damage.",
+        "Demonstrate cutting and forming the sheet with an assumed sheet-forming setup; the illustrative transition is shown in 2005321. The depicted shape is not a production geometry."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Metal Sheet 7",
+          "productNumber": "MS-1981"
+        },
+        {
+          "number": 2,
+          "name": "Seat Stays",
+          "productNumber": "SS-2985"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 680,
+      "name": "HL Road Frame - Black, 58",
+      "productNumber": "FR-R92B-58",
+      "productModelId": 6,
+      "productModelName": "HL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 706,
+      "name": "HL Road Frame - Red, 58",
+      "productNumber": "FR-R92R-58",
+      "productModelId": 6,
+      "productModelName": "HL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 717,
+      "name": "HL Road Frame - Red, 62",
+      "productNumber": "FR-R92R-62",
+      "productModelId": 6,
+      "productModelName": "HL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 718,
+      "name": "HL Road Frame - Red, 44",
+      "productNumber": "FR-R92R-44",
+      "productModelId": 6,
+      "productModelName": "HL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 719,
+      "name": "HL Road Frame - Red, 48",
+      "productNumber": "FR-R92R-48",
+      "productModelId": 6,
+      "productModelName": "HL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 720,
+      "name": "HL Road Frame - Red, 52",
+      "productNumber": "FR-R92R-52",
+      "productModelId": 6,
+      "productModelName": "HL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 721,
+      "name": "HL Road Frame - Red, 56",
+      "productNumber": "FR-R92R-56",
+      "productModelId": 6,
+      "productModelName": "HL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 722,
+      "name": "LL Road Frame - Black, 58",
+      "productNumber": "FR-R38B-58",
+      "productModelId": 9,
+      "productModelName": "LL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 723,
+      "name": "LL Road Frame - Black, 60",
+      "productNumber": "FR-R38B-60",
+      "productModelId": 9,
+      "productModelName": "LL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 724,
+      "name": "LL Road Frame - Black, 62",
+      "productNumber": "FR-R38B-62",
+      "productModelId": 9,
+      "productModelName": "LL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 725,
+      "name": "LL Road Frame - Red, 44",
+      "productNumber": "FR-R38R-44",
+      "productModelId": 9,
+      "productModelName": "LL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 726,
+      "name": "LL Road Frame - Red, 48",
+      "productNumber": "FR-R38R-48",
+      "productModelId": 9,
+      "productModelName": "LL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 727,
+      "name": "LL Road Frame - Red, 52",
+      "productNumber": "FR-R38R-52",
+      "productModelId": 9,
+      "productModelName": "LL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 728,
+      "name": "LL Road Frame - Red, 58",
+      "productNumber": "FR-R38R-58",
+      "productModelId": 9,
+      "productModelName": "LL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 729,
+      "name": "LL Road Frame - Red, 60",
+      "productNumber": "FR-R38R-60",
+      "productModelId": 9,
+      "productModelName": "LL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 730,
+      "name": "LL Road Frame - Red, 62",
+      "productNumber": "FR-R38R-62",
+      "productModelId": 9,
+      "productModelName": "LL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 731,
+      "name": "ML Road Frame - Red, 44",
+      "productNumber": "FR-R72R-44",
+      "productModelId": 16,
+      "productModelName": "ML Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 732,
+      "name": "ML Road Frame - Red, 48",
+      "productNumber": "FR-R72R-48",
+      "productModelId": 16,
+      "productModelName": "ML Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 733,
+      "name": "ML Road Frame - Red, 52",
+      "productNumber": "FR-R72R-52",
+      "productModelId": 16,
+      "productModelName": "ML Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 734,
+      "name": "ML Road Frame - Red, 58",
+      "productNumber": "FR-R72R-58",
+      "productModelId": 16,
+      "productModelName": "ML Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 735,
+      "name": "ML Road Frame - Red, 60",
+      "productNumber": "FR-R72R-60",
+      "productModelId": 16,
+      "productModelName": "ML Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 736,
+      "name": "LL Road Frame - Black, 44",
+      "productNumber": "FR-R38B-44",
+      "productModelId": 9,
+      "productModelName": "LL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 737,
+      "name": "LL Road Frame - Black, 48",
+      "productNumber": "FR-R38B-48",
+      "productModelId": 9,
+      "productModelName": "LL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 738,
+      "name": "LL Road Frame - Black, 52",
+      "productNumber": "FR-R38B-52",
+      "productModelId": 9,
+      "productModelName": "LL Road Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 739,
+      "name": "HL Mountain Frame - Silver, 42",
+      "productNumber": "FR-M94S-42",
+      "productModelId": 5,
+      "productModelName": "HL Mountain Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 740,
+      "name": "HL Mountain Frame - Silver, 44",
+      "productNumber": "FR-M94S-44",
+      "productModelId": 5,
+      "productModelName": "HL Mountain Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 741,
+      "name": "HL Mountain Frame - Silver, 48",
+      "productNumber": "FR-M94S-52",
+      "productModelId": 5,
+      "productModelName": "HL Mountain Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 742,
+      "name": "HL Mountain Frame - Silver, 46",
+      "productNumber": "FR-M94S-46",
+      "productModelId": 5,
+      "productModelName": "HL Mountain Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 743,
+      "name": "HL Mountain Frame - Black, 42",
+      "productNumber": "FR-M94B-42",
+      "productModelId": 5,
+      "productModelName": "HL Mountain Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 744,
+      "name": "HL Mountain Frame - Black, 44",
+      "productNumber": "FR-M94B-44",
+      "productModelId": 5,
+      "productModelName": "HL Mountain Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 745,
+      "name": "HL Mountain Frame - Black, 48",
+      "productNumber": "FR-M94B-48",
+      "productModelId": 5,
+      "productModelName": "HL Mountain Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 746,
+      "name": "HL Mountain Frame - Black, 46",
+      "productNumber": "FR-M94B-46",
+      "productModelId": 5,
+      "productModelName": "HL Mountain Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 747,
+      "name": "HL Mountain Frame - Black, 38",
+      "productNumber": "FR-M94B-38",
+      "productModelId": 5,
+      "productModelName": "HL Mountain Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 748,
+      "name": "HL Mountain Frame - Silver, 38",
+      "productNumber": "FR-M94S-38",
+      "productModelId": 5,
+      "productModelName": "HL Mountain Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 814,
+      "name": "ML Mountain Frame - Black, 38",
+      "productNumber": "FR-M63B-38",
+      "productModelId": 15,
+      "productModelName": "ML Mountain Frame-W",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 822,
+      "name": "ML Road Frame-W - Yellow, 38",
+      "productNumber": "FR-R72Y-38",
+      "productModelId": 17,
+      "productModelName": "ML Road Frame-W",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 830,
+      "name": "ML Mountain Frame - Black, 40",
+      "productNumber": "FR-M63B-40",
+      "productModelId": 14,
+      "productModelName": "ML Mountain Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 831,
+      "name": "ML Mountain Frame - Black, 44",
+      "productNumber": "FR-M63B-44",
+      "productModelId": 14,
+      "productModelName": "ML Mountain Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 832,
+      "name": "ML Mountain Frame - Black, 48",
+      "productNumber": "FR-M63B-48",
+      "productModelId": 14,
+      "productModelName": "ML Mountain Frame",
+      "quantity": 4.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 833,
+      "name": "ML Road Frame-W - Yellow, 40",
+      "productNumber": "FR-R72Y-40",
+      "productModelId": 17,
+      "productModelName": "ML Road Frame-W",
+      "quantity": 4.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 78
+}

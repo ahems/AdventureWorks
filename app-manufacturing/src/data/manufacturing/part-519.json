@@ -1,0 +1,204 @@
+{
+  "productId": 519,
+  "name": "HL Road Seat Assembly",
+  "productNumber": "SA-R522",
+  "documentNode": "/900000/519/",
+  "title": "HL Road Seat Assembly part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. HL Road Seat Assembly (Product Number SA-R522) part sheet. Fictional shop-floor demonstration for assembling HL Road Seat Assembly SA-R522, product 519, from its four direct BOM components.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.3\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Routing evidence: historical work orders for this part used this work centre. Estimates are fictional demo assumptions. Subassembly: prepare and bring together the purchased components for one seat assembly.<step>Collect and visually check 1 EA <material>Seat Lug (Product Number SL-0931)</material>, 1 EA <material>Seat Post (Product Number SP-2981)</material>, 4 EA <material>Pinch Bolt (Product Number PB-6109)</material> and 1 EA <material>HL Road Seat/Saddle (Product Number SE-R995)</material>. See the component inventory in figure <diag>2005191</diag>.</step><step>Support the components in an <tool>assumed padded assembly jig</tool>. Check the intended interfaces against authorized product documentation; stop if the fit or bolt positions are unclear.</step><step>Fit <material>Seat Lug (Product Number SL-0931)</material> and <material>HL Road Seat/Saddle (Product Number SE-R995)</material> to <material>Seat Post (Product Number SP-2981)</material> at their confirmed interfaces. Install the 4 EA <material>Pinch Bolt (Product Number PB-6109)</material> in their confirmed positions using an <tool>assumed suitable hand tool</tool>; use authorized fastening requirements.</step></Location><Location LocationID=\"60\" SetupHours=\"0\" LaborHours=\"0.1\" MachineHours=\"0\" LotSize=\"1\">Work Center 60 - Final Assembly. Routing evidence: historical work orders for this part used this work centre. Estimates are fictional demo assumptions. Final Assembly: check the completed seat assembly before handoff.<step>Visually check the assembly for damage, component presence and obvious looseness. Set aside any assembly with an unclear fit or defect for review.</step><step>Identify the accepted assembly as HL Road Seat Assembly SA-R522 and transfer it for the next operation.</step></Location></root>",
+  "routingBasis": "historical",
+  "processNotes": [
+    "The routing is inferred from historical work order 72523: Subassembly followed by Final Assembly. It is evidence, not an engineering specification.",
+    "All direct components are purchased; no raw-material forming or component fabrication is assumed.",
+    "The listed Seat Assembly document was not supplied for review. Confirm component interfaces, bolt positions and fastening requirements against authorized product documentation before assembly; do not infer them from the diagram."
+  ],
+  "variantNotes": [
+    "Product 519 has no catalog variants. One EA is used in each of the listed Road-150 Red assemblies in sizes 44, 48, 52, 56 and 62.",
+    "One EA is also used in each of the listed Road-250 Red and Black assemblies in sizes 44, 48, 52 and 58."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0519",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 519,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P519-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "D. Okafor"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2023-02-06",
+        "changeRequest": "ECN-2023-P519-02",
+        "description": "Separated first-article inspection from routine in-process checks; clarified the hold point for nonconforming parts.",
+        "preparedBy": "D. Okafor",
+        "approvedBy": "K. Novak"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P519-03",
+        "description": "Released the illustrated part sheet edition: Seat assembly component inventory. Confirmed the operation sequence against historical work-order routing.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "L. Moreau"
+      }
+    ]
+  },
+  "figures": {
+    "2005191": {
+      "title": "Seat assembly component inventory",
+      "guidance": [
+        "Collect and visually check 1 EA Seat Lug (Product Number SL-0931), 1 EA Seat Post (Product Number SP-2981), 4 EA Pinch Bolt (Product Number PB-6109) and 1 EA HL Road Seat/Saddle (Product Number SE-R995). See the component inventory in figure 2005191.",
+        "Fit Seat Lug (Product Number SL-0931) and HL Road Seat/Saddle (Product Number SE-R995) to Seat Post (Product Number SP-2981) at their confirmed interfaces. Install the 4 EA Pinch Bolt (Product Number PB-6109) in their confirmed positions using an assumed suitable hand tool; use authorized fastening requirements."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "HL Road Seat/Saddle",
+          "productNumber": "SE-R995"
+        },
+        {
+          "number": 2,
+          "name": "Seat Post",
+          "productNumber": "SP-2981"
+        },
+        {
+          "number": 3,
+          "name": "Seat Lug",
+          "productNumber": "SL-0931"
+        },
+        {
+          "number": 4,
+          "name": "Pinch Bolt",
+          "productNumber": "PB-6109"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 749,
+      "name": "Road-150 Red, 62",
+      "productNumber": "BK-R93R-62",
+      "productModelId": 25,
+      "productModelName": "Road-150",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 750,
+      "name": "Road-150 Red, 44",
+      "productNumber": "BK-R93R-44",
+      "productModelId": 25,
+      "productModelName": "Road-150",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 751,
+      "name": "Road-150 Red, 48",
+      "productNumber": "BK-R93R-48",
+      "productModelId": 25,
+      "productModelName": "Road-150",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 752,
+      "name": "Road-150 Red, 52",
+      "productNumber": "BK-R93R-52",
+      "productModelId": 25,
+      "productModelName": "Road-150",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 753,
+      "name": "Road-150 Red, 56",
+      "productNumber": "BK-R93R-56",
+      "productModelId": 25,
+      "productModelName": "Road-150",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 789,
+      "name": "Road-250 Red, 44",
+      "productNumber": "BK-R89R-44",
+      "productModelId": 26,
+      "productModelName": "Road-250",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 790,
+      "name": "Road-250 Red, 48",
+      "productNumber": "BK-R89R-48",
+      "productModelId": 26,
+      "productModelName": "Road-250",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 791,
+      "name": "Road-250 Red, 52",
+      "productNumber": "BK-R89R-52",
+      "productModelId": 26,
+      "productModelName": "Road-250",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 792,
+      "name": "Road-250 Red, 58",
+      "productNumber": "BK-R89R-58",
+      "productModelId": 26,
+      "productModelName": "Road-250",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 793,
+      "name": "Road-250 Black, 44",
+      "productNumber": "BK-R89B-44",
+      "productModelId": 26,
+      "productModelName": "Road-250",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 794,
+      "name": "Road-250 Black, 48",
+      "productNumber": "BK-R89B-48",
+      "productModelId": 26,
+      "productModelName": "Road-250",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 795,
+      "name": "Road-250 Black, 52",
+      "productNumber": "BK-R89B-52",
+      "productModelId": 26,
+      "productModelName": "Road-250",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 796,
+      "name": "Road-250 Black, 58",
+      "productNumber": "BK-R89B-58",
+      "productModelId": 26,
+      "productModelName": "Road-250",
+      "quantity": 1.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 13
+}

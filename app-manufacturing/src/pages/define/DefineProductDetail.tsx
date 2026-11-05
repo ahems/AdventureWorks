@@ -29,7 +29,8 @@ const DefineProductDetail = () => {
   const { data: currentCost } = useQuery({
     queryKey: ['current-cost', productId],
     queryFn: () => fetchCurrentCost(productId),
-    enabled: !!product?.MakeFlag,
+    // The cost roll-up only exists for manufactured finished goods; sub-assemblies would 404.
+    enabled: !!product?.MakeFlag && !!product?.FinishedGoodsFlag,
     staleTime: 60_000,
   });
 

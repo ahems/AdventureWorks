@@ -1,0 +1,262 @@
+{
+  "productId": 517,
+  "name": "LL Road Seat Assembly",
+  "productNumber": "SA-R127",
+  "documentNode": "/900000/517/",
+  "title": "LL Road Seat Assembly part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. LL Road Seat Assembly (Product Number SA-R127) part sheet. Fictional shop-floor demonstration for assembling LL Road Seat Assembly, product 517 (SA-R127), from its four purchased components.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.4\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Routing evidence: historical work orders for this part used this work centre. Estimates are fictional demo assumptions. Subassembly: receive, inspect and fit the purchased components using their confirmed interfaces.<step>Stage 4 EA of <material>Pinch Bolt (Product Number PB-6109)</material>, 1 EA of <material>LL Road Seat/Saddle (Product Number SE-R581)</material>, 1 EA of <material>Seat Lug (Product Number SL-0931)</material> and 1 EA of <material>Seat Post (Product Number SP-2981)</material>. Check the count and inspect for visible damage; see inventory view <diag>2005171</diag>.</step><step>Using an <tool>assumed padded assembly support</tool>, fit the components only after their interfaces and fastener positions have been confirmed from applicable instructions. Use a <tool>suitable hand tool</tool> for the fasteners; follow the applicable manufacturer's tightening instructions.</step></Location><Location LocationID=\"60\" SetupHours=\"0.05\" LaborHours=\"0.2\" MachineHours=\"0\" LotSize=\"1\">Work Center 60 - Final Assembly. Routing evidence: historical work orders for this part used this work centre. Estimates are fictional demo assumptions. Final assembly: check and release the completed seat assembly for subsequent use.<step>Visually check the completed assembly for damage, missing components and apparent misalignment. Confirm fastener installation against the applicable instructions.</step><step>Set aside any assembly with an unresolved defect or uncertain interface; otherwise transfer it for subsequent use.</step></Location></root>",
+  "routingBasis": "historical",
+  "processNotes": [
+    "The sequence through work centers 50 and 60 is inferred from historical routing, not an engineering specification.",
+    "Component attachment geometry and bolt positions are not supplied. Confirm the actual interfaces and applicable manufacturer instructions before fitting or tightening; do not infer them from the diagram.",
+    "The existing Seat Assembly document is listed in the source but its contents were not supplied; this draft does not replace it."
+  ],
+  "variantNotes": [
+    "The part itself has no catalog variants. The source lists one assembly per Road-650 parent in red or black, in sizes 44, 48, 52, 58, 60 and 62.",
+    "The source also lists one assembly per Road-750 Black parent in sizes 44, 48, 52 and 58."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0517",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 517,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P517-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "D. Okafor",
+        "approvedBy": "L. Moreau"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2023-04-12",
+        "changeRequest": "ECN-2023-P517-02",
+        "description": "Separated first-article inspection from routine in-process checks; clarified the hold point for nonconforming parts.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "K. Novak"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2023-04-19",
+        "changeRequest": "ECN-2023-P517-03",
+        "description": "Consolidated deburr and handling notes and removed a duplicate operator sign-off.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "T. Haddad"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2025-01-04",
+        "changeRequest": "ECN-2025-P517-04",
+        "description": "Recorded that the part supplies 16 parent assemblies; added a kitting note to prevent mixed lots.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "D. Okafor"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2025-07-07",
+        "changeRequest": "ECN-2025-P517-05",
+        "description": "Added a stock-identification check for LL Road Seat/Saddle before the first cut or fit-up.",
+        "preparedBy": "D. Okafor",
+        "approvedBy": "L. Moreau"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2026-02-08",
+        "changeRequest": "ECN-2026-P517-06",
+        "description": "Reformatted the point-of-use copy with numbered steps and larger callout references.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "K. Novak"
+      },
+      {
+        "revision": "7.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P517-07",
+        "description": "Released the illustrated part sheet edition: Seat assembly component inventory. Confirmed the operation sequence against historical work-order routing.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "T. Haddad"
+      }
+    ]
+  },
+  "figures": {
+    "2005171": {
+      "title": "Seat assembly component inventory",
+      "guidance": [
+        "Stage 4 EA of Pinch Bolt (Product Number PB-6109), 1 EA of LL Road Seat/Saddle (Product Number SE-R581), 1 EA of Seat Lug (Product Number SL-0931) and 1 EA of Seat Post (Product Number SP-2981). Check the count and inspect for visible damage; see inventory view 2005171."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "LL Road Seat/Saddle",
+          "productNumber": "SE-R581"
+        },
+        {
+          "number": 2,
+          "name": "Seat Post",
+          "productNumber": "SP-2981"
+        },
+        {
+          "number": 3,
+          "name": "Seat Lug",
+          "productNumber": "SL-0931"
+        },
+        {
+          "number": 4,
+          "name": "Pinch Bolt",
+          "productNumber": "PB-6109"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 759,
+      "name": "Road-650 Red, 58",
+      "productNumber": "BK-R50R-58",
+      "productModelId": 30,
+      "productModelName": "Road-650",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 760,
+      "name": "Road-650 Red, 60",
+      "productNumber": "BK-R50R-60",
+      "productModelId": 30,
+      "productModelName": "Road-650",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 761,
+      "name": "Road-650 Red, 62",
+      "productNumber": "BK-R50R-62",
+      "productModelId": 30,
+      "productModelName": "Road-650",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 762,
+      "name": "Road-650 Red, 44",
+      "productNumber": "BK-R50R-44",
+      "productModelId": 30,
+      "productModelName": "Road-650",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 763,
+      "name": "Road-650 Red, 48",
+      "productNumber": "BK-R50R-48",
+      "productModelId": 30,
+      "productModelName": "Road-650",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 764,
+      "name": "Road-650 Red, 52",
+      "productNumber": "BK-R50R-52",
+      "productModelId": 30,
+      "productModelName": "Road-650",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 765,
+      "name": "Road-650 Black, 58",
+      "productNumber": "BK-R50B-58",
+      "productModelId": 30,
+      "productModelName": "Road-650",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 766,
+      "name": "Road-650 Black, 60",
+      "productNumber": "BK-R50B-60",
+      "productModelId": 30,
+      "productModelName": "Road-650",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 767,
+      "name": "Road-650 Black, 62",
+      "productNumber": "BK-R50B-62",
+      "productModelId": 30,
+      "productModelName": "Road-650",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 768,
+      "name": "Road-650 Black, 44",
+      "productNumber": "BK-R50B-44",
+      "productModelId": 30,
+      "productModelName": "Road-650",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 769,
+      "name": "Road-650 Black, 48",
+      "productNumber": "BK-R50B-48",
+      "productModelId": 30,
+      "productModelName": "Road-650",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 770,
+      "name": "Road-650 Black, 52",
+      "productNumber": "BK-R50B-52",
+      "productModelId": 30,
+      "productModelName": "Road-650",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 977,
+      "name": "Road-750 Black, 58",
+      "productNumber": "BK-R19B-58",
+      "productModelId": 31,
+      "productModelName": "Road-750",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 997,
+      "name": "Road-750 Black, 44",
+      "productNumber": "BK-R19B-44",
+      "productModelId": 31,
+      "productModelName": "Road-750",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 998,
+      "name": "Road-750 Black, 48",
+      "productNumber": "BK-R19B-48",
+      "productModelId": 31,
+      "productModelName": "Road-750",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 999,
+      "name": "Road-750 Black, 52",
+      "productNumber": "BK-R19B-52",
+      "productModelId": 31,
+      "productModelName": "Road-750",
+      "quantity": 1.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 16
+}

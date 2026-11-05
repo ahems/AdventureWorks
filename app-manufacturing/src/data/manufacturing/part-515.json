@@ -1,0 +1,155 @@
+{
+  "productId": 515,
+  "name": "ML Mountain Seat Assembly",
+  "productNumber": "SA-M237",
+  "documentNode": "/900000/515/",
+  "title": "ML Mountain Seat Assembly part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. ML Mountain Seat Assembly (Product Number SA-M237) part sheet. Fictional shop-floor demonstration for assembling and checking ML Mountain Seat Assembly SA-M237, product 515, from its four direct components.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.4\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Routing evidence: historical work orders for this part used this work centre. Estimates are fictional demo assumptions. Subassembly: prepare and provisionally fit the purchased components. This operation is inferred from the historical route.<step>Gather and visually inspect 1 EA of <material>ML Mountain Seat/Saddle (Product Number SE-M798)</material>, 1 EA of <material>Seat Post (Product Number SP-2981)</material>, 1 EA of <material>Seat Lug (Product Number SL-0931)</material>, and 4 EA of <material>Pinch Bolt (Product Number PB-6109)</material>. See the component inventory in illustration <diag>2005151</diag>.</step><step>Support <material>Seat Post (Product Number SP-2981)</material> in <tool>an assumed padded assembly jig</tool> and provisionally fit <material>Seat Lug (Product Number SL-0931)</material> and <material>ML Mountain Seat/Saddle (Product Number SE-M798)</material> using the applicable component guidance. Do not force a questionable fit.</step><step>Fit the 4 EA of <material>Pinch Bolt (Product Number PB-6109)</material> at the positions confirmed by the applicable component guidance, using <tool>a suitable hand tool</tool>. Refer to that guidance for fastening requirements; no settings are specified in this demo.</step></Location><Location LocationID=\"60\" SetupHours=\"0.05\" LaborHours=\"0.15\" MachineHours=\"0\" LotSize=\"1\">Work Center 60 - Final Assembly. Routing evidence: historical work orders for this part used this work centre. Estimates are fictional demo assumptions. Final Assembly: check the completed seat assembly. This operation is inferred from the historical route.<step>Visually check the assembly for damage, complete fastener presence, and obvious misalignment. Resolve questionable fit or fastening against the applicable component guidance before release.</step><step>Place the checked assembly in a protected area for its parent assembly.</step></Location></root>",
+  "routingBasis": "historical",
+  "processNotes": [
+    "The historical route supplies the center order only; the operations assigned to those centers are inferred.",
+    "Component mating details and fastener positions are not supplied. Confirm fit and fastening using applicable component guidance before assembly.",
+    "The existing Seat Assembly document is listed but its contents were not supplied; this draft does not replace it."
+  ],
+  "variantNotes": [
+    "One assembly is used in each Mountain-300 Black parent in sizes 38, 40, 44, and 48; the supplied BOM does not identify substitutions between those parents."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0515",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 515,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P515-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "L. Moreau"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2020-12-03",
+        "changeRequest": "ECN-2020-P515-02",
+        "description": "Separated first-article inspection from routine in-process checks; clarified the hold point for nonconforming parts.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "K. Novak"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2021-07-27",
+        "changeRequest": "ECN-2021-P515-03",
+        "description": "Recorded that the part supplies 4 parent assemblies; added a kitting note to prevent mixed lots.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "D. Okafor"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2025-05-23",
+        "changeRequest": "ECN-2025-P515-04",
+        "description": "Added a stock-identification check for ML Mountain Seat/Saddle before the first cut or fit-up.",
+        "preparedBy": "D. Okafor",
+        "approvedBy": "T. Haddad"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2025-07-23",
+        "changeRequest": "ECN-2025-P515-05",
+        "description": "Consolidated deburr and handling notes and removed a duplicate operator sign-off.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "L. Moreau"
+      },
+      {
+        "revision": "6.0",
+        "effectiveDate": "2025-11-02",
+        "changeRequest": "ECN-2025-P515-06",
+        "description": "Reformatted the point-of-use copy with numbered steps and larger callout references.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "K. Novak"
+      },
+      {
+        "revision": "7.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P515-07",
+        "description": "Released the illustrated part sheet edition: Seat assembly component inventory. Confirmed the operation sequence against historical work-order routing.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "D. Okafor"
+      }
+    ]
+  },
+  "figures": {
+    "2005151": {
+      "title": "Seat assembly component inventory",
+      "guidance": [
+        "Gather and visually inspect 1 EA of ML Mountain Seat/Saddle (Product Number SE-M798), 1 EA of Seat Post (Product Number SP-2981), 1 EA of Seat Lug (Product Number SL-0931), and 4 EA of Pinch Bolt (Product Number PB-6109). See the component inventory in illustration 2005151.",
+        "Support Seat Post (Product Number SP-2981) in an assumed padded assembly jig and provisionally fit Seat Lug (Product Number SL-0931) and ML Mountain Seat/Saddle (Product Number SE-M798) using the applicable component guidance. Do not force a questionable fit.",
+        "Fit the 4 EA of Pinch Bolt (Product Number PB-6109) at the positions confirmed by the applicable component guidance, using a suitable hand tool. Refer to that guidance for fastening requirements; no settings are specified in this demo."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "ML Mountain Seat/Saddle",
+          "productNumber": "SE-M798"
+        },
+        {
+          "number": 2,
+          "name": "Seat Post",
+          "productNumber": "SP-2981"
+        },
+        {
+          "number": 3,
+          "name": "Seat Lug",
+          "productNumber": "SL-0931"
+        },
+        {
+          "number": 4,
+          "name": "Pinch Bolt",
+          "productNumber": "PB-6109"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 785,
+      "name": "Mountain-300 Black, 38",
+      "productNumber": "BK-M47B-38",
+      "productModelId": 21,
+      "productModelName": "Mountain-300",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 786,
+      "name": "Mountain-300 Black, 40",
+      "productNumber": "BK-M47B-40",
+      "productModelId": 21,
+      "productModelName": "Mountain-300",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 787,
+      "name": "Mountain-300 Black, 44",
+      "productNumber": "BK-M47B-44",
+      "productModelId": 21,
+      "productModelName": "Mountain-300",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 788,
+      "name": "Mountain-300 Black, 48",
+      "productNumber": "BK-M47B-48",
+      "productModelId": 21,
+      "productModelName": "Mountain-300",
+      "quantity": 1.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 4
+}

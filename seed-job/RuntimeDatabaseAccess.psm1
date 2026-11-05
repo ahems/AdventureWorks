@@ -76,4 +76,33 @@ EXEC sp_executesql @sql;
     } finally { $command.Dispose() }
 }
 
-Export-ModuleMember -Function Initialize-RuntimeDatabaseAccess, Grant-RuntimeChangeTrackingAccess
+function Grant-RuntimeXmlSchemaAccess {
+    param(
+        [Parameter(Mandatory)] $Connection,
+        [Parameter(Mandatory)][string] $IdentityName
+    )
+
+    $command = $Connection.CreateCommand()
+    try {
+        $command.CommandTimeout = 120
+        # XML_SCHEMA_NAMESPACE requires VIEW DEFINITION plus REFERENCES (or ALTER/CONTROL) on the collection.
+        $command.CommandText = @'
+IF NOT EXISTS (
+    SELECT 1 FROM sys.xml_schema_collections
+    WHERE schema_id = SCHEMA_ID(N'Production') AND name = N'ManuInstructionsSchemaCollection')
+    THROW 51024, 'Cannot grant runtime XML schema access: Production.ManuInstructionsSchemaCollection is missing.', 1;
+DECLARE @quoted nvarchar(258) = QUOTENAME(@identityName), @sql nvarchar(max);
+IF @quoted IS NULL OR LEN(@identityName) = 0
+    THROW 51020, 'Invalid runtime database identity name.', 1;
+SET @sql = N'GRANT REFERENCES, VIEW DEFINITION ON XML SCHEMA COLLECTION::[Production].[ManuInstructionsSchemaCollection] TO ' + @quoted + N';';
+EXEC sp_executesql @sql;
+'@
+        $parameter = $command.CreateParameter()
+        $parameter.ParameterName = '@identityName'
+        $parameter.Value = $IdentityName
+        $null = $command.Parameters.Add($parameter)
+        $null = $command.ExecuteNonQuery()
+    } finally { $command.Dispose() }
+}
+
+Export-ModuleMember -Function Initialize-RuntimeDatabaseAccess, Grant-RuntimeChangeTrackingAccess, Grant-RuntimeXmlSchemaAccess

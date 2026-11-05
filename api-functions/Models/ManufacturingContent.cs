@@ -73,3 +73,29 @@ public sealed record ManufacturingDiagramResult(
     string Status, int ProductModelId, int Slot, int IllustrationId, string FileName,
     string SourceFingerprint, string InstructionsSha256, string? ResponseId,
     string Xaml, string Svg, IReadOnlyList<ManufacturingDiagramPosition> Callouts);
+
+public sealed record ManufacturingProductSubject(int ProductId, string Name, string ProductNumber, string? Color,
+    string? Size, decimal? Weight, string? WeightUnit, short DaysToManufacture,
+    DateTime SellStartDate, DateTime? SellEndDate, DateTime? DiscontinuedDate);
+public sealed record ManufacturingWhereUsed(int ParentProductId, string Name, string ProductNumber,
+    int? ProductModelId, string? ProductModelName, decimal Quantity, string Unit);
+public sealed record ManufacturingProductDocumentReference(string DocumentNode, string Title, string FileName,
+    string FileExtension, string Revision, string? DocumentSummary);
+public sealed record ManufacturingProductGrounding(
+    DateTime AsOfUtc, ManufacturingProductSubject Product, IReadOnlyList<ManufacturingComponent> Components,
+    IReadOnlyList<ManufacturingWhereUsed> WhereUsed, int WhereUsedCount,
+    IReadOnlyList<ManufacturingWorkCenter> WorkCenters, IReadOnlyList<ManufacturingRouting> HistoricalRouting,
+    string RoutingBasis, IReadOnlyList<ManufacturingProductDocumentReference> ExistingDocuments,
+    IReadOnlyList<int> ExistingIllustrationIds, string InstructionSchema);
+public sealed record ManufacturingProductContentResult(
+    string Status, string SourceFingerprint, string AgentId, string? ResponseId,
+    ManufacturingProductGrounding Grounding, ManufacturingInstructionDraft Draft, string InstructionsXml,
+    IReadOnlyList<ManufacturingDiagramReservation> DiagramReservations, string DocumentNode);
+public sealed record ManufacturingProductDiagramRequest(ManufacturingProductContentResult ApprovedDraft, int Slot);
+public sealed record ManufacturingProductDiagramResult(
+    string Status, int ProductId, int Slot, int IllustrationId, string FileName,
+    string SourceFingerprint, string InstructionsSha256, string? ResponseId,
+    string Xaml, string Svg, IReadOnlyList<ManufacturingDiagramPosition> Callouts);
+public sealed record ManufacturingProductDocument(
+    int ProductId, string DocumentNode, string Title, string FileName, string FileExtension, string Revision,
+    int ChangeNumber, byte Status, string? DocumentSummary, DateTime ModifiedDate, bool Generated, string? InstructionsXml);

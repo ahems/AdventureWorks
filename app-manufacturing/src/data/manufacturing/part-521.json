@@ -1,0 +1,120 @@
+{
+  "productId": 521,
+  "name": "ML Touring Seat Assembly",
+  "productNumber": "SA-T612",
+  "documentNode": "/900000/521/",
+  "title": "ML Touring Seat Assembly part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. ML Touring Seat Assembly (Product Number SA-T612) part sheet. Fictional shop-floor demonstration for ML Touring Seat Assembly SA-T612 (product 521), covering its purchased components, assembly and final checks.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.4\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Routing evidence: historical work orders for this part used this work centre. Estimates are fictional demo assumptions. Subassembly: identify, inspect and provisionally fit the purchased components using the verified interfaces.<step>Collect 1.00 EA of <material>Seat Post (Product Number SP-2981)</material>, 1.00 EA of <material>Seat Lug (Product Number SL-0931)</material>, 1.00 EA of <material>ML Touring Seat/Saddle (Product Number SE-T762)</material> and 4.00 EA of <material>Pinch Bolt (Product Number PB-6109)</material>. Check identity and visible condition against the inventory in illustration <diag>2005211</diag>.</step><step>Verify the component interfaces and fastener positions against current authorized assembly information. Hold any questionable or damaged components for review.</step><step>When the interfaces are verified, support the components in an <tool>assumed padded assembly jig</tool> and fit them together using suitable <tool>hand tools</tool>. Use the verified fastening requirements; do not guess bolt positions or tightening settings.</step></Location><Location LocationID=\"60\" SetupHours=\"0\" LaborHours=\"0.15\" MachineHours=\"0\" LotSize=\"1\">Work Center 60 - Final Assembly. Routing evidence: historical work orders for this part used this work centre. Estimates are fictional demo assumptions. Final Assembly: check the completed seat assembly before transfer.<step>Check the assembly for visible damage, completeness and secure fit against the verified assembly information. Confirm that all four supplied fasteners have been accounted for.</step><step>Hold the assembly for review if fit or fastening cannot be confirmed; otherwise transfer it for the next operation.</step></Location></root>",
+  "routingBasis": "historical",
+  "processNotes": [
+    "The center sequence is inferred from historical routing, not an engineering specification. The listed Seat Assembly document was not supplied for review; consult the current document before work.",
+    "Component interfaces, bolt positions and tightening requirements are not established by the supplied BOM. Verify them before fitting; hold the assembly if they cannot be confirmed."
+  ],
+  "variantNotes": [
+    "The assembly is used at 1.00 EA per Touring-2000 Blue bicycle in sizes 46, 50, 54 and 60. No product variants are listed for the seat assembly itself."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0521",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 521,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P521-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "T. Haddad"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2022-06-27",
+        "changeRequest": "ECN-2022-P521-02",
+        "description": "Separated first-article inspection from routine in-process checks; clarified the hold point for nonconforming parts.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "D. Okafor"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P521-03",
+        "description": "Released the illustrated part sheet edition: Seat assembly component inventory. Confirmed the operation sequence against historical work-order routing.",
+        "preparedBy": "D. Okafor",
+        "approvedBy": "K. Novak"
+      }
+    ]
+  },
+  "figures": {
+    "2005211": {
+      "title": "Seat assembly component inventory",
+      "guidance": [
+        "Collect 1.00 EA of Seat Post (Product Number SP-2981), 1.00 EA of Seat Lug (Product Number SL-0931), 1.00 EA of ML Touring Seat/Saddle (Product Number SE-T762) and 4.00 EA of Pinch Bolt (Product Number PB-6109). Check identity and visible condition against the inventory in illustration 2005211."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "ML Touring Seat/Saddle",
+          "productNumber": "SE-T762"
+        },
+        {
+          "number": 2,
+          "name": "Seat Post",
+          "productNumber": "SP-2981"
+        },
+        {
+          "number": 3,
+          "name": "Seat Lug",
+          "productNumber": "SL-0931"
+        },
+        {
+          "number": 4,
+          "name": "Pinch Bolt",
+          "productNumber": "PB-6109"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 953,
+      "name": "Touring-2000 Blue, 60",
+      "productNumber": "BK-T44U-60",
+      "productModelId": 35,
+      "productModelName": "Touring-2000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 970,
+      "name": "Touring-2000 Blue, 46",
+      "productNumber": "BK-T44U-46",
+      "productModelId": 35,
+      "productModelName": "Touring-2000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 971,
+      "name": "Touring-2000 Blue, 50",
+      "productNumber": "BK-T44U-50",
+      "productModelId": 35,
+      "productModelName": "Touring-2000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 972,
+      "name": "Touring-2000 Blue, 54",
+      "productNumber": "BK-T44U-54",
+      "productModelId": 35,
+      "productModelName": "Touring-2000",
+      "quantity": 1.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 4
+}

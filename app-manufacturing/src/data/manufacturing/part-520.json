@@ -1,0 +1,169 @@
+{
+  "productId": 520,
+  "name": "LL Touring Seat Assembly",
+  "productNumber": "SA-T467",
+  "documentNode": "/900000/520/",
+  "title": "LL Touring Seat Assembly part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. LL Touring Seat Assembly (Product Number SA-T467) part sheet. Fictional shop-floor part sheet for LL Touring Seat Assembly, SA-T467, covering component preparation, assembly and final checks.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.4\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Routing evidence: historical work orders for this part used this work centre. Estimates are fictional demo assumptions. Subassembly: prepare the purchased components and demonstrate their intended fit.<step>Gather and visually check 1 EA <material>Seat Lug (Product Number SL-0931)</material>, 1 EA <material>Seat Post (Product Number SP-2981)</material>, 4 EA <material>Pinch Bolt (Product Number PB-6109)</material> and 1 EA <material>LL Touring Seat/Saddle (Product Number SE-T312)</material>. Compare the inventory with illustration <diag>2005201</diag>.</step><step>Support <material>Seat Post (Product Number SP-2981)</material> in an assumed <tool>padded assembly fixture</tool> and check its intended fit with <material>Seat Lug (Product Number SL-0931)</material> and <material>LL Touring Seat/Saddle (Product Number SE-T312)</material>; resolve any uncertain interfaces before proceeding.</step><step>Fit the components and install 4 EA <material>Pinch Bolt (Product Number PB-6109)</material> only at confirmed attachment points, using an assumed <tool>suitable hand tool</tool>. Fastening locations and settings require approved instructions.</step></Location><Location LocationID=\"60\" SetupHours=\"0\" LaborHours=\"0.15\" MachineHours=\"0\" LotSize=\"1\">Work Center 60 - Final Assembly. Routing evidence: historical work orders for this part used this work centre. Estimates are fictional demo assumptions. Final Assembly: perform a simple completion check on the seat assembly.<step>Visually check the assembly for obvious damage, missing components and loose hardware; set aside anything requiring review.</step><step>Identify the completed assembly and move it to the designated holding area.</step></Location></root>",
+  "routingBasis": "historical",
+  "processNotes": [
+    "The work-center sequence comes from historical routing; the operations assigned to those centers are inferred, not an engineering specification.",
+    "The supplied components are purchased; their exact geometry, attachment points and fastening method are not established by the snapshot. Confirm compatibility and approved instructions before actual work.",
+    "This draft complements the listed Seat Assembly document; its contents were not supplied for comparison."
+  ],
+  "variantNotes": [
+    "This part has no catalog variants. One assembly is used in each listed Touring-3000 Blue and Yellow parent, in sizes 44, 50, 54, 58 and 62."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0520",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 520,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P520-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "K. Novak"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P520-02",
+        "description": "Released the illustrated part sheet edition: Seat assembly component inventory. Confirmed the operation sequence against historical work-order routing.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "D. Okafor"
+      }
+    ]
+  },
+  "figures": {
+    "2005201": {
+      "title": "Seat assembly component inventory",
+      "guidance": [
+        "Gather and visually check 1 EA Seat Lug (Product Number SL-0931), 1 EA Seat Post (Product Number SP-2981), 4 EA Pinch Bolt (Product Number PB-6109) and 1 EA LL Touring Seat/Saddle (Product Number SE-T312). Compare the inventory with illustration 2005201.",
+        "Support Seat Post (Product Number SP-2981) in an assumed padded assembly fixture and check its intended fit with Seat Lug (Product Number SL-0931) and LL Touring Seat/Saddle (Product Number SE-T312); resolve any uncertain interfaces before proceeding.",
+        "Fit the components and install 4 EA Pinch Bolt (Product Number PB-6109) only at confirmed attachment points, using an assumed suitable hand tool. Fastening locations and settings require approved instructions."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "LL Touring Seat/Saddle",
+          "productNumber": "SE-T312"
+        },
+        {
+          "number": 2,
+          "name": "Seat Post",
+          "productNumber": "SP-2981"
+        },
+        {
+          "number": 3,
+          "name": "Seat Lug",
+          "productNumber": "SL-0931"
+        },
+        {
+          "number": 4,
+          "name": "Pinch Bolt",
+          "productNumber": "PB-6109"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 958,
+      "name": "Touring-3000 Blue, 54",
+      "productNumber": "BK-T18U-54",
+      "productModelId": 36,
+      "productModelName": "Touring-3000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 959,
+      "name": "Touring-3000 Blue, 58",
+      "productNumber": "BK-T18U-58",
+      "productModelId": 36,
+      "productModelName": "Touring-3000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 960,
+      "name": "Touring-3000 Blue, 62",
+      "productNumber": "BK-T18U-62",
+      "productModelId": 36,
+      "productModelName": "Touring-3000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 961,
+      "name": "Touring-3000 Yellow, 44",
+      "productNumber": "BK-T18Y-44",
+      "productModelId": 36,
+      "productModelName": "Touring-3000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 962,
+      "name": "Touring-3000 Yellow, 50",
+      "productNumber": "BK-T18Y-50",
+      "productModelId": 36,
+      "productModelName": "Touring-3000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 963,
+      "name": "Touring-3000 Yellow, 54",
+      "productNumber": "BK-T18Y-54",
+      "productModelId": 36,
+      "productModelName": "Touring-3000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 964,
+      "name": "Touring-3000 Yellow, 58",
+      "productNumber": "BK-T18Y-58",
+      "productModelId": 36,
+      "productModelName": "Touring-3000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 965,
+      "name": "Touring-3000 Yellow, 62",
+      "productNumber": "BK-T18Y-62",
+      "productModelId": 36,
+      "productModelName": "Touring-3000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 978,
+      "name": "Touring-3000 Blue, 44",
+      "productNumber": "BK-T18U-44",
+      "productModelId": 36,
+      "productModelName": "Touring-3000",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 979,
+      "name": "Touring-3000 Blue, 50",
+      "productNumber": "BK-T18U-50",
+      "productModelId": 36,
+      "productModelName": "Touring-3000",
+      "quantity": 1.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 10
+}

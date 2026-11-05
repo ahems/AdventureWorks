@@ -1,0 +1,102 @@
+{
+  "productId": 350,
+  "name": "Fork Crown",
+  "productNumber": "FC-3654",
+  "documentNode": "/900000/350/",
+  "title": "Fork Crown part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Fork Crown (Product Number FC-3654) part sheet. Fictional shop-floor demonstration for forming and finishing Fork Crown FC-3654 from its direct sheet component.<Location LocationID=\"10\" SetupHours=\"0.2\" LaborHours=\"0.5\" MachineHours=\"0.2\" LotSize=\"1\">Work Center 10 - Frame Forming. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Frame Forming: prepare and form the sheet into a conceptual fork crown.<step>Select 1 EA of <material>Metal Sheet 5 (Product Number MS-2341)</material> and visually check it for obvious damage.</step><step>Prepare and form the sheet with <tool>an assumed forming jig and forming machine</tool>. The conceptual transition is shown in illustration <diag>2003501</diag>; exact geometry is not established by the source.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.3\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 30 - Debur and Polish. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Debur and Polish: finish and visually check the formed part.<step>Remove sharp edges with <tool>an assumed hand deburring tool</tool>.</step><step>Visually check the finished crown for obvious cracks, damage and remaining burrs.</step></Location></root>",
+  "routingBasis": "demo-assumption",
+  "processNotes": [
+    "The routing through Frame Forming and Debur and Polish is inferred: no historical routing is available.",
+    "The crown geometry in the diagram is conceptual; the source does not establish its exact shape or dimensions."
+  ],
+  "variantNotes": [
+    "This product has no catalog variants. Each LL Fork FK-1639, ML Fork FK-5136 and HL Fork FK-9939 assembly uses 1 EA of Fork Crown FC-3654."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0350",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 350,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P350-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "T. Haddad"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2024-02-19",
+        "changeRequest": "ECN-2024-P350-02",
+        "description": "Recorded that the part supplies 3 parent assemblies; added a kitting note to prevent mixed lots.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "D. Okafor"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P350-03",
+        "description": "Released the illustrated part sheet edition: Conceptual crown forming transition. Assigned demonstration work centres pending a routing study; marked them as demo assumptions.",
+        "preparedBy": "D. Okafor",
+        "approvedBy": "K. Novak"
+      }
+    ]
+  },
+  "figures": {
+    "2003501": {
+      "title": "Conceptual crown forming transition",
+      "guidance": [
+        "Select 1 EA of Metal Sheet 5 (Product Number MS-2341) and visually check it for obvious damage.",
+        "Prepare and form the sheet with an assumed forming jig and forming machine. The conceptual transition is shown in illustration 2003501; exact geometry is not established by the source."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Metal Sheet 5",
+          "productNumber": "MS-2341"
+        },
+        {
+          "number": 2,
+          "name": "Fork Crown",
+          "productNumber": "FC-3654"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 802,
+      "name": "LL Fork",
+      "productNumber": "FK-1639",
+      "productModelId": 104,
+      "productModelName": "LL Fork",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 803,
+      "name": "ML Fork",
+      "productNumber": "FK-5136",
+      "productModelId": 105,
+      "productModelName": "ML Fork",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 804,
+      "name": "HL Fork",
+      "productNumber": "FK-9939",
+      "productModelId": 106,
+      "productModelName": "HL Fork",
+      "quantity": 1.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 3
+}

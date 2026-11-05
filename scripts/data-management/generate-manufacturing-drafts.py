@@ -170,7 +170,9 @@ def operation_guidance(root, brief, components, identifier):
 
 def render_preview(result, illustrations=None, change_history=None):
     grounding = result["grounding"]
-    model = grounding["model"]
+    sheet = grounding.get("product")
+    model = grounding["model"] if sheet is None else {"name": f'{sheet["name"]} part sheet', "productModelId": None}
+    representative = grounding["representative"] if sheet is None else sheet
     draft = result["draft"]
     xml = result["instructionsXml"]
     if "<!DOCTYPE" in xml.upper() or "<!ENTITY" in xml.upper():
@@ -181,6 +183,8 @@ def render_preview(result, illustrations=None, change_history=None):
     reservations = {r["slot"]: r for r in result["diagramReservations"]}
     briefs = {reservations[d["slot"]]["illustrationId"]: d for d in draft["diagrams"]}
     components = {c["productId"]: c for c in grounding["components"]}
+    if sheet is not None:
+        components[sheet["productId"]] = sheet
     centers = {c["locationId"]: c["name"] for c in grounding["workCenters"]}
 
     def operation_explanation(identifier):
@@ -252,7 +256,7 @@ def render_preview(result, illustrations=None, change_history=None):
         )
     assumptions = "".join(f"<li>{escape(note)}</li>" for text in draft["assumptions"] if (note := presentation_notes(text)))
     variants = "".join(f"<li>{escape(text)}</li>" for text in draft["variantNotes"])
-    direct = [c for c in grounding["components"] if c["parentProductId"] == grounding["representative"]["productId"]]
+    direct = [c for c in grounding["components"] if c["parentProductId"] == representative["productId"]]
     bom = "".join(
         f'<tr><td>{c["productId"]}</td><td>{escape(c["productNumber"])}</td><td>{escape(c["name"])}</td>'
         f'<td>{escape(c["quantity"])}</td><td>{escape(c["unit"])}</td></tr>' for c in direct
@@ -267,7 +271,7 @@ def render_preview(result, illustrations=None, change_history=None):
 <body><nav><a href="../{"diagrams.html" if illustrations else "index.html"}">All sample drafts</a> · <a href="instructions.xml">Source XML</a> · <a href="grounding.json">Grounding</a></nav>
 {brand_header()}
 <div class="document-title"><div class="eyebrow">Manufacturing work instructions</div><h1>{escape(model["name"])}</h1>
-<p>Model {model["productModelId"]} · Representative product {grounding["representative"]["productId"]}: {escape(grounding["representative"]["name"])}</p>
+<p>{f'Model {model["productModelId"]} · Representative product {representative["productId"]}: {escape(representative["name"])}' if sheet is None else f'Product {sheet["productId"]} · {escape(sheet["productNumber"])} · Routing basis: {escape(grounding["routingBasis"])}'}</p>
 </div>
 <section><h2>Overview</h2><p>{escape(overview)}</p></section>
 <section><h2>Process notes and estimates</h2><ul>{assumptions}</ul><h2>Variant notes</h2><ul>{variants}</ul></section>
@@ -276,7 +280,7 @@ def render_preview(result, illustrations=None, change_history=None):
 <section><h2>Grounded direct components</h2><p>Quantities per representative assembly, from the effective live BOM.</p>
 <div class="table-scroll"><table><thead><tr><th>Product ID</th><th>Number</th><th>Component</th><th>Quantity</th><th>Unit</th></tr></thead><tbody>{bom}</tbody></table></div></section>
 {render_change_history(change_history)}
-<footer>AdventureWorks · Manufacturing Engineering · {escape(model["name"])} · Model {model["productModelId"]}</footer>
+<footer>AdventureWorks · Manufacturing Engineering · {escape(model["name"])} · {f'Model {model["productModelId"]}' if sheet is None else f'Product {sheet["productId"]}'}</footer>
 </body></html>"""
 
 

@@ -110,6 +110,28 @@ export const fetchProductModel = (id: number) =>
     $filter: `ProductModelID eq ${id}`,
   }).then((r) => r[0] || null);
 
+export interface ManufacturingPartDocument {
+  productId: number;
+  documentNode: string;
+  title: string;
+  fileName: string;
+  fileExtension: string;
+  revision: string;
+  changeNumber: number;
+  status: number;
+  documentSummary: string | null;
+  modifiedDate: string;
+  generated: boolean;
+  instructionsXml: string | null;
+}
+
+// Production.Document is not exposed through DAB; Functions reads it with the manufacturing.read scope.
+export async function fetchPartDocuments(productId: number, signal?: AbortSignal): Promise<ManufacturingPartDocument[]> {
+  const res = await fetch(`${MANUFACTURING_BASE}/manufacturing/parts/${productId}/documents`, { signal });
+  if (!res.ok) throw new Error(`Part documents could not be loaded (${res.status}).`);
+  return res.json();
+}
+
 // Categories (filter to English only — these tables have CultureID)
 export const fetchProductCategories = () =>
   fetchAllOData<ProductCategory>("ProductCategory", {

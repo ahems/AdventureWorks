@@ -1,0 +1,93 @@
+{
+  "productId": 331,
+  "name": "Fork End",
+  "productNumber": "FE-3760",
+  "documentNode": "/900000/331/",
+  "title": "Fork End part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Fork End (Product Number FE-3760) part sheet. Fictional part sheet for Fork End FE-3760, manufactured from its direct sheet component.<Location LocationID=\"10\" SetupHours=\"0.1\" LaborHours=\"0.2\" MachineHours=\"0.1\" LotSize=\"1\">Work Center 10 - Frame Forming. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Frame Forming: assumed cutting and forming of the fork-end blank.<step>Inspect 1.00 EA of <material>Metal Sheet 2 (Product Number MS-0253)</material> for visible damage.</step><step>For the demonstration, cut and form a fork-end blank using an <tool>assumed cutting and forming fixture</tool>. The conceptual relationship is shown in illustration <diag>2003311</diag>; it is not a cutting pattern.</step></Location><Location LocationID=\"30\" SetupHours=\"0.05\" LaborHours=\"0.15\" MachineHours=\"0\" LotSize=\"1\">Work Center 30 - Debur and Polish. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Debur and Polish: assumed edge finishing and visual inspection.<step>Remove visible burrs from the blank with an <tool>assumed hand deburring tool</tool>.</step><step>Visually check the finished part for remaining burrs and obvious surface damage; set aside any questionable part.</step></Location></root>",
+  "routingBasis": "demo-assumption",
+  "processNotes": [
+    "The illustrated fork-end outline and slot are conceptual only. Actual geometry and manufacturing requirements were not supplied."
+  ],
+  "variantNotes": [
+    "LL Fork FK-1639, ML Fork FK-5136 and HL Fork FK-9939 each use 2.00 EA of this part."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0331",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 331,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P331-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "L. Moreau"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P331-02",
+        "description": "Released the illustrated part sheet edition: Conceptual sheet-to-fork-end view. Assigned demonstration work centres pending a routing study; marked them as demo assumptions.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "D. Okafor"
+      }
+    ]
+  },
+  "figures": {
+    "2003311": {
+      "title": "Conceptual sheet-to-fork-end view",
+      "guidance": [
+        "Inspect 1.00 EA of Metal Sheet 2 (Product Number MS-0253) for visible damage.",
+        "For the demonstration, cut and form a fork-end blank using an assumed cutting and forming fixture. The conceptual relationship is shown in illustration 2003311; it is not a cutting pattern."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Metal Sheet 2",
+          "productNumber": "MS-0253"
+        },
+        {
+          "number": 2,
+          "name": "Fork End",
+          "productNumber": "FE-3760"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 802,
+      "name": "LL Fork",
+      "productNumber": "FK-1639",
+      "productModelId": 104,
+      "productModelName": "LL Fork",
+      "quantity": 2.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 803,
+      "name": "ML Fork",
+      "productNumber": "FK-5136",
+      "productModelId": 105,
+      "productModelName": "ML Fork",
+      "quantity": 2.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 804,
+      "name": "HL Fork",
+      "productNumber": "FK-9939",
+      "productModelId": 106,
+      "productModelName": "HL Fork",
+      "quantity": 2.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 3
+}

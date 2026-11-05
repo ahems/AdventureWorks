@@ -235,6 +235,9 @@ routes. Only the pre-auth reset flow and consumer signup are anonymous.
 | `GET, POST /api/manufacturing/illustrations/export` | I | `manufacturing.read` | Internal-only | — |
 | `POST /api/manufacturing/content/instructions/generate` | I | `manufacturing.write` | Internal-only | — |
 | `POST /api/manufacturing/content/diagrams/generate` | I | `manufacturing.write` | Internal-only | — |
+| `POST /api/manufacturing/content/parts/instructions/generate` | I | `manufacturing.write` | Internal-only | — |
+| `POST /api/manufacturing/content/parts/diagrams/generate` | I | `manufacturing.write` | Internal-only | — |
+| `GET /api/manufacturing/parts/{productId:int}/documents` | I | `manufacturing.read` | Internal-only | — |
 | `POST /api/GenerateProductNameEmbeddings` | I | `admin.write` | Internal-only | — |
 | `POST /api/GenerateProductReviewEmbeddings_HttpStart` | I | `admin.write` | Internal-only | — |
 | `POST /api/GenerateProductReviewsUsingAI_HttpStart` | I | `admin.write` | Internal-only | — |

@@ -1,0 +1,19 @@
+<svg width="1000" height="700" viewBox="0 0 1000 700" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g>
+    <path d="M 12,12 L 988,12 L 988,688 L 12,688 Z" fill-rule="evenodd" fill="#FFFFFF" />
+    <path d="M 145,280 L 215,400 L 400,360 L 400,368 L 215,408 L 145,288 Z" fill-rule="evenodd" stroke-width="2.5" fill="#B9C9D2" stroke="#19364D" />
+    <path d="M 145,280 L 330,240 L 400,360 L 215,400 Z" fill-rule="evenodd" stroke-width="3" fill="#E6EDF2" stroke="#19364D" />
+    <path d="M 160,287 L 327,251" fill-rule="evenodd" stroke-width="2" stroke="#FFFFFF" />
+    <path d="M 435,315 L 525,315 L 525,301 L 553,325 L 525,349 L 525,335 L 435,335 Z" fill-rule="evenodd" fill="#238C8C" />
+    <path d="M 585,322 C 585,362 636,394 700,394 C 764,394 815,362 815,322 L 815,344 C 815,384 764,416 700,416 C 636,416 585,384 585,344 Z" fill-rule="evenodd" stroke-width="3" fill="#B9CAD4" stroke="#19364D" />
+    <path d="M 585,322 C 585,282 636,250 700,250 C 764,250 815,282 815,322 C 815,362 764,394 700,394 C 636,394 585,362 585,322 Z" fill-rule="evenodd" stroke-width="3" fill="#E6EDF2" stroke="#19364D" />
+    <path d="M 602,322 C 602,289 646,262 700,262 C 754,262 798,289 798,322 C 798,355 754,382 700,382 C 646,382 602,355 602,322 Z" fill-rule="evenodd" stroke-width="2" stroke="#8EA9B9" />
+    <path d="M 626,291 C 645,278 672,271 699,271" fill-rule="evenodd" stroke-width="2" stroke="#FFFFFF" />
+    <path d="M 177,273 L 139,205 L 124,171" fill-rule="evenodd" stroke-width="1.5" stroke="#19364D" />
+    <path d="M 782,270 L 850,200 L 875,170" fill-rule="evenodd" stroke-width="1.5" stroke="#19364D" />
+    <path d="M 97,155 C 97,131 133,131 133,155 C 133,179 97,179 97,155 Z" fill-rule="evenodd" stroke-width="1.5" fill="#FFFFFF" stroke="#19364D" />
+    <path d="M 118.5,147 L 118.5,155 M 118.5,155 L 118.5,163" fill-rule="evenodd" stroke-width="2" stroke="#19364D" />
+    <path d="M 867,155 C 867,131 903,131 903,155 C 903,179 867,179 867,155 Z" fill-rule="evenodd" stroke-width="1.5" fill="#FFFFFF" stroke="#19364D" />
+    <path d="M 881.5,147 L 888.5,147 M 888.5,147 L 888.5,155 M 881.5,163 L 888.5,163 M 881.5,155 L 881.5,163 M 881.5,155 L 888.5,155" fill-rule="evenodd" stroke-width="2" stroke="#19364D" />
+  </g>
+</svg>

@@ -424,7 +424,7 @@ try {
     # Validate all shipped artifacts before either importing or resetting a fresh database.
     $null = Read-ManufacturingOverlays -SqlFolder (Join-Path $PSScriptRoot 'sql')
     if ($ManufacturingOverlaysOnly) {
-        Write-Log "TARGETED MODE: importing only the three approved manufacturing overlay artifacts."
+        Write-Log "TARGETED MODE: importing only the approved manufacturing overlay artifacts."
         $result = Import-ManufacturingOverlays -Connection $conn -SqlFolder (Join-Path $PSScriptRoot 'sql') -VerifyOnly:$VerifyOnly
         Write-Log "Manufacturing overlays verified and committed: $($result | ConvertTo-Json -Compress -Depth 5)"
         $script:seedSuccess = $true
@@ -462,6 +462,8 @@ IF NOT EXISTS (SELECT 1 FROM Production.Product)
             Write-Log "Manufacturing overlays verified and committed: $($result | ConvertTo-Json -Compress -Depth 5)"
             if ($env:RUNTIME_MANAGED_IDENTITY_CLIENT_ID) {
                 Grant-RuntimeChangeTrackingAccess -Connection $conn -IdentityName $env:RUNTIME_MANAGED_IDENTITY_NAME
+                Grant-RuntimeXmlSchemaAccess -Connection $conn -IdentityName $env:RUNTIME_MANAGED_IDENTITY_NAME
+                Write-Log "Runtime Change Tracking and manufacturing XML schema access granted."
             }
             $script:seedSuccess = $true
             return
@@ -1196,8 +1198,6 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         # AI-translated product description culture mappings (16 additional cultures beyond base AdventureWorks 7)
         @{ Table='Production.ProductModelProductDescriptionCulture'; File='ProductModelProductDescriptionCulture-ai.csv'; Delimiter="|"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.ProductModelIllustration'; File='ProductModelIllustration.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
-        # Atomic overlay path, after original illustrations, models, and mappings.
-        @{ ManufacturingOverlays=$true }
         @{ Table='Production.Product'; File='Product.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         # AI-generated standard costs for manufactured sub-assemblies (BOM rollup + labor).
         # UpdateIfExists: rows match existing ProductIDs and UPDATE StandardCost/ListPrice columns.
@@ -1274,6 +1274,8 @@ SET IDENTITY_INSERT Production.ProductPhoto OFF;
         @{ Table='Production.Document'; File='Document.csv'; Delimiter="+|"; RowTerminator='&|'; IsWideChar=$false; HexColumns=@('DocumentNode', 'DocumentSummary', 'Document') }
         # ProductDocument references ProductIDs that all exist in Product.csv - load order ensures Product is loaded first
         @{ Table='Production.ProductDocument'; File='ProductDocument.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false; HexColumns=@('DocumentNode') }
+        # Atomic overlay path, after original models, illustrations, products, documents, and their links.
+        @{ ManufacturingOverlays=$true }
         @{ Table='Production.TransactionHistory'; File='TransactionHistory.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.TransactionHistoryArchive'; File='TransactionHistoryArchive.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
         @{ Table='Production.WorkOrder'; File='WorkOrder.csv'; Delimiter="`t"; RowTerminator="`n"; IsWideChar=$false }
@@ -2668,6 +2670,8 @@ WHERE e.EmailAddress = 'demo.admin@adventureworks.com';
     if ($env:RUNTIME_MANAGED_IDENTITY_CLIENT_ID) {
         Grant-RuntimeChangeTrackingAccess -Connection $conn -IdentityName $env:RUNTIME_MANAGED_IDENTITY_NAME
         Write-Log "Runtime Change Tracking access granted on Sales.SalesOrderHeader."
+        Grant-RuntimeXmlSchemaAccess -Connection $conn -IdentityName $env:RUNTIME_MANAGED_IDENTITY_NAME
+        Write-Log "Runtime XML schema access granted on Production.ManuInstructionsSchemaCollection."
     }
 
     $script:seedSuccess = $true

@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchActiveOperations, fetchProduct, fetchWorkOrder, fetchWorkOrderRouting } from '@/services/api';
 import { DetailPageSkeleton } from '@/components/LoadingSkeletons';
 import ModelInstructions from '@/pages/define/ModelInstructions';
+import PartInstructions from '@/pages/define/PartInstructions';
+import { hasGeneratedPartSheet } from '@/lib/generatedManufacturingContent';
 
 export default function WorkstationInstructions() {
   const { id } = useParams();
@@ -37,12 +39,14 @@ export default function WorkstationInstructions() {
     setSearch(next);
   };
   const modelId = product.data.ProductModelID;
+  const partSheet = !modelId && hasGeneratedPartSheet(product.data.ProductID);
   return <div className="workstation-reader container mx-auto space-y-5 px-4 py-8">
     <Link className="text-doodle-blue underline" to={`/execute/work-order/${workOrderId}`}>Back to work order</Link>
     <h1 className="font-doodle text-2xl font-bold">Workstation instructions - WO #{workOrderId}</h1>
     <p>{product.data.Name} ({product.data.ProductNumber}) · Order quantity: {order.data.OrderQty}</p>
     <p className="text-sm text-muted-foreground">Reading view only. Changing the viewed operation does not advance production.</p>
     {modelId && <Link className="text-doodle-blue underline" to={`/define/models/${modelId}/instructions?productId=${product.data.ProductID}`}>Open full document</Link>}
+    {partSheet && <Link className="text-doodle-blue underline" to={`/define/parts/${product.data.ProductID}/instructions`}>Open full part sheet</Link>}
     {!operations.length ? <p>No routing is available for this work order.</p> : <>
       <label className="block">Viewed operation{' '}
         <select className="doodle-input" value={selected?.OperationSequence ?? ''} onChange={event => {
@@ -63,6 +67,7 @@ export default function WorkstationInstructions() {
         </nav>
         <p>Operation {selected.OperationSequence} · Work Center {selected.LocationID}. Instructions are shared by operations at this work center.</p>
         {modelId ? <ModelInstructions modelId={modelId} productId={product.data.ProductID} embedded workCenterId={selected.LocationID} /> :
+          partSheet ? <PartInstructions productId={product.data.ProductID} embedded workCenterId={selected.LocationID} /> :
           <p>No product-model instructions are assigned to this product.</p>}
       </>}
     </>}

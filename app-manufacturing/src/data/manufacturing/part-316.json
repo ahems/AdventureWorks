@@ -1,0 +1,118 @@
+{
+  "productId": 316,
+  "name": "Blade",
+  "productNumber": "BL-2036",
+  "documentNode": "/900000/316/",
+  "title": "Blade part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Blade (Product Number BL-2036) part sheet. Fictional shop-floor demonstration for manufacturing Blade BL-2036, product 316, from its effective BOM material.<Location LocationID=\"10\" SetupHours=\"0.2\" LaborHours=\"0.5\" MachineHours=\"0.3\" LotSize=\"1\">Work Center 10 - Frame Forming. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Frame Forming: demonstrate preparing and forming the sheet into a conceptual blade shape.<step>Prepare 1 EA of <material>Metal Sheet 5 (Product Number MS-2341)</material> for the demonstration; check the sheet visually for damage.</step><step>Using an <tool>assumed sheet-cutting tool</tool>, prepare a blank and form it with an <tool>assumed forming jig</tool>. The exact profile is unspecified; see the conceptual illustration <diag>2003161</diag>.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.3\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 30 - Debur and Polish. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Debur and Polish: demonstrate edge cleanup and a simple visual check of the formed part.<step>Clean up the formed part's edges with an <tool>assumed deburring tool</tool>.</step><step>Visually check for obvious burrs, cracks, and surface damage; set aside any suspect part for review.</step></Location></root>",
+  "routingBasis": "demo-assumption",
+  "processNotes": [
+    "The routing through Frame Forming and Debur and Polish is inferred for this demonstration; no historical routing is available.",
+    "The blade's exact geometry and manufacturing settings are not supplied. The illustrated shape is conceptual and must not be used as a dimensional or mating guide."
+  ],
+  "variantNotes": [
+    "LL Fork FK-1639, ML Fork FK-5136, and HL Fork FK-9939 each use 2 EA of Blade BL-2036. The supplied data does not describe differences among those parent assemblies."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0316",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 316,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P316-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "T. Haddad"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2022-05-31",
+        "changeRequest": "ECN-2022-P316-02",
+        "description": "Added a stock-identification check for Metal Sheet 5 before the first cut or fit-up.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "D. Okafor"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2022-11-12",
+        "changeRequest": "ECN-2022-P316-03",
+        "description": "Separated first-article inspection from routine in-process checks; clarified the hold point for nonconforming parts.",
+        "preparedBy": "D. Okafor",
+        "approvedBy": "L. Moreau"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2025-11-05",
+        "changeRequest": "ECN-2025-P316-04",
+        "description": "Consolidated deburr and handling notes and removed a duplicate operator sign-off.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "K. Novak"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P316-05",
+        "description": "Released the illustrated part sheet edition: Conceptual sheet-to-blade view. Assigned demonstration work centres pending a routing study; marked them as demo assumptions.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "T. Haddad"
+      }
+    ]
+  },
+  "figures": {
+    "2003161": {
+      "title": "Conceptual sheet-to-blade view",
+      "guidance": [
+        "Prepare 1 EA of Metal Sheet 5 (Product Number MS-2341) for the demonstration; check the sheet visually for damage.",
+        "Using an assumed sheet-cutting tool, prepare a blank and form it with an assumed forming jig. The exact profile is unspecified; see the conceptual illustration 2003161."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Metal Sheet 5",
+          "productNumber": "MS-2341"
+        },
+        {
+          "number": 2,
+          "name": "Blade",
+          "productNumber": "BL-2036"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 802,
+      "name": "LL Fork",
+      "productNumber": "FK-1639",
+      "productModelId": 104,
+      "productModelName": "LL Fork",
+      "quantity": 2.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 803,
+      "name": "ML Fork",
+      "productNumber": "FK-5136",
+      "productModelId": 105,
+      "productModelName": "ML Fork",
+      "quantity": 2.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 804,
+      "name": "HL Fork",
+      "productNumber": "FK-9939",
+      "productModelId": 106,
+      "productModelName": "HL Fork",
+      "quantity": 2.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 3
+}

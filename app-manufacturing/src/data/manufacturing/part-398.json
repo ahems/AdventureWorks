@@ -1,0 +1,143 @@
+{
+  "productId": 398,
+  "name": "Handlebar Tube",
+  "productNumber": "HT-2981",
+  "documentNode": "/900000/398/",
+  "title": "Handlebar Tube part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Handlebar Tube (Product Number HT-2981) part sheet. Fictional shop-floor demonstration for producing one Handlebar Tube, HT-2981, from its effective BOM component. This is not a certified manufacturing procedure.<Location LocationID=\"10\" SetupHours=\"0.1\" LaborHours=\"0.3\" MachineHours=\"0.2\" LotSize=\"1\">Work Center 10 - Frame Forming. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Frame Forming: prepare and form the supplied sheet in the assumed demo route.<step>Select 1.00 EA of <material>Metal Sheet 6 (Product Number MS-2348)</material> and visually check it for obvious damage.</step><step>Prepare and form the sheet into a tubular shape using an <tool>assumed sheet-forming jig</tool>. The illustrative material transformation is shown in <diag>2003981</diag>.</step></Location><Location LocationID=\"20\" SetupHours=\"0.1\" LaborHours=\"0.2\" MachineHours=\"0.1\" LotSize=\"1\">Work Center 20 - Frame Welding. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Frame Welding: join the assumed formed seam for this demonstration.<step>Hold the formed tube in an <tool>assumed welding fixture</tool> and join its assumed longitudinal seam. The joining method and settings are not supplied.</step><step>Visually check the joined area for obvious gaps or damage.</step></Location><Location LocationID=\"30\" SetupHours=\"0.05\" LaborHours=\"0.15\" MachineHours=\"0\" LotSize=\"1\">Work Center 30 - Debur and Polish. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Debur and Polish: remove obvious sharp edges and perform a simple visual check.<step>Use an <tool>assumed deburring tool</tool> to remove obvious burrs from the tube ends and joined area.</step><step>Visually check the finished tube for remaining burrs and obvious surface damage.</step></Location></root>",
+  "routingBasis": "demo-assumption",
+  "processNotes": [
+    "No historical routing is available.",
+    "Forming the sheet into a tube and joining a longitudinal seam are illustrative assumptions; the actual profile, joining method and finished geometry are not supplied.",
+    "The diagram is schematic and does not establish dimensions, bend shape or seam geometry."
+  ],
+  "variantNotes": [
+    "The part has no product model or catalog variants.",
+    "One EA is used in each of LL, ML and HL Mountain Handlebars.",
+    "One EA is used in each of LL, ML and HL Road Handlebars.",
+    "One EA is used in each of LL and HL Touring Handlebars. No parent-specific tube differences are supplied."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0398",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 398,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P398-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "T. Haddad"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P398-02",
+        "description": "Released the illustrated part sheet edition: Sheet-to-tube demonstration. Assigned demonstration work centres pending a routing study; marked them as demo assumptions.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "K. Novak"
+      }
+    ]
+  },
+  "figures": {
+    "2003981": {
+      "title": "Sheet-to-tube demonstration",
+      "guidance": [
+        "Select 1.00 EA of Metal Sheet 6 (Product Number MS-2348) and visually check it for obvious damage.",
+        "Prepare and form the sheet into a tubular shape using an assumed sheet-forming jig. The illustrative material transformation is shown in 2003981."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Metal Sheet 6",
+          "productNumber": "MS-2348"
+        },
+        {
+          "number": 2,
+          "name": "Handlebar Tube",
+          "productNumber": "HT-2981"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 808,
+      "name": "LL Mountain Handlebars",
+      "productNumber": "HB-M243",
+      "productModelId": 52,
+      "productModelName": "LL Mountain Handlebars",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 809,
+      "name": "ML Mountain Handlebars",
+      "productNumber": "HB-M763",
+      "productModelId": 54,
+      "productModelName": "ML Mountain Handlebars",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 810,
+      "name": "HL Mountain Handlebars",
+      "productNumber": "HB-M918",
+      "productModelId": 55,
+      "productModelName": "HL Mountain Handlebars",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 811,
+      "name": "LL Road Handlebars",
+      "productNumber": "HB-R504",
+      "productModelId": 56,
+      "productModelName": "LL Road Handlebars",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 812,
+      "name": "ML Road Handlebars",
+      "productNumber": "HB-R720",
+      "productModelId": 57,
+      "productModelName": "ML Road Handlebars",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 813,
+      "name": "HL Road Handlebars",
+      "productNumber": "HB-R956",
+      "productModelId": 58,
+      "productModelName": "HL Road Handlebars",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 946,
+      "name": "LL Touring Handlebars",
+      "productNumber": "HB-T721",
+      "productModelId": 47,
+      "productModelName": "LL Touring Handlebars",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 947,
+      "name": "HL Touring Handlebars",
+      "productNumber": "HB-T928",
+      "productModelId": 48,
+      "productModelName": "HL Touring Handlebars",
+      "quantity": 1.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 8
+}

@@ -9,6 +9,10 @@ import WorkstationInstructions from './WorkstationInstructions';
 vi.mock('@/services/api', () => ({
   fetchActiveOperations: vi.fn(), fetchProduct: vi.fn(), fetchWorkOrder: vi.fn(), fetchWorkOrderRouting: vi.fn(),
 }));
+vi.mock('@/pages/define/PartInstructions', () => ({
+  default: ({ productId, workCenterId }: { productId: number; workCenterId: number }) =>
+    <p>Part sheet {productId} - Center {workCenterId}</p>,
+}));
 vi.mock('@/pages/define/ModelInstructions', () => ({
   default: ({ modelId, workCenterId, productId }: { modelId: number; workCenterId: number; productId: number }) =>
     <p>Model {modelId} - Center {workCenterId} - Product {productId}</p>,
@@ -88,4 +92,11 @@ it('retains explicit viewing selection when push-invalidated activity changes', 
   await act(async () => { await client.invalidateQueries({ queryKey: ['active-operations'] }); });
   expect(screen.getByRole('combobox')).toHaveValue('30');
   expect(screen.getByText('Model 125 - Center 60 - Product 825')).toBeInTheDocument();
+});
+it('embeds the part sheet for model-less manufactured parts', async () => {
+  vi.mocked(fetchWorkOrder).mockResolvedValue({ WorkOrderID: 1, ProductID: 514, OrderQty: 3 } as WorkOrder);
+  vi.mocked(fetchProduct).mockResolvedValue({ ProductID: 514, ProductModelID: null, Name: 'LL Mountain Seat Assembly', ProductNumber: 'SA-M198' } as Product);
+  show('?operation=20');
+  expect(await screen.findByText('Part sheet 514 - Center 50')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Open full part sheet' })).toHaveAttribute('href', '/define/parts/514/instructions');
 });

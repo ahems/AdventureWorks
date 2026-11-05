@@ -56,6 +56,9 @@ public static class FunctionAuthorizationRegistry
         new("GenerateManufacturingDiagram", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),
         new("GenerateManufacturingInstructions", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),
         new("ExportManufacturingIllustrations", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),
+        new("GenerateManufacturingPartSheet", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),  // /api/manufacturing/content/parts/instructions/generate
+        new("GenerateManufacturingPartDiagram", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),  // /api/manufacturing/content/parts/diagrams/generate
+        new("GetManufacturingPartDocuments", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),  // /api/manufacturing/parts/{productId:int}/documents
         new("AIJobQueue_Status", AccessTier.Internal, FunctionScopes.AdminRead, AccessMode.InternalOnly, null),  // /api/ai-job-queue/status
         new("AnalyzeCartRecovery", AccessTier.Internal, FunctionScopes.AdminRead, AccessMode.InternalOnly, null),  // /api/carts/analyze-recovery
         new("AnalyzeReviewsBatch", AccessTier.Internal, FunctionScopes.AdminWrite, AccessMode.InternalOnly, null),  // /api/reviews/analyze-batch

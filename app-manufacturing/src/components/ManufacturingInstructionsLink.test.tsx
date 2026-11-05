@@ -49,4 +49,13 @@ describe('manufacturing instruction entry points', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not load');
     expect(screen.queryByText('No manufacturing instructions available')).not.toBeInTheDocument();
   });
+  it('links model-less parts to their published part sheet', () => {
+    show(null, 50, 514);
+    expect(screen.getByRole('link', { name: /View Part Sheet/ })).toHaveAttribute('href', '/define/parts/514/instructions#work-center-50');
+    expect(fetchProductModel).not.toHaveBeenCalled();
+  });
+  it('keeps the no-model message for parts without a part sheet', () => {
+    show(null, undefined, 999);
+    expect(screen.getByText('No product model assigned')).toBeInTheDocument();
+  });
 });

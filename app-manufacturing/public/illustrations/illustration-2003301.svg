@@ -1,0 +1,18 @@
+<svg width="1000" height="700" viewBox="0 0 1000 700" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g>
+    <path d="M 130,323 L 244,389 L 244,398 L 130,332 Z" fill-rule="evenodd" stroke-width="2.5" fill="#B6C9D3" stroke="#19364D" />
+    <path d="M 244,389 L 420,325 L 420,334 L 244,398 Z" fill-rule="evenodd" stroke-width="2.5" fill="#9EB6C3" stroke="#19364D" />
+    <path d="M 130,323 L 306,259 L 420,325 L 244,389 Z" fill-rule="evenodd" stroke-width="3" fill="#E6EDF2" stroke="#19364D" />
+    <path d="M 150,321 L 306,270 L 397,323" fill-rule="evenodd" stroke-width="2" stroke="#FFFFFF" />
+    <path d="M 460,316 L 555,316 L 555,303 L 585,323 L 555,343 L 555,330 L 460,330 Z" fill-rule="evenodd" fill="#218C91" />
+    <path d="M 650,320 C 650,342 695,360 750,360 C 805,360 850,342 850,320 L 850,350 C 850,372 805,390 750,390 C 695,390 650,372 650,350 Z" fill-rule="evenodd" stroke-width="3" fill="#B4C8D2" stroke="#19364D" />
+    <path d="M 650,320 C 650,298 695,280 750,280 C 805,280 850,298 850,320 C 850,342 805,360 750,360 C 695,360 650,342 650,320 Z" fill-rule="evenodd" stroke-width="3" fill="#E6EDF2" stroke="#19364D" />
+    <path d="M 670,312 C 684,299 714,292 746,291" fill-rule="evenodd" stroke-width="2" stroke="#FFFFFF" />
+    <path d="M 212,293 L 190,218 L 147,169" fill-rule="evenodd" stroke-width="1.5" stroke="#19364D" />
+    <path d="M 799,285 L 816,218 L 843,169" fill-rule="evenodd" stroke-width="1.5" stroke="#19364D" />
+    <path d="M 117,155 C 117,131 153,131 153,155 C 153,179 117,179 117,155 Z" fill-rule="evenodd" stroke-width="1.5" fill="#FFFFFF" stroke="#19364D" />
+    <path d="M 138.5,147 L 138.5,155 M 138.5,155 L 138.5,163" fill-rule="evenodd" stroke-width="2" stroke="#19364D" />
+    <path d="M 837,155 C 837,131 873,131 873,155 C 873,179 837,179 837,155 Z" fill-rule="evenodd" stroke-width="1.5" fill="#FFFFFF" stroke="#19364D" />
+    <path d="M 851.5,147 L 858.5,147 M 858.5,147 L 858.5,155 M 851.5,163 L 858.5,163 M 851.5,155 L 851.5,163 M 851.5,155 L 858.5,155" fill-rule="evenodd" stroke-width="2" stroke="#19364D" />
+  </g>
+</svg>

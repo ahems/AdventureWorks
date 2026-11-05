@@ -1,0 +1,127 @@
+{
+  "productId": 3,
+  "name": "BB Ball Bearing",
+  "productNumber": "BE-2349",
+  "documentNode": "/900000/3/",
+  "title": "BB Ball Bearing part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. BB Ball Bearing (Product Number BE-2349) part sheet. Fictional shop-floor demonstration for BB Ball Bearing BE-2349, covering component preparation and inspection at Subassembly.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.25\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Subassembly is the assumed demo work center for preparing and inspecting the components.<step>Collect and visually inspect 2 EA of <material>Cup-Shaped Race (Product Number RA-2345)</material> and 2 EA of <material>Cone-Shaped Race (Product Number RA-7490)</material>.</step><step>Collect and visually inspect 1 EA of <material>Lock Ring (Product Number LR-2398)</material> and 10 EA of <material>Bearing Ball (Product Number BA-8327)</material>; compare the count with illustration <diag>2000031</diag>.</step><step>Keep the checked components together in an assumed <tool>parts tray</tool>. Confirm assembly order and mating geometry before proceeding; these are not established by the supplied BOM.</step></Location></root>",
+  "routingBasis": "demo-assumption",
+  "processNotes": [
+    "The BOM does not establish assembly order or mating geometry. Confirm those details before fitting the purchased components."
+  ],
+  "variantNotes": [
+    "The part is used in LL Bottom Bracket BB-7421, ML Bottom Bracket BB-8107 and HL Bottom Bracket BB-9108, each at 10 EA per parent assembly."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0003",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 3,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P003-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "D. Okafor",
+        "approvedBy": "L. Moreau"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2022-04-23",
+        "changeRequest": "ECN-2022-P003-02",
+        "description": "Reformatted the point-of-use copy with numbered steps and larger callout references.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "K. Novak"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2026-02-14",
+        "changeRequest": "ECN-2026-P003-03",
+        "description": "Added a stock-identification check for Bearing Ball before the first cut or fit-up.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "T. Haddad"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2026-03-18",
+        "changeRequest": "ECN-2026-P003-04",
+        "description": "Recorded that the part supplies 3 parent assemblies; added a kitting note to prevent mixed lots.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "D. Okafor"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P003-05",
+        "description": "Released the illustrated part sheet edition: Bearing component inventory. Assigned demonstration work centres pending a routing study; marked them as demo assumptions.",
+        "preparedBy": "D. Okafor",
+        "approvedBy": "L. Moreau"
+      }
+    ]
+  },
+  "figures": {
+    "2000031": {
+      "title": "Bearing component inventory",
+      "guidance": [
+        "Collect and visually inspect 2 EA of Cup-Shaped Race (Product Number RA-2345) and 2 EA of Cone-Shaped Race (Product Number RA-7490).",
+        "Collect and visually inspect 1 EA of Lock Ring (Product Number LR-2398) and 10 EA of Bearing Ball (Product Number BA-8327); compare the count with illustration 2000031."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Cup-Shaped Race",
+          "productNumber": "RA-2345"
+        },
+        {
+          "number": 2,
+          "name": "Cone-Shaped Race",
+          "productNumber": "RA-7490"
+        },
+        {
+          "number": 3,
+          "name": "Lock Ring",
+          "productNumber": "LR-2398"
+        },
+        {
+          "number": 4,
+          "name": "Bearing Ball",
+          "productNumber": "BA-8327"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 994,
+      "name": "LL Bottom Bracket",
+      "productNumber": "BB-7421",
+      "productModelId": 95,
+      "productModelName": "LL Bottom Bracket",
+      "quantity": 10.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 995,
+      "name": "ML Bottom Bracket",
+      "productNumber": "BB-8107",
+      "productModelId": 96,
+      "productModelName": "ML Bottom Bracket",
+      "quantity": 10.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 996,
+      "name": "HL Bottom Bracket",
+      "productNumber": "BB-9108",
+      "productModelId": 97,
+      "productModelName": "HL Bottom Bracket",
+      "quantity": 10.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 3
+}

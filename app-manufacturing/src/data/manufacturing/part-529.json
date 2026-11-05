@@ -1,0 +1,163 @@
+{
+  "productId": 529,
+  "name": "Stem",
+  "productNumber": "SM-9087",
+  "documentNode": "/900000/529/",
+  "title": "Stem part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. Stem (Product Number SM-9087) part sheet. Fictional part sheet for manufacturing Stem SM-9087, product 529, from its direct material component.<Location LocationID=\"10\" SetupHours=\"0.2\" LaborHours=\"0.5\" MachineHours=\"0.3\" LotSize=\"1\">Work Center 10 - Frame Forming. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Frame Forming is used here as an assumed demo location for shaping the stem from its raw material.<step>Prepare 1 EA of <material>Metal Bar 1 (Product Number MB-2024)</material> for the fictional forming demonstration.</step><step>Use an <tool>assumed forming fixture</tool> and suitable shop machinery to illustrate shaping and machining the material into a stem. The geometry in illustration <diag>2005291</diag> is conceptual only.</step></Location><Location LocationID=\"30\" SetupHours=\"0.1\" LaborHours=\"0.2\" MachineHours=\"0.0\" LotSize=\"1\">Work Center 30 - Debur and Polish. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Debur and Polish is the assumed demo location for finishing and a simple visual check.<step>Remove visible burrs with an <tool>assumed hand deburring tool</tool> and smooth the accessible surfaces.</step><step>Visually check for remaining burrs or obvious surface damage and set aside any questionable part.</step></Location></root>",
+  "routingBasis": "demo-assumption",
+  "processNotes": [
+    "The stem geometry and manufacturing details are not supplied. The illustrated shape and forming and machining operations are conceptual, not a production design or certified procedure."
+  ],
+  "variantNotes": [
+    "One stem is listed per LL, ML, and HL Mountain Handlebars assembly and per LL, ML, and HL Road Handlebars assembly.",
+    "One stem is also listed per LL and HL Touring Handlebars assembly. The source does not describe differences in the stem among these parents."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0529",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 529,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P529-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "K. Novak"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2020-11-08",
+        "changeRequest": "ECN-2020-P529-02",
+        "description": "Added a stock-identification check for Metal Bar 1 before the first cut or fit-up.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "D. Okafor"
+      },
+      {
+        "revision": "3.0",
+        "effectiveDate": "2024-07-29",
+        "changeRequest": "ECN-2024-P529-03",
+        "description": "Consolidated deburr and handling notes and removed a duplicate operator sign-off.",
+        "preparedBy": "D. Okafor",
+        "approvedBy": "L. Moreau"
+      },
+      {
+        "revision": "4.0",
+        "effectiveDate": "2025-04-22",
+        "changeRequest": "ECN-2025-P529-04",
+        "description": "Separated first-article inspection from routine in-process checks; clarified the hold point for nonconforming parts.",
+        "preparedBy": "L. Moreau",
+        "approvedBy": "T. Haddad"
+      },
+      {
+        "revision": "5.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P529-05",
+        "description": "Released the illustrated part sheet edition: Conceptual stem forming overview. Assigned demonstration work centres pending a routing study; marked them as demo assumptions.",
+        "preparedBy": "T. Haddad",
+        "approvedBy": "K. Novak"
+      }
+    ]
+  },
+  "figures": {
+    "2005291": {
+      "title": "Conceptual stem forming overview",
+      "guidance": [
+        "Prepare 1 EA of Metal Bar 1 (Product Number MB-2024) for the fictional forming demonstration.",
+        "Use an assumed forming fixture and suitable shop machinery to illustrate shaping and machining the material into a stem. The geometry in illustration 2005291 is conceptual only."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "Metal Bar 1",
+          "productNumber": "MB-2024"
+        },
+        {
+          "number": 2,
+          "name": "Stem",
+          "productNumber": "SM-9087"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 808,
+      "name": "LL Mountain Handlebars",
+      "productNumber": "HB-M243",
+      "productModelId": 52,
+      "productModelName": "LL Mountain Handlebars",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 809,
+      "name": "ML Mountain Handlebars",
+      "productNumber": "HB-M763",
+      "productModelId": 54,
+      "productModelName": "ML Mountain Handlebars",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 810,
+      "name": "HL Mountain Handlebars",
+      "productNumber": "HB-M918",
+      "productModelId": 55,
+      "productModelName": "HL Mountain Handlebars",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 811,
+      "name": "LL Road Handlebars",
+      "productNumber": "HB-R504",
+      "productModelId": 56,
+      "productModelName": "LL Road Handlebars",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 812,
+      "name": "ML Road Handlebars",
+      "productNumber": "HB-R720",
+      "productModelId": 57,
+      "productModelName": "ML Road Handlebars",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 813,
+      "name": "HL Road Handlebars",
+      "productNumber": "HB-R956",
+      "productModelId": 58,
+      "productModelName": "HL Road Handlebars",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 946,
+      "name": "LL Touring Handlebars",
+      "productNumber": "HB-T721",
+      "productModelId": 47,
+      "productModelName": "LL Touring Handlebars",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 947,
+      "name": "HL Touring Handlebars",
+      "productNumber": "HB-T928",
+      "productModelId": 48,
+      "productModelName": "HL Touring Handlebars",
+      "quantity": 1.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 8
+}

@@ -132,6 +132,7 @@ const EngineerBOMDetail = () => {
   const { data: currentCost } = useQuery({
     queryKey: ['current-cost', pid],
     queryFn: () => fetchCurrentCost(pid),
+    enabled: !!product?.MakeFlag && !!product?.FinishedGoodsFlag,
     staleTime: 60_000,
   });
 

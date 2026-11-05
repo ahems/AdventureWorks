@@ -46,7 +46,7 @@ class OverlayTestCommand {
         if ($this.Owner.FailAt -eq $this.Owner.Commands.Count) { throw 'Simulated SQL validation/conflict failure' }
         if ($this.CommandText.Contains('DECLARE @before table')) {
             $counts = @{}
-            foreach ($name in @('@targets', '@illustrations', '@mappings')) {
+            foreach ($name in @('@targets', '@illustrations', '@mappings', '@documents', '@productDocuments')) {
                 $json = $this.Parameters.Where({ $_.ParameterName -eq $name })[0].Value
                 $counts[$name] = @(ConvertFrom-Json -InputObject $json -NoEnumerate)[0].Count
             }
@@ -57,6 +57,8 @@ class OverlayTestCommand {
                 InstructionRecordsVerified = $counts['@targets']
                 IllustrationRecordsVerified = $counts['@illustrations']
                 MappingRecordsVerified = $counts['@mappings']
+                DocumentRecordsVerified = $counts['@documents']
+                ProductDocumentRecordsVerified = $counts['@productDocuments']
             }
         }
         if ($this.CommandText.Contains('FOR JSON PATH')) { return '[{"ProductModelID":1,"InstructionsHash":"ABCD"}]' }
@@ -232,12 +234,91 @@ try {
     Remove-Item $illustrationPath
     Assert-Throws { Read-ManufacturingOverlays $fixtures } '.'
 
+    # Generated part sheets: Production.Document folder/sheet rows, product links, and unmapped part diagrams.
+    $documentPath = Join-Path $fixtures 'Document-ai.csv'
+    $productDocumentPath = Join-Path $fixtures 'ProductDocument-ai.csv'
+    $sheetXml = '<root xmlns="http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions">Part sheet Málaga <step>Cut <diag>2003161</diag></step></root>'
+    $folderRow = '/900000/+|Generated Part Sheets+|217+|1+|Generated Part Sheets+|+|0+|0+|2+|Folder+|+|11111111-1111-5111-8111-111111111111+|2026-11-04 10:00:00&|'
+    $sheetRow = "/900000/316/+|Blade (BL-2036) part sheet+|219+|0+|AW-MFG-PS-316.xml+|.xml+|1.0+|0+|2+|Summary+|$sheetXml+|22222222-2222-5222-8222-222222222222+|2026-11-04 10:00:00&|"
+    function Write-DocumentFixtures {
+        Write-Fixtures
+        [IO.File]::AppendAllText($illustrationPath, "`n2003161+|<Viewbox/>+|2026-11-04 10:00:00&|")
+        [IO.File]::WriteAllText($documentPath, "$sheetRow`n$folderRow`n")
+        [IO.File]::WriteAllText($productDocumentPath, "316`t/900000/316/`t2026-11-04 10:00:00`n")
+    }
+    Write-DocumentFixtures
+    $documents = Read-ManufacturingOverlays $fixtures
+    Assert ($documents.Documents.Count -eq 2 -and $documents.Documents[0].Path -eq '/900000/') 'Folder sorts before child sheet'
+    Assert ($documents.ProductDocuments.Count -eq 1 -and $documents.Illustrations.Count -eq 5) 'Part link and unmapped part diagram parsed'
+    $connection = [OverlayTestConnection]::new()
+    $documentImport = Import-ManufacturingOverlays $connection $fixtures
+    Assert ($connection.Commands.Count -eq 32) 'Document and link import plus verification commands'
+    Assert ($documentImport.DocumentsInserted -eq 2 -and $documentImport.ProductDocumentsInserted -eq 1) 'Document insert counts'
+    Assert ($documentImport.DocumentRecordsVerified -eq 2 -and $documentImport.ProductDocumentRecordsVerified -eq 1 -and
+        $documentImport.SourceRecordsVerified -eq 15) 'Document verification counts'
+    Assert ($documentImport.ArtifactSha256.Count -eq 5) 'Document artifacts hashed'
+    $documentCommands = @($connection.Commands | Where-Object { $_.CommandText.Contains('INSERT Production.Document ') })
+    Assert ($documentCommands.Count -eq 4) 'Document SQL executed for import and verification'
+    $documentSql = $documentCommands[0].CommandText
+    Assert ($documentSql -match 'hierarchyid::Parse\(@path\)' -and $documentSql -match 'THROW 51011' -and
+        $documentSql -match 'THROW 51013' -and $documentSql -match 'ManuInstructionsSchemaCollection') 'Document SQL validates schema, parent, and conflicts'
+    Assert ($documentSql -notmatch 'UPDATE|DELETE' -and $documentSql -notmatch 'Málaga') 'Documents are insert-only and parameterized'
+    $folderContent = $documentCommands[0].Parameters.Where({ $_.ParameterName -eq '@content' })[0]
+    Assert ($folderContent.DbType -eq [System.Data.DbType]::Binary -and $folderContent.Value.Length -eq 0) 'Folder content bound as empty varbinary (stored NULL)'
+    $content = $documentCommands[1].Parameters.Where({ $_.ParameterName -eq '@content' })[0]
+    Assert ($content.DbType -eq [System.Data.DbType]::Binary -and $content.Size -eq -1 -and
+        [Text.Encoding]::UTF8.GetString([byte[]]$content.Value) -eq $sheetXml) 'Sheet XML bound as UTF-8 varbinary'
+    $linkSql = @($connection.Commands | Where-Object { $_.CommandText.Contains('INSERT Production.ProductDocument') })[0].CommandText
+    Assert ($linkSql -match 'THROW 51014' -and $linkSql -match 'THROW 51015' -and $linkSql -notmatch 'UPDATE|DELETE') 'Link SQL guarded and insert-only'
+    Assert ($connection.Commands[-1].CommandText -match 'DocumentRecordsVerified' -and
+        $connection.Commands[-1].CommandText -match 'ProductDocumentRecordsVerified') 'Final verification includes documents'
+    $connection = [OverlayTestConnection]::new()
+    $connection.AlreadyImported = $true
+    $documentReplay = Import-ManufacturingOverlays $connection $fixtures
+    Assert ($documentReplay.DocumentsInserted -eq 0 -and $documentReplay.DocumentsUnchanged -eq 2 -and
+        $documentReplay.ProductDocumentsUnchanged -eq 1) 'Document replay is idempotent'
+    foreach ($failAt in @(14, 15, 16, 30, 32)) {
+        $connection = [OverlayTestConnection]::new()
+        $connection.FailAt = $failAt
+        Assert-Throws { Import-ManufacturingOverlays $connection $fixtures } 'Simulated SQL'
+        Assert ($connection.Transaction.RolledBack -and -not $connection.Transaction.Committed) "Document rollback at command $failAt"
+    }
+    foreach ($case in @(
+        @{ Document = $sheetRow; Link = "316`t/900000/316/`t2026-11-04 10:00:00"; Pattern = 'folder' },
+        @{ Document = "$folderRow`n$($sheetRow.Replace('/900000/316/', '/800000/316/'))"; Link = "316`t/800000/316/`t2026-11-04 10:00:00"; Pattern = '/900000/' },
+        @{ Document = "$folderRow`n$sheetRow"; Link = "317`t/900000/316/`t2026-11-04 10:00:00"; Pattern = 'own generated sheet' },
+        @{ Document = "$folderRow`n$sheetRow"; Link = ''; Pattern = 'no product link' },
+        @{ Document = "$folderRow`n$($sheetRow.Replace('2003161', '2003171'))"; Link = "316`t/900000/316/`t2026-11-04 10:00:00"; Pattern = 'absent' },
+        @{ Document = "$folderRow`n$($sheetRow.Replace('Blade (BL-2036) part sheet', ('x' * 51)))"; Link = "316`t/900000/316/`t2026-11-04 10:00:00"; Pattern = 'metadata' },
+        @{ Document = "$folderRow`n$($sheetRow.Replace('<root xmlns', '<other xmlns').Replace('</root>', '</other>'))"; Link = "316`t/900000/316/`t2026-11-04 10:00:00"; Pattern = 'instruction XML' },
+        @{ Document = "$folderRow`n$($sheetRow.Replace('22222222-2222-5222-8222-222222222222', '11111111-1111-5111-8111-111111111111'))"; Link = "316`t/900000/316/`t2026-11-04 10:00:00"; Pattern = 'Duplicate' }
+    )) {
+        Write-DocumentFixtures
+        [IO.File]::WriteAllText($documentPath, $case.Document)
+        [IO.File]::WriteAllText($productDocumentPath, $case.Link)
+        $connection = [OverlayTestConnection]::new()
+        Assert-Throws { Import-ManufacturingOverlays $connection $fixtures } $case.Pattern
+        Assert ($null -eq $connection.Transaction) "Invalid document overlay rejected before transaction: $($case.Pattern)"
+    }
+    Write-DocumentFixtures
+    Remove-Item $productDocumentPath
+    Assert-Throws { Read-ManufacturingOverlays $fixtures } 'shipped together'
+    Write-DocumentFixtures
+    Remove-Item $documentPath, $productDocumentPath
+    Assert-Throws { Read-ManufacturingOverlays $fixtures } 'not referenced'
+    Write-Fixtures
+    [IO.File]::AppendAllText($illustrationPath, "`n100999+|<Viewbox/>+|2026-11-04 10:00:00&|")
+    Assert-Throws { Read-ManufacturingOverlays $fixtures } 'no model mapping'
+    Write-Fixtures
+
     $seedPath = Join-Path $PSScriptRoot '../seed-database.ps1'
     $seed = [IO.File]::ReadAllText($seedPath)
     $target = $seed.IndexOf('if ($ManufacturingOverlaysOnly)')
     Assert ($target -gt 0 -and $target -lt $seed.IndexOf('Dropping ALL user objects')) 'Targeted branch precedes destructive schema operations'
     Assert ($seed.Substring($target, $seed.IndexOf('# ---------------------------------------------------------------------', $target) - $target) -match 'return') 'Targeted mode exits full seed path'
     Assert ($seed.IndexOf("@{ ManufacturingOverlays=") -gt $seed.IndexOf("File='ProductModelIllustration.csv'")) 'Overlay follows original mapping load'
+    Assert ($seed.IndexOf("@{ ManufacturingOverlays=") -gt $seed.IndexOf("File='Product.csv'") -and
+        $seed.IndexOf("@{ ManufacturingOverlays=") -gt $seed.IndexOf("File='ProductDocument.csv'")) 'Overlay follows product and document loads'
     foreach ($file in @($seedPath, (Join-Path $PSScriptRoot '../ManufacturingOverlays.psm1'))) {
         $parseErrors = $null
         $null = [System.Management.Automation.Language.Parser]::ParseFile($file, [ref]$null, [ref]$parseErrors)
@@ -245,12 +326,15 @@ try {
     }
     if ($ArtifactsFolder) {
         $actual = Read-ManufacturingOverlays $ArtifactsFolder
-        $expectedTotal = $actual.Instructions.Count + $actual.Illustrations.Count + $actual.Mappings.Count
+        $expectedTotal = $actual.Instructions.Count + $actual.Illustrations.Count + $actual.Mappings.Count +
+            $actual.Documents.Count + $actual.ProductDocuments.Count
         $driver = [OverlayTestConnection]::new()
         $actualImport = Import-ManufacturingOverlays $driver $ArtifactsFolder
         Assert ($actualImport.InstructionRecords -eq $actual.Instructions.Count -and
             $actualImport.IllustrationRecords -eq $actual.Illustrations.Count -and
-            $actualImport.MappingRecords -eq $actual.Mappings.Count) 'Generated artifact counts'
+            $actualImport.MappingRecords -eq $actual.Mappings.Count -and
+            $actualImport.DocumentRecords -eq $actual.Documents.Count -and
+            $actualImport.ProductDocumentRecords -eq $actual.ProductDocuments.Count) 'Generated artifact counts'
         Assert ($actualImport.SourceRecordsVerified -eq $expectedTotal) 'Generated source verification contract'
         Assert (($actualImport.ProductModelIDs -join ',') -eq ($actual.Instructions.ID -join ',')) 'Generated model IDs match parsed source'
         Assert (($actualImport.IllustrationIDs -join ',') -eq ($actual.Illustrations.ID -join ',')) 'Generated illustration IDs match parsed source'
@@ -261,7 +345,8 @@ try {
         $driver = [OverlayTestConnection]::new()
         $driver.AlreadyImported = $true
         $actualReplay = Import-ManufacturingOverlays $driver $ArtifactsFolder
-        Assert ($actualReplay.InstructionsUpdated + $actualReplay.IllustrationsInserted + $actualReplay.MappingsInserted -eq 0) 'Generated idempotent replay contract'
+        Assert ($actualReplay.InstructionsUpdated + $actualReplay.IllustrationsInserted + $actualReplay.MappingsInserted +
+            $actualReplay.DocumentsInserted + $actualReplay.ProductDocumentsInserted -eq 0) 'Generated idempotent replay contract'
         Assert ($actualReplay.InstructionsUnchanged -eq $actual.Instructions.Count -and
             $actualReplay.IllustrationsUnchanged -eq $actual.Illustrations.Count -and
             $actualReplay.MappingsUnchanged -eq $actual.Mappings.Count -and

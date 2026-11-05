@@ -1,0 +1,156 @@
+{
+  "productId": 401,
+  "name": "HL Hub",
+  "productNumber": "HU-8998",
+  "documentNode": "/900000/401/",
+  "title": "HL Hub part sheet",
+  "sourceInstructions": "<root xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/ProductModelManuInstructions\">AI-generated fictional demo instructions. Not validated engineering or safety instructions. HL Hub (Product Number HU-8998) part sheet. Fictional shop-floor demonstration for assembling HL Hub HU-8998 from its two purchased components.<Location LocationID=\"50\" SetupHours=\"0.1\" LaborHours=\"0.25\" MachineHours=\"0\" LotSize=\"1\">Work Center 50 - Subassembly. Demo assumption: this part has no historical routing, so this existing work centre was assigned for demonstration only. Estimates are fictional demo assumptions. Subassembly: inspect the purchased components, demonstrate their fit and check the resulting hub.<step>Collect 1 EA of <material>HL Spindle/Axle (Product Number SD-9872)</material> and 1 EA of <material>HL Shell (Product Number SH-9312)</material>; visually check both for obvious damage.</step><step>Support <material>HL Shell (Product Number SH-9312)</material> in an <tool>assumed padded assembly jig</tool> and check alignment with <material>HL Spindle/Axle (Product Number SD-9872)</material>. See schematic illustration <diag>2004011</diag>.</step><step>If the components fit without force, fit them together by hand. Stop and set them aside if compatibility or the intended fit is unclear.</step><step>Visually inspect the completed hub for obvious damage and check for unobstructed movement by hand where applicable. Set aside any assembly that binds or appears damaged.</step></Location></root>",
+  "routingBasis": "demo-assumption",
+  "processNotes": [
+    "Component shapes and their coaxial arrangement are schematic assumptions. Verify compatibility before fitting; the source does not establish internal construction or assembly details."
+  ],
+  "variantNotes": [
+    "The hub is used in ten listed parent wheel assemblies: mountain, road and touring front and rear wheels, each using 1 EA. The source identifies no product variants for the hub itself."
+  ],
+  "history": {
+    "documentNumber": "AW-MFG-PS-0401",
+    "contentKind": "fabricated-demo-change-history",
+    "dateBasis": "Initial issue uses the part SellStartDate; intervening changes are invented.",
+    "lifecycleSource": {
+      "ProductID": 401,
+      "SellStartDate": "2020-05-13T00:00:00"
+    },
+    "revisions": [
+      {
+        "revision": "1.0",
+        "effectiveDate": "2020-05-13",
+        "changeRequest": "ECN-2020-P401-01",
+        "description": "Initial controlled issue for part release; established the stock list and work-center hand-off.",
+        "preparedBy": "D. Okafor",
+        "approvedBy": "K. Novak"
+      },
+      {
+        "revision": "2.0",
+        "effectiveDate": "2026-11-05",
+        "changeRequest": "ECN-2026-P401-02",
+        "description": "Released the illustrated part sheet edition: Hub component alignment. Assigned demonstration work centres pending a routing study; marked them as demo assumptions.",
+        "preparedBy": "K. Novak",
+        "approvedBy": "T. Haddad"
+      }
+    ]
+  },
+  "figures": {
+    "2004011": {
+      "title": "Hub component alignment",
+      "guidance": [
+        "Collect 1 EA of HL Spindle/Axle (Product Number SD-9872) and 1 EA of HL Shell (Product Number SH-9312); visually check both for obvious damage.",
+        "Support HL Shell (Product Number SH-9312) in an assumed padded assembly jig and check alignment with HL Spindle/Axle (Product Number SD-9872). See schematic illustration 2004011."
+      ],
+      "callouts": [
+        {
+          "number": 1,
+          "name": "HL Spindle/Axle",
+          "productNumber": "SD-9872"
+        },
+        {
+          "number": 2,
+          "name": "HL Shell",
+          "productNumber": "SH-9312"
+        }
+      ]
+    }
+  },
+  "whereUsed": [
+    {
+      "productId": 816,
+      "name": "ML Mountain Front Wheel",
+      "productNumber": "FW-M762",
+      "productModelId": 45,
+      "productModelName": "ML Mountain Front Wheel",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 817,
+      "name": "HL Mountain Front Wheel",
+      "productNumber": "FW-M928",
+      "productModelId": 46,
+      "productModelName": "HL Mountain Front Wheel",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 819,
+      "name": "ML Road Front Wheel",
+      "productNumber": "FW-R762",
+      "productModelId": 50,
+      "productModelName": "ML Road Front Wheel",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 820,
+      "name": "HL Road Front Wheel",
+      "productNumber": "FW-R820",
+      "productModelId": 51,
+      "productModelName": "HL Road Front Wheel",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 821,
+      "name": "Touring Front Wheel",
+      "productNumber": "FW-T905",
+      "productModelId": 44,
+      "productModelName": "Touring Front Wheel",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 824,
+      "name": "ML Mountain Rear Wheel",
+      "productNumber": "RW-M762",
+      "productModelId": 124,
+      "productModelName": "ML Mountain Rear Wheel",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 825,
+      "name": "HL Mountain Rear Wheel",
+      "productNumber": "RW-M928",
+      "productModelId": 125,
+      "productModelName": "HL Mountain Rear Wheel",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 827,
+      "name": "ML Road Rear Wheel",
+      "productNumber": "RW-R762",
+      "productModelId": 77,
+      "productModelName": "ML Road Rear Wheel",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 828,
+      "name": "HL Road Rear Wheel",
+      "productNumber": "RW-R820",
+      "productModelId": 78,
+      "productModelName": "HL Road Rear Wheel",
+      "quantity": 1.0,
+      "unit": "EA"
+    },
+    {
+      "productId": 829,
+      "name": "Touring Rear Wheel",
+      "productNumber": "RW-T905",
+      "productModelId": 43,
+      "productModelName": "Touring Rear Wheel",
+      "quantity": 1.0,
+      "unit": "EA"
+    }
+  ],
+  "whereUsedCount": 10
+}
