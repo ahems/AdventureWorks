@@ -83,6 +83,17 @@ export async function fetchAllOData<T>(
 export const fetchProducts = (filter?: string) =>
   fetchAllOData<Product>("Product", filter ? { $filter: filter } : undefined);
 
+export async function fetchProductsByNumbers(numbers: string[]): Promise<Product[]> {
+  const distinct = [...new Set(numbers)].sort();
+  const products: Product[] = [];
+  for (let offset = 0; offset < distinct.length; offset += 25) {
+    const filter = distinct.slice(offset, offset + 25)
+      .map(number => `ProductNumber eq '${number.replace(/'/g, "''")}'`).join(" or ");
+    products.push(...await fetchAllOData<Product>("Product", { $filter: filter }));
+  }
+  return products;
+}
+
 export const fetchManufacturedProducts = () =>
   fetchAllOData<Product>("Product", { $filter: "MakeFlag eq true" });
 
@@ -132,6 +143,12 @@ export const fetchActiveBOM = () =>
   fetchAllOData<BillOfMaterials>("BillOfMaterials", {
     $filter: "EndDate eq null",
   });
+
+export async function fetchEffectiveProductBOM(productId: number, asOf = Date.now()) {
+  const rows = await fetchAllOData<BillOfMaterials>("BillOfMaterials", { $filter: `ProductAssemblyID eq ${productId}` });
+  return rows.filter(row => new Date(sqlUtcTimestamp(row.StartDate)).getTime() <= asOf &&
+    (row.EndDate === null || new Date(sqlUtcTimestamp(row.EndDate)).getTime() > asOf));
+}
 
 // Work Orders — limited fetches for list views (most recent 500)
 export const fetchWorkOrders = (options?: { signal?: AbortSignal }) =>

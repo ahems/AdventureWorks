@@ -122,7 +122,9 @@ const PlanWorkOrderDetail = () => {
             >
               {product?.Name || `Product #${wo.ProductID}`}
             </Link>
-            {product && <div className="mt-2"><ManufacturingInstructionsLink modelId={product.ProductModelID} /></div>}
+            {product && <div className="mt-2"><ManufacturingInstructionsLink modelId={product.ProductModelID} productId={product.ProductID} />
+              <Link className="ml-3 text-sm text-doodle-blue underline" to={`/execute/work-order/${wo.WorkOrderID}/instructions`}>Workstation view</Link>
+            </div>}
           </div>
           <div className="flex gap-6 text-center">
             <div>

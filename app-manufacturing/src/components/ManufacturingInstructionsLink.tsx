@@ -7,9 +7,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 interface Props {
   modelId?: number | null;
   locationId?: number | null;
+  productId?: number;
 }
 
-export default function ManufacturingInstructionsLink({ modelId, locationId }: Props) {
+export default function ManufacturingInstructionsLink({ modelId, locationId, productId }: Props) {
   const model = useQuery({
     queryKey: ['product-model', modelId],
     queryFn: () => fetchProductModel(modelId!),
@@ -20,7 +21,7 @@ export default function ManufacturingInstructionsLink({ modelId, locationId }: P
   if (model.isError) return <span role="alert" className="text-sm text-destructive">Could not load instruction availability.</span>;
   if (!model.data?.Instructions?.trim()) return <span className="font-doodle text-xs text-muted-foreground">No manufacturing instructions available</span>;
   return (
-    <Link to={`/define/models/${modelId}/instructions${locationId ? `#work-center-${locationId}` : ''}`}
+    <Link to={`/define/models/${modelId}/instructions${productId ? `?productId=${productId}` : ''}${locationId ? `#work-center-${locationId}` : ''}`}
       className="inline-flex items-center gap-2 font-doodle text-sm text-doodle-blue hover:underline print:hidden">
       <BookOpen className="h-4 w-4" /> View Manufacturing Instructions
     </Link>

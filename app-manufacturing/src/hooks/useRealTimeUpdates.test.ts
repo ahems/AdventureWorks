@@ -39,14 +39,17 @@ describe("manufacturing real-time refresh batching", () => {
     advance(1999);
     expect(invalidateQueries).not.toHaveBeenCalled();
     advance(1);
-    expect(invalidateQueries).toHaveBeenCalledTimes(20);
+    expect(invalidateQueries).toHaveBeenCalledTimes(24);
     expect(invalidateQueries).toHaveBeenCalledWith(
       { queryKey: ["work-orders"] },
       { cancelRefetch: false },
     );
     expect(invalidateQueries.mock.calls.every(([, options]) => options.cancelRefetch === false)).toBe(true);
+    for (const key of ["instruction-bom", "instruction-components", "active-bom", "product"]) {
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: [key] }, { cancelRefetch: false });
+    }
     advance(10000);
-    expect(invalidateQueries).toHaveBeenCalledTimes(20);
+    expect(invalidateQueries).toHaveBeenCalledTimes(24);
     unmount();
   });
 

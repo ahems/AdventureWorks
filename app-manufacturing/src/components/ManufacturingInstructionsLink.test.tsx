@@ -7,9 +7,9 @@ import ManufacturingInstructionsLink from './ManufacturingInstructionsLink';
 
 vi.mock('@/services/api', () => ({ fetchProductModel: vi.fn() }));
 
-function show(modelId: number | null, locationId?: number) {
+function show(modelId: number | null, locationId?: number, productId?: number) {
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-    <MemoryRouter><ManufacturingInstructionsLink modelId={modelId} locationId={locationId} /></MemoryRouter>
+    <MemoryRouter><ManufacturingInstructionsLink modelId={modelId} locationId={locationId} productId={productId} /></MemoryRouter>
   </QueryClientProvider>);
 }
 
@@ -30,6 +30,13 @@ describe('manufacturing instruction entry points', () => {
     show(5);
     expect(await screen.findByText('No manufacturing instructions available')).toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+  it('retains the selected product and work-center anchor', async () => {
+    vi.mocked(fetchProductModel).mockResolvedValue({
+      ProductModelID: 67, Name: 'Saddle', CatalogDescription: null, Instructions: 'Assemble saddle.', ModifiedDate: '2026-11-03',
+    });
+    show(67, 50, 908);
+    expect(await screen.findByRole('link')).toHaveAttribute('href', '/define/models/67/instructions?productId=908#work-center-50');
   });
   it('does not query an unassigned model', () => {
     show(null);

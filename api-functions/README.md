@@ -67,6 +67,21 @@ instructions show an explicit unavailable state. Work-order links may include
 `#work-center-{LocationID}`. The viewer preserves source prose and step order,
 supports zoom/printing, and does not poll.
 
+Generated figure legends resolve product numbers to real product-detail links,
+with BOM and inventory actions only when corresponding data exists. Product
+entry points retain the selected variant via `?productId=...`; the viewer shows
+its size/colour and effective BOM separately from the model-wide schematic.
+Representative comparisons use current component IDs, quantities and units,
+not inferred substitutions or historical BOM reconstruction.
+
+Work orders also offer a read-only workstation reader at
+`/execute/work-order/:id/instructions`. It defaults to the active operation,
+then the first unfinished operation, then the first operation for completed
+orders. `?operation=...` selects an explicit routing sequence, including repeated
+work centers. Viewing another operation never advances production. Missing
+routing or instruction sections retain access to the full document. These
+views use existing Web PubSub cache invalidation rather than polling.
+
 Future AI enrichment should use `ProductModel-ai.csv` for new model records or
 an explicit seed-job update path for instructions on existing model IDs (inserting
 duplicate IDs would fail). Add `Illustration-ai.csv` records with globally unique

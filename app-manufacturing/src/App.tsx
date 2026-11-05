@@ -39,6 +39,7 @@ import PlanDemand from "@/pages/plan/PlanDemand";
 import ManufacturingDashboard from "@/pages/execute/ManufacturingDashboard";
 import ExecuteShopFloor from "@/pages/execute/ExecuteShopFloor";
 import ExecuteWorkOrder from "@/pages/execute/ExecuteWorkOrder";
+import WorkstationInstructions from "@/pages/execute/WorkstationInstructions";
 import FinishedGoodTracker from "@/pages/execute/FinishedGoodTracker";
 import WorkforcePage from "@/pages/execute/WorkforcePage";
 import SupplyChain from "@/pages/supply/SupplyChain";
@@ -140,6 +141,7 @@ const App = () => (
                   path="/execute/work-order/:id"
                   element={<ExecuteWorkOrder />}
                 />
+                <Route path="/execute/work-order/:id/instructions" element={<WorkstationInstructions />} />
                 <Route
                   path="/execute/tracker"
                   element={<FinishedGoodTracker />}

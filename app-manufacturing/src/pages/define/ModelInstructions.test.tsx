@@ -8,7 +8,10 @@ import type { ProductModel } from '@/types/production';
 import generated from '@/data/manufacturing/model-59.json';
 import supplemental from '@/data/manufacturing/model-44.json';
 
-vi.mock('@/services/api', () => ({ fetchProductModel: vi.fn(), fetchLocations: vi.fn() }));
+vi.mock('@/services/api', () => ({
+  fetchProductModel: vi.fn(), fetchLocations: vi.fn(), fetchProductsByNumbers: vi.fn().mockResolvedValue([]),
+  fetchActiveBOM: vi.fn().mockResolvedValue([]), fetchProductInventory: vi.fn().mockResolvedValue([]),
+}));
 
 const model: ProductModel = {
   ProductModelID: 67, Name: 'HL Touring Seat/Saddle', CatalogDescription: null,
@@ -16,13 +19,13 @@ const model: ProductModel = {
   ModifiedDate: '2026-11-03',
 };
 
-function show(data: ProductModel | null, error?: Error) {
+function show(data: ProductModel | null, error?: Error, embeddedCenter?: number) {
   if (error) vi.mocked(fetchProductModel).mockRejectedValue(error);
   else vi.mocked(fetchProductModel).mockResolvedValue(data);
   vi.mocked(fetchLocations).mockResolvedValue([]);
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
     <MemoryRouter initialEntries={[`/define/models/${data?.ProductModelID ?? 67}/instructions`]}><Routes>
-      <Route path="/define/models/:id/instructions" element={<ModelInstructions />} />
+      <Route path="/define/models/:id/instructions" element={<ModelInstructions embedded={embeddedCenter !== undefined} workCenterId={embeddedCenter} />} />
     </Routes></MemoryRouter>
   </QueryClientProvider>);
 }
@@ -56,6 +59,17 @@ describe('instruction page', () => {
   it('reports database read failures', async () => {
     show(model, new Error('Database unavailable'));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Database unavailable'));
+  });
+  it('limits embedded reading to the requested work center without the full-document overview', async () => {
+    show(model, undefined, 50);
+    expect(await screen.findByRole('heading', { name: 'Work Center 50' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Overview' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Print' })).not.toBeInTheDocument();
+  });
+  it('explains unmatched routed work centers instead of showing unrelated steps', async () => {
+    show(model, undefined, 60);
+    expect(await screen.findByText(/No instruction section matches this work center/)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Work Center 50' })).not.toBeInTheDocument();
   });
   it('renders the approved branding, operation guidance and revision history for live matching instructions', async () => {
     show({ ...model, ProductModelID: 59, Name: 'LL Headset', Instructions: generated.sourceInstructions });

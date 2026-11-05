@@ -10,6 +10,8 @@ import type { ManufacturingInstructions } from '@/lib/manufacturingInstructions'
 import ManufacturingLogo from '@/components/ManufacturingLogo';
 import { generatedDocument, generatedIntroduction } from '@/lib/generatedManufacturingContent';
 import type { GeneratedFigure } from '@/lib/generatedManufacturingContent';
+import ManufacturingComponentLegend from '@/components/ManufacturingComponentLegend';
+import InstructionProductContext from '@/components/InstructionProductContext';
 
 function Illustration({ id, content }: { id: number; content?: GeneratedFigure }) {
   const [failed, setFailed] = useState(false);
@@ -28,9 +30,7 @@ function Illustration({ id, content }: { id: number; content?: GeneratedFigure }
       {content && <div className="mt-4 space-y-3">
         <h3 className="font-semibold">Operation guidance</h3>
         {content.guidance.map((text, index) => <p key={index} className="text-sm leading-relaxed">{text}</p>)}
-        <ul className="space-y-1 text-sm">{content.callouts.map(callout => <li key={callout.number}>
-          <strong>{callout.number}:</strong> {callout.name} ({callout.productNumber})
-        </li>)}</ul>
+        <ManufacturingComponentLegend callouts={content.callouts} />
       </div>}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-4xl bg-white">
@@ -44,10 +44,19 @@ function Illustration({ id, content }: { id: number; content?: GeneratedFigure }
   );
 }
 
-export default function ModelInstructions() {
+interface Props {
+  modelId?: number;
+  workCenterId?: number;
+  embedded?: boolean;
+  productId?: number;
+}
+
+export default function ModelInstructions({ modelId: suppliedModelId, workCenterId, embedded = false, productId }: Props) {
   const { id } = useParams();
-  const modelId = Number(id);
+  const modelId = suppliedModelId ?? Number(id);
   const location = useLocation();
+  const requestedProduct = new URLSearchParams(location.search).get('productId');
+  const selectedProductId = productId ?? (requestedProduct !== null ? Number(requestedProduct) : undefined);
   const validId = Number.isSafeInteger(modelId) && modelId > 0;
   const model = useQuery({
     queryKey: ['product-model', modelId], queryFn: () => fetchProductModel(modelId), enabled: validId,
@@ -63,10 +72,10 @@ export default function ModelInstructions() {
   }, [model.data?.Instructions]);
   const generated = useMemo(() => parsed?.document ? generatedDocument(modelId, parsed.document) : undefined, [modelId, parsed]);
   useEffect(() => {
-    if (parsed?.document && /^#work-center-\d+$/.test(location.hash)) {
+    if (!embedded && parsed?.document && /^#work-center-\d+$/.test(location.hash)) {
       document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'start' });
     }
-  }, [parsed, location.hash]);
+  }, [parsed, location.hash, embedded]);
 
   if (validId && model.isLoading) return <div className="container mx-auto px-4 py-8"><DetailPageSkeleton /></div>;
   return (
@@ -80,10 +89,10 @@ export default function ModelInstructions() {
         .instruction-document #change-history table { min-width: 0; font-size: 8pt; }
         .instruction-document #change-history td { min-width: 0; white-space: normal; padding: 4px; }
       }`}</style>
-      <Link to={validId ? `/define/models/${modelId}` : '/define/models'}
+      {!embedded && <Link to={validId ? `/define/models/${modelId}` : '/define/models'}
         className="inline-flex items-center gap-2 font-doodle text-doodle-blue hover:underline print:hidden">
         <ArrowLeft className="h-4 w-4" /> Back to Model
-      </Link>
+      </Link>}
       {model.isError ? (
         <div role="alert" className="doodle-card-static p-6 text-destructive">
           Could not load manufacturing instructions: {model.error.message}
@@ -92,12 +101,12 @@ export default function ModelInstructions() {
         <p className="doodle-card-static p-6">Product model not found.</p>
       ) : (
         <>
-          {generated && <div className="flex items-center gap-3 border-b-4 border-blue-600 pb-6">
+          {!embedded && generated && <div className="flex items-center gap-3 border-b-4 border-blue-600 pb-6">
             <ManufacturingLogo className="h-14 w-14" />
             <div><p className="text-2xl font-extrabold tracking-tight">Adventure<span className="text-blue-600">Works</span></p>
               <p className="text-xs uppercase tracking-widest text-muted-foreground">Manufacturing Hub</p></div>
           </div>}
-          <div className="flex flex-wrap items-start justify-between gap-4">
+          {!embedded && <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1 className="font-doodle text-2xl font-bold">{model.data.Name}</h1>
               <p className="text-muted-foreground">Manufacturing Instructions - Model {modelId}</p>
@@ -105,29 +114,33 @@ export default function ModelInstructions() {
             {parsed?.document && <button onClick={() => window.print()} className="doodle-button inline-flex items-center gap-2 print:hidden">
               <Printer className="h-4 w-4" /> Print
             </button>}
-          </div>
+          </div>}
+          {selectedProductId !== undefined && <InstructionProductContext productId={selectedProductId} modelId={modelId}
+            representativeId={generated?.history.lifecycleSource?.ProductID} />}
           {!parsed ? <p className="doodle-card-static p-6">No manufacturing instructions are available for this model yet.</p> :
             parsed.error ? <p role="alert" className="doodle-card-static p-6 text-destructive">{parsed.error}</p> :
             parsed.document && (
               <>
-                <section className="doodle-card-static p-6">
+                {!embedded && <section className="doodle-card-static p-6">
                   <h2 className="mb-3 font-doodle text-lg font-bold">Overview</h2>
                   <p className="whitespace-pre-wrap leading-relaxed">{generated ? generatedIntroduction(parsed.document.introduction) : parsed.document.introduction}</p>
-                </section>
-                {generated && <section className="doodle-card-static space-y-4 p-6">
+                </section>}
+                {!embedded && generated && <section className="doodle-card-static space-y-4 p-6">
                   <h2 className="text-lg font-bold">Process notes and estimates</h2>
                   <ul className="list-disc space-y-2 pl-6">{generated.processNotes.map((text, index) => <li key={index}>{text}</li>)}</ul>
                   <h2 className="text-lg font-bold">Variant notes</h2>
                   <ul className="list-disc space-y-2 pl-6">{generated.variantNotes.map((text, index) => <li key={index}>{text}</li>)}</ul>
                 </section>}
-                {parsed.document.locations.length > 0 && (
+                {!embedded && parsed.document.locations.length > 0 && (
                   <nav aria-label="Instruction work centers" className="flex flex-wrap gap-3 print:hidden">
                     {parsed.document.locations.map(center => <a key={center.id} href={`#work-center-${center.id}`}
                       className="doodle-button text-sm">Work Center {center.id}</a>)}
                   </nav>
                 )}
                 {centers.isError && <p role="alert" className="text-sm text-destructive">Work center names could not be loaded; source instructions are shown below.</p>}
-                {parsed.document.locations.map(center => (
+                {embedded && !parsed.document.locations.some(center => center.id === workCenterId) &&
+                  <p className="doodle-card-static p-6">No instruction section matches this work center. Open the full document for available guidance.</p>}
+                {parsed.document.locations.filter(center => !embedded || center.id === workCenterId).map(center => (
                   <section key={center.id} id={`work-center-${center.id}`} className="doodle-card-static scroll-mt-24 p-6">
                     <h2 className="font-doodle text-xl font-bold">
                       Work Center {center.id}{centers.data?.find(c => c.LocationID === center.id)?.Name
@@ -159,7 +172,7 @@ export default function ModelInstructions() {
                   <h2 className="text-xl font-bold">Assembly illustrations</h2>
                   {Object.entries(generated.figures).map(([id, content]) => <Illustration key={id} id={Number(id)} content={content} />)}
                 </section>}
-                {generated && <>
+                {!embedded && generated && <>
                   <section id="change-history" className="doodle-card-static space-y-4 p-6">
                     <h2 className="text-xl font-bold">Document change management history</h2>
                     <p><strong>Document:</strong> {generated.history.documentNumber} · <strong>Current revision:</strong>{' '}

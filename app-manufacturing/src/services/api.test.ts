@@ -6,6 +6,8 @@ import {
   fetchAllOData,
   fetchAllPurchaseOrderDetails,
   fetchWorkOrders,
+  fetchProductsByNumbers,
+  fetchEffectiveProductBOM,
   sqlUtcTimestamp,
 } from "./api";
 
@@ -23,6 +25,27 @@ describe("fetchWorkOrders", () => {
       expect.stringContaining("/WorkOrder?$orderby=ModifiedDate%20desc&$first=500"),
       { signal },
     );
+  });
+
+  it("resolves unique component numbers with escaped filters and all pages", async () => {
+    vi.mocked(dabFetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        value: [{ ProductID: 1 }], nextLink: "http://localhost:5000/api/Product?$after=next",
+      })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ value: [{ ProductID: 101 }] })));
+    await expect(fetchProductsByNumbers(["PART'1", "PART'1"])).resolves.toEqual([{ ProductID: 1 }, { ProductID: 101 }]);
+    expect(new URL(vi.mocked(dabFetch).mock.calls[0][0]).searchParams.get("$filter")).toBe("ProductNumber eq 'PART''1'");
+    expect(dabFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses effective dates rather than accepting future or ended BOM records", async () => {
+    vi.mocked(dabFetch).mockResolvedValue(new Response(JSON.stringify({ value: [
+      { BillOfMaterialsID: 1, StartDate: "2026-01-01T00:00:00", EndDate: null },
+      { BillOfMaterialsID: 2, StartDate: "2027-01-01T00:00:00", EndDate: null },
+      { BillOfMaterialsID: 3, StartDate: "2025-01-01T00:00:00", EndDate: "2026-01-01T00:00:00" },
+    ] })));
+    const rows = await fetchEffectiveProductBOM(401, Date.parse("2026-11-05T00:00:00Z"));
+    expect(rows.map(row => row.BillOfMaterialsID)).toEqual([1]);
   });
 
   describe("DAB-only manufacturing reads", () => {

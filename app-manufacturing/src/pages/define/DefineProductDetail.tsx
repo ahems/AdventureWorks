@@ -65,7 +65,7 @@ const DefineProductDetail = () => {
           <div>
             <h1 className="font-doodle text-2xl font-bold text-doodle-text">{product.Name}</h1>
             <p className="font-doodle text-sm text-muted-foreground">{product.ProductNumber}</p>
-            <ManufacturingInstructionsLink modelId={product.ProductModelID} />
+            <ManufacturingInstructionsLink modelId={product.ProductModelID} productId={product.ProductID} />
             {category && subcategory && (
               <p className="font-doodle text-xs text-muted-foreground mt-1">{category.Name} → {subcategory.Name}</p>
             )}

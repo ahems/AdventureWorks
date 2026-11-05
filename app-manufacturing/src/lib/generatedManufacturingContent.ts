@@ -16,6 +16,7 @@ export interface GeneratedDocument {
   supplementalFigures?: boolean;
   history: {
     documentNumber: string;
+    lifecycleSource?: { ProductID: number };
     revisions: {
       revision: string; effectiveDate: string; changeRequest: string;
       description: string; preparedBy: string; approvedBy: string;
