@@ -19,7 +19,7 @@ public class ReceiptService
         _connectionString = connectionString;
     }
 
-    private async Task<IDbConnection> GetConnectionAsync()
+    protected virtual async Task<IDbConnection> GetConnectionAsync()
     {
         // Connection string contains Authentication=Active Directory Default
         // which handles credential acquisition automatically
@@ -50,6 +50,7 @@ public class ReceiptService
                     WHEN soh.Status = 4 THEN 'Rejected'
                     WHEN soh.Status = 5 THEN 'Shipped'
                     WHEN soh.Status = 6 THEN 'Cancelled'
+                    WHEN soh.Status = 7 THEN 'Delivered'
                     ELSE 'Unknown'
                 END AS StatusText,
                 soh.SubTotal,
@@ -57,7 +58,7 @@ public class ReceiptService
                 soh.Freight,
                 soh.TotalDue,
                 cust.CustomerID,
-                p.FirstName + ' ' + p.LastName AS CustomerName,
+                COALESCE(store.Name, p.FirstName + ' ' + p.LastName) AS CustomerName,
                 ea.EmailAddress AS CustomerEmail,
                 sm.Name AS ShipMethod,
                 -- Ship To Address
@@ -76,8 +77,14 @@ public class ReceiptService
                 billCountry.Name AS BillToCountry
             FROM Sales.SalesOrderHeader soh
             INNER JOIN Sales.Customer cust ON soh.CustomerID = cust.CustomerID
-            INNER JOIN Person.Person p ON cust.PersonID = p.BusinessEntityID
-            LEFT JOIN Person.EmailAddress ea ON p.BusinessEntityID = ea.BusinessEntityID
+            LEFT JOIN Sales.Store store ON cust.StoreID = store.BusinessEntityID
+            LEFT JOIN Person.Person p ON cust.PersonID = p.BusinessEntityID
+            OUTER APPLY (
+                SELECT TOP 1 email.EmailAddress
+                FROM Person.EmailAddress email
+                WHERE email.BusinessEntityID = p.BusinessEntityID
+                ORDER BY email.EmailAddressID
+            ) ea
             LEFT JOIN Purchasing.ShipMethod sm ON soh.ShipMethodID = sm.ShipMethodID
             -- Ship To Address
             LEFT JOIN Person.Address shipAddr ON soh.ShipToAddressID = shipAddr.AddressID

@@ -103,9 +103,10 @@ IF NOT EXISTS (SELECT 1 FROM [Sales].[SpecialOfferProduct] WHERE SpecialOfferID 
     {
         using var connection = await GetConnectionAsync();
         var expiredIds = await connection.QueryAsync<int>(@"
+DECLARE @ExpiredIds TABLE (SpecialOfferID int);
 UPDATE so
 SET so.EndDate = GETDATE(), so.ModifiedDate = GETDATE()
-OUTPUT INSERTED.SpecialOfferID
+OUTPUT INSERTED.SpecialOfferID INTO @ExpiredIds
 FROM [Sales].[SpecialOffer] so
 WHERE so.StartDate <= GETDATE()
   AND so.EndDate > GETDATE()
@@ -118,7 +119,8 @@ WHERE so.StartDate <= GETDATE()
             SELECT 1 FROM Production.ProductInventory pi
             WHERE pi.ProductID = sop.ProductID AND pi.Quantity > 0
         )
-  )");
+  );
+SELECT SpecialOfferID FROM @ExpiredIds;");
         return expiredIds.ToList();
     }
 }

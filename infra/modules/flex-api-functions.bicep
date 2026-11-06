@@ -99,6 +99,11 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
             name: 'function:OrderPlacedSqlTrigger'
             instanceCount: 1
           }
+          {
+            // All direct-DAB change signals share one transactional SQL outbox.
+            name: 'function:DatabaseChanges'
+            instanceCount: 1
+          }
         ]
       }
       runtime: {

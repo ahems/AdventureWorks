@@ -8,6 +8,7 @@ using Azure.Core;
 using Azure.Core.Pipeline;
 using Azure.Data.Tables;
 using Azure.Identity;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Extensions.Sql;
 using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -206,15 +207,120 @@ public class RealtimePublisherTests
         var publisher = new Publisher();
         var trigger = new DatabaseChangeNotifications(publisher);
         var changes = new[] { SqlChangeOperation.Insert, SqlChangeOperation.Update, SqlChangeOperation.Delete }
-            .Select(operation => new SqlChange<DatabaseChangeNotifications.Row>(operation, new() { ProductID = 123 }))
+            .Select(operation => new SqlChange<DatabaseChangeNotifications.Row>(SqlChangeOperation.Insert,
+                new() { NotificationID = 123, Entity = "Sales.ShoppingCartItem", ChangeType = operation.ToString() }))
             .ToArray();
-        await trigger.Cart(changes);
+        await trigger.Run(changes);
         var sent = Assert.Single(publisher.Events);
         Assert.Equal("orders", sent.Group);
         Assert.Equal("Sales.ShoppingCartItem", sent.Payload.GetProperty("entity").GetString());
         Assert.Equal(3, sent.Payload.GetProperty("changeTypes").GetArrayLength());
         Assert.DoesNotContain("123", sent.Payload.ToString());
-        await trigger.Cart([]);
+        await trigger.Run([]);
         Assert.Single(publisher.Events);
+    }
+
+    [Theory]
+    [InlineData("Production.ProductInventory", "manufacturing-ops,warehouse,supply-chain")]
+    [InlineData("Production.ProductCostHistory", "manufacturing-ops,finance")]
+    [InlineData("Production.ProductReview", "reviews")]
+    [InlineData("Purchasing.Vendor", "supply-chain,warehouse")]
+    [InlineData("Sales.SpecialOffer", "promotions")]
+    public async Task Outbox_preserves_domain_groups(string entity, string groups)
+    {
+        var publisher = new Publisher();
+        await new DatabaseChangeNotifications(publisher).Run([
+            new(SqlChangeOperation.Insert, new() { Entity = entity, ChangeType = "Update" })
+        ]);
+        Assert.Equal(groups.Split(','), publisher.Events.Select(e => e.Group));
+    }
+
+    [Fact]
+    public async Task Outbox_cleanup_does_not_emit_changes_and_invalid_signals_fail_explicitly()
+    {
+        var publisher = new Publisher();
+        var trigger = new DatabaseChangeNotifications(publisher);
+        await trigger.Run([new(SqlChangeOperation.Delete, new())]);
+        Assert.Empty(publisher.Events);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => trigger.Run([
+            new(SqlChangeOperation.Insert, new() { Entity = "Private.Unknown", ChangeType = "Insert" })
+        ]));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => trigger.Run([
+            new(SqlChangeOperation.Insert, new() { Entity = "Sales.ShoppingCartItem", ChangeType = "Invalid" })
+        ]));
+        Assert.Empty(publisher.Events);
+    }
+
+    [Fact]
+    public void Deployed_worker_and_sql_listener_configuration_matches_the_runtime_contract()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "azure.yaml")))
+            directory = directory.Parent;
+        Assert.NotNull(directory);
+        var root = directory!.FullName;
+        using var host = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "api-functions/host.json")));
+        var durable = host.RootElement.GetProperty("extensions").GetProperty("durableTask");
+        Assert.Equal("push-v1", durable.GetProperty("defaultVersion").GetString());
+        Assert.Equal("CurrentOrOlder", durable.GetProperty("versionMatchStrategy").GetString());
+        var infrastructure = File.ReadAllText(Path.Combine(root, "infra/modules/flex-api-functions.bicep"));
+        var sqlFunctions = typeof(DatabaseChangeNotifications).Assembly.GetTypes()
+            .SelectMany(t => t.GetMethods())
+            .Where(m => m.GetParameters().Any(p => p.GetCustomAttributes(typeof(SqlTriggerAttribute), false).Length > 0));
+        var names = sqlFunctions.Select(m =>
+            ((FunctionAttribute)m.GetCustomAttributes(typeof(FunctionAttribute), false).Single()).Name).Order().ToArray();
+        Assert.Equal(new[] { "DatabaseChanges", "OrderPlacedSqlTrigger" }, names);
+        Assert.All(names, name => Assert.Contains($"name: 'function:{name}'", infrastructure));
+        var migration = File.ReadAllText(Path.Combine(root, "seed-job/sql/realtime-notification-outbox.sql"));
+        Assert.Contains("CREATE OR ALTER TRIGGER", migration);
+        Assert.Contains("BEGIN TRANSACTION", migration);
+        Assert.Contains("AFTER INSERT, UPDATE, DELETE", migration);
+        Assert.DoesNotContain("ShoppingCartID", migration);
+        var mappedEntities = (IReadOnlyDictionary<string, string[]>)typeof(DatabaseChangeNotifications)
+            .GetField("Groups", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.GetValue(null)!;
+        var migratedEntities = System.Text.RegularExpressions.Regex.Matches(migration, @"\('([A-Za-z]+\.[A-Za-z]+)'\)")
+            .Select(match => match.Groups[1].Value).Order().ToArray();
+        Assert.Equal(mappedEntities.Keys.Order(), migratedEntities);
+    }
+
+    [Theory]
+    [InlineData("OrderGenerationService.cs", "SalesOrderDetailID", "InsertedIds")]
+    [InlineData("ReviewService.cs", "ProductReviewID", "InsertedIds")]
+    [InlineData("WorkOrderSimulationService.cs", "WorkOrderID", "InsertedIds")]
+    [InlineData("SpecialOfferService.cs", "SpecialOfferID", "ExpiredIds")]
+    public void Identity_and_updated_row_results_are_compatible_with_notification_triggers(
+        string service, string key, string results)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "azure.yaml")))
+            directory = directory.Parent;
+        Assert.NotNull(directory);
+        var source = File.ReadAllText(Path.Combine(directory!.FullName, "api-functions", "Services", service));
+        Assert.Contains($"DECLARE @{results} TABLE ({key} int);", source);
+        Assert.Contains($"OUTPUT INSERTED.{key} INTO @{results}", source);
+        Assert.Contains($"SELECT {key} FROM @{results};", source);
+        Assert.DoesNotMatch($@"OUTPUT INSERTED\.{key}\s*\r?\n\s*(VALUES|FROM)", source);
+    }
+
+    [Fact]
+    public void Supply_bootstrap_batches_stock_and_avoids_per_order_speed_reads()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "azure.yaml")))
+            directory = directory.Parent;
+        Assert.NotNull(directory);
+        var source = File.ReadAllText(Path.Combine(directory.FullName, "api-functions/Services/SupplyChainService.cs"));
+        var initialization = source.Split("public async Task InitializeAsync()", 2)[1]
+            .Split("public async Task Force", 2)[0];
+        Assert.Contains("stockBatch.Count == 100", initialization);
+        Assert.Contains("stockBatch.Count > 0", initialization);
+        Assert.Contains("SubmitTransactionAsync(stockBatch)", initialization);
+        var pending = source.Split("private async Task ProcessHistoricalPendingOrdersAsync(", 2)[1]
+            .Split("private async Task ProcessHistoricalApprovedOrdersAsync()", 2)[0];
+        Assert.True(pending.IndexOf("GetEffectiveTimeScaleAsync()") < pending.IndexOf("for (int i = 0;"));
+        var summaries = source.Split("public async Task<List<VendorSummary>> GetVendorSummariesAsync()", 2)[1]
+            .Split("// ── Catalog", 2)[0];
+        Assert.DoesNotContain("and VendorId eq", summaries);
+        Assert.Contains("counts.Total, counts.InStock", summaries);
     }
 }

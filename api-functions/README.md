@@ -12,9 +12,9 @@ High‑level responsibilities:
 
 ## SQL connection and idle-cost behavior
 
-Most Functions open SQL connections only while handling an HTTP request, queue message, or scheduled job. The SQL Change Tracking listeners are different: `OrderPlacedSqlTrigger` observes `Sales.SalesOrderHeader`, and `DatabaseChangeNotifications` observes direct DAB mutations across the cart, order details, manufacturing, inventory, catalog, reviews, purchasing and finance tables. These bindings continuously observe SQL changes. The infrastructure intentionally keeps one Flex Consumption instance always ready for these listeners so that changes are not missed. Consequently, the deployed Functions app can keep the serverless Azure SQL Database online even when all user-facing Container Apps have scaled to zero. This server-side observation is not frontend polling.
+Most Functions open SQL connections only while handling an HTTP request, queue message, or scheduled job. Two SQL Change Tracking listeners are different: `OrderPlacedSqlTrigger` observes `Sales.SalesOrderHeader`, and `DatabaseChanges` observes `dbo.RealtimeNotificationOutbox`. Transactional SQL triggers write small change signals to this shared outbox for direct DAB mutations across the cart, order details, manufacturing, inventory, catalog, reviews, purchasing and finance tables. Each listener has one Flex always-ready instance (two total), rather than an instance per source table. Consequently, the deployed Functions app can keep the serverless Azure SQL Database online even when all user-facing Container Apps have scaled to zero. This server-side observation is not frontend polling.
 
-The SQL Database still has serverless auto-pause enabled, but auto-pause requires zero sessions and zero user-workload CPU for the configured delay. The hourly `OrderDelivery_Timer` and weekly `ArchiveTransactionHistoryTimer` are additional scheduled SQL callers that can wake the database periodically. `ShoppingSimulator_Timer` does not query SQL when the simulator is stopped; it checks state in Table Storage and returns.
+The SQL Database still has serverless auto-pause enabled, but auto-pause requires zero sessions and zero user-workload CPU for the configured delay. The hourly `OrderDelivery_Timer`, weekly `ArchiveTransactionHistoryTimer`, and daily `CleanupDatabaseNotifications` are additional scheduled SQL callers that can wake the database periodically. `ShoppingSimulator_Timer` does not query SQL when the simulator is stopped; it checks state in Table Storage and returns.
 
 For the demo's normal intermittent usage, the no-code workaround is to delete the environment when finished and redeploy it before the next session:
 
@@ -53,6 +53,17 @@ Direct-DAB observers cover cart writes as well as operational/catalog changes;
 cart notifications do not broadcast customer/cart identifiers. Never broadcast
 tokens, Durable management URLs, or private record bodies.
 
+The outbox stores only a notification ID, entity name, change type and UTC creation
+time. SQL triggers participate in the originating transaction, so rolled-back
+mutations do not publish. The listener batches rows by entity and preserves the
+existing domain groups. Daily cleanup deletes up to 10,000 rows older than seven
+days; deletion of expired signals does not generate frontend invalidations.
+
+SQL writes to these trigger-enabled tables must use `OUTPUT ... INTO` followed
+by a `SELECT` when returning inserted IDs or updated rows. SQL Server rejects a
+bare `OUTPUT` result set on a table with enabled DML triggers. This applies to
+B2B order details, generated reviews, work orders and promotion expiry.
+
 The utility observer requeues active instances with a three-second visibility
 delay (actual cadence also includes queue polling/processing). It stops when the
 persisted runtime status is `Completed`, `Failed`, `Terminated`, or legacy
@@ -66,14 +77,19 @@ Publishing is best-effort; reconnect/focus status reads recover missed signals.
 
 1. Provision the updated storage module, including `utility-status-queue` and its
    poison queue. Application code does not create storage infrastructure.
-2. Run the updated seed provisioning/grants before deploying Functions. It enables
-   SQL Change Tracking on the observed tables and precreates explicit SQL lease
-   tables with runtime permissions.
+2. Run the updated seed provisioning/grants before deploying Functions. It creates
+   the outbox and idempotent DML triggers, enables Change Tracking on the outbox,
+   and precreates the two listener lease tables with runtime permissions. For an
+   existing database use the private-network seed job's
+   `-RealtimeNotificationsOnly` mode; it does not reseed data or import overlays.
 3. Drain existing **unversioned** Durable utility instances before rolling out
    polling-free utility views. Existing histories retain their old orchestration
    version; new HTTP starters explicitly use `push-v1`. Any future starter for a
    dormant utility orchestrator must also specify `push-v1`. The host-wide Durable
-   default version is unchanged so old histories remain replay-compatible.
+   `defaultVersion` must be `push-v1`, with `versionMatchStrategy: CurrentOrOlder`.
+   This accepts both new versioned instances and older/unversioned histories;
+   the orchestration code gates new lifecycle activities on `context.Version`.
+   Leaving the worker version unset causes versioned jobs to remain Pending.
 4. Publish Functions, then deploy the three frontends. Do not treat old deployed
    publishers as proof that the updated clients have complete live coverage.
 
@@ -95,6 +111,11 @@ replay-compatible but do not receive the new utility lifecycle events.
 SQL listeners have server-side observation costs, and high-rate simulations can
 exhaust Web PubSub Free-tier message quotas. Connection failure remains explicit;
 do not silently reintroduce frontend polling.
+
+Both SQL-trigger function names must remain in the Flex `alwaysReady` list in
+`infra/modules/flex-api-functions.bicep`. A new listener on a separate table
+requires its own scale group; prefer extending the outbox's fixed entity/group
+mapping and seed migration rather than adding per-table bindings.
 
 ### Verification
 
@@ -554,6 +575,19 @@ All AI Foundry agent calls share the `FoundryAgentClient` singleton, which lever
 
 - **Trigger**: Queue `order-receipt-generation`
 - **Purpose**: For each queued order, loads receipt data via `ReceiptService`, generates a PDF with `PdfReceiptGenerator`, and uploads it to blob storage. If email metadata is attached, enqueues an `order-email-generation` message to trigger downstream email delivery.
+
+Receipt lookup supports both consumer customers and store-only B2B customers
+(`Sales.Customer.PersonID` may be null). Store receipts use the store name, the
+order's shipping/billing addresses and persisted header totals; a missing contact
+email does not suppress PDF generation. Displayed discounts are already included
+in the net subtotal. Simulator results also use the persisted receipt total and
+customer ID, never a pre-tax sum of the AI plan. Reseller discount fractions are
+used directly (`0.02` means 2%, not 0.02%). If a committed order cannot be loaded
+for its receipt, generation reports an explicit error instead of a fabricated total.
+
+Historical simulator failures remain historical: a successful deployment does not
+remove old SQL trigger errors or rewrite earlier result totals. Verify fixes with
+a new order; no database repair or environment recreation is required.
 
 ### `GenerateAndSendReceipt`
 
@@ -1093,6 +1127,13 @@ permissions already support these reads; no database/schema migration is needed.
 ## Supply Chain Control Functions
 
 These functions expose the supply chain simulation. See [MANUFACTURING_SIMULATION.md](./MANUFACTURING_SIMULATION.md) for context.
+
+The first supply read initializes simulation state once per Functions process.
+Initial vendor stock writes use Table transactions of at most 100 rows, preserving
+state-change notifications after each successful batch. Historical pending-order
+injection loads vendor and time-scale configuration once, and vendor summaries
+aggregate stock counts in one Table scan rather than one query per vendor.
+Catalog and quote responses expose prices as `unitCost`.
 
 ### `GetVendors` / `GetVendor`
 

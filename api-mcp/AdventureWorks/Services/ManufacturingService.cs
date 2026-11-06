@@ -354,11 +354,10 @@ public class ManufacturingService
 
     public async Task<string> GetFeasibilityAsync(int productId, int qty = 1, bool withProcurement = true)
     {
-        var resp = await _http.GetAsync($"api/plan/feasibility/{productId}?qty={qty}&withProcurement={withProcurement}");
+        using var resp = await _http.GetAsync($"api/plan/feasibility/{productId}?qty={qty}&withProcurement={withProcurement}");
         if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
             return $"ProductID {productId} not found or is not a manufactured finished good.";
-        if (!resp.IsSuccessStatusCode)
-            return $"Error retrieving feasibility for ProductID {productId}: {resp.StatusCode}";
+        resp.EnsureSuccessStatusCode();
 
         var json = await resp.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
@@ -366,25 +365,26 @@ public class ManufacturingService
 
         var sb = new StringBuilder();
         sb.AppendLine($"## Feasibility for ProductID {productId}");
-        sb.AppendLine($"Product: {root.GetStringOrDefault("productName")}");
-        sb.AppendLine($"Requested Qty: {qty}");
-        sb.AppendLine($"Max Producible Now: {root.GetIntOrDefault("maxProducibleNow")}");
-        sb.AppendLine($"Can Meet Request: {root.GetBoolOrDefault("canMeetRequest")}");
+        var requestedQty = root.GetProperty("requestedQty").GetInt32();
+        var maxProducibleNow = root.GetProperty("maxProducibleNow").GetInt32();
+        sb.AppendLine($"Product: {root.GetProperty("name").GetString()}");
+        sb.AppendLine($"Requested Qty: {requestedQty}");
+        sb.AppendLine($"Max Producible Now: {maxProducibleNow}");
+        sb.AppendLine($"Can Meet Request: {maxProducibleNow == -1 || maxProducibleNow >= requestedQty}");
+        sb.AppendLine($"Max Producible With Procurement: {root.GetProperty("maxProducibleWithProcurement").GetInt32()}");
+        sb.AppendLine($"Procurement Cost To Meet Request: ${root.GetProperty("procurementCostToMeetRequest").GetDecimal():N2}");
 
-        if (root.TryGetProperty("bottleneckComponents", out var bottlenecks) && bottlenecks.ValueKind == JsonValueKind.Array && bottlenecks.GetArrayLength() > 0)
+        var components = root.GetProperty("components");
+        if (components.ValueKind != JsonValueKind.Array)
+            throw new JsonException("Expected a feasibility components array.");
+        if (components.GetArrayLength() > 0)
         {
             sb.AppendLine();
-            sb.AppendLine("### Bottleneck Components");
-            foreach (var b in bottlenecks.EnumerateArray().Take(10))
-                sb.AppendLine($"  - {b.GetStringOrDefault("name")}: need {b.GetIntOrDefault("required")}, available {b.GetIntOrDefault("available")} (can make {b.GetIntOrDefault("maxFromStock")})");
-        }
-
-        if (root.TryGetProperty("pendingProcurementHelp", out var pending) && pending.ValueKind == JsonValueKind.Array && pending.GetArrayLength() > 0)
-        {
-            sb.AppendLine();
-            sb.AppendLine("### Incoming Supply Orders (will help)");
-            foreach (var p in pending.EnumerateArray().Take(5))
-                sb.AppendLine($"  - {p.GetStringOrDefault("productName")} x{p.GetIntOrDefault("qty")} — {p.GetStringOrDefault("status")}");
+            sb.AppendLine("### Components (bottlenecks and shortages first)");
+            foreach (var c in components.EnumerateArray()
+                .OrderByDescending(c => c.GetProperty("shortfallForQty").GetInt32() > 0)
+                .ThenByDescending(c => c.GetProperty("isBottleneck").GetBoolean()))
+                sb.AppendLine($"  - {c.GetProperty("name").GetString()} (ProductID {c.GetProperty("productId").GetInt32()}): need {c.GetProperty("requiredForQty").GetInt32()}, available {c.GetProperty("currentStock").GetInt32()}, shortfall {c.GetProperty("shortfallForQty").GetInt32()} (can make {c.GetProperty("canSupportUnits").GetInt32()}; bottleneck: {c.GetProperty("isBottleneck").GetBoolean()})");
         }
 
         return sb.ToString();

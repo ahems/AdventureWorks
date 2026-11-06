@@ -364,7 +364,7 @@ public class PdfReceiptGenerator
             {
                 column.Item().PaddingTop(3).Row(row =>
                 {
-                    row.RelativeItem().Text("Discount:").FontColor(ACCENT_COLOR);
+                    row.RelativeItem().Text("Discount (included):").FontColor(ACCENT_COLOR);
                     row.ConstantItem(80).AlignRight().Text($"-${receipt.DiscountAmt:N2}").FontColor(ACCENT_COLOR);
                 });
             }

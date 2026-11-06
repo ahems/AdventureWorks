@@ -29,6 +29,28 @@ Fresh provisioning configures SQL with **public access disabled from creation** 
 
 The identity resource is named `av-seed-identity-${resourceToken}`. Provisioning exports `SEED_MANAGED_IDENTITY_NAME`, `SEED_MANAGED_IDENTITY_CLIENT_ID`, and `SEED_MANAGED_IDENTITY_PRINCIPAL_ID` to azd. Existing global `AZURE_CLIENT_ID`/`USER_MANAGED_IDENTITY_NAME` still identify the runtime UAMI; only the seed container receives its dedicated client ID/name under those container-local names. The container also receives runtime bootstrap inputs as `RUNTIME_MANAGED_IDENTITY_NAME` and `RUNTIME_MANAGED_IDENTITY_CLIENT_ID`.
 
+### Realtime notification migration
+
+Normal fresh/incremental seeding applies
+[`sql/realtime-notification-outbox.sql`](sql/realtime-notification-outbox.sql)
+before granting runtime Change Tracking access. It creates a shared outbox and
+22 idempotent `AFTER INSERT, UPDATE, DELETE` triggers. Changes record only entity,
+operation and timestamp within the source transaction, never cart/customer IDs
+or row bodies. The two SQL binding lease tables cover `Sales.SalesOrderHeader`
+and `dbo.RealtimeNotificationOutbox`; old per-table leases/tracking are left
+intact when upgrading an existing database.
+
+For a populated deployment, start the updated seed image in the existing
+private-network job with the sole argument `-RealtimeNotificationsOnly`.
+This mode applies only the outbox/schema/grant migration and exits before
+overlay validation/import, runtime-user bootstrap or base seeding. It cannot be
+combined with `-ManufacturingOverlaysOnly` or `-VerifyOnly`. It uses the same
+dedicated seed identity and private SQL path; no public networking is opened.
+
+Deploy the two listener always-ready settings and Functions after the migration
+succeeds. See [Functions real-time rollout](../api-functions/README.md#deployment-order)
+for worker version requirements and live validation.
+
 When SQL has public network access disabled, postprovision preserves that setting and skips public firewall rules, public-IP discovery, and deployment-host SQL role/Change Tracking commands. Fresh deployments use the IaC-established administrator above; legacy databases can reuse their existing identity grants. Missing permissions cause the asynchronous seed execution to fail rather than opening public access; inspect the job logs or `/health`. A legacy public-enabled server retains the existing temporary client-firewall/role setup. The hook fails closed if it cannot determine the network setting. Full fresh seeding enables Change Tracking inside the private-network job; the incremental overlay path does not migrate Change Tracking on an existing database.
 
 ---

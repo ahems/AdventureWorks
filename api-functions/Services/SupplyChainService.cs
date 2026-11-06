@@ -322,6 +322,7 @@ public class SupplyChainService
                 var historicalStock = await GetHistoricalStockLevelsAsync();
 
                 int seededFromHistory = 0, seededFromFormula = 0;
+                var stockBatch = new List<TableTransactionAction>(100);
 
                 foreach (var vp in vendorProducts)
                 {
@@ -370,8 +371,15 @@ public class SupplyChainService
                         ["CurrentStock"]    = initStock,
                         ["MaxStock"]        = maxStock,
                     };
-                    await _tableClient.UpsertEntityAsync(entity);
+                    stockBatch.Add(new TableTransactionAction(TableTransactionActionType.UpsertMerge, entity));
+                    if (stockBatch.Count == 100)
+                    {
+                        await _tableClient.SubmitTransactionAsync(stockBatch);
+                        stockBatch.Clear();
+                    }
                 }
+                if (stockBatch.Count > 0)
+                    await _tableClient.SubmitTransactionAsync(stockBatch);
 
                 _logger.LogInformation(
                     "Supply chain initialized: {VendorCount} vendors, {ProductCount} vendor-product pairs " +
@@ -524,6 +532,8 @@ public class SupplyChainService
         }
 
         int enqueued = 0;
+        var vendorById = (await GetVendorsAsync()).ToDictionary(v => v.VendorId);
+        double effScale = await GetEffectiveTimeScaleAsync();
         for (int i = 0; i < poList.Count; i++)
         {
             var r    = poList[i];
@@ -560,9 +570,8 @@ public class SupplyChainService
             string vendorId = (string)r.VendorId;
             int prodId      = (int)r.ProductID;
             int qty         = (int)r.Qty;
-            var vendorInfo  = (await GetVendorsAsync()).FirstOrDefault(v => v.VendorId == vendorId);
+            vendorById.TryGetValue(vendorId, out var vendorInfo);
             int restockHrs  = vendorInfo?.RestockDelaySimHrs ?? 12;
-            double effScale = await GetEffectiveTimeScaleAsync();
             int restockSec  = Math.Max(1, (int)(restockHrs * 3600.0 / effScale)) + i; // stagger
 
             var restockMsg = new PurchaseOrderMessage
@@ -724,18 +733,21 @@ public class SupplyChainService
                 r => (string)r.VendorId,
                 r => ((int)r.ActiveOrders, (int)r.DeliveredToday));
 
+        var stockCounts = new Dictionary<string, (int Total, int InStock)>();
+        await foreach (var e in _tableClient.QueryAsync<TableEntity>(
+            filter: $"PartitionKey eq '{PART_STOCK}'",
+            select: new[] { "VendorId", "CurrentStock" }))
+        {
+            var vendorId = e.GetString("VendorId") ?? "";
+            stockCounts.TryGetValue(vendorId, out var counts);
+            stockCounts[vendorId] = (counts.Total + 1, counts.InStock + ((e.GetInt32("CurrentStock") ?? 0) > 0 ? 1 : 0));
+        }
         var result = new List<VendorSummary>();
         foreach (var v in vendors)
         {
-            int totalComponents = 0, inStock = 0;
-            await foreach (var e in _tableClient.QueryAsync<TableEntity>(
-                filter: $"PartitionKey eq '{PART_STOCK}' and VendorId eq '{v.VendorId}'"))
-            {
-                totalComponents++;
-                if ((e.GetInt32("CurrentStock") ?? 0) > 0) inStock++;
-            }
+            stockCounts.TryGetValue(v.VendorId, out var counts);
             var (activeOrders, deliveredToday) = orderStats.TryGetValue(v.VendorId, out var s) ? s : (0, 0);
-            result.Add(new VendorSummary(v, totalComponents, inStock, activeOrders, deliveredToday));
+            result.Add(new VendorSummary(v, counts.Total, counts.InStock, activeOrders, deliveredToday));
         }
         return result;
     }

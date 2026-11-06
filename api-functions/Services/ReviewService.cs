@@ -138,11 +138,13 @@ public class ReviewService
         using var connection = await GetConnectionAsync();
 
         var insertSql = @"
+            DECLARE @InsertedIds TABLE (ProductReviewID int);
             INSERT INTO Production.ProductReview 
             (ProductID, ReviewerName, ReviewDate, EmailAddress, Rating, Comments, ModifiedDate)
-            OUTPUT INSERTED.ProductReviewID
+            OUTPUT INSERTED.ProductReviewID INTO @InsertedIds
             VALUES 
-            (@ProductID, @ReviewerName, @ReviewDate, @EmailAddress, @Rating, @Comments, GETDATE())";
+            (@ProductID, @ReviewerName, @ReviewDate, @EmailAddress, @Rating, @Comments, GETDATE());
+            SELECT ProductReviewID FROM @InsertedIds;";
 
         return await connection.ExecuteScalarAsync<int>(insertSql, new
         {

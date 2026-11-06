@@ -469,7 +469,13 @@ async function getResourceAccessToken(
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: body.toString(),
       });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        if (res.status === 400 || res.status === 401) {
+          clearAuthorization();
+          window.dispatchEvent(new Event(DAB_SESSION_LOST_EVENT));
+        }
+        return null;
+      }
       const token = (await res.json()) as TokenResponse;
       if (token.refresh_token) {
         localStorage.setItem(TOKEN_KEY, JSON.stringify({ ...current, refreshToken: token.refresh_token }));

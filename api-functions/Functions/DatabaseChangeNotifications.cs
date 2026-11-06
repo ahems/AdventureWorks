@@ -1,115 +1,84 @@
 using api_functions.Services;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Extensions.Sql;
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace api_functions.Functions;
 
-/// <summary>Observes committed SQL changes, including mutations made directly through DAB.</summary>
 public sealed class DatabaseChangeNotifications(WebPubSubService publisher)
 {
     public sealed class Row
     {
-        public int? ProductID { get; set; }
+        public long NotificationID { get; set; }
+        public string Entity { get; set; } = "";
+        public string ChangeType { get; set; } = "";
+        public DateTime CreatedAt { get; set; }
     }
 
-    private async Task PublishAsync(IReadOnlyList<SqlChange<Row>> changes, string entity, params string[] groups)
+    private static readonly Dictionary<string, string[]> Groups = new(StringComparer.Ordinal)
     {
-        if (changes.Count == 0) return;
-        var payload = new
+        ["Sales.ShoppingCartItem"] = ["orders"],
+        ["Sales.SalesOrderDetail"] = ["orders"],
+        ["Production.WorkOrder"] = ["manufacturing-ops"],
+        ["Production.WorkOrderRouting"] = ["manufacturing-ops"],
+        ["Production.ProductInventory"] = ["manufacturing-ops", "warehouse", "supply-chain"],
+        ["Production.Location"] = ["manufacturing-ops", "warehouse"],
+        ["Production.BillOfMaterials"] = ["manufacturing-ops"],
+        ["Production.Product"] = ["manufacturing-ops", "warehouse", "supply-chain"],
+        ["Production.ProductCostHistory"] = ["manufacturing-ops", "finance"],
+        ["Production.ProductListPriceHistory"] = ["manufacturing-ops", "finance"],
+        ["Production.ProductModel"] = ["manufacturing-ops"],
+        ["Production.TransactionHistory"] = ["manufacturing-ops", "warehouse", "finance"],
+        ["Production.TransactionHistoryArchive"] = ["manufacturing-ops", "warehouse", "finance"],
+        ["Purchasing.Vendor"] = ["supply-chain", "warehouse"],
+        ["Purchasing.ProductVendor"] = ["supply-chain", "manufacturing-ops"],
+        ["Purchasing.PurchaseOrderHeader"] = ["supply-chain", "warehouse", "finance"],
+        ["Purchasing.PurchaseOrderDetail"] = ["supply-chain", "warehouse"],
+        ["Production.ProductReview"] = ["reviews"],
+        ["Production.ProductReviewReply"] = ["reviews"],
+        ["Sales.SpecialOffer"] = ["promotions"],
+        ["Sales.CurrencyRate"] = ["finance"],
+        ["Sales.SpecialOfferProduct"] = ["promotions"]
+    };
+
+    [Function("DatabaseChanges")]
+    public async Task Run(
+        [SqlTrigger("[dbo].[RealtimeNotificationOutbox]", "SQL_CONNECTION_STRING", "Notifications_RealtimeNotificationOutbox")]
+        IReadOnlyList<SqlChange<Row>> changes)
+    {
+        var notifications = changes.Where(c => c.Operation == SqlChangeOperation.Insert).Select(c => c.Item).ToArray();
+        foreach (var row in notifications)
         {
-            @event = "database-changed",
-            entity,
-            changeTypes = changes.Select(c => c.Operation.ToString()).Distinct().ToArray()
-        };
-        foreach (var group in groups)
-            await publisher.SendToGroupAsync(group, payload);
+            if (!Groups.ContainsKey(row.Entity) || row.ChangeType is not ("Insert" or "Update" or "Delete"))
+                throw new InvalidOperationException("Invalid realtime notification entity or change type.");
+        }
+        foreach (var entity in notifications.GroupBy(row => row.Entity))
+        {
+            var payload = new
+            {
+                @event = "database-changed",
+                entity = entity.Key,
+                changeTypes = entity.Select(row => row.ChangeType).Distinct().ToArray()
+            };
+            foreach (var group in Groups[entity.Key])
+                await publisher.SendToGroupAsync(group, payload);
+        }
     }
 
-    [Function("CartChanges")]
-    public Task Cart([SqlTrigger("[Sales].[ShoppingCartItem]", "SQL_CONNECTION_STRING", "Notifications_ShoppingCartItem")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Sales.ShoppingCartItem", "orders");
+}
 
-    [Function("OrderDetailChanges")]
-    public Task OrderDetails([SqlTrigger("[Sales].[SalesOrderDetail]", "SQL_CONNECTION_STRING", "Notifications_SalesOrderDetail")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Sales.SalesOrderDetail", "orders");
-
-    [Function("WorkOrderChanges")]
-    public Task WorkOrders([SqlTrigger("[Production].[WorkOrder]", "SQL_CONNECTION_STRING", "Notifications_WorkOrder")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Production.WorkOrder", "manufacturing-ops");
-
-    [Function("WorkOrderRoutingChanges")]
-    public Task Routing([SqlTrigger("[Production].[WorkOrderRouting]", "SQL_CONNECTION_STRING", "Notifications_WorkOrderRouting")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Production.WorkOrderRouting", "manufacturing-ops");
-
-    [Function("InventoryChanges")]
-    public Task Inventory([SqlTrigger("[Production].[ProductInventory]", "SQL_CONNECTION_STRING", "Notifications_ProductInventory")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Production.ProductInventory", "manufacturing-ops", "warehouse", "supply-chain");
-
-    [Function("LocationChanges")]
-    public Task Locations([SqlTrigger("[Production].[Location]", "SQL_CONNECTION_STRING", "Notifications_Location")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Production.Location", "manufacturing-ops", "warehouse");
-
-    [Function("BomChanges")]
-    public Task Bom([SqlTrigger("[Production].[BillOfMaterials]", "SQL_CONNECTION_STRING", "Notifications_BillOfMaterials")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Production.BillOfMaterials", "manufacturing-ops");
-
-    [Function("ProductChanges")]
-    public Task Products([SqlTrigger("[Production].[Product]", "SQL_CONNECTION_STRING", "Notifications_Product")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Production.Product", "manufacturing-ops", "warehouse", "supply-chain");
-
-    [Function("ProductCostChanges")]
-    public Task Costs([SqlTrigger("[Production].[ProductCostHistory]", "SQL_CONNECTION_STRING", "Notifications_ProductCostHistory")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Production.ProductCostHistory", "manufacturing-ops", "finance");
-
-    [Function("ProductPriceChanges")]
-    public Task Prices([SqlTrigger("[Production].[ProductListPriceHistory]", "SQL_CONNECTION_STRING", "Notifications_ProductListPriceHistory")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Production.ProductListPriceHistory", "manufacturing-ops", "finance");
-
-    [Function("ProductModelChanges")]
-    public Task Models([SqlTrigger("[Production].[ProductModel]", "SQL_CONNECTION_STRING", "Notifications_ProductModel")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Production.ProductModel", "manufacturing-ops");
-
-    [Function("TransactionChanges")]
-    public Task Transactions([SqlTrigger("[Production].[TransactionHistory]", "SQL_CONNECTION_STRING", "Notifications_TransactionHistory")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Production.TransactionHistory", "manufacturing-ops", "warehouse", "finance");
-
-    [Function("TransactionArchiveChanges")]
-    public Task TransactionArchives([SqlTrigger("[Production].[TransactionHistoryArchive]", "SQL_CONNECTION_STRING", "Notifications_TransactionHistoryArchive")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Production.TransactionHistoryArchive", "manufacturing-ops", "warehouse", "finance");
-
-    [Function("VendorChanges")]
-    public Task Vendors([SqlTrigger("[Purchasing].[Vendor]", "SQL_CONNECTION_STRING", "Notifications_Vendor")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Purchasing.Vendor", "supply-chain", "warehouse");
-
-    [Function("ProductVendorChanges")]
-    public Task ProductVendors([SqlTrigger("[Purchasing].[ProductVendor]", "SQL_CONNECTION_STRING", "Notifications_ProductVendor")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Purchasing.ProductVendor", "supply-chain", "manufacturing-ops");
-
-    [Function("PurchaseOrderChanges")]
-    public Task PurchaseOrders([SqlTrigger("[Purchasing].[PurchaseOrderHeader]", "SQL_CONNECTION_STRING", "Notifications_PurchaseOrderHeader")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Purchasing.PurchaseOrderHeader", "supply-chain", "warehouse", "finance");
-
-    [Function("PurchaseOrderDetailChanges")]
-    public Task PurchaseOrderDetails([SqlTrigger("[Purchasing].[PurchaseOrderDetail]", "SQL_CONNECTION_STRING", "Notifications_PurchaseOrderDetail")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Purchasing.PurchaseOrderDetail", "supply-chain", "warehouse");
-
-    [Function("ReviewChanges")]
-    public Task Reviews([SqlTrigger("[Production].[ProductReview]", "SQL_CONNECTION_STRING", "Notifications_ProductReview")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Production.ProductReview", "reviews");
-
-    [Function("ReviewReplyChanges")]
-    public Task Replies([SqlTrigger("[Production].[ProductReviewReply]", "SQL_CONNECTION_STRING", "Notifications_ProductReviewReply")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Production.ProductReviewReply", "reviews");
-
-    [Function("SpecialOfferChanges")]
-    public Task Offers([SqlTrigger("[Sales].[SpecialOffer]", "SQL_CONNECTION_STRING", "Notifications_SpecialOffer")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Sales.SpecialOffer", "promotions");
-
-    [Function("CurrencyRateChanges")]
-    public Task CurrencyRates([SqlTrigger("[Sales].[CurrencyRate]", "SQL_CONNECTION_STRING", "Notifications_CurrencyRate")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Sales.CurrencyRate", "finance");
-
-    [Function("SpecialOfferProductChanges")]
-    public Task OfferProducts([SqlTrigger("[Sales].[SpecialOfferProduct]", "SQL_CONNECTION_STRING", "Notifications_SpecialOfferProduct")] IReadOnlyList<SqlChange<Row>> changes) =>
-        PublishAsync(changes, "Sales.SpecialOfferProduct", "promotions");
+public sealed class DatabaseNotificationCleanup(IConfiguration configuration, ILogger<DatabaseNotificationCleanup> logger)
+{
+    [Function("CleanupDatabaseNotifications")]
+    public async Task Cleanup([TimerTrigger("0 0 3 * * *")] TimerInfo timer)
+    {
+        await using var connection = new SqlConnection(configuration["SQL_CONNECTION_STRING"]);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "DELETE TOP (10000) FROM dbo.RealtimeNotificationOutbox WHERE CreatedAt < DATEADD(day, -7, SYSUTCDATETIME());";
+        var removed = await command.ExecuteNonQueryAsync();
+        logger.LogInformation("Removed {Count} expired realtime notifications.", removed);
+    }
 }

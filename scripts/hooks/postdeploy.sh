@@ -45,6 +45,21 @@ admin_url=$(get_azd_value "APP_ADMIN_URL")
 manufacturing_url=$(get_azd_value "APP_MANUFACTURING_URL")
 inspector_url=$(get_azd_value "MCP_INSPECTOR_URL")
 
+# Foundry assigns a hosted instance principal only when the agent is deployed.
+# Resolve it from the deployed endpoint, not the project/blueprint/client identity.
+# Merge with the current shared-identity allowlist; never replace existing trust.
+hosted_trust=""
+if [[ -n "$manufacturing_endpoint" ]]; then
+  if [[ -z "$mcp_app_name" || -z "$resource_group" ]]; then
+    echo "ERROR: api-mcp app name/resource group is required to wire hosted agent MCP trust." >&2
+    exit 1
+  fi
+  hosted_trust=$(python3 scripts/utilities/hosted-agent-mcp-trust.py \
+    --endpoint "$manufacturing_endpoint" \
+    --resource-group "$resource_group" \
+    --app-name "$mcp_app_name")
+fi
+
 if [[ -z "$mcp_app_name" || -z "$resource_group" ]]; then
   echo "Warning: api-mcp app name or resource group unavailable; skipping OAuth redirect URI wiring."
 else
@@ -63,15 +78,18 @@ else
   append_redirect "OAUTH_ADMIN_REDIRECT_URIS" "$admin_url"
   append_redirect "OAUTH_MANUFACTURING_REDIRECT_URIS" "$manufacturing_url"
   append_redirect "OAUTH_INSPECTOR_REDIRECT_URIS" "$inspector_url"
+  if [[ -n "$hosted_trust" ]]; then
+    redirect_env_pairs+=("MCP_TRUSTED_SERVICE_PRINCIPAL_IDS=$hosted_trust")
+  fi
 
   if [[ ${#redirect_env_pairs[@]} -gt 0 ]]; then
-    echo "Configuring OAuth redirects for deployed apps..."
+    echo "Configuring OAuth redirects and hosted agent MCP trust..."
     az containerapp update \
       --name "$mcp_app_name" \
       --resource-group "$resource_group" \
       --set-env-vars "${redirect_env_pairs[@]}" \
       --output none
-    echo "OAuth redirects configured."
+    echo "OAuth redirects and hosted agent MCP trust configured."
   else
     echo "Warning: no app URLs resolved; api-mcp OAuth clients will use development redirect URIs only."
   fi

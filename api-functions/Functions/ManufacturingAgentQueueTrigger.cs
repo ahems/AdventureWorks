@@ -267,85 +267,150 @@ public class ManufacturingAgentQueueTrigger
                 $"Hosted agent returned {(int)response.StatusCode}: {responseBody[..Math.Min(200, responseBody.Length)]}");
         }
 
-        // The AgentHost responses endpoint returns the Responses API format.
-        // The output[] array may contain intermediate tool-call message items followed
-        // by the final summary message. Always use the LAST message item's text,
-        // which is the agent's complete structured JSON response.
+        return ParseAgentResponse(responseBody);
+    }
+
+    internal static AgentInvocationResult ParseAgentResponse(string responseBody)
+    {
         try
         {
             using var doc = JsonDocument.Parse(responseBody);
-            var root      = doc.RootElement;
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException("Hosted agent response must be a JSON object.");
+            if (root.TryGetProperty("object", out var responseObject) &&
+                (responseObject.ValueKind != JsonValueKind.String || responseObject.GetString() != "response"))
+                throw new InvalidOperationException("Hosted agent returned an unexpected response object.");
 
-            // Collect all message texts from output[], then use the last one
+            // HTTP 200 is only transport success. Foundry can return failed/incomplete
+            // Responses envelopes with HTTP 200, including MCP authentication failures.
+            RejectResponseError(root);
+            if (!root.TryGetProperty("status", out var status) ||
+                status.ValueKind != JsonValueKind.String ||
+                status.GetString() != "completed")
+                throw new InvalidOperationException("Hosted agent response did not complete successfully.");
+
+            if (!root.TryGetProperty("output", out var output) ||
+                output.ValueKind != JsonValueKind.Array)
+                throw new InvalidOperationException("Hosted agent response is missing its output array.");
+
+            // Intermediate tool-call messages can precede the final assistant message.
             string? agentText = null;
-            if (root.TryGetProperty("output", out var outputEl) &&
-                outputEl.ValueKind == JsonValueKind.Array)
+            foreach (var item in output.EnumerateArray())
             {
-                foreach (var item in outputEl.EnumerateArray())
+                if (item.ValueKind != JsonValueKind.Object)
+                    throw new InvalidOperationException("Hosted agent output contains a malformed item.");
+                RejectResponseError(item);
+                if (!item.TryGetProperty("type", out var type) ||
+                    type.ValueKind != JsonValueKind.String)
+                    throw new InvalidOperationException("Hosted agent output item is missing its type.");
+                if (item.TryGetProperty("status", out var itemStatus) &&
+                    (itemStatus.ValueKind != JsonValueKind.String || itemStatus.GetString() != "completed"))
+                    throw new InvalidOperationException("Hosted agent output item did not complete successfully.");
+
+                if (type.GetString() != "message")
+                    continue;
+                if (item.TryGetProperty("role", out var role) &&
+                    (role.ValueKind != JsonValueKind.String || role.GetString() != "assistant"))
+                    continue;
+                if (!item.TryGetProperty("content", out var content) ||
+                    content.ValueKind != JsonValueKind.Array)
+                    throw new InvalidOperationException("Hosted agent message is missing its content.");
+
+                var text = new StringBuilder();
+                foreach (var part in content.EnumerateArray())
                 {
-                    if (item.TryGetProperty("type", out var t) && t.GetString() == "message" &&
-                        item.TryGetProperty("content", out var contentEl) &&
-                        contentEl.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var part in contentEl.EnumerateArray())
-                        {
-                            if (part.TryGetProperty("text", out var textEl))
-                            {
-                                // Keep overwriting — last message wins
-                                agentText = textEl.GetString();
-                            }
-                        }
-                    }
+                    if (part.ValueKind != JsonValueKind.Object)
+                        throw new InvalidOperationException("Hosted agent message contains malformed content.");
+                    RejectResponseError(part);
+                    if (!part.TryGetProperty("type", out var partType) ||
+                        partType.ValueKind != JsonValueKind.String ||
+                        partType.GetString() != "output_text" ||
+                        !part.TryGetProperty("text", out var textValue) ||
+                        textValue.ValueKind != JsonValueKind.String)
+                        throw new InvalidOperationException("Hosted agent message did not return output text.");
+                    text.Append(textValue.GetString());
                 }
+                agentText = text.ToString();
             }
 
-            // If no output[] found, try top-level "text" (direct Responses API fallback)
-            if (agentText == null && root.TryGetProperty("text", out var topText))
-                agentText = topText.GetString();
+            if (string.IsNullOrWhiteSpace(agentText))
+                throw new InvalidOperationException("Hosted agent response contains no final assistant findings.");
 
-            if (agentText == null)
-                return new AgentInvocationResult(responseBody.Length > 2000 ? responseBody[..2000] : responseBody, null, null, null);
-
-            // The agent returns a JSON object as its output text.
-            // The new schema uses recommendedActions (ProposePending) instead of proposalIds.
+            JsonDocument innerDoc;
             try
             {
-                using var innerDoc      = JsonDocument.Parse(agentText);
-                var inner               = innerDoc.RootElement;
-                var findingsSummary     = inner.TryGetProperty("findingsSummary",    out var fs) ? fs.GetString() : null;
-                var toolsUsed           = DeserializeStringArray(inner, "toolsUsed");
-                var actionsExecuted     = DeserializeStringArray(inner, "actionsExecuted");
-                var recommendedActions  = DeserializeRecommendedActions(inner);
-                return new AgentInvocationResult(findingsSummary, toolsUsed, null, actionsExecuted, recommendedActions);
+                innerDoc = JsonDocument.Parse(agentText);
             }
-            catch
+            catch (JsonException)
             {
-                // Agent returned prose instead of JSON — use it as the findings summary
-                return new AgentInvocationResult(
-                    agentText.Length > 2000 ? agentText[..2000] : agentText,
-                    null, null, null);
+                // Retain genuine prose findings, but not truncated/malformed structured output.
+                if (agentText.TrimStart().StartsWith('{') || agentText.TrimStart().StartsWith('[') ||
+                    agentText.TrimStart().StartsWith("```", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Hosted agent returned malformed structured findings.");
+                return new AgentInvocationResult(agentText.Length > 2000 ? agentText[..2000] : agentText, null, null, null);
+            }
+
+            using (innerDoc)
+            {
+                var inner = innerDoc.RootElement;
+                if (inner.ValueKind != JsonValueKind.Object)
+                    throw new InvalidOperationException("Hosted agent structured findings must be an object.");
+                RejectResponseError(inner);
+                // An embedded Responses/error envelope is not a findings payload.
+                if (inner.TryGetProperty("object", out _) ||
+                    inner.TryGetProperty("output", out _) ||
+                    inner.TryGetProperty("status", out _))
+                    throw new InvalidOperationException("Hosted agent returned an envelope instead of findings.");
+                if (!inner.TryGetProperty("findingsSummary", out var summary) ||
+                    summary.ValueKind != JsonValueKind.String ||
+                    string.IsNullOrWhiteSpace(summary.GetString()))
+                    throw new InvalidOperationException("Hosted agent structured findings are missing a summary.");
+                return new AgentInvocationResult(summary.GetString(),
+                    DeserializeStringArray(inner, "toolsUsed"), null,
+                    DeserializeStringArray(inner, "actionsExecuted"), DeserializeRecommendedActions(inner));
             }
         }
-        catch
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException or OverflowException)
         {
-            // Fallback: treat raw response body as findings
-            return new AgentInvocationResult(
-                responseBody.Length > 2000 ? responseBody[..2000] : responseBody,
-                null, null, null);
+            throw new ManufacturingAgentThrottledException($"Hosted agent response rejected: {ex.Message}");
         }
+    }
+
+    private static void RejectResponseError(JsonElement value)
+    {
+        if (value.TryGetProperty("error", out var error) && error.ValueKind != JsonValueKind.Null)
+        {
+            // Do not store/log arbitrary upstream error content, which can include headers or tokens.
+            var code = error.ValueKind == JsonValueKind.Object &&
+                error.TryGetProperty("code", out var errorCode) && errorCode.ValueKind == JsonValueKind.String
+                    ? errorCode.GetString() : "unspecified";
+            throw new InvalidOperationException($"Hosted agent reported an error ({code}).");
+        }
+        if (value.TryGetProperty("incomplete_details", out var details) && details.ValueKind != JsonValueKind.Null)
+            throw new InvalidOperationException("Hosted agent returned incomplete output.");
+        if (value.TryGetProperty("type", out var type) &&
+            type.ValueKind == JsonValueKind.String &&
+            type.GetString() is "error" or "mcp_error" or "refusal")
+            throw new InvalidOperationException("Hosted agent output reports an error or refusal.");
     }
 
     private static List<string>? DeserializeStringArray(JsonElement root, string property)
     {
-        if (!root.TryGetProperty(property, out var el) || el.ValueKind != JsonValueKind.Array)
+        if (!root.TryGetProperty(property, out var el))
             return null;
+        if (el.ValueKind != JsonValueKind.Array ||
+            el.EnumerateArray().Any(i => i.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(i.GetString())))
+            throw new InvalidOperationException($"Hosted agent findings contain an invalid {property} array.");
         return el.EnumerateArray().Select(i => i.GetString() ?? string.Empty).ToList();
     }
 
     private static List<RecommendedAction>? DeserializeRecommendedActions(JsonElement root)
     {
-        if (!root.TryGetProperty("recommendedActions", out var el) || el.ValueKind != JsonValueKind.Array)
+        if (!root.TryGetProperty("recommendedActions", out var el))
             return null;
+        if (el.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("Hosted agent findings contain invalid recommendedActions.");
         var results = new List<RecommendedAction>();
         foreach (var item in el.EnumerateArray())
         {

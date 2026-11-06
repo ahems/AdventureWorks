@@ -64,14 +64,29 @@ builder.Services.AddSingleton<CustomerGeneratorService>();
 // short-lived Functions-audience service token signed by this authorization server.
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddTransient<AdventureWorks.Auth.FunctionsServiceTokenHandler>();
-builder.Services.AddHttpClient<ManufacturingService>(client =>
+AddPlanningClient<ManufacturingService>();
+AddPlanningClient<SupplyChainService>();
+
+void AddPlanningClient<TService>() where TService : class
 {
-	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
-}).AddHttpMessageHandler<AdventureWorks.Auth.FunctionsServiceTokenHandler>();
-builder.Services.AddHttpClient<SupplyChainService>(client =>
-{
-	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
-}).AddHttpMessageHandler<AdventureWorks.Auth.FunctionsServiceTokenHandler>();
+#pragma warning disable EXTEXP0001 // Required to replace Aspire's default resilience pipeline for this client only.
+	builder.Services.AddHttpClient<TService>(client =>
+	{
+		client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
+	}).AddHttpMessageHandler<AdventureWorks.Auth.FunctionsServiceTokenHandler>()
+		.RemoveAllResilienceHandlers()
+		.AddStandardResilienceHandler(options =>
+		{
+			// First planning/supply reads can bootstrap stock and historical purchase workflows.
+			// Do not replay mutations when that cold-start work is slow.
+			options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
+			options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(90);
+			options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
+			options.Retry.ShouldHandle = _ => ValueTask.FromResult(false);
+		});
+#pragma warning restore EXTEXP0001
+}
+
 builder.Services.AddHttpClient<BankService>(client =>
 {
 	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");

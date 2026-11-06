@@ -37,6 +37,7 @@ import NotFound from "./pages/NotFound";
 import HelpMeChoosePage from "./pages/HelpMeChoosePage";
 import { useRealTimeUpdates } from "./hooks/useRealTimeUpdates";
 import { LiveUpdatesNotice } from "./components/LiveUpdatesNotice";
+import RequireAuth from "./components/RequireAuth";
 
 const queryClient = new QueryClient();
 
@@ -83,14 +84,6 @@ const App = () => (
                                 element={<ProductPage />}
                               />
                               <Route path="/cart" element={<CartPage />} />
-                              <Route
-                                path="/checkout"
-                                element={<CheckoutPage />}
-                              />
-                              <Route
-                                path="/order-confirmation"
-                                element={<OrderConfirmationPage />}
-                              />
                               <Route path="/auth" element={<AuthPage />} />
                               <Route
                                 path="/oauth/callback"
@@ -100,23 +93,30 @@ const App = () => (
                                 path="/reset-password"
                                 element={<ResetPasswordPage />}
                               />
-                              <Route
-                                path="/account"
-                                element={<AccountPage />}
-                              />
                               <Route path="/sale" element={<SalePage />} />
                               <Route
                                 path="/search"
                                 element={<SearchPage />}
                               />
-                              <Route
-                                path="/order-tracking"
-                                element={<OrderTrackingPage />}
-                              />
-                              <Route
-                                path="/order-tracking/:orderId"
-                                element={<OrderTrackingPage />}
-                              />
+                              <Route element={<RequireAuth />}>
+                                <Route
+                                  path="/checkout"
+                                  element={<CheckoutPage />}
+                                />
+                                <Route
+                                  path="/order-confirmation"
+                                  element={<OrderConfirmationPage />}
+                                />
+                                <Route path="/account" element={<AccountPage />} />
+                                <Route
+                                  path="/order-tracking"
+                                  element={<OrderTrackingPage />}
+                                />
+                                <Route
+                                  path="/order-tracking/:orderId"
+                                  element={<OrderTrackingPage />}
+                                />
+                              </Route>
                               <Route
                                 path="/returns"
                                 element={<ReturnsPage />}

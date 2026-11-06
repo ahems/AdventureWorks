@@ -126,13 +126,15 @@ public class OrderService
                     WHEN soh.Status = 4 THEN 'Rejected'
                     WHEN soh.Status = 5 THEN 'Shipped'
                     WHEN soh.Status = 6 THEN 'Cancelled'
+                    WHEN soh.Status = 7 THEN 'Delivered'
                     ELSE 'Unknown'
                 END AS StatusText,
-                c.FirstName + ' ' + c.LastName AS CustomerName,
+                COALESCE(store.Name, c.FirstName + ' ' + c.LastName) AS CustomerName,
                 (SELECT TOP 1 EmailAddress FROM Person.EmailAddress WHERE BusinessEntityID = c.BusinessEntityID) AS EmailAddress
             FROM Sales.SalesOrderHeader soh
             INNER JOIN Sales.Customer cust ON soh.CustomerID = cust.CustomerID
-            INNER JOIN Person.Person c ON cust.PersonID = c.BusinessEntityID
+            LEFT JOIN Person.Person c ON cust.PersonID = c.BusinessEntityID
+            LEFT JOIN Sales.Store store ON cust.StoreID = store.BusinessEntityID
             LEFT JOIN Purchasing.ShipMethod sm ON soh.ShipMethodID = sm.ShipMethodID
             WHERE soh.SalesOrderID = @OrderId
                 AND (@CustomerId IS NULL OR cust.CustomerID = @CustomerId)";
@@ -152,6 +154,7 @@ public class OrderService
         var detailsSql = @"
             SELECT 
                 sod.SalesOrderDetailID,
+                sod.ProductID,
                 sod.OrderQty,
                 sod.UnitPrice,
                 sod.LineTotal,
@@ -167,6 +170,7 @@ public class OrderService
         var result = new StringBuilder();
         result.AppendLine(_localizer["OrderDetails", header.SalesOrderID].Value);
         result.AppendLine($"CustomerID: {((int)header.CustomerID).ToString(CultureInfo.InvariantCulture)}");
+        result.AppendLine($"Customer: {header.CustomerName}");
         result.AppendLine($"{_localizer["Status", header.StatusText].Value}");
         result.AppendLine($"{_localizer["OrderDate", header.OrderDate].Value}");
         if (header.ShipDate != null)
@@ -179,6 +183,7 @@ public class OrderService
         foreach (var item in details)
         {
             result.AppendLine($"  {item.ProductName}");
+            result.AppendLine($"    ProductID: {((int)item.ProductID).ToString(CultureInfo.InvariantCulture)}");
             result.AppendLine($"    {_localizer["Qty", item.OrderQty].Value} - {_localizer["UnitPrice", item.UnitPrice].Value} - {_localizer["LineTotal", item.LineTotal].Value}");
         }
 

@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/context/AuthContext";
 import Index from "./pages/Index";
@@ -36,79 +36,87 @@ import WarehousePage from "./pages/WarehousePage";
 import OAuthCallbackPage from "./pages/OAuthCallbackPage";
 import { useRealTimeUpdates } from "./hooks/useRealTimeUpdates";
 import { LiveUpdatesNotice } from "./components/LiveUpdatesNotice";
+import RequireAuth from "./components/RequireAuth";
 
 const queryClient = new QueryClient();
 
 /** Wrapper component inside QueryClientProvider so hooks work. */
-const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const AppShell = () => {
   useRealTimeUpdates();
-  return <><LiveUpdatesNotice />{children}</>;
+  return (
+    <>
+      <LiveUpdatesNotice />
+      <Outlet />
+    </>
+  );
 };
 
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
     <QueryClientProvider client={queryClient}>
-      <AppShell>
-        <TooltipProvider>
-          <AuthProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/products" element={<ProductsPage />} />
-                <Route path="/categories" element={<CategoriesPage />} />
-                <Route
-                  path="/category/:categoryId"
-                  element={<CategoryPage />}
-                />
-                <Route path="/product/:productId" element={<ProductPage />} />
-                <Route path="/customers" element={<CustomersPage />} />
-                <Route
-                  path="/customers/:customerId"
-                  element={<CustomersPage />}
-                />
-                <Route path="/orders" element={<OrdersPage />} />
-                <Route path="/orders/:orderId" element={<OrdersPage />} />
-                <Route path="/stores" element={<StoresPage />} />
-                <Route path="/reviews" element={<ReviewsPage />} />
-                <Route path="/promotions" element={<PromotionsPage />} />
-                <Route path="/cultures" element={<CulturesPage />} />
-                <Route path="/currencies" element={<CurrenciesPage />} />
-                <Route path="/stale-carts" element={<StaleCartsPage />} />
-                <Route path="/utilities" element={<UtilitiesPage />} />
-                <Route path="/customer-stats" element={<CustomerStatsPage />} />
-                <Route path="/search" element={<SearchPage />} />
-                <Route
-                  path="/inventory-transactions"
-                  element={<InventoryTransactionsPage />}
-                />
-                <Route path="/reports" element={<ReportsPage />} />
-                <Route
-                  path="/product-profitability"
-                  element={<ProductProfitabilityPage />}
-                />
-                <Route path="/loss-makers" element={<LossMakersPage />} />
-                <Route path="/slow-movers" element={<SlowMoversPage />} />
-                <Route path="/generate-order" element={<GenerateOrderPage />} />
-                <Route
-                  path="/shopping-simulator"
-                  element={<ShoppingSimulatorPage />}
-                />
-                <Route
-                  path="/auto-promotions"
-                  element={<AutoPromotionsPage />}
-                />
-                <Route path="/order-pipeline" element={<OrderPipelinePage />} />
-                <Route path="/warehouse" element={<WarehousePage />} />
-                <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </BrowserRouter>
-          </AuthProvider>
-        </TooltipProvider>
-      </AppShell>
+      <TooltipProvider>
+        <AuthProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+              <Route element={<RequireAuth />}>
+                <Route element={<AppShell />}>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/products" element={<ProductsPage />} />
+                  <Route path="/categories" element={<CategoriesPage />} />
+                  <Route
+                    path="/category/:categoryId"
+                    element={<CategoryPage />}
+                  />
+                  <Route path="/product/:productId" element={<ProductPage />} />
+                  <Route path="/customers" element={<CustomersPage />} />
+                  <Route
+                    path="/customers/:customerId"
+                    element={<CustomersPage />}
+                  />
+                  <Route path="/orders" element={<OrdersPage />} />
+                  <Route path="/orders/:orderId" element={<OrdersPage />} />
+                  <Route path="/stores" element={<StoresPage />} />
+                  <Route path="/reviews" element={<ReviewsPage />} />
+                  <Route path="/promotions" element={<PromotionsPage />} />
+                  <Route path="/cultures" element={<CulturesPage />} />
+                  <Route path="/currencies" element={<CurrenciesPage />} />
+                  <Route path="/stale-carts" element={<StaleCartsPage />} />
+                  <Route path="/utilities" element={<UtilitiesPage />} />
+                  <Route path="/customer-stats" element={<CustomerStatsPage />} />
+                  <Route path="/search" element={<SearchPage />} />
+                  <Route
+                    path="/inventory-transactions"
+                    element={<InventoryTransactionsPage />}
+                  />
+                  <Route path="/reports" element={<ReportsPage />} />
+                  <Route
+                    path="/product-profitability"
+                    element={<ProductProfitabilityPage />}
+                  />
+                  <Route path="/loss-makers" element={<LossMakersPage />} />
+                  <Route path="/slow-movers" element={<SlowMoversPage />} />
+                  <Route path="/generate-order" element={<GenerateOrderPage />} />
+                  <Route
+                    path="/shopping-simulator"
+                    element={<ShoppingSimulatorPage />}
+                  />
+                  <Route
+                    path="/auto-promotions"
+                    element={<AutoPromotionsPage />}
+                  />
+                  <Route path="/order-pipeline" element={<OrderPipelinePage />} />
+                  <Route path="/warehouse" element={<WarehousePage />} />
+                  <Route path="*" element={<NotFound />} />
+                </Route>
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </TooltipProvider>
     </QueryClientProvider>
   </ThemeProvider>
 );

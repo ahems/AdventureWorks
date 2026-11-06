@@ -53,13 +53,10 @@ public class SupplyChainService
         {
             var vendor = v.TryGetProperty("vendor", out var vd) ? vd : v;
             sb.AppendLine($"### {vendor.GetStringOrDefault("name")} (ID: {vendor.GetStringOrDefault("vendorId")})");
-            sb.AppendLine($"  Credit rating: {vendor.GetIntOrDefault("creditRating")} | Active: {vendor.GetBoolOrDefault("activeFlag")}");
+            sb.AppendLine($"  Credit rating: {vendor.GetIntOrDefault("creditRating")}");
             sb.AppendLine($"  Preferred: {vendor.GetBoolOrDefault("preferredVendorStatus")}");
 
-            if (v.TryGetProperty("totalStockUnits", out var stock))
-                sb.AppendLine($"  Total stock units: {stock.GetInt32()}");
-            if (v.TryGetProperty("uniqueProducts", out var prods))
-                sb.AppendLine($"  Unique products supplied: {prods.GetInt32()}");
+            sb.AppendLine($"  Components supplied: {v.GetIntOrDefault("totalComponents")} | In stock: {v.GetIntOrDefault("inStockComponents")}");
             sb.AppendLine();
         }
 
@@ -94,7 +91,7 @@ public class SupplyChainService
             sb.AppendLine("### Components in Catalog");
             foreach (var c in stock.EnumerateArray())
             {
-                sb.AppendLine($"  - ProductID {c.GetIntOrDefault("productId")}: {c.GetStringOrDefault("productName")} — {c.GetIntOrDefault("stockAvailable")} units @ ${c.GetDecimalOrDefault("unitPrice"):N4}");
+                sb.AppendLine($"  - ProductID {c.GetIntOrDefault("productId")}: {c.GetStringOrDefault("productName")} — {c.GetIntOrDefault("stockAvailable")} units @ ${c.GetProperty("unitCost").GetDecimal():N4}");
                 sb.AppendLine($"    Lead time: {c.GetIntOrDefault("leadTimeDays")} days, min order: {c.GetIntOrDefault("minOrderQty")}");
             }
         }
@@ -110,18 +107,17 @@ public class SupplyChainService
             ? $"api/supply/catalog/{productId.Value}"
             : "api/supply/catalog";
 
-        var resp = await _http.GetAsync(url);
+        using var resp = await _http.GetAsync(url);
         if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
             return productId.HasValue ? $"No vendor offers found for ProductID {productId.Value}." : "Catalog not found.";
-        if (!resp.IsSuccessStatusCode)
-            return $"Error retrieving supply catalog: {resp.StatusCode}";
+        resp.EnsureSuccessStatusCode();
 
         var json = await resp.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
         var arr = root.ValueKind == JsonValueKind.Array ? root : default;
         if (arr.ValueKind != JsonValueKind.Array)
-            return "Unexpected response format for supply catalog.";
+            throw new JsonException("Expected a supply catalog array.");
 
         var sb = new StringBuilder();
         sb.AppendLine("## Supply Catalog");
@@ -132,7 +128,7 @@ public class SupplyChainService
 
         foreach (var c in arr.EnumerateArray())
         {
-            sb.AppendLine($"| {c.GetIntOrDefault("productId")} | {c.GetStringOrDefault("productName")} | {c.GetStringOrDefault("vendorName")} ({c.GetStringOrDefault("vendorId")}) | {c.GetIntOrDefault("stockAvailable")} | ${c.GetDecimalOrDefault("unitPrice"):N4} | {c.GetIntOrDefault("leadTimeDays")}d |");
+            sb.AppendLine($"| {c.GetIntOrDefault("productId")} | {c.GetStringOrDefault("productName")} | {c.GetStringOrDefault("vendorName")} ({c.GetStringOrDefault("vendorId")}) | {c.GetIntOrDefault("stockAvailable")} | ${c.GetProperty("unitCost").GetDecimal():N4} | {c.GetIntOrDefault("leadTimeDays")}d |");
         }
 
         return sb.ToString();
@@ -159,11 +155,10 @@ public class SupplyChainService
         sb.AppendLine($"Requested qty: {qty}");
         sb.AppendLine($"Min order qty: {root.GetIntOrDefault("minOrderQty")}");  // MUST order at least this many
         sb.AppendLine($"Max order qty: {root.GetIntOrDefault("maxOrderQty")}");
-        sb.AppendLine($"Unit price: ${root.GetDecimalOrDefault("unitPrice"):N4}");
+        sb.AppendLine($"Unit price: ${root.GetProperty("unitCost").GetDecimal():N4}");
         sb.AppendLine($"Total cost: ${root.GetDecimalOrDefault("totalCost"):N2}");
         sb.AppendLine($"Stock available: {root.GetIntOrDefault("stockAvailable")}");
         sb.AppendLine($"Lead time: {root.GetIntOrDefault("leadTimeDays")} days");
-        sb.AppendLine($"Discount applied: {root.GetDoubleOrDefault("discountPct"):P1}");
 
         return sb.ToString();
     }

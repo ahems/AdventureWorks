@@ -57,6 +57,8 @@ function Grant-RuntimeChangeTrackingAccess {
     $command = $Connection.CreateCommand()
     try {
         $command.CommandTimeout = 120
+        $command.CommandText = Get-Content -Raw (Join-Path $PSScriptRoot 'sql/realtime-notification-outbox.sql')
+        $null = $command.ExecuteNonQuery()
         $command.CommandText = @'
 IF OBJECT_ID('Sales.SalesOrderHeader', 'U') IS NULL
     THROW 51022, 'Cannot grant runtime Change Tracking access: SalesOrderHeader is missing.', 1;
@@ -81,15 +83,7 @@ IF OBJECT_ID('az_func.GlobalState', 'U') IS NULL
 ELSE IF COL_LENGTH('az_func.GlobalState', 'LastAccessTime') IS NULL
     ALTER TABLE [az_func].[GlobalState] ADD LastAccessTime datetime NOT NULL DEFAULT GETUTCDATE();
 INSERT INTO @tables VALUES
-    ('Sales.SalesOrderHeader'), ('Sales.ShoppingCartItem'), ('Sales.SalesOrderDetail'),
-    ('Production.WorkOrder'), ('Production.WorkOrderRouting'), ('Production.ProductInventory'),
-    ('Production.Location'), ('Production.BillOfMaterials'), ('Production.Product'),
-    ('Production.ProductCostHistory'), ('Production.ProductListPriceHistory'), ('Production.ProductModel'),
-    ('Production.TransactionHistory'), ('Production.TransactionHistoryArchive'),
-    ('Purchasing.Vendor'), ('Purchasing.ProductVendor'),
-    ('Purchasing.PurchaseOrderHeader'), ('Purchasing.PurchaseOrderDetail'),
-    ('Production.ProductReview'), ('Production.ProductReviewReply'),
-    ('Sales.SpecialOffer'), ('Sales.SpecialOfferProduct'), ('Sales.CurrencyRate');
+    ('Sales.SalesOrderHeader'), ('dbo.RealtimeNotificationOutbox');
 DECLARE @table nvarchar(256), @qualified nvarchar(518), @lease nvarchar(258),
     @keys nvarchar(max), @columns nvarchar(max);
 DECLARE tracked_tables CURSOR LOCAL FAST_FORWARD FOR SELECT name FROM @tables;

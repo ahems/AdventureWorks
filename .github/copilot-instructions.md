@@ -4,6 +4,41 @@
 
 **Do not commit, push, or check in any file changes to GitHub on behalf of the user.** All Git operations (commits, pushes, pull requests, branch creation, etc.) must be performed manually by the user.
 
+## Azure Environment Policy: Demo/POC Only
+
+**This entire solution is a demo/test/POC, including every Azure deployment.
+There is no production environment. Never remediate a deployed Azure environment
+in place.** This policy applies to development, debugging, testing and deployment,
+and takes precedence over in-place repair or migration guidance elsewhere.
+
+- Fix source code, Bicep, seed scripts and deployment hooks so changes are
+  reproducible through normal deployment. Do not patch Azure resources/settings,
+  run ad hoc database migrations, launch repair jobs or perform one-off
+  infrastructure repairs to make a deployed environment match local changes.
+- Agents may run `azd deploy --no-prompt`, optionally targeting affected services,
+  then test the deployed changes. Do not bypass deployment hooks with manual
+  Azure CLI, REST, Portal or SQL changes.
+- If changes require infrastructure provisioning or a fresh database/environment
+  rather than `azd deploy`, stop and ask the user to recreate the environment.
+  Agents must not run `azd provision`, `azd down`, `azd up` or the recreation
+  sequence themselves. Teardown/recreation takes a long time and is user-only.
+- Do not spend tokens designing or executing in-place remediation, migration,
+  compatibility-draining or data-preservation workarounds for a disposable demo.
+  Put required schema/setup changes in normal provisioning/seeding instead.
+- Read-only Azure diagnostics and ordinary application/API testing, including
+  controlled test-data mutations and cleanup, remain allowed. They are not a
+  substitute for deploying source changes.
+
+When recreation is required, explain why, warn that this permanently deletes the
+current demo environment and its data, and provide this **user-run command only**:
+
+```bash
+OLD_ENV=$(azd env get-value AZURE_ENV_NAME) && OLD_SUB=$(azd env get-value AZURE_SUBSCRIPTION_ID) && NEW_ENV="adventureworks$((RANDOM % 900 + 100))" && azd down --force --purge --no-prompt && azd env remove "$OLD_ENV" --no-prompt --force && azd env new "$NEW_ENV" --no-prompt && azd env set AZURE_SUBSCRIPTION_ID "$OLD_SUB" && azd env set AZURE_LOCATION "eastus2" && azd env set FOUNDRY_LOCATION "swedencentral" && azd up --no-prompt
+```
+
+After the user completes deployment and the asynchronous seed job succeeds,
+re-read the selected azd environment outputs and validate the new deployment.
+
 ## Architecture Overview
 
 This is a **3-tier Azure application** demonstrating enterprise patterns with passwordless authentication:
@@ -54,7 +89,10 @@ When adding a new query that needs live updates:
 
 ### Local Development Setup
 
-**IMPORTANT**: DO NOT remove the Azure Infrastructure or Azure resources while developing locally. The app relies on Azure-hosted services for authentication and data. Specifically: do not run "azd down".
+**IMPORTANT**: Local development relies on Azure-hosted demo services. Agents must
+not remove, manually repair or recreate those resources. Follow the
+[demo/POC environment policy](#azure-environment-policy-demopoc-only): deploy
+service changes with `azd deploy`, or ask the user to recreate the environment.
 
 **Environment configuration:**
 
@@ -104,8 +142,12 @@ azd env get-value MCP_SERVICE_URL --no-prompt
 The app uses **azd lifecycle hooks** for automated deployment orchestration:
 
 ```bash
-azd up --no-prompt  # Full lifecycle below; seed execution continues asynchronously
+azd deploy --no-prompt  # Agent-allowed service deployment using existing infrastructure
+azd up --no-prompt      # User-only full lifecycle; seed execution continues asynchronously
 ```
+
+The lifecycle below describes the user's full deployment. It does not authorize
+agents to provision or recreate infrastructure; follow the demo/POC policy above.
 
 **Important:** Always use `--no-prompt` for unattended deployment. Required missing
 values or unsupported decisions can still fail; do not assume every prompt or
@@ -300,11 +342,18 @@ await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "wo-comple
 ```
 
 Table-backed services also publish `state-changed` after successful persistence.
-SQL Change Tracking observers publish `database-changed` for direct DAB writes;
-enable tracking and provision lease tables/grants in the seed job, not at runtime.
+Transactional SQL triggers write direct DAB changes to `dbo.RealtimeNotificationOutbox`;
+the single `DatabaseChanges` SQL listener publishes `database-changed`. Extend its
+entity/group map and seed setup rather than adding per-table SQL listeners.
+Provision the outbox, DML triggers, Change Tracking and lease tables/grants in the
+seed job, not at runtime. Both `DatabaseChanges` and `OrderPlacedSqlTrigger` require
+their own Flex always-ready scale groups (two instances total).
 Signals must not contain private records, tokens or Durable management URLs.
 For utility workflows, preserve replay safety and launch new instances with
-`push-v1`; drain old unversioned runs before deploying polling-free utility views.
+`push-v1`; set the Durable worker's `defaultVersion` to `push-v1` and use
+`versionMatchStrategy: CurrentOrOlder` so new jobs run and old histories still
+replay. If a change requires fresh orchestration state or database setup, ask the
+user to recreate the demo environment; do not drain or migrate deployed instances.
 See [Functions real-time rollout](../api-functions/README.md#web-pubsub-changes-and-polling-free-frontends).
 
 **Client-side pattern** — `useRealTimeUpdates()` is mounted in each app's root.

@@ -52,8 +52,15 @@ const AuthPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const destination = (location.state as {
+    from?: { pathname: string; search?: string; hash?: string };
+  } | null)?.from;
   const from =
-    (location.state as { from?: { pathname: string } })?.from?.pathname || "/";
+    destination?.pathname?.startsWith("/") &&
+    !destination.pathname.startsWith("//") &&
+    !destination.pathname.includes("\\")
+      ? destination.pathname + (destination.search ?? "") + (destination.hash ?? "")
+      : "/";
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();

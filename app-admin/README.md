@@ -99,7 +99,17 @@ After sign-in the app silently switches its refresh token to DAB, MCP and Functi
 
 Demo login: `ken0@adventure-works.com` / `Admin1234!` (Ken Sánchez, CEO → `executive-admin`).
 
-All pages check `useAuth().isAuthenticated`. Unauthenticated users are redirected to `/login`.
+All routes except `/login` and `/oauth/callback` sit behind a shared authentication
+boundary. Signed-out users are redirected to `/login` before protected pages or
+live-update subscriptions mount. Sign-in returns to the original path, query and
+fragment. Logout, cross-tab session removal and rejected refresh credentials
+return protected views to login; permission-denied responses are not treated as logout.
+
+Receipt downloads use authenticated `fetch` through the Functions OAuth
+interceptor, then a temporary local blob URL. Never link a browser, iframe or new
+tab directly to a protected Functions receipt URL: navigation cannot attach the
+bearer header. The existing receipt preview remains in-app; downloads show a
+loading state and report HTTP or invalid-PDF errors without leaving the page.
 
 ---
 

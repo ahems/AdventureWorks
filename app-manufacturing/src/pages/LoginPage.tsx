@@ -58,7 +58,8 @@ const LoginPage: React.FC = () => {
     }
 
     // On success the browser leaves for the OAuth sign-in and returns via /oauth/callback.
-    await login(email, password);
+    const returnTo = (location.state as { returnTo?: unknown } | null)?.returnTo;
+    await login(email, password, typeof returnTo === "string" ? returnTo : "/");
   };
 
   return (

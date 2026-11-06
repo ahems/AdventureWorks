@@ -1,7 +1,12 @@
 # Database Seeding Script for Container App Job
 # Uses Managed Identity for authentication (configured in infrastructure)
 
-param([switch] $ManufacturingOverlaysOnly, [switch] $VerifyOnly)
+param([switch] $ManufacturingOverlaysOnly, [switch] $VerifyOnly, [switch] $RealtimeNotificationsOnly)
+
+if ($RealtimeNotificationsOnly -and ($ManufacturingOverlaysOnly -or $VerifyOnly)) {
+    [Console]::Error.WriteLine('-RealtimeNotificationsOnly cannot be combined with overlay modes.')
+    exit 1
+}
 
 if ($VerifyOnly -and -not $ManufacturingOverlaysOnly) {
     [Console]::Error.WriteLine('-VerifyOnly requires -ManufacturingOverlaysOnly; refusing to run the full seed.')
@@ -419,6 +424,17 @@ try {
     $conn.Open()
     Write-Log "  ✓ Successfully connected to SQL Database"
     $cmd = $conn.CreateCommand()
+
+    if ($RealtimeNotificationsOnly) {
+        if ([string]::IsNullOrWhiteSpace($env:RUNTIME_MANAGED_IDENTITY_NAME)) {
+            throw 'RUNTIME_MANAGED_IDENTITY_NAME is required for the realtime migration.'
+        }
+        Import-Module (Join-Path $PSScriptRoot 'RuntimeDatabaseAccess.psm1') -Force -ErrorAction Stop
+        Grant-RuntimeChangeTrackingAccess -Connection $conn -IdentityName $env:RUNTIME_MANAGED_IDENTITY_NAME
+        Write-Log 'Realtime notification outbox, transactional triggers, tracking and runtime grants verified.'
+        $script:seedSuccess = $true
+        return
+    }
 
     Import-Module (Join-Path $PSScriptRoot 'ManufacturingOverlays.psm1') -Force -ErrorAction Stop
     # Validate all shipped artifacts before either importing or resetting a fresh database.

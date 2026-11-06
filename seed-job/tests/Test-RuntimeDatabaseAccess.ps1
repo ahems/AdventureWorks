@@ -13,9 +13,11 @@ class RuntimeTestCommand {
     [bool] $Disposed
     [bool] $Fail
     [System.Collections.Generic.List[object]] $Parameters = [System.Collections.Generic.List[object]]::new()
+    [System.Collections.Generic.List[string]] $ExecutedSql = [System.Collections.Generic.List[string]]::new()
     [object] CreateParameter() { return [RuntimeTestParameter]::new() }
     [int] ExecuteNonQuery() {
         $this.Executed = $true
+        $this.ExecutedSql.Add($this.CommandText)
         if ($this.Fail) { throw 'Simulated SID conflict' }
         return 0
     }
@@ -49,6 +51,16 @@ Grant-RuntimeChangeTrackingAccess $tracking 'runtime'
 Assert ($tracking.Command.CommandText.Contains('GRANT VIEW CHANGE TRACKING ON OBJECT::[Sales].[SalesOrderHeader] TO')) 'Change Tracking grant uses object-level SQL syntax'
 Assert ($tracking.Command.CommandText -match 'sys.change_tracking_tables' -and $tracking.Command.CommandText -match 'THROW 51023') 'Grant requires tracked table'
 Assert ($tracking.Command.Disposed -and $tracking.Command.Parameters.Count -eq 1) 'Tracking grant binds identity and disposes'
+Assert ($tracking.Command.ExecutedSql.Count -eq 2 -and $tracking.Command.ExecutedSql[0] -match 'RealtimeNotify_') 'Runs the outbox migration before binding grants'
+Assert ($tracking.Command.CommandText -match "dbo.RealtimeNotificationOutbox") 'Tracking and explicit leases cover the consolidated outbox'
+Assert ($tracking.Command.CommandText -notmatch 'Production.WorkOrder') 'No per-source SQL binding leases are provisioned'
+$outbox = Get-Content -Raw (Join-Path $PSScriptRoot '../sql/realtime-notification-outbox.sql')
+Assert ($outbox -match 'BEGIN TRANSACTION' -and $outbox -match 'COMMIT TRANSACTION') 'Outbox schema and triggers migrate atomically'
+Assert ($outbox -match 'CREATE OR ALTER TRIGGER' -and $outbox -match 'AFTER INSERT, UPDATE, DELETE') 'Idempotent triggers capture every committed mutation'
+Assert ($outbox -notmatch 'ShoppingCartID|CustomerID|DISABLE CHANGE_TRACKING|DROP TABLE') 'Signals carry no private identifiers and migration preserves existing data/tracking'
+$seed = Get-Content -Raw (Join-Path $PSScriptRoot '../seed-database.ps1')
+Assert ($seed -match 'if \(\$RealtimeNotificationsOnly\)' -and
+    $seed.IndexOf('Realtime notification outbox, transactional triggers') -lt $seed.IndexOf('Read-ManufacturingOverlays')) 'Migration-only mode exits before any seed artifacts are read/imported'
 
 $xmlSchema = [RuntimeTestConnection]::new()
 Grant-RuntimeXmlSchemaAccess $xmlSchema "runtime's identity"

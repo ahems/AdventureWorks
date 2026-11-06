@@ -53,6 +53,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { getFunctionsApiUrl } from "@/lib/utils";
+import { downloadReceipt } from "@/services/receiptService";
 import ReceiptPreviewModal from "@/components/ReceiptPreviewModal";
 import EmailReceiptDialog from "@/components/EmailReceiptDialog";
 import { Sparkles } from "lucide-react";
@@ -78,7 +79,24 @@ const ReceiptActions: React.FC<ReceiptActionsProps> = ({
   const { data: receiptStatus, isLoading: receiptStatusLoading } =
     useReceiptStatus(order.SalesOrderID);
 
-  const downloadUrl = `${getFunctionsApiUrl()}/api/orders/${order.SalesOrderID}/receipt`;
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsDownloading(true);
+    try {
+      await downloadReceipt(order.SalesOrderID);
+    } catch (error) {
+      console.error("Receipt download failed:", error);
+      toast({
+        title: "Unable to download receipt",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <div className="mt-4 pt-4 border-t-2 border-dashed border-doodle-text/20">
@@ -110,16 +128,18 @@ const ReceiptActions: React.FC<ReceiptActionsProps> = ({
             Checking…
           </button>
         ) : receiptStatus?.exists ? (
-          <a
-            href={downloadUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
+          <button
+            onClick={handleDownload}
+            disabled={isDownloading}
             className="doodle-button doodle-button-primary flex items-center gap-2 py-2 px-4"
           >
-            <Download className="w-4 h-4" />
-            Download Receipt
-          </a>
+            {isDownloading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            {isDownloading ? "Downloading…" : "Download Receipt"}
+          </button>
         ) : (
           <button
             onClick={(e) => onGenerate(e, order)}

@@ -391,6 +391,30 @@ flowchart TB
 
 ## Silent admin sign-in and service tokens
 
+### Protected browser routes
+
+The admin and manufacturing portals keep only `/login` and `/oauth/callback`
+public. Every other route, including unknown deep links, is nested under
+`RequireAuth`. Protected pages and their live-update layout mount only after an
+authenticated session exists; a pending OAuth callback alone is not a session.
+Login carries the original local path, query and fragment through PKCE and returns
+there after the callback. New internal pages must remain inside this boundary.
+Rejected refresh credentials and logout remove the session and return protected
+views to login. Internal tabs also recheck session presence on storage changes and
+window focus; permission-denied responses do not sign users out.
+
+The e-shop deliberately permits anonymous browsing, carts and password recovery.
+Its account, checkout, order confirmation and order-tracking routes use the same
+pre-mount boundary, redirecting to `/auth` and preserving the full return location.
+
+Regression coverage (all three actual route trees and internal token renewal):
+
+```bash
+node --experimental-vm-modules --test tests/scripts/test-route-auth.mjs
+```
+
+### Token acquisition
+
 The admin portal reads its data (customers, orders, dashboard KPIs) from DAB, which
 requires an `api-mcp`-issued JWT. Authorization happens once, at sign-in, and is silent
 afterwards; there is no separate authorization page.

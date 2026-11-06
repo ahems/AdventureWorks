@@ -2,7 +2,6 @@ import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   BrowserRouter,
-  Navigate,
   Outlet,
   Route,
   Routes,
@@ -12,7 +11,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { AuthProvider } from "@/context/AuthContext";
-import { useAuth } from "@/context/AuthContext";
+import RequireAuth from "@/components/RequireAuth";
 import { useRealTimeUpdates } from "@/hooks/useRealTimeUpdates";
 import ProductionHeader from "@/components/ProductionHeader";
 import Footer from "@/components/Footer";
@@ -62,12 +61,8 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const AuthGuard: React.FC = () => {
-  const { isAuthenticated } = useAuth();
+const AuthenticatedLayout: React.FC = () => {
   const pushStatus = useRealTimeUpdates();
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
   return (
     <div className="min-h-screen flex flex-col">
       <ProductionHeader />
@@ -97,105 +92,107 @@ const App = () => (
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
-              <Route element={<AuthGuard />}>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/define" element={<DefineProducts />} />
-                <Route
-                  path="/define/products/:id"
-                  element={<DefineProductDetail />}
-                />
-                <Route path="/define/models" element={<DefineModels />} />
-                <Route path="/define/models/:id/instructions" element={<ModelInstructions />} />
-                <Route path="/define/parts/:id/instructions" element={<PartInstructions />} />
-                <Route
-                  path="/define/models/:id"
-                  element={<DefineModelDetail />}
-                />
+              <Route element={<RequireAuth />}>
+                <Route element={<AuthenticatedLayout />}>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/define" element={<DefineProducts />} />
+                  <Route
+                    path="/define/products/:id"
+                    element={<DefineProductDetail />}
+                  />
+                  <Route path="/define/models" element={<DefineModels />} />
+                  <Route path="/define/models/:id/instructions" element={<ModelInstructions />} />
+                  <Route path="/define/parts/:id/instructions" element={<PartInstructions />} />
+                  <Route
+                    path="/define/models/:id"
+                    element={<DefineModelDetail />}
+                  />
 
-                <Route path="/engineer" element={<EngineerBOM />} />
-                <Route
-                  path="/engineer/bom/:productId"
-                  element={<EngineerBOMDetail />}
-                />
-                <Route
-                  path="/engineer/routing/:productId"
-                  element={<EngineerRouting />}
-                />
-                <Route
-                  path="/engineer/locations"
-                  element={<EngineerLocations />}
-                />
-                <Route
-                  path="/engineer/locations/:id"
-                  element={<EngineerLocationDetail />}
-                />
-                <Route path="/plan" element={<PlanWorkOrders />} />
-                <Route
-                  path="/plan/work-orders/:id"
-                  element={<PlanWorkOrderDetail />}
-                />
-                <Route path="/plan/schedule" element={<PlanSchedule />} />
-                <Route
-                  path="/plan/intelligence"
-                  element={<PlanningIntelligence />}
-                />
-                <Route path="/plan/finance" element={<FinanceManager />} />
-                <Route path="/plan/demand" element={<PlanDemand />} />
-                <Route path="/execute" element={<ManufacturingDashboard />} />
-                <Route
-                  path="/execute/shop-floor"
-                  element={<ExecuteShopFloor />}
-                />
-                <Route
-                  path="/execute/work-order/:id"
-                  element={<ExecuteWorkOrder />}
-                />
-                <Route path="/execute/work-order/:id/instructions" element={<WorkstationInstructions />} />
-                <Route
-                  path="/execute/tracker"
-                  element={<FinishedGoodTracker />}
-                />
-                <Route path="/execute/workforce" element={<WorkforcePage />} />
-                <Route path="/supply" element={<SupplyChain />} />
-                <Route
-                  path="/supply/vendors/:vendorId"
-                  element={<VendorDetail />}
-                />
-                <Route
-                  path="/supply/orders/:orderId"
-                  element={<PurchaseOrderDetail />}
-                />
-                <Route
-                  path="/supply/product/:productId"
-                  element={<ProductPurchaseOrders />}
-                />
+                  <Route path="/engineer" element={<EngineerBOM />} />
+                  <Route
+                    path="/engineer/bom/:productId"
+                    element={<EngineerBOMDetail />}
+                  />
+                  <Route
+                    path="/engineer/routing/:productId"
+                    element={<EngineerRouting />}
+                  />
+                  <Route
+                    path="/engineer/locations"
+                    element={<EngineerLocations />}
+                  />
+                  <Route
+                    path="/engineer/locations/:id"
+                    element={<EngineerLocationDetail />}
+                  />
+                  <Route path="/plan" element={<PlanWorkOrders />} />
+                  <Route
+                    path="/plan/work-orders/:id"
+                    element={<PlanWorkOrderDetail />}
+                  />
+                  <Route path="/plan/schedule" element={<PlanSchedule />} />
+                  <Route
+                    path="/plan/intelligence"
+                    element={<PlanningIntelligence />}
+                  />
+                  <Route path="/plan/finance" element={<FinanceManager />} />
+                  <Route path="/plan/demand" element={<PlanDemand />} />
+                  <Route path="/execute" element={<ManufacturingDashboard />} />
+                  <Route
+                    path="/execute/shop-floor"
+                    element={<ExecuteShopFloor />}
+                  />
+                  <Route
+                    path="/execute/work-order/:id"
+                    element={<ExecuteWorkOrder />}
+                  />
+                  <Route path="/execute/work-order/:id/instructions" element={<WorkstationInstructions />} />
+                  <Route
+                    path="/execute/tracker"
+                    element={<FinishedGoodTracker />}
+                  />
+                  <Route path="/execute/workforce" element={<WorkforcePage />} />
+                  <Route path="/supply" element={<SupplyChain />} />
+                  <Route
+                    path="/supply/vendors/:vendorId"
+                    element={<VendorDetail />}
+                  />
+                  <Route
+                    path="/supply/orders/:orderId"
+                    element={<PurchaseOrderDetail />}
+                  />
+                  <Route
+                    path="/supply/product/:productId"
+                    element={<ProductPurchaseOrders />}
+                  />
 
-                <Route path="/receive" element={<ReceiveInventory />} />
-                <Route
-                  path="/receive/inventory/:productId"
-                  element={<ReceiveProductInventory />}
-                />
-                <Route path="/receive/costing" element={<ReceiveCosting />} />
-                <Route
-                  path="/receive/costing/:productId"
-                  element={<ReceiveProductCost />}
-                />
+                  <Route path="/receive" element={<ReceiveInventory />} />
+                  <Route
+                    path="/receive/inventory/:productId"
+                    element={<ReceiveProductInventory />}
+                  />
+                  <Route path="/receive/costing" element={<ReceiveCosting />} />
+                  <Route
+                    path="/receive/costing/:productId"
+                    element={<ReceiveProductCost />}
+                  />
 
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route
-                  path="/manufacturing-agent"
-                  element={<ManufacturingAgentPage />}
-                />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route
+                    path="/manufacturing-agent"
+                    element={<ManufacturingAgentPage />}
+                  />
 
-                <Route path="/warehouse" element={<WarehouseDashboard />} />
-                <Route path="/warehouse/floor" element={<WarehouseFloor />} />
-                <Route
-                  path="/warehouse/workforce"
-                  element={<WarehouseWorkforce />}
-                />
-                <Route path="/warehouse/config" element={<WarehouseConfig />} />
+                  <Route path="/warehouse" element={<WarehouseDashboard />} />
+                  <Route path="/warehouse/floor" element={<WarehouseFloor />} />
+                  <Route
+                    path="/warehouse/workforce"
+                    element={<WarehouseWorkforce />}
+                  />
+                  <Route path="/warehouse/config" element={<WarehouseConfig />} />
 
-                <Route path="*" element={<NotFound />} />
+                  <Route path="*" element={<NotFound />} />
+                </Route>
               </Route>
             </Routes>
           </BrowserRouter>

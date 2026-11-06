@@ -12,7 +12,6 @@ import {
   DAB_SESSION_LOST_EVENT,
   getCurrentClaims,
   getDabRole,
-  hasPendingAuthorization as hasPendingDabAuthorization,
   hasSession as hasDabSession,
   startSilentSignIn,
 } from "@/services/dabAuth";
@@ -31,7 +30,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string, returnTo?: string) => Promise<boolean>;
   /** Builds the signed-in user from the freshly issued token (called by /oauth/callback). */
   completeSignIn: () => boolean;
   logout: () => void;
@@ -53,7 +52,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       if (!storedUser) return null;
       // A signed-in user without a renewable DAB session would see empty pages
       // (DAB rejects anonymous reads), so treat it as signed out.
-      if (!hasDabSession() && !hasPendingDabAuthorization()) {
+      if (!hasDabSession()) {
         localStorage.removeItem(CURRENT_USER_KEY);
         return null;
       }
@@ -68,7 +67,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   // decides whether this account may use the admin portal (employees only). Nothing
   // is looked up anonymously in the browser.
   const login = useCallback(
-    async (email: string, password: string): Promise<boolean> => {
+    async (email: string, password: string, returnTo = "/"): Promise<boolean> => {
       setIsLoading(true);
       // Clear any prior OAuth authorization so a user switch never inherits the
       // previous employee's delegated tokens, scopes or role.
@@ -78,7 +77,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
       try {
         // Leaves the app: api-mcp /login → /authorize → back to /oauth/callback.
-        await startSilentSignIn(email.trim(), password, "/");
+        const destination =
+          returnTo.startsWith("/") &&
+          !returnTo.startsWith("//") &&
+          !returnTo.includes("\\")
+            ? returnTo
+            : "/";
+        await startSilentSignIn(email.trim(), password, destination);
         return true;
       } catch (err) {
         console.error("Sign-in error:", err);
@@ -128,8 +133,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         variant: "destructive",
       });
     };
+    const checkSession = () => {
+      if (!localStorage.getItem(CURRENT_USER_KEY) || !hasDabSession()) {
+        onSessionLost();
+        setUser(null);
+      }
+    };
     window.addEventListener(DAB_SESSION_LOST_EVENT, onSessionLost);
-    return () => window.removeEventListener(DAB_SESSION_LOST_EVENT, onSessionLost);
+    window.addEventListener("storage", checkSession);
+    window.addEventListener("focus", checkSession);
+    return () => {
+      window.removeEventListener(DAB_SESSION_LOST_EVENT, onSessionLost);
+      window.removeEventListener("storage", checkSession);
+      window.removeEventListener("focus", checkSession);
+    };
   }, []);
 
   const logout = useCallback(() => {

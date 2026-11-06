@@ -214,10 +214,12 @@ public class WorkOrderSimulationService
     {
         using var conn = await GetConnectionAsync();
         var workOrderId = await conn.ExecuteScalarAsync<int>(@"
+            DECLARE @InsertedIds TABLE (WorkOrderID int);
             INSERT INTO Production.WorkOrder
                 (ProductID, OrderQty, ScrappedQty, StartDate, DueDate, ModifiedDate)
-            OUTPUT INSERTED.WorkOrderID
-            VALUES (@ProductId, @OrderQty, 0, @StartDate, @DueDate, GETDATE())",
+            OUTPUT INSERTED.WorkOrderID INTO @InsertedIds
+            VALUES (@ProductId, @OrderQty, 0, @StartDate, @DueDate, GETDATE());
+            SELECT WorkOrderID FROM @InsertedIds;",
             new { ProductId = productId, OrderQty = orderQty, StartDate = startDate, DueDate = dueDate });
         return workOrderId;
     }

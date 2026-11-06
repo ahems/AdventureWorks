@@ -20,6 +20,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\api-functions\api-functions.csproj" />
+    <Compile Include="..\manufacturing-agent\mcp-tools\src\mcp-tools\McpServiceAuthentication.cs"
+             Link="HostedAgent\McpServiceAuthentication.cs" />
   </ItemGroup>
 
 </Project>

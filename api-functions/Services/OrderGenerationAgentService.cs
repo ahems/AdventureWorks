@@ -211,11 +211,10 @@ public class OrderGenerationAgentService
             // B2B store orders don't need a consumer customer — they resolve it from StoreID later
             if (orderMode == "b2b-store")
             {
-                // For B2B, we don't resolve a consumer customer here.
-                // The store's CustomerID is resolved inside CreateStoreOrderAsync.
-                customerId = 0; // placeholder — not used for B2B path
-                var storeInfo = await _orderGenService.GetStoreInfoAsync(storeId ?? 0);
-                result.CustomerName = storeInfo?.StoreName ?? $"Store #{storeId}";
+                var storeInfo = await _orderGenService.GetStoreInfoAsync(storeId ?? 0)
+                    ?? throw new InvalidOperationException($"No Customer record found for Store {storeId}");
+                customerId = storeInfo.CustomerID;
+                result.CustomerName = storeInfo.StoreName;
                 Log($"B2B store order for: {result.CustomerName} (StoreID={storeId})", "success");
             }
             // If we used a seed customer (existing-customer persona), always honour it
@@ -347,22 +346,16 @@ public class OrderGenerationAgentService
 
             // ── Generate receipt ─────────────────────────────────────────────
             Log("Generating PDF receipt...", "info");
-            var receiptData = await _receiptService.GetReceiptDataBySalesOrderIDAsync(salesOrderId);
-            if (receiptData != null)
-            {
-                result.ReceiptPdfBase64 = await _pdfGenerator.GenerateReceiptPdfBase64Async(receiptData);
-                Log("Receipt generated successfully", "success");
-            }
-            else
-            {
-                Log("Receipt data not found — skipping PDF generation", "dim");
-            }
+            var receiptData = await _receiptService.GetReceiptDataBySalesOrderIDAsync(salesOrderId)
+                ?? throw new InvalidOperationException($"Receipt data not found for created order {salesOrderId}");
+            result.TotalDue = receiptData.TotalDue;
+            result.CustomerId = receiptData.CustomerID;
+            result.CustomerEmail = receiptData.CustomerEmail;
+            result.ReceiptPdfBase64 = await _pdfGenerator.GenerateReceiptPdfBase64Async(receiptData);
+            Log("Receipt generated successfully", "success");
 
             var duration = DateTimeOffset.UtcNow - startTime;
             result.Success   = true;
-            result.TotalDue  = receiptData?.TotalDue
-                ?? validItems.Sum(vi => vi.UnitPrice * vi.Quantity);
-            result.CustomerId = customerId;
             result.ThreadId  = agentResponse.ResponseId;
             operation.Telemetry.Success = true;
 

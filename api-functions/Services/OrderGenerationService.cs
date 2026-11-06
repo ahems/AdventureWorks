@@ -379,7 +379,7 @@ public class OrderGenerationService
     {
         using var connection = await GetConnectionAsync();
         var row = await connection.QueryFirstOrDefaultAsync(""" 
-            SELECT TOP 1 sop.SpecialOfferID AS Id, so.DiscountPct / 100.0 AS Pct
+            SELECT TOP 1 sop.SpecialOfferID AS Id, so.DiscountPct AS Pct
             FROM Sales.SpecialOfferProduct sop
             INNER JOIN Sales.SpecialOffer so ON sop.SpecialOfferID = so.SpecialOfferID
             WHERE sop.ProductID = @ProductId
@@ -722,13 +722,15 @@ public class OrderGenerationService
                     new { item.ProductId }, transaction: tx) ?? 1;
 
                 var salesOrderDetailId = await connection.ExecuteScalarAsync<int>(@"
+                    DECLARE @InsertedIds TABLE (SalesOrderDetailID int);
                     INSERT INTO Sales.SalesOrderDetail
                         (SalesOrderID, OrderQty, ProductID, SpecialOfferID,
                          UnitPrice, UnitPriceDiscount, rowguid, ModifiedDate)
-                    OUTPUT INSERTED.SalesOrderDetailID
+                    OUTPUT INSERTED.SalesOrderDetailID INTO @InsertedIds
                     VALUES
                         (@SalesOrderId, @Qty, @ProductId, @SpecialOfferId,
-                         @UnitPrice, @Discount, NEWID(), GETDATE())",
+                         @UnitPrice, @Discount, NEWID(), GETDATE());
+                    SELECT SalesOrderDetailID FROM @InsertedIds;",
                     new
                     {
                         SalesOrderId = salesOrderId,

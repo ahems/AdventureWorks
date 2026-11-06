@@ -320,12 +320,26 @@ All tools are defined in `AdventureWorks/Tools/ManufacturingMcpTools.cs`. They e
 
 All tools are defined in `AdventureWorks/Tools/SupplyChainMcpTools.cs`. They expose the supply-chain procurement simulation — allowing an agent to browse vendors, request quotes, place and track purchase orders, and manage vendor stock.
 
+The manufacturing and supply Functions clients have a bounded 90-second request/attempt budget to
+accommodate first-read stock initialization (including feasibility reads). This replaces the default resilience
+pipeline and disables automatic retries so purchase mutations are never replayed
+by the HTTP client. Catalog and quote prices use the Functions `unitCost` field;
+missing prices or failed catalog responses surface as tool errors, not zero-cost offers.
+
+Manufacturing analysis uses `get_order_details` for both consumer and B2B orders,
+including store customers without a person record. Each line includes its numeric
+`ProductID` so subsequent inventory and feasibility calls use exact identifiers.
+Feasibility uses the API's requested quantity and maximum producible quantity
+(including its `-1` unlimited sentinel) to determine whether the request can be
+met. Component IDs, shortages, bottlenecks, and procurement capacity/cost are
+included for accurate follow-up procurement analysis.
+
 ### Vendors
 
 #### Tool: `GetSupplyChainVendors`
 
 - **Signature:** `Task<string> GetSupplyChainVendors()`
-- **Purpose:** Lists all active supply-chain vendors with credit rating, preferred status, number of unique products supplied, and total stock available. Use this to understand the supplier base before placing orders.
+- **Purpose:** Lists all active supply-chain vendors with credit rating, preferred status, total component count, and count of components in stock. Use this to understand the supplier base before placing orders.
 
 #### Tool: `GetVendorDetails`
 
@@ -344,7 +358,7 @@ All tools are defined in `AdventureWorks/Tools/SupplyChainMcpTools.cs`. They exp
 #### Tool: `GetSupplyQuote`
 
 - **Signature:** `Task<string> GetSupplyQuote(string vendorId, int productId, int qty = 1)`
-- **Purpose:** Gets a real-time quote from a specific vendor: unit price, any quantity discount, total cost, available stock, and lead time. Call this before placing an order to confirm pricing and availability.
+- **Purpose:** Gets a real-time quote from a specific vendor: unit cost, total cost, available stock, lead time, and minimum/maximum order quantities. Call this before placing an order to confirm pricing and availability.
 
 ### Orders
 

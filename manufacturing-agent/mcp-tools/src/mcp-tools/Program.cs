@@ -19,6 +19,7 @@ using DotNetEnv;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Foundry.Hosting;
 using Microsoft.Extensions.AI;
+using McpTools;
 
 // Load .env file if present (for local development)
 Env.NoClobber().TraversePath().Load();
@@ -34,30 +35,34 @@ var mcpServiceUrl = Environment.GetEnvironmentVariable("MCP_SERVICE_URL")
 // ── Server-side MCP: AdventureWorks manufacturing + supply chain tools ────────
 // The Foundry Responses API calls the MCP server on behalf of the agent —
 // no local MCP connection or tool-call approval loop needed.
-AITool adventureWorksMcp = new HostedMcpServerTool(
+HostedMcpServerTool CreateMcpTool(string authorization) => new(
     serverName: "adventureworks_mcp",
     serverAddress: mcpServiceUrl)
 {
     ApprovalMode = HostedMcpServerToolApprovalMode.NeverRequire,
+    Headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Authorization"] = authorization
+    },
     // Restrict to manufacturing, supply chain, and order/inventory tools only.
     AllowedTools =
     [
         // Manufacturing analysis
-        "GetManufacturingStatus", "GetActiveManufacturingOperations",
-        "GetProductionFeasibility", "GetAllProductsFeasibility",
-        "GetManufacturingCatalogSnapshot", "GetOverstockItems",
-        "GetThinMarginProducts", "GetComponentShortageForecast",
-        "GetReorderRecommendations",
+        "get_manufacturing_status", "get_active_manufacturing_operations",
+        "get_production_feasibility", "get_all_products_feasibility",
+        "get_manufacturing_catalog_snapshot", "get_overstock_items",
+        "get_thin_margin_products", "get_component_shortage_forecast",
+        "get_reorder_recommendations",
         // Manufacturing execute (FullyAutonomous mode only)
-        "BeginManufacturingRun",
+        "begin_manufacturing_run",
         // Supply chain analysis
-        "GetSupplyChainVendors", "GetVendorDetails",
-        "GetSupplyCatalog", "GetSupplyQuote",
-        "GetActiveSupplyOrders", "GetSupplyOrderHistory",
+        "get_supply_chain_vendors", "get_vendor_details",
+        "get_supply_catalog", "get_supply_quote",
+        "get_active_supply_orders", "get_supply_order_history",
         // Supply chain execute (FullyAutonomous mode only)
-        "PlaceSupplyOrder",
+        "place_supply_order",
         // Order and inventory context
-        "GetOrderDetails", "CheckInventoryAvailability", "GetProductDetails",
+        "get_order_details", "check_inventory_availability", "get_product_details",
     ]
 };
 
@@ -74,12 +79,12 @@ const string instructions = """
     - Optional StepCallbackUrl (ignore it — step updates are handled externally)
 
     ## Your workflow
-    1. Call GetOrderDetails to retrieve the ordered products and quantities.
-    2. For each product, call CheckInventoryAvailability to check current stock.
-    3. For products where stock may fall below safe levels, call GetProductionFeasibility.
-    4. For products where manufacturing is not feasible, call GetSupplyChainVendors
-       and GetSupplyQuote to find the best supply option.
-    5. In FullyAutonomous mode, call BeginManufacturingRun or PlaceSupplyOrder for
+    1. Call get_order_details to retrieve the ordered products and quantities.
+    2. For each product, call check_inventory_availability to check current stock.
+    3. For products where stock may fall below safe levels, call get_production_feasibility.
+    4. For products where manufacturing is not feasible, call get_supply_chain_vendors
+       and get_supply_quote to find the best supply option.
+    5. In FullyAutonomous mode, call begin_manufacturing_run or place_supply_order for
        each product that needs action. In all other modes skip this step.
     6. Return the JSON response.
 
@@ -93,18 +98,18 @@ const string instructions = """
     a brief rationale for each. The calling system will create the proposals from
     your recommendations — you do NOT need to call any action tools.
 
-    **FullyAutonomous**: Call BeginManufacturingRun or PlaceSupplyOrder directly.
-    IMPORTANT: Always pass confirmed=true when calling BeginManufacturingRun or
-    StopManufacturing to bypass the interactive confirmation prompt.
+    **FullyAutonomous**: Call begin_manufacturing_run or place_supply_order directly.
+    IMPORTANT: Always pass confirmed=true when calling begin_manufacturing_run
+    to bypass the interactive confirmation prompt.
     For each action, record a single structured entry in actionsExecuted.
 
-    Manufacturing entry format (extract all values from the BeginManufacturingRun response):
+    Manufacturing entry format (extract all values from the begin_manufacturing_run response):
       "WO #<Root Work Order ID>: Started <qty>x <Product Name> (Product #<productId>) — <Total Work Orders Created> work orders, due <dueDate>"
 
-    Supply entry format (extract all values from the PlaceSupplyOrder response):
+    Supply entry format (extract all values from the place_supply_order response):
       "PO #<Order ID>: Ordered <qty>x <Product Name> (Product #<productId>) from <Vendor Name> (Vendor #<vendorId>) — $<totalCost>, ETA <expectedDeliveryDate>"
 
-    IMPORTANT for supply orders: Before calling PlaceSupplyOrder, call GetSupplyQuote to confirm:
+    IMPORTANT for supply orders: Before calling place_supply_order, call get_supply_quote to confirm:
     - The qty you request is >= Min order qty shown in the quote (e.g. if min is 100, order at least 100)
     - Stock available >= your qty
     Use the Min order qty from the quote as your order quantity when stock allows.
@@ -137,18 +142,41 @@ const string instructions = """
     - Every WO # and PO # in actionsExecuted MUST be the actual ID from the tool response.
     - toolsUsed must list only the tools you actually called during this invocation.
     - Be specific: "Product #776 had 42 units" not "stock was low".
-    - If tools are unavailable or return errors, log the issue clearly and exit gracefully.
+    - If a required tool is unavailable or returns an error, return ONLY
+      {"error":{"code":"tool_failure"}}. Never return successful findings or actions for a failed analysis.
     - This is a demo environment — be conservative with autonomous actions.
     """;
 
 // ── Build the agent ───────────────────────────────────────────────────────────
-AIAgent agent = new AIProjectClient(projectEndpoint, new DefaultAzureCredential())
+var credential = new DefaultAzureCredential();
+// Do not follow redirects with managed-identity assertions or log token response bodies.
+using var authHttp = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+var mcpAuthentication = new McpServiceAuthentication(credential, authHttp, mcpServiceUrl);
+AIAgent agent = new AIProjectClient(projectEndpoint, credential)
     .AsAIAgent(
         model: deployment,
         instructions: instructions,
         name: "manufacturing-agent",
-        description: "Autonomous manufacturing and supply chain agent triggered when new orders are placed.",
-        tools: [adventureWorksMcp]);
+        description: "Autonomous manufacturing and supply chain agent triggered when new orders are placed.")
+    .AsBuilder()
+    .Use(async (messages, session, options, next, cancellationToken) =>
+    {
+        // Resolve authentication per invocation, never once at startup or on a shared tool.
+        var authorization = await mcpAuthentication.GetTokenAsync(cancellationToken);
+        var runOptions = options is ChatClientAgentRunOptions chatOptions
+            ? (ChatClientAgentRunOptions)chatOptions.Clone()
+            : new ChatClientAgentRunOptions
+            {
+                ContinuationToken = options?.ContinuationToken,
+                AllowBackgroundResponses = options?.AllowBackgroundResponses,
+                AdditionalProperties = options?.AdditionalProperties?.Clone(),
+                ResponseFormat = options?.ResponseFormat
+            };
+        runOptions.ChatOptions = runOptions.ChatOptions?.Clone() ?? new ChatOptions();
+        runOptions.ChatOptions.Tools = [CreateMcpTool(authorization)];
+        await next(messages, session, runOptions, cancellationToken);
+    })
+    .Build();
 
 var builder = AgentHost.CreateBuilder(args);
 builder.Services.AddFoundryResponses(agent);
