@@ -68,7 +68,9 @@ public class SupplyChainServiceTests(OAuthTestFactory factory) : IClassFixture<O
     [Theory]
     [InlineData(nameof(SupplyChainService))]
     [InlineData(nameof(ManufacturingService))]
-    public async Task Real_planning_pipeline_allows_slow_reads_and_never_retries_mutations(string clientName)
+    [InlineData(nameof(BankService))]
+    [InlineData(nameof(SimulatorService))]
+    public async Task Real_functions_pipeline_allows_slow_reads_and_never_retries_mutations(string clientName)
     {
         using var handler = new SlowWorkflowHandler();
         using var app = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
@@ -85,20 +87,24 @@ public class SupplyChainServiceTests(OAuthTestFactory factory) : IClassFixture<O
     }
 
     [Fact]
-    public void Supply_http_budget_allows_cold_initialization_without_replaying_mutations()
+    public void Functions_http_budget_allows_cold_initialization_without_replaying_mutations()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory != null && !File.Exists(Path.Combine(directory.FullName, "azure.yaml")))
             directory = directory.Parent;
         Assert.NotNull(directory);
         var source = File.ReadAllText(Path.Combine(directory.FullName, "api-mcp/AdventureWorks/Program.cs"));
-        Assert.Contains("AddPlanningClient<ManufacturingService>();", source);
-        Assert.Contains("AddPlanningClient<SupplyChainService>();", source);
-        var registration = source.Split("void AddPlanningClient<TService>()", 2)[1]
-            .Split("AddHttpClient<BankService>", 2)[0];
+        Assert.Contains("AddFunctionsClient<ManufacturingService>(90);", source);
+        Assert.Contains("AddFunctionsClient<SupplyChainService>(90);", source);
+        Assert.Contains("AddFunctionsClient<BankService>(90);", source);
+        Assert.Contains("AddFunctionsClient<SimulatorService>(200);", source);
+        Assert.DoesNotContain("AddHttpClient<BankService>", source);
+        Assert.DoesNotContain("AddHttpClient<SimulatorService>", source);
+        var registration = source.Split("void AddFunctionsClient<TService>(int timeoutSeconds)", 2)[1]
+            .Split("#pragma warning restore EXTEXP0001", 2)[0];
         Assert.Contains("RemoveAllResilienceHandlers()", registration);
-        Assert.Contains("AttemptTimeout.Timeout = TimeSpan.FromSeconds(90)", registration);
-        Assert.Contains("TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(90)", registration);
+        Assert.Contains("AttemptTimeout.Timeout = TimeSpan.FromSeconds(timeoutSeconds)", registration);
+        Assert.Contains("TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(timeoutSeconds)", registration);
         Assert.Contains("Retry.ShouldHandle = _ => ValueTask.FromResult(false)", registration);
     }
 

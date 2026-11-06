@@ -73,6 +73,18 @@ public class ReceiptServiceTests
         Assert.Single(connection.Commands);
     }
 
+    [Theory]
+    [InlineData("""{"SalesOrderNumber":"SO1","EmailMetadata":null}""", false)]
+    [InlineData("""{"SalesOrderNumber":"SO1"}""", false)]
+    [InlineData("""{"SalesOrderNumber":"SO1","EmailMetadata":{"CustomerId":1,"EmailAddressId":2,"SalesOrderId":3}}""", true)]
+    public void Receipt_queue_treats_null_email_metadata_as_no_email(string json, bool expected)
+    {
+        var message = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(json);
+        Assert.Equal(expected, api_functions.Functions.GenerateOrderReceipts.TryReadEmailMetadata(
+            message, out var customerId, out var emailAddressId, out var salesOrderId));
+        if (expected) Assert.Equal((1, 2, 3), (customerId, emailAddressId, salesOrderId));
+    }
+
     [Fact]
     public void Simulator_requires_persisted_receipt_totals_and_preserves_reseller_discount_units()
     {

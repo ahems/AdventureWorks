@@ -191,11 +191,8 @@ public class GenerateOrderReceipts
             );
 
             // Check if email metadata is present (sent from GenerateAndSendReceipt function)
-            if (messageData.TryGetProperty("EmailMetadata", out var emailMetadata))
+            if (TryReadEmailMetadata(messageData, out var customerId, out var emailAddressId, out var salesOrderId))
             {
-                var customerId = emailMetadata.GetProperty("CustomerId").GetInt32();
-                var emailAddressId = emailMetadata.GetProperty("EmailAddressId").GetInt32();
-                var salesOrderId = emailMetadata.GetProperty("SalesOrderId").GetInt32();
 
                 _logger.LogInformation(
                     "Email metadata found for {orderNumber}. Enqueuing email delivery.",
@@ -245,6 +242,19 @@ public class GenerateOrderReceipts
             );
             throw; // Rethrow to allow Azure Functions retry logic and poison queue handling
         }
+    }
+
+    // Orders without an email address (for example B2B store orders) are enqueued with "EmailMetadata": null.
+    public static bool TryReadEmailMetadata(JsonElement message, out int customerId, out int emailAddressId, out int salesOrderId)
+    {
+        customerId = emailAddressId = salesOrderId = 0;
+        if (!message.TryGetProperty("EmailMetadata", out var metadata) || metadata.ValueKind != JsonValueKind.Object)
+            return false;
+
+        customerId = metadata.GetProperty("CustomerId").GetInt32();
+        emailAddressId = metadata.GetProperty("EmailAddressId").GetInt32();
+        salesOrderId = metadata.GetProperty("SalesOrderId").GetInt32();
+        return true;
     }
 
     /// <summary>

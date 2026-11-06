@@ -320,10 +320,11 @@ All tools are defined in `AdventureWorks/Tools/ManufacturingMcpTools.cs`. They e
 
 All tools are defined in `AdventureWorks/Tools/SupplyChainMcpTools.cs`. They expose the supply-chain procurement simulation — allowing an agent to browse vendors, request quotes, place and track purchase orders, and manage vendor stock.
 
-The manufacturing and supply Functions clients have a bounded 90-second request/attempt budget to
-accommodate first-read stock initialization (including feasibility reads). This replaces the default resilience
-pipeline and disables automatic retries so purchase mutations are never replayed
-by the HTTP client. Catalog and quote prices use the Functions `unitCost` field;
+All MCP-to-Functions clients (`AddFunctionsClient` in `Program.cs`) replace the default 10s/30s
+resilience pipeline with a bounded budget and no automatic retries, so cold-start initialization
+(supply stock, bank seeding, feasibility reads) can finish and mutations (purchase orders, bank
+deposits/withdrawals, simulator reset) are never replayed. Manufacturing, supply, and bank use 90
+seconds; the sequential simulator reset uses 200 seconds, below the ~230-second Functions HTTP limit. Catalog and quote prices use the Functions `unitCost` field;
 missing prices or failed catalog responses surface as tool errors, not zero-cost offers.
 
 Manufacturing analysis uses `get_order_details` for both consumer and B2B orders,

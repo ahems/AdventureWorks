@@ -64,12 +64,15 @@ builder.Services.AddSingleton<CustomerGeneratorService>();
 // short-lived Functions-audience service token signed by this authorization server.
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddTransient<AdventureWorks.Auth.FunctionsServiceTokenHandler>();
-AddPlanningClient<ManufacturingService>();
-AddPlanningClient<SupplyChainService>();
+AddFunctionsClient<ManufacturingService>(90);
+AddFunctionsClient<SupplyChainService>(90);
+AddFunctionsClient<BankService>(90);
+// Reset runs manufacturing, supply, bank, and shopping resets sequentially; stay below the ~230s Functions HTTP limit.
+AddFunctionsClient<SimulatorService>(200);
 
-void AddPlanningClient<TService>() where TService : class
+void AddFunctionsClient<TService>(int timeoutSeconds) where TService : class
 {
-#pragma warning disable EXTEXP0001 // Required to replace Aspire's default resilience pipeline for this client only.
+#pragma warning disable EXTEXP0001 // Required to replace Aspire's default resilience pipeline for these clients only.
 	builder.Services.AddHttpClient<TService>(client =>
 	{
 		client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
@@ -77,24 +80,15 @@ void AddPlanningClient<TService>() where TService : class
 		.RemoveAllResilienceHandlers()
 		.AddStandardResilienceHandler(options =>
 		{
-			// First planning/supply reads can bootstrap stock and historical purchase workflows.
-			// Do not replay mutations when that cold-start work is slow.
-			options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
-			options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(90);
-			options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
+			// Cold Functions workers can bootstrap stock, bank, and purchase history on first use.
+			// Allow that work to finish, and never replay non-idempotent POSTs (orders, deposits, resets).
+			options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+			options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+			options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(timeoutSeconds * 2);
 			options.Retry.ShouldHandle = _ => ValueTask.FromResult(false);
 		});
 #pragma warning restore EXTEXP0001
 }
-
-builder.Services.AddHttpClient<BankService>(client =>
-{
-	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
-}).AddHttpMessageHandler<AdventureWorks.Auth.FunctionsServiceTokenHandler>();
-builder.Services.AddHttpClient<SimulatorService>(client =>
-{
-	client.BaseAddress = new Uri(apiFunctionsUrl.TrimEnd('/') + "/");
-}).AddHttpMessageHandler<AdventureWorks.Auth.FunctionsServiceTokenHandler>();
 
 // Resolve task store: durable Azure Table Storage when a storage account is configured, else in-memory
 var storageAccountName = builder.Configuration["AzureWebJobsStorage:accountName"]
