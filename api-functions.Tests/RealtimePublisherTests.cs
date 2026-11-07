@@ -21,11 +21,28 @@ public class RealtimePublisherTests
     private sealed class Publisher() : WebPubSubService(null, new DefaultAzureCredential(), NullLogger<WebPubSubService>.Instance)
     {
         public List<(string Group, JsonElement Payload)> Events { get; } = [];
+        public TimeSpan Window { get; init; } = TimeSpan.FromSeconds(5);
+        protected override TimeSpan CoalesceWindow => Window;
         public override Task SendToGroupAsync(string group, object payload)
         {
-            Events.Add((group, JsonSerializer.SerializeToElement(payload)));
+            lock (Events) Events.Add((group, JsonSerializer.SerializeToElement(payload)));
             return Task.CompletedTask;
         }
+    }
+
+    [Fact]
+    public async Task Coalesced_bursts_send_leading_and_one_trailing_event_per_key()
+    {
+        var publisher = new Publisher { Window = TimeSpan.FromMilliseconds(300) };
+        for (var i = 0; i < 50; i++)
+            await publisher.SendCoalescedAsync("warehouse", "awWarehouse", new { @event = "state-changed", n = i });
+        await publisher.SendCoalescedAsync("warehouse", "other", new { @event = "state-changed", n = -1 });
+
+        Assert.Equal(2, publisher.Events.Count);
+        await Task.Delay(800);
+
+        Assert.Equal(3, publisher.Events.Count);
+        Assert.Equal(49, publisher.Events[^1].Payload.GetProperty("n").GetInt32());
     }
 
     private sealed class Credential : TokenCredential
@@ -322,5 +339,38 @@ public class RealtimePublisherTests
             .Split("// ── Catalog", 2)[0];
         Assert.DoesNotContain("and VendorId eq", summaries);
         Assert.Contains("counts.Total, counts.InStock", summaries);
+    }
+
+    [Fact]
+    public void Supply_replay_and_reset_are_bounded_idempotent_and_do_not_duplicate_lines()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "azure.yaml")))
+            directory = directory.Parent;
+        Assert.NotNull(directory);
+        var source = File.ReadAllText(Path.Combine(directory.FullName, "api-functions/Services/SupplyChainService.cs"));
+
+        // BOM membership is a filter; joining it multiplies PO lines per parent assembly.
+        Assert.DoesNotContain("INNER JOIN Production.BillOfMaterials bom", source);
+        // RevisionNumber is tinyint.
+        Assert.Matches(@"RevisionNumber = CASE WHEN (poh\.)?RevisionNumber < 255", source);
+        Assert.DoesNotMatch(@"RevisionNumber = (poh\.)?RevisionNumber \+ 1", source);
+
+        var replay = source.Split("private async Task ProcessHistoricalApprovedOrdersAsync()", 2)[1]
+            .Split("// ── Vendor read", 2)[0];
+        Assert.Contains("pending.GroupBy(r => (int)r.PurchaseOrderID)", replay);
+        Assert.Contains("WHERE PurchaseOrderID = @Id AND Status = 2", replay);
+        Assert.Contains("if (claimed == 0)", replay);
+        Assert.Contains("PART_REPLAYED_APPROVED", replay);
+
+        var reset = source.Split("public async Task ResetAsync()", 2)[1].Split("private async Task<List<string>> GetPartitionRowKeysAsync", 2)[0];
+        Assert.Contains("GetPartitionRowKeysAsync(PART_REPLAYED_APPROVED)", reset);
+        Assert.Contains("STRING_SPLIT(@Ids, ',')", reset);
+        Assert.DoesNotContain("Production.BillOfMaterials", reset);
+
+        var receive = source.Split("private async Task AddToSqlInventoryAsync(", 2)[1].Split("private async Task DirectInsertToSqlInventoryAsync(", 2)[0];
+        Assert.True(receive.IndexOf("catch (Exception ex)") < receive.IndexOf("RecordPurchaseTransactionHistoryAsync"),
+            "History failures after a queued receive must not trigger the direct-insert fallback.");
+        Assert.Contains("ex.Number is 2627 or 2601", source);
     }
 }

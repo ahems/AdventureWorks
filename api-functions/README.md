@@ -35,6 +35,15 @@ Do not add recurring frontend requests or manual refresh controls as a fallback.
 Connections/reconnections and visible-tab focus recover missed snapshots; failed
 connections show a stale-data notice.
 
+Table-backed `state-changed` events, SQL outbox `database-changed` fan-out, and
+per-message queue-processor events (warehouse operations, work-order operations,
+PO status, bank transactions) are coalesced server-side by
+`WebPubSubService.SendCoalescedAsync`. The first event per (group, key) is sent
+immediately; later events within 5 seconds collapse into one trailing send.
+Bulk replays and simulator bursts therefore cannot exhaust the Free-tier daily
+message quota, which surfaces as HTTP 429. Do not coalesce events that clients
+filter by ID, such as `utilities` `instanceId`.
+
 Backend event contracts:
 
 | Group | Event | Payload |
@@ -872,6 +881,7 @@ Notification emails (Shipped, Delivered) are gated behind the `ORDER_NOTIFICATIO
 
 - **Trigger / Route**: HTTP `POST /api/simulators/reset`
 - **Purpose**: Coordinated reset of all three simulators in the correct order — clears the manufacturing work-order queue, resets the supply chain (reverts POs and re-seeds vendor stock), then resets the bank (wipes transaction history and re-seeds the USD balance). Returns a step-by-step result with the new USD seed amount. Use this instead of individual resets to avoid orphaned bank transactions.
+- **Supply scope**: Only POs that the historical replay moved off Approved are reverted. They are tracked in the `replayed-approved` partition of the supply table, so seed Complete/Rejected POs are never touched. A fresh environment replays 12 seed-Approved POs. Replay claims each PO atomically (`WHERE Status = 2`), so concurrent workers never deliver it twice, and processes each PO line once. BOM membership is a semi-join, not a row-multiplying join.
 
 ### `GetFinancialSummary`
 

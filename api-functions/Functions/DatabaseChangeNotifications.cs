@@ -63,7 +63,7 @@ public sealed class DatabaseChangeNotifications(WebPubSubService publisher)
                 changeTypes = entity.Select(row => row.ChangeType).Distinct().ToArray()
             };
             foreach (var group in Groups[entity.Key])
-                await publisher.SendToGroupAsync(group, payload);
+                await publisher.SendCoalescedAsync(group, entity.Key, payload);
         }
     }
 

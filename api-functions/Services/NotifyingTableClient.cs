@@ -9,8 +9,9 @@ public sealed class NotifyingTableClient(
     Uri endpoint, string tableName, TokenCredential credential,
     WebPubSubService publisher, string group, TableClientOptions? options = null) : TableClient(endpoint, tableName, credential, options)
 {
+    // Coalesced: bulk operations write thousands of rows; clients only need one invalidation per burst.
     private Task NotifyAsync(string changeType) =>
-        publisher.SendToGroupAsync(group, new { @event = "state-changed", entity = Name, changeType });
+        publisher.SendCoalescedAsync(group, Name, new { @event = "state-changed", entity = Name, changeType });
 
     public override async Task<Response> UpsertEntityAsync<T>(
         T entity, TableUpdateMode mode = TableUpdateMode.Merge, CancellationToken cancellationToken = default)

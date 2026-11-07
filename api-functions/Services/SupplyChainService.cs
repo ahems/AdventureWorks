@@ -96,6 +96,7 @@ public class SupplyChainService
     private const string TABLE_NAME           = "awSupplyChain";
     private const string PART_STOCK           = "stock";
     private const string PART_PENDING_INJECTED = "pending-injected";
+    private const string PART_REPLAYED_APPROVED = "replayed-approved";
 
     internal const string QUEUE_NAME = "supply-chain-orders-queue";
 
@@ -195,8 +196,7 @@ public class SupplyChainService
             INNER JOIN Purchasing.ProductVendor pv
                 ON v.BusinessEntityID = pv.BusinessEntityID
             INNER JOIN Production.Product p ON pv.ProductID = p.ProductID
-            INNER JOIN Production.BillOfMaterials bom
-                ON bom.ComponentID = p.ProductID AND bom.EndDate IS NULL
+            CROSS APPLY (SELECT TOP 1 1 AS IsComponent FROM Production.BillOfMaterials b WHERE b.ComponentID = p.ProductID AND b.EndDate IS NULL) bom
             LEFT JOIN (
                 SELECT poh.VendorID,
                        poh.ShipMethodID,
@@ -453,8 +453,7 @@ public class SupplyChainService
             INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
             INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
             INNER JOIN Production.Product p ON pod.ProductID = p.ProductID
-            INNER JOIN Production.BillOfMaterials bom
-                ON bom.ComponentID = p.ProductID AND bom.EndDate IS NULL
+            CROSS APPLY (SELECT TOP 1 1 AS IsComponent FROM Production.BillOfMaterials b WHERE b.ComponentID = p.ProductID AND b.EndDate IS NULL) bom
             WHERE poh.Status = 1
               AND v.ActiveFlag = 1
               AND p.MakeFlag = 0
@@ -489,8 +488,7 @@ public class SupplyChainService
             INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
             INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
             INNER JOIN Production.Product p ON pod.ProductID = p.ProductID
-            INNER JOIN Production.BillOfMaterials bom
-                ON bom.ComponentID = p.ProductID AND bom.EndDate IS NULL
+            CROSS APPLY (SELECT TOP 1 1 AS IsComponent FROM Production.BillOfMaterials b WHERE b.ComponentID = p.ProductID AND b.EndDate IS NULL) bom
             WHERE poh.Status = 1
               AND v.ActiveFlag = 1
               AND p.MakeFlag = 0");
@@ -636,54 +634,59 @@ public class SupplyChainService
             INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
             INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
             INNER JOIN Production.Product p ON pod.ProductID = p.ProductID
-            INNER JOIN Production.BillOfMaterials bom
-                ON bom.ComponentID = p.ProductID AND bom.EndDate IS NULL
+            CROSS APPLY (SELECT TOP 1 1 AS IsComponent FROM Production.BillOfMaterials b WHERE b.ComponentID = p.ProductID AND b.EndDate IS NULL) bom
             WHERE poh.Status = 2
               AND v.ActiveFlag = 1
               AND p.MakeFlag = 0
               AND poh.OrderDate < DATEADD(day, -1, GETDATE())");
 
-        int passed = 0, rejected = 0;
-        foreach (var r in pending)
+        int passed = 0, rejected = 0, skipped = 0;
+        foreach (var order in pending.GroupBy(r => (int)r.PurchaseOrderID))
         {
-            int    poId     = (int)r.PurchaseOrderID;
-            string vendorId = (string)r.VendorId;
-            int    productId= (int)r.ProductID;
-            int    qty      = (int)r.Qty;
-            double unitCost = (double)r.UnitCost;
+            int    poId     = order.Key;
+            var    lines    = order.ToList();
+            string vendorId = (string)lines[0].VendorId;
 
             double reliability = vendorReliability.TryGetValue(vendorId, out double rel) ? rel : 0.85;
+            bool delivered = Random.Shared.NextDouble() <= reliability;
 
-            if (Random.Shared.NextDouble() <= reliability)
+            // Atomic claim: concurrent instances (lazy init on another worker, or a reset) may
+            // replay the same Approved PO. Only the caller that moves it off Status=2 continues.
+            int claimed = await conn.ExecuteAsync(@"
+                UPDATE Purchasing.PurchaseOrderHeader
+                SET Status = @Status, RevisionNumber = CASE WHEN RevisionNumber < 255 THEN RevisionNumber + 1 ELSE 255 END, ModifiedDate = GETDATE()
+                WHERE PurchaseOrderID = @Id AND Status = 2",
+                new { Id = poId, Status = delivered ? 4 : 3 });
+            if (claimed == 0)
             {
-                // Reliability passed → deliver
-                await conn.ExecuteAsync(@"
-                    UPDATE Purchasing.PurchaseOrderHeader
-                    SET Status = 4, RevisionNumber = RevisionNumber + 1, ModifiedDate = GETDATE()
-                    WHERE PurchaseOrderID = @Id",
-                    new { Id = poId });
+                skipped++;
+                continue;
+            }
+            await _tableClient.UpsertEntityAsync(new TableEntity(PART_REPLAYED_APPROVED, poId.ToString()));
+
+            if (delivered)
+            {
                 await conn.ExecuteAsync(@"
                     UPDATE Purchasing.PurchaseOrderDetail
-                    SET ReceivedQty = @Qty, ModifiedDate = GETDATE()
+                    SET ReceivedQty = OrderQty, ModifiedDate = GETDATE()
                     WHERE PurchaseOrderID = @Id",
-                    new { Id = poId, Qty = (decimal)qty });
-                await AddToSqlInventoryAsync(productId, qty, vendorId, unitCost, poId);
+                    new { Id = poId });
+                foreach (var line in lines)
+                {
+                    int    productId = (int)line.ProductID;
+                    int    qty       = (int)line.Qty;
+                    await AddToSqlInventoryAsync(productId, qty, vendorId, (double)line.UnitCost, poId);
+                }
                 _telemetry.TrackEvent("SupplyChainOrder", new Dictionary<string, string>
                 {
                     ["PurchaseOrderId"] = poId.ToString(),
                     ["EventType"]       = "complete",
-                    ["Description"]     = $"Reliability check passed. {qty} units of ProductID {productId} delivered and added to inventory.",
+                    ["Description"]     = $"Reliability check passed. {lines.Count} line(s) delivered and added to inventory.",
                 });
                 passed++;
             }
             else
             {
-                // Reliability failed → reject
-                await conn.ExecuteAsync(@"
-                    UPDATE Purchasing.PurchaseOrderHeader
-                    SET Status = 3, RevisionNumber = RevisionNumber + 1, ModifiedDate = GETDATE()
-                    WHERE PurchaseOrderID = @Id",
-                    new { Id = poId });
                 _telemetry.TrackEvent("SupplyChainOrder", new Dictionary<string, string>
                 {
                     ["PurchaseOrderId"] = poId.ToString(),
@@ -693,6 +696,9 @@ public class SupplyChainService
                 rejected++;
             }
         }
+
+        if (skipped > 0)
+            _logger.LogInformation("Skipped {Skipped} historical Approved POs already claimed by another worker.", skipped);
 
         if (passed + rejected > 0)
             _logger.LogInformation(
@@ -726,7 +732,7 @@ public class SupplyChainService
             INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
             INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
             INNER JOIN Production.Product p ON pod.ProductID = p.ProductID
-            INNER JOIN Production.BillOfMaterials bom ON bom.ComponentID = p.ProductID AND bom.EndDate IS NULL
+            CROSS APPLY (SELECT TOP 1 1 AS IsComponent FROM Production.BillOfMaterials b WHERE b.ComponentID = p.ProductID AND b.EndDate IS NULL) bom
             WHERE v.ActiveFlag = 1 AND p.MakeFlag = 0
             GROUP BY poh.VendorID"))
             .ToDictionary(
@@ -783,7 +789,7 @@ public class SupplyChainService
             INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
             INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
             INNER JOIN Production.Product p ON pod.ProductID = p.ProductID
-            INNER JOIN Production.BillOfMaterials bom ON bom.ComponentID = p.ProductID AND bom.EndDate IS NULL
+            CROSS APPLY (SELECT TOP 1 1 AS IsComponent FROM Production.BillOfMaterials b WHERE b.ComponentID = p.ProductID AND b.EndDate IS NULL) bom
             WHERE poh.Status IN (1, 2) AND v.ActiveFlag = 1 AND p.MakeFlag = 0{whereExtra}");
 
         foreach (var r in rows)
@@ -1474,55 +1480,60 @@ public class SupplyChainService
 
     /// <summary>
     /// Resets simulation state and re-seeds vendor stock.
-    /// Reverts Status=3/4 BOM vendor POs back to Approved (2) so the next call to
-    /// <see cref="ProcessHistoricalApprovedOrdersAsync"/> can replay them.
+    /// Reverts only the POs that <see cref="ProcessHistoricalApprovedOrdersAsync"/> moved off
+    /// Approved (recorded in the replay ledger) so the next initialization replays the same set.
+    /// Seed-data Complete/Rejected POs are never touched.
     /// </summary>
     public async Task ResetAsync()
     {
         _vendorCache = null;
         _initComplete = false;   // Allow InitializeAsync to re-seed after stock rows are deleted
 
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
+        var replayed = await GetPartitionRowKeysAsync(PART_REPLAYED_APPROVED);
+        if (replayed.Count > 0)
+        {
+            await using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync();
+            var ids = string.Join(',', replayed);
 
-        // Revert sim-touched BOM vendor POs back to Approved (2) so they can be re-processed
-        await conn.ExecuteAsync(@"
-            UPDATE poh
-            SET poh.Status = 2,
-                poh.ShipDate = NULL,
-                poh.RevisionNumber = poh.RevisionNumber + 1,
-                poh.ModifiedDate = GETDATE()
-            FROM Purchasing.PurchaseOrderHeader poh
-            INNER JOIN Purchasing.PurchaseOrderDetail pod ON poh.PurchaseOrderID = pod.PurchaseOrderID
-            INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
-            INNER JOIN Production.Product p ON pod.ProductID = p.ProductID
-            INNER JOIN Production.BillOfMaterials bom ON bom.ComponentID = p.ProductID AND bom.EndDate IS NULL
-            WHERE v.ActiveFlag = 1 AND p.MakeFlag = 0 AND poh.Status IN (3, 4)");
+            await conn.ExecuteAsync(@"
+                UPDATE Purchasing.PurchaseOrderHeader
+                SET Status = 2,
+                    ShipDate = NULL,
+                    RevisionNumber = CASE WHEN RevisionNumber < 255 THEN RevisionNumber + 1 ELSE 255 END,
+                    ModifiedDate = GETDATE()
+                WHERE Status IN (3, 4)
+                  AND PurchaseOrderID IN (SELECT TRY_CAST(value AS INT) FROM STRING_SPLIT(@Ids, ','));
+                UPDATE Purchasing.PurchaseOrderDetail
+                SET ReceivedQty = 0, ModifiedDate = GETDATE()
+                WHERE PurchaseOrderID IN (SELECT TRY_CAST(value AS INT) FROM STRING_SPLIT(@Ids, ','));",
+                new { Ids = ids }, commandTimeout: 120);
+        }
 
-        // Also reset ReceivedQty on detail rows of reverted POs
-        await conn.ExecuteAsync(@"
-            UPDATE pod
-            SET pod.ReceivedQty = 0, pod.ModifiedDate = GETDATE()
-            FROM Purchasing.PurchaseOrderDetail pod
-            INNER JOIN Purchasing.PurchaseOrderHeader poh ON pod.PurchaseOrderID = poh.PurchaseOrderID
-            INNER JOIN Purchasing.Vendor v ON poh.VendorID = v.BusinessEntityID
-            INNER JOIN Production.Product p ON pod.ProductID = p.ProductID
-            INNER JOIN Production.BillOfMaterials bom ON bom.ComponentID = p.ProductID AND bom.EndDate IS NULL
-            WHERE v.ActiveFlag = 1 AND p.MakeFlag = 0");
+        _logger.LogInformation("Reset: reverted {Count} replayed historical POs back to Approved.", replayed.Count);
 
-        _logger.LogInformation("Reset: reverted BOM vendor POs (Status 3/4) back to Approved.");
-
-        // Re-seed vendor stock in Table Storage
-        var toDelete = new List<(string pk, string rk)>();
-        await foreach (var e in _tableClient.QueryAsync<TableEntity>(
-            filter: $"PartitionKey eq '{PART_STOCK}'",
-            select: new[] { "PartitionKey", "RowKey" }))
-            toDelete.Add((e.PartitionKey, e.RowKey));
-        foreach (var (pk, rk) in toDelete)
-            await _tableClient.DeleteEntityAsync(pk, rk);
+        await DeletePartitionAsync(PART_STOCK);
+        await DeletePartitionAsync(PART_REPLAYED_APPROVED);
 
         await InitializeAsync();
         _logger.LogInformation("Supply chain simulation reset — vendor stock re-seeded from Purchasing tables.");
+    }
+
+    private async Task<List<string>> GetPartitionRowKeysAsync(string partition)
+    {
+        var keys = new List<string>();
+        await foreach (var e in _tableClient.QueryAsync<TableEntity>(
+            filter: $"PartitionKey eq '{partition}'",
+            select: new[] { "RowKey" }))
+            keys.Add(e.RowKey);
+        return keys;
+    }
+
+    private async Task DeletePartitionAsync(string partition)
+    {
+        foreach (var chunk in (await GetPartitionRowKeysAsync(partition)).Chunk(100))
+            await _tableClient.SubmitTransactionAsync(chunk.Select(rk =>
+                new TableTransactionAction(TableTransactionActionType.Delete, new TableEntity(partition, rk), Azure.ETag.All)));
     }
 
     // ── Internal helpers ───────────────────────────────────────────────────────
@@ -1583,17 +1594,23 @@ public class SupplyChainService
         // before they appear in inventory at LocationID 7 (Finished Goods Storage).
         if (_warehouse != null)
         {
+            bool enqueued = false;
             try
             {
                 await _warehouse.EnqueueReceiveSupplierOperationAsync(purchaseOrderId, productId, qty);
-                // Still record TransactionHistory immediately for audit trail
-                await RecordPurchaseTransactionHistoryAsync(productId, qty, purchaseOrderId, unitCost, vendorId);
-                _logger.LogInformation("Warehouse receive op enqueued for ProductID={ProductId} qty={Qty} PO={POId}", productId, qty, purchaseOrderId);
-                return;
+                enqueued = true;
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "[Warehouse] Failed to enqueue receive op for PO {PurchaseOrderId} — falling back to direct inventory insert.", purchaseOrderId);
+            }
+
+            if (enqueued)
+            {
+                // Audit failures must not trigger the direct-insert fallback: the receive is already queued.
+                await RecordPurchaseTransactionHistoryAsync(productId, qty, purchaseOrderId, unitCost, vendorId);
+                _logger.LogInformation("Warehouse receive op enqueued for ProductID={ProductId} qty={Qty} PO={POId}", productId, qty, purchaseOrderId);
+                return;
             }
         }
 
@@ -1679,11 +1696,26 @@ public class SupplyChainService
               WHERE ProductID = @ProductId AND EndDate IS NULL AND StartDate < @ReceiptDate",
             new { ProductId = productId, ReceiptDate = receiptDate });
 
-        // Insert new ProductCostHistory record with the receipt cost
-        int costHistoryInserted = await conn.ExecuteAsync(
-            @"INSERT INTO Production.ProductCostHistory (ProductID, StartDate, EndDate, StandardCost, ModifiedDate)
-              VALUES (@ProductId, @StartDate, NULL, @StandardCost, GETDATE())",
+        // Insert new ProductCostHistory record with the receipt cost. StartDate is a SQL datetime
+        // (~3ms precision), so receipts of the same product in one tick update the existing row.
+        int costHistoryInserted;
+        try
+        {
+            costHistoryInserted = await conn.ExecuteAsync(
+            @"UPDATE Production.ProductCostHistory
+              SET StandardCost = @StandardCost, ModifiedDate = GETDATE()
+              WHERE ProductID = @ProductId AND StartDate = CAST(@StartDate AS datetime);
+              IF @@ROWCOUNT = 0
+                  INSERT INTO Production.ProductCostHistory (ProductID, StartDate, EndDate, StandardCost, ModifiedDate)
+                  VALUES (@ProductId, CAST(@StartDate AS datetime), NULL, @StandardCost, GETDATE());",
             new { ProductId = productId, StartDate = receiptDate, StandardCost = unitCost });
+        }
+        catch (SqlException ex) when (ex.Number is 2627 or 2601)
+        {
+            // Another worker recorded this product's cost in the same tick; history is audit-only.
+            _logger.LogDebug("ProductCostHistory already recorded for ProductID={ProductId} at {Date:u}", productId, receiptDate);
+            return;
+        }
 
         if (costHistoryInserted > 0)
         {
@@ -1867,7 +1899,7 @@ public class SupplyChainService
             await conn.ExecuteAsync(
                 @"UPDATE Purchasing.PurchaseOrderHeader
                   SET Status = @Status, ShipDate = @ShipDate,
-                      RevisionNumber = RevisionNumber + 1, ModifiedDate = GETDATE()
+                      RevisionNumber = CASE WHEN RevisionNumber < 255 THEN RevisionNumber + 1 ELSE 255 END, ModifiedDate = GETDATE()
                   WHERE PurchaseOrderID = @Id",
                 new { Status = status, ShipDate = shipDate.Value, Id = purchaseOrderId });
         }
@@ -1876,7 +1908,7 @@ public class SupplyChainService
             await conn.ExecuteAsync(
                 @"UPDATE Purchasing.PurchaseOrderHeader
                   SET Status = @Status,
-                      RevisionNumber = RevisionNumber + 1, ModifiedDate = GETDATE()
+                      RevisionNumber = CASE WHEN RevisionNumber < 255 THEN RevisionNumber + 1 ELSE 255 END, ModifiedDate = GETDATE()
                   WHERE PurchaseOrderID = @Id",
                 new { Status = status, Id = purchaseOrderId });
         }

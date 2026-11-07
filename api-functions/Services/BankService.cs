@@ -391,7 +391,7 @@ public class BankService
                 // Push real-time finance event to connected browser clients
                 if (_webPubSub != null)
                 {
-                    _ = _webPubSub.SendToGroupAsync("finance", new
+                    _ = _webPubSub.SendCoalescedAsync("finance", "transaction", new
                     {
                         @event = "transaction",
                         currencyCode = code,

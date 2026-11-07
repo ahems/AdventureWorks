@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Azure.Identity;
 using Azure.Messaging.WebPubSub;
@@ -68,6 +69,67 @@ public class WebPubSubService
         {
             _logger.LogWarning(ex, "[WebPubSub] Failed to push event to group '{Group}'. Clients will fall back to polling.", group);
         }
+    }
+
+    /// <summary>Window within which repeated invalidation events for the same key are collapsed.</summary>
+    protected virtual TimeSpan CoalesceWindow => TimeSpan.FromSeconds(5);
+
+    private sealed class CoalesceSlot
+    {
+        public DateTime LastSentUtc = DateTime.MinValue;
+        public object? Pending;
+        public bool TrailingScheduled;
+    }
+
+    private readonly ConcurrentDictionary<string, CoalesceSlot> _coalesceSlots = new();
+
+    /// <summary>
+    /// Sends a cache-invalidation event at most once per <see cref="CoalesceWindow"/> per (group, key):
+    /// the first event is sent immediately and any further events in the window collapse into one
+    /// trailing send carrying the latest payload. Use for high-frequency state-changed notifications
+    /// (bulk warehouse/supply/bank writes) so bursts cannot exhaust the Web PubSub Free-tier quota.
+    /// </summary>
+    public async Task SendCoalescedAsync(string group, string key, object payload)
+    {
+        var slot = _coalesceSlots.GetOrAdd($"{group}\n{key}", _ => new CoalesceSlot());
+        TimeSpan delay;
+        lock (slot)
+        {
+            var now = DateTime.UtcNow;
+            var elapsed = now - slot.LastSentUtc;
+            if (!slot.TrailingScheduled && elapsed >= CoalesceWindow)
+            {
+                slot.LastSentUtc = now;
+                delay = TimeSpan.Zero;
+            }
+            else
+            {
+                slot.Pending = payload;
+                if (slot.TrailingScheduled) return;
+                slot.TrailingScheduled = true;
+                delay = CoalesceWindow - elapsed;
+            }
+        }
+
+        if (delay <= TimeSpan.Zero)
+        {
+            await SendToGroupAsync(group, payload);
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(delay);
+            object? latest;
+            lock (slot)
+            {
+                latest = slot.Pending;
+                slot.Pending = null;
+                slot.TrailingScheduled = false;
+                slot.LastSentUtc = DateTime.UtcNow;
+            }
+            if (latest != null) await SendToGroupAsync(group, latest);
+        });
     }
 
     /// <summary>

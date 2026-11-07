@@ -133,7 +133,7 @@ public class PurchaseOrderProcessorFunction
 
         _logger.LogInformation("Order {OrderId} → {Status}", msg.OrderId, resolvedTarget);
 
-        await _webPubSub.SendToGroupAsync("supply-chain", new { @event = "po-status-changed", purchaseOrderId = msg.OrderId, newStatus = resolvedTarget });
+        await _webPubSub.SendCoalescedAsync("supply-chain", "po-status-changed", new { @event = "po-status-changed", purchaseOrderId = msg.OrderId, newStatus = resolvedTarget });
 
         // Schedule next step (only if we reached "approved" — complete/rejected are terminal)
         if (resolvedTarget == "approved")

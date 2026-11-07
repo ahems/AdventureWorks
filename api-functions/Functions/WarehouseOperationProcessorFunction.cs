@@ -93,7 +93,7 @@ public class WarehouseOperationProcessorFunction
 
                 await _warehouse.ProcessCompletionPhaseAsync(msg);
 
-                await _webPubSub.SendToGroupAsync("warehouse", new { @event = "operation-completed", operationType = msg.OperationType, productId = msg.ProductId });
+                await _webPubSub.SendCoalescedAsync("warehouse", "operation-completed", new { @event = "operation-completed", operationType = msg.OperationType, productId = msg.ProductId });
             }
         }
         catch (Exception ex)

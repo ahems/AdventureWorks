@@ -152,7 +152,7 @@ public class WorkOrderOperationProcessorFunction
                         msg.WorkOrderId, requiredQty, componentProductId, componentName,
                         available, msg.MaterialRetryCount + 1, retryDelaySec);
 
-                    await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "shortage-updated", productId = componentProductId, workOrderId = msg.WorkOrderId });
+                    await _webPubSub.SendCoalescedAsync("manufacturing-ops", "shortage-updated", new { @event = "shortage-updated", productId = componentProductId, workOrderId = msg.WorkOrderId });
 
                     var retryMsg = msg with { MaterialRetryCount = msg.MaterialRetryCount + 1 };
                     await RequeueAsync(queueClient, retryMsg, TimeSpan.FromSeconds(retryDelaySec));
@@ -163,7 +163,7 @@ public class WorkOrderOperationProcessorFunction
                 await _sim.ClearShortageAsync(msg.WorkOrderId, componentProductId);
                 if (msg.MaterialRetryCount > 0)
                 {
-                    await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "shortage-updated", productId = componentProductId, workOrderId = msg.WorkOrderId });
+                    await _webPubSub.SendCoalescedAsync("manufacturing-ops", "shortage-updated", new { @event = "shortage-updated", productId = componentProductId, workOrderId = msg.WorkOrderId });
                 }
                 _logger.LogDebug("Consumed {Qty} units of ProductID={ComponentId} for WO={WorkOrderId}",
                     requiredQty, componentProductId, msg.WorkOrderId);
@@ -308,7 +308,7 @@ public class WorkOrderOperationProcessorFunction
         }
 
         // Notify clients that a routing operation completed (distinct from wo-completed which fires only on final op)
-        await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "routing-updated", workOrderId = msg.WorkOrderId, operationSequence = msg.OperationSequence });
+        await _webPubSub.SendCoalescedAsync("manufacturing-ops", "routing-updated", new { @event = "routing-updated", workOrderId = msg.WorkOrderId, operationSequence = msg.OperationSequence });
 
         // Bank: payroll charge for this routing operation
         if (msg.AssignedEmployeeId.HasValue && msg.AssignedHourlyRate > 0)
@@ -405,7 +405,7 @@ public class WorkOrderOperationProcessorFunction
                 msg.WorkOrderId, msg.LocationId, reasonName, isTotalFailure,
                 suppVendorId.HasValue ? $" AttributedVendor={suppVendorId}({suppVendorName})" : "");
 
-            await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "scrap-event", workOrderId = msg.WorkOrderId, productId = msg.ProductId, locationId = msg.LocationId, scrappedQty = 1 });
+            await _webPubSub.SendCoalescedAsync("manufacturing-ops", "scrap-event", new { @event = "scrap-event", workOrderId = msg.WorkOrderId, productId = msg.ProductId, locationId = msg.LocationId, scrappedQty = 1 });
 
             if (isTotalFailure)
             {
@@ -447,7 +447,7 @@ public class WorkOrderOperationProcessorFunction
         // ── All ops done — complete the WorkOrder ─────────────────────────────
         await _sim.CompleteWorkOrderAsync(msg.WorkOrderId);
 
-        await _webPubSub.SendToGroupAsync("manufacturing-ops", new { @event = "wo-completed", workOrderId = msg.WorkOrderId, productId = msg.ProductId });
+        await _webPubSub.SendCoalescedAsync("manufacturing-ops", "wo-completed", new { @event = "wo-completed", workOrderId = msg.WorkOrderId, productId = msg.ProductId });
         await _webPubSub.SendToGroupAsync("warehouse", new { @event = "inventory-updated", productId = msg.ProductId });
 
         // ── Unblock parent assemblies via BOM chain ────────────────────────────
