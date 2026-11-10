@@ -20,7 +20,7 @@ import { useProductNames } from "@/context/ProductNamesContext";
 
 const CartPage: React.FC = () => {
   const { t } = useTranslation(["cart", "common"]);
-  const { items, isLoading, updateQuantity, removeFromCart, clearCart } =
+  const { items, isLoading, error, canRetryGuestMerge, retryGuestMerge, updateQuantity, removeFromCart, clearCart } =
     useCart();
   const { formatPrice } = useCurrency();
   const { getLocalizedName } = useProductNames();
@@ -93,6 +93,25 @@ const CartPage: React.FC = () => {
                 <div className="h-12 w-full bg-doodle-text/10 animate-pulse"></div>
               </div>
             </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-1 container mx-auto px-4 py-12">
+          <div className="doodle-card p-6" role="alert">
+            <p>{error}</p>
+            {canRetryGuestMerge && (
+              <button type="button" className="doodle-button mt-4" onClick={retryGuestMerge}>
+                {t("cart:cart.retryGuestMerge")}
+              </button>
+            )}
           </div>
         </main>
         <Footer />

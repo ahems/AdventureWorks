@@ -1,12 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as apiService from "@/data/apiService";
-import { ShoppingCartItem, Product } from "@/types/product";
+import { ShoppingCartItem } from "@/types/product";
 
 // Hook to fetch shopping cart items
 export const useShoppingCart = (shoppingCartId: string | null) => {
   return useQuery<ShoppingCartItem[]>({
     queryKey: ["shoppingCart", shoppingCartId],
-    queryFn: () => apiService.getShoppingCartItems(shoppingCartId!),
+    queryFn: ({ signal }) => apiService.getShoppingCartItems(shoppingCartId!, signal),
     enabled: !!shoppingCartId,
     staleTime: 0, // Always fetch fresh data
     refetchOnMount: "always", // Force refetch when component mounts
@@ -30,7 +30,7 @@ export const useAddToCart = () => {
       productId: number;
       quantity: number;
     }) => apiService.createCartItem(shoppingCartId, productId, quantity),
-    onMutate: async ({ shoppingCartId, productId, quantity }) => {
+    onMutate: async ({ shoppingCartId }) => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({
         queryKey: ["shoppingCart", shoppingCartId],
@@ -41,22 +41,6 @@ export const useAddToCart = () => {
         "shoppingCart",
         shoppingCartId,
       ]);
-
-      // Optimistically update to the new value
-      if (previousCart) {
-        const optimisticItem: ShoppingCartItem = {
-          ShoppingCartItemID: Date.now(), // Temporary ID
-          ShoppingCartID: shoppingCartId,
-          ProductID: productId,
-          Quantity: quantity,
-          DateCreated: new Date().toISOString(),
-          ModifiedDate: new Date().toISOString(),
-        };
-        queryClient.setQueryData<ShoppingCartItem[]>(
-          ["shoppingCart", shoppingCartId],
-          [...previousCart, optimisticItem],
-        );
-      }
 
       return { previousCart };
     },
@@ -72,10 +56,6 @@ export const useAddToCart = () => {
     onSettled: async (_, __, variables) => {
       // Immediately invalidate and refetch
       await queryClient.invalidateQueries({
-        queryKey: ["shoppingCart", variables.shoppingCartId],
-      });
-      // Force immediate refetch
-      await queryClient.refetchQueries({
         queryKey: ["shoppingCart", variables.shoppingCartId],
       });
     },
@@ -95,7 +75,7 @@ export const useUpdateCartItem = () => {
       shoppingCartItemId: number;
       quantity: number;
       shoppingCartId: string;
-    }) => apiService.updateCartItemQuantity(shoppingCartItemId, quantity),
+    }) => apiService.updateCartItemQuantity(shoppingCartItemId, quantity, shoppingCartId),
     onMutate: async ({ shoppingCartId, shoppingCartItemId, quantity }) => {
       await queryClient.cancelQueries({
         queryKey: ["shoppingCart", shoppingCartId],
@@ -135,9 +115,6 @@ export const useUpdateCartItem = () => {
       await queryClient.invalidateQueries({
         queryKey: ["shoppingCart", variables.shoppingCartId],
       });
-      await queryClient.refetchQueries({
-        queryKey: ["shoppingCart", variables.shoppingCartId],
-      });
     },
   });
 };
@@ -153,7 +130,7 @@ export const useDeleteCartItem = () => {
     }: {
       shoppingCartItemId: number;
       shoppingCartId: string;
-    }) => apiService.deleteCartItem(shoppingCartItemId),
+    }) => apiService.deleteCartItem(shoppingCartItemId, shoppingCartId),
     onMutate: async ({ shoppingCartId, shoppingCartItemId }) => {
       await queryClient.cancelQueries({
         queryKey: ["shoppingCart", shoppingCartId],
@@ -185,9 +162,6 @@ export const useDeleteCartItem = () => {
     },
     onSettled: async (_, __, variables) => {
       await queryClient.invalidateQueries({
-        queryKey: ["shoppingCart", variables.shoppingCartId],
-      });
-      await queryClient.refetchQueries({
         queryKey: ["shoppingCart", variables.shoppingCartId],
       });
     },

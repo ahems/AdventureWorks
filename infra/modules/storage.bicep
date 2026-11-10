@@ -51,7 +51,7 @@ var durableControlQueues = [for partition in range(0, durablePartitionCount): {
 }]
 
 // Use Azure Verified Module for Storage Account
-module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
+module storageAccount 'br/public:avm/res/storage/storage-account:0.33.0' = {
   name: 'storage-account-${storageName}'
   params: {
     name: storageName
@@ -59,7 +59,14 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
     kind: 'StorageV2'
     skuName: 'Standard_LRS'
     allowBlobPublicAccess: false
-    allowSharedKeyAccess: true // Required for Container Apps file share mounts
+    allowSharedKeyAccess: false
+    defaultToOAuthAuthentication: true
+    azureFilesIdentityBasedAuthentication: {
+      directoryServiceOptions: 'None'
+      smbOAuthSettings: {
+        isSmbOAuthEnabled: true
+      }
+    }
     minimumTlsVersion: 'TLS1_2'
     publicNetworkAccess: 'Disabled'
     requireInfrastructureEncryption: true
@@ -194,6 +201,11 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.16.0' = {
     }
     
     fileServices: {
+      protocolSettings: {
+        smb: {
+          authenticationMethods: 'Kerberos'
+        }
+      }
       shares: [
         {
           name: 'seed-job-logs'

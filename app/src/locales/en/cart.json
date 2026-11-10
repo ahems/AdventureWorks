@@ -31,6 +31,7 @@
     "estimatedTotal": "Estimated Total",
     "freeShipping": "Free Shipping on orders over $50",
     "cartUpdated": "Cart updated",
+    "retryGuestMerge": "Retry guest cart merge",
     "itemRemoved": "Item removed from cart",
     "clearCart": "Clear Cart",
     "confirmClear": "Are you sure you want to clear your cart?"

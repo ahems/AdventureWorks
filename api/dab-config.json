@@ -5099,30 +5099,25 @@
       ],
       "permissions": [
         {
-          "role": "anonymous",
-          "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
-          ]
-        },
-        {
           "role": "authenticated",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            {
+              "action": "read",
+              "policy": {
+                "database": "@item.ShoppingCartID eq @claims.business_entity_id"
+              }
+            }
           ]
         },
         {
           "role": "consumer",
           "actions": [
-            "create",
-            "read",
-            "update",
-            "delete"
+            {
+              "action": "read",
+              "policy": {
+                "database": "@item.ShoppingCartID eq @claims.business_entity_id"
+              }
+            }
           ]
         }
       ],
@@ -7242,14 +7237,29 @@
         {
           "role": "anonymous",
           "actions": [
-            "create",
             "read"
           ]
         },
         {
           "role": "authenticated",
           "actions": [
-            "create",
+            {
+              "action": "create",
+              "policy": {
+                "database": "@item.UserID eq @claims.business_entity_id"
+              },
+              "fields": {
+                "include": [
+                  "ProductID",
+                  "ReviewerName",
+                  "ReviewDate",
+                  "EmailAddress",
+                  "Rating",
+                  "Comments",
+                  "UserID"
+                ]
+              }
+            },
             "read",
             {
               "action": "update",
@@ -7264,7 +7274,23 @@
         {
           "role": "consumer",
           "actions": [
-            "create",
+            {
+              "action": "create",
+              "policy": {
+                "database": "@item.UserID eq @claims.business_entity_id"
+              },
+              "fields": {
+                "include": [
+                  "ProductID",
+                  "ReviewerName",
+                  "ReviewDate",
+                  "EmailAddress",
+                  "Rating",
+                  "Comments",
+                  "UserID"
+                ]
+              }
+            },
             "read",
             {
               "action": "update",

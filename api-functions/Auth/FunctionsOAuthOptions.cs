@@ -6,9 +6,8 @@ namespace ApiFunctions.Auth;
 public enum OAuthEnforcementMode
 {
     /// <summary>
-    /// No enforcement — every route behaves as it did before OAuth (anonymous). Default, so a
-    /// partial rollout (resource server deployed before the frontends attach tokens, or before the
-    /// issuer/JWKS are wired by infra) never breaks the demo.
+    /// No middleware enforcement. Explicit local-development mode, also the default when no mode
+    /// is requested. An explicitly enabled mode never falls back to this on configuration errors.
     /// </summary>
     Disabled,
 
@@ -25,8 +24,7 @@ public enum OAuthEnforcementMode
 /// <summary>
 /// Deployment-derived configuration for the api-functions resource server. All values come from
 /// configuration / environment (never hard-coded Azure hostnames); when the issuer or audience is
-/// absent the resource server stays in <see cref="OAuthEnforcementMode.Disabled"/> so local and
-/// not-yet-wired deployments keep working unchanged.
+/// absent an explicitly enabled resource server rejects the configuration at startup.
 /// </summary>
 public sealed class FunctionsOAuthOptions
 {
@@ -57,7 +55,7 @@ public sealed class FunctionsOAuthOptions
     /// <summary>
     /// Builds options from configuration/environment. Issuer, audience and metadata are derived
     /// from the deployed api-mcp URL; the enforcement mode defaults to <c>Disabled</c> unless
-    /// explicitly set AND the issuer/audience are configured.
+    /// explicitly set. An enabled mode requires complete configuration.
     /// </summary>
     public static FunctionsOAuthOptions FromConfiguration(IConfiguration config)
     {
@@ -91,19 +89,20 @@ public sealed class FunctionsOAuthOptions
 
         var requested = ParseMode(Get("FUNCTIONS_OAUTH_MODE"));
 
-        // Can only enforce/audit when we actually have an issuer + audience + metadata to validate
-        // against; otherwise stay disabled (fail-open to current anonymous behavior).
         var configured = !string.IsNullOrWhiteSpace(issuer)
             && !string.IsNullOrWhiteSpace(audience)
             && !string.IsNullOrWhiteSpace(metadata);
-        var mode = configured ? requested : OAuthEnforcementMode.Disabled;
+        if (requested != OAuthEnforcementMode.Disabled && !configured)
+        {
+            throw new InvalidOperationException("Functions OAuth is enabled but issuer, audience or metadata is missing.");
+        }
 
         return new FunctionsOAuthOptions
         {
             Issuer = issuer,
             Audience = audience,
             MetadataAddress = metadata,
-            Mode = mode,
+            Mode = requested,
         };
     }
 
@@ -111,6 +110,7 @@ public sealed class FunctionsOAuthOptions
     {
         "enforced" or "enforce" or "on" or "true" => OAuthEnforcementMode.Enforced,
         "audit" or "shadow" => OAuthEnforcementMode.Audit,
-        _ => OAuthEnforcementMode.Disabled,
+        null or "" or "disabled" or "off" or "false" => OAuthEnforcementMode.Disabled,
+        _ => throw new InvalidOperationException("FUNCTIONS_OAUTH_MODE must be disabled, audit or enforced."),
     };
 }

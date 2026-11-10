@@ -29,10 +29,13 @@ public sealed class FunctionsAccessTokenValidator
 {
     private readonly FunctionsOAuthOptions _options;
     private readonly ILogger<FunctionsAccessTokenValidator> _logger;
-    private readonly ConfigurationManager<OpenIdConnectConfiguration>? _configurationManager;
+    private readonly IConfigurationManager<OpenIdConnectConfiguration>? _configurationManager;
     private readonly JsonWebTokenHandler _handler = new();
 
-    public FunctionsAccessTokenValidator(FunctionsOAuthOptions options, ILogger<FunctionsAccessTokenValidator> logger)
+    public FunctionsAccessTokenValidator(
+        FunctionsOAuthOptions options,
+        ILogger<FunctionsAccessTokenValidator> logger,
+        IConfigurationManager<OpenIdConnectConfiguration>? configurationManager = null)
     {
         _options = options;
         _logger = logger;
@@ -40,7 +43,7 @@ public sealed class FunctionsAccessTokenValidator
         if (_options.IsConfigured)
         {
             var requireHttps = _options.MetadataAddress!.StartsWith("https", StringComparison.OrdinalIgnoreCase);
-            _configurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
+            _configurationManager = configurationManager ?? new ConfigurationManager<OpenIdConnectConfiguration>(
                 _options.MetadataAddress!,
                 new OpenIdConnectConfigurationRetriever(),
                 new HttpDocumentRetriever { RequireHttps = requireHttps });
@@ -104,6 +107,18 @@ public sealed class FunctionsAccessTokenValidator
         }
 
         var principal = new ClaimsPrincipal(result.ClaimsIdentity);
+        if (string.IsNullOrWhiteSpace(principal.FindFirst("sub")?.Value))
+        {
+            return AccessTokenValidationResult.Fail("missing_subject");
+        }
+
+        var category = principal.FindFirst("category")?.Value;
+        if (category is not (UserCategories.Consumer or UserCategories.Employee
+            or UserCategories.Manufacturing or UserCategories.Service))
+        {
+            return AccessTokenValidationResult.Fail("invalid_category");
+        }
+
         return AccessTokenValidationResult.Success(principal);
     }
 }

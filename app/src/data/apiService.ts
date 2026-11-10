@@ -1,6 +1,4 @@
 import { graphqlClient } from "@/lib/graphql-client";
-import { getRestApiUrl } from "@/lib/utils";
-import { dabFetch } from "@/lib/dabFetch";
 import { trackError } from "@/lib/appInsights";
 import {
   GET_CATEGORIES,
@@ -816,152 +814,13 @@ export let products: Product[] = [];
   }
 })();
 
-// Shopping Cart API Functions
-import {
-  GET_SHOPPING_CART_ITEMS,
-  CREATE_CART_ITEM,
-  UPDATE_CART_ITEM,
-  DELETE_CART_ITEM,
-} from "@/lib/graphql-queries";
-import { ShoppingCartItem } from "@/types/product";
-
-interface ShoppingCartItemsResponse {
-  shoppingCartItems: GraphQLResponse<ShoppingCartItem>;
-}
-
-interface CreateCartItemResponse {
-  createShoppingCartItem: ShoppingCartItem;
-}
-
-interface UpdateCartItemResponse {
-  updateShoppingCartItem: ShoppingCartItem;
-}
-
-interface DeleteCartItemResponse {
-  deleteShoppingCartItem: { ShoppingCartItemID: number };
-}
-
-// Get shopping cart items for a user
-export const getShoppingCartItems = async (
-  shoppingCartId: string,
-): Promise<ShoppingCartItem[]> => {
-  try {
-    const data = await graphqlClient.request<ShoppingCartItemsResponse>(
-      GET_SHOPPING_CART_ITEMS,
-      { shoppingCartId },
-    );
-    return data.shoppingCartItems.items;
-  } catch (error) {
-    trackError("Error fetching shopping cart items", error, {
-      service: "apiService",
-      function: "getShoppingCartItems",
-    });
-    return [];
-  }
-};
-
-// Create a new shopping cart item
-export const createCartItem = async (
-  shoppingCartId: string,
-  productId: number,
-  quantity: number,
-): Promise<ShoppingCartItem | null> => {
-  try {
-    // Use REST API instead of GraphQL to avoid DateTime default value issues
-    const restApiUrl = getRestApiUrl();
-
-    const response = await dabFetch(`${restApiUrl}/ShoppingCartItem`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        ShoppingCartID: shoppingCartId,
-        ProductID: productId,
-        Quantity: quantity,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    // REST API returns { value: [...] }
-    return data.value && data.value.length > 0 ? data.value[0] : null;
-  } catch (error) {
-    trackError("Error creating cart item", error, {
-      service: "apiService",
-      function: "createCartItem",
-      productId: productId,
-    });
-    return null;
-  }
-};
-
-// Update cart item quantity
-export const updateCartItemQuantity = async (
-  shoppingCartItemId: number,
-  quantity: number,
-): Promise<ShoppingCartItem | null> => {
-  try {
-    const data = await graphqlClient.request<UpdateCartItemResponse>(
-      UPDATE_CART_ITEM,
-      {
-        shoppingCartItemId,
-        item: {
-          Quantity: quantity,
-        },
-      },
-    );
-    return data.updateShoppingCartItem;
-  } catch (error) {
-    trackError("Error updating cart item", error, {
-      service: "apiService",
-      function: "updateCartItemQuantity",
-      shoppingCartItemId: shoppingCartItemId,
-    });
-    return null;
-  }
-};
-
-// Delete a cart item
-export const deleteCartItem = async (
-  shoppingCartItemId: number,
-): Promise<boolean> => {
-  try {
-    await graphqlClient.request<DeleteCartItemResponse>(DELETE_CART_ITEM, {
-      shoppingCartItemId,
-    });
-    return true;
-  } catch (error) {
-    trackError("Error deleting cart item", error, {
-      service: "apiService",
-      function: "deleteCartItem",
-      shoppingCartItemId: shoppingCartItemId,
-    });
-    return false;
-  }
-};
-
-// Delete all cart items for a user
-export const clearShoppingCart = async (
-  shoppingCartId: string,
-): Promise<boolean> => {
-  try {
-    const items = await getShoppingCartItems(shoppingCartId);
-    await Promise.all(
-      items.map((item) => deleteCartItem(item.ShoppingCartItemID)),
-    );
-    return true;
-  } catch (error) {
-    trackError("Error clearing shopping cart", error, {
-      service: "apiService",
-      function: "clearShoppingCart",
-    });
-    return false;
-  }
-};
+export {
+  getShoppingCartItems,
+  createCartItem,
+  updateCartItemQuantity,
+  deleteCartItem,
+  clearShoppingCart,
+} from "@/services/ownedCart";
 
 // Fetch a single large photo on-demand (for fullscreen view)
 // This avoids OutOfMemoryException by loading large photos only when needed

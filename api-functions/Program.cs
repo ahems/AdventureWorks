@@ -27,6 +27,8 @@ var functionsOAuthOptions = FunctionsOAuthOptions.FromConfiguration(builder.Conf
 builder.Services.AddSingleton(functionsOAuthOptions);
 builder.Services.AddSingleton<FunctionsAccessTokenValidator>();
 builder.Services.AddScoped<ChatIdentityService>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<IOwnedCartService, OwnedCartService>();
 builder.Services.AddSingleton<FunctionsAuthorizationMiddleware>();
 builder.UseMiddleware<FunctionsAuthorizationMiddleware>();
 

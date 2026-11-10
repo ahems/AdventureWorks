@@ -43,8 +43,9 @@ public sealed class FunctionUser
     public bool IsConsumer =>
         string.Equals(Category, UserCategories.Consumer, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>True when the caller is an authenticated internal (non-consumer) user.</summary>
-    public bool IsInternal => IsAuthenticated && !IsConsumer;
+    /// <summary>True when the caller has an explicitly recognized internal category.</summary>
+    public bool IsInternal => IsAuthenticated &&
+        Category is UserCategories.Employee or UserCategories.Manufacturing or UserCategories.Service;
 
     /// <summary>Returns true when the token carries the requested scope.</summary>
     public bool HasScope(string scope) => Scopes.Contains(scope);

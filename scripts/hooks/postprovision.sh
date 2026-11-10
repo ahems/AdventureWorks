@@ -6,6 +6,9 @@ set -e
 
 echo "Configuring Azure resources for the demo..."
 
+# Incremental ARM deployments do not remove role assignments retired from Bicep.
+python3 "$(dirname "${BASH_SOURCE[0]}")/../utilities/reconcile-runtime-rbac.py" --apply
+
 API_URL=$(azd env get-value 'API_URL' 2>/dev/null | head -n1 | tr -d '\n\r ')
 if [ -n "$API_URL" ]; then
     azd env set 'VITE_API_URL' "$API_URL"

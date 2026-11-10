@@ -14,6 +14,17 @@ These scripts test the AdventureWorks APIs and Azure Functions directly using cu
 
 ## Available Test Scripts
 
+### Review Authentication Regression Tests
+
+- **[test-review-auth.mjs](test-review-auth.mjs)** exercises the real storefront
+  review hook: anonymous/mismatched sessions, authenticated submissions, protected
+  fields, response validation and voting guards. Run
+  `node --experimental-vm-modules --test tests/scripts/test-review-auth.mjs`.
+  The [auth assurance runner](validate-auth.sh) also includes these tests and
+  deployed anonymous review-read/mutation-denial checks. See the
+  [end-to-end guide](../../docs/features/authentication/END_TO_END_AUTHENTICATION.md)
+  for remaining consumer-fixture and server-side vote-integrity limitations.
+
 ### Health Diagnostics
 
 - **[test-health-diagnostics.sh](test-health-diagnostics.sh)** - Read-only Azure
@@ -64,6 +75,29 @@ These scripts test the AdventureWorks APIs and Azure Functions directly using cu
 
 ### Authentication Tests
 
+- **[validate-auth.sh](validate-auth.sh)** - Runs reflected Functions/MCP inventory, auth unit tests, azd-driven infrastructure checks and safe live probes. See the [end-to-end auth guide](../../docs/features/authentication/END_TO_END_AUTHENTICATION.md). Reports explicit failures and missing coverage; it does not claim complete assurance or start unsafe simulator runs. Run with `--offline`, `--infra`, `--live` or `--all`.
+- **[test-runtime-rbac.py](test-runtime-rbac.py)** - Executes the real
+  [runtime probe](runtime-rbac-probe.cjs) in the existing admin container using its
+  actual shared UAMI. Checks denied Storage/ACR management reads and successful
+  deployed-image manifest pull. Default is read-only. Run
+  `python3 tests/scripts/test-runtime-rbac.py --environment <environment>`.
+  With separate approval, `--send-email` and `AUTH_RBAC_TEST_RECIPIENT` opt in to
+  one controlled email and operation-status polling; no automatic send retries.
+  Reports never contain recipient, tokens or response bodies. An uncertain
+  invocation must be investigated before repeating a send. Service `Succeeded`
+  is not independent mailbox delivery proof. Offline safety tests:
+  `node --test tests/scripts/test-runtime-rbac.cjs`.
+- **[reconcile-runtime-rbac.py](../../scripts/utilities/reconcile-runtime-rbac.py)** -
+  Plan-only by default; `--apply` retires at most the four exact legacy runtime
+  bindings after verifying narrow email and AcrPull replacements. The provisioning
+  hook invokes this for upgrades because incremental ARM cannot delete removed
+  declarations. Uses azd discovery, verifies preservation, writes an ignored
+  removal ledger, leaves unrelated/admin grants and obsolete unassigned custom
+  definitions untouched, and fails on unexpected definitions. Does not provision,
+  seed, reset or delete resources. Run
+  `python3 scripts/utilities/reconcile-runtime-rbac.py --environment <environment>`
+  to inspect first. Offline tests:
+  `python3 -m unittest discover -s tests/auth -p 'test_*.py'`.
 - **[test_azure_auth.py](test_azure_auth.py)** - Offline regression tests for the reusable [Azure authentication helper](../../scripts/utilities/azure-auth.py): PKCE/state, identity/audience/role binding, redirects, errors and refresh rotation. Run `python3 -B -m unittest discover -s tests/scripts -p 'test_azure_auth.py'`. See the [authenticated scripting guide](../../docs/testing/AZURE_AUTHENTICATED_SCRIPTS.md) for live read-only checks.
 - **test-password-functions.sh** - Password hashing and verification (requires `FUNCTIONS_TOKEN` + `TEST_BUSINESS_ENTITY_ID` for a disposable e-shop customer — the endpoints are self-only)
 - **test-password-reset-flow.sh** - Complete password reset flow (request → validate → reset; also requires `TEST_EMAIL`)
@@ -187,3 +221,53 @@ When adding new test scripts:
 - [Main Testing Guide](../../docs/testing/AI_AND_MCP_TESTING_GUIDE.md)
 - [Test scripts](../README.md)
 - [API Documentation](../../api/README.md)
+## Guest cart authorization regressions
+
+Run `node --experimental-vm-modules --test tests/scripts/test-guest-cart-auth.mjs`
+from the repository root. Tests exercise the actual storefront transport and
+session module, including malformed/expired sessions, cross-tab bootstrap,
+Functions audience selection, logout isolation, failed-merge proof preservation,
+merge deduplication, origin/redirect restrictions and strict response handling.
+The authentication assurance runner includes these tests. Its guest-isolation scenario
+creates two isolated guest carts, verifies cross-owner denial and DAB denial,
+then retires those exact sessions. The sanitized cleanup ledger contains cart
+IDs/expiry only, never guest capabilities. No order, email or AI call is involved.
+
+`test-cart-provider-auth.mjs` exercises the real provider with deterministic hook
+lifecycle scheduling: automatic merge, proof-retirement/render races, merge
+retries, stale account-switch failures and logout cache eviction.
+
+The live assurance profile also runs `test-guest-cart-browser.mjs` against the
+azd-discovered storefront and Functions URLs. Chromium verifies anonymous add,
+persisted quantity, reload, sign-in-only checkout, actual consumer sign-in and
+automatic merge/proof retirement. It selects a product absent from the initial
+account cart and removes only that fixture, preserving all other account rows.
+The Playwright development dependency is declared in the storefront; install
+its Chromium/OS prerequisites when missing. The browser runner blocks non-cart
+Functions mutations and writes no capability tokens to its JSON evidence.
+
+The approved demo-only live profile creates two reusable consumer users on first
+use. Credentials/pending setup state stay in the ignored, mode-0600 local azd
+environment (`AUTH_TEST_CONSUMER_A_*` / `AUTH_TEST_CONSUMER_B_*`); they never
+appear in reports or CLI arguments. Do not publish `azd env get-values` output.
+The API scenario separately proves real two-owner authorization, DAB read policies,
+read-only token scope denial, atomic quantity combination, retry idempotency and
+overflow rollback. Its exact account/guest fixtures are cleaned; users are retained.
+Signup sends no email, and these scenarios create no order, review or AI invocation.
+See the [authentication guide](../../docs/features/authentication/END_TO_END_AUTHENTICATION.md)
+for fixture lifecycle, remaining blockers and RBAC findings.
+
+## Seed log mount authentication
+
+Run `python3 tests/scripts/test-seed-log-mount.py --environment <azd-environment>`
+to verify the existing Azure Files `/logs` mount uses the ACA environment's
+existing user-assigned identity with SMB OAuth and Storage Shared Key disabled.
+Two bounded execution overrides write/read/delete only one unique probe file;
+the seed entrypoint is never invoked and the stored job template is unchanged.
+Existing logs and SQL data are not modified. The test refuses an active seed job
+and records exact executions and cleanup under ignored `.auth-results/`.
+See the [seed logging guide](../../seed-job/README.md#persistent-seed-logs-managed-identity-smb-mount-preview)
+for preview requirements and failure recovery. The offline assurance profile
+includes its seed configuration/probe regression tests; this live probe is an
+explicit separate command rather than silently starting jobs during read-only
+infrastructure validation.

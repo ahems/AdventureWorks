@@ -1,7 +1,12 @@
 # Database Seeding Script for Container App Job
 # Uses Managed Identity for authentication (configured in infrastructure)
 
-param([switch] $ManufacturingOverlaysOnly, [switch] $VerifyOnly, [switch] $RealtimeNotificationsOnly)
+param([switch] $ManufacturingOverlaysOnly, [switch] $VerifyOnly, [switch] $RealtimeNotificationsOnly, [switch] $GuestCartsOnly)
+
+if ($GuestCartsOnly -and ($ManufacturingOverlaysOnly -or $VerifyOnly -or $RealtimeNotificationsOnly)) {
+    [Console]::Error.WriteLine('-GuestCartsOnly cannot be combined with other migration modes.')
+    exit 1
+}
 
 if ($RealtimeNotificationsOnly -and ($ManufacturingOverlaysOnly -or $VerifyOnly)) {
     [Console]::Error.WriteLine('-RealtimeNotificationsOnly cannot be combined with overlay modes.')
@@ -379,6 +384,19 @@ ORDER BY c.ORDINAL_POSITION
     }
 }
 
+function Initialize-GuestCartSchema {
+    param([Parameter(Mandatory)] $Connection)
+    $migration = $Connection.CreateCommand()
+    try {
+        $migration.CommandText = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot 'sql/guest-cart-sessions.sql'))
+        $migration.CommandTimeout = 120
+        $null = $migration.ExecuteNonQuery()
+        Write-Log 'Guest cart session schema verified without modifying existing carts.'
+    } finally {
+        $migration.Dispose()
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Acquire Azure AD access token for SQL (scope: https://database.windows.net/.default)
 # Using Managed Identity
@@ -424,6 +442,12 @@ try {
     $conn.Open()
     Write-Log "  ✓ Successfully connected to SQL Database"
     $cmd = $conn.CreateCommand()
+
+    if ($GuestCartsOnly) {
+        Initialize-GuestCartSchema -Connection $conn
+        $script:seedSuccess = $true
+        return
+    }
 
     if ($RealtimeNotificationsOnly) {
         if ([string]::IsNullOrWhiteSpace($env:RUNTIME_MANAGED_IDENTITY_NAME)) {
@@ -474,6 +498,7 @@ IF NOT EXISTS (SELECT 1 FROM Production.Product)
 "@
             $null = $cmd.ExecuteNonQuery()
             Write-Log "Existing base seed detected; preserving schema/data and applying manufacturing overlays only."
+            Initialize-GuestCartSchema -Connection $conn
             $result = Import-ManufacturingOverlays -Connection $conn -SqlFolder (Join-Path $PSScriptRoot 'sql')
             Write-Log "Manufacturing overlays verified and committed: $($result | ConvertTo-Json -Compress -Depth 5)"
             if ($env:RUNTIME_MANAGED_IDENTITY_CLIENT_ID) {
@@ -2690,6 +2715,7 @@ WHERE e.EmailAddress = 'demo.admin@adventureworks.com';
         Write-Log "Runtime XML schema access granted on Production.ManuInstructionsSchemaCollection."
     }
 
+    Initialize-GuestCartSchema -Connection $conn
     $script:seedSuccess = $true
     $conn.Close()
 }

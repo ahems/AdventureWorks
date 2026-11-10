@@ -172,15 +172,11 @@ module acr 'modules/acr.bicep' = {
   name: 'Deploy-ACR'
   params: {
     acrName: acrName
-    identityName: identityName
     workspaceName: workspaceName
     adminUserEnabled: adminUserEnabled
     diagnosticsName: diagnosticsName
     location: location
   }
-  dependsOn: [
-    identity
-  ]
 }
 
 // Surface ACR endpoint for azd environment injection

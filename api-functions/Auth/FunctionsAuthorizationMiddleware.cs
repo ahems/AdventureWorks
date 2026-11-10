@@ -131,7 +131,7 @@ public sealed class FunctionsAuthorizationMiddleware : IFunctionsWorkerMiddlewar
         }
 
         // Category check — internal-only routes reject consumer tokens.
-        if (policy.Mode == AccessMode.InternalOnly && user.IsConsumer)
+        if (policy.Mode == AccessMode.InternalOnly && !user.IsInternal)
         {
             if (_options.Mode == OAuthEnforcementMode.Enforced)
             {

@@ -94,13 +94,25 @@ public class FunctionUserTests
     [Theory]
     [InlineData("employee")]
     [InlineData("manufacturing")]
-    [InlineData("admin")]
+    [InlineData("service")]
     public void Non_consumer_categories_are_flagged_internal(string category)
     {
         var user = FunctionUser.FromPrincipal(Principal(new Claim("category", category)));
 
         Assert.False(user.IsConsumer);
         Assert.True(user.IsInternal);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("anonymous")]
+    [InlineData("admin")]
+    [InlineData("unrecognized")]
+    public void Missing_or_unrecognized_categories_are_not_internal(string? category)
+    {
+        var principal = category is null ? Principal() : Principal(new Claim("category", category));
+        Assert.False(FunctionUser.FromPrincipal(principal).IsInternal);
     }
 
     [Fact]

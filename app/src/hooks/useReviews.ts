@@ -6,6 +6,7 @@ import { GET_PRODUCT_REVIEWS, GET_ALL_REVIEWS } from "@/lib/graphql-queries";
 import { getRestApiUrl } from "@/lib/utils";
 import { dabFetch } from "@/lib/dabFetch";
 import { trackError } from "@/lib/appInsights";
+import { useAuth } from "@/context/AuthContext";
 
 const STORAGE_KEY = "adventureworks_user_reviews";
 
@@ -41,6 +42,7 @@ interface ReviewsResponse {
 }
 
 export const useReviews = (productId: number) => {
+  const { isAuthenticated, user } = useAuth();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -107,102 +109,81 @@ export const useReviews = (productId: number) => {
     userEmail?: string,
     userId?: number,
   ) => {
-    // If user is logged in and we have email/userId, submit to API
-    if (userEmail && userId) {
-      // Check if user already reviewed this product
-      const existingReview = reviews.find(
-        (r) => r.id.startsWith("api_") && r.productId === review.productId,
-      );
-
-      // Check API reviews for this user
-      const hasReviewed = reviews.some((r) => {
-        // For API reviews, check if UserID matches
-        if (r.id.startsWith("api_")) {
-          // We need to fetch the full review data to check UserID
-          // For now, we'll rely on the frontend check below
-          return false;
-        }
-        return false;
+    if (
+      !isAuthenticated || !user || !userEmail || !userId ||
+      userEmail !== user.email || userId !== user.businessEntityId
+    ) {
+      const error = new Error("Please sign in to submit a review.");
+      trackError("Review submission requires the current authenticated user", error, {
+        hook: "useReviews",
+        context: "addReview",
       });
-
-      try {
-        const restApiUrl = getRestApiUrl();
-        const response = await dabFetch(`${restApiUrl}/ProductReview`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            ProductID: review.productId,
-            ReviewerName: review.userName,
-            ReviewDate: new Date().toISOString(),
-            EmailAddress: userEmail,
-            Rating: review.rating,
-            Comments: review.comment,
-            HelpfulVotes: 0,
-            UserID: userId,
-          }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || "Failed to submit review");
-        }
-
-        const newReviewData = await response.json();
-
-        // Refetch reviews to get the updated list
-        // For now, just optimistically update the UI
-        const newReview: Review = {
-          id: `api_${newReviewData.value?.[0]?.ProductReviewID || Date.now()}`,
-          productId: review.productId,
-          userName: review.userName,
-          rating: review.rating,
-          title: review.title,
-          comment: review.comment,
-          createdAt: new Date().toISOString().split("T")[0],
-          helpful: 0,
-          markedUsefulBy: [],
-          userID: userId,
-        };
-
-        setReviews((prev) => [newReview, ...prev]);
-        return newReview;
-      } catch (error) {
-        trackError("Error submitting review to API", error as Error, {
-          hook: "useReviews",
-          context: "addReview",
-          productId: review.productId,
-          userId,
-        });
-        throw error;
-      }
+      throw error;
     }
 
-    // Fallback to localStorage for non-authenticated users
-    const newReview: Review = {
-      ...review,
-      id: `user_${Date.now()}`,
-      createdAt: new Date().toISOString().split("T")[0],
-      helpful: 0,
-      markedUsefulBy: [],
-    };
+    try {
+      const restApiUrl = getRestApiUrl();
+      const response = await dabFetch(`${restApiUrl}/ProductReview`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ProductID: review.productId,
+          ReviewerName: review.userName,
+          ReviewDate: new Date().toISOString(),
+          EmailAddress: userEmail,
+          Rating: review.rating,
+          Comments: review.comment,
+          UserID: userId,
+        }),
+      });
 
-    // Store only user-submitted reviews
-    const storedReviews = localStorage.getItem(STORAGE_KEY);
-    const userReviews: Review[] = storedReviews
-      ? JSON.parse(storedReviews)
-      : [];
+      if (!response.ok) {
+        throw new Error(`Failed to submit review (HTTP ${response.status})`);
+      }
 
-    userReviews.unshift(newReview);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(userReviews));
+      const newReviewData = await response.json();
+      const reviewId = newReviewData.value?.[0]?.ProductReviewID;
+      if (!Number.isInteger(reviewId) || reviewId <= 0) {
+        throw new Error("The review service returned no valid review identifier.");
+      }
 
-    setReviews((prev) => [newReview, ...prev]);
+      const newReview: Review = {
+        id: `api_${reviewId}`,
+        productId: review.productId,
+        userName: review.userName,
+        rating: review.rating,
+        title: review.title,
+        comment: review.comment,
+        createdAt: new Date().toISOString().split("T")[0],
+        helpful: 0,
+        markedUsefulBy: [],
+        userID: userId,
+      };
 
-    return newReview;
+      setReviews((prev) => [newReview, ...prev]);
+      return newReview;
+    } catch (error) {
+      trackError("Error submitting review to API", error as Error, {
+        hook: "useReviews",
+        context: "addReview",
+        productId: review.productId,
+        userId,
+      });
+      throw error;
+    }
   };
 
   const markAsUseful = async (reviewId: string, userId: string) => {
+    if (!isAuthenticated || !user || userId !== user.id) {
+      const error = new Error("Please sign in to like a review.");
+      trackError("Review voting requires the current authenticated user", error, {
+        hook: "useReviews",
+        context: "markAsUseful",
+      });
+      throw error;
+    }
     // Only handle API reviews (start with 'api_')
     if (!reviewId.startsWith("api_")) {
       // For user-submitted reviews, keep using localStorage
@@ -256,8 +237,8 @@ export const useReviews = (productId: number) => {
 
     if (!review) return false;
 
-    // Reviewers cannot vote on their own review (also enforced by the DAB update policy)
-    if (review.userID != null && String(review.userID) === userId) return false;
+    // DAB restricts writes to HelpfulVotes; prevent self-voting in the UI.
+    if (review.userID != null && review.userID === user.businessEntityId) return false;
 
     // Load user votes from localStorage
     const voteMarks = localStorage.getItem(`${STORAGE_KEY}_votes`);

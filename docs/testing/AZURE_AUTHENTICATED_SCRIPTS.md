@@ -202,3 +202,9 @@ require deliberate selection and may mutate data/incur costs.
 Related: [OAuth server guide](../features/mcp-oauth/README.md),
 [Functions OAuth guide](../features/functions-oauth/README.md),
 [existing auth smoke tests](../../tests/scripts/auth-smoke-tests.sh).
+# Cross-solution validation
+
+For reflected inventory, unit tests, deployed configuration checks and safe live
+probes, use the [end-to-end authentication assurance guide](../features/authentication/END_TO_END_AUTHENTICATION.md)
+and `bash tests/scripts/validate-auth.sh --all`. Unverified identity paths and
+unreviewed exceptions remain nonzero results, not successes.

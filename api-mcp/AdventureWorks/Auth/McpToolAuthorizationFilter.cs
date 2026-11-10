@@ -45,7 +45,14 @@ public static class McpToolAuthorizationFilter
             return Error("Authentication is required to use this tool.");
         }
 
-        var subject = user.GetSubjectId() ?? "(unknown)";
+        var subject = user.GetSubjectId();
+        if (string.IsNullOrWhiteSpace(subject))
+        {
+            LogAndTrack(logger, telemetry, "(missing)", user.GetCategory(), user.GetApplication(),
+                toolName, "(none)", AuthorizationOutcome.DenyIdentity, correlationId);
+            return Error("A recognized authenticated identity is required.");
+        }
+
         var category = user.GetCategory();
         var application = user.GetApplication();
         var scopes = user.GetScopeSet();

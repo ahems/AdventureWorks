@@ -18,7 +18,7 @@ public static class FunctionAuthorizationRegistry
 {
     private static readonly FrozenDictionary<string, FunctionPolicy> Policies = new FunctionPolicy[]
     {
-        // ---- Tier P — anonymous (18) ----
+        // ---- Tier P — anonymous / handler-enforced (21) ----
         new("AIAgentChat", AccessTier.Public, null, AccessMode.Anonymous, null),  // Validates MCP-audience OAuth inside the function.
         new("AIAgentStatus", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/agent/status
         new("GetOpenApiSpec", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/openapi.json
@@ -37,8 +37,12 @@ public static class FunctionAuthorizationRegistry
         new("SemanticSearch", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/search/semantic
         new("Signup", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/signup (server-side consumer registration)
         new("ValidateResetToken", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/password/reset/validate
+        new("GuestCartSession", AccessTier.Public, null, AccessMode.Anonymous, null),
+        new("OwnedCartItems", AccessTier.Public, null, AccessMode.Anonymous, null),
+        new("OwnedCartItem", AccessTier.Public, null, AccessMode.Anonymous, null),
 
-        // ---- Tier C — consumer self-or-internal, ownership (12) ----
+        // ---- Tier C — consumer self-or-internal, ownership (13) ----
+        new("MergeGuestCart", AccessTier.Consumer, FunctionScopes.OrdersWrite, AccessMode.SelfOrInternal, "consumer + guest session"),
         new("SetPassword", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityID(self; internal → customers only)"),  // /api/password
         new("VerifyPassword", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal, "businessEntityID(self only)"),  // /api/password/verify
         new("CheckOrderReceipt", AccessTier.Consumer, FunctionScopes.OrdersRead, AccessMode.SelfOrInternal, "salesOrderId(owner CustomerID)"),  // /api/orders/{salesOrderId:int}/receipt-status

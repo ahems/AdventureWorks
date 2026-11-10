@@ -54,6 +54,7 @@ _Production reference architecture showing all Azure components with enterprise 
 
 **Location:** `features/authentication/`
 
+- [End-to-end authentication assurance](features/authentication/END_TO_END_AUTHENTICATION.md) - User/workload identity paths, API coverage, RBAC, exceptions, executable validation and explicit remaining gaps
 - [Authenticated local Azure scripts](testing/AZURE_AUTHENTICATED_SCRIPTS.md) - Reusable azd-based helper for seeded internal-user OAuth, DAB/Functions/MCP calls, curl and rotating refresh sessions
 - [PASSWORD_IMPLEMENTATION.md](features/authentication/PASSWORD_IMPLEMENTATION.md) - Password hashing and storage
 - [PASSWORD_RESET_FLOW.md](features/authentication/PASSWORD_RESET_FLOW.md) - Password reset workflow

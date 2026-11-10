@@ -72,6 +72,67 @@ The container uses **Managed Identity** (passwordless authentication) to connect
 - **Azure SQL Database**: Uses the dedicated seed/bootstrap user-assigned managed identity configured as the server's Microsoft Entra administrator by Bicep; runtime identity receives reader/writer/EXECUTE/Change Tracking permissions only
 - **Azure Resources**: Authenticates via managed identity for Azure resource access
 
+### Persistent seed logs: managed-identity SMB mount (preview)
+
+The existing Azure Files share `seed-job-logs` remains mounted at `/logs`; the
+seed script's file logging is unchanged. The mount no longer retrieves or stores
+a Storage account key. It uses the **existing runtime user-assigned identity
+attached to the Container Apps environment**. The seed container still uses its
+separate seed/bootstrap identity for SQL and ACR; mount authentication happens
+at the environment layer, not inside the container.
+
+Infrastructure configuration:
+
+- [`storage.bicep`](../infra/modules/storage.bicep) enables
+  `azureFilesIdentityBasedAuthentication.smbOAuthSettings.isSmbOAuthEnabled`,
+  permits Kerberos in SMB protocol settings, defaults to OAuth and disables
+  Shared Key access. Its Storage AVM version uses the current Storage API needed
+  for SMB OAuth.
+- [`aca.bicep`](../infra/modules/aca.bicep) assigns **Storage File Data SMB MI
+  Admin** to the existing environment identity at Storage account scope, then
+  configures the `seed-job` storage definition with `azureFile.identity` and
+  API version `2026-03-02-preview`. Neither `accountKey` nor Key Vault key
+  indirection is configured. The normal module dependency on Storage precedes
+  the mount; the mount explicitly depends on its RBAC assignment.
+- The administrator-level file data role is a **preview platform requirement**.
+  It applies across the account's file shares and bypasses individual file ACL
+  isolation; it is not a management-plane Contributor grant. Keep this explicit
+  in IAM reviews. Do not substitute ordinary SMB Share Contributor/Reader roles.
+  Role propagation can delay the first mount even after ARM deployment succeeds.
+
+See Microsoft's [Container Apps mount guidance](https://learn.microsoft.com/en-us/azure/container-apps/storage-mounts#azure-files-volume)
+and [managed-identity Azure Files requirements](https://learn.microsoft.com/en-us/azure/storage/files/files-managed-identities).
+The preview was explicitly approved for this demo.
+
+#### Verify logging without seeding
+
+```bash
+python3 tests/scripts/test-seed-log-mount.py --environment <azd-environment>
+python3 -m unittest discover -s seed-job/tests -p 'test_seed*.py'
+```
+
+The live verifier reads all resource names/identities from the selected azd
+environment, checks mount authentication, SMB OAuth, disabled Shared Key and the
+required role, and refuses to start while a seed execution may be active. It
+starts **two execution overrides of the existing job**, preserving its image,
+resources and volume mounts but replacing its entrypoint with isolated PowerShell
+file operations. It never invokes the seed script, SQL, email or AI.
+
+The first execution proves `/logs` is an SMB mount and creates one uniquely named
+probe file without overwriting existing files. The second execution reads and
+validates that exact file, then deletes it. A sanitized execution/cleanup ledger
+and JSON/Markdown/JUnit evidence are written under ignored `.auth-results/`.
+The stored job template must remain unchanged. Failed/uncertain execution starts
+are not blindly retried; inspect the ledger's exact execution before recovering
+an unconfirmed probe. Cleanup only targets its exact filename and expected content,
+never existing seed logs.
+
+The deployed migration passed this check after Shared Key access was disabled.
+The existing `/api/seed/status` REST-based log reader also returned HTTP 200 and
+`completed` using its existing managed-identity permissions. No database seeding
+or reset was performed. A fresh-from-scratch `azd up` remains a separate verification
+after user-owned teardown; never run `azd down` as part of this test.
+
 Environment variables required:
 
 - `AZURE_RESOURCE_GROUP`
@@ -267,6 +328,19 @@ az containerapp job start --name "$SEED_JOB_NAME" --resource-group "$RESOURCE_GR
 Do not run the two starts concurrently. Each successful import log must show artifact counts matching the complete packaged files, equal database verification counts, and their sum as `SourceRecordsVerified`. (The original three-model sample was 3 instructions, 4 illustrations, 4 mappings, 11 verified records; full coverage is larger.) A first import into NULL/absent targets reports updated/inserted counts; a pre-existing identical subset legitimately lowers these counts. On the second import all three mutation counts must be zero and unchanged counts must equal the corresponding artifact counts. Both executions verify protected snapshots before commit. `ProtectedInstructionSnapshotsVerified` can increase after the first import because those instructions are now non-NULL and protected on replay.
 
 For a separate verification-only execution, append `"-VerifyOnly"` to the generated template's `args` and start it with the same `--yaml` mechanism. Remove the local execution template when finished. Execution overrides leave the stored job definition unchanged; use them instead of changing the job template for a standalone import.
+
+### Guest-cart schema only
+
+For an existing deployment, build the current seed-job image and reuse the
+execution override above, replacing `"-ManufacturingOverlaysOnly"` with
+`"-GuestCartsOnly"`. This mutually exclusive mode applies only
+[`sql/guest-cart-sessions.sql`](sql/guest-cart-sessions.sql) and exits before any
+seed/reset path. It creates the hashed, fixed-one-day guest-session table without
+altering existing carts or reseeding business data. Verify that the exact job
+execution reaches `Succeeded`; starting an execution is not completion.
+
+The migration also runs during ordinary preserved-data and fresh-seed paths.
+Do not invoke the default seed entry point merely to apply this schema change.
 
 Each SQL command has a 120-second timeout. The import performs two passes across every source record, plus snapshot/preservation checks; large artifact sets and database blocking affect elapsed time. The existing job retains its 2000-second timeout. A killed execution cannot commit a partial SQL transaction; check execution status and logs before retrying.
 

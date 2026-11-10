@@ -18,6 +18,10 @@ _[Watch full video](docs/adventureworks-demo.webm) (25 seconds)_
 
 This repo implements a **3‑tier Azure application** with passwordless authentication and managed identities.
 
+See [end-to-end authentication assurance](docs/features/authentication/END_TO_END_AUTHENTICATION.md)
+for the distinction between demo user OAuth and Azure workload identities, validation
+commands, accepted exceptions and remaining coverage gaps.
+
 ### Production Reference Architecture
 
 The diagram below shows the **ideal production state** of this solution, modeled on the [Baseline Microsoft Foundry Chat Reference Architecture](https://learn.microsoft.com/en-us/azure/architecture/ai-ml/architecture/baseline-openai-e2e-chat). It includes enterprise security features (VNet, private endpoints, Application Gateway + WAF, Azure Firewall) that the current demo deployment omits for simplicity.

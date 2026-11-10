@@ -9,10 +9,10 @@ public enum AccessTier
     /// <summary>Tier P — anonymous. No token required (health, discovery, pre-auth, public catalog, AI-assistant pass-through).</summary>
     Public,
 
-    /// <summary>Tier C — consumer self-service with record-level ownership (internal roles unrestricted).</summary>
+    /// <summary>Tier C — consumer self-service with record-level ownership (scoped internal roles unrestricted).</summary>
     Consumer,
 
-    /// <summary>Tier I — internal-only. Valid token + scope + non-consumer category.</summary>
+    /// <summary>Tier I — internal-only. Valid token + scope + recognized internal category.</summary>
     Internal,
 }
 
@@ -25,7 +25,7 @@ public enum AccessMode
     /// <summary>Consumers restricted to their own records (server-resolved owner id); internal roles unrestricted.</summary>
     SelfOrInternal,
 
-    /// <summary>Internal (non-consumer) categories only.</summary>
+    /// <summary>Recognized internal categories only.</summary>
     InternalOnly,
 }
 
@@ -52,12 +52,15 @@ public static class FunctionScopes
 }
 
 /// <summary>
-/// AdventureWorks user categories carried in the token <c>category</c> claim. Any value other
-/// than <see cref="Consumer"/> is treated as an internal (employee) category for Tier I checks.
+/// AdventureWorks user categories carried in the token <c>category</c> claim. Values outside
+/// this catalog are rejected by token validation; only explicit internal categories have Tier I access.
 /// </summary>
 public static class UserCategories
 {
     public const string Consumer = "consumer";
+    public const string Employee = "employee";
+    public const string Manufacturing = "manufacturing";
+    public const string Service = "service";
 }
 
 /// <summary>

@@ -157,8 +157,9 @@ public class DependencyHealthService(
             var options = new ShareClientOptions { ShareTokenIntent = ShareTokenIntent.Backup };
             var client = new ShareServiceClient(StorageUri(account, "file"), credential, options)
                 .GetShareClient("seed-job-logs");
-            await client.GetPropertiesAsync(cancellationToken: ct);
-            return ("healthy", "Seed log file share is accessible; seed execution is checked separately.");
+            // Share properties require management permissions; probe the actual file-data capability instead.
+            await client.GetRootDirectoryClient().GetPropertiesAsync(cancellationToken: ct);
+            return ("healthy", "Seed log root directory is readable; seed execution is checked separately.");
         });
         foreach (var probe in McpProbes())
             yield return probe;

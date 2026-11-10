@@ -6,7 +6,7 @@ namespace ApiFunctions.Tests;
 
 /// <summary>
 /// Unit tests for <see cref="FunctionsOAuthOptions.FromConfiguration"/>: the deployment-derived
-/// issuer/audience/metadata resolution and the fail-open enforcement-mode policy.
+/// issuer/audience/metadata resolution and fail-closed enabled configuration.
 /// </summary>
 public class FunctionsOAuthOptionsTests
 {
@@ -23,17 +23,12 @@ public class FunctionsOAuthOptionsTests
         new ConfigurationBuilder().AddInMemoryCollection(values).Build();
 
     [Fact]
-    public void Stays_disabled_when_issuer_is_not_configured()
+    public void Explicit_enforcement_rejects_missing_issuer()
     {
         using var _ = new EnvScope(RelevantEnvKeys);
 
-        // Even an explicit "enforced" request must fail open to Disabled when there is nothing to
-        // validate against (no issuer/audience/metadata) — local + not-yet-wired deployments.
-        var options = FunctionsOAuthOptions.FromConfiguration(
-            Config(new() { ["FUNCTIONS_OAUTH_MODE"] = "enforced" }));
-
-        Assert.Equal(OAuthEnforcementMode.Disabled, options.Mode);
-        Assert.False(options.IsConfigured);
+        Assert.Throws<InvalidOperationException>(() => FunctionsOAuthOptions.FromConfiguration(
+            Config(new() { ["FUNCTIONS_OAUTH_MODE"] = "enforced" })));
     }
 
     [Theory]
@@ -42,7 +37,6 @@ public class FunctionsOAuthOptionsTests
     [InlineData("audit", OAuthEnforcementMode.Audit)]
     [InlineData("shadow", OAuthEnforcementMode.Audit)]
     [InlineData("disabled", OAuthEnforcementMode.Disabled)]
-    [InlineData("nonsense", OAuthEnforcementMode.Disabled)]
     public void Resolves_mode_when_fully_configured(string mode, OAuthEnforcementMode expected)
     {
         using var _ = new EnvScope(RelevantEnvKeys);
@@ -66,6 +60,14 @@ public class FunctionsOAuthOptionsTests
             Config(new() { ["FUNCTIONS_JWT_ISSUER"] = "https://mcp.example.test" }));
 
         Assert.Equal(OAuthEnforcementMode.Disabled, options.Mode);
+    }
+
+    [Fact]
+    public void Invalid_mode_cannot_silently_disable_authorization()
+    {
+        using var _ = new EnvScope(RelevantEnvKeys);
+        Assert.Throws<InvalidOperationException>(() => FunctionsOAuthOptions.FromConfiguration(
+            Config(new() { ["FUNCTIONS_OAUTH_MODE"] = "enfroced" })));
     }
 
     [Fact]

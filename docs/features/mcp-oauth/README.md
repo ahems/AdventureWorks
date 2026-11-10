@@ -1,5 +1,10 @@
 # MCP OAuth Authorization (Self-Contained Demo)
 
+See [end-to-end authentication assurance](../authentication/END_TO_END_AUTHENTICATION.md)
+for the complete user/workload trust model, executable validation, exception
+boundaries and remaining gaps. Historical design/security-review statements below
+are not a current full-solution conformance result.
+
 This feature turns the existing **`api-mcp`** service into an **OAuth 2.0-protected
 MCP resource** *and* the **authorization server that protects it** — entirely
 self-contained, provisioned automatically by `azd up`, and backed by the demo's

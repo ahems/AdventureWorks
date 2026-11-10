@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "publicFunctions": {
+    "AIAgentChat": "alternate-mcp-enforcement",
+    "AIAgentStatus": "public-status",
+    "GetOpenApiSpec": "public-discovery",
+    "GetSearchSuggestions": "public-catalog",
+    "GetSitemap": "public-catalog",
+    "GetSwaggerUI": "public-discovery",
+    "HealthCheck": "public-status",
+    "DependencyReadiness": "public-status",
+    "HelpMeChooseCatalogMeta": "public-catalog",
+    "HelpMeChooseQuestions": "public-recommendations",
+    "HelpMeChooseRecommend": "public-recommendations",
+    "NegotiateWebPubSub": "public-client-capability",
+    "RequestPasswordReset": "pre-authentication",
+    "ResetPassword": "pre-authentication",
+    "SeedJobStatus": "public-status",
+    "SemanticSearch": "public-catalog",
+    "Signup": "pre-authentication",
+    "ValidateResetToken": "pre-authentication",
+    "GuestCartSession": "guest-bootstrap-and-capability",
+    "OwnedCartItems": "alternate-cart-session-or-consumer-enforcement",
+    "OwnedCartItem": "alternate-cart-session-or-consumer-enforcement"
+  },
+  "anonymousDabReads": [
+    "UnitMeasure", "Culture", "Currency", "AddressType", "ContactType",
+    "PhoneNumberType", "SalesReason", "CurrencyRate", "CountryRegion",
+    "SalesTerritory", "ShipMethod", "StateProvince", "Illustration",
+    "Location", "ProductCategory", "ProductSubcategory", "ProductModel",
+    "ProductDescription", "ProductModelProductDescriptionCulture",
+    "ProductSearch", "ProductModelIllustration", "Product", "ProductName",
+    "ProductListPriceHistory", "ProductInventory", "SpecialOffer",
+    "SpecialOfferProduct", "CountryRegionCurrency",
+    "SalesTaxRate", "ProductPhoto", "ProductProductPhoto", "ProductReview",
+    "ProductReviewReply", "HelpMeChoose"
+  ],
+  "unreviewedAnonymousDabOperations": {},
+  "runtimeEmailRole": {
+    "roleNamePrefix": "AdventureWorks Email Sender ",
+    "actions": [
+      "Microsoft.Communication/communicationServices/read",
+      "Microsoft.Communication/communicationServices/write"
+    ],
+    "justification": "ACS email authorization requires Communication service write. Only this exact custom role at the selected single Communication resource is reviewed; no wildcard, keys, deletion, role administration or broader scope is permitted."
+  }
+}

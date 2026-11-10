@@ -77,14 +77,27 @@ resource aspireDashboard 'Microsoft.App/managedEnvironments/dotNetComponents@202
   }
 }
 
-// Storage for seed job logs
-resource seedJobStorage 'Microsoft.App/managedEnvironments/storages@2023-11-02-preview' = {
+resource seedJobSmbRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storageAccount.id, azidentity.id, 'Storage File Data SMB MI Admin')
+  scope: storageAccount
+  properties: {
+    principalId: azidentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a235d3ee-5935-4cfb-8cc5-a3303ad5995e')
+  }
+}
+
+// SMB OAuth uses the environment identity, not the seed container's SQL identity.
+resource seedJobStorage 'Microsoft.App/managedEnvironments/storages@2026-03-02-preview' = {
   parent: containerAppEnv
   name: 'seed-job'
+  dependsOn: [
+    seedJobSmbRole
+  ]
   properties: {
     azureFile: {
       accountName: storageAccount.name
-      accountKey: storageAccount.listKeys().keys[0].value
+      identity: azidentity.id
       shareName: 'seed-job-logs'
       accessMode: 'ReadWrite'
     }

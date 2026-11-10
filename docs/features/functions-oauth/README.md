@@ -1,5 +1,10 @@
 # Functions API OAuth Authorization
 
+For cross-solution coverage, executable validation and known gaps, see
+[end-to-end authentication assurance](../authentication/END_TO_END_AUTHENTICATION.md).
+Historical route counts below are design snapshots; use the runner's reflected
+inventory for the current surface.
+
 > Extends the self-contained AdventureWorks OAuth demo — already protecting the **MCP**
 > server ([`docs/features/mcp-oauth`](../mcp-oauth/README.md)) and the **DAB** GraphQL/REST
 > API (JWT config in [`api/dab-config.json`](../../../api/dab-config.json), see
@@ -218,17 +223,19 @@ classified in the registry — exactly as `McpAuthorizationExtensions` does for 
 The resource server reads `FUNCTIONS_OAUTH_MODE`
 ([`FunctionsOAuthOptions`](../../../api-functions/Auth/FunctionsOAuthOptions.cs)). Enforcement is
 only possible when the issuer, audience, and OIDC metadata address are all resolved from
-configuration; otherwise the server **fails open** to `disabled` so local and not-yet-wired
-deployments keep working unchanged.
+configuration. Explicit `enforced` or `audit` with incomplete configuration now fails
+startup; invalid mode strings also fail instead of silently disabling protection.
+An unset mode still defaults to `disabled` for local development.
 
 | Mode | Token absent | Token present | Blocks? | Purpose |
 | ---- | ------------ | ------------- | ------- | ------- |
-| `disabled` | allowed | ignored | never | Pure pass-through — pre-OAuth behavior. The implicit fallback when issuer/audience/metadata are unset. |
+| `disabled` | allowed | ignored | never | Explicit local pass-through; also the default when no mode is requested. Never valid for deployed assurance. |
 | `audit` | allowed | validated; allow/deny logged to App Insights | never | Shadow mode for diagnosing a new client before enforcing. |
 | `enforced` *(deployed)* | protected routes → `401` | validated + scope/category/ownership enforced | yes | Full enforcement. |
 
 Infrastructure wires the mode in [`infra/main.bicep`](../../../infra/main.bicep) as `enforced`.
-Tier P routes are always allowed regardless of mode.
+Tier P routes bypass middleware. `agent/chat` then validates an MCP-audience token
+inside its handler; it is not an anonymous business endpoint.
 
 ### How each client obtains its Functions token
 
@@ -273,8 +280,9 @@ All phases are implemented.
   `password/reset/*` and `signup` happen before the user has a token. `POST /api/password` and
   `POST /api/password/verify` now require a token: consumers act only on themselves, staff may only
   reset **customer** passwords, and verify is self-only (no password oracle).
-- **`agent/chat` / `agent/status` stay anonymous** to preserve the anonymous assistant and MCP
-  token forwarding; tool authorization is enforced at `/mcp`.
+- **`agent/status` stays public.** `agent/chat` bypasses Functions-audience middleware
+  but requires a validated MCP-audience user token in its handler before forwarding;
+  tool authorization is additionally enforced at `/mcp`.
 - **`openapi.json` / `swagger/ui` stay anonymous** and may describe internal routes — acceptable for
   a demo; the routes themselves are still protected.
 

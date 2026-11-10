@@ -1,13 +1,8 @@
 param acrName string = 'avacr${toLower(uniqueString(resourceGroup().id))}'
 param diagnosticsName string = 'acr-diagnostics-${toLower(uniqueString(resourceGroup().id))}'
-param identityName string = 'av-identity-${uniqueString(resourceGroup().id)}'
 param workspaceName string = 'av-workspace-${toLower(uniqueString(resourceGroup().id))}'
 param location string = resourceGroup().location
 param adminUserEnabled bool = true
-
-resource azidentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
-  name: identityName
-}
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspaceName
@@ -22,13 +17,6 @@ module acr 'br/public:avm/res/container-registry/registry:0.9.3' = {
     acrSku: 'Basic'
     acrAdminUserEnabled: adminUserEnabled
     zoneRedundancy: 'Disabled'
-    roleAssignments: [
-      {
-        principalId: azidentity.properties.principalId
-        roleDefinitionIdOrName: 'Contributor'
-        principalType: 'ServicePrincipal'
-      }
-    ]
     diagnosticSettings: [
       {
         name: diagnosticsName

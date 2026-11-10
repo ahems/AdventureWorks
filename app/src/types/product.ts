@@ -136,6 +136,8 @@ export interface ShoppingCartItem {
   ShoppingCartID: string;
   Quantity: number;
   ProductID: number;
+  DateCreated?: string;
+  ModifiedDate?: string;
   Product?: Product;
 }
 

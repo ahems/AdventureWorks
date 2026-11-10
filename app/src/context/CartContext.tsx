@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useMemo, ReactNode } from "react";
+import React, { createContext, useContext, useMemo, useState, useEffect, useCallback, useRef, ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Product,
   CartItem,
@@ -18,10 +19,17 @@ import {
 import { trackEvent, trackError } from "@/lib/appInsights";
 import { useProductsByIds } from "@/hooks/useProducts";
 import { useLanguage } from "@/context/LanguageContext";
+import {
+  GuestCartSession, GUEST_CART_EVENT, GUEST_CART_STORAGE_KEY, ensureGuestCartSession,
+  mergeGuestCartSession, readGuestCartSession,
+} from "@/services/ownedCart";
 
 interface CartContextType {
   items: CartItem[];
   isLoading: boolean;
+  error: string | null;
+  canRetryGuestMerge: boolean;
+  retryGuestMerge: () => void;
   addToCart: (
     product: Product,
     quantity?: number,
@@ -52,11 +60,74 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [guestSession, setGuestSession] = useState<GuestCartSession | null>(null);
+  const [isMerging, setIsMerging] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
+  const mergeGeneration = useRef(0);
+  const previousCartId = useRef<string | null>(null);
+  const businessEntityId = user?.businessEntityId;
   const { selectedLanguage } = useLanguage();
-  const shoppingCartId = user?.businessEntityId?.toString() || null;
+  const shoppingCartId = businessEntityId?.toString() || guestSession?.cartId || null;
+
+  useEffect(() => {
+    const previous = previousCartId.current;
+    previousCartId.current = shoppingCartId;
+    if (previous && previous !== shoppingCartId) {
+      void queryClient.cancelQueries({ queryKey: ["shoppingCart", previous] });
+      queryClient.removeQueries({ queryKey: ["shoppingCart", previous] });
+    }
+  }, [shoppingCartId, queryClient]);
+
+  useEffect(() => {
+    const refresh = () => {
+      try {
+        setGuestSession(readGuestCartSession());
+      } catch (error) {
+        setGuestSession(null);
+        trackError("Guest cart session could not be restored", error as Error, { component: "CartContext" });
+        toast({ title: "Guest Cart", description: (error as Error).message, variant: "destructive" });
+      }
+    };
+    const storage = (event: StorageEvent) => {
+      if (event.key === GUEST_CART_STORAGE_KEY || event.key === null) refresh();
+    };
+    refresh();
+    window.addEventListener(GUEST_CART_EVENT, refresh);
+    window.addEventListener("storage", storage);
+    return () => {
+      window.removeEventListener(GUEST_CART_EVENT, refresh);
+      window.removeEventListener("storage", storage);
+    };
+  }, []);
+
+  const retryGuestMerge = useCallback(async () => {
+    if (!businessEntityId || !guestSession) return;
+    const generation = ++mergeGeneration.current;
+    setIsMerging(true);
+    setMergeError(null);
+    try {
+      await mergeGuestCartSession(businessEntityId.toString(), guestSession);
+      await queryClient.invalidateQueries({ queryKey: ["shoppingCart", businessEntityId.toString()] });
+    } catch (error) {
+      trackError("Guest cart merge could not be confirmed", error as Error, { component: "CartContext" });
+      if (generation === mergeGeneration.current)
+        setMergeError("Unable to merge the guest cart. " + (error as Error).message);
+    } finally {
+      if (generation === mergeGeneration.current) setIsMerging(false);
+    }
+  }, [businessEntityId, guestSession, queryClient]);
+
+  const invalidatePendingMerge = useCallback(() => { mergeGeneration.current++; }, []);
+  useEffect(() => {
+    setMergeError(null);
+    if (businessEntityId && guestSession) void retryGuestMerge();
+    else setIsMerging(false);
+    return invalidatePendingMerge;
+  }, [businessEntityId, guestSession, retryGuestMerge, invalidatePendingMerge]);
 
   // Fetch cart items from API
-  const { data: cartItems = [], isLoading: cartLoading } =
+  const { data: cartItems = [], isLoading: cartLoading, error: cartError } =
     useShoppingCart(shoppingCartId);
 
   // Extract product IDs from cart items
@@ -75,7 +146,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
   const deleteCartMutation = useDeleteCartItem();
   const clearCartMutation = useClearCart();
 
-  const isLoading = cartLoading || productsLoading;
+  const isLoading = cartLoading || productsLoading || isMerging;
 
   // Combine cart items with product details to create CartItem objects
   const items = useMemo<CartItem[]>(() => {
@@ -119,12 +190,12 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
     selectedSize?: string,
     selectedColor?: string,
   ) => {
-    if (!shoppingCartId) {
-      toast({
-        title: "Please Sign In",
-        description: "You need to be signed in to add items to your cart",
-        variant: "destructive",
-      });
+    let activeCartId = shoppingCartId;
+    try {
+      if (!activeCartId) activeCartId = (await ensureGuestCartSession()).cartId;
+    } catch (error) {
+      trackError("Guest cart session could not be created", error as Error, { component: "CartContext" });
+      toast({ title: "Cart Unavailable", description: (error as Error).message, variant: "destructive" });
       return;
     }
 
@@ -135,52 +206,9 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
           }`
         : product.Name;
 
-    // Check if item already exists in cart
-    const existingItem = items.find(
-      (item) =>
-        item.ProductID === product.ProductID &&
-        item.selectedSize === selectedSize &&
-        item.selectedColor === selectedColor,
-    );
-
-    if (existingItem && "ShoppingCartItemID" in existingItem) {
-      // Update existing item quantity
-      const newQuantity = existingItem.quantity + quantity;
-      try {
-        await updateCartMutation.mutateAsync({
-          shoppingCartItemId: (
-            existingItem as CartItem & { ShoppingCartItemID: number }
-          ).ShoppingCartItemID,
-          quantity: newQuantity,
-          shoppingCartId,
-        });
-
-        toast({
-          title: "Cart Updated!",
-          description: `Added another ${displayName} to your cart`,
-          action: (
-            <ToastAction altText="View cart" asChild>
-              <a href="/cart">View Cart</a>
-            </ToastAction>
-          ),
-        });
-      } catch (error) {
-        trackError("Failed to update cart item", error, {
-          component: "CartContext",
-          productId: product.ProductID,
-          quantity: newQuantity,
-        });
-        toast({
-          title: "Error",
-          description: "Failed to update cart. Please try again.",
-          variant: "destructive",
-        });
-      }
-    } else {
-      // Add new item to cart
       try {
         await addToCartMutation.mutateAsync({
-          shoppingCartId,
+          shoppingCartId: activeCartId,
           productId: product.ProductID,
           quantity,
         });
@@ -216,7 +244,6 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
           variant: "destructive",
         });
       }
-    }
   };
 
   const removeFromCart = async (
@@ -332,6 +359,9 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
       value={{
         items,
         isLoading,
+        error: mergeError || cartError?.message || null,
+        canRetryGuestMerge: mergeError !== null,
+        retryGuestMerge: () => { void retryGuestMerge(); },
         addToCart,
         removeFromCart,
         updateQuantity,

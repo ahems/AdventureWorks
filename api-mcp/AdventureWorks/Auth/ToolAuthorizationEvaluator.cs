@@ -10,6 +10,8 @@ public sealed class CallerContext
     public string? Application { get; init; }
 
     public bool IsConsumer => Category == UserCategories.Consumer;
+    public bool IsKnownCategory => Category is UserCategories.Consumer or UserCategories.Employee
+        or UserCategories.Manufacturing or UserCategories.Service;
     public bool HasScope(string scope) => Scopes.Contains(scope);
 }
 
@@ -23,6 +25,7 @@ public enum AuthorizationOutcome
     DenyInternalOnly,
     DenyOwnership,
     DenyNoCustomer,
+    DenyIdentity,
 }
 
 /// <summary>Result of a tool authorization evaluation.</summary>
@@ -48,6 +51,7 @@ public sealed record AuthorizationDecision(
         AuthorizationOutcome.DenyInternalOnly => "This operation is restricted to internal users.",
         AuthorizationOutcome.DenyOwnership => "You can only access your own records.",
         AuthorizationOutcome.DenyNoCustomer => "No customer profile is associated with your account.",
+        AuthorizationOutcome.DenyIdentity => "A recognized authenticated identity is required.",
         _ => "Not authorized.",
     };
 }
@@ -75,6 +79,11 @@ public sealed class ToolAuthorizationEvaluator
     /// <summary>Evaluates against an explicit policy.</summary>
     public AuthorizationDecision Evaluate(CallerContext caller, ToolPolicy policy, int? ownerArgValue, bool ownerArgPresent)
     {
+        if (string.IsNullOrWhiteSpace(caller.Subject) || !caller.IsKnownCategory)
+        {
+            return new AuthorizationDecision(false, AuthorizationOutcome.DenyIdentity, policy.RequiredScope);
+        }
+
         // Baseline connectivity scope.
         if (!caller.HasScope(OAuthScopes.McpAccess))
         {

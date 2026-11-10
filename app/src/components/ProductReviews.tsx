@@ -44,6 +44,7 @@ const ProductReviews: React.FC<ProductReviewsProps> = ({ productId }) => {
         productId: review.productId.toString(),
         userId: user?.businessEntityId?.toString() || "unknown",
       });
+      throw error;
     }
   };
 
