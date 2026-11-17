@@ -1,19 +1,28 @@
 # API Service - Data API Builder
 
-This directory contains the API service for the MyToDoApp application, implemented using [Microsoft Data API Builder (DAB)](https://github.com/Azure/data-api-builder). The API service provides REST and GraphQL endpoints to access the Azure SQL Database using Azure AD authentication and Managed Identity.
+This directory contains the AdventureWorks API service, implemented using [Microsoft Data API Builder (DAB)](https://github.com/Azure/data-api-builder). REST, GraphQL and native MCP accept resource-bound user JWTs issued by api-mcp; database access uses Managed Identity.
 
 ## Overview
 
-The API service is automatically deployed by Azure Developer CLI (`azd`) as a separate container app alongside the main web application. It provides secure, authenticated access to the todo database through modern API standards.
+The API service is automatically deployed by Azure Developer CLI (`azd`) as a separate container app alongside the main web application. Entity permissions define authenticated access and intentional public reads.
 
 ### Key Features
 
 - **REST API**: RESTful endpoints at `/api` for CRUD operations
 - **GraphQL API**: GraphQL endpoint at `/graphql` for flexible queries
-- **Azure AD Authentication**: JWT-based authentication using Azure AD
+- **Application-user Authentication**: api-mcp JWT issuer/audience validation and entity role policies
 - **Managed Identity**: Passwordless database access using Azure Managed Identity
 - **Application Insights**: Telemetry and monitoring integration
 - **CORS Support**: Configurable cross-origin resource sharing
+
+### Saved payment methods
+
+Consumer and built-in authenticated roles cannot read `CreditCard` directly.
+The storefront uses the `customers.read` Functions route
+`GET /api/payment-methods`, bound to the signed person's BusinessEntityID,
+which returns only masked card metadata. Existing `PersonCreditCard` link reads
+and deletions remain owner-scoped; self-service cannot create foreign card links.
+Internal DAB permissions are unchanged.
 
 ## How It's Deployed by azd
 
@@ -108,6 +117,32 @@ If `IDENTITY_ENDPOINT` is not set (e.g., running locally), the wait logic is ski
 ### dab-config.json
 
 **Purpose**: Configuration file for Data API Builder that defines database connection, authentication, and entity mappings.
+
+Field permissions belong inside each action object, not directly on a role.
+Password reads expose only metadata to executive-admin; hash/salt columns are
+excluded. Customer self-service reads exclude replication/timestamp metadata;
+creation accepts only `PersonID` and `TerritoryID` under the signed-owner
+policy, and updates/deletes are unavailable. Consumer order-header writes
+use the ownership-checked Functions route instead of DAB. These changes
+require deployed verification. See the
+[authentication assurance guide](../docs/features/authentication/END_TO_END_AUTHENTICATION.md)
+for actual-row field checks, role denials and remaining coverage obligations.
+
+#### Native MCP trusted host
+
+The `/mcp` transport requires an exact trusted hostname in addition to the existing
+api-mcp-issued DAB-audience token and DAB role permissions. The startup wrapper derives
+`DAB_MCP_ALLOWED_HOST` from the platform's `CONTAINER_APP_NAME` and
+`CONTAINER_APP_ENV_DNS_SUFFIX`, not the revision-specific `CONTAINER_APP_HOSTNAME`.
+This needs no provisioned setting or deployment-hook repair. Local wrapper startup
+defaults to loopback; a direct local `dab start` must supply `DAB_MCP_ALLOWED_HOST=localhost`.
+An explicit custom hostname is supported, but URLs, ports and wildcard values are
+rejected before DAB starts. Incomplete Azure platform metadata also fails startup.
+
+Do not use `*` to work around an MCP `403`: the transport checks Host and Origin
+to protect against DNS rebinding. A browser-origin scenario is not authorized by
+this host-only change and requires separate verification. REST/GraphQL
+authentication, audiences and entity permissions are unchanged.
 
 **Configuration Sections:**
 
@@ -223,13 +258,26 @@ The API service requires the following environment variables to be set by `azd` 
 
 ## Database Permissions
 
-The API service connects to Azure SQL Database using the user-assigned managed identity. The required permissions are configured by the [`postprovision.sh`](../scripts/README.md) script:
+The API service connects to Azure SQL Database using the runtime user-assigned
+managed identity. Normal provisioning/seeding configures its contained principal
+through [RuntimeDatabaseAccess.psm1](../seed-job/RuntimeDatabaseAccess.psm1):
 
 - **db_datareader**: Read access to all tables
 - **db_datawriter**: Write access to all tables
-- **db_ddladmin**: Schema modification permissions (if needed)
+- **EXECUTE**: Shared runtime procedure/function execution.
+- **Object-scoped VIEW DEFINITION** on user tables with default/computed columns:
+  DAB must discover default expressions without exposing defaulted system fields
+  for consumer writes. Added to normal seed setup after mutation tests exposed
+  missing review default metadata.
+- Scoped Change Tracking and XML schema permissions support the other shared
+  runtime services; they do not grant database ownership or DDL administration.
 
-These permissions allow DAB to perform all CRUD operations on the `dbo.ToDo` table on behalf of authenticated users.
+The runtime must not require `db_owner` or `db_ddladmin`. These shared SQL grants
+are a documented demo exception to per-service least privilege; DAB independently
+enforces user roles, fields and database ownership policies. The new metadata
+seed correction is not yet evidence that an existing deployment has the grant.
+Do not patch deployed SQL permissions in place; follow the user-owned demo
+recreation policy when provisioning/seeding changes are required.
 
 For more details on the provisioning process, see the [Scripts Documentation](../scripts/README.md).
 

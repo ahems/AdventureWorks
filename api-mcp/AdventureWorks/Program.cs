@@ -93,27 +93,34 @@ void AddFunctionsClient<TService>(int timeoutSeconds) where TService : class
 // Resolve task store: durable Azure Table Storage when a storage account is configured, else in-memory
 var storageAccountName = builder.Configuration["AzureWebJobsStorage:accountName"]
 	?? Environment.GetEnvironmentVariable("STORAGE_ACCOUNT_NAME");
+var taskOwnership = new McpTaskOwnership();
+builder.Services.AddSingleton(taskOwnership);
 IMcpTaskStore taskStore = !string.IsNullOrEmpty(storageAccountName)
-	? new AzureTableMcpTaskStore(storageAccountName)
-	: new InMemoryMcpTaskStore();
+	? new AzureTableMcpTaskStore(storageAccountName, taskOwnership)
+	: new OwnedInMemoryMcpTaskStore(new InMemoryMcpTaskStore(), taskOwnership);
+builder.Services.AddSingleton(taskStore);
 
 // Register MCP server (v2.0 — stateless by default, assembly-level tool discovery)
 builder.Services
-	   .AddMcpServer()
+	   .AddMcpServer(options =>
+	   {
+#pragma warning disable MCPEXP002 // Authorize before the SDK's task-creation filter.
+		   options.Filters.Request.CallToolWithAlternateFilters.Add(async (context, next, ct) =>
+		   {
+			   var denial = await McpToolAuthorizationFilter.AuthorizeAsync(context, ct);
+			   if (denial is not null) return denial;
+			   using var caller = taskOwnership.Bind(context.User,
+				   context.Params!.Name,
+				   context.Services!.GetRequiredService<ILoggerFactory>().CreateLogger("AdventureWorks.Auth.McpTasks"));
+			   return await next(context, ct);
+		   });
+#pragma warning restore MCPEXP002
+	   })
 	   .WithHttpTransport()
 	   .WithToolsFromAssembly()
 	   .WithTasks(taskStore)
 	   .WithRequestFilters(filters =>
 	   {
-		   // OAuth authorization: re-evaluate the validated token's scopes and (for
-		   // consumers) record ownership on EVERY tools/call. Registered first so denials
-		   // short-circuit before any tool executes. Returns a safe error result on deny.
-		   filters.AddCallToolFilter(next => async (context, ct) =>
-		   {
-			   var denial = await McpToolAuthorizationFilter.AuthorizeAsync(context, ct);
-			   return denial ?? await next(context, ct);
-		   });
-
 		   // Centralized Application Insights telemetry for every tool call
 		   filters.AddCallToolFilter(next => async (context, ct) =>
 		   {
@@ -173,6 +180,17 @@ app.UseForwardedHeaders();
 // AuthN/AuthZ, OAuth endpoints (authorize/token/login/consent/logout), protected-resource
 // metadata, and the /mcp WWW-Authenticate challenge. Must precede endpoint mapping.
 app.UseMcpAuthorization(authOptions);
+app.Use(async (context, next) =>
+{
+	if (!context.Request.Path.StartsWithSegments("/mcp"))
+	{
+		await next(context);
+		return;
+	}
+	using var caller = taskOwnership.Bind(context.User, null,
+		context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("AdventureWorks.Auth.McpTasks"));
+	await next(context);
+});
 
 app.MapDefaultEndpoints();
 app.MapGet("/ready", async (McpReadinessService health, HttpContext context) =>

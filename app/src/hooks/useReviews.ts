@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Review, ProductReview } from "@/types/review";
 import { graphqlClient } from "@/lib/graphql-client";
-import { GET_PRODUCT_REVIEWS, GET_ALL_REVIEWS } from "@/lib/graphql-queries";
+import { GET_PRODUCT_REVIEWS, GET_ALL_REVIEWS, UPDATE_REVIEW_VOTES } from "@/lib/graphql-queries";
 import { getRestApiUrl } from "@/lib/utils";
 import { dabFetch } from "@/lib/dabFetch";
 import { trackError } from "@/lib/appInsights";
@@ -231,7 +231,6 @@ export const useReviews = (productId: number) => {
       return true;
     }
 
-    // For API reviews, update via REST API
     const productReviewId = parseInt(reviewId.replace("api_", ""));
     const review = reviews.find((r) => r.id === reviewId);
 
@@ -254,23 +253,12 @@ export const useReviews = (productId: number) => {
       : review.helpful + 1;
 
     try {
-      // Update via DAB REST API
-      const restApiUrl = getRestApiUrl();
-      const response = await dabFetch(
-        `${restApiUrl}/ProductReview/ProductReviewID/${productReviewId}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            HelpfulVotes: newHelpfulCount,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to update helpful votes");
+      const response = await graphqlClient.request<{
+        updateProductReview: { ProductReviewID: number; HelpfulVotes: number } | null;
+      }>(UPDATE_REVIEW_VOTES, { id: productReviewId, votes: newHelpfulCount });
+      if (response.updateProductReview?.ProductReviewID !== productReviewId ||
+          response.updateProductReview.HelpfulVotes !== newHelpfulCount) {
+        throw new Error("The review service did not confirm the requested vote.");
       }
 
       // Update localStorage vote tracking

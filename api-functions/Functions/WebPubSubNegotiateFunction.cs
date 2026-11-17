@@ -1,5 +1,5 @@
 using System.Net;
-using System.Text.Json;
+using ApiFunctions.Auth;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -10,11 +10,11 @@ namespace api_functions.Functions;
 /// <summary>
 /// Negotiate endpoint for Azure Web PubSub client connections.
 ///
-/// GET /api/webpubsub/negotiate?groups=manufacturing-agent,warehouse,...
+/// GET /api/webpubsub/negotiate
 ///
 /// Returns a client access URL with a short-lived JWT token that the browser
-/// uses to open a WebSocket connection to Web PubSub. The requested groups are
-/// validated against an allow-list before being granted.
+/// uses to open a WebSocket connection to Web PubSub. Group permissions are
+/// derived from the validated user's scopes and category, never from client input.
 /// </summary>
 public class WebPubSubNegotiateFunction
 {
@@ -34,6 +34,21 @@ public class WebPubSubNegotiateFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "webpubsub/negotiate")]
         HttpRequestData req)
     {
+        var user = FunctionUser.Current(req.FunctionContext);
+        if (!user.IsAuthenticated)
+        {
+            var err = req.CreateResponse(HttpStatusCode.Unauthorized);
+            await err.WriteAsJsonAsync(new { error = "authentication_required" });
+            return err;
+        }
+
+        if (!user.HasScope(FunctionScopes.RealtimeConnect))
+        {
+            var err = req.CreateResponse(HttpStatusCode.Forbidden);
+            await err.WriteAsJsonAsync(new { error = "insufficient_scope" });
+            return err;
+        }
+
         if (!_webPubSubService.IsEnabled)
         {
             var err = req.CreateResponse(HttpStatusCode.ServiceUnavailable);
@@ -41,24 +56,15 @@ public class WebPubSubNegotiateFunction
             return err;
         }
 
-        var groupsParam = req.Query["groups"] ?? string.Empty;
-        var requestedGroups = groupsParam
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(g => WebPubSubService.AllowedGroups.Contains(g))
-            .ToArray();
-
-        if (requestedGroups.Length == 0)
+        var authorizedGroups = WebPubSubService.GetAuthorizedGroups(user);
+        if (authorizedGroups.Length == 0)
         {
-            var err = req.CreateResponse(HttpStatusCode.BadRequest);
-            await err.WriteAsJsonAsync(new
-            {
-                error = "No valid groups specified.",
-                allowedGroups = WebPubSubService.AllowedGroups,
-            });
+            var err = req.CreateResponse(HttpStatusCode.Forbidden);
+            await err.WriteAsJsonAsync(new { error = "no_authorized_groups" });
             return err;
         }
 
-        var uri = await _webPubSubService.GetClientAccessUriAsync(requestedGroups);
+        var uri = await _webPubSubService.GetClientAccessUriAsync(user);
         if (uri == null)
         {
             var err = req.CreateResponse(HttpStatusCode.ServiceUnavailable);
@@ -66,7 +72,7 @@ public class WebPubSubNegotiateFunction
             return err;
         }
 
-        _logger.LogInformation("[WebPubSub] Negotiate: granted groups [{Groups}]", string.Join(", ", requestedGroups));
+        _logger.LogInformation("[WebPubSub] Negotiated realtime access for {GroupCount} authorized groups.", authorizedGroups.Length);
 
         var response = req.CreateResponse(HttpStatusCode.OK);
         await response.WriteAsJsonAsync(new { url = uri.AbsoluteUri });

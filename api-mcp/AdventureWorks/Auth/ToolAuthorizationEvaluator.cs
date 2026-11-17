@@ -121,13 +121,13 @@ public sealed class ToolAuthorizationEvaluator
                     return new AuthorizationDecision(false, AuthorizationOutcome.DenyNoCustomer, policy.RequiredScope);
                 }
 
-                if (!ownerArgPresent || ownerArgValue is null)
+                if (!ownerArgPresent)
                 {
                     // Owner argument omitted: scope it to the caller's own records.
                     return new AuthorizationDecision(true, AuthorizationOutcome.Allow, policy.RequiredScope, caller.CustomerId);
                 }
 
-                return ownerArgValue.Value == caller.CustomerId.Value
+                return ownerArgValue is int owner && owner == caller.CustomerId.Value
                     ? new AuthorizationDecision(true, AuthorizationOutcome.Allow, policy.RequiredScope)
                     : new AuthorizationDecision(false, AuthorizationOutcome.DenyOwnership, policy.RequiredScope);
 

@@ -12,6 +12,25 @@ log() {
   echo "[entrypoint][$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"
 }
 
+if [ -z "${DAB_MCP_ALLOWED_HOST:-}" ]; then
+  if [ -n "${CONTAINER_APP_NAME:-}" ] && [ -n "${CONTAINER_APP_ENV_DNS_SUFFIX:-}" ]; then
+    DAB_MCP_ALLOWED_HOST="${CONTAINER_APP_NAME}.${CONTAINER_APP_ENV_DNS_SUFFIX}"
+  elif [ -n "${CONTAINER_APP_NAME:-}${CONTAINER_APP_ENV_DNS_SUFFIX:-}${IDENTITY_ENDPOINT:-}" ]; then
+    log "Cannot configure MCP trusted host: Container Apps hostname metadata is incomplete."
+    exit 1
+  else
+    DAB_MCP_ALLOWED_HOST=localhost
+  fi
+fi
+case "$DAB_MCP_ALLOWED_HOST" in
+  *[!a-zA-Z0-9.-]*|.*|*.|-*|*-|*..*)
+    log "Invalid MCP trusted host: expected an exact hostname, not a wildcard, URL or port."
+    exit 1
+    ;;
+esac
+export DAB_MCP_ALLOWED_HOST
+log "MCP transport trusts only the configured application hostname (plus DAB loopback defaults)."
+
 wait_for_mi_token() {
   # If not running in Azure Container Apps with MI, skip the wait
   if [ -z "${IDENTITY_ENDPOINT:-}" ]; then

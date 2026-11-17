@@ -1,4 +1,6 @@
 using AdventureWorks.Auth;
+using AdventureWorks.Services;
+using System.Text.Json;
 using Xunit;
 
 namespace AdventureWorks.Tests;
@@ -10,12 +12,12 @@ namespace AdventureWorks.Tests;
 public class ToolAuthorizationRegistryTests
 {
     // The authoritative count of MCP tools discovered by reflection over the built assembly:
-    // AdventureWorksMcpTools(19) + BankMcpTools(9) + CustomerGeneratorMcpTools(2)
-    // + SimulatorMcpTools(1) + ManufacturingMcpTools(20) + SupplyChainMcpTools(11) = 62.
-    private const int ExpectedToolCount = 62;
+    // AdventureWorksMcpTools(20) + BankMcpTools(9) + CustomerGeneratorMcpTools(2)
+    // + SimulatorMcpTools(1) + ManufacturingMcpTools(20) + SupplyChainMcpTools(11) = 63.
+    private const int ExpectedToolCount = 63;
 
     [Fact]
-    public void Registry_contains_all_62_tools()
+    public void Registry_contains_all_63_tools()
     {
         Assert.Equal(ExpectedToolCount, ToolAuthorizationRegistry.All.Count);
     }
@@ -64,6 +66,8 @@ public class ToolAuthorizationRegistryTests
 
     [Theory]
     [InlineData("search_products", OAuthScopes.ProductsRead, ToolAccessMode.Public)]
+    [InlineData("get_product_availability", OAuthScopes.ProductsRead, ToolAccessMode.Public)]
+    [InlineData("check_inventory_availability", OAuthScopes.InventoryRead, ToolAccessMode.InternalOnly)]
     [InlineData("get_customer_orders", OAuthScopes.OrdersRead, ToolAccessMode.SelfOrInternal)]
     [InlineData("search_customers", OAuthScopes.CustomersRead, ToolAccessMode.InternalOnly)]
     [InlineData("get_business_stats", OAuthScopes.SalesRead, ToolAccessMode.InternalOnly)]
@@ -76,6 +80,23 @@ public class ToolAuthorizationRegistryTests
         Assert.NotNull(policy);
         Assert.Equal(scope, policy!.RequiredScope);
         Assert.Equal(mode, policy.Mode);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(null)]
+    public void Customer_availability_contains_no_inventory_details(bool? inStock)
+    {
+        using var result = JsonDocument.Parse(ProductService.FormatProductAvailability(42, inStock));
+        var properties = result.RootElement.EnumerateObject().Select(property => property.Name).ToArray();
+        Assert.Equal(["productId", "inStock"], properties);
+        Assert.Equal(42, result.RootElement.GetProperty("productId").GetInt32());
+        var value = result.RootElement.GetProperty("inStock");
+        if (inStock is null)
+            Assert.Equal(JsonValueKind.Null, value.ValueKind);
+        else
+            Assert.Equal(inStock.Value, value.GetBoolean());
     }
 
     [Fact]

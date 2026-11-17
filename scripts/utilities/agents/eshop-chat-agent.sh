@@ -115,7 +115,7 @@ You have access to the following tools and ONLY these tools:
 - get_product_details — specifications and list price for a specific finished good
 - get_personalized_recommendations — personalised product suggestions based on {{userId}} purchase history
 - analyze_product_reviews — customer ratings and review summaries for a product
-- check_inventory_availability — whether a finished good is currently in stock
+- get_product_availability — whether a finished good is currently in stock, without inventory details
 
 These are the ONLY tools you are permitted to call. Do not call any other tool, even if one appears to be available.
 
@@ -195,7 +195,7 @@ STRUCTURED_INPUTS='{"userId": {"type": "string", "description": "The AdventureWo
 # Internal tools (manufacturing, supply chain, bank, simulator) must not be callable.
 # DABMCP is excluded entirely (9th arg = false) — it exposes create_record/delete_record
 # over all database entities and is only needed by the dedicated help-me-choose agent.
-ALLOWED_TOOLS='["get_customer_orders","get_order_details","find_complementary_products","search_products","get_product_details","get_personalized_recommendations","analyze_product_reviews","check_inventory_availability"]'
+ALLOWED_TOOLS='["get_customer_orders","get_order_details","find_complementary_products","search_products","get_product_details","get_personalized_recommendations","analyze_product_reviews","get_product_availability"]'
 
 AGENT_ID=$(upsert_agent "eshop-chat-agent" "AdventureWorks Customer Support" "$INSTRUCTIONS" "$MEMORY_STORE" "$DESCRIPTION" "$STARTER_PROMPTS" "$STRUCTURED_INPUTS" "$ALLOWED_TOOLS" "false")
 if [ -z "$AGENT_ID" ]; then error "Failed to create eshop-chat-agent"; exit 1; fi

@@ -66,6 +66,7 @@ class AuthenticationTests(unittest.TestCase):
                 self.assertEqual(login["username"], auth.IDENTITIES[identity][0])
                 self.assertEqual(authorize["client_id"], auth.IDENTITIES[identity][2])
                 self.assertIn("offline_access", authorize["scope"])
+                self.assertIn("realtime.connect", authorize["scope"].split())
                 self.assertEqual(authorize["resource"], BASE + "/dab")
                 verifier = exchange["code_verifier"]
                 self.assertGreaterEqual(len(verifier), 43)
@@ -222,7 +223,7 @@ class DeploymentAndRequestTests(unittest.TestCase):
                 login.assert_not_called()
         with patch.object(auth.sys, "argv", [
             "azure-auth.py", "request", "--identity", "admin", "--resource", "dab",
-            "--path", "//other.example"
+            "--environment", "test-env", "--path", "//other.example"
         ]), patch.object(auth, "deployment", return_value=(BASE, BASE + "/dab")), \
                 patch.object(auth, "azd_value", return_value=BASE + "/graphql"), \
                 patch.object(auth, "session") as login:
@@ -235,7 +236,8 @@ class DeploymentAndRequestTests(unittest.TestCase):
             result = {"access_token": "SECRET", "refresh_token": "REFRESH"}
             output = io.StringIO()
             with patch.object(auth.sys, "argv", [
-                "azure-auth.py", "token", "--identity", "admin", "--resource", "dab", *flags
+                "azure-auth.py", "token", "--identity", "admin", "--resource", "dab",
+                "--environment", "test-env", *flags
             ]), patch.object(auth.sys, "stdout", output), \
                     patch.object(auth, "deployment", return_value=(BASE, BASE + "/dab")), \
                     patch.object(auth, "session", return_value=result):
@@ -254,7 +256,7 @@ class DeploymentAndRequestTests(unittest.TestCase):
         ]:
             with self.subTest(resource=resource, status=status):
                 argv = ["azure-auth.py", "request", "--identity", "manufacturing",
-                        "--resource", resource, "--path", path]
+                        "--resource", resource, "--environment", "test-env", "--path", path]
                 stdout = Mock()
                 with patch.object(auth.sys, "argv", argv), patch.object(auth.sys, "stdout", stdout), \
                         patch.object(auth, "deployment", return_value=(BASE, BASE + "/" + resource)), \
@@ -276,6 +278,31 @@ class DeploymentAndRequestTests(unittest.TestCase):
                         self.assertNotIn("X-MS-API-ROLE", headers)
                     if resource == "mcp":
                         self.assertEqual(headers["Accept"], "application/json, text/event-stream")
+
+    def test_default_environment_is_pinned_before_loading_token_and_request_targets(self):
+        calls = []
+
+        def value(key, environment, required=True):
+            calls.append((key, environment))
+            if key == "AZURE_ENV_NAME" and environment is None:
+                return "selected-env"
+            self.assertEqual(environment, "selected-env")
+            return {"API_MCP_URL": BASE + "/mcp",
+                    "DAB_RESOURCE_IDENTIFIER": "",
+                    "API_URL": BASE + "/graphql"}[key]
+
+        stdout = Mock()
+        with patch.object(auth.sys, "argv", [
+            "azure-auth.py", "request", "--identity", "manufacturing",
+            "--resource", "dab", "--path", "/graphql"
+        ]), patch.object(auth.sys, "stdout", stdout), patch.object(auth, "azd_value", side_effect=value), \
+                patch.object(auth, "session", return_value={"access_token": "SECRET"}), \
+                patch.object(auth, "send_http", return_value=(200, {}, b'{"data":{}}')) as send:
+            self.assertEqual(auth.main(), 0)
+        self.assertEqual(calls, [
+            ("AZURE_ENV_NAME", None), ("API_MCP_URL", "selected-env"),
+            ("DAB_RESOURCE_IDENTIFIER", "selected-env"), ("API_URL", "selected-env")])
+        self.assertEqual(send.call_args.args[1], BASE + "/graphql")
 
 
 if __name__ == "__main__":

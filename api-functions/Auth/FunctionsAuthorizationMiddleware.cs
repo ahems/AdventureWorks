@@ -187,7 +187,7 @@ public sealed class FunctionsAuthorizationMiddleware : IFunctionsWorkerMiddlewar
         var parts = new List<string> { scheme + " realm=\"adventureworks-functions\"" };
         if (!string.IsNullOrEmpty(_options.Issuer))
         {
-            parts.Add($"resource_metadata=\"{_options.Issuer}{ProtectedResourceMetadataPath}\"");
+            parts.Add($"resource_metadata=\"{_options.Issuer.TrimEnd('/')}{ProtectedResourceMetadataPath}\"");
         }
 
         parts.Add($"error=\"{error}\"");

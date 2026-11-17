@@ -25,7 +25,8 @@ public class RealtimePublisherTests
         protected override TimeSpan CoalesceWindow => Window;
         public override Task SendToGroupAsync(string group, object payload)
         {
-            lock (Events) Events.Add((group, JsonSerializer.SerializeToElement(payload)));
+            lock (Events) Events.Add((group,
+                JsonSerializer.SerializeToElement(WebPubSubService.SanitizePayloadForGroup(group, payload))));
             return Task.CompletedTask;
         }
     }
@@ -108,6 +109,23 @@ public class RealtimePublisherTests
         await Assert.ThrowsAsync<RequestFailedException>(() =>
             client.UpdateEntityAsync(new TableEntity("p", "r"), ETag.All));
         Assert.Empty(publisher.Events);
+    }
+
+    [Fact]
+    public async Task Order_group_publishers_emit_only_generic_invalidation_payloads()
+    {
+        var publisher = new Publisher();
+        await publisher.SendToGroupAsync("orders", new
+        {
+            @event = "order-status-changed",
+            salesOrderId = 123,
+            customerId = 456,
+            newStatus = 7,
+        });
+
+        var sent = Assert.Single(publisher.Events);
+        Assert.Equal("orders", sent.Group);
+        Assert.Equal("{\"event\":\"orders-changed\"}", sent.Payload.GetRawText());
     }
 
     [Theory]
@@ -230,9 +248,7 @@ public class RealtimePublisherTests
         await trigger.Run(changes);
         var sent = Assert.Single(publisher.Events);
         Assert.Equal("orders", sent.Group);
-        Assert.Equal("Sales.ShoppingCartItem", sent.Payload.GetProperty("entity").GetString());
-        Assert.Equal(3, sent.Payload.GetProperty("changeTypes").GetArrayLength());
-        Assert.DoesNotContain("123", sent.Payload.ToString());
+        Assert.Equal("{\"event\":\"orders-changed\"}", sent.Payload.GetRawText());
         await trigger.Run([]);
         Assert.Single(publisher.Events);
     }

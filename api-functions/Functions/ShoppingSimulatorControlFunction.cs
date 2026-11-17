@@ -81,27 +81,23 @@ public class ShoppingSimulatorControlFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "shopping-simulator/start")]
         HttpRequestData req)
     {
-        ShoppingSimulatorStartRequest? input = null;
-        try
+        var body = await new StreamReader(req.Body).ReadToEndAsync();
+        if (!ShoppingSimulatorStartRequest.TryParseAndValidate(body, out var input, out var validationError))
         {
-            var body = await new StreamReader(req.Body).ReadToEndAsync();
-            input = JsonSerializer.Deserialize<ShoppingSimulatorStartRequest>(
-                body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            _logger.LogWarning("Rejected invalid shopping simulator start request: {Reason}", validationError);
+            var badRequest = req.CreateResponse(HttpStatusCode.BadRequest);
+            await badRequest.WriteAsJsonAsync(new { error = validationError });
+            return badRequest;
         }
-        catch { /* fall through — use defaults */ }
 
-        var ordersPerMinute          = Math.Clamp(input?.OrdersPerMinute          ?? 1,  1,   60);
-        var existingCustomerPct      = Math.Clamp(input?.ExistingCustomerPercentage ?? 30, 0, 100);
-        var durationHours            = Math.Clamp(input?.DurationHours              ?? 24, 1,  72);
-        var noOrderCustomerPct       = Math.Clamp(input?.NoOrderCustomerPercentage  ?? 50, 0, 100);
-        var abandonedCartPct         = Math.Clamp(input?.AbandonedCartPercentage    ?? 10, 0, 100);
-        var includeConsumerOrders    = input?.IncludeConsumerOrders ?? true;
-        var includeStoreOrders       = input?.IncludeStoreOrders   ?? true;
-        var storeOrderPct            = Math.Clamp(input?.StoreOrderPercentage       ?? 20, 5,  50);
-
-        // At least one order type must be enabled
-        if (!includeConsumerOrders && !includeStoreOrders)
-            includeConsumerOrders = true;
+        var ordersPerMinute          = input.OrdersPerMinute;
+        var existingCustomerPct      = input.ExistingCustomerPercentage;
+        var durationHours            = input.DurationHours;
+        var noOrderCustomerPct       = input.NoOrderCustomerPercentage;
+        var abandonedCartPct         = input.AbandonedCartPercentage;
+        var includeConsumerOrders    = input.IncludeConsumerOrders ?? true;
+        var includeStoreOrders       = input.IncludeStoreOrders ?? true;
+        var storeOrderPct            = input.StoreOrderPercentage;
 
         var state = await _simulator.GetStateAsync();
         state.IsRunning                  = true;
@@ -301,4 +297,80 @@ public class ShoppingSimulatorStartRequest
     public bool? IncludeConsumerOrders     { get; set; }
     public bool? IncludeStoreOrders        { get; set; }
     public int StoreOrderPercentage        { get; set; } = 20;
+
+    public static bool TryParseAndValidate(
+        string body,
+        out ShoppingSimulatorStartRequest request,
+        out string error)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            request = new ShoppingSimulatorStartRequest();
+        }
+        else
+        {
+            try
+            {
+                request = JsonSerializer.Deserialize<ShoppingSimulatorStartRequest>(
+                    body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+            }
+            catch (JsonException)
+            {
+                request = null!;
+                error = "Request body must be valid JSON.";
+                return false;
+            }
+
+            if (request is null)
+            {
+                error = "Request body must contain a shopping simulator configuration.";
+                return false;
+            }
+        }
+
+        if (request.OrdersPerMinute is < 1 or > 60)
+        {
+            error = "ordersPerMinute must be between 1 and 60.";
+            return false;
+        }
+
+        if (request.ExistingCustomerPercentage is < 0 or > 100)
+        {
+            error = "existingCustomerPercentage must be between 0 and 100.";
+            return false;
+        }
+
+        if (request.DurationHours is < 1 or > 72)
+        {
+            error = "durationHours must be between 1 and 72.";
+            return false;
+        }
+
+        if (request.NoOrderCustomerPercentage is < 0 or > 100)
+        {
+            error = "noOrderCustomerPercentage must be between 0 and 100.";
+            return false;
+        }
+
+        if (request.AbandonedCartPercentage is < 0 or > 100)
+        {
+            error = "abandonedCartPercentage must be between 0 and 100.";
+            return false;
+        }
+
+        if (request.StoreOrderPercentage is < 5 or > 50)
+        {
+            error = "storeOrderPercentage must be between 5 and 50.";
+            return false;
+        }
+
+        if (request.IncludeConsumerOrders == false && request.IncludeStoreOrders == false)
+        {
+            error = "At least one order type must be enabled.";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
 }

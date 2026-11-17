@@ -260,7 +260,7 @@ public class SilentAuthAndServiceGrantTests : IClassFixture<OAuthTestFactory>
             ["client_id"] = AuthorizationServerOptions.ServiceClientId,
             ["assertion"] = OAuthTestFactory.ValidServiceAssertion,
             ["resource"] = OAuthTestFactory.ResourceIdentifier,
-            ["scope"] = "mcp.access products.read customers.write",
+            ["scope"] = "products.read",
         });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -268,7 +268,33 @@ public class SilentAuthAndServiceGrantTests : IClassFixture<OAuthTestFactory>
         Assert.Equal(OAuthTestFactory.ResourceIdentifier, Audience(payload));
         Assert.Equal("service:" + OAuthTestFactory.TrustedServicePrincipalId, payload.GetProperty("sub").GetString());
         Assert.Equal(UserCategories.Service, payload.GetProperty("category").GetString());
+        Assert.Equal(
+            new[] { OAuthScopes.McpAccess, OAuthScopes.ProductsRead }.OrderBy(scope => scope),
+            response.RootElement.GetProperty("scope").GetString()!.Split(' ').OrderBy(scope => scope));
         Assert.False(response.RootElement.TryGetProperty("refresh_token", out _));
+    }
+
+    [Fact]
+    public async Task Service_grant_requires_explicit_known_scopes_and_never_grants_all_by_default()
+    {
+        var client = CreateClient();
+        foreach (var scope in new[] { null, "products.read unknown.scope" })
+        {
+            var form = new Dictionary<string, string>
+            {
+                ["grant_type"] = ManagedIdentityGrant.GrantType,
+                ["client_id"] = AuthorizationServerOptions.ServiceClientId,
+                ["assertion"] = OAuthTestFactory.ValidServiceAssertion,
+                ["resource"] = OAuthTestFactory.ResourceIdentifier,
+            };
+            if (scope is not null)
+            {
+                form["scope"] = scope;
+            }
+
+            var response = await PostAsync(client, form);
+            Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
+        }
     }
 
     [Fact]

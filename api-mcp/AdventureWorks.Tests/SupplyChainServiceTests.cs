@@ -54,6 +54,35 @@ public class SupplyChainServiceTests(OAuthTestFactory factory) : IClassFixture<O
     }
 
     [Fact]
+    public async Task Simulator_reset_propagates_incomplete_reset_as_an_error()
+    {
+        using var http = new HttpClient(new Handler(
+            """{"message":"Simulator reset incomplete.","steps":["private error"]}""",
+            HttpStatusCode.InternalServerError))
+        {
+            BaseAddress = new Uri("https://functions.example.test/")
+        };
+        var error = await Assert.ThrowsAsync<HttpRequestException>(() =>
+            new SimulatorService(http).ResetAllSimulatorsAsync());
+        Assert.Equal(HttpStatusCode.InternalServerError, error.StatusCode);
+        Assert.DoesNotContain("private error", error.Message);
+    }
+
+    [Fact]
+    public async Task Simulator_reset_keeps_successful_step_output()
+    {
+        using var http = new HttpClient(new Handler(
+            """{"message":"Simulator reset complete.","steps":["Queue cleared."],"resetAtUtc":"2026-01-01T00:00:00Z"}""",
+            HttpStatusCode.OK))
+        {
+            BaseAddress = new Uri("https://functions.example.test/")
+        };
+        var result = await new SimulatorService(http).ResetAllSimulatorsAsync();
+        Assert.Contains("Simulator Reset Complete", result);
+        Assert.Contains("Queue cleared.", result);
+    }
+
+    [Fact]
     public async Task Vendors_use_actual_summary_component_counts()
     {
         var (service, _) = Create("""

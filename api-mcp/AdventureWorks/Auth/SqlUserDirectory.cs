@@ -5,33 +5,19 @@ namespace AdventureWorks.Auth;
 
 /// <summary>
 /// Dapper-based <see cref="IUserDirectory"/> over the AdventureWorks database.
-/// Resolves category / role / scope / ownership purely from data:
-/// Person, Sales.Customer, HumanResources.EmployeeDepartmentHistory and the
-/// deterministic <c>Auth.*</c> seed tables (with in-code fallbacks that mirror the seed).
+/// Resolves user identity and ownership from Person, Sales.Customer and
+/// HumanResources.EmployeeDepartmentHistory. Role and scope policy comes from the
+/// source-controlled <see cref="ApplicationRoles"/> map.
 /// Never maps permissions by user name.
 /// </summary>
 public sealed class SqlUserDirectory : IUserDirectory
 {
     private readonly string _connectionString;
-    private readonly ILogger<SqlUserDirectory> _logger;
 
-    public SqlUserDirectory(string connectionString, ILogger<SqlUserDirectory> logger)
+    public SqlUserDirectory(string connectionString)
     {
         _connectionString = connectionString;
-        _logger = logger;
     }
-
-    /// <summary>Fallback department → role mapping (mirrors Auth.DepartmentRole seed).</summary>
-    private static readonly IReadOnlyDictionary<int, string> DepartmentRoleFallback = new Dictionary<int, string>
-    {
-        [3] = ApplicationRoles.SalesAdmin,            // Sales
-        [4] = ApplicationRoles.MarketingAdmin,        // Marketing
-        [5] = ApplicationRoles.InventoryAdmin,        // Purchasing (Inventory Management)
-        [15] = ApplicationRoles.InventoryAdmin,       // Shipping and Receiving (Inventory Management)
-        [7] = ApplicationRoles.ManufacturingEngineer, // Production (Manufacturing)
-        [8] = ApplicationRoles.ManufacturingEngineer, // Production Control (Manufacturing)
-        [16] = ApplicationRoles.ExecutiveAdmin,       // Executive
-    };
 
     private async Task<SqlConnection> OpenAsync(CancellationToken ct)
     {
@@ -131,7 +117,7 @@ public sealed class SqlUserDirectory : IUserDirectory
                       ORDER BY edh.StartDate DESC",
                     new { Beid = businessEntityId }, cancellationToken: ct));
 
-            string role = await ResolveDepartmentRoleAsync(conn, departmentId, ct);
+            string role = ApplicationRoles.RoleForDepartment(departmentId);
             roles = new[] { role };
             category = ApplicationRoles.CategoryFor(role);
         }
@@ -142,7 +128,7 @@ public sealed class SqlUserDirectory : IUserDirectory
             category = UserCategories.Consumer;
         }
 
-        var scopes = await ResolveScopesAsync(conn, roles, ct);
+        var scopes = ResolveScopes(roles);
 
         var displayName = string.Join(' ', new[] { person.FirstName, person.LastName }
             .Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
@@ -163,55 +149,11 @@ public sealed class SqlUserDirectory : IUserDirectory
         };
     }
 
-    private async Task<string> ResolveDepartmentRoleAsync(SqlConnection conn, int? departmentId, CancellationToken ct)
+    private static IReadOnlyList<string> ResolveScopes(IReadOnlyList<string> roles)
     {
-        if (departmentId is null)
-        {
-            return ApplicationRoles.OperationsAdmin;
-        }
-
-        try
-        {
-            var role = await conn.QueryFirstOrDefaultAsync<string?>(
-                new CommandDefinition(
-                    "SELECT TOP 1 RoleName FROM Auth.DepartmentRole WHERE DepartmentId = @DepartmentId",
-                    new { DepartmentId = departmentId.Value }, cancellationToken: ct));
-            if (!string.IsNullOrWhiteSpace(role))
-            {
-                return role!;
-            }
-        }
-        catch (SqlException ex)
-        {
-            _logger.LogDebug(ex, "Auth.DepartmentRole unavailable; using in-code fallback map");
-        }
-
-        return DepartmentRoleFallback.TryGetValue(departmentId.Value, out var fallback)
-            ? fallback
-            : ApplicationRoles.OperationsAdmin;
-    }
-
-    private async Task<IReadOnlyList<string>> ResolveScopesAsync(SqlConnection conn, IReadOnlyList<string> roles, CancellationToken ct)
-    {
-        try
-        {
-            var scopes = (await conn.QueryAsync<string>(
-                new CommandDefinition(
-                    "SELECT DISTINCT Scope FROM Auth.RoleScope WHERE RoleName IN @Roles",
-                    new { Roles = roles }, cancellationToken: ct))).ToList();
-            if (scopes.Count > 0)
-            {
-                return NormalizeScopes(scopes);
-            }
-        }
-        catch (SqlException ex)
-        {
-            _logger.LogDebug(ex, "Auth.RoleScope unavailable; using in-code fallback scopes");
-        }
-
-        var fallback = roles
+        var scopes = roles
             .SelectMany(r => ApplicationRoles.DefaultRoleScopes.TryGetValue(r, out var s) ? s : Array.Empty<string>());
-        return NormalizeScopes(fallback);
+        return NormalizeScopes(scopes);
     }
 
     private static IReadOnlyList<string> NormalizeScopes(IEnumerable<string> scopes) =>

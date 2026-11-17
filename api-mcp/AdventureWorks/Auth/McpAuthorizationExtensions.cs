@@ -31,8 +31,7 @@ public static class McpAuthorizationExtensions
         builder.Services.AddSingleton(options);
 
         // AdventureWorks identity + authorization services.
-        builder.Services.AddSingleton<IUserDirectory>(sp =>
-            new SqlUserDirectory(connectionString, sp.GetRequiredService<ILogger<SqlUserDirectory>>()));
+        builder.Services.AddSingleton<IUserDirectory>(new SqlUserDirectory(connectionString));
         builder.Services.AddSingleton<ToolAuthorizationEvaluator>();
         builder.Services.AddSingleton<OneTimeUseCache>();
         builder.Services.AddRateLimiter(rateLimiter =>
@@ -343,7 +342,7 @@ public static class McpAuthorizationExtensions
             config, new[] { "APP_REDIRECT_URI", "OAUTH_ESHOP_REDIRECT_URIS", "SERVICE_APP_URL", "APP_URL" },
             new[]
             {
-                OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.OrdersRead, OAuthScopes.OrdersWrite,
+                OAuthScopes.McpAccess, OAuthScopes.RealtimeConnect, OAuthScopes.ProductsRead, OAuthScopes.OrdersRead, OAuthScopes.OrdersWrite,
                 OAuthScopes.CustomersRead, OAuthScopes.CustomersWrite,
             },
             allowedCategories: new[] { UserCategories.Consumer }));
@@ -355,8 +354,13 @@ public static class McpAuthorizationExtensions
 
         options.Clients.Add(BuildClient("adventureworks-manufacturing", "AdventureWorks Manufacturing",
             config, new[] { "OAUTH_MANUFACTURING_REDIRECT_URIS", "MANUFACTURING_APP_URL", "SERVICE_APP_MANUFACTURING_URL" },
-            new[] { OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.InventoryRead, OAuthScopes.ManufacturingRead, OAuthScopes.ManufacturingWrite },
+            new[] { OAuthScopes.McpAccess, OAuthScopes.RealtimeConnect, OAuthScopes.ProductsRead, OAuthScopes.InventoryRead, OAuthScopes.ManufacturingRead, OAuthScopes.ManufacturingWrite },
             allowedCategories: new[] { UserCategories.Manufacturing }));
+
+        options.Clients.Add(BuildClient("adventureworks-inspector", "AdventureWorks Hosted Inspector",
+            config, new[] { "OAUTH_INSPECTOR_REDIRECT_URIS" },
+            OAuthScopes.All.ToArray(),
+            allowedCategories: new[] { UserCategories.Employee, UserCategories.Manufacturing }));
 
         options.Clients.Add(BuildClient("mcp-inspector", "MCP Inspector",
             config, new[] { "OAUTH_INSPECTOR_REDIRECT_URIS" },

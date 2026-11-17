@@ -9,7 +9,6 @@ export const GET_PRODUCT_REVIEWS = gql`
         ProductID
         ReviewerName
         ReviewDate
-        EmailAddress
         Rating
         Comments
         HelpfulVotes
@@ -28,6 +27,15 @@ export const GET_PRODUCT_REVIEWS = gql`
   }
 `;
 
+export const UPDATE_REVIEW_VOTES = gql`
+  mutation UpdateReviewVotes($id: Int!, $votes: Int!) {
+    updateProductReview(ProductReviewID: $id, item: { HelpfulVotes: $votes }) {
+      ProductReviewID
+      HelpfulVotes
+    }
+  }
+`;
+
 // Query to get all product reviews
 export const GET_ALL_REVIEWS = gql`
   query GetAllReviews {
@@ -37,7 +45,6 @@ export const GET_ALL_REVIEWS = gql`
         ProductID
         ReviewerName
         ReviewDate
-        EmailAddress
         Rating
         Comments
         HelpfulVotes
@@ -152,7 +159,6 @@ export const GET_PRODUCTS = gql`
         ProductNumber
         Color
         ListPrice
-        StandardCost
         Size
         SizeUnitMeasureCode
         Weight
@@ -180,7 +186,6 @@ export const GET_PRODUCTS_BY_IDS = gql`
         ProductNumber
         Color
         ListPrice
-        StandardCost
         Size
         SizeUnitMeasureCode
         Weight
@@ -209,7 +214,6 @@ export const GET_PRODUCT_BY_ID = gql`
         ProductNumber
         Color
         ListPrice
-        StandardCost
         Size
         SizeUnitMeasureCode
         Weight
@@ -278,7 +282,6 @@ export const GET_PRODUCTS_BY_CATEGORY = gql`
         ProductNumber
         Color
         ListPrice
-        StandardCost
         Size
         Weight
         ProductLine
@@ -310,7 +313,6 @@ export const GET_PRODUCTS_BY_SUBCATEGORY_IDS = gql`
         ProductNumber
         Color
         ListPrice
-        StandardCost
         Size
         SizeUnitMeasureCode
         Weight
@@ -398,7 +400,6 @@ export const GET_PRODUCTS_BY_SUBCATEGORY = gql`
         ProductNumber
         Color
         ListPrice
-        StandardCost
         Size
         SizeUnitMeasureCode
         Weight
@@ -464,8 +465,6 @@ export const GET_PRODUCT_INVENTORY = gql`
       items {
         ProductID
         LocationID
-        Shelf
-        Bin
         Quantity
       }
     }

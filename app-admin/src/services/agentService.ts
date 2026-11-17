@@ -1,5 +1,9 @@
 import { getFunctionsApiUrl } from "@/lib/utils";
-import { getMcpAccessToken } from "@/services/dabAuth";
+import {
+  getMcpAccessToken,
+  getTabAuthorizationGeneration,
+  isTabAuthorizationGenerationCurrent,
+} from "@/services/dabAuth";
 
 export interface AgentMessage {
   role: "user" | "assistant";
@@ -19,11 +23,18 @@ export async function sendAgentMessage(
   conversationHistory: AgentMessage[],
 ): Promise<AgentMessage> {
   const url = `${getFunctionsApiUrl()}/api/agent/chat`;
+  const generation = getTabAuthorizationGeneration();
+  const ensureSession = () => {
+    if (!isTabAuthorizationGenerationCurrent(generation)) {
+      throw new Error("Your secure session has expired. Please sign in again.");
+    }
+  };
 
   // Forward a per-user MCP token (minted silently from the sign-in session) so
   // tool calls are authorized as the signed-in admin.
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const mcpToken = await getMcpAccessToken();
+  ensureSession();
   if (!mcpToken) {
     throw new Error("Your secure session has expired. Please sign in again.");
   }
@@ -41,15 +52,18 @@ export async function sendAgentMessage(
       isAdmin: true,
     }),
   });
+  ensureSession();
 
   if (!response.ok) {
     const errText = await response.text().catch(() => "");
+    ensureSession();
     throw new Error(
       `Agent API ${response.status}: ${errText || response.statusText}`,
     );
   }
 
   const data: AgentApiResponse = await response.json();
+  ensureSession();
   return {
     role: "assistant",
     content:

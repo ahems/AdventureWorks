@@ -27,7 +27,7 @@ import {
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/context/AuthContext";
-import { useAddresses, Address } from "@/hooks/useAddresses";
+import { useAddresses, SharedAddressError, type Address } from "@/hooks/useAddresses";
 import { usePaymentMethods } from "@/hooks/usePaymentMethods";
 import {
   useOrders,
@@ -1610,7 +1610,9 @@ const AccountPage: React.FC = () => {
                         } catch (error) {
                           toast({
                             title: t("account.error"),
-                            description: t("account.errorUpdateAddress"),
+                            description: t(error instanceof SharedAddressError
+                              ? "account.errorSharedAddress"
+                              : "account.errorUpdateAddress"),
                             variant: "destructive",
                           });
                         }

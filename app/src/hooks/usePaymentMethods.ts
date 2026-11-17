@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { graphqlClient } from "@/lib/graphql-client";
-import { gql } from "graphql-request";
-import { getRestApiUrl } from "@/lib/utils";
+import { z } from "zod";
+import { getFunctionsApiUrl, getRestApiUrl } from "@/lib/utils";
 import { dabFetch } from "@/lib/dabFetch";
+import { functionsFetch } from "@/services/functionsAuth";
 import { trackError } from "@/lib/appInsights";
 
 export interface SavedPaymentMethod {
@@ -20,55 +20,13 @@ export interface SavedPaymentMethod {
   isDefault: boolean;
 }
 
-interface PersonCreditCard {
-  BusinessEntityID: number;
-  CreditCardID: number;
-}
-
-interface CreditCard {
-  CreditCardID: number;
-  CardType: string;
-  CardNumber: string;
-  ExpMonth: number;
-  ExpYear: number;
-}
-
-interface PersonCreditCardsResponse {
-  personCreditCards: {
-    items: PersonCreditCard[];
-  };
-}
-
-interface CreditCardsResponse {
-  creditCards: {
-    items: CreditCard[];
-  };
-}
-
-const GET_PERSON_CREDIT_CARDS = gql`
-  query GetPersonCreditCards($businessEntityId: Int!) {
-    personCreditCards(filter: { BusinessEntityID: { eq: $businessEntityId } }) {
-      items {
-        BusinessEntityID
-        CreditCardID
-      }
-    }
-  }
-`;
-
-const GET_CREDIT_CARDS = gql`
-  query GetCreditCards($cardIds: [Int!]) {
-    creditCards(filter: { CreditCardID: { in: $cardIds } }) {
-      items {
-        CreditCardID
-        CardType
-        CardNumber
-        ExpMonth
-        ExpYear
-      }
-    }
-  }
-`;
+const paymentCardsSchema = z.array(z.object({
+  id: z.number().int().positive(),
+  cardType: z.string(),
+  last4: z.string().max(4),
+  expMonth: z.number().int().min(1).max(12),
+  expYear: z.number().int().positive(),
+}).strict());
 
 // Detect card brand from card type
 const getCardBrand = (cardType: string): string => {
@@ -91,41 +49,20 @@ export const usePaymentMethods = () => {
 
     setIsLoading(true);
     try {
-      // Get PersonCreditCard links
-      const personCardsResponse =
-        await graphqlClient.request<PersonCreditCardsResponse>(
-          GET_PERSON_CREDIT_CARDS,
-          { businessEntityId: user.businessEntityId },
-        );
-
-      const personCards = personCardsResponse.personCreditCards?.items || [];
-
-      if (personCards.length === 0) {
-        setPaymentMethods([]);
-        return;
+      const response = await functionsFetch(`${getFunctionsApiUrl()}/api/payment-methods`);
+      if (!response.ok) {
+        throw new Error(`Failed to load payment methods (HTTP ${response.status}).`);
       }
-
-      // Get CreditCard details
-      const cardIds = personCards.map((pc) => pc.CreditCardID);
-      const cardsResponse = await graphqlClient.request<CreditCardsResponse>(
-        GET_CREDIT_CARDS,
-        {
-          cardIds,
-        },
-      );
-
-      const cards = cardsResponse.creditCards?.items || [];
+      const cards = paymentCardsSchema.parse(await response.json());
 
       // Transform to SavedPaymentMethod format
       const methods: SavedPaymentMethod[] = cards.map((card, index) => ({
-        id: card.CreditCardID.toString(),
+        id: card.id.toString(),
         type: "card" as const,
-        label: `${getCardBrand(card.CardType)} •••• ${card.CardNumber.slice(
-          -4,
-        )}`,
-        cardLast4: card.CardNumber.slice(-4),
-        cardBrand: getCardBrand(card.CardType),
-        cardExpiry: `${String(card.ExpMonth).padStart(2, "0")}/${card.ExpYear}`,
+        label: `${getCardBrand(card.cardType)} •••• ${card.last4}`,
+        cardLast4: card.last4,
+        cardBrand: getCardBrand(card.cardType),
+        cardExpiry: `${String(card.expMonth).padStart(2, "0")}/${card.expYear}`,
         isDefault: index === 0, // First card is default for now
       }));
 

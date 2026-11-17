@@ -117,7 +117,10 @@ start_seed_job seed-job test-rg
         self.assertIn('--set-env-vars SEED_SKIP_EXISTING=true', hook)
         self.assertIn('source "$(dirname "${BASH_SOURCE[0]}")/seed-job-execution.sh"', hook)
         self.assertIn('if ! start_seed_job "$SEED_JOB_NAME" "$RESOURCE_GROUP"; then\n    exit 1', hook)
-        self.assertLess(hook.index("az acr build"), hook.index("start_seed_job"))
+        self.assertIn('prepare_seed_job >"$SEED_SETUP_LOG" 2>&1 &', hook)
+        self.assertLess(hook.index("prepare_seed_job >"), hook.index('echo "Configuring Azure AI permissions..."'))
+        self.assertLess(hook.index('if wait "$SEED_SETUP_PID"; then'), hook.index("start_seed_job"))
+        self.assertLess(hook.index("az acr build"), hook.index("az containerapp job update"))
         self.assertIn("COPY ManufacturingOverlays.psm1 /app/ManufacturingOverlays.psm1", dockerfile)
         self.assertIn("COPY sql/ /app/sql/", dockerfile)
 

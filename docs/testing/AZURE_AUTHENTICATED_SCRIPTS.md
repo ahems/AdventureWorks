@@ -34,8 +34,9 @@ or a hidden prompt; never pass it as a command-line argument or commit it.
 
 The helper resolves only relevant values with `azd env get-value --no-prompt`
 from the repository root. It does not source/evaluate the `.env` or print all its
-values. It uses the selected environment; `--environment NAME` selects another
-existing environment for that invocation without changing the default.
+values. It pins the selected environment name before reading endpoints;
+`--environment NAME` selects another existing environment for that invocation
+without changing the default.
 
 ```bash
 # Read manufacturing Functions data as Peter.
@@ -72,9 +73,10 @@ exchanges automatically, since codes and refresh tokens are single-use.
 
 ```bash
 set -euo pipefail
+ENVIRONMENT=$(azd env get-value AZURE_ENV_NAME --no-prompt)
 FUNCTIONS_TOKEN=$(python3 scripts/utilities/azure-auth.py token \
-  --identity manufacturing --resource functions)
-FUNCTIONS_URL=$(azd env get-value API_FUNCTIONS_URL)
+  --identity manufacturing --resource functions --environment "$ENVIRONMENT")
+FUNCTIONS_URL=$(azd env get-value API_FUNCTIONS_URL --environment "$ENVIRONMENT" --no-prompt)
 
 # Keep the token out of curl's process arguments by supplying headers on stdin.
 printf 'Authorization: Bearer %s\n' "$FUNCTIONS_TOKEN" |
@@ -114,7 +116,8 @@ Clients are `adventureworks-admin` (callback
 (`http://localhost:5175/oauth/callback`). These localhost URLs are already registered
 by [McpAuthorizationExtensions](../../api-mcp/AdventureWorks/Auth/McpAuthorizationExtensions.cs).
 PKCE means no client secret is needed. The helper requests the client's business
-scopes plus `offline_access`; the server intersects them with actual user grants.
+scopes, `realtime.connect` for authenticated Web PubSub negotiation, and
+`offline_access`; the server intersects them with actual user grants.
 
 | Resource option | Default token audience | Destination |
 | --- | --- | --- |
@@ -141,13 +144,14 @@ and `_issuer`; `refresh` consumes this JSON on stdin and emits its replacement:
 
 ```bash
 set -euo pipefail
+ENVIRONMENT=$(azd env get-value AZURE_ENV_NAME --no-prompt)
 SESSION=$(python3 scripts/utilities/azure-auth.py token \
-  --identity manufacturing --resource dab --json)
+  --identity manufacturing --resource dab --environment "$ENVIRONMENT" --json)
 
 # Can renew for the same resource or mint a different allowed resource.
 SESSION=$(printf '%s' "$SESSION" |
   python3 scripts/utilities/azure-auth.py refresh \
-    --identity manufacturing --resource functions)
+    --identity manufacturing --resource functions --environment "$ENVIRONMENT")
 
 # jq is optional; only needed by this extraction example.
 FUNCTIONS_TOKEN=$(printf '%s' "$SESSION" | jq -er '.access_token')

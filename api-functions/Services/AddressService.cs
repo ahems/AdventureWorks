@@ -3,10 +3,26 @@ using AddressFunctions.Models;
 using Dapper;
 using Azure.Core;
 using Azure.Identity;
+using System.Data;
+using System.Data.Common;
 
 namespace AddressFunctions.Services;
 
-public class AddressService
+public interface IAddressService
+{
+    Task<IEnumerable<PersonAddressResult>> GetPersonAddressesAsync(IEnumerable<int> businessEntityIds);
+    Task<bool> IsAddressOwnedByAsync(int addressId, int businessEntityId);
+    Task<IEnumerable<Address>> GetAddressesAsync(int? limit = 100, int? offset = 0, int? businessEntityId = null);
+    Task<Address?> GetAddressByIdAsync(int id, int? businessEntityId = null);
+    Task<Address> CreateAddressAsync(CreateAddressRequest request);
+    Task<Address?> UpdateAddressAsync(int id, UpdateAddressRequest request);
+    Task<OwnedAddressUpdateResult> UpdateOwnedAddressAsync(int id, int businessEntityId, UpdateAddressRequest request);
+    Task<SetAddressTypeResult> SetAddressTypeAsync(int businessEntityId, int addressId, int addressTypeId);
+    Task<bool> DeleteAddressAsync(int id);
+    Task<bool> DeleteOwnedAddressAsync(int id, int businessEntityId);
+}
+
+public class AddressService : IAddressService
 {
     /// <summary>AdventureWorks Person.AddressType "Home" — used as the owner's single default address.</summary>
     public const int DefaultAddressTypeId = 2;
@@ -22,7 +38,7 @@ public class AddressService
     /// <summary>
     /// Creates a SQL connection with Azure AD authentication via connection string
     /// </summary>
-    private async Task<SqlConnection> CreateConnectionAsync()
+    protected virtual async Task<DbConnection> CreateConnectionAsync()
     {
         // Connection string contains Authentication=Active Directory Default
         // which handles credential acquisition automatically using DefaultAzureCredential
@@ -98,7 +114,7 @@ public class AddressService
     /// <summary>
     /// Get all addresses with optional pagination
     /// </summary>
-    public async Task<IEnumerable<Address>> GetAddressesAsync(int? limit = 100, int? offset = 0)
+    public async Task<IEnumerable<Address>> GetAddressesAsync(int? limit = 100, int? offset = 0, int? businessEntityId = null)
     {
         using var connection = await CreateConnectionAsync();
 
@@ -112,35 +128,43 @@ public class AddressService
                 PostalCode, 
                 rowguid, 
                 ModifiedDate
-            FROM [Person].[Address]
+            FROM [Person].[Address] a
+            WHERE @BusinessEntityId IS NULL OR EXISTS (
+                SELECT 1 FROM Person.BusinessEntityAddress bea
+                WHERE bea.AddressID = a.AddressID
+                  AND bea.BusinessEntityID = @BusinessEntityId)
             ORDER BY AddressID
             OFFSET @Offset ROWS
             FETCH NEXT @Limit ROWS ONLY";
 
-        return await connection.QueryAsync<Address>(sql, new { Offset = offset, Limit = limit });
+        return await connection.QueryAsync<Address>(sql, new { Offset = offset, Limit = limit, BusinessEntityId = businessEntityId });
     }
 
     /// <summary>
     /// Get a single address by ID
     /// </summary>
-    public async Task<Address?> GetAddressByIdAsync(int id)
+    public async Task<Address?> GetAddressByIdAsync(int id, int? businessEntityId = null)
     {
         using var connection = await CreateConnectionAsync();
+        return await ReadAddressAsync(connection, id, businessEntityId, null, false);
+    }
 
-        var sql = @"
-            SELECT 
-                AddressID, 
-                AddressLine1, 
-                AddressLine2, 
-                City, 
-                StateProvinceID, 
-                PostalCode, 
-                rowguid, 
-                ModifiedDate
-            FROM [Person].[Address]
-            WHERE AddressID = @Id";
+    private static Task<Address?> ReadAddressAsync(
+        DbConnection connection, int id, int? businessEntityId, DbTransaction? transaction, bool lockForUpdate)
+    {
+        var addressLock = lockForUpdate ? "WITH (UPDLOCK, HOLDLOCK)" : "";
+        var linkLock = lockForUpdate ? "WITH (UPDLOCK, HOLDLOCK)" : "";
+        var sql = $@"
+            SELECT a.AddressID, a.AddressLine1, a.AddressLine2, a.City, a.StateProvinceID,
+                   a.PostalCode, a.rowguid, a.ModifiedDate
+            FROM [Person].[Address] a {addressLock}
+            WHERE a.AddressID = @Id
+              AND (@BusinessEntityId IS NULL OR EXISTS (
+                  SELECT 1 FROM [Person].[BusinessEntityAddress] bea {linkLock}
+                  WHERE bea.AddressID = a.AddressID AND bea.BusinessEntityID = @BusinessEntityId))";
 
-        return await connection.QuerySingleOrDefaultAsync<Address>(sql, new { Id = id });
+        return connection.QuerySingleOrDefaultAsync<Address>(
+            sql, new { Id = id, BusinessEntityId = businessEntityId }, transaction);
     }
 
     /// <summary>
@@ -232,11 +256,72 @@ public class AddressService
     public async Task<Address?> UpdateAddressAsync(int id, UpdateAddressRequest request)
     {
         using var connection = await CreateConnectionAsync();
+        return await UpdateAddressCoreAsync(connection, null, id, null, request);
+    }
 
+    public async Task<OwnedAddressUpdateResult> UpdateOwnedAddressAsync(
+        int id, int businessEntityId, UpdateAddressRequest request)
+    {
+        using var connection = await CreateConnectionAsync();
+        using var transaction = connection.BeginTransaction(IsolationLevel.Serializable);
+        var address = await ReadAddressAsync(connection, id, businessEntityId, transaction, true);
+        if (address is null)
+        {
+            transaction.Rollback();
+            return new(OwnedAddressUpdateStatus.NotOwned);
+        }
+
+        if (!HasChanges(address, request))
+        {
+            transaction.Commit();
+            return new(OwnedAddressUpdateStatus.Updated, address);
+        }
+
+        var shared = await connection.ExecuteScalarAsync<int>(@"
+            SELECT CASE WHEN EXISTS (
+                SELECT 1 FROM [Person].[BusinessEntityAddress] WITH (UPDLOCK, HOLDLOCK)
+                WHERE AddressID = @Id AND BusinessEntityID <> @BusinessEntityId
+            ) OR EXISTS (
+                SELECT 1 FROM [Sales].[SalesOrderHeader] soh WITH (UPDLOCK, HOLDLOCK)
+                LEFT JOIN [Sales].[Customer] customer WITH (HOLDLOCK)
+                    ON customer.CustomerID = soh.CustomerID
+                WHERE (soh.BillToAddressID = @Id OR soh.ShipToAddressID = @Id)
+                  AND (customer.PersonID IS NULL OR customer.PersonID <> @BusinessEntityId)
+            ) THEN 1 ELSE 0 END",
+            new { Id = id, BusinessEntityId = businessEntityId }, transaction);
+        if (shared != 0)
+        {
+            transaction.Rollback();
+            return new(OwnedAddressUpdateStatus.Shared);
+        }
+
+        var updated = await UpdateAddressCoreAsync(connection, transaction, id, businessEntityId, request);
+        if (updated is null)
+        {
+            transaction.Rollback();
+            return new(OwnedAddressUpdateStatus.NotOwned);
+        }
+
+        transaction.Commit();
+        return new(OwnedAddressUpdateStatus.Updated, updated);
+    }
+
+    private static bool HasChanges(Address address, UpdateAddressRequest request) =>
+        (request.AddressLine1 is not null && request.AddressLine1 != address.AddressLine1) ||
+        (request.AddressLine2 is not null && request.AddressLine2 != address.AddressLine2) ||
+        (request.City is not null && request.City != address.City) ||
+        (request.StateProvinceID is not null && request.StateProvinceID != address.StateProvinceID) ||
+        (request.PostalCode is not null && request.PostalCode != address.PostalCode);
+
+    private static async Task<Address?> UpdateAddressCoreAsync(
+        DbConnection connection, DbTransaction? transaction, int id, int? businessEntityId,
+        UpdateAddressRequest request)
+    {
         // Build dynamic SQL for partial updates
         var setClauses = new List<string>();
         var parameters = new DynamicParameters();
         parameters.Add("@Id", id);
+        parameters.Add("@BusinessEntityId", businessEntityId);
 
         if (request.AddressLine1 != null)
         {
@@ -267,7 +352,7 @@ public class AddressService
         if (!setClauses.Any())
         {
             // No fields to update, just return the existing record
-            return await GetAddressByIdAsync(id);
+            return await ReadAddressAsync(connection, id, businessEntityId, transaction, false);
         }
 
         // Always update ModifiedDate
@@ -285,9 +370,12 @@ public class AddressService
                 INSERTED.PostalCode,
                 INSERTED.rowguid,
                 INSERTED.ModifiedDate
-            WHERE AddressID = @Id";
+            WHERE AddressID = @Id
+              AND (@BusinessEntityId IS NULL OR EXISTS (
+                  SELECT 1 FROM [Person].[BusinessEntityAddress] bea
+                  WHERE bea.AddressID = @Id AND bea.BusinessEntityID = @BusinessEntityId))";
 
-        return await connection.QuerySingleOrDefaultAsync<Address>(sql, parameters);
+        return await connection.QuerySingleOrDefaultAsync<Address>(sql, parameters, transaction);
     }
 
     /// <summary>
@@ -301,6 +389,45 @@ public class AddressService
         var rowsAffected = await connection.ExecuteAsync(sql, new { Id = id });
 
         return rowsAffected > 0;
+    }
+
+    public async Task<bool> DeleteOwnedAddressAsync(int id, int businessEntityId)
+    {
+        using var connection = await CreateConnectionAsync();
+        using var transaction = connection.BeginTransaction(IsolationLevel.Serializable);
+        var parameters = new { AddressId = id, BusinessEntityId = businessEntityId };
+
+        var addressId = await connection.ExecuteScalarAsync<int?>(@"
+            SELECT AddressID FROM [Person].[Address] WITH (UPDLOCK, HOLDLOCK)
+            WHERE AddressID = @AddressId", parameters, transaction);
+        if (addressId is null)
+        {
+            transaction.Rollback();
+            return false;
+        }
+
+        var removed = await connection.ExecuteAsync(@"
+            DELETE FROM [Person].[BusinessEntityAddress]
+            WHERE AddressID = @AddressId AND BusinessEntityID = @BusinessEntityId",
+            parameters, transaction);
+        if (removed == 0)
+        {
+            transaction.Rollback();
+            return false;
+        }
+
+        await connection.ExecuteAsync(@"
+            DELETE FROM [Person].[Address]
+            WHERE AddressID = @AddressId
+              AND NOT EXISTS (
+                  SELECT 1 FROM [Person].[BusinessEntityAddress]
+                  WHERE AddressID = @AddressId)
+              AND NOT EXISTS (
+                  SELECT 1 FROM [Sales].[SalesOrderHeader]
+                  WHERE BillToAddressID = @AddressId OR ShipToAddressID = @AddressId)",
+            parameters, transaction);
+        transaction.Commit();
+        return true;
     }
 
     /// <summary>
@@ -362,7 +489,7 @@ public class AddressService
     /// requests cannot both create a default.
     /// </summary>
     private static async Task<IReadOnlyList<OwnerLink>> LockOwnerLinksAsync(
-        SqlConnection connection, SqlTransaction transaction, int businessEntityId)
+        DbConnection connection, DbTransaction transaction, int businessEntityId)
     {
         var links = await connection.QueryAsync<OwnerLink>(@"
             SELECT AddressID, AddressTypeID
@@ -378,7 +505,7 @@ public class AddressService
     /// AddressTypeID is part of the primary key.
     /// </summary>
     private static Task DemoteOtherDefaultsAsync(
-        SqlConnection connection, SqlTransaction transaction, int businessEntityId, int keepAddressId)
+        DbConnection connection, DbTransaction transaction, int businessEntityId, int keepAddressId)
     {
         return connection.ExecuteAsync(@"
             DELETE d FROM [Person].[BusinessEntityAddress] d
@@ -413,3 +540,12 @@ public enum SetAddressTypeResult
     NotLinked,
     DefaultRequired
 }
+
+public enum OwnedAddressUpdateStatus
+{
+    Updated,
+    NotOwned,
+    Shared
+}
+
+public sealed record OwnedAddressUpdateResult(OwnedAddressUpdateStatus Status, Address? Address = null);

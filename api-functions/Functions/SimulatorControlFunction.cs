@@ -57,6 +57,7 @@ public class SimulatorControlFunction
             req.Headers.TryGetValues("X-Forwarded-For", out var fwd) ? string.Join(", ", fwd) : "unknown");
 
         var steps = new List<string>();
+        var failed = false;
 
         // Step 1 — Clear manufacturing queue
         try
@@ -69,7 +70,8 @@ public class SimulatorControlFunction
         catch (Exception ex)
         {
             _logger.LogError(ex, "[SimulatorControl] Step 1 failed: could not clear manufacturing queue.");
-            steps.Add($"Manufacturing queue clear FAILED: {ex.Message}");
+            steps.Add("Manufacturing queue clear failed.");
+            failed = true;
         }
 
         // Step 2 — Reset supply chain
@@ -82,7 +84,8 @@ public class SimulatorControlFunction
         catch (Exception ex)
         {
             _logger.LogError(ex, "[SimulatorControl] Step 2 failed: could not reset supply chain.");
-            steps.Add($"Supply chain reset FAILED: {ex.Message}");
+            steps.Add("Supply chain reset failed.");
+            failed = true;
         }
 
         // Step 3 — Reset bank (last — so all pre-reset transactions are wiped consistently)
@@ -97,7 +100,8 @@ public class SimulatorControlFunction
         catch (Exception ex)
         {
             _logger.LogError(ex, "[SimulatorControl] Step 3 failed: could not reset bank.");
-            steps.Add($"Bank reset FAILED: {ex.Message}");
+            steps.Add("Bank reset failed.");
+            failed = true;
         }
 
         // Step 4 — Stop shopping simulator and clear its queue and stats
@@ -110,14 +114,15 @@ public class SimulatorControlFunction
         catch (Exception ex)
         {
             _logger.LogError(ex, "[SimulatorControl] Step 4 failed: could not reset shopping simulator.");
-            steps.Add($"Shopping simulator reset FAILED: {ex.Message}");
+            steps.Add("Shopping simulator reset failed.");
+            failed = true;
         }
 
-        var resp = req.CreateResponse(HttpStatusCode.OK);
+        var resp = req.CreateResponse(failed ? HttpStatusCode.InternalServerError : HttpStatusCode.OK);
         resp.Headers.Add("Content-Type", "application/json; charset=utf-8");
         await resp.WriteStringAsync(JsonSerializer.Serialize(new
         {
-            message    = "Simulator reset complete.",
+            message    = failed ? "Simulator reset incomplete." : "Simulator reset complete.",
             steps,
             resetAtUtc = DateTimeOffset.UtcNow,
         }, _json));

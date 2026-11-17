@@ -99,15 +99,42 @@ Each agent is created via `az rest --method PUT` to the Foundry data plane API w
 
 ### re-running Agent Creation
 
-The creation script is idempotent — re-running `postprovision.sh` will recreate agents. To update an agent's instructions or tool configuration, edit `scripts/utilities/create-foundry-agents.sh` and re-run:
+The creation script is idempotent — re-running `postprovision.sh` configures all agents. The API Functions postdeploy hook also upserts the Help-Me-Choose agent so its security policy stays synchronized during a targeted deployment:
 
 ```bash
-bash scripts/utilities/create-foundry-agents.sh
+azd deploy api-functions --no-prompt
 ```
+
+The authentication assurance live profile reads the selected deployment's Foundry
+agent definition and checks the public questions/recommendations routes without
+an application-user token. It verifies the catalog-only tool list, absence of
+memory and DAB MCP, and rejects fallback/response-ID-shaped results. A separate
+deployed telemetry check confirmed execution of the authorized catalog tools.
+
+Backend MCP service tokens must request explicit scope sets; the api-mcp service
+grant rejects omitted or unknown scopes, and token clients verify the exact
+granted set when the token response includes `scope`. OAuth permits omitting
+that field when the granted set matches the request, so clients accept that
+omission as the requested set. Help-Me-Choose requests `products.read`; customer
+generation uses `admin.write`; order generation requests only the product,
+inventory, customer, order-read and customer-generation scopes needed by its
+tool allow-list. The hosted manufacturing agent requests read scopes for
+ReadOnly/ProposePending and adds `manufacturing.write` only for FullyAutonomous
+runs. User-facing chat uses the caller's delegated MCP token instead of a
+service token. Agents with server-supplied data disable MCP tools for the
+invocation.
+
+The Foundry provisioner omits MCP servers when their explicit tool allow-list
+is empty; DAB MCP is opt-in and requires its own non-empty allow-list. The
+normal `azd deploy` hook reapplies prompt-agent definitions when their source
+fingerprint changes, while avoiding a duplicate update after `azd up`.
 
 ## Thread Persistence
 
-Each conversation uses a Foundry-managed `previous_response_id` that persists across requests. The frontend stores the `threadId` (which holds the Foundry response ID) and sends it with each subsequent request; the C# service chains responses via `previous_response_id` for full context continuity — no client-side thread management is needed.
+Agents that support multi-turn conversations use a Foundry-managed
+`previous_response_id`; the frontend returns the `threadId` for follow-up calls.
+Public Help-Me-Choose is an exception: it does not expose response IDs or resume
+caller-selected Foundry conversations because its routes are anonymous.
 
 ## Structured Inputs
 
@@ -120,7 +147,7 @@ Each agent's Foundry portal definition must declare a `structured_inputs` schema
 | Agent                | Variables declared in portal `structured_inputs` schema                                                                                    |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Chat                 | `customerId` (string), `cultureId` (string), `userName` (string)                                                                           |
-| Help-Me-Choose       | `cultureId` (string, default `"en"`), `profileContext` (string — JSON catalog/shopper hint), `userId` (string — for memory scoping)        |
+| Help-Me-Choose       | `cultureId` (string, default `"en"`), `profileContext` (string — catalog/shopper hint)                                                               |
 | Order Generation     | `todayDate`, `personaDescription`, `isExistingCustomer` (bool), `customerName`, `customerId`, `orderCount`, `totalSpend`, `recentProducts` |
 | Promotion Generation | `promotionType`, `offerCategory`, `todayDate`, `categoryName`, `subcategoryName`, `categoryId`, `subcategoryId`                            |
 | Customer Generation  | `locale` (string), `todayDate` (string)                                                                                                    |
@@ -129,12 +156,13 @@ Each agent's Foundry portal definition must declare a `structured_inputs` schema
 
 ## Memory Stores
 
-Each agent maintains a named Foundry memory store for long-term context. Memory is scoped per user/context via the `x-memory-user-id` header set by `FoundryAgentClient`.
+Agents configured with a named Foundry memory store retain long-term context,
+scoped per user/context via the `x-memory-user-id` header set by
+`FoundryAgentClient`.
 
 | Agent                | Memory Store Name             | What Is Retained                                                                                | What Is Excluded                                 |
 | -------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | Chat                 | `eshop-chat-memory`           | Preferred bike category, activity level, budgets, clothing/shoe sizes, brand preferences        | Payment details, passwords, addresses            |
-| Help-Me-Choose       | `eshop-help-me-choose-memory` | Sport/activity preferences, skill level, budget constraints, past recommendations               | Sensitive personal or financial data             |
 | Promotion Generation | `admin-promotion-memory`      | Promotion type patterns, category performance insights, seasonal timing, discount effectiveness | Individual customer PII, payment data            |
 | Order Generation     | `admin-order-memory`          | Persona order patterns, product performance by persona type, successful order compositions      | Customer PII, financial data                     |
 | Customer Generation  | `admin-customer-memory`       | Recently generated customer names, cities, email domains per locale for variety across runs     | Real personal data (all profiles are fictitious) |
@@ -142,10 +170,17 @@ Each agent maintains a named Foundry memory store for long-term context. Memory 
 Memory scoping headers set by `FoundryAgentClient`:
 
 - Chat: `customer-{customerId}`
-- Help-Me-Choose: `customer-{customerId}` (anonymous if no login)
 - Promotion: `promotion-gen-{promotionType}`
 - Order: `order-gen-customer-{customerId}` or `order-gen-persona-{personaType}`
 - Customer: `customer-gen-locale-{locale}`
+
+Help-Me-Choose is a public, stateless catalog feature and does not use a memory
+store. It calls only the product-catalog MCP tools with a workload token limited
+to `products.read`; it does not receive caller-controlled customer identities or
+resume browser-supplied Foundry response IDs. The selected deployment's agent
+definition and anonymous questions/recommendations flow have been live-verified;
+see the current status in the
+[authentication assurance record](../authentication/END_TO_END_AUTHENTICATION.md).
 
 The `isExistingCustomer`, `categoryName`, `subcategoryName`, `categoryId`, and `subcategoryId` variables should be declared as optional in the schema so agents handle both the `{{#if ...}}` and `{{else}}` branches of Handlebars conditionals correctly.
 

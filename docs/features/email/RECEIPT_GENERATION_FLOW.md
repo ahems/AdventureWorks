@@ -1,5 +1,24 @@
 # Order Receipt Generation - Flow Diagram
 
+## Authentication boundaries
+
+The bulk generation flow below is an internal, `admin.write`-protected
+utility, not an anonymous endpoint. Individual receipt status/download routes
+require `orders.read` and check the existing order against the signed consumer
+CustomerID before blob access; recognized internal readers may read across
+customers. Receipt blobs are private and accessed by the Functions managed
+identity, not by anonymous URL.
+
+The separate `POST /api/orders/generate-and-send-receipt` flow retains
+`orders.read` for compatibility, but is side-effecting: it verifies the persisted
+order/customer/email relationship and awaits queue persistence before 202.
+Its delivery worker revalidates that relationship before reading receipts or
+sending email. Neither a supplied customer ID nor a forwarded role header grants
+ownership. See the [route matrix](../functions-oauth/ROUTE_SCOPE_MATRIX.md) and
+[authentication assurance](../authentication/END_TO_END_AUTHENTICATION.md).
+Valid generation/email canaries remain blocked until durable no-email controls
+are verified; read-only probes do not enqueue messages.
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                      ORDER RECEIPT GENERATION FLOW                          │
@@ -116,7 +135,7 @@
         │                                               │
         │  Container: adventureworks-receipts           │
         │  Path: CustomerReceipts/SO43659.pdf           │
-        │  Access: Public                               │
+        │  Access: Private; managed identity            │
         └───────────┬───────────────────────────────────┘
                     │
                     │  Blob URL returned

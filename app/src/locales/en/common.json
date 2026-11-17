@@ -241,6 +241,7 @@
     "error": "Error",
     "errorAddAddress": "Failed to add address. Please try again.",
     "errorUpdateAddress": "Failed to update address. Please try again.",
+    "errorSharedAddress": "This address is shared and cannot be changed. Add a new address instead.",
     "errorDeleteAddress": "Failed to delete address. Please try again.",
     "errorSetDefaultAddress": "Failed to update default address. Please try again.",
     "noAddressesYet": "No saved addresses yet.",

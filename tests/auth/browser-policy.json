@@ -1,0 +1,7 @@
+{
+  "startupNavigationTimeoutMs": 240000,
+  "startupReadTimeoutMs": 240000,
+  "renewedReadTimeoutMs": 90000,
+  "slowReadThresholdMs": 30000,
+  "runnerTimeoutSeconds": 1200
+}

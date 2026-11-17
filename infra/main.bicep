@@ -11,7 +11,7 @@ param diagnosticsName string = 'acr-diagnostics-${toLower(resourceToken)}'
 param keyVaultName string = 'av-kv-${toLower(resourceToken)}'
 param foundryLocation string = resourceGroup().location
 param location string = resourceGroup().location
-param adminUserEnabled bool = true
+param adminUserEnabled bool = false
 param aadAdminObjectId string
 @description('Wether to restore the OpenAI service or not. If set to true, the OpenAI service will be restored from a soft-deleted backup. Use this only if you have previously deleted the OpenAI service created with this script, as you will need to restore it.')
 param restoreOpenAi bool
@@ -62,6 +62,8 @@ module keyvault 'modules/keyvault.bicep' = {
     keyVaultName: keyVaultName
     location: location
     runtimeIdentityPrincipalId: identity.outputs.principalId
+    virtualNetworkId: sqlPrivateNetwork.outputs.virtualNetworkId
+    privateEndpointSubnetId: sqlPrivateNetwork.outputs.privateEndpointSubnetId
   }
 }
 

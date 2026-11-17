@@ -9,6 +9,9 @@ public enum AccessTier
     /// <summary>Tier P — anonymous. No token required (health, discovery, pre-auth, public catalog, AI-assistant pass-through).</summary>
     Public,
 
+    /// <summary>Authenticated user; group-level permissions are enforced by the handler.</summary>
+    Authenticated,
+
     /// <summary>Tier C — consumer self-service with record-level ownership (scoped internal roles unrestricted).</summary>
     Consumer,
 
@@ -27,6 +30,9 @@ public enum AccessMode
 
     /// <summary>Recognized internal categories only.</summary>
     InternalOnly,
+
+    /// <summary>Authenticated callers whose requested resource groups are scope-checked by the handler.</summary>
+    GroupScoped,
 }
 
 /// <summary>
@@ -49,6 +55,7 @@ public static class FunctionScopes
     public const string ManufacturingWrite = "manufacturing.write";
     public const string AdminRead = "admin.read";
     public const string AdminWrite = "admin.write";
+    public const string RealtimeConnect = "realtime.connect";
 }
 
 /// <summary>

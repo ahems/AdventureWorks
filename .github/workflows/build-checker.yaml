@@ -10,6 +10,88 @@ permissions:
   contents: read
 
 jobs:
+  auth-offline:
+    name: Offline authentication assurance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore offline test dependencies
+        run: |
+          dotnet restore api-functions.Tests/api-functions.Tests.csproj
+          dotnet restore api-mcp/AdventureWorks.Tests/AdventureWorks.Tests.csproj
+          npm ci
+          npm --prefix app ci --legacy-peer-deps
+          npm --prefix mcp-inspector ci
+          python3 -m pip install -r tests/auth/container/requirements.txt
+
+      - name: Run offline authentication assurance
+        env:
+          AUTH_OFFLINE_OUTPUT: .auth-results/ci-offline
+        run: |
+          set +e
+          bash tests/scripts/validate-auth.sh --offline --output "$AUTH_OFFLINE_OUTPUT"
+          result=$?
+          set -e
+          if [[ "$result" != "0" && "$result" != "2" ]]; then
+            exit "$result"
+          fi
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads((Path(os.environ["AUTH_OFFLINE_OUTPUT"]) / "report.json").read_text())
+          checks = report["checks"]
+          required = {
+              "required:entra-assertion-real-signature-negatives",
+              "required:functions-worker-middleware",
+              "required:address-handler-ownership",
+              "required:password-handler-ownership",
+              "required:receipt-handler-ownership",
+              "required:consumer-handlers-offline",
+              "required:guest-cart-service-lifecycle",
+              "required:mcp-tool-http-dispatch",
+              "required:mcp-task-ownership-offline",
+          }
+          gates = [check for check in checks if check["id"] in required]
+          if (any(check["status"] == "FAIL" for check in checks)
+                  or len(gates) != len(required)
+                  or {check["id"] for check in gates} != required
+                  or any(check["status"] != "PASS" for check in gates)):
+              raise SystemExit("Offline authentication regression or missing deterministic evidence")
+          print("Offline authentication assertions passed; live evidence blockers remain separate.")
+          PY
+
+      - name: Upload offline authentication evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: authentication-offline
+          path: |
+            .auth-results/ci-offline/report.json
+            .auth-results/ci-offline/junit.xml
+            .auth-results/ci-offline/dotnet/*.trx
+          if-no-files-found: warn
+
   build-check:
     runs-on: ubuntu-latest
 

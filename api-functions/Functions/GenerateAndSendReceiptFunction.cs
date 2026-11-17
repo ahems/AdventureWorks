@@ -5,35 +5,42 @@ using api_functions.Services;
 using System.Net;
 using System.Text.Json;
 using Azure.Storage.Queues;
-using Azure.Identity;
+using ApiFunctions.Auth;
+using Azure;
+using Microsoft.Data.SqlClient;
 
 namespace api_functions.Functions;
 
 /// <summary>
 /// Orchestrates receipt generation and email delivery for completed orders
-/// Fire-and-forget pattern: generates PDF receipt then emails it to customer's selected address
+/// Confirms queue persistence before accepting asynchronous generation and delivery.
 /// </summary>
 public class GenerateAndSendReceiptFunction
 {
     private readonly ILogger<GenerateAndSendReceiptFunction> _logger;
     private readonly ReceiptService _receiptService;
     private readonly EmailService _emailService;
-    private const string RECEIPT_QUEUE_NAME = "order-receipt-generation";
+    private readonly IReceiptAccessService _access;
+    private readonly QueueClient _receiptQueue;
     private const string EMAIL_QUEUE_NAME = "order-email-generation";
 
     public GenerateAndSendReceiptFunction(
         ILogger<GenerateAndSendReceiptFunction> logger,
         ReceiptService receiptService,
-        EmailService emailService)
+        EmailService emailService,
+        IReceiptAccessService access,
+        QueueClient receiptQueue)
     {
         _logger = logger;
         _receiptService = receiptService;
         _emailService = emailService;
+        _access = access;
+        _receiptQueue = receiptQueue;
     }
 
     /// <summary>
     /// Generates a PDF receipt for an order and sends it via email to the customer's selected email address
-    /// This is a fire-and-forget endpoint - returns immediately after validation, processes asynchronously
+    /// Returns after authorization and confirmed queue persistence; generation and delivery run asynchronously.
     /// </summary>
     /// <param name="req">HTTP request with order details</param>
     /// <returns>Accepted response if validation passes</returns>
@@ -46,6 +53,16 @@ public class GenerateAndSendReceiptFunction
         HttpRequestData req)
     {
         _logger.LogInformation("GenerateAndSendReceipt function processing request");
+
+        var user = FunctionUser.Current(req.FunctionContext);
+        if (!user.IsAuthenticated || (!user.IsConsumer && !user.IsInternal) ||
+            (user.IsConsumer && user.CustomerId is not > 0))
+        {
+            _logger.LogWarning("Denied unbound receipt email request");
+            var denied = req.CreateResponse(HttpStatusCode.Forbidden);
+            await denied.WriteAsJsonAsync(new { error = "Order access is not allowed." });
+            return denied;
+        }
 
         try
         {
@@ -85,6 +102,15 @@ public class GenerateAndSendReceiptFunction
                 return badRequestResponse;
             }
 
+            if (!await _access.CanSendAsync(request.SalesOrderId, request.CustomerId,
+                    request.EmailAddressId, user.IsConsumer ? user.CustomerId : null))
+            {
+                _logger.LogWarning("Denied receipt order/customer/email binding");
+                var denied = req.CreateResponse(HttpStatusCode.Forbidden);
+                await denied.WriteAsJsonAsync(new { error = "Order access is not allowed." });
+                return denied;
+            }
+
             _logger.LogInformation(
                 "Accepted receipt generation and email request for SalesOrderId={salesOrderId}, CustomerId={customerId}, EmailAddressId={emailAddressId}",
                 request.SalesOrderId,
@@ -92,26 +118,9 @@ public class GenerateAndSendReceiptFunction
                 request.EmailAddressId
             );
 
-            // Fire-and-forget: Enqueue receipt generation, then email will follow
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await EnqueueReceiptAndEmailAsync(
-                        request.SalesOrderId,
-                        request.CustomerId,
-                        request.EmailAddressId
-                    );
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(
-                        ex,
-                        "Error in background processing for SalesOrderId={salesOrderId}",
-                        request.SalesOrderId
-                    );
-                }
-            });
+            await EnqueueReceiptAndEmailAsync(
+                request.SalesOrderId, request.CustomerId, request.EmailAddressId,
+                req.FunctionContext.CancellationToken);
 
             // Return immediately
             var acceptedResponse = req.CreateResponse(HttpStatusCode.Accepted);
@@ -124,7 +133,13 @@ public class GenerateAndSendReceiptFunction
             });
             return acceptedResponse;
         }
-        catch (Exception ex)
+        catch (JsonException)
+        {
+            var badRequest = req.CreateResponse(HttpStatusCode.BadRequest);
+            await badRequest.WriteAsJsonAsync(new { error = "Invalid request body" });
+            return badRequest;
+        }
+        catch (Exception ex) when (ex is RequestFailedException or SqlException)
         {
             _logger.LogError(ex, "Error in GenerateAndSendReceipt endpoint");
             var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
@@ -137,62 +152,28 @@ public class GenerateAndSendReceiptFunction
     /// Enqueue receipt generation first, then enqueue email sending to follow
     /// Uses existing GenerateOrderReceipts queue infrastructure
     /// </summary>
-    private async Task EnqueueReceiptAndEmailAsync(int salesOrderId, int customerId, int emailAddressId)
+    private async Task EnqueueReceiptAndEmailAsync(
+        int salesOrderId, int customerId, int emailAddressId, CancellationToken cancellationToken)
     {
-        try
-        {
-            _logger.LogInformation(
-                "Enqueueing receipt generation and email for SalesOrderId={salesOrderId}",
-                salesOrderId
-            );
+        _logger.LogInformation(
+            "Enqueueing receipt generation and email for SalesOrderId={salesOrderId}",
+            salesOrderId
+        );
 
-            // Get queue service URI from environment variables
-            var queueServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__queueServiceUri");
-            if (string.IsNullOrEmpty(queueServiceUri))
+        var salesOrderNumber = $"SO{salesOrderId}";
+        var receiptMessage = JsonSerializer.Serialize(new
+        {
+            SalesOrderNumber = salesOrderNumber,
+            EmailMetadata = new
             {
-                var storageAccountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
-                    ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
-                queueServiceUri = $"https://{storageAccountName}.queue.core.windows.net";
+                CustomerId = customerId,
+                EmailAddressId = emailAddressId,
+                SalesOrderId = salesOrderId
             }
+        });
 
-            // Create queue client with managed identity
-            var queueServiceClient = new QueueServiceClient(
-                new Uri(queueServiceUri),
-                new DefaultAzureCredential(),
-                new QueueClientOptions
-                {
-                    MessageEncoding = QueueMessageEncoding.Base64
-                }
-            );
-
-            // Step 1: Enqueue receipt generation with email metadata (reuse existing infrastructure)
-            var receiptQueueClient = queueServiceClient.GetQueueClient(RECEIPT_QUEUE_NAME);
-
-            var salesOrderNumber = $"SO{salesOrderId}";
-            var receiptMessage = JsonSerializer.Serialize(new
-            {
-                SalesOrderNumber = salesOrderNumber,
-                // Include email metadata so receipt generation can enqueue email AFTER PDF is ready
-                EmailMetadata = new
-                {
-                    CustomerId = customerId,
-                    EmailAddressId = emailAddressId,
-                    SalesOrderId = salesOrderId
-                }
-            });
-
-            await receiptQueueClient.SendMessageAsync(receiptMessage);
-            _logger.LogInformation("Enqueued receipt generation for {orderNumber} with email follow-up", salesOrderNumber);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error enqueueing receipt and email for SalesOrderId={salesOrderId}",
-                salesOrderId
-            );
-            throw;
-        }
+        await _receiptQueue.SendMessageAsync(receiptMessage, cancellationToken);
+        _logger.LogInformation("Enqueued receipt generation for {orderNumber} with email follow-up", salesOrderNumber);
     }
 
     /// <summary>
@@ -215,6 +196,14 @@ public class GenerateAndSendReceiptFunction
             {
                 _logger.LogError("Invalid queue message: SalesOrderNumber is null or empty");
                 return;
+            }
+
+            if (!salesOrderNumber.StartsWith("SO", StringComparison.Ordinal) ||
+                !int.TryParse(salesOrderNumber.AsSpan(2), out var orderId) || orderId <= 0 ||
+                salesOrderNumber != $"SO{orderId}" || customerId <= 0 || emailAddressId <= 0 ||
+                !await _access.CanSendAsync(orderId, customerId, emailAddressId, null))
+            {
+                throw new InvalidOperationException("Receipt email metadata does not match the persisted order/customer/email.");
             }
 
             _logger.LogInformation(

@@ -4,7 +4,7 @@ using Xunit;
 namespace AdventureWorks.Tests;
 
 /// <summary>
-/// Verifies the deterministic role→scope design: each seeded role grants exactly the
+/// Verifies the deterministic role→scope design: each configured role grants exactly the
 /// intended business scopes, categories are correct, and cross-category escalation is
 /// impossible (manufacturing excludes customer/admin; consumers exclude internal scopes).
 /// </summary>
@@ -16,6 +16,7 @@ public class RoleScopeMappingTests
         foreach (var (role, scopes) in ApplicationRoles.DefaultRoleScopes)
         {
             Assert.Contains(OAuthScopes.McpAccess, scopes);
+            Assert.Contains(OAuthScopes.RealtimeConnect, scopes);
         }
     }
 
@@ -39,7 +40,7 @@ public class RoleScopeMappingTests
             new[]
             {
                 OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.OrdersRead, OAuthScopes.OrdersWrite,
-                OAuthScopes.CustomersRead, OAuthScopes.CustomersWrite,
+                OAuthScopes.RealtimeConnect, OAuthScopes.CustomersRead, OAuthScopes.CustomersWrite,
             }.OrderBy(s => s),
             scopes.OrderBy(s => s));
     }
@@ -115,5 +116,26 @@ public class RoleScopeMappingTests
         {
             Assert.NotEqual(UserCategories.Consumer, ApplicationRoles.CategoryFor(role));
         }
+    }
+
+    [Theory]
+    [InlineData(3, ApplicationRoles.SalesAdmin)]
+    [InlineData(4, ApplicationRoles.MarketingAdmin)]
+    [InlineData(5, ApplicationRoles.InventoryAdmin)]
+    [InlineData(15, ApplicationRoles.InventoryAdmin)]
+    [InlineData(7, ApplicationRoles.ManufacturingEngineer)]
+    [InlineData(8, ApplicationRoles.ManufacturingEngineer)]
+    [InlineData(16, ApplicationRoles.ExecutiveAdmin)]
+    public void Department_maps_to_source_controlled_role(int departmentId, string expectedRole)
+    {
+        Assert.Equal(expectedRole, ApplicationRoles.RoleForDepartment(departmentId));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(999)]
+    public void Unmapped_department_uses_operations_role(int? departmentId)
+    {
+        Assert.Equal(ApplicationRoles.OperationsAdmin, ApplicationRoles.RoleForDepartment(departmentId));
     }
 }

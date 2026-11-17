@@ -10,6 +10,31 @@ High‑level responsibilities:
 
 > **Note**: Function _names_ below refer to the `[Function("...")]` attribute and may differ from class or method names.
 
+## Saved payment methods
+
+`GetPaymentMethods` (`GET /api/payment-methods`) requires `customers.read`.
+It reads only the signed person's linked cards, never a request-supplied owner,
+and SQL projects only the last four digits rather than full card numbers.
+Internal callers are also restricted to their own person claim; unbound service
+identities are denied. No SQL schema, fixture table or provisioning change is needed.
+
+## Order receipts and delivery ownership
+
+Receipt status and PDF downloads require `orders.read` and a persisted order
+matching the consumer's signed CustomerID before accessing private blobs.
+Unbound consumers and foreign orders return 403 without storage access.
+Recognized internal callers retain cross-customer reads, but the order must exist.
+
+Receipt generation/email requests also bind the supplied order, customer and
+selected email address through existing SQL relationships. The existing
+`orders.read` scope is retained for this feature; this POST is not a read-only
+probe. A 202 response now requires confirmed queue persistence, not an unobserved
+background task. The email worker revalidates the persisted order/customer/email
+relationship before retrieving receipt contents or attempting delivery, including
+for older messages. Invalid metadata follows the existing retry/poison path.
+Blob/queue SDK clients use the configured managed identity and existing resources.
+No schema, storage resource or environment recreation is required.
+
 ## SQL connection and idle-cost behavior
 
 Most Functions open SQL connections only while handling an HTTP request, queue message, or scheduled job. Two SQL Change Tracking listeners are different: `OrderPlacedSqlTrigger` observes `Sales.SalesOrderHeader`, and `DatabaseChanges` observes `dbo.RealtimeNotificationOutbox`. Transactional SQL triggers write small change signals to this shared outbox for direct DAB mutations across the cart, order details, manufacturing, inventory, catalog, reviews, purchasing and finance tables. Each listener has one Flex always-ready instance (two total), rather than an instance per source table. Consequently, the deployed Functions app can keep the serverless Azure SQL Database online even when all user-facing Container Apps have scaled to zero. This server-side observation is not frontend polling.
@@ -48,6 +73,8 @@ Backend event contracts:
 
 | Group | Event | Payload |
 | --- | --- | --- |
+| `orders` | `orders-changed` | No business identifiers or status; cache invalidation only |
+| `finance` | `finance-changed` | No transaction amount, currency, type, reference or identifier; cache invalidation only |
 | Existing domain groups | `state-changed` | `entity`, `changeType`, sent after successful Table Storage persistence |
 | Matching domain groups | `database-changed` | `entity`, `changeTypes`, observed SQL/DAB changes |
 | `reviews` | `generation-state-changed` | `productId`, `changeType`: `started`, `progress`, `terminal` |
@@ -880,7 +907,7 @@ Notification emails (Shipped, Delivered) are gated behind the `ORDER_NOTIFICATIO
 ### `ResetAllSimulators`
 
 - **Trigger / Route**: HTTP `POST /api/simulators/reset`
-- **Purpose**: Coordinated reset of all three simulators in the correct order — clears the manufacturing work-order queue, resets the supply chain (reverts POs and re-seeds vendor stock), then resets the bank (wipes transaction history and re-seeds the USD balance). Returns a step-by-step result with the new USD seed amount. Use this instead of individual resets to avoid orphaned bank transactions.
+- **Purpose**: Coordinated reset in order — clears the manufacturing work-order queue, resets the supply chain, resets the bank, then stops and resets the shopping simulator. Returns step-by-step results. If any step fails it returns HTTP 500 with sanitized details; other steps may already have succeeded, so reconcile before retrying. The MCP reset tool propagates the failure.
 - **Supply scope**: Only POs that the historical replay moved off Approved are reverted. They are tracked in the `replayed-approved` partition of the supply table, so seed Complete/Rejected POs are never touched. A fresh environment replays 12 seed-Approved POs. Replay claims each PO atomically (`WHERE Status = 2`), so concurrent workers never deliver it twice, and processes each PO line once. BOM membership is a semi-join, not a row-multiplying join.
 
 ### `GetFinancialSummary`
@@ -1267,6 +1294,7 @@ The Shopping Simulator continuously generates AI-driven orders to simulate reali
   }
   ```
 - **Configuration details**:
+  - Malformed JSON, values outside the documented ranges, or disabling both order types return HTTP 400 without starting the simulator. An empty body continues to use defaults.
   - `ordersPerMinute` (1–60): Messages enqueued per timer tick (every minute).
   - `durationHours` (1–72, default 24): Auto-stop duration. Simulator NEVER runs forever.
   - `existingCustomerPercentage` (0–100): Split between existing customers and new customers for consumer orders.
@@ -1347,9 +1375,15 @@ Modes marked "AI Required" will log full diagnostics and fail (message goes to p
 
 ### Web PubSub Negotiate Endpoint
 
-`GET /api/webpubsub/negotiate?groups=manufacturing-agent,warehouse,...`
+`GET /api/webpubsub/negotiate` requires a Functions-audience user bearer token
+with `realtime.connect`.
 
-Returns a client access URL with a short-lived JWT token for opening a WebSocket connection.
+The server derives the short-lived Web PubSub URL's groups from the signed token's
+domain scopes and category. Clients cannot request additional groups. Every
+internal group requires an internal category; the `orders` group also permits
+consumers with `orders.read` because it carries only the generic `orders-changed`
+invalidation signal. The URL and its embedded token must never be logged or
+included in assurance reports.
 
 ### Real-Time Push Groups
 
@@ -1359,9 +1393,12 @@ Returns a client access URL with a short-lived JWT token for opening a WebSocket
 | `manufacturing-ops`   | wo-completed, simulation-stopped, config-changed                        | WorkOrderOperationProcessorFunction, ManufacturingControlFunction                                 |
 | `warehouse`           | operation-completed, config-changed                                     | WarehouseOperationProcessorFunction, WarehouseFunction                                            |
 | `supply-chain`        | po-status-changed                                                       | PurchaseOrderProcessorFunction                                                                    |
-| `orders`              | order-placed, order-status-changed, orders-delivered                    | OrderPlacedSqlTrigger, ProcessSalesOrderStatus, OrderDeliveryTimerFunction, StoreOrderFunctions   |
+| `orders`              | orders-changed (non-identifying invalidation only)                      | OrderPlacedSqlTrigger, ProcessSalesOrderStatus, OrderDeliveryTimerFunction, StoreOrderFunctions   |
 | `shopping-simulator`  | simulator-started, simulator-stopped                                    | ShoppingSimulatorControlFunction                                                                  |
 | `reviews`             | moderation-progress, generation-progress                                | ReviewModerationQueueFunction, GenerateVerifiedReviewsFunction                                    |
+| `finance`             | database-changed, state-changed                                          | DatabaseChangeNotifications, BankService, table-backed finance publishers                         |
+| `promotions`          | database-changed, state-changed                                          | DatabaseChangeNotifications, AutoPromotionQueueTrigger                                              |
+| `utilities`           | utility-status-changed                                                   | UtilityLifecycleNotifications                                                                      |
 
 For examples of how these Functions are exercised, see the test scripts in the repo root (e.g. `test-receipt-generation.sh`, `test-send-email.sh`, `test-ai-and-mcp-complete.sh`) and the utilities in [scripts/utilities/](../scripts/utilities/) (e.g. `seed-sales-order-status-queue.sh` for the sales order status pipeline).
 

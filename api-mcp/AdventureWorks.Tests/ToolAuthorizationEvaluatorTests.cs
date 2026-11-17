@@ -85,6 +85,15 @@ public class ToolAuthorizationEvaluatorTests
     }
 
     [Fact]
+    public void Consumer_malformed_present_owner_argument_is_denied_without_injection()
+    {
+        var decision = _eval.Evaluate(Consumer(customerId: 100), "get_customer_orders", null, true);
+        Assert.False(decision.Allowed);
+        Assert.Equal(AuthorizationOutcome.DenyOwnership, decision.Outcome);
+        Assert.Null(decision.InjectCustomerId);
+    }
+
+    [Fact]
     public void Consumer_without_customer_profile_is_denied_ownership_tool()
     {
         var d = _eval.Evaluate(Consumer(customerId: null), "get_customer_orders", null, false);

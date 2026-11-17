@@ -313,7 +313,6 @@ const HelpMeChoosePage: React.FC = () => {
           gender || undefined,
           heightLabel || undefined,
           selectedColors.length > 0 ? selectedColors : undefined,
-          isAuthenticated ? user?.businessEntityId : undefined,
         );
 
         // Enrich with photos

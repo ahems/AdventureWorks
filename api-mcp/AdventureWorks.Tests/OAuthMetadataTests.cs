@@ -40,6 +40,7 @@ public class OAuthMetadataTests : IClassFixture<OAuthTestFactory>
 
         var scopes = doc.GetProperty("scopes_supported").EnumerateArray().Select(e => e.GetString()).ToList();
         Assert.Contains("mcp.access", scopes);
+        Assert.Contains("realtime.connect", scopes);
         Assert.Contains("products.read", scopes);
         Assert.Contains("orders.write", scopes);
     }
@@ -80,6 +81,7 @@ public class OAuthMetadataTests : IClassFixture<OAuthTestFactory>
 
         var scopes = doc.GetProperty("scopes_supported").EnumerateArray().Select(e => e.GetString());
         Assert.Contains("mcp.access", scopes);
+        Assert.Contains("realtime.connect", scopes);
     }
 
     [Fact]

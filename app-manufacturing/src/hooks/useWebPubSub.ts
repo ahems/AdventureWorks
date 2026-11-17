@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { WebPubSubClient } from "@azure/web-pubsub-client";
 import { WEB_PUBSUB_NEGOTIATE_URL } from "@/config/api";
+import {
+  getFunctionsAccessToken,
+  getTabAuthorizationGeneration,
+  isTabAuthorizationGenerationCurrent,
+} from "@/services/dabAuth";
 
 /**
  * Connects to Azure Web PubSub and subscribes to the specified groups.
@@ -22,6 +27,8 @@ export function useWebPubSub(
   const groupsKey = groups.join(",");
 
   useEffect(() => {
+    const generation = getTabAuthorizationGeneration();
+    const subscribedGroups = new Set(groupsKey.split(",").filter(Boolean));
     let cancelled = false;
     const abortController = new AbortController();
     setStatus("connecting");
@@ -29,33 +36,47 @@ export function useWebPubSub(
     const client = new WebPubSubClient({
       // Renew the negotiate token on reconnect rather than reusing an expired URL.
       getClientAccessUrl: async () => {
+        const ensureSession = () => {
+          if (!isTabAuthorizationGenerationCurrent(generation)) {
+            throw new Error("The live-updates session has changed.");
+          }
+        };
+        ensureSession();
+        const accessToken = await getFunctionsAccessToken();
+        ensureSession();
+        if (!accessToken) throw new Error("Functions authorization is required for live updates.");
         const res = await fetch(
-          `${WEB_PUBSUB_NEGOTIATE_URL}?groups=${encodeURIComponent(groupsKey)}`,
-          { signal: abortController.signal },
+          WEB_PUBSUB_NEGOTIATE_URL,
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            signal: abortController.signal,
+          },
         );
+        ensureSession();
         if (!res.ok) throw new Error(`Negotiate failed: ${res.status}`);
         const { url } = (await res.json()) as { url: string };
+        ensureSession();
         if (!url || cancelled) throw new Error("Push unavailable");
         return url;
       },
     });
 
     client.on("connected", () => {
-      if (cancelled) return;
+      if (cancelled || !isTabAuthorizationGenerationCurrent(generation)) return;
       setStatus("live");
       onConnectedRef.current?.();
     });
     client.on("disconnected", () => {
-      if (!cancelled) setStatus("reconnecting");
+      if (!cancelled && isTabAuthorizationGenerationCurrent(generation)) setStatus("reconnecting");
     });
     client.on("stopped", () => {
-      if (!cancelled) setStatus("unavailable");
+      if (!cancelled && isTabAuthorizationGenerationCurrent(generation)) setStatus("unavailable");
     });
     client.on("rejoin-group-failed", () => {
-      if (!cancelled) setStatus("unavailable");
+      if (!cancelled && isTabAuthorizationGenerationCurrent(generation)) setStatus("unavailable");
     });
     client.on("group-message", (e) => {
-      if (cancelled) return;
+      if (cancelled || !isTabAuthorizationGenerationCurrent(generation) || !subscribedGroups.has(e.message.group)) return;
       try {
         const data =
           typeof e.message.data === "string"
@@ -74,6 +95,10 @@ export function useWebPubSub(
     async function connect() {
       try {
         await client.start();
+        if (!isTabAuthorizationGenerationCurrent(generation)) {
+          setStatus("unavailable");
+          await client.stop();
+        }
       } catch (err) {
         if (cancelled) return;
         setStatus("unavailable");

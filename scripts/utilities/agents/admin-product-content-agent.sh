@@ -65,7 +65,8 @@ DESCRIPTION="Generates creative product content for the AdventureWorks admin cat
 
 STARTER_PROMPTS='[{"text":"Design a mountain bike for the Bikes > Mountain Bikes category"},{"text":"Create a cycling jersey product for the Clothing > Jerseys subcategory"},{"text":"Generate a road helmet for the Components > Helmets and Helmets category"},{"text":"Design a water bottle accessory for the Accessories category"}]'
 
-AGENT_ID=$(upsert_agent "admin-product-content-agent" "Product Content Designer" "$INSTRUCTIONS" "$MEMORY_STORE" "$DESCRIPTION" "$STARTER_PROMPTS" "{}")
+# Product context is supplied by the backend; this agent must not query MCP.
+AGENT_ID=$(upsert_agent "admin-product-content-agent" "Product Content Designer" "$INSTRUCTIONS" "$MEMORY_STORE" "$DESCRIPTION" "$STARTER_PROMPTS" "{}" "[]" "false")
 if [ -z "$AGENT_ID" ]; then error "Failed to create admin-product-content-agent"; exit 1; fi
 success "admin-product-content-agent created: $AGENT_ID"
 azd env set AI_AGENT_PRODUCT_CONTENT_ID "$AGENT_ID"

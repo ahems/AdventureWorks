@@ -16,7 +16,10 @@
     },
     "mcp": {
       "enabled": true,
-      "path": "/mcp"
+      "path": "/mcp",
+      "allowed-hosts": [
+        "@env('DAB_MCP_ALLOWED_HOST')"
+      ]
     },
     "host": {
       "port": 80,
@@ -735,18 +738,6 @@
         }
       ],
       "permissions": [
-        {
-          "role": "authenticated",
-          "actions": [
-            "read"
-          ]
-        },
-        {
-          "role": "consumer",
-          "actions": [
-            "read"
-          ]
-        },
         {
           "role": "sales-admin",
           "actions": [
@@ -1499,25 +1490,7 @@
           "role": "authenticated",
           "actions": [
             {
-              "action": "create",
-              "policy": {
-                "database": "@item.BusinessEntityID eq @claims.business_entity_id"
-              }
-            },
-            {
               "action": "read",
-              "policy": {
-                "database": "@item.BusinessEntityID eq @claims.business_entity_id"
-              }
-            },
-            {
-              "action": "update",
-              "policy": {
-                "database": "@item.BusinessEntityID eq @claims.business_entity_id"
-              }
-            },
-            {
-              "action": "delete",
               "policy": {
                 "database": "@item.BusinessEntityID eq @claims.business_entity_id"
               }
@@ -1528,25 +1501,7 @@
           "role": "consumer",
           "actions": [
             {
-              "action": "create",
-              "policy": {
-                "database": "@item.BusinessEntityID eq @claims.business_entity_id"
-              }
-            },
-            {
               "action": "read",
-              "policy": {
-                "database": "@item.BusinessEntityID eq @claims.business_entity_id"
-              }
-            },
-            {
-              "action": "update",
-              "policy": {
-                "database": "@item.BusinessEntityID eq @claims.business_entity_id"
-              }
-            },
-            {
-              "action": "delete",
               "policy": {
                 "database": "@item.BusinessEntityID eq @claims.business_entity_id"
               }
@@ -1842,14 +1797,16 @@
         {
           "role": "executive-admin",
           "actions": [
-            "read"
-          ],
-          "fields": {
-            "exclude": [
-              "PasswordHash",
-              "PasswordSalt"
-            ]
-          }
+            {
+              "action": "read",
+              "fields": {
+                "exclude": [
+                  "PasswordHash",
+                  "PasswordSalt"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -2481,58 +2438,58 @@
           "actions": [
             {
               "action": "read",
+              "fields": {
+                "exclude": [
+                  "rowguid",
+                  "ModifiedDate"
+                ]
+              },
               "policy": {
                 "database": "@item.PersonID eq @claims.business_entity_id"
               }
             },
             {
               "action": "create",
-              "policy": {
-                "database": "@item.PersonID eq @claims.business_entity_id"
-              }
-            },
-            {
-              "action": "update",
+              "fields": {
+                "include": [
+                  "PersonID",
+                  "TerritoryID"
+                ]
+              },
               "policy": {
                 "database": "@item.PersonID eq @claims.business_entity_id"
               }
             }
-          ],
-          "fields": {
-            "exclude": [
-              "rowguid",
-              "ModifiedDate"
-            ]
-          }
+          ]
         },
         {
           "role": "consumer",
           "actions": [
             {
               "action": "read",
+              "fields": {
+                "exclude": [
+                  "rowguid",
+                  "ModifiedDate"
+                ]
+              },
               "policy": {
                 "database": "@item.PersonID eq @claims.business_entity_id"
               }
             },
             {
               "action": "create",
-              "policy": {
-                "database": "@item.PersonID eq @claims.business_entity_id"
-              }
-            },
-            {
-              "action": "update",
+              "fields": {
+                "include": [
+                  "PersonID",
+                  "TerritoryID"
+                ]
+              },
               "policy": {
                 "database": "@item.PersonID eq @claims.business_entity_id"
               }
             }
-          ],
-          "fields": {
-            "exclude": [
-              "rowguid",
-              "ModifiedDate"
-            ]
-          }
+          ]
         },
         {
           "role": "sales-admin",
@@ -2734,24 +2691,6 @@
         }
       ],
       "permissions": [
-        {
-          "role": "anonymous",
-          "actions": [
-            "read"
-          ]
-        },
-        {
-          "role": "authenticated",
-          "actions": [
-            "read"
-          ]
-        },
-        {
-          "role": "consumer",
-          "actions": [
-            "read"
-          ]
-        },
         {
           "role": "sales-admin",
           "actions": [
@@ -3706,19 +3645,30 @@
         {
           "role": "anonymous",
           "actions": [
-            "read"
+            {
+              "action": "read",
+              "fields": {
+                "exclude": [
+                  "StandardCost",
+                  "SafetyStockLevel",
+                  "ReorderPoint",
+                  "DaysToManufacture"
+                ]
+              }
+            }
           ]
         },
         {
           "role": "authenticated",
           "actions": [
-            "read",
             {
-              "action": "update",
+              "action": "read",
               "fields": {
-                "include": [
-                  "ProductID",
-                  "SafetyStockLevel"
+                "exclude": [
+                  "StandardCost",
+                  "SafetyStockLevel",
+                  "ReorderPoint",
+                  "DaysToManufacture"
                 ]
               }
             }
@@ -3727,13 +3677,14 @@
         {
           "role": "consumer",
           "actions": [
-            "read",
             {
-              "action": "update",
+              "action": "read",
               "fields": {
-                "include": [
-                  "ProductID",
-                  "SafetyStockLevel"
+                "exclude": [
+                  "StandardCost",
+                  "SafetyStockLevel",
+                  "ReorderPoint",
+                  "DaysToManufacture"
                 ]
               }
             }
@@ -4183,19 +4134,43 @@
         {
           "role": "anonymous",
           "actions": [
-            "read"
+            {
+              "action": "read",
+              "fields": {
+                "exclude": [
+                  "Shelf",
+                  "Bin"
+                ]
+              }
+            }
           ]
         },
         {
           "role": "authenticated",
           "actions": [
-            "read"
+            {
+              "action": "read",
+              "fields": {
+                "exclude": [
+                  "Shelf",
+                  "Bin"
+                ]
+              }
+            }
           ]
         },
         {
           "role": "consumer",
           "actions": [
-            "read"
+            {
+              "action": "read",
+              "fields": {
+                "exclude": [
+                  "Shelf",
+                  "Bin"
+                ]
+              }
+            }
           ]
         },
         {
@@ -4645,18 +4620,6 @@
               "policy": {
                 "database": "@item.CustomerID eq @claims.customer_id"
               }
-            },
-            {
-              "action": "create",
-              "policy": {
-                "database": "@item.CustomerID eq @claims.customer_id"
-              }
-            },
-            {
-              "action": "update",
-              "policy": {
-                "database": "@item.CustomerID eq @claims.customer_id"
-              }
             }
           ]
         },
@@ -4665,18 +4628,6 @@
           "actions": [
             {
               "action": "read",
-              "policy": {
-                "database": "@item.CustomerID eq @claims.customer_id"
-              }
-            },
-            {
-              "action": "create",
-              "policy": {
-                "database": "@item.CustomerID eq @claims.customer_id"
-              }
-            },
-            {
-              "action": "update",
               "policy": {
                 "database": "@item.CustomerID eq @claims.customer_id"
               }
@@ -4875,20 +4826,6 @@
         }
       ],
       "permissions": [
-        {
-          "role": "authenticated",
-          "actions": [
-            "create",
-            "read"
-          ]
-        },
-        {
-          "role": "consumer",
-          "actions": [
-            "create",
-            "read"
-          ]
-        },
         {
           "role": "sales-admin",
           "actions": [
@@ -7237,7 +7174,14 @@
         {
           "role": "anonymous",
           "actions": [
-            "read"
+            {
+              "action": "read",
+              "fields": {
+                "exclude": [
+                  "EmailAddress"
+                ]
+              }
+            }
           ]
         },
         {
@@ -7260,7 +7204,14 @@
                 ]
               }
             },
-            "read",
+            {
+              "action": "read",
+              "fields": {
+                "exclude": [
+                  "EmailAddress"
+                ]
+              }
+            },
             {
               "action": "update",
               "fields": {
@@ -7291,7 +7242,14 @@
                 ]
               }
             },
-            "read",
+            {
+              "action": "read",
+              "fields": {
+                "exclude": [
+                  "EmailAddress"
+                ]
+              }
+            },
             {
               "action": "update",
               "fields": {

@@ -239,6 +239,8 @@ async function loadSocket(app, fetchResponse) {
   const warnings = [];
   const clients = [];
   const cleanups = [];
+  const requests = [];
+  let generation = "test-session";
   let fetches = 0;
   class Client {
     handlers = {};
@@ -250,7 +252,7 @@ async function loadSocket(app, fetchResponse) {
   const context = vm.createContext({
     window: new EventTarget(), Event, AbortController,
     console: { warn: (...args) => warnings.push(args) },
-    fetch: (...args) => { fetches++; return fetchResponse(...args); },
+    fetch: (...args) => { fetches++; requests.push(args); return fetchResponse(...args); },
     setTimeout: (callback, delay) => { timers.set(delay, callback); return delay; },
     clearTimeout: id => timers.delete(id),
   });
@@ -263,6 +265,13 @@ async function loadSocket(app, fetchResponse) {
       ? { useRef: value => ({ current: value }), useEffect: callback => { cleanups.push(callback()); } }
       : name === "@azure/web-pubsub-client"
         ? { WebPubSubClient: Client }
+        : name === "@/services/dabAuth" || name === "@/services/eshopOAuth"
+          ? {
+            getFunctionsAccessToken: async () => "test-functions-token",
+            getEshopAccessToken: async () => "test-functions-token",
+            getTabAuthorizationGeneration: () => generation,
+            isTabAuthorizationGenerationCurrent: expected => expected === generation,
+          }
         : { getFunctionsApiUrl: () => "https://functions.example", getWebPubSubNegotiateUrl: () => "https://functions.example/api/webpubsub/negotiate" };
     return new vm.SyntheticModule(Object.keys(exports), function () {
       for (const [key, value] of Object.entries(exports)) this.setExport(key, value);
@@ -270,22 +279,51 @@ async function loadSocket(app, fetchResponse) {
   });
   await module.evaluate();
   const settle = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
-  return { api: module.namespace, timers, warnings, clients, cleanups, settle, fetches: () => fetches };
+  return { api: module.namespace, timers, warnings, clients, cleanups, requests, settle,
+    setGeneration: value => { generation = value; }, fetches: () => fetches };
 }
 
 for (const app of ["app", "app-admin"]) {
+  if (app === "app-admin") test("admin does not negotiate after its session changes during token acquisition", async () => {
+    const env = await loadSocket(app, async () => ({ ok: true, json: async () => ({ url: "wss://socket.example" }) }));
+    env.api.useWebPubSub(["orders"], () => {});
+    env.setGeneration("new-session");
+    await env.settle();
+    assert.equal(env.fetches(), 0);
+    assert.notEqual(env.api.getWebPubSubStatus(), "connected");
+    env.cleanups.forEach(cleanup => cleanup());
+  });
+
+  if (app === "app-admin") test("admin ignores socket events from a superseded session", async () => {
+    const env = await loadSocket(app, async () => ({ ok: true, json: async () => ({ url: "wss://socket.example" }) }));
+    const messages = [];
+    env.api.useWebPubSub(["orders"], (...args) => messages.push(args));
+    await env.settle();
+    const client = env.clients[0];
+    env.setGeneration("new-session");
+    client.handlers.disconnected();
+    client.handlers.connected();
+    client.handlers["group-message"]({ message: { group: "orders", data: '{"event":"database-changed"}' } });
+    assert.equal(env.api.getWebPubSubStatus(), "connected");
+    assert.equal(messages.length, 0);
+    env.cleanups[0]();
+  });
+
   test(`${app} socket reports availability, rejects malformed messages and ignores cleanup-time events`, async () => {
     const env = await loadSocket(app, async () => ({ ok: true, json: async () => ({ url: "wss://socket.example" }) }));
     const messages = [];
     env.api.useWebPubSub(["orders"], (...args) => messages.push(args));
     await env.settle();
     assert.equal(env.api.getWebPubSubStatus(), "connected");
+    assert.equal(env.requests[0][1].headers.Authorization, "Bearer test-functions-token");
+    assert.equal(env.requests[0][0], "https://functions.example/api/webpubsub/negotiate");
     assert.equal(env.timers.size, 0);
     const client = env.clients[0];
     const emit = data => client.handlers["group-message"]({ message: { group: "orders", data } });
     emit("not-json");
     emit("null");
     emit("[]");
+    client.handlers["group-message"]({ message: { group: "reviews", data: '{"event":"database-changed"}' } });
     assert.equal(messages.length, 0);
     assert.equal(env.warnings.length, 3);
     emit('{"event":"cart-changed"}');
@@ -316,6 +354,7 @@ for (const app of ["app", "app-admin"]) {
       signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
     }));
     timeout.api.useWebPubSub(["orders"], () => {});
+    await timeout.settle();
     assert.equal(timeout.api.getWebPubSubStatus(), "connecting");
     assert.equal(timeout.timers.size, 1);
     timeout.timers.get(30_000)();

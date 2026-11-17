@@ -5,51 +5,55 @@
 > [`TOOL_SCOPE_MATRIX.md`](../mcp-oauth/TOOL_SCOPE_MATRIX.md). It reuses the same
 > business-domain scopes ([`OAuthScopes.cs`](../../../api-mcp/AdventureWorks/Auth/OAuthScopes.cs))
 > and the same authorization server in `api-mcp`. It classifies **every** one of the
-> **189** HTTP-triggered routes discovered in `api-functions` — no route is left
+> **200** HTTP-triggered Functions discovered in `api-functions` — no route is left
 > unclassified. Non-HTTP triggers (queue / SQL / timer) are internal and not part of
 > this matrix.
 
-**Status:** Enforced. The registry in
+**Status:** The registry in
 [`FunctionAuthorizationRegistry.cs`](../../../api-functions/Auth/FunctionAuthorizationRegistry.cs)
-implements this matrix and `FUNCTIONS_OAUTH_MODE=enforced` is deployed: only Tier P routes are
-reachable without a valid Functions-audience token.
+implements this source matrix and `FUNCTIONS_OAUTH_MODE=enforced` is provisioned.
+The new order-header and order-detail routes, address protections and related
+DAB restrictions are source-tested, but not verified in the current deployment.
 
 ## How to read this matrix
 
 | Column | Meaning |
 | ------ | ------- |
 | **Method / route** | The HTTP method(s) and `/api/...` route template as declared by the Functions `HttpTrigger`. |
-| **Tier** | `Anonymous` (no token), `Consumer` (token + record ownership), or `Internal-only` (token + non-consumer category). Rows marked *MCP-proxied* are also called by api-mcp with its service token (see below). |
-| **Required scope** | The single business-domain OAuth scope the access token must carry (in addition to a valid resource-bound token). `—` = none (anonymous). |
-| **Access mode** | `Anonymous` = reachable with no token. `Self-or-internal (ownership)` = consumers may act only on their own records (server-resolved owner id), internal roles unrestricted. `Internal-only` = requires the scope **and** a non-consumer category (defense-in-depth). |
+| **Tier** | `Anonymous` (no token), `Authenticated` (token + handler-scoped group grants), `Consumer` (token + record ownership), or `Internal-only` (token + non-consumer category). Rows marked *MCP-proxied* are also called by api-mcp with its service token (see below). |
+| **Required scope** | The OAuth scope the access token must carry (in addition to a valid resource-bound token). `—` = none (anonymous). |
+| **Access mode** | `Anonymous` = reachable with no token. `Group-scoped` = the handler derives authorized groups from signed scopes/category; client input cannot add permissions. `Self-or-internal (ownership)` = consumers may act only on their own records (server-resolved owner id), internal roles unrestricted. `Internal-only` = requires the scope **and** a non-consumer category (defense-in-depth). |
 | **Ownership key** | For ownership-checked routes, the identifier validated/overwritten server-side against the caller's resolved owner id. A client-supplied value can never widen access. |
 
 ## Summary
 
 | Tier | Access | Count |
 | ---- | ------ | ----- |
-| **P** | Anonymous | 18 |
-| **C** | Consumer (ownership) | 12 |
-| **I** | Internal-only (40 of them also MCP-proxied) | 159 |
-| | **Total** | **189** |
+| **P** | Anonymous | 20 |
+| **A** | Authenticated (handler-scoped) | 1 |
+| **C** | Consumer (ownership) | 17 |
+| **I** | Internal-only (40 of them also MCP-proxied) | 162 |
+| | **Total** | **200** |
 
-### Routes per required scope (protected routes only)
+### Function policies per required scope (all protected tiers)
 
 | Required scope | Route count | In existing catalog? |
 | -------------- | ----------- | -------------------- |
 | `admin.write` | 42 | yes |
-| `manufacturing.read` | 42 | yes |
+| `manufacturing.read` | 43 | yes |
 | `sales.read` | 23 | yes |
-| `manufacturing.write` | 25 | yes |
+| `manufacturing.write` | 27 | yes |
 | `admin.read` | 19 | yes |
-| `orders.write` | 6 | yes |
-| `customers.write` | 5 | **new — added by this work** |
-| `orders.read` | 5 | yes |
-| `customers.read` | 4 | yes |
+| `orders.write` | 9 | yes |
+| `customers.write` | 5 | yes |
+| `orders.read` | 6 | yes |
+| `customers.read` | 5 | yes |
+| `realtime.connect` | 1 | **new — added by this work** |
 
-> The only scope not already in the shared catalog is **`customers.write`**, required
-> for consumer self-service address writes (and internal customer mutations). All other
-> routes map onto the existing 12-scope catalog already used by MCP and DAB.
+The `realtime.connect` scope is granted to signed-in roles, but is not sufficient
+by itself to obtain any business-data group. Each group also requires its mapped
+domain scope and category; shared order and finance payloads are generic
+invalidation signals only.
 
 ## MCP-proxied routes — api-mcp service token
 
@@ -76,7 +80,7 @@ These reads are no longer part of the Functions authorization surface.
 
 ## Matrix by functional area
 
-### Platform & discovery (public) (7)
+### Platform & discovery (public) (6)
 
 | Method / route | Tier | Required scope | Access mode | Ownership key |
 | -------------- | ---- | -------------- | ----------- | ------------- |
@@ -86,7 +90,32 @@ These reads are no longer part of the Functions authorization surface.
 | `GET /api/seed/status` | P | — | Anonymous | — |
 | `GET /api/sitemap.xml` | P | — | Anonymous | — |
 | `GET /api/swagger/ui` | P | — | Anonymous | — |
-| `GET /api/webpubsub/negotiate` | P | — | Anonymous | — |
+
+### Real-time negotiation (authenticated)
+
+The negotiate route requires a Functions-audience user token with
+`realtime.connect`. The server issues a short-lived URL only for groups whose
+domain scopes the signed identity carries; all groups except `orders` also
+require an internal category. The browser does not choose group permissions.
+Order-group messages are reduced to a generic cache-invalidation signal with no
+order/customer identifiers, status, count, or entity metadata.
+
+| Method / route | Tier | Required scope | Access mode | Ownership key |
+| -------------- | ---- | -------------- | ----------- | ------------- |
+| `GET /api/webpubsub/negotiate` | A | `realtime.connect` | Group-scoped | — |
+
+| Group | Additional scope(s), any one | Category |
+| ----- | -------------------------- | -------- |
+| `manufacturing-agent` | `manufacturing.read` | Internal |
+| `manufacturing-ops` | `manufacturing.read` | Internal |
+| `warehouse` | `inventory.read` | Internal |
+| `supply-chain` | `inventory.read`, `manufacturing.read` | Internal |
+| `orders` | `orders.read`, `manufacturing.read` | Consumer or internal; payload is generic invalidation only |
+| `shopping-simulator` | `admin.read`, `manufacturing.read` | Internal |
+| `reviews` | `admin.read` | Internal |
+| `finance` | `sales.read`, `manufacturing.read` | Internal; payload is generic invalidation only |
+| `promotions` | `admin.read` | Internal |
+| `utilities` | `admin.read` | Internal |
 
 ### Catalog search (public) (5)
 
@@ -97,6 +126,11 @@ These reads are no longer part of the Functions authorization surface.
 | `POST /api/helpme/recommend` | P | — | Anonymous | — |
 | `POST /api/search/semantic` | P | — | Anonymous | — |
 | `GET /api/search/suggestions` | P | — | Anonymous | — |
+
+Help-Me-Choose is a public catalog exception, not an anonymous customer-data API.
+Its Foundry agent has only product-catalog MCP tools and receives a service token
+limited to `products.read`; the DAB MCP connection is excluded. Its public request
+and response contracts do not accept customer IDs or Foundry response IDs.
 
 ### AI assistant (public pass-through) (2)
 
@@ -131,6 +165,38 @@ routes. Only the pre-auth reset flow and consumer signup are anonymous.
 | `DELETE /api/addresses/{id:int}` | C | `customers.write` | Self-or-internal (ownership) | businessEntityId |
 | `GET /api/person-addresses` | C | `customers.read` | Self-or-internal (ownership) | businessEntityId |
 
+Consumer reads and updates are scoped in SQL. A physical update to a shared
+address, including one used by another customer's order, returns HTTP 409;
+an unchanged address remains saveable. Direct DAB link writes are unavailable
+to consumers; owner-bound Functions manage links and types.
+
+### Saved payment methods (1)
+
+| Method / route | Tier | Required scope | Access mode | Ownership key |
+| -------------- | ---- | -------------- | ----------- | ------------- |
+| `GET /api/payment-methods` | C | `customers.read` | Signed person's own cards only, including internal callers | business_entity_id (claim only) |
+
+This route joins existing `PersonCreditCard`/`CreditCard` rows for the signed
+person and projects only card ID, brand, last four digits and expiry. SQL masks
+the number before it leaves the database. Request IDs/role headers cannot choose
+another person. Direct `CreditCard` reads are unavailable to consumer and
+authenticated DAB roles; existing owner-scoped link read/delete remains.
+
+### Guest and consumer-owned carts (4 policies)
+
+The three Public-tier functions below are handler-enforced capability endpoints:
+guest session proofs are opaque, fixed-lifetime credentials limited to one cart,
+and consumer bearer requests use the signed owner and order scopes. They do not
+enable anonymous DAB cart access. `MergeGuestCart` is also ownership checked and
+requires the consumer's `orders.write` scope.
+
+| Method / route | Tier | Required scope | Access mode | Ownership key |
+| -------------- | ---- | -------------- | ----------- | ------------- |
+| `POST, DELETE /api/cart/session` | P | — | Guest capability enforced by handler | Guest session capability |
+| `GET, POST, DELETE /api/cart/items` | P | — | Guest capability or validated consumer bearer enforced by handler | Guest session / business entity |
+| `PATCH, DELETE /api/cart/items/{id:int}` | P | — | Guest capability or validated consumer bearer enforced by handler | Guest session / business entity |
+| `POST /api/cart/merge` | C | `orders.write` | Self-or-internal (ownership) plus guest capability | Consumer business entity + guest session |
+
 ### Receipts (5)
 
 | Method / route | Tier | Required scope | Access mode | Ownership key |
@@ -140,6 +206,31 @@ routes. Only the pre-auth reset flow and consumer signup are anonymous.
 | `POST /api/orders/generate-missing-receipts` | I | `admin.write` | Internal-only | — |
 | `GET /api/orders/{salesOrderId:int}/receipt` | C | `orders.read` | Self-or-internal (ownership) | salesOrderId(owner CustomerID) |
 | `GET /api/orders/{salesOrderId:int}/receipt-status` | C | `orders.read` | Self-or-internal (ownership) | salesOrderId(owner CustomerID) |
+
+Receipt reads check the persisted order against the signed consumer CustomerID
+before any blob lookup. Unbound consumers are denied. Generation additionally
+binds the body customer and email address to that order; internal callers cannot
+mix another customer's recipient with an order. Queue acceptance is awaited, and
+the email worker checks the same persisted relationship again before delivery.
+The existing `orders.read` scope for this POST is a feature exception, not evidence
+that it is safe for read-only canaries. Only the reviewed all-zero validation
+payload is exercised live before the no-email safety substrate is complete.
+
+### Consumer order creation and details (3)
+
+| Method / route | Tier | Required scope | Access mode | Ownership key |
+| -------------- | ---- | -------------- | ----------- | ------------- |
+| `POST /api/orders` | C | `orders.write` | Signed consumer customer/person; both addresses must be linked to that person | customer_id + business_entity_id |
+| `POST /api/orders/{salesOrderId:int}/details` | C | `orders.write` | Self-or-internal (ownership) | salesOrderId(owner CustomerID) |
+| `GET /api/orders/details?orderIds=...` | C | `orders.read` | Self-or-internal; every order in a batch must belong to the caller | Each order's CustomerID |
+
+The read accepts one to 100 distinct positive IDs and fails the whole batch if
+any order is absent or foreign. Consumers cannot read or create order-detail
+rows directly through DAB in the updated source.
+Consumers also cannot write order headers directly through DAB. Internal callers
+of the header route supply a customer/person pair, which is checked along with
+both address links and the ship method. Header totals and detail prices remain
+client-supplied; this ownership guard is not a pricing or inventory guarantee.
 
 ### Reporting & analytics (14)
 

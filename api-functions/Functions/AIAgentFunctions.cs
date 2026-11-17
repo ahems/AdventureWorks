@@ -40,6 +40,7 @@ public class AIAgentFunctions
     public async Task<HttpResponseData> Chat(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "agent/chat")] HttpRequestData req)
     {
+        using var activity = InvocationActivity.Start(req.FunctionContext.TraceContext, "AIAgentChat");
         _logger.LogInformation("AI Agent chat request received");
 
         var requestStartTime = DateTimeOffset.UtcNow;

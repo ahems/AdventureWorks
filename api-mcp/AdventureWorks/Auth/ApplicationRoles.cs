@@ -3,7 +3,7 @@ namespace AdventureWorks.Auth;
 /// <summary>
 /// User categories derived from the AdventureWorks database. A category is a broad
 /// population; a <see cref="ApplicationRoles">role</see> is the finer-grained,
-/// seed-data-driven mapping that resolves to OAuth scopes.
+/// source-controlled mapping that resolves to OAuth scopes.
 /// </summary>
 public static class UserCategories
 {
@@ -27,12 +27,8 @@ public static class UserCategories
 }
 
 /// <summary>
-/// Application roles. Roles are stored in the <c>Auth.ApplicationRole</c> table and
-/// mapped to scopes in <c>Auth.RoleScope</c>; employees are mapped to a role via
-/// <c>Auth.DepartmentRole</c> (by current department, never by user name).
-///
-/// The constants here are the deterministic seed values and are used as safe
-/// fallbacks when the database has not yet been extended.
+/// Source-controlled application roles, scopes and current-department role mapping.
+/// Employee permissions are never selected by user name.
 /// </summary>
 public static class ApplicationRoles
 {
@@ -57,49 +53,63 @@ public static class ApplicationRoles
     /// <summary>Manufacturing engineer / production controller / warehouse operator.</summary>
     public const string ManufacturingEngineer = "manufacturing-engineer";
 
+    private static readonly IReadOnlyDictionary<int, string> DepartmentRoles = new Dictionary<int, string>
+    {
+        [3] = SalesAdmin,
+        [4] = MarketingAdmin,
+        [5] = InventoryAdmin,
+        [15] = InventoryAdmin,
+        [7] = ManufacturingEngineer,
+        [8] = ManufacturingEngineer,
+        [16] = ExecutiveAdmin,
+    };
+
+    public static string RoleForDepartment(int? departmentId) =>
+        departmentId is int id && DepartmentRoles.TryGetValue(id, out var role)
+            ? role
+            : OperationsAdmin;
+
     /// <summary>
-    /// Deterministic role → scope grants. Mirrors the <c>Auth.RoleScope</c> seed data
-    /// and is used as an in-process fallback and for tests. The database is the source
-    /// of truth at runtime.
+    /// Deterministic, source-controlled role → scope grants used by the authorization server.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string[]> DefaultRoleScopes = new Dictionary<string, string[]>
     {
         [Consumer] = new[]
         {
-            OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.OrdersRead, OAuthScopes.OrdersWrite,
+            OAuthScopes.McpAccess, OAuthScopes.RealtimeConnect, OAuthScopes.ProductsRead, OAuthScopes.OrdersRead, OAuthScopes.OrdersWrite,
             // Own-profile self-service (e.g. their addresses via the Functions API). Restricted
             // to owned rows by record-level ownership; internal-only endpoints add a category gate.
             OAuthScopes.CustomersRead, OAuthScopes.CustomersWrite,
         },
         [SalesAdmin] = new[]
         {
-            OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.SalesRead, OAuthScopes.CustomersRead,
+            OAuthScopes.McpAccess, OAuthScopes.RealtimeConnect, OAuthScopes.ProductsRead, OAuthScopes.SalesRead, OAuthScopes.CustomersRead,
             OAuthScopes.CustomersWrite, OAuthScopes.OrdersRead, OAuthScopes.AdminRead,
         },
         [MarketingAdmin] = new[]
         {
-            OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.SalesRead, OAuthScopes.CustomersRead,
+            OAuthScopes.McpAccess, OAuthScopes.RealtimeConnect, OAuthScopes.ProductsRead, OAuthScopes.SalesRead, OAuthScopes.CustomersRead,
             OAuthScopes.CustomersWrite, OAuthScopes.AdminRead, OAuthScopes.AdminWrite,
         },
         [InventoryAdmin] = new[]
         {
-            OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.InventoryRead, OAuthScopes.ManufacturingRead,
+            OAuthScopes.McpAccess, OAuthScopes.RealtimeConnect, OAuthScopes.ProductsRead, OAuthScopes.InventoryRead, OAuthScopes.ManufacturingRead,
             OAuthScopes.AdminRead,
         },
         [OperationsAdmin] = new[]
         {
-            OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.SalesRead, OAuthScopes.CustomersRead,
+            OAuthScopes.McpAccess, OAuthScopes.RealtimeConnect, OAuthScopes.ProductsRead, OAuthScopes.SalesRead, OAuthScopes.CustomersRead,
             OAuthScopes.CustomersWrite, OAuthScopes.OrdersRead, OAuthScopes.InventoryRead, OAuthScopes.AdminRead,
         },
         [ExecutiveAdmin] = new[]
         {
-            OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.SalesRead, OAuthScopes.CustomersRead,
+            OAuthScopes.McpAccess, OAuthScopes.RealtimeConnect, OAuthScopes.ProductsRead, OAuthScopes.SalesRead, OAuthScopes.CustomersRead,
             OAuthScopes.CustomersWrite, OAuthScopes.InventoryRead, OAuthScopes.ManufacturingRead, OAuthScopes.OrdersRead,
             OAuthScopes.OrdersWrite, OAuthScopes.AdminRead, OAuthScopes.AdminWrite, OAuthScopes.McpAdmin,
         },
         [ManufacturingEngineer] = new[]
         {
-            OAuthScopes.McpAccess, OAuthScopes.ProductsRead, OAuthScopes.InventoryRead,
+            OAuthScopes.McpAccess, OAuthScopes.RealtimeConnect, OAuthScopes.ProductsRead, OAuthScopes.InventoryRead,
             OAuthScopes.ManufacturingRead, OAuthScopes.ManufacturingWrite,
         },
     };

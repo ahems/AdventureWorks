@@ -4,8 +4,10 @@
 // and surfaces an expired session (which triggers the redirect to /login).
 import {
   getDabRole,
+  getTabAuthorizationGeneration,
   getValidAccessToken,
   hasSession,
+  isTabAuthorizationGenerationCurrent,
   refreshAccessToken,
 } from "@/services/dabAuth";
 
@@ -30,16 +32,28 @@ async function withAuthHeaders(init?: RequestInit): Promise<RequestInit> {
  * fires DAB_SESSION_LOST_EVENT (AuthContext signs the user out) and this throws.
  */
 export async function dabFetch(input: string, init?: RequestInit): Promise<Response> {
+  const generation = getTabAuthorizationGeneration();
   if (!hasSession()) {
     return fetch(input, init);
   }
 
-  const res = await fetch(input, await withAuthHeaders(init));
+  const ensureSession = () => {
+    if (!isTabAuthorizationGenerationCurrent(generation)) throw new Error(SESSION_EXPIRED_MESSAGE);
+  };
+  const initial = await withAuthHeaders(init);
+  ensureSession();
+  const res = await fetch(input, initial);
+  ensureSession();
   if (res.status !== 401) return res;
 
   const refreshed = await refreshAccessToken(true);
+  ensureSession();
   if (!refreshed) {
     throw new Error(SESSION_EXPIRED_MESSAGE);
   }
-  return fetch(input, await withAuthHeaders(init));
+  const retry = await withAuthHeaders(init);
+  ensureSession();
+  const response = await fetch(input, retry);
+  ensureSession();
+  return response;
 }

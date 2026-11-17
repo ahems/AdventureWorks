@@ -17,6 +17,8 @@ resource webPubSub 'Microsoft.SignalRService/webPubSub@2024-03-01' = {
     capacity: 1
   }
   properties: {
+    disableLocalAuth: true
+    disableAadAuth: false
     tls: {
       clientCertEnabled: false
     }
@@ -24,13 +26,36 @@ resource webPubSub 'Microsoft.SignalRService/webPubSub@2024-03-01' = {
   }
 }
 
-// Grant managed identity "Web PubSub Service Owner" role
-// This allows api-functions to generate client tokens and send messages via Managed Identity
+resource webPubSubRuntimeRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
+  name: guid(resourceGroup().id, 'AdventureWorks Web PubSub Runtime')
+  properties: {
+    roleName: 'AdventureWorks Web PubSub Runtime ${uniqueString(resourceGroup().id)}'
+    description: 'Issue client capabilities and publish or inspect groups for the selected Web PubSub resource.'
+    type: 'customRole'
+    permissions: [
+      {
+        actions: []
+        notActions: []
+        dataActions: [
+          'Microsoft.SignalRService/WebPubSub/clientConnection/generateToken/action'
+          'Microsoft.SignalRService/WebPubSub/clientConnection/write'
+          'Microsoft.SignalRService/WebPubSub/group/send/action'
+          'Microsoft.SignalRService/WebPubSub/group/read'
+        ]
+        notDataActions: []
+      }
+    ]
+    assignableScopes: [
+      webPubSub.id
+    ]
+  }
+}
+
 resource webPubSubRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(webPubSub.id, identity.id, '12cf5a90-567b-43ae-8102-96cf46c7d9b4')
+  name: guid(webPubSub.id, identity.id, 'AdventureWorks Web PubSub Runtime')
   scope: webPubSub
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '12cf5a90-567b-43ae-8102-96cf46c7d9b4') // Web PubSub Service Owner
+    roleDefinitionId: webPubSubRuntimeRole.id
     principalId: identity.properties.principalId
     principalType: 'ServicePrincipal'
   }

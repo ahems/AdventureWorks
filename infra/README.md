@@ -240,7 +240,8 @@ The Foundry storage connection is registered in `aiservices.bicep`, but no curre
 - **Purpose**: Provisions **Azure Web PubSub (Free tier)** for real-time push notifications to all frontend apps.
 - **Typical responsibilities**:
   - Web PubSub resource (`Microsoft.SignalRService/webPubSub`) with `Free_F1` SKU.
-  - Grants the user-assigned managed identity the `Web PubSub Service Owner` role for passwordless auth.
+  - Disables local-key authentication and assigns the runtime identity a custom role scoped to this resource: client-token generation, client connection, group send and group read.
+  - The required client-connection permission also permits closing connections; verify negotiation and push delivery after provisioning.
   - Outputs `webPubSubHostName` consumed by Functions and frontend Container Apps.
 
 ---

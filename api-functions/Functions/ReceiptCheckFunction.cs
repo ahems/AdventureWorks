@@ -1,119 +1,95 @@
+using System.Net;
+using ApiFunctions.Auth;
+using api_functions.Services;
+using Azure;
+using Azure.Storage.Blobs;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
-using System.Net;
-using Azure.Storage.Blobs;
-using Azure.Identity;
 
 namespace api_functions.Functions;
 
-/// <summary>
-/// Functions for checking receipt existence and downloading receipts from blob storage
-/// </summary>
-public class ReceiptCheckFunction
+public class ReceiptCheckFunction(
+    ILogger<ReceiptCheckFunction> logger,
+    IReceiptAccessService access,
+    BlobContainerClient container)
 {
-    private readonly ILogger<ReceiptCheckFunction> _logger;
-    private const string CONTAINER_NAME = "adventureworks-receipts";
-
-    public ReceiptCheckFunction(ILogger<ReceiptCheckFunction> logger)
-    {
-        _logger = logger;
-    }
-
-    private BlobContainerClient GetContainerClient()
-    {
-        var blobServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__blobServiceUri");
-        if (string.IsNullOrEmpty(blobServiceUri))
-        {
-            var storageAccountName = Environment.GetEnvironmentVariable("AzureWebJobsStorage__accountName")
-                ?? throw new InvalidOperationException("AzureWebJobsStorage__accountName not found");
-            blobServiceUri = $"https://{storageAccountName}.blob.core.windows.net";
-        }
-
-        var blobServiceClient = new BlobServiceClient(
-            new Uri(blobServiceUri),
-            new DefaultAzureCredential()
-        );
-
-        return blobServiceClient.GetBlobContainerClient(CONTAINER_NAME);
-    }
-
-    /// <summary>
-    /// Checks whether a PDF receipt exists in blob storage for the given order.
-    /// GET /api/orders/{salesOrderId}/receipt-status
-    /// Returns: { "exists": true|false }
-    /// </summary>
     [Function("CheckOrderReceipt")]
     public async Task<HttpResponseData> CheckOrderReceipt(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "orders/{salesOrderId:int}/receipt-status")]
         HttpRequestData req,
         int salesOrderId)
     {
-        _logger.LogInformation("Checking receipt status for order {salesOrderId}", salesOrderId);
+        if (await AuthorizeAsync(req, salesOrderId) is { } denied)
+            return denied;
 
         try
         {
-            var blobName = $"CustomerReceipts/SO{salesOrderId}.pdf";
-            var containerClient = GetContainerClient();
-            var blobClient = containerClient.GetBlobClient(blobName);
-
-            var exists = await blobClient.ExistsAsync();
-
+            var exists = await container.GetBlobClient($"CustomerReceipts/SO{salesOrderId}.pdf")
+                .ExistsAsync(req.FunctionContext.CancellationToken);
             var response = req.CreateResponse(HttpStatusCode.OK);
             await response.WriteAsJsonAsync(new { exists = exists.Value });
             return response;
         }
-        catch (Exception ex)
+        catch (RequestFailedException ex)
         {
-            _logger.LogError(ex, "Error checking receipt for order {salesOrderId}", salesOrderId);
-            var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await errorResponse.WriteAsJsonAsync(new { error = ex.Message });
-            return errorResponse;
+            logger.LogError(ex, "Error checking authorized order receipt");
+            return await ErrorAsync(req, HttpStatusCode.InternalServerError, "Receipt storage is unavailable.");
         }
     }
 
-    /// <summary>
-    /// Downloads the PDF receipt for the given order directly from blob storage.
-    /// GET /api/orders/{salesOrderId}/receipt
-    /// Returns the PDF as an inline/attachment response, or 404 if not found.
-    /// </summary>
     [Function("DownloadOrderReceipt")]
     public async Task<HttpResponseData> DownloadOrderReceipt(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "orders/{salesOrderId:int}/receipt")]
         HttpRequestData req,
         int salesOrderId)
     {
-        _logger.LogInformation("Downloading receipt for order {salesOrderId}", salesOrderId);
+        if (await AuthorizeAsync(req, salesOrderId) is { } denied)
+            return denied;
 
         try
         {
-            var blobName = $"CustomerReceipts/SO{salesOrderId}.pdf";
-            var containerClient = GetContainerClient();
-            var blobClient = containerClient.GetBlobClient(blobName);
-
-            var exists = await blobClient.ExistsAsync();
-            if (!exists.Value)
-            {
-                var notFoundResponse = req.CreateResponse(HttpStatusCode.NotFound);
-                await notFoundResponse.WriteAsJsonAsync(new { error = $"Receipt for order SO{salesOrderId} has not been generated yet." });
-                return notFoundResponse;
-            }
-
-            var download = await blobClient.DownloadContentAsync();
-            var pdfBytes = download.Value.Content.ToArray();
-
+            var download = await container.GetBlobClient($"CustomerReceipts/SO{salesOrderId}.pdf")
+                .DownloadContentAsync(cancellationToken: req.FunctionContext.CancellationToken);
             var response = req.CreateResponse(HttpStatusCode.OK);
             response.Headers.Add("Content-Type", "application/pdf");
             response.Headers.Add("Content-Disposition", $"attachment; filename=\"receipt-SO{salesOrderId}.pdf\"");
-            await response.Body.WriteAsync(pdfBytes);
+            await response.Body.WriteAsync(download.Value.Content.ToMemory(), req.FunctionContext.CancellationToken);
             return response;
         }
-        catch (Exception ex)
+        catch (RequestFailedException ex) when (ex.Status == 404)
         {
-            _logger.LogError(ex, "Error downloading receipt for order {salesOrderId}", salesOrderId);
-            var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await errorResponse.WriteAsJsonAsync(new { error = ex.Message });
-            return errorResponse;
+            return await ErrorAsync(req, HttpStatusCode.NotFound, "Receipt has not been generated yet.");
         }
+        catch (RequestFailedException ex)
+        {
+            logger.LogError(ex, "Error downloading authorized order receipt");
+            return await ErrorAsync(req, HttpStatusCode.InternalServerError, "Receipt storage is unavailable.");
+        }
+    }
+
+    private async Task<HttpResponseData?> AuthorizeAsync(HttpRequestData req, int salesOrderId)
+    {
+        if (salesOrderId <= 0)
+            return await ErrorAsync(req, HttpStatusCode.BadRequest, "A valid sales order id is required.");
+
+        var user = FunctionUser.Current(req.FunctionContext);
+        if (!user.IsAuthenticated || (!user.IsConsumer && !user.IsInternal) ||
+            (user.IsConsumer && user.CustomerId is not > 0) ||
+            !await access.CanReadAsync(salesOrderId, user.IsConsumer ? user.CustomerId : null))
+        {
+            logger.LogWarning("Denied order receipt access");
+            return await ErrorAsync(req, HttpStatusCode.Forbidden, "Order access is not allowed.");
+        }
+
+        return null;
+    }
+
+    private static async Task<HttpResponseData> ErrorAsync(
+        HttpRequestData req, HttpStatusCode status, string message)
+    {
+        var response = req.CreateResponse(status);
+        await response.WriteAsJsonAsync(new { error = message });
+        return response;
     }
 }

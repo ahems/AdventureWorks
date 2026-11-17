@@ -39,6 +39,7 @@ public class HelpMeChooseFunctions
     public async Task<HttpResponseData> GetQuestions(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "helpme/questions")] HttpRequestData req)
     {
+        using var activity = InvocationActivity.Start(req.FunctionContext.TraceContext, "HelpMeChoose");
         _logger.LogInformation("HelpMeChoose: questions request received");
 
         try
@@ -56,7 +57,7 @@ public class HelpMeChooseFunctions
             });
 
             var result = await _helpMeChooseService.GetQuestionsAsync(
-                request.Context, request.CultureId, request.CustomerId);
+                request.Context, request.CultureId);
 
             var response = req.CreateResponse(HttpStatusCode.OK);
             await response.WriteAsJsonAsync(result);
@@ -82,6 +83,7 @@ public class HelpMeChooseFunctions
     public async Task<HttpResponseData> GetRecommendations(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "helpme/recommend")] HttpRequestData req)
     {
+        using var activity = InvocationActivity.Start(req.FunctionContext.TraceContext, "HelpMeChoose");
         _logger.LogInformation("HelpMeChoose: recommendation request received");
 
         try
@@ -109,9 +111,7 @@ public class HelpMeChooseFunctions
                 request.FirstName,
                 request.Gender,
                 request.HeightLabel,
-                request.PreferredColors,
-                request.CustomerId,
-                request.PreviousThreadId);
+                request.PreferredColors);
 
             var response = req.CreateResponse(HttpStatusCode.OK);
             await response.WriteAsJsonAsync(result);

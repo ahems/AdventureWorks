@@ -191,7 +191,15 @@ public class OrderGenerationAgentService
                 userId: memoryUserId,
                 previousResponseId: string.IsNullOrEmpty(previousResponseId) ? null : previousResponseId,
                 structuredInputs: structuredInputs,
-                toolChoice: "required");
+                toolChoice: "required",
+                mcpServiceScopes:
+                [
+                    McpServiceTokenProvider.ProductsReadScope,
+                    McpServiceTokenProvider.InventoryReadScope,
+                    McpServiceTokenProvider.CustomersReadScope,
+                    McpServiceTokenProvider.OrdersReadScope,
+                    McpServiceTokenProvider.AdminWriteScope,
+                ]);
             rawResponse = agentResponse.ResponseText ?? string.Empty;
 
             if (agentResponse.ToolsUsed?.Count > 0)

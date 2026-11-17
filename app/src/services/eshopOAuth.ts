@@ -11,6 +11,7 @@ const TOKEN_KEYS = {
 } as const;
 const REQUESTED_SCOPES = [
   "mcp.access",
+  "realtime.connect",
   "products.read",
   "customers.read",
   "customers.write",

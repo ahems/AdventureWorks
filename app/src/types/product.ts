@@ -40,8 +40,6 @@ export interface SpecialOfferProduct {
 export interface ProductInventory {
   ProductID: number;
   LocationID: number;
-  Shelf: string;
-  Bin: number;
   Quantity: number;
 }
 
@@ -51,7 +49,6 @@ export interface Product {
   ProductNumber: string;
   Color: string | null;
   ListPrice: number;
-  StandardCost?: number;
   Size: string | null;
   SizeUnitMeasureCode: string | null;
   Weight: number | null;

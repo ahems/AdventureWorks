@@ -75,6 +75,28 @@ public class ProductService
         return products.ToList();
     }
 
+    public async Task<string> GetProductAvailabilityAsync(int productId)
+    {
+        using var connection = await GetConnectionAsync();
+        var inStock = await connection.QuerySingleOrDefaultAsync<bool?>(@"
+            SELECT CAST(CASE WHEN EXISTS (
+                SELECT 1
+                FROM Production.ProductInventory pi
+                INNER JOIN Production.Location l ON pi.LocationID = l.LocationID
+                WHERE pi.ProductID = p.ProductID
+                  AND l.Name LIKE 'Finished Goods%'
+                  AND pi.Quantity > 0
+            ) THEN 1 ELSE 0 END AS bit)
+            FROM Production.Product p
+            WHERE p.ProductID = @ProductId AND p.FinishedGoodsFlag = 1",
+            new { ProductId = productId });
+
+        return FormatProductAvailability(productId, inStock);
+    }
+
+    internal static string FormatProductAvailability(int productId, bool? inStock) =>
+        JsonSerializer.Serialize(new { productId, inStock });
+
     public async Task<string> CheckInventoryAvailabilityAsync(int productId, string cultureId = "en")
     {
         // Set culture for localization

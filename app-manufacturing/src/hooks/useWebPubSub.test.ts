@@ -8,6 +8,8 @@ const { sdk } = vi.hoisted(() => ({
     credential: null as { getClientAccessUrl: () => Promise<string> } | null,
     start: vi.fn(),
     stop: vi.fn(),
+    getFunctionsAccessToken: vi.fn(),
+    generation: "test-session",
   },
 }));
 vi.mock("@azure/web-pubsub-client", () => ({
@@ -19,6 +21,11 @@ vi.mock("@azure/web-pubsub-client", () => ({
   },
 }));
 vi.mock("@/config/api", () => ({ WEB_PUBSUB_NEGOTIATE_URL: "/api/webpubsub/negotiate" }));
+vi.mock("@/services/dabAuth", () => ({
+  getFunctionsAccessToken: sdk.getFunctionsAccessToken,
+  getTabAuthorizationGeneration: () => sdk.generation,
+  isTabAuthorizationGenerationCurrent: (generation: string | null) => generation === sdk.generation,
+}));
 
 async function settle() {
   await act(async () => { await Promise.resolve(); await Promise.resolve(); });
@@ -28,6 +35,8 @@ describe("push connection lifecycle without polling fallback", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     sdk.handlers = {};
+    sdk.generation = "test-session";
+    sdk.getFunctionsAccessToken.mockReset().mockResolvedValue("functions-token");
     sdk.start.mockReset().mockImplementation(async () => {
       await sdk.credential?.getClientAccessUrl();
       sdk.handlers.connected();
@@ -49,6 +58,9 @@ describe("push connection lifecycle without polling fallback", () => {
     const { result, unmount } = renderHook(() => useWebPubSub(["warehouse"], vi.fn(), onConnected));
     await settle();
     expect(result.current).toBe("live");
+    expect(fetch).toHaveBeenCalledWith("/api/webpubsub/negotiate", expect.objectContaining({
+      headers: { Authorization: "Bearer functions-token" },
+    }));
     expect(onConnected).toHaveBeenCalledTimes(1);
     act(() => vi.advanceTimersByTime(600_000));
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -86,6 +98,7 @@ describe("push connection lifecycle without polling fallback", () => {
       sdk.handlers["group-message"]({ message: { group: "warehouse", data: "invalid json" } });
       sdk.handlers["group-message"]({ message: { group: "warehouse", data: "null" } });
       sdk.handlers["group-message"]({ message: { group: "warehouse", data: [] } });
+      sdk.handlers["group-message"]({ message: { group: "orders", data: '{"event":"orders-changed"}' } });
       sdk.handlers["group-message"]({ message: { group: "warehouse", data: '{"event":"database-changed"}' } });
     });
     expect(onMessage).toHaveBeenCalledTimes(1);
@@ -103,6 +116,7 @@ describe("push connection lifecycle without polling fallback", () => {
     vi.mocked(fetch).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     const onConnected = vi.fn();
     const { unmount } = renderHook(() => useWebPubSub(["warehouse"], vi.fn(), onConnected));
+    await settle();
     const signal = vi.mocked(fetch).mock.calls[0][1]?.signal;
     unmount();
     expect(signal?.aborted).toBe(true);
@@ -110,5 +124,26 @@ describe("push connection lifecycle without polling fallback", () => {
     await settle();
     expect(onConnected).not.toHaveBeenCalled();
     expect(sdk.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not negotiate again after the initiating session changes", async () => {
+    const onMessage = vi.fn();
+    const onConnected = vi.fn();
+    const { result, unmount } = renderHook(() => useWebPubSub(["warehouse"], onMessage, onConnected));
+    await settle();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(onConnected).toHaveBeenCalledTimes(1);
+    sdk.generation = "new-session";
+    act(() => {
+      sdk.handlers.disconnected();
+      sdk.handlers.connected();
+      sdk.handlers["group-message"]({ message: { group: "warehouse", data: {} } });
+    });
+    expect(result.current).toBe("live");
+    expect(onConnected).toHaveBeenCalledTimes(1);
+    expect(onMessage).not.toHaveBeenCalled();
+    await expect(sdk.credential!.getClientAccessUrl()).rejects.toThrow("session has changed");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    unmount();
   });
 });

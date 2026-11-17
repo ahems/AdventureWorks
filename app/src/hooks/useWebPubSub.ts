@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { WebPubSubClient } from "@azure/web-pubsub-client";
 import { getFunctionsApiUrl } from "@/lib/utils";
+import { getEshopAccessToken } from "@/services/eshopOAuth";
 
 export type WebPubSubStatus = "connecting" | "connected" | "disconnected" | "failed" | "not-configured";
 let connectionStatus: WebPubSubStatus = "connecting";
@@ -37,6 +38,7 @@ export function useWebPubSub(
   const groupsKey = groups.join(",");
 
   useEffect(() => {
+    const subscribedGroups = new Set(groupsKey.split(",").filter(Boolean));
     let client: WebPubSubClient | null = null;
     let cancelled = false;
     const controller = new AbortController();
@@ -49,10 +51,19 @@ export function useWebPubSub(
         const functionsUrl = getFunctionsApiUrl();
         const negotiateUrl =
           functionsUrl.replace(/\/$/, "") + "/api/webpubsub/negotiate";
+        const accessToken = await getEshopAccessToken("functions");
+        if (!accessToken) {
+          setStatus("failed");
+          console.warn("[WebPubSub] Functions authorization is required — live updates unavailable.");
+          return;
+        }
 
         const res = await fetch(
-          `${negotiateUrl}?groups=${encodeURIComponent(groupsKey)}`,
-          { signal: controller.signal },
+          negotiateUrl,
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            signal: controller.signal,
+          },
         );
         if (!res.ok) {
           console.warn(
@@ -81,7 +92,7 @@ export function useWebPubSub(
         });
 
         client.on("group-message", (e) => {
-          if (cancelled) return;
+          if (cancelled || !subscribedGroups.has(e.message.group)) return;
           let data: unknown = e.message.data;
           if (typeof data === "string") {
             try {

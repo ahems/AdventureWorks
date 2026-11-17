@@ -24,4 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ServiceDefaults\ServiceDefaults.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="AdventureWorks.Tests" />
+  </ItemGroup>
 </Project>

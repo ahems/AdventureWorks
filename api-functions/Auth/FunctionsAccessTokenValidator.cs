@@ -70,6 +70,12 @@ public sealed class FunctionsAccessTokenValidator
             return AccessTokenValidationResult.Fail("missing_token");
         }
 
+        if (!_handler.CanReadToken(token))
+        {
+            _logger.LogInformation("Access token rejected: malformed JWT.");
+            return AccessTokenValidationResult.Fail("invalid_token");
+        }
+
         OpenIdConnectConfiguration configuration;
         try
         {

@@ -19,9 +19,8 @@ public class SimulatorService
     /// </summary>
     public async Task<string> ResetAllSimulatorsAsync()
     {
-        var resp = await _http.PostAsync("api/simulators/reset", null);
-        if (!resp.IsSuccessStatusCode)
-            return $"Simulator reset failed ({resp.StatusCode}).";
+        using var resp = await _http.PostAsync("api/simulators/reset", null);
+        resp.EnsureSuccessStatusCode();
 
         var json = await resp.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);

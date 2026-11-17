@@ -19,6 +19,13 @@ export interface Address {
   isDefault: boolean;
 }
 
+export class SharedAddressError extends Error {
+  constructor() {
+    super("This address is shared. Add a new address instead.");
+    this.name = "SharedAddressError";
+  }
+}
+
 // API response type from Functions API (camelCase from C# JSON serialization)
 interface ApiAddress {
   addressID: number;
@@ -338,7 +345,13 @@ export const useAddresses = () => {
           updates.stateProvinceId ||
           updates.postalCode
         ) {
-          const updatePayload: any = {};
+          const updatePayload: {
+            AddressLine1?: string;
+            AddressLine2?: string | null;
+            City?: string;
+            StateProvinceID?: number;
+            PostalCode?: string;
+          } = {};
 
           if (updates.addressLine1)
             updatePayload.AddressLine1 = updates.addressLine1;
@@ -358,7 +371,8 @@ export const useAddresses = () => {
             },
           );
 
-          if (!response.ok) throw new Error("Failed to update address");
+          if (response.status === 409) throw new SharedAddressError();
+          if (!response.ok) throw new Error(`Failed to update address (HTTP ${response.status})`);
         }
 
         // Default changes are atomic server-side. The current default keeps its type until
@@ -403,31 +417,10 @@ export const useAddresses = () => {
       setIsLoading(true);
       try {
         const addressId = parseInt(id);
-        const dabApiUrl = getRestApiUrl();
-
-        // First, find the AddressTypeID for this BusinessEntityAddress
-        const beaResponse = await dabFetch(
-          `${dabApiUrl}/BusinessEntityAddress?$filter=BusinessEntityID eq ${user.businessEntityId} and AddressID eq ${addressId}`,
-        );
-
-        if (beaResponse.ok) {
-          const beaData = await beaResponse.json();
-          const links: BusinessEntityAddress[] = beaData.value || [];
-
-          // Delete every BusinessEntityAddress link so the Address row can be removed
-          for (const bea of links) {
-            await dabFetch(
-              `${dabApiUrl}/BusinessEntityAddress/BusinessEntityID/${user.businessEntityId}/AddressID/${addressId}/AddressTypeID/${bea.AddressTypeID}`,
-              { method: "DELETE" },
-            );
-          }
-        }
-
-        // Delete address from Functions API
-        const functionsApiUrl = getFunctionsApiUrl();
-        await functionsFetch(`${functionsApiUrl}/api/addresses/${addressId}`, {
+        const response = await functionsFetch(`${getFunctionsApiUrl()}/api/addresses/${addressId}`, {
           method: "DELETE",
         });
+        if (!response.ok) throw new Error(`Failed to delete address (HTTP ${response.status})`);
 
         // Refresh addresses
         await fetchAddresses();

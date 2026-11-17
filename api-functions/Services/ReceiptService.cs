@@ -10,7 +10,13 @@ namespace api_functions.Services;
 /// <summary>
 /// Service for retrieving complete order receipt data from AdventureWorks database
 /// </summary>
-public class ReceiptService
+public interface IReceiptAccessService
+{
+    Task<bool> CanReadAsync(int salesOrderId, int? ownerCustomerId);
+    Task<bool> CanSendAsync(int salesOrderId, int customerId, int emailAddressId, int? ownerCustomerId);
+}
+
+public class ReceiptService : IReceiptAccessService
 {
     private readonly string _connectionString;
 
@@ -26,6 +32,36 @@ public class ReceiptService
         var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
         return connection;
+    }
+
+    public async Task<bool> CanReadAsync(int salesOrderId, int? ownerCustomerId)
+    {
+        using var connection = await GetConnectionAsync();
+        return await connection.ExecuteScalarAsync<bool>(@"
+            SELECT CONVERT(bit, CASE WHEN EXISTS (
+                SELECT 1 FROM Sales.SalesOrderHeader
+                WHERE SalesOrderID = @SalesOrderId
+                  AND (@OwnerCustomerId IS NULL OR CustomerID = @OwnerCustomerId)
+            ) THEN 1 ELSE 0 END)",
+            new { SalesOrderId = salesOrderId, OwnerCustomerId = ownerCustomerId });
+    }
+
+    public async Task<bool> CanSendAsync(
+        int salesOrderId, int customerId, int emailAddressId, int? ownerCustomerId)
+    {
+        using var connection = await GetConnectionAsync();
+        return await connection.ExecuteScalarAsync<bool>(@"
+            SELECT CONVERT(bit, CASE WHEN EXISTS (
+                SELECT 1
+                FROM Sales.SalesOrderHeader soh
+                INNER JOIN Sales.Customer c ON soh.CustomerID = c.CustomerID
+                INNER JOIN Person.EmailAddress ea ON c.PersonID = ea.BusinessEntityID
+                WHERE soh.SalesOrderID = @SalesOrderId AND c.CustomerID = @CustomerId
+                  AND ea.EmailAddressID = @EmailAddressId
+                  AND (@OwnerCustomerId IS NULL OR c.CustomerID = @OwnerCustomerId)
+            ) THEN 1 ELSE 0 END)",
+            new { SalesOrderId = salesOrderId, CustomerId = customerId,
+                  EmailAddressId = emailAddressId, OwnerCustomerId = ownerCustomerId });
     }
 
     /// <summary>

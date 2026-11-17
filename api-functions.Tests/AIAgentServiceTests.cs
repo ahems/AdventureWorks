@@ -18,8 +18,12 @@ public class AIAgentServiceTests
     {
         using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
         using var handler = new RecordingHandler();
+        var serviceTokenProvider = new McpServiceTokenProvider(
+            new TestCredential(), new TestFactory(handler), NullLogger<McpServiceTokenProvider>.Instance,
+            "https://mcp.test/mcp");
         var client = new FoundryAgentClient(NullLogger<FoundryAgentClient>.Instance,
-            new TelemetryClient(telemetry), new TestCredential(), "https://foundry.test", new TestFactory(handler));
+            new TelemetryClient(telemetry), new TestCredential(), "https://foundry.test", new TestFactory(handler),
+            fallbackMcpServiceUrl: "https://mcp.test/mcp", serviceTokenProvider: serviceTokenProvider);
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["AI_AGENT_CHAT_ID"] = "eshop-chat-agent",
@@ -40,6 +44,26 @@ public class AIAgentServiceTests
         Assert.Null(handler.Policy);
     }
 
+    [Fact]
+    public async Task Admin_chat_rejects_an_unsafe_deployed_tool_definition()
+    {
+        using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
+        using var handler = new RecordingHandler { UnsafeAdminTool = true };
+        var client = new FoundryAgentClient(NullLogger<FoundryAgentClient>.Instance,
+            new TelemetryClient(telemetry), new TestCredential(), "https://foundry.test", new TestFactory(handler),
+            fallbackMcpServiceUrl: "https://mcp.test/mcp");
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["AI_AGENT_CHAT_ID"] = "eshop-chat-agent",
+            ["AI_AGENT_ADMIN_CHAT_ID"] = "admin-chat-agent"
+        }).Build();
+        var service = new AIAgentService(NullLogger<AIAgentService>.Instance, config, client, new TelemetryClient(telemetry));
+
+        await Assert.ThrowsAsync<FoundryToolPolicyException>(() =>
+            service.ProcessMessageAsync("Sales overview", [], isAdmin: true, mcpAccessToken: "admin-token"));
+        Assert.Null(handler.Authorization);
+    }
+
     [Theory]
     [InlineData("content_filter", "foundry")]
     [InlineData("ownership", "conversation-ownership")]
@@ -48,7 +72,8 @@ public class AIAgentServiceTests
         using var telemetry = new TelemetryConfiguration { DisableTelemetry = true };
         using var handler = new RecordingHandler { Failure = reason };
         var client = new FoundryAgentClient(NullLogger<FoundryAgentClient>.Instance,
-            new TelemetryClient(telemetry), new TestCredential(), "https://foundry.test", new TestFactory(handler));
+            new TelemetryClient(telemetry), new TestCredential(), "https://foundry.test", new TestFactory(handler),
+            fallbackMcpServiceUrl: "https://mcp.test/mcp");
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["AI_AGENT_CHAT_ID"] = "eshop-chat-agent"
@@ -72,6 +97,7 @@ public class AIAgentServiceTests
         public string? Authorization { get; private set; }
         public string? Policy { get; private set; }
         public string? Failure { get; init; }
+        public bool UnsafeAdminTool { get; init; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -80,9 +106,27 @@ public class AIAgentServiceTests
             if (request.RequestUri!.AbsolutePath.StartsWith("/agents/"))
             {
                 AgentId = request.RequestUri.AbsolutePath.Split('/').Last();
+                if (AgentId == "admin-chat-agent")
+                {
+                    var definition = """
+                        {"versions":{"latest":{"definition":{"kind":"prompt","model":"chat","instructions":"Admin",
+                        "tools":[{"type":"mcp","server_label":"adventureworks_mcp","server_url":"https://mcp.test/mcp",
+                        "allowed_tools":["get_business_stats","get_top_customers","get_orders_by_status",
+                        "get_sales_report_by_status","get_product_performance_summary","get_recent_customers_without_orders",
+                        "search_customers","get_top_selling_products","search_products","get_product_details",
+                        "check_inventory_availability","get_categories_with_products","get_products_for_promotion",
+                        "get_active_promotions","analyze_product_reviews"]}]}}}}
+                        """;
+                    return JsonResponse(UnsafeAdminTool
+                        ? definition.Replace("\"analyze_product_reviews\"]", "\"analyze_product_reviews\",\"create_order\"]")
+                        : definition);
+                }
                 return JsonResponse("""
                     {"versions":{"latest":{"definition":{"kind":"prompt","model":"chat","instructions":"Customer {{userId}}",
-                    "tools":[{"type":"mcp","server_label":"aw","server_url":"https://mcp.test/mcp"}]}}}}
+                    "tools":[{"type":"mcp","server_label":"adventureworks_mcp","server_url":"https://mcp.test/mcp",
+                    "allowed_tools":["get_customer_orders","get_order_details","find_complementary_products",
+                    "search_products","get_product_details","get_personalized_recommendations",
+                    "analyze_product_reviews","get_product_availability"]}]}}}}
                     """);
             }
             if (request.RequestUri.AbsolutePath == "/mcp") return JsonResponse("{}");

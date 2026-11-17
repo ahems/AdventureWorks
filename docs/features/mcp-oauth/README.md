@@ -75,8 +75,10 @@ login, user selection, account creation, anonymous browsing, or purchasing chang
 
 There is **no** universal "persona selector" and **no** second user store. The
 AdventureWorks database (`Person.Person`, `Sales.Customer`,
-`HumanResources.EmployeeDepartmentHistory`, plus the new `Auth.*` catalog) is the single
-authoritative source of users and authorization.
+`HumanResources.EmployeeDepartmentHistory`) is the source of user and department data.
+Role-to-scope policy is source-controlled in `ApplicationRoles`; no `Auth.*` SQL
+authorization catalog or schema seed is required. Existing deployed `Auth.*` tables, if
+any, are left untouched and are not read by the application.
 
 ## Architecture
 
@@ -99,7 +101,7 @@ flowchart LR
 
   func["api-functions\n(agent host / MCP client)"]
   kv[("Azure Key Vault\nRBAC · mcp-signing cert")]
-  sql[("Azure SQL\nAdventureWorks + Auth.*")]
+  sql[("Azure SQL\nAdventureWorks")]
 
   eshop -->|credential grant| as
   admin -->|PKCE S256| as
@@ -147,11 +149,12 @@ Access tokens contain **only** `iss`, `sub`, `aud`, `iat`, `exp`, the granted `s
 user category, application context, role(s) and an optional display name. They **never**
 contain passwords, hashes, reset tokens, payment data, addresses or unnecessary PII.
 
-The resolution chain is deterministic and driven by seed data, never by user name:
+The resolution chain uses AdventureWorks for identity and current department, then
+source-controlled role/scope policy; it never maps permissions by user name:
 
 ```
 AdventureWorks user ─▶ application role ─▶ OAuth scopes ─▶ MCP tool/ownership policies
-    (Person / Customer / EmployeeDepartmentHistory)   (Auth.RoleScope)   (ToolAuthorizationRegistry)
+    (Person / Customer / EmployeeDepartmentHistory) (ApplicationRoles) (ToolAuthorizationRegistry)
 ```
 
 ## OAuth endpoints
@@ -189,7 +192,17 @@ wired from the deployed app URLs at deploy time (`scripts/hooks/postdeploy.sh`) 
 | `adventureworks-eshop` | E-shop | `<APP_URL>/oauth/callback` | `http://localhost:5173/oauth/callback` |
 | `adventureworks-admin` | Admin | `<APP_ADMIN_URL>/oauth/callback` | `http://localhost:5174/oauth/callback` |
 | `adventureworks-manufacturing` | Manufacturing | `<APP_MANUFACTURING_URL>/oauth/callback` | `http://localhost:5175/oauth/callback` |
-| `mcp-inspector` | MCP Inspector | `<MCP_INSPECTOR_URL>/oauth/callback` | `http://localhost:6274/oauth/callback` |
+| `adventureworks-inspector` | Hosted internal Inspector gateway | `<MCP_INSPECTOR_URL>/oauth/callback` | None |
+| `mcp-inspector` | Separately run third-party Inspector | Configured exact Inspector callbacks | `http://localhost:6274/oauth/callback` |
+
+The hosted Inspector admits employee/manufacturing users only. Its OAuth gateway
+holds separate MCP/DAB resource tokens server-side and exposes only the two exact
+configured targets through an opaque cookie session. It does not launch the
+upstream generic proxy or permit STDIO/arbitrary targets. Both client registrations
+reuse deployed `OAUTH_INSPECTOR_REDIRECT_URIS`; only the third-party registration
+adds its existing development callbacks. See
+[hosted Inspector authentication](../authentication/END_TO_END_AUTHENTICATION.md#hosted-inspector-authentication)
+for session expiry, logout, CSRF and browser evidence.
 
 No client secrets are committed. If a confidential credential were ever unavoidable it
 would be stored in Key Vault and read via managed identity — but the demo uses public
@@ -197,15 +210,17 @@ PKCE clients exclusively, so none exist.
 
 ## Scopes and roles
 
-**Business-domain scopes** (12), advertised in metadata and bound to the canonical MCP
+**OAuth scopes** (14), advertised in metadata and bound to the canonical MCP
 resource so issued tokens carry the correct `aud`:
 
 | Scope | Intent |
 | ----- | ------ |
 | `mcp.access` | Baseline — required for **any** authenticated MCP connectivity. |
+| `realtime.connect` | Request user-bound Web PubSub group grants; the group scope/category policy remains authoritative. |
 | `products.read` | Public catalog: search, details, recommendations, reviews, promotions. |
 | `sales.read` | Internal sales summaries / analytics / financial reporting. |
 | `customers.read` | Internal customer lookup / enumeration (consumer self-access is ownership, not this scope). |
+| `customers.write` | Customer changes; consumer access is restricted to their own profile by ownership. |
 | `inventory.read` | Internal inventory levels and availability. |
 | `orders.read` | Order history / status (consumers restricted to **their own** via ownership). |
 | `orders.write` | Permitted order changes under current business rules. |
@@ -215,10 +230,12 @@ resource so issued tokens carry the correct `aud`:
 | `admin.write` | Internal administration (write): data generation, bank operations. |
 | `mcp.admin` | Security-sensitive / broad MCP administration (e.g. simulator reset). |
 
-**Roles** are stored in `Auth.ApplicationRole`, mapped to scopes in `Auth.RoleScope`, and
-assigned to employees by **current department** via `Auth.DepartmentRole` — **never by
-user name**. Deterministic seed data mirrors the in-process fallback in
-[`ApplicationRoles.DefaultRoleScopes`](../../../api-mcp/AdventureWorks/Auth/ApplicationRoles.cs).
+**Roles, department mappings and scope grants** are source-controlled in
+[`ApplicationRoles`](../../../api-mcp/AdventureWorks/Auth/ApplicationRoles.cs), and
+assigned to employees by **current department** — **never by user name**. The SQL
+authorization catalog is not part of runtime authorization and does not need to be
+created or seeded. This does not drop or modify any such tables already present in an
+Azure deployment.
 
 | Role | Category | Granted scopes (besides `mcp.access`) |
 | ---- | -------- | ------------------------------------- |
@@ -227,10 +244,14 @@ user name**. Deterministic seed data mirrors the in-process fallback in
 | `marketing-admin` | employee | `products.read`, `sales.read`, `customers.read`, `admin.read`, `admin.write` |
 | `inventory-admin` | employee | `products.read`, `inventory.read`, `manufacturing.read`, `admin.read` |
 | `operations-admin` | employee | `products.read`, `sales.read`, `customers.read`, `orders.read`, `inventory.read`, `admin.read` |
-| `executive-admin` | employee | **all 11** business scopes incl. `manufacturing.*` and `mcp.admin` |
+| `executive-admin` | employee | **all 13** scopes besides `mcp.access`, including `realtime.connect`, `manufacturing.*` and `mcp.admin` |
 | `manufacturing-engineer` | manufacturing | `products.read`, `inventory.read`, `manufacturing.read`, `manufacturing.write` |
 
-**Department → role** seed (`Auth.DepartmentRole`, also the `SqlUserDirectory` fallback):
+Every seeded interactive role also receives `realtime.connect`. That baseline
+scope alone grants no event group: each Web PubSub group requires its own mapped
+business scope, and internal groups additionally require an internal category.
+
+**Department → role** source-controlled mapping:
 
 | Department | Role |
 | ---------- | ---- |
@@ -264,6 +285,10 @@ Scopes gate *domains*; **ownership** gates *records*. Tools that expose per-cust
 (`get_customer_orders`, `get_order_details`, `get_personalized_recommendations`) run in
 `SelfOrInternal` mode:
 
+- All three require `orders.read`: personalized recommendations query purchase
+  history and reveal purchased categories, not only public product data.
+  A catalogue-only `products.read` workload cannot invoke them, including as
+  background tasks. Public catalogue tools remain available.
 - **Consumers** may act only on **their own** records. The `customerId` argument is
   validated / overwritten against the caller's **server-resolved** `CustomerID` (from the
   token `sub`). A client that supplies *another* customer's ID cannot widen access — the
@@ -273,6 +298,11 @@ Scopes gate *domains*; **ownership** gates *records*. Tools that expose per-cust
 
 `InternalOnly` tools additionally require a **non-consumer category**, so a consumer token
 that somehow carried an internal scope would still be denied (defense-in-depth).
+
+Tasks in the existing Azure/in-memory stores bind subject, client, category,
+originating tool and its required scope. Every read/control operation rechecks
+that binding against the current tool policy; changed or unclassified policies
+and old unbound records deny without migration or backfill.
 
 ## Authorization inspection
 
@@ -296,7 +326,7 @@ sequenceDiagram
     participant U as User (already signed in / selected in the app)
     participant SPA as Frontend (public client)
     participant AS as api-mcp Authorization Server
-    participant DB as AdventureWorks DB (Auth.*)
+    participant DB as AdventureWorks DB
     participant FN as api-functions (agent host)
     participant MCP as api-mcp /mcp (resource)
 
@@ -342,7 +372,7 @@ via JWKS.
 flowchart TB
   subgraph provisioning["azd up"]
     bicep["infra/modules/keyvault.bicep\nRBAC-enabled vault\n(purge protection OFF for azd down)"]
-    hook["scripts/hooks/postprovision.sh\n• grant deployer 'Key Vault Certificates Officer'\n• az keyvault certificate create (self-signed RSA 2048, exportable)\n• bounded retries for RBAC propagation"]
+    hook["scripts/hooks/postprovision.sh\n• grant deployer 'Key Vault Certificates Officer'\n• list existing/pending certificates, retrying reads\n• create once only when absent, then verify metadata"]
     role["infra grants api-mcp identity\n'Key Vault Secrets User' (vault scope only)"]
   end
   subgraph runtime["api-mcp runtime"]
@@ -359,13 +389,27 @@ flowchart TB
 - The vault uses **Azure RBAC** (`enableRbacAuthorization: true`), **not** legacy access
   policies.
 - The signing **certificate is created at deploy time** (`postprovision` hook); the
-  **private key never leaves Key Vault**, is never committed, never baked into an image,
-  and never placed in app settings or Bicep outputs.
+  exportable PFX is retrieved from Key Vault into the api-mcp process and loaded
+  into an ephemeral in-memory certificate. It is not committed, baked into an
+  image, or placed in app settings or Bicep outputs; this is not a non-exportable
+  Key Vault signing operation.
 - `api-mcp` reads the PFX using its **managed identity** with the **narrowest** role —
   **`Key Vault Secrets User`**, scoped to the **vault** (not the subscription). Runtime
   identities are **never** Key Vault Administrators.
 - The provider has **bounded retries with exponential backoff** to absorb RBAC role
   propagation delay, and all replicas/restarts use the same Key Vault-backed material.
+- The source template provisions a vault private endpoint, private DNS zone and
+  VNet link for the Container Apps environment. The vault's public firewall
+  defaults to deny; the provisioning hook temporarily permits the deployer's
+  current IP for certificate setup and removes its own rule afterward. The
+  private-link change requires user-owned environment recreation and is not yet
+  verified in the current deployment.
+- Certificate setup targets the selected azd subscription and retries only
+  read-only inventory/readiness checks. It lists pending certificates too; an
+  unavailable or malformed inventory stops setup rather than assuming absence.
+  Creation is attempted once and an uncertain result fails without retrying, so
+  an access or transport failure cannot silently rotate an existing signing key.
+  Metadata readability does not prove that the runtime can retrieve the PFX.
 - `azd down` removes the vault with the environment (purge protection is intentionally
   disabled).
 
@@ -473,8 +517,13 @@ restricted to the e-shop client and consumer accounts.
   parameter on the `refresh_token` grant (trusted first-party clients only).
   `getMcpAccessToken` uses this to mint an MCP-resource token silently, and
   `agentService.ts` forwards it to `/api/agent/chat`, so MCP tool calls run as the
-  signed-in admin and role-based allow/deny applies. If no user token is available,
-  the agent falls back to the managed-identity service token.
+  signed-in admin and role-based allow/deny applies. Chat rejects a missing or invalid
+  delegated token; it does not fall back to a managed-identity service token.
+  Admin routing additionally requires an internal caller with `sales.read`. Functions
+  validates the actual cached admin agent definition against its 15 reviewed read-only
+  tools and the selected MCP server, and rejects unchecked fallback definitions or
+  unreviewed tools. If no admin agent ID is configured, chat instead uses the
+  separately guarded customer agent.
 
 ## Demonstration steps (allowed and denied)
 
@@ -557,20 +606,23 @@ the MCP Inspector. Keep these separate from the fast suite.
 
 `azd up` performs everything automatically:
 
-1. Provisions an **RBAC-enabled Key Vault** (`infra/modules/keyvault.bicep`).
+1. Provisions an **RBAC-enabled Key Vault** and its private endpoint/DNS link
+   (`infra/modules/keyvault.bicep`).
 2. Grants `api-mcp`'s managed identity **`Key Vault Secrets User`** (vault-scoped).
-3. Creates the **`mcp-signing`** RSA certificate (`postprovision` hook, idempotent, with
-   RBAC-propagation retries).
+3. Creates the **`mcp-signing`** RSA certificate only if absent (`postprovision`
+   hook, with bounded read-only propagation checks and no blind create retry).
 4. Configures the **issuer** and **canonical MCP resource URL** from the Container Apps
    environment default domain (no hard-coded hostnames).
 5. Wires **exact OAuth redirect URIs** for every client from deployed app URLs
    (`postdeploy` hook).
-6. Applies the **`Auth.*`** schema/seed changes (`seed-job`).
+6. Prepares the demo users' compatible OAuth password hashes as part of database
+   seeding; no authorization-catalog schema is created or required.
 7. Builds and deploys all services and outputs the app URLs.
 
 `azd down` removes the vault and signing material with the environment. Existing managed
-identity / `DefaultAzureCredential` patterns are reused; **no secrets** are placed in azd
-environment files or outputs.
+identity / `DefaultAzureCredential` patterns are reused; signing material is not
+placed in azd environment files or outputs. Reusable test-consumer credentials may
+be stored in the ignored local azd environment as described in the assurance guide.
 
 ## Security review
 
@@ -579,7 +631,8 @@ Reviewed before completion (see also [Accepted demo limitations](#accepted-demo-
 - **Open redirects:** only exact, registered redirect URIs accepted; wildcards rejected.
 - **PKCE/state:** `S256` required and advertised; `plain` removed; `state` validated.
 - **Code replay:** authorization codes are single-use and short-lived (~5 min).
-- **Token lifetime:** ~10 min access tokens; no refresh tokens.
+- **Token lifetime:** access tokens default to ten minutes; trusted first-party
+  clients may receive refresh tokens, which default to twelve hours.
 - **Issuer/audience/resource:** validated on every call; tokens are resource-bound.
 - **Scope escalation / ID tampering / ownership bypass:** internal-only + ownership checks
   derive identity from the validated token and server-side data, never from client input.
@@ -599,8 +652,8 @@ Reviewed before completion (see also [Accepted demo limitations](#accepted-demo-
 - The OpenIddict store is **in-memory and deterministic** (re-seeded every boot), which is
   ideal for a single-user demo but not for horizontal multi-instance token state.
 - Key Vault **purge protection is intentionally disabled** so `azd down` can remove the
-  vault. Re-deploying the *same* environment name within the soft-delete window may require
-  `az keyvault purge` first.
+  vault. The user-owned disposable-environment recreation uses a new environment
+  name and purges the old environment.
 - The signing certificate is **self-signed** (adequate for JWT signing via JWKS; no PKI
   chain is needed).
 
@@ -608,11 +661,12 @@ Reviewed before completion (see also [Accepted demo limitations](#accepted-demo-
 
 | Symptom | Cause / fix |
 | ------- | ----------- |
-| `api-mcp` fails to start: no signing certificate | The `postprovision` hook did not create `mcp-signing`. Re-run `azd provision`, or create it manually: `az keyvault certificate create --vault-name <MCP_SIGNING_KEY_VAULT_NAME> --name mcp-signing --policy @<policy.json>`. |
-| `403`/`AuthorizationFailed` reading the cert at startup | RBAC role propagation lag. The provider retries with backoff; if it persists, confirm the `Key Vault Secrets User` assignment on the vault for the `av-identity-*` identity. |
+| `api-mcp` fails to load its signing certificate | Read-only checks should distinguish missing certificate, identity/RBAC failure and firewall/private-DNS failure. Fix source/hooks and request user-owned environment recreation if provisioning is required; do not create or repair the certificate manually. |
+| `403`/`ForbiddenByFirewall` reading the certificate | Verify the selected vault's private endpoint, DNS and Container Apps VNet binding. Azure-services bypass alone does not grant Container Apps access. Do not patch the deployed vault in place. |
+| `403`/`AuthorizationFailed` reading the certificate | The provider retries bounded RBAC propagation. If it persists, inspect the selected runtime identity's vault-scoped `Key Vault Secrets User` assignment read-only and fix reproducible provisioning rather than changing the deployed assignment. |
 | `401` on `/mcp` with a valid-looking token | Missing `mcp.access`, wrong `aud`/resource, or expired token. Re-authorize; check the `resource` parameter matches the canonical MCP resource. |
 | `invalid_request` at `/authorize` | Missing/`plain` PKCE, bad `state`, or a redirect URI that is not exactly registered. Confirm the `postdeploy` hook wired the app's URL. |
-| Vault name already exists after re-deploy | Soft-deleted vault; `az keyvault purge --name <name>` (accepted limitation above). |
+| Vault name already exists after re-deploy | The prior vault may still be soft-deleted. Follow the user-owned disposable-environment recreation process instead of manually purging or repairing it. |
 | Tool denied unexpectedly | Check the user's role→scope grant and the tool's row in [TOOL_SCOPE_MATRIX.md](TOOL_SCOPE_MATRIX.md); confirm category for `InternalOnly` tools. |
 
 ## Source map
@@ -620,7 +674,7 @@ Reviewed before completion (see also [Accepted demo limitations](#accepted-demo-
 | Concern | File |
 | ------- | ---- |
 | Scopes | [`Auth/OAuthScopes.cs`](../../../api-mcp/AdventureWorks/Auth/OAuthScopes.cs) |
-| Roles / role→scope fallback | [`Auth/ApplicationRoles.cs`](../../../api-mcp/AdventureWorks/Auth/ApplicationRoles.cs) |
+| Role, department and scope policy | [`Auth/ApplicationRoles.cs`](../../../api-mcp/AdventureWorks/Auth/ApplicationRoles.cs) |
 | Tool → scope registry | [`Auth/ToolAuthorizationPolicy.cs`](../../../api-mcp/AdventureWorks/Auth/ToolAuthorizationPolicy.cs) |
 | Tool authorization filter | [`Auth/McpToolAuthorizationFilter.cs`](../../../api-mcp/AdventureWorks/Auth/McpToolAuthorizationFilter.cs) |
 | Ownership / scope evaluator | [`Auth/ToolAuthorizationEvaluator.cs`](../../../api-mcp/AdventureWorks/Auth/ToolAuthorizationEvaluator.cs) |
@@ -631,6 +685,5 @@ Reviewed before completion (see also [Accepted demo limitations](#accepted-demo-
 | Client / scope seeding | [`Auth/OpenIddictClientSeeder.cs`](../../../api-mcp/AdventureWorks/Auth/OpenIddictClientSeeder.cs) |
 | Key Vault infra | [`infra/modules/keyvault.bicep`](../../../infra/modules/keyvault.bicep) |
 | Cert creation / redirect wiring | [`scripts/hooks/postprovision.sh`](../../../scripts/hooks/postprovision.sh), [`scripts/hooks/postdeploy.sh`](../../../scripts/hooks/postdeploy.sh) |
-| Auth schema + seed | [`seed-job/sql/AdventureWorks-Auth.sql`](../../../seed-job/sql/AdventureWorks-Auth.sql) |
 | Delegated propagation | [`api-functions/Services/FoundryAgentClient.cs`](../../../api-functions/Services/FoundryAgentClient.cs) |
 | Tests | [`api-mcp/AdventureWorks.Tests/`](../../../api-mcp/AdventureWorks.Tests/) |

@@ -51,6 +51,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
   properties: {
     managedEnvironmentId: containerAppEnvId
     configuration: {
+      activeRevisionsMode: 'Single'
       secrets: [
         {
           name: 'database-connection-string'
@@ -63,6 +64,9 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         allowInsecure: false
         transport: 'http'
         clientCertificateMode: 'ignore'
+        stickySessions: {
+          affinity: 'sticky'
+        }
         corsPolicy: {
           allowedOrigins: ['*']
           allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']

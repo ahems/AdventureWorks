@@ -413,9 +413,14 @@ public static class AuthorizationEndpoints
         }
 
         var requestedScopes = request.GetScopes();
-        var scopes = requestedScopes.IsEmpty
-            ? OAuthScopes.All.ToList()
-            : requestedScopes.Where(s => OAuthScopes.All.Contains(s)).ToList();
+        if (requestedScopes.IsEmpty || requestedScopes.Any(scope => !OAuthScopes.IsKnown(scope)))
+        {
+            return Forbid(
+                "Managed-identity service tokens require an explicit set of recognized MCP scopes.",
+                Errors.InvalidScope);
+        }
+
+        var scopes = requestedScopes.ToList();
         if (!scopes.Contains(OAuthScopes.McpAccess))
         {
             scopes.Add(OAuthScopes.McpAccess);
@@ -529,7 +534,8 @@ public static class AuthorizationEndpoints
             // CustomerID may not exist until a consumer's first purchase; emit a 0 sentinel so the
             // claim is always present (avoids missing-claim policy failures) yet matches no row,
             // since CustomerIDs are strictly positive. Ownership therefore gates read/update/delete
-            // without blocking a first-time buyer's Customer/SalesOrderHeader create.
+            // without blocking a first-time buyer's Customer create. Checkout refreshes the
+            // resource tokens before creating an order for that new customer.
             identity.SetClaim(AwClaims.CustomerId, (user.CustomerId ?? 0).ToString(CultureInfo.InvariantCulture));
 
             // BusinessEntityID always exists for a resolved consumer and owns their identity,

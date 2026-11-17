@@ -13,9 +13,9 @@ namespace AddressFunctions.Functions;
 public class AddressFunctions
 {
     private readonly ILogger<AddressFunctions> _logger;
-    private readonly AddressService _addressService;
+    private readonly IAddressService _addressService;
 
-    public AddressFunctions(ILogger<AddressFunctions> logger, AddressService addressService)
+    public AddressFunctions(ILogger<AddressFunctions> logger, IAddressService addressService)
     {
         _logger = logger;
         _addressService = addressService;
@@ -76,12 +76,12 @@ public class AddressFunctions
             var user = FunctionUser.Current(executionContext);
             if (user.IsConsumer)
             {
-                if (user.BusinessEntityId is null)
+                if (user.BusinessEntityId is not int ownerId || ownerId <= 0)
                 {
                     return await ForbiddenAsync(req, "This token has no business entity id; cannot resolve owned records.");
                 }
 
-                ids = new List<int> { user.BusinessEntityId.Value };
+                ids = new List<int> { ownerId };
             }
 
             var addresses = await _addressService.GetPersonAddressesAsync(ids);
@@ -120,22 +120,18 @@ public class AddressFunctions
             var limit = queryParams.TryGetValue("limit", out var limitValue) && int.TryParse(limitValue, out var l) ? l : 100;
             var offset = queryParams.TryGetValue("offset", out var offsetValue) && int.TryParse(offsetValue, out var o) ? o : 0;
 
-            var addresses = await _addressService.GetAddressesAsync(limit, offset);
-
-            // Record-level ownership: a consumer only sees their own address records. Internal users
-            // (and anonymous/disabled-mode requests) receive the full listing unchanged.
+            // Apply ownership before SQL pagination, not after fetching a global page.
             var user = FunctionUser.Current(executionContext);
             if (user.IsConsumer)
             {
-                if (user.BusinessEntityId is null)
+                if (user.BusinessEntityId is not int ownerId || ownerId <= 0)
                 {
                     return await ForbiddenAsync(req, "This token has no business entity id; cannot resolve owned records.");
                 }
-
-                var owned = await _addressService.GetOwnedAddressIdsAsync(user.BusinessEntityId.Value);
-                addresses = addresses.Where(a => owned.Contains(a.AddressID)).ToList();
             }
 
+            var addresses = await _addressService.GetAddressesAsync(limit, offset,
+                user.IsConsumer ? user.BusinessEntityId : null);
             var response = req.CreateResponse(HttpStatusCode.OK);
             await response.WriteAsJsonAsync(addresses);
             return response;
@@ -162,12 +158,12 @@ public class AddressFunctions
             return null;
         }
 
-        if (user.BusinessEntityId is null)
+        if (user.BusinessEntityId is not int ownerId || ownerId <= 0)
         {
             return await ForbiddenAsync(req, "This token has no business entity id; cannot resolve owned records.");
         }
 
-        if (!await _addressService.IsAddressOwnedByAsync(addressId, user.BusinessEntityId.Value))
+        if (!await _addressService.IsAddressOwnedByAsync(addressId, ownerId))
         {
             return await ForbiddenAsync(req, $"Address {addressId} is not owned by the current user.");
         }
@@ -195,16 +191,17 @@ public class AddressFunctions
 
         try
         {
-            var ownership = await EnforceAddressOwnershipAsync(req, executionContext, id);
-            if (ownership is not null)
-            {
-                return ownership;
-            }
+            var user = FunctionUser.Current(executionContext);
+            if (user.IsConsumer && (user.BusinessEntityId is not int ownerId || ownerId <= 0))
+                return await ForbiddenAsync(req, "This token has no business entity id; cannot resolve owned records.");
 
-            var address = await _addressService.GetAddressByIdAsync(id);
+            var address = await _addressService.GetAddressByIdAsync(id,
+                user.IsConsumer ? user.BusinessEntityId : null);
 
             if (address == null)
             {
+                if (user.IsConsumer)
+                    return await ForbiddenAsync(req, $"Address {id} is not owned by the current user.");
                 var notFoundResponse = req.CreateResponse(HttpStatusCode.NotFound);
                 await notFoundResponse.WriteAsJsonAsync(new { error = $"Address with ID {id} not found" });
                 return notFoundResponse;
@@ -257,12 +254,12 @@ public class AddressFunctions
             var user = FunctionUser.Current(executionContext);
             if (user.IsConsumer)
             {
-                if (user.BusinessEntityId is null)
+                if (user.BusinessEntityId is not int ownerId || ownerId <= 0)
                 {
                     return await ForbiddenAsync(req, "This token has no business entity id; cannot create an owned record.");
                 }
 
-                createRequest.BusinessEntityID = user.BusinessEntityId.Value;
+                createRequest.BusinessEntityID = ownerId;
             }
 
             // Log the incoming request for debugging
@@ -314,6 +311,7 @@ public class AddressFunctions
     /// <returns>Updated address</returns>
     /// <response code="200">Address updated successfully</response>
     /// <response code="404">Address not found</response>
+    /// <response code="409">Address is shared with another owner or their order</response>
     /// <response code="400">Invalid request body</response>
     /// <response code="500">Internal server error</response>
     /// <param name="executionContext">Function execution context carrying the validated caller identity.</param>
@@ -327,11 +325,9 @@ public class AddressFunctions
 
         try
         {
-            var ownership = await EnforceAddressOwnershipAsync(req, executionContext, id);
-            if (ownership is not null)
-            {
-                return ownership;
-            }
+            var user = FunctionUser.Current(executionContext);
+            if (user.IsConsumer && (user.BusinessEntityId is not int ownerId || ownerId <= 0))
+                return await ForbiddenAsync(req, "This token has no business entity id; cannot resolve owned records.");
 
             var updateRequest = await req.ReadFromJsonAsync<UpdateAddressRequest>();
 
@@ -342,7 +338,26 @@ public class AddressFunctions
                 return badRequest;
             }
 
-            var address = await _addressService.UpdateAddressAsync(id, updateRequest);
+            Address? address;
+            if (user.IsConsumer)
+            {
+                var result = await _addressService.UpdateOwnedAddressAsync(
+                    id, user.BusinessEntityId.GetValueOrDefault(), updateRequest);
+                if (result.Status == OwnedAddressUpdateStatus.NotOwned)
+                    return await ForbiddenAsync(req, $"Address {id} is not owned by the current user.");
+                if (result.Status == OwnedAddressUpdateStatus.Shared)
+                {
+                    _logger.LogInformation("Consumer update denied for shared address {Id}", id);
+                    var conflict = req.CreateResponse(HttpStatusCode.Conflict);
+                    await conflict.WriteAsJsonAsync(new { error = "This address is shared. Add a new address instead." });
+                    return conflict;
+                }
+                address = result.Address;
+            }
+            else
+            {
+                address = await _addressService.UpdateAddressAsync(id, updateRequest);
+            }
 
             if (address == null)
             {
@@ -452,15 +467,19 @@ public class AddressFunctions
 
         try
         {
-            var ownership = await EnforceAddressOwnershipAsync(req, executionContext, id);
-            if (ownership is not null)
+            var user = FunctionUser.Current(executionContext);
+            if (user.IsConsumer)
             {
-                return ownership;
+                if (user.BusinessEntityId is not int ownerId || ownerId <= 0)
+                    return await ForbiddenAsync(req, "This token has no business entity id; cannot resolve owned records.");
+
+                if (!await _addressService.DeleteOwnedAddressAsync(id, ownerId))
+                    return await ForbiddenAsync(req, $"Address {id} is not owned by the current user.");
+
+                return req.CreateResponse(HttpStatusCode.NoContent);
             }
 
-            var deleted = await _addressService.DeleteAddressAsync(id);
-
-            if (!deleted)
+            if (!await _addressService.DeleteAddressAsync(id))
             {
                 var notFoundResponse = req.CreateResponse(HttpStatusCode.NotFound);
                 await notFoundResponse.WriteAsJsonAsync(new { error = $"Address with ID {id} not found" });

@@ -9,6 +9,8 @@ echo "Configuring Azure resources for the demo..."
 # Incremental ARM deployments do not remove role assignments retired from Bicep.
 python3 "$(dirname "${BASH_SOURCE[0]}")/../utilities/reconcile-runtime-rbac.py" --apply
 
+RESOURCE_GROUP=$(azd env get-value 'AZURE_RESOURCE_GROUP' 2>/dev/null | head -n1 | tr -d '\n\r ')
+
 API_URL=$(azd env get-value 'API_URL' 2>/dev/null | head -n1 | tr -d '\n\r ')
 if [ -n "$API_URL" ]; then
     azd env set 'VITE_API_URL' "$API_URL"
@@ -26,9 +28,109 @@ if [ -n "$API_URL" ] && [ -n "$API_FUNCTIONS_URL" ]; then
     echo "Configured frontend API endpoints."
 fi
 
+# Build and publish the seed image while the independent resource configuration
+# below runs. SQL setup must finish before the job starts on legacy public-SQL
+# deployments, so this background stage only prepares the image and job template.
+ACR_ENDPOINT=$(azd env get-value AZURE_CONTAINER_REGISTRY_ENDPOINT 2>/dev/null | head -n1 | tr -d '\n\r ')
+SEED_JOB_NAME=$(azd env get-value SERVICE_SEED_JOB_NAME 2>/dev/null | head -n1 | tr -d '\n\r ')
+if [ -z "$RESOURCE_GROUP" ] || [ -z "$ACR_ENDPOINT" ] || [ -z "$SEED_JOB_NAME" ]; then
+    echo "ERROR: Required environment variables not found for seed-job deployment."
+    echo "Resource Group: ${RESOURCE_GROUP:-[NOT SET]}"
+    echo "ACR Endpoint: ${ACR_ENDPOINT:-[NOT SET]}"
+    echo "Seed Job Name: ${SEED_JOB_NAME:-[NOT SET]}"
+    exit 1
+fi
+
+SEED_SETUP_LOG=$(mktemp /tmp/seed-job-setup.XXXXXX.log)
+SEED_SETUP_PID=""
+SQL_CLIENT_FIREWALL_RULE_ACTIVE=false
+cleanup_postprovision() {
+    local status=$?
+    trap - EXIT
+    if [ -n "$SEED_SETUP_PID" ]; then
+        if kill -0 "$SEED_SETUP_PID" 2>/dev/null; then
+            kill "$SEED_SETUP_PID" 2>/dev/null || true
+        fi
+        wait "$SEED_SETUP_PID" 2>/dev/null || true
+    fi
+    if [ "$SQL_CLIENT_FIREWALL_RULE_ACTIVE" = "true" ]; then
+        if az sql server firewall-rule delete \
+            --server "$SQL_SERVER_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "AllowClient" \
+            --output none 2>/dev/null; then
+            echo "Removed temporary SQL client firewall rule."
+        else
+            echo "WARNING: Could not remove the temporary SQL client firewall rule. If azd up stops before postup completes, remove AllowClient manually."
+        fi
+    fi
+    [ -z "$SEED_SETUP_LOG" ] || rm -f "$SEED_SETUP_LOG"
+    exit "$status"
+}
+trap cleanup_postprovision EXIT
+
+prepare_seed_job() {
+    local acr_name="${ACR_ENDPOINT%%.*}"
+
+    # Ensure Git LFS files (e.g. seed-job/sql/ProductNames-ai.csv) are present
+    # so the build context contains real assets, not pointer files.
+    local repo_root
+    repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    if [ -n "$repo_root" ] && [ -e "$repo_root/.git" ]; then
+        if ! git lfs version &>/dev/null; then
+            echo "ERROR: Git LFS is required to fetch the seed-job assets." >&2
+            return 1
+        fi
+        echo "Checking required seed-job assets..."
+        if ! (cd "$repo_root" && git lfs pull); then
+            echo "ERROR: Could not download Git LFS assets required to build the seed job." >&2
+            return 1
+        fi
+        echo "  Seed-job assets ready."
+    fi
+
+    echo "Building and publishing the seed-job image..."
+    local build_output build_id image_name update_output
+    if build_output=$(az acr build \
+        --registry "$acr_name" \
+        --image seed-job:latest \
+        --file seed-job/dockerfile \
+        seed-job \
+        --no-logs 2>&1); then
+        build_id=$(printf '%s\n' "$build_output" | sed -nE 's/.*build with ID: ([[:alnum:]-]+).*/\1/p' | tail -n1)
+        if [ -n "$build_id" ]; then
+            echo "  Seed-job image build succeeded ($build_id)."
+        else
+            echo "  Seed-job image build succeeded."
+        fi
+    else
+        echo "$build_output" >&2
+        echo "ERROR: Seed-job image build failed." >&2
+        return 1
+    fi
+
+    image_name="${ACR_ENDPOINT}/seed-job:latest"
+    echo "Updating the seed-job template..."
+    if ! update_output=$(az containerapp job update \
+        --name "$SEED_JOB_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --container-name "$SEED_JOB_NAME" \
+        --image "$image_name" \
+        --set-env-vars SEED_SKIP_EXISTING=true \
+        --output none 2>&1); then
+        echo "$update_output" >&2
+        echo "ERROR: Could not update the seed-job image." >&2
+        return 1
+    fi
+    echo "Seed-job image and template are ready."
+}
+
+echo "Preparing the seed-job image and template in the background..."
+prepare_seed_job >"$SEED_SETUP_LOG" 2>&1 &
+SEED_SETUP_PID=$!
+
 # Grant current user Contributor role on Container Apps Environment for Aspire Dashboard access
 CONTAINER_APP_ENV_NAME=$(azd env get-value 'CONTAINER_APP_ENVIRONMENT_NAME' 2>/dev/null | head -n1 | tr -d '\n\r ')
-RESOURCE_GROUP=$(azd env get-value 'AZURE_RESOURCE_GROUP' 2>/dev/null | head -n1 | tr -d '\n\r ')
 
 if [ -n "$CONTAINER_APP_ENV_NAME" ] && [ "$CONTAINER_APP_ENV_NAME" != "ERROR: key 'CONTAINER_APP_ENVIRONMENT_NAME' not found in the environment values" ]; then
     echo ""
@@ -101,7 +203,41 @@ if [ -z "$KEY_VAULT_NAME" ] || [[ "$KEY_VAULT_NAME" == ERROR:* ]]; then
     echo "ERROR: MCP_SIGNING_KEY_VAULT_NAME is missing; the MCP OAuth server cannot start without its signing certificate." >&2
     exit 1
 else
-    SUBSCRIPTION_ID=$(az account show --query id -o tsv 2>/dev/null || echo "")
+(
+    # Keep certificate cleanup isolated from the later SQL EXIT trap.
+    KEY_VAULT_CLIENT_FIREWALL_RULE_ACTIVE=false
+    CERT_POLICY_FILE=""
+    CERT_ERROR_FILE=""
+    CERT_INVENTORY_FILE=""
+    cleanup_key_vault_certificate_setup() {
+        local status=$?
+        if [ "$KEY_VAULT_CLIENT_FIREWALL_RULE_ACTIVE" = "true" ]; then
+            if az keyvault network-rule remove \
+                --name "$KEY_VAULT_NAME" \
+                --resource-group "$RESOURCE_GROUP" \
+                --subscription "$SUBSCRIPTION_ID" \
+                --ip-address "${KEY_VAULT_CLIENT_IP}/32" \
+                --output none; then
+                echo "  Removed temporary Key Vault client firewall rule."
+            else
+                echo "ERROR: Could not remove the temporary Key Vault client firewall rule (${KEY_VAULT_CLIENT_IP}/32) from $KEY_VAULT_NAME." >&2
+                status=1
+            fi
+        fi
+        [ -z "$CERT_POLICY_FILE" ] || rm -f "$CERT_POLICY_FILE"
+        [ -z "$CERT_ERROR_FILE" ] || rm -f "$CERT_ERROR_FILE"
+        [ -z "$CERT_INVENTORY_FILE" ] || rm -f "$CERT_INVENTORY_FILE"
+        exit "$status"
+    }
+    trap cleanup_key_vault_certificate_setup EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+
+    SUBSCRIPTION_ID=$(azd env get-value 'AZURE_SUBSCRIPTION_ID' 2>/dev/null | head -n1 | tr -d '\n\r ')
+    if [ -z "$SUBSCRIPTION_ID" ] || [[ "$SUBSCRIPTION_ID" == ERROR:* ]]; then
+        echo "ERROR: AZURE_SUBSCRIPTION_ID is missing; cannot configure the signing vault." >&2
+        exit 1
+    fi
     VAULT_RESOURCE_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.KeyVault/vaults/${KEY_VAULT_NAME}"
     DEPLOYER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || echo "")
 
@@ -109,18 +245,21 @@ else
         # Grant the deployer "Key Vault Certificates Officer" (idempotent), scoped to the vault only.
         EXISTING_CERT_OFFICER=$(az role assignment list \
             --scope "$VAULT_RESOURCE_ID" \
+            --subscription "$SUBSCRIPTION_ID" \
             --assignee "$DEPLOYER_OBJECT_ID" \
             --role "Key Vault Certificates Officer" \
             --query "[].id" -o tsv 2>/dev/null || echo "")
         if [ -z "$EXISTING_CERT_OFFICER" ]; then
             if az role assignment create \
                 --scope "$VAULT_RESOURCE_ID" \
+                --subscription "$SUBSCRIPTION_ID" \
                 --assignee "$DEPLOYER_OBJECT_ID" \
                 --role "Key Vault Certificates Officer" \
                 --output none 2>/dev/null; then
                 echo "  Granted deployer 'Key Vault Certificates Officer' on $KEY_VAULT_NAME"
             elif az role assignment list \
                 --scope "$VAULT_RESOURCE_ID" \
+                --subscription "$SUBSCRIPTION_ID" \
                 --assignee "$DEPLOYER_OBJECT_ID" \
                 --role "Key Vault Certificates Officer" \
                 --query "[0].id" -o tsv 2>/dev/null | grep -q .; then
@@ -136,8 +275,91 @@ else
         echo "  WARNING: Could not determine deployer object ID; assuming existing Key Vault permissions."
     fi
 
-    # Create the signing certificate only if it does not already exist (idempotent).
-    if az keyvault certificate show --vault-name "$KEY_VAULT_NAME" --name "$SIGNING_CERT_NAME" &>/dev/null; then
+    KEY_VAULT_CLIENT_IP="${KEY_VAULT_CLIENT_IP:-${SQL_CLIENT_IP:-}}"
+    if [ -z "$KEY_VAULT_CLIENT_IP" ]; then
+        KEY_VAULT_CLIENT_IP=$(curl -4fsS --connect-timeout 5 --max-time 10 https://api.ipify.org) || {
+            echo "ERROR: Could not discover the deployment host's public IPv4 address; set KEY_VAULT_CLIENT_IP and retry." >&2
+            exit 1
+        }
+    fi
+    if ! printf '%s\n' "$KEY_VAULT_CLIENT_IP" | awk -F. 'NF != 4 { exit 1 } { for (i = 1; i <= 4; i++) if ($i !~ /^[0-9]+$/ || $i > 255) exit 1 }'; then
+        echo "ERROR: KEY_VAULT_CLIENT_IP must be a valid IPv4 address (got: $KEY_VAULT_CLIENT_IP)" >&2
+        exit 1
+    fi
+    # Use the management plane to check rules before making any data-plane calls.
+    EXISTING_KEY_VAULT_CLIENT_RULE=$(az keyvault show \
+        --name "$KEY_VAULT_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --subscription "$SUBSCRIPTION_ID" \
+        --query "properties.networkAcls.ipRules[?value=='${KEY_VAULT_CLIENT_IP}' || value=='${KEY_VAULT_CLIENT_IP}/32'].value" \
+        --output tsv)
+    if [ -z "$EXISTING_KEY_VAULT_CLIENT_RULE" ]; then
+        echo "  Temporarily allowing the deployment host to configure the Key Vault certificate..."
+        # Also attempt cleanup if the add request fails after reaching Azure.
+        KEY_VAULT_CLIENT_FIREWALL_RULE_ACTIVE=true
+        az keyvault network-rule add \
+            --name "$KEY_VAULT_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --subscription "$SUBSCRIPTION_ID" \
+            --ip-address "${KEY_VAULT_CLIENT_IP}/32" \
+            --output none
+    fi
+
+    CERT_ERROR_FILE=$(mktemp /tmp/mcp-signing-error.XXXXXX.txt)
+    CERT_INVENTORY_FILE=$(mktemp /tmp/mcp-signing-inventory.XXXXXX.json)
+    CERT_INVENTORY_READY=false
+    for attempt in $(seq 1 12); do
+        if az keyvault certificate list \
+            --vault-name "$KEY_VAULT_NAME" \
+            --subscription "$SUBSCRIPTION_ID" \
+            --include-pending true \
+            --query '[].{id:id}' \
+            --output json >"$CERT_INVENTORY_FILE" 2>"$CERT_ERROR_FILE"; then
+            CERT_INVENTORY_READY=true
+            break
+        fi
+        [ "$attempt" -eq 12 ] || sleep 15
+    done
+    if [ "$CERT_INVENTORY_READY" != "true" ]; then
+        echo "ERROR: Could not inspect Key Vault certificates; refusing to create or rotate the signing certificate." >&2
+        sed 's/^/  /' "$CERT_ERROR_FILE" >&2
+        exit 1
+    fi
+
+    if ! CERT_PRESENT=$(python3 - "$CERT_INVENTORY_FILE" "$KEY_VAULT_NAME" "$SIGNING_CERT_NAME" <<'PY'
+import json
+import re
+import sys
+from urllib.parse import urlsplit
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as source:
+        certificates = json.load(source)
+    if not isinstance(certificates, list) or not re.fullmatch(r"[a-zA-Z0-9-]+", sys.argv[3]):
+        raise ValueError("Invalid certificate inventory")
+    names = []
+    for certificate in certificates:
+        identifier = certificate.get("id") if isinstance(certificate, dict) else None
+        if not isinstance(identifier, str):
+            raise ValueError("Missing certificate identifier")
+        parsed = urlsplit(identifier)
+        parts = parsed.path.split("/")
+        if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or
+                parsed.hostname.split(".")[0].lower() != sys.argv[2].lower() or
+                parsed.query or parsed.fragment or len(parts) != 3 or parts[1] != "certificates" or
+                not re.fullmatch(r"[a-zA-Z0-9-]+", parts[2])):
+            raise ValueError("Invalid certificate identifier")
+        names.append(parts[2].lower())
+    print("true" if sys.argv[3].lower() in names else "false")
+except (OSError, ValueError):
+    print("ERROR: Invalid Key Vault certificate inventory; refusing certificate creation.", file=sys.stderr)
+    sys.exit(1)
+PY
+    ); then
+        exit 1
+    fi
+
+    if [ "$CERT_PRESENT" = "true" ]; then
         echo "  Signing certificate '$SIGNING_CERT_NAME' already exists in $KEY_VAULT_NAME"
     else
         # Self-signed, exportable RSA 2048 so api-mcp can read the PFX (private key)
@@ -163,32 +385,38 @@ else
   ]
 }
 POLICY
-        # Bounded retries handle RBAC role propagation (Certificates Officer) which
-        # can take up to a minute or two after assignment.
-        echo "  Creating '$SIGNING_CERT_NAME' in Key Vault (waiting for permissions if needed)..."
-        CERT_CREATED="false"
-        for attempt in $(seq 1 12); do
-            if az keyvault certificate create \
-                --vault-name "$KEY_VAULT_NAME" \
-                --name "$SIGNING_CERT_NAME" \
-                --policy @"$CERT_POLICY_FILE" \
-                --output none 2>/tmp/mcp-cert-err.txt; then
-                CERT_CREATED="true"
-                echo "  Signing certificate ready (attempt $attempt/12)."
-                break
-            fi
-            sleep 15
-        done
-        rm -f "$CERT_POLICY_FILE"
-        if [ "$CERT_CREATED" != "true" ]; then
-            echo "  ERROR: Failed to create signing certificate '$SIGNING_CERT_NAME' after multiple attempts."
-            echo "         Last error:"
-            sed 's/^/           /' /tmp/mcp-cert-err.txt 2>/dev/null || true
-            echo "         Re-run 'azd provision' or create the certificate manually:"
-            echo "           az keyvault certificate create --vault-name $KEY_VAULT_NAME --name $SIGNING_CERT_NAME --policy @<policy.json>"
+        echo "  Creating '$SIGNING_CERT_NAME' in Key Vault..."
+        if ! az keyvault certificate create \
+            --vault-name "$KEY_VAULT_NAME" \
+            --subscription "$SUBSCRIPTION_ID" \
+            --name "$SIGNING_CERT_NAME" \
+            --policy @"$CERT_POLICY_FILE" \
+            --output none 2>"$CERT_ERROR_FILE"; then
+            echo "ERROR: Signing certificate creation failed or its outcome is uncertain; no retry was attempted." >&2
+            sed 's/^/  /' "$CERT_ERROR_FILE" >&2
             exit 1
         fi
+        rm -f "$CERT_POLICY_FILE"
     fi
+
+    CERT_READY=false
+    for attempt in $(seq 1 12); do
+        if az keyvault certificate show \
+            --vault-name "$KEY_VAULT_NAME" --name "$SIGNING_CERT_NAME" \
+            --subscription "$SUBSCRIPTION_ID" \
+            --output none 2>"$CERT_ERROR_FILE"; then
+            CERT_READY=true
+            echo "  Signing certificate metadata is readable (attempt $attempt/12)."
+            break
+        fi
+        [ "$attempt" -eq 12 ] || sleep 15
+    done
+    if [ "$CERT_READY" != "true" ]; then
+        echo "ERROR: Signing certificate is not readable; no additional create was attempted." >&2
+        sed 's/^/  /' "$CERT_ERROR_FILE" >&2
+        exit 1
+    fi
+)
 fi
 
 echo "Configuring Azure SQL access..."
@@ -239,21 +467,7 @@ if [ -n "$SQL_SERVER_NAME" ] && [ -n "$SQL_DATABASE_NAME" ] && [ -n "$USER_MANAG
         echo "ERROR: SQL_CLIENT_IP must be a valid IPv4 address (got: $SQL_CLIENT_IP)"
         exit 1
     fi
-    cleanup_sql_firewall_rule() {
-        if [ "${SQL_CLIENT_FIREWALL_RULE_ACTIVE:-false}" = "true" ]; then
-            if az sql server firewall-rule delete \
-                --server "$SQL_SERVER_NAME" \
-                --resource-group "$RESOURCE_GROUP" \
-                --name "AllowClient" \
-                --output none 2>/dev/null; then
-                echo "Removed temporary SQL client firewall rule."
-            else
-                echo "WARNING: Could not remove the temporary SQL client firewall rule. If azd up stops before postup completes, remove AllowClient manually."
-            fi
-        fi
-    }
     SQL_CLIENT_FIREWALL_RULE_ACTIVE=true
-    trap cleanup_sql_firewall_rule EXIT
 
     echo "Temporarily allowing the deployment host to configure Azure SQL..."
     if az sql server firewall-rule show \
@@ -438,73 +652,14 @@ fi
 
 echo "Preparing the database seed job..."
 
-# Get Azure environment values for seed job deployment
-ACR_ENDPOINT=$(azd env get-value AZURE_CONTAINER_REGISTRY_ENDPOINT 2>/dev/null | head -n1 | tr -d '\n\r ')
-SEED_JOB_NAME=$(azd env get-value SERVICE_SEED_JOB_NAME 2>/dev/null | head -n1 | tr -d '\n\r ')
-
-if [ -z "$RESOURCE_GROUP" ] || [ -z "$ACR_ENDPOINT" ] || [ -z "$SEED_JOB_NAME" ]; then
-    echo "ERROR: Required environment variables not found for seed-job deployment."
-    echo "Resource Group: ${RESOURCE_GROUP:-[NOT SET]}"
-    echo "ACR Endpoint: ${ACR_ENDPOINT:-[NOT SET]}"
-    echo "Seed Job Name: ${SEED_JOB_NAME:-[NOT SET]}"
-    exit 1
-fi
-
-# Extract ACR name from endpoint (e.g., "avacragtyjfry4y6w6.azurecr.io" -> "avacragtyjfry4y6w6")
-ACR_NAME="${ACR_ENDPOINT%%.*}"
-
-# Ensure Git LFS files (e.g. seed-job/sql/ProductNames-ai.csv) are present so the build context includes real content, not pointers
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-if [ -n "$REPO_ROOT" ] && [ -e "$REPO_ROOT/.git" ]; then
-    if ! git lfs version &>/dev/null; then
-        echo "ERROR: Git LFS is required to fetch the seed-job assets." >&2
-        exit 1
-    fi
-    echo "Checking required seed-job assets..."
-    if LFS_OUTPUT=$(cd "$REPO_ROOT" && git lfs pull 2>&1); then
-        echo "  Seed-job assets ready."
-    else
-        echo "$LFS_OUTPUT" >&2
-        echo "ERROR: Could not download Git LFS assets required to build the seed job." >&2
-        exit 1
-    fi
-fi
-
-# Build and push the image to ACR
-echo "Building and publishing the seed-job image..."
-if BUILD_OUTPUT=$(az acr build \
-    --registry "$ACR_NAME" \
-    --image seed-job:latest \
-    --file seed-job/dockerfile \
-    seed-job \
-    --no-logs 2>&1); then
-    BUILD_ID=$(printf '%s\n' "$BUILD_OUTPUT" | sed -nE 's/.*build with ID: ([[:alnum:]-]+).*/\1/p' | tail -n1)
-    if [ -n "$BUILD_ID" ]; then
-        echo "  Seed-job image build succeeded ($BUILD_ID)."
-    else
-        echo "  Seed-job image build succeeded."
-    fi
+if wait "$SEED_SETUP_PID"; then
+    SEED_SETUP_PID=""
+    cat "$SEED_SETUP_LOG"
 else
-    echo "$BUILD_OUTPUT" >&2
-    echo "ERROR: Seed-job image build failed." >&2
-    exit 1
-fi
-
-# Use the endpoint directly for the image name
-IMAGE_NAME="${ACR_ENDPOINT}/seed-job:latest"
-
-# Simple approach: Just update the container image for the specific container
-# Preserve existing configuration; automatic deployment must never reset a populated database.
-# Suppress verbose JSON output.
-if ! JOB_UPDATE_OUTPUT=$(az containerapp job update \
-    --name "$SEED_JOB_NAME" \
-    --resource-group "$RESOURCE_GROUP" \
-    --container-name "$SEED_JOB_NAME" \
-    --image "$IMAGE_NAME" \
-    --set-env-vars SEED_SKIP_EXISTING=true \
-    --output none 2>&1); then
-    echo "$JOB_UPDATE_OUTPUT" >&2
-    echo "ERROR: Could not update the seed-job image." >&2
+    SEED_SETUP_STATUS=$?
+    SEED_SETUP_PID=""
+    cat "$SEED_SETUP_LOG" >&2
+    echo "ERROR: Seed-job image/template preparation failed (exit $SEED_SETUP_STATUS)." >&2
     exit 1
 fi
 
@@ -581,14 +736,23 @@ if [[ -n "$_AI_ACCOUNT" ]] && [[ -n "$_AI_PROJECT" ]] && [[ -n "$_USER_OID" ]]; 
     exit 1
   fi
 
-  # Assign the custom AIServices data-plane role (covers agents/write, memory stores, etc.)
-  # The built-in Azure AI Developer role does NOT include AIServices/* data actions.
-  _CUSTOM_ROLE_NAME=$(az role definition list \
+  # The runtime UAMI role is assigned in Bicep; do not reassign it through this name lookup.
+  # Resolve only the source-declared Bicep role for the deployer; similarly named roles are not interchangeable.
+  _CUSTOM_ROLE_NAMES=$(az role definition list \
     --scope "/subscriptions/${_SUBSCRIPTION}/resourceGroups/${_RG}" \
-    --custom-role-only true --query "[?contains(roleName,'Foundry Agents')].roleName | [0]" -o tsv 2>/dev/null || true)
+    --custom-role-only true --query "[].roleName" -o tsv 2>/dev/null || true)
+  _CUSTOM_ROLE_NAME=""
+  while IFS= read -r _ROLE_NAME; do
+    if [[ "$_ROLE_NAME" =~ ^AdventureWorks\ Foundry\ Agents\ [a-z0-9]{13}$ ]]; then
+      if [[ -n "$_CUSTOM_ROLE_NAME" ]]; then
+        echo "ERROR: Multiple source-shaped Foundry Agents roles exist in the Azure resource group." >&2
+        exit 1
+      fi
+      _CUSTOM_ROLE_NAME="$_ROLE_NAME"
+    fi
+  done <<< "$_CUSTOM_ROLE_NAMES"
   if [[ -n "$_CUSTOM_ROLE_NAME" ]]; then
     ensure_project_role "$_USER_OID" User "$_CUSTOM_ROLE_NAME" || exit 1
-    ensure_project_role "$_MI_PRINCIPAL" ServicePrincipal "$_CUSTOM_ROLE_NAME" || exit 1
     echo "Azure AI permissions configured."
   else
     echo "ERROR: The Foundry Agents custom role was not found in the Azure resource group." >&2
@@ -615,5 +779,8 @@ else
     echo "ERROR: Could not refresh azd environment values from the Azure deployment." >&2
     exit 1
 fi
+
+FOUNDRY_AGENT_CONFIG_HASH=$(python3 scripts/utilities/agents/lib/agent-config-fingerprint.py)
+azd env set FOUNDRY_AGENT_CONFIG_HASH "$FOUNDRY_AGENT_CONFIG_HASH"
 
 echo "Azure resource configuration complete."

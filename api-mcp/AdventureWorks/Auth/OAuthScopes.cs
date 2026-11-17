@@ -14,6 +14,9 @@ public static class OAuthScopes
     /// <summary>Baseline scope required for any authenticated MCP connectivity.</summary>
     public const string McpAccess = "mcp.access";
 
+    /// <summary>Connect to authorized real-time notification groups.</summary>
+    public const string RealtimeConnect = "realtime.connect";
+
     /// <summary>Public product catalog: search, details, recommendations, reviews, promotions.</summary>
     public const string ProductsRead = "products.read";
 
@@ -64,6 +67,7 @@ public static class OAuthScopes
     public static readonly IReadOnlyDictionary<string, string> Descriptions = new Dictionary<string, string>
     {
         [McpAccess] = "Connect to the AdventureWorks MCP server",
+        [RealtimeConnect] = "Connect to authorized real-time notification groups",
         [ProductsRead] = "Browse the public product catalog, recommendations and reviews",
         [SalesRead] = "Read internal sales analytics and financial summaries",
         [CustomersRead] = "Read customer records (own profile for consumers; any for internal roles)",
@@ -82,6 +86,7 @@ public static class OAuthScopes
     public static readonly IReadOnlyList<string> All = new[]
     {
         McpAccess,
+        RealtimeConnect,
         ProductsRead,
         SalesRead,
         CustomersRead,

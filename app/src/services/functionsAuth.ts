@@ -14,6 +14,7 @@ const TOKEN_KEY = "functions_oauth_token";
 // required business-domain scope and (for consumer tokens) record ownership.
 export const FUNCTIONS_CONSUMER_REQUESTED_SCOPES = [
   "mcp.access",
+  "realtime.connect",
   "products.read",
   "orders.read",
   "orders.write",

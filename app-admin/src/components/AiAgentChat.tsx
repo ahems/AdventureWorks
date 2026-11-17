@@ -29,8 +29,13 @@ import {
   sendAgentMessage,
   getAgentStatus,
 } from "@/services/agentService";
+import {
+  authorizationStorageKey,
+  getTabAuthorizationGeneration,
+  isTabAuthorizationGenerationCurrent,
+} from "@/services/dabAuth";
 
-const STORAGE_KEY = "ai-agent-conversations";
+const STORAGE_KEY = "ai-agent-conversations:session";
 
 interface SearchResult {
   conversationId: string;
@@ -60,12 +65,12 @@ const createNewConversation = (): Conversation => ({
   createdAt: Date.now(),
 });
 
-const loadConversations = (): {
+const loadConversations = (storageKey: string): {
   conversations: Conversation[];
   activeId: string;
 } => {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(storageKey);
     if (stored) {
       const parsed = JSON.parse(stored);
       if (parsed.conversations?.length > 0) {
@@ -80,7 +85,9 @@ const loadConversations = (): {
 };
 
 const AiAgentChat: React.FC = () => {
-  const [data, setData] = useState(loadConversations);
+  const [generation] = useState(getTabAuthorizationGeneration);
+  const storageKey = authorizationStorageKey(STORAGE_KEY, generation);
+  const [data, setData] = useState(() => loadConversations(storageKey));
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showTools, setShowTools] = useState(false);
@@ -150,12 +157,13 @@ const AiAgentChat: React.FC = () => {
 
   // Persist conversations to localStorage
   useEffect(() => {
+    if (!isTabAuthorizationGenerationCurrent(generation)) return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      localStorage.setItem(storageKey, JSON.stringify(data));
     } catch (e) {
       console.warn("Failed to save conversations:", e);
     }
-  }, [data]);
+  }, [data, generation, storageKey]);
 
   useEffect(() => {
     if (scrollRef.current) {

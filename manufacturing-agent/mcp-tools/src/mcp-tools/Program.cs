@@ -161,8 +161,10 @@ AIAgent agent = new AIProjectClient(projectEndpoint, credential)
     .AsBuilder()
     .Use(async (messages, session, options, next, cancellationToken) =>
     {
-        // Resolve authentication per invocation, never once at startup or on a shared tool.
-        var authorization = await mcpAuthentication.GetTokenAsync(cancellationToken);
+        var mode = McpServiceAuthentication.GetModeFromMessages(messages.Select(message => message.Text));
+
+        // Resolve narrowly scoped authentication per invocation, never at startup or on a shared tool.
+        var authorization = await mcpAuthentication.GetTokenAsync(mode, cancellationToken);
         var runOptions = options is ChatClientAgentRunOptions chatOptions
             ? (ChatClientAgentRunOptions)chatOptions.Clone()
             : new ChatClientAgentRunOptions

@@ -17,6 +17,15 @@ using Azure.AI.OpenAI;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
+#if AUTH_ASSURANCE_HOST
+builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+{
+    ["AzureWebJobsStorage:accountName"] = "offline",
+    ["AzureWebJobsStorage:tableServiceUri"] = "https://offline.table.example.invalid",
+    ["AzureWebJobsStorage:queueServiceUri"] = "https://offline.queue.example.invalid"
+});
+#endif
+
 builder.ConfigureFunctionsWebApplication();
 
 // ---- Functions OAuth resource server (validates api-mcp-issued JWT access tokens) ----
@@ -30,7 +39,13 @@ builder.Services.AddScoped<ChatIdentityService>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IOwnedCartService, OwnedCartService>();
 builder.Services.AddSingleton<FunctionsAuthorizationMiddleware>();
+#if AUTH_ASSURANCE_HOST
+builder.UseMiddleware<AuthAssurance.HostEntryProbe>();
+#endif
 builder.UseMiddleware<FunctionsAuthorizationMiddleware>();
+#if AUTH_ASSURANCE_HOST
+builder.UseMiddleware<AuthAssurance.HandlerEntryProbe>();
+#endif
 
 // Register Application Insights for telemetry
 builder.Services.AddApplicationInsightsTelemetryWorkerService();
@@ -74,7 +89,7 @@ if (!string.IsNullOrEmpty(storageConnectionString))
 }
 
 // Register custom services with connection string from configuration
-builder.Services.AddScoped<AddressService>(sp =>
+builder.Services.AddScoped<IAddressService>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
     var connectionString = configuration["SQL_CONNECTION_STRING"]
@@ -134,6 +149,29 @@ builder.Services.AddScoped<ReceiptService>(sp =>
         ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
     return new ReceiptService(connectionString);
 });
+builder.Services.AddScoped<IReceiptAccessService>(sp => sp.GetRequiredService<ReceiptService>());
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var account = config["AzureWebJobsStorage:accountName"];
+    var uri = config["AzureWebJobsStorage:blobServiceUri"]
+        ?? (account is not null ? $"https://{account}.blob.core.windows.net"
+            : throw new InvalidOperationException("AzureWebJobsStorage blob endpoint is not set"));
+    return new Azure.Storage.Blobs.BlobServiceClient(
+        new Uri(uri), sp.GetRequiredService<DefaultAzureCredential>())
+        .GetBlobContainerClient("adventureworks-receipts");
+});
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var account = config["AzureWebJobsStorage:accountName"];
+    var uri = config["AzureWebJobsStorage:queueServiceUri"]
+        ?? (account is not null ? $"https://{account}.queue.core.windows.net"
+            : throw new InvalidOperationException("AzureWebJobsStorage queue endpoint is not set"));
+    return new QueueServiceClient(new Uri(uri), sp.GetRequiredService<DefaultAzureCredential>(),
+        new QueueClientOptions { MessageEncoding = QueueMessageEncoding.Base64 })
+        .GetQueueClient("order-receipt-generation");
+});
 
 // Register PasswordService for password hashing and verification
 builder.Services.AddScoped<PasswordService>(sp =>
@@ -143,6 +181,7 @@ builder.Services.AddScoped<PasswordService>(sp =>
         ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
     return new PasswordService(connectionString);
 });
+builder.Services.AddScoped<IPasswordService>(sp => sp.GetRequiredService<PasswordService>());
 
 // Register ExchangeRateService for refreshing Sales.CurrencyRate from Frankfurter API
 builder.Services.AddScoped<ExchangeRateService>(sp =>
@@ -473,6 +512,29 @@ builder.Services.AddScoped<OrderGenerationService>(sp =>
     var connectionString = configuration["SQL_CONNECTION_STRING"]
         ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
     return new OrderGenerationService(connectionString, sp.GetRequiredService<ILogger<OrderGenerationService>>());
+});
+
+builder.Services.AddScoped<IOrderDetailService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new OrderDetailService(connectionString);
+});
+builder.Services.AddScoped<IOrderHeaderService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new OrderHeaderService(connectionString);
+});
+
+builder.Services.AddScoped<IPaymentMethodService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var connectionString = configuration["SQL_CONNECTION_STRING"]
+        ?? throw new InvalidOperationException("SQL_CONNECTION_STRING environment variable is not set");
+    return new PaymentMethodService(connectionString);
 });
 
 // Register manufacturing agent infrastructure (replaces ManufacturingAgentService).

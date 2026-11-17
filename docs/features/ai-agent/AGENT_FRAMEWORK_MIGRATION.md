@@ -4,6 +4,13 @@
 
 All four AI agent services in `api-functions` have been fully migrated to the **Azure AI Foundry Responses API** (`FoundryAgentClient` / `Azure.AI.Projects`). Agents are defined and managed in Azure AI Foundry; MCP tool execution happens server-side inside Foundry — no client-side MCP wiring is needed.
 
+> **Current Help-Me-Choose auth boundary:** the historical flow below originally
+> returned and resumed Foundry response IDs. The public implementation is now
+> stateless: it accepts no customer ID or prior response ID, returns no Foundry
+> response ID, removes the memory store and DAB MCP connection, and limits its
+> workload token to `products.read`. The migration details below document the
+> earlier implementation, not the current public API contract.
+
 Every agent now uses the complete Foundry platform feature set:
 
 - **Named memory stores** — long-term context retained per user/persona across sessions

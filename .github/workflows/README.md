@@ -2,6 +2,22 @@
 
 This directory contains GitHub Actions workflows for the AdventureWorks application.
 
+## build-checker.yaml: offline authentication assurance
+
+The existing manual/scheduled [Build-Checker](build-checker.yaml) includes an
+`auth-offline` job. It restores the .NET, locked Node and assurance Python dependencies and runs
+`bash tests/scripts/validate-auth.sh --offline`, without Azure login, secrets or
+deployed API calls.
+
+Any assertion failure fails the job. The current-run signed assertion,
+Functions middleware, address/password/receipt ownership, all-consumer-handler
+closure, guest-cart lifecycle and MCP
+HTTP tool-dispatch and persisted task-ownership gates
+must each pass exactly once. The profile's exit code 2 is allowed only when those
+deterministic gates pass and no assertion fails; unresolved live coverage
+remains explicitly blocked. JSON, JUnit and TRX evidence is uploaded for review.
+This job does not build/deploy the private runner or authorize live mutations.
+
 ## azd-up-service-principal.yml
 
 A manually triggered workflow that deploys the entire AdventureWorks application to Azure using a service principal for authentication.

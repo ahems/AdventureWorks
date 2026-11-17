@@ -84,6 +84,21 @@ validates/displays individual results from a valid 503 report. Every other probe
 requires a successful HTTP status plus its expected payload. 400/401/403/404/429
 are **not** healthy. Missing/duplicate/malformed dependency results fail explicitly.
 
+The optional `sql-identity` result reads the current SQL principal's type and SID
+and compares it with `AZURE_CLIENT_ID`; it exposes neither identifier nor SQL
+data. It does not change the core readiness headline and may be unconfigured for
+local development. The assurance runner also verifies that the configured client
+ID belongs to the selected attached runtime identity. This proves that particular
+Functions probe connection, not every SQL caller or effective permission.
+
+Optional `blob-identity`, `queue-identity`, `table-identity`, `file-identity`
+and `webpubsub-identity` checks perform read-only SDK operations and verify that
+the token used by each SDK identifies `AZURE_CLIENT_ID`. The Azure service
+validates the token; the response never includes the token or identifier. The
+assurance runner independently binds that client ID and each service endpoint
+to the selected deployment. These checks do not prove write permissions or
+other callers, and missing/unverifiable identity is not treated as a pass.
+
 Functions caches the report per process for 60 seconds and coalesces simultaneous
 requests. Each dependency is bounded to 20 seconds. MCP `/ready` likewise caches
 for 60 seconds, bounds its checks to 12 seconds, and returns sanitized JSON with

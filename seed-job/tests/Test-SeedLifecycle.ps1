@@ -20,6 +20,7 @@ class SeedLifecycleCommand {
 }
 
 function Write-Log { param([string] $Message) }
+function Initialize-GuestCartSchema { param($Connection) }
 function Import-ManufacturingOverlays {
     param($Connection, [string] $SqlFolder)
     $script:imports++
@@ -94,7 +95,7 @@ try {
     Assert ($targeted.Extent.EndOffset -lt $seed.IndexOf('Initialize-RuntimeDatabaseAccess') -and
         $targeted.Extent.Text -match 'return' -and
         $targeted.Extent.Text -match '-VerifyOnly:\$VerifyOnly' -and
-        $targeted.Extent.Text -notmatch 'Initialize-RuntimeDatabaseAccess|Grant-RuntimeChangeTrackingAccess|Grant-RuntimeXmlSchemaAccess') 'Targeted verify-only exits before any runtime bootstrap/grants'
+        $targeted.Extent.Text -notmatch 'Initialize-RuntimeDatabaseAccess|Grant-RuntimeChangeTrackingAccess|Grant-RuntimeXmlSchemaAccess|Grant-RuntimeDefaultMetadataAccess') 'Targeted verify-only exits before any runtime bootstrap/grants'
     Assert ($branch.Extent.Text -match 'return') 'Populated branch exits before full-seed mutations'
     $overlay = $seed.IndexOf('@{ ManufacturingOverlays=$true }')
     $previous = 0

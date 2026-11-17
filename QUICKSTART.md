@@ -234,6 +234,11 @@ The hook disables public access to Azure SQL, prints the storefront and service-
 Key responsibilities:
 
 - Prepares frontend build endpoints and the MCP OAuth signing certificate.
+  - Temporarily allows the deployment host's public IPv4 address through the Key
+    Vault firewall for certificate lookup/creation, then removes only the rule
+    added by this run, including on failure. Existing client rules are preserved.
+    IP discovery can be overridden with `KEY_VAULT_CLIENT_IP` (or `SQL_CLIENT_IP`).
+    The vault's default-deny firewall remains enabled throughout.
 - Configures Aspire Dashboard access by assigning Contributor role to the current user on the Container Apps Environment.
 - Ensures the user‑assigned managed identity has the correct database permissions:
   - Connects to Azure SQL using the current user's Azure CLI credentials.

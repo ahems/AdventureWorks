@@ -7,6 +7,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { getFunctionsApiUrl } from "@/lib/utils";
 import { functionsFetch } from "@/services/functionsAuth";
+import { fetchOwnedOrderDetails } from "@/services/orderDetails";
 import { graphqlClient } from "@/lib/graphql-client";
 import { trackError, trackEvent } from "@/lib/appInsights";
 import { CURRENCY_SYMBOLS } from "@/lib/currencies";
@@ -27,19 +28,6 @@ const GET_ORDER_BY_PK = gql`
       CustomerID
       shipMethod {
         Name
-      }
-      salesOrderDetails {
-        items {
-          ProductID
-          OrderQty
-          UnitPrice
-          UnitPriceDiscount
-          LineTotal
-          product {
-            ProductID
-            Name
-          }
-        }
       }
     }
   }
@@ -233,16 +221,6 @@ const OrderConfirmationPage: React.FC = () => {
             ShipToAddressID: number;
             CustomerID: number;
             shipMethod: { Name: string } | null;
-            salesOrderDetails: {
-              items: Array<{
-                ProductID: number;
-                OrderQty: number;
-                UnitPrice: number;
-                UnitPriceDiscount: number;
-                LineTotal: number;
-                product: { ProductID: number; Name: string } | null;
-              }>;
-            };
           } | null;
         }>(GET_ORDER_BY_PK, { salesOrderId });
 
@@ -255,6 +233,8 @@ const OrderConfirmationPage: React.FC = () => {
           setLoading(false);
           return;
         }
+
+        const orderDetails = await fetchOwnedOrderDetails([salesOrderId]);
 
         // Fetch shipping address from Azure Functions API (Address is not in DAB)
         const shipToAddressId = Number(orderData.ShipToAddressID);
@@ -399,12 +379,12 @@ const OrderConfirmationPage: React.FC = () => {
         const order: Order = {
           id: orderId,
           salesOrderNumber: orderData.SalesOrderNumber,
-          items: orderData.salesOrderDetails.items.map((detail) => ({
-            ProductID: detail.ProductID,
-            Name: detail.product?.Name || "Unknown Product",
-            ListPrice: detail.UnitPrice,
-            quantity: detail.OrderQty,
-            discount: detail.UnitPriceDiscount,
+          items: orderDetails.map((detail) => ({
+            ProductID: detail.productId,
+            Name: detail.productName,
+            ListPrice: detail.unitPrice,
+            quantity: detail.orderQty,
+            discount: detail.unitPriceDiscount,
           })),
           shipping: {
             firstName,

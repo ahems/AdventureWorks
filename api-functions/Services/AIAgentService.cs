@@ -135,7 +135,9 @@ public class AIAgentService
                 structuredInputs: structuredInputs,
                 mcpAccessToken: mcpAccessToken,
                 contentFilterPolicy: resolvedAgentId == _agentId ? EshopContentFilterPolicy : null,
-                conversationOwner: conversationOwner);
+                conversationOwner: conversationOwner,
+                requireCustomerChatTools: resolvedAgentId == _agentId,
+                requireAdminChatTools: resolvedAgentId != _agentId);
 
             // ── Suggested follow-up questions ─────────────────────────────────────
             var suggestions = await GenerateSuggestedQuestionsAsync(message, agentResponse.ResponseText, customerId);

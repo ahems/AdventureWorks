@@ -95,6 +95,16 @@ else
   fi
 fi
 
+# Keep prompt-agent definitions synchronized during normal azd deploys without
+# creating a second Foundry version during azd up's postprovision/postdeploy pair.
+foundry_agent_config_hash=$(python3 scripts/utilities/agents/lib/agent-config-fingerprint.py)
+deployed_foundry_agent_config_hash=$(get_azd_value "FOUNDRY_AGENT_CONFIG_HASH")
+if [[ "$foundry_agent_config_hash" != "$deployed_foundry_agent_config_hash" ]]; then
+  echo "Foundry agent provisioning sources changed; applying reviewed definitions."
+  bash scripts/utilities/create-foundry-agents.sh
+  azd env set "FOUNDRY_AGENT_CONFIG_HASH" "$foundry_agent_config_hash" >/dev/null
+fi
+
 # Run after every service has deployed so the Functions app receives the newly
 # published hosted-agent endpoint as well as the other agent settings.
 bash scripts/hooks/api-functions-postdeploy.sh

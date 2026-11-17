@@ -41,6 +41,8 @@ import { getSalePrice } from "@/types/product";
 import { useProfile } from "@/hooks/useProfile";
 import { formatPhoneNumber, parsePhoneNumber } from "@/lib/phoneFormatter";
 import { graphqlClient } from "@/lib/graphql-client";
+import { getFunctionsApiUrl } from "@/lib/utils";
+import { functionsFetch } from "@/services/functionsAuth";
 import { getEshopAccessToken } from "@/services/eshopOAuth";
 import { gql } from "graphql-request";
 import { CURRENCY_SYMBOLS } from "@/lib/currencies";
@@ -160,100 +162,6 @@ const CREATE_CUSTOMER = gql`
     createCustomer(item: { PersonID: $personId, TerritoryID: 1 }) {
       CustomerID
       PersonID
-    }
-  }
-`;
-
-const CREATE_SALES_ORDER_HEADER = gql`
-  mutation CreateSalesOrderHeader(
-    $orderDate: DateTime!
-    $dueDate: DateTime!
-    $customerId: Int!
-    $billToAddressId: Int!
-    $shipToAddressId: Int!
-    $shipMethodId: Int!
-    $subTotal: Decimal!
-    $taxAmt: Decimal!
-    $freight: Decimal!
-  ) {
-    createSalesOrderHeader(
-      item: {
-        RevisionNumber: 1
-        OrderDate: $orderDate
-        DueDate: $dueDate
-        Status: 1
-        OnlineOrderFlag: true
-        CustomerID: $customerId
-        BillToAddressID: $billToAddressId
-        ShipToAddressID: $shipToAddressId
-        ShipMethodID: $shipMethodId
-        SubTotal: $subTotal
-        TaxAmt: $taxAmt
-        Freight: $freight
-      }
-    ) {
-      SalesOrderID
-      OrderDate
-      SubTotal
-      TaxAmt
-      Freight
-    }
-  }
-`;
-
-const CREATE_SALES_ORDER_DETAIL = gql`
-  mutation CreateSalesOrderDetail(
-    $salesOrderId: Int!
-    $productId: Int!
-    $orderQty: Short!
-    $unitPrice: Decimal!
-    $unitPriceDiscount: Decimal!
-  ) {
-    createSalesOrderDetail(
-      item: {
-        SalesOrderID: $salesOrderId
-        SpecialOfferID: 1
-        OrderQty: $orderQty
-        ProductID: $productId
-        UnitPrice: $unitPrice
-        UnitPriceDiscount: $unitPriceDiscount
-      }
-    ) {
-      SalesOrderDetailID
-      ProductID
-      OrderQty
-      UnitPrice
-    }
-  }
-`;
-
-const UPDATE_PRODUCT_STOCK = gql`
-  mutation UpdateProductStock($productId: Int!, $newStock: Short!) {
-    updateProduct(
-      ProductID: $productId
-      item: { SafetyStockLevel: $newStock }
-    ) {
-      ProductID
-      SafetyStockLevel
-    }
-  }
-`;
-
-const DELETE_CART_ITEM = gql`
-  mutation DeleteCartItem($shoppingCartItemId: Int!) {
-    deleteShoppingCartItem(ShoppingCartItemID: $shoppingCartItemId) {
-      ShoppingCartItemID
-    }
-  }
-`;
-
-const GET_PRODUCT_STOCK = gql`
-  query GetProductStock($productId: Int!) {
-    products(filter: { ProductID: { eq: $productId } }) {
-      items {
-        ProductID
-        SafetyStockLevel
-      }
     }
   }
 `;
@@ -834,31 +742,31 @@ const CheckoutPage: React.FC = () => {
         throw new Error("No address available");
       }
 
-      // Convert address ID from string to number for GraphQL
+      // Convert address ID from string to number for the owner-bound order API.
       const addressId = parseInt(addressIdString, 10);
 
-      // Step 3: Create SalesOrderHeader
-      const orderDate = new Date().toISOString();
-      const dueDate = new Date(
-        Date.now() + 7 * 24 * 60 * 60 * 1000,
-      ).toISOString(); // 7 days from now
-
-      const orderHeaderResponse = await graphqlClient.request<{
-        createSalesOrderHeader: { SalesOrderID: number };
-      }>(CREATE_SALES_ORDER_HEADER, {
-        orderDate,
-        dueDate,
-        customerId,
-        billToAddressId: addressId,
-        shipToAddressId: addressId,
-        shipMethodId: selectedShipMethodId || 5,
-        subTotal: parseFloat(totalPrice.toFixed(2)),
-        taxAmt: parseFloat(tax.toFixed(2)),
-        freight: parseFloat(shipping.toFixed(2)),
+      // Step 3: Create the header after the server checks both address links and signed owner.
+      const orderHeaderResponse = await functionsFetch(`${getFunctionsApiUrl()}/api/orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          billToAddressId: addressId,
+          shipToAddressId: addressId,
+          shipMethodId: selectedShipMethodId || 5,
+          subTotal: parseFloat(totalPrice.toFixed(2)),
+          taxAmt: parseFloat(tax.toFixed(2)),
+          freight: parseFloat(shipping.toFixed(2)),
+        }),
       });
-
-      const salesOrderId =
-        orderHeaderResponse.createSalesOrderHeader.SalesOrderID;
+      if (!orderHeaderResponse.ok) {
+        throw new Error(`Failed to create order (${orderHeaderResponse.status})`);
+      }
+      const orderHeader: { salesOrderId?: unknown } = await orderHeaderResponse.json();
+      if (typeof orderHeader.salesOrderId !== "number" ||
+          !Number.isSafeInteger(orderHeader.salesOrderId) || orderHeader.salesOrderId <= 0) {
+        throw new Error("Order creation returned an invalid order ID.");
+      }
+      const salesOrderId = orderHeader.salesOrderId;
 
       // Step 4: Create SalesOrderDetail for each cart item
       for (const item of items) {
@@ -868,54 +776,25 @@ const CheckoutPage: React.FC = () => {
           ? (item.ListPrice - salePrice) / item.ListPrice
           : 0;
 
-        await graphqlClient.request(CREATE_SALES_ORDER_DETAIL, {
-          salesOrderId,
-          productId: item.ProductID,
-          orderQty: item.quantity,
-          unitPrice: parseFloat(itemPrice.toFixed(2)),
-          unitPriceDiscount: parseFloat(discount.toFixed(4)),
-        });
-
-        // Step 5: Update product stock (decrement SafetyStockLevel)
-        try {
-          const stockResponse = await graphqlClient.request<{
-            products: { items: { SafetyStockLevel: number }[] };
-          }>(GET_PRODUCT_STOCK, { productId: item.ProductID });
-
-          if (stockResponse.products.items.length > 0) {
-            const currentStock =
-              stockResponse.products.items[0].SafetyStockLevel;
-            const newStock = currentStock - item.quantity; // Allow negative stock
-
-            await graphqlClient.request(UPDATE_PRODUCT_STOCK, {
+        const detailResponse = await functionsFetch(
+          `${getFunctionsApiUrl()}/api/orders/${salesOrderId}/details`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
               productId: item.ProductID,
-              newStock,
-            });
-          }
-        } catch (stockError) {
-          trackError("Error updating stock for product", stockError, {
-            page: "CheckoutPage",
-            productId: item.ProductID,
-          });
-          // Continue even if stock update fails
+              orderQty: item.quantity,
+              unitPrice: parseFloat(itemPrice.toFixed(2)),
+              unitPriceDiscount: parseFloat(discount.toFixed(4)),
+            }),
+          },
+        );
+        if (!detailResponse.ok) {
+          throw new Error(
+            `Failed to add order item (${detailResponse.status})`,
+          );
         }
-      }
 
-      // Step 6: Clear cart by deleting all cart items
-      for (const item of items) {
-        if ("ShoppingCartItemID" in item && item.ShoppingCartItemID) {
-          try {
-            await graphqlClient.request(DELETE_CART_ITEM, {
-              shoppingCartItemId: item.ShoppingCartItemID,
-            });
-          } catch (deleteError) {
-            trackError("Error deleting cart item", deleteError, {
-              page: "CheckoutPage",
-              shoppingCartItemId: item.ShoppingCartItemID,
-            });
-            // Continue even if delete fails
-          }
-        }
       }
 
       // Generate order number
@@ -928,7 +807,7 @@ const CheckoutPage: React.FC = () => {
       const shippingMethodName =
         selectedShipMethod?.Name || "Standard Shipping";
 
-      // Manually clear cart from UI (await so in-flight GraphQL is not aborted on navigate)
+      // Await the owner-checked cart clear before navigating.
       await clearCart();
 
       // Track purchase event in Application Insights

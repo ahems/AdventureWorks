@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { graphqlClient } from "@/lib/graphql-client";
 import { gql } from "graphql-request";
+import { fetchOwnedOrderDetails } from "@/services/orderDetails";
 
 export interface OrderItem {
   ProductID: number;
@@ -61,17 +62,6 @@ const GET_CUSTOMER_ORDERS = gql`
             CurrencyCode
           }
         }
-        salesOrderDetails {
-          items {
-            ProductID
-            OrderQty
-            UnitPrice
-            LineTotal
-            product {
-              Name
-            }
-          }
-        }
       }
     }
   }
@@ -81,10 +71,29 @@ export const useOrders = (customerId: number) => {
   return useQuery<Order[]>({
     queryKey: ["orders", customerId],
     queryFn: async () => {
-      const data: any = await graphqlClient.request(GET_CUSTOMER_ORDERS, {
+      const data = await graphqlClient.request<{
+        salesOrderHeaders: { items: Array<Omit<Order, "salesOrderDetails">> };
+      }>(GET_CUSTOMER_ORDERS, {
         customerId,
       });
-      return data.salesOrderHeaders.items;
+      const orders = data.salesOrderHeaders.items;
+      const details = await fetchOwnedOrderDetails(orders.map(order => order.SalesOrderID));
+      const detailsByOrder = new Map<number, OrderItem[]>();
+      for (const detail of details) {
+        const items = detailsByOrder.get(detail.salesOrderId) ?? [];
+        items.push({
+          ProductID: detail.productId,
+          OrderQty: detail.orderQty,
+          UnitPrice: detail.unitPrice,
+          LineTotal: detail.lineTotal,
+          product: { Name: detail.productName },
+        });
+        detailsByOrder.set(detail.salesOrderId, items);
+      }
+      return orders.map(order => ({
+        ...order,
+        salesOrderDetails: { items: detailsByOrder.get(order.SalesOrderID) ?? [] },
+      }));
     },
     enabled: !!customerId,
   });

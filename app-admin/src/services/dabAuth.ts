@@ -14,9 +14,9 @@
 //    for first-party AdventureWorks clients, so the user sees nothing but a brief
 //    redirect. `offline_access` yields a refresh token so the short-lived (~10 min)
 //    access token is renewed in the background for the rest of the session.
-//  - The access + refresh token are kept in localStorage so every admin tab shares
-//    one session; they are cleared on logout / user switch. Concurrent refreshes are
-//    serialized with the Web Locks API (refresh tokens are single-use upstream).
+//  - Tokens are kept in localStorage; each tab is bound to a session generation
+//    and cannot adopt another tab's later sign-in. Logout or user switch clears
+//    the prior generation. Web Locks serialize single-use refresh tokens.
 import { getApiMcpUrl } from "@/lib/utils";
 
 const CLIENT_ID = "adventureworks-admin";
@@ -24,6 +24,79 @@ const PKCE_KEY = "dab_oauth_pkce";
 const TOKEN_KEY = "dab_oauth_token";
 const MCP_TOKEN_KEY = "mcp_oauth_token";
 const FUNCTIONS_TOKEN_KEY = "fn_oauth_token";
+const GENERATION_KEY = "dab_oauth_generation";
+const TAB_GENERATION_KEY = "dab_oauth_tab_generation";
+
+export function getAuthorizationGeneration(): string | null {
+  return localStorage.getItem(GENERATION_KEY);
+}
+
+export function getTabAuthorizationGeneration(): string | null {
+  const bound = sessionStorage.getItem(TAB_GENERATION_KEY);
+  if (bound !== null) {
+    const generation: unknown = JSON.parse(bound);
+    if (typeof generation === "string") return generation;
+    if (generation === null) return null;
+    throw new Error("Invalid tab authorization generation.");
+  }
+  let generation = getAuthorizationGeneration();
+  const pending = sessionStorage.getItem(PKCE_KEY);
+  if (pending !== null) {
+    try {
+      const pkce: unknown = JSON.parse(pending);
+      if (!pkce || typeof pkce !== "object") {
+        generation = "";
+      } else {
+        const value = "generation" in pkce ? pkce.generation : null;
+        generation = typeof value === "string" ? value : value === null ? null : "";
+      }
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+      generation = "";
+    }
+  }
+  sessionStorage.setItem(TAB_GENERATION_KEY, JSON.stringify(generation));
+  return generation;
+}
+
+export function authorizationStorageKey(key: string, generation: string | null): string {
+  return generation === null ? key : `${key}:${generation}`;
+}
+
+function revokedKey(generation: string | null): string {
+  return `${GENERATION_KEY}:revoked:${generation ?? "legacy"}`;
+}
+
+export function isAuthorizationGenerationCurrent(generation: string | null): boolean {
+  const marker = localStorage.getItem(revokedKey(generation));
+  return getAuthorizationGeneration() === generation && (marker === null || marker === "0");
+}
+
+export function isTabAuthorizationGenerationCurrent(generation: string | null): boolean {
+  return getTabAuthorizationGeneration() === generation && isAuthorizationGenerationCurrent(generation);
+}
+
+// Revocation markers outlive tokens so a late write from another tab remains invalid.
+function writeToken(key: string, value: string, generation: string | null): boolean {
+  if (!isTabAuthorizationGenerationCurrent(generation)) return false;
+  const scoped = authorizationStorageKey(key, generation);
+  localStorage.setItem(scoped, value);
+  if (isTabAuthorizationGenerationCurrent(generation)) return true;
+  localStorage.removeItem(scoped);
+  return false;
+}
+
+function invalidateAuthorization(generation: string | null): void {
+  const keys = [TOKEN_KEY, MCP_TOKEN_KEY, FUNCTIONS_TOKEN_KEY];
+  try {
+    localStorage.setItem(revokedKey(generation), "1");
+  } catch (error) {
+    for (const key of keys) localStorage.removeItem(authorizationStorageKey(key, generation));
+    if (!(error instanceof DOMException) || error.name !== "QuotaExceededError") throw error;
+    localStorage.setItem(revokedKey(generation), "1");
+  }
+  for (const key of keys) localStorage.removeItem(authorizationStorageKey(key, generation));
+}
 
 // Scopes the admin client may request for DAB access. The authorization server
 // intersects these with the signed-in employee's seeded role-derived scopes, so
@@ -33,6 +106,7 @@ const FUNCTIONS_TOKEN_KEY = "fn_oauth_token";
 export const DAB_ADMIN_REQUESTED_SCOPES = [
   "offline_access",
   "mcp.access",
+  "realtime.connect",
   "products.read",
   "sales.read",
   "customers.read",
@@ -141,7 +215,7 @@ export function hasPendingAuthorization(): boolean {
 }
 
 /** Builds the `/authorize` URL and stores the PKCE verifier/state for the callback. */
-async function buildAuthorizeUrl(returnTo: string, loginHint?: string): Promise<string> {
+async function buildAuthorizeUrl(returnTo: string, generation: string, loginHint?: string): Promise<string> {
   const base = getOAuthBaseUrl();
   if (!base) {
     throw new Error("DAB authorization server URL is not configured.");
@@ -151,9 +225,10 @@ async function buildAuthorizeUrl(returnTo: string, loginHint?: string): Promise<
   const state = randomUrlSafe(24);
   const challenge = await s256Challenge(verifier);
 
+  if (!isAuthorizationGenerationCurrent(generation)) throw new Error("Sign-in was superseded.");
   sessionStorage.setItem(
     PKCE_KEY,
-    JSON.stringify({ verifier, state, returnTo }),
+    JSON.stringify({ verifier, state, returnTo, generation }),
   );
 
   const params = new URLSearchParams({
@@ -194,7 +269,13 @@ export async function startSilentSignIn(
     throw new Error("DAB authorization server URL is not configured.");
   }
 
-  const authorizeUrl = new URL(await buildAuthorizeUrl(returnTo, username));
+  const generation = randomUrlSafe(24);
+  invalidateAuthorization(getAuthorizationGeneration());
+  sessionStorage.setItem(TAB_GENERATION_KEY, JSON.stringify(generation));
+  localStorage.setItem(revokedKey(generation), "0");
+  localStorage.setItem(GENERATION_KEY, generation);
+  const authorizeUrl = new URL(await buildAuthorizeUrl(returnTo, generation, username));
+  if (!isAuthorizationGenerationCurrent(generation)) throw new Error("Sign-in was superseded.");
 
   const form = document.createElement("form");
   form.method = "POST";
@@ -222,8 +303,25 @@ export interface CallbackResult {
   returnTo?: string;
 }
 
+export function getCallbackGeneration(): { generation: string | null } | null {
+  const state = new URL(window.location.href).searchParams.get("state");
+  const stored = sessionStorage.getItem(PKCE_KEY);
+  if (!state || !stored) return null;
+  try {
+    const pkce: unknown = JSON.parse(stored);
+    if (!pkce || typeof pkce !== "object" || !("state" in pkce) || pkce.state !== state) return null;
+    const generation = "generation" in pkce ? pkce.generation : null;
+    if (typeof generation === "string") return { generation };
+    return generation === null ? { generation: null } : null;
+  } catch (error) {
+    if (error instanceof SyntaxError) return null;
+    throw error;
+  }
+}
+
 /** Handle the redirect back from the authorization server for the DAB flow. */
 export async function handleCallback(): Promise<CallbackResult> {
+  const generation = getTabAuthorizationGeneration();
   const url = new URL(window.location.href);
   const error = url.searchParams.get("error");
   const code = url.searchParams.get("code");
@@ -243,7 +341,11 @@ export async function handleCallback(): Promise<CallbackResult> {
     verifier: string;
     state: string;
     returnTo?: string;
+    generation?: string | null;
   };
+  if ((pkce.generation ?? null) !== generation || !isAuthorizationGenerationCurrent(generation)) {
+    return { ok: false, error: "Sign-in was superseded." };
+  }
   if (pkce.state !== state) {
     return { ok: false, error: "State mismatch — possible CSRF; request rejected." };
   }
@@ -270,7 +372,8 @@ export async function handleCallback(): Promise<CallbackResult> {
     return { ok: false, error: `Token exchange failed (${res.status}): ${text}` };
   }
 
-  storeTokenResponse((await res.json()) as TokenResponse);
+  const token = (await res.json()) as TokenResponse;
+  if (!storeTokenResponse(token, generation)) return { ok: false, error: "Sign-in was superseded." };
   return { ok: true, returnTo: pkce.returnTo };
 }
 
@@ -281,14 +384,16 @@ interface TokenResponse {
   refresh_token?: string;
 }
 
-function storeTokenResponse(token: TokenResponse, previousRefreshToken?: string): void {
+function storeTokenResponse(
+  token: TokenResponse, generation: string | null, previousRefreshToken?: string,
+): boolean {
   const stored: StoredToken = {
     accessToken: token.access_token,
     expiresAt: Math.floor(Date.now() / 1000) + (token.expires_in ?? 600),
     scope: token.scope ?? "",
     refreshToken: token.refresh_token ?? previousRefreshToken,
   };
-  localStorage.setItem(TOKEN_KEY, JSON.stringify(stored));
+  return writeToken(TOKEN_KEY, JSON.stringify(stored), generation);
 }
 
 function nowSeconds(): number {
@@ -296,13 +401,16 @@ function nowSeconds(): number {
 }
 
 /** Raw stored session (may hold an expired access token alongside a refresh token). */
-function readSession(): StoredToken | null {
-  const raw = localStorage.getItem(TOKEN_KEY);
+function readSession(generation = getTabAuthorizationGeneration()): StoredToken | null {
+  if (!isTabAuthorizationGenerationCurrent(generation)) return null;
+  const key = authorizationStorageKey(TOKEN_KEY, generation);
+  const raw = localStorage.getItem(key);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as StoredToken;
+    const token = JSON.parse(raw) as StoredToken;
+    return isTabAuthorizationGenerationCurrent(generation) ? token : null;
   } catch {
-    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(key);
     return null;
   }
 }
@@ -335,7 +443,7 @@ async function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
   return fn();
 }
 
-let inFlightRefresh: Promise<string | null> | null = null;
+let inFlightRefresh: { generation: string | null; promise: Promise<string | null> } | null = null;
 
 /**
  * Exchanges the refresh token for a new access token. Serialized across tabs; a tab
@@ -343,11 +451,14 @@ let inFlightRefresh: Promise<string | null> | null = null;
  * On a definitive rejection the session is cleared and DAB_SESSION_LOST_EVENT fires.
  */
 export async function refreshAccessToken(force = false): Promise<string | null> {
-  if (inFlightRefresh) return inFlightRefresh;
-  const startedWith = readSession()?.accessToken;
+  const generation = getTabAuthorizationGeneration();
+  if (!isTabAuthorizationGenerationCurrent(generation)) return null;
+  if (inFlightRefresh?.generation === generation) return inFlightRefresh.promise;
+  const startedWith = readSession(generation)?.accessToken;
 
-  inFlightRefresh = withRefreshLock(async () => {
-    const current = readSession();
+  const request = withRefreshLock(async () => {
+    if (!isTabAuthorizationGenerationCurrent(generation)) return null;
+    const current = readSession(generation);
     if (!current?.refreshToken) return getAccessToken();
     // Another tab refreshed while we waited for the lock.
     if (current.accessToken !== startedWith && !needsRefresh(current, false)) {
@@ -372,25 +483,30 @@ export async function refreshAccessToken(force = false): Promise<string | null> 
       });
     } catch {
       // Network / cold-start failure: keep the session and retry on the next request.
-      return getAccessToken();
+      return isTabAuthorizationGenerationCurrent(generation) ? getAccessToken() : null;
     }
 
+    if (!isTabAuthorizationGenerationCurrent(generation)) return null;
     if (!res.ok) {
       if (res.status === 400 || res.status === 401) {
-        clearAuthorization();
-        window.dispatchEvent(new Event(DAB_SESSION_LOST_EVENT));
+        invalidateAuthorization(generation);
+        if (getAuthorizationGeneration() === generation) {
+          window.dispatchEvent(new Event(DAB_SESSION_LOST_EVENT));
+        }
         return null;
       }
       return getAccessToken();
     }
 
-    storeTokenResponse((await res.json()) as TokenResponse, current.refreshToken);
+    const token = (await res.json()) as TokenResponse;
+    if (!storeTokenResponse(token, generation, current.refreshToken)) return null;
     return getAccessToken();
   }).finally(() => {
-    inFlightRefresh = null;
+    if (inFlightRefresh?.promise === request) inFlightRefresh = null;
   });
 
-  return inFlightRefresh;
+  inFlightRefresh = { generation, promise: request };
+  return request;
 }
 
 /** Canonical MCP resource indicator (RFC 8707) — the api-mcp `/mcp` endpoint URL. */
@@ -413,13 +529,16 @@ interface StoredResourceToken {
   subject?: string;
 }
 
-function readResourceToken(key: string): StoredResourceToken | null {
-  const raw = localStorage.getItem(key);
+function readResourceToken(key: string, generation: string | null): StoredResourceToken | null {
+  if (!isTabAuthorizationGenerationCurrent(generation)) return null;
+  const scoped = authorizationStorageKey(key, generation);
+  const raw = localStorage.getItem(scoped);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as StoredResourceToken;
+    const token = JSON.parse(raw) as StoredResourceToken;
+    return isTabAuthorizationGenerationCurrent(generation) ? token : null;
   } catch {
-    localStorage.removeItem(key);
+    localStorage.removeItem(scoped);
     return null;
   }
 }
@@ -436,25 +555,29 @@ async function getResourceAccessToken(
   cacheKey: string,
   force = false,
 ): Promise<string | null> {
-  const session = readSession();
+  const generation = getTabAuthorizationGeneration();
+  if (!isTabAuthorizationGenerationCurrent(generation)) return null;
+  const session = readSession(generation);
   if (!session || !resource) return null;
   const subject = decodeTokenClaims(session.accessToken)?.sub as string | undefined;
   const isFresh = (t: StoredResourceToken | null): t is StoredResourceToken =>
     !!t && t.subject === subject && t.expiresAt - REFRESH_SKEW_SECONDS > nowSeconds();
 
   if (!force) {
-    const cached = readResourceToken(cacheKey);
+    const cached = readResourceToken(cacheKey, generation);
     if (isFresh(cached)) return cached.accessToken;
   }
-  const pending = inFlightResource.get(cacheKey);
+  const flightKey = authorizationStorageKey(cacheKey, generation);
+  const pending = inFlightResource.get(flightKey);
   if (pending) return pending;
 
   const request = withRefreshLock(async () => {
+    if (!isTabAuthorizationGenerationCurrent(generation)) return null;
     if (!force) {
-      const again = readResourceToken(cacheKey);
+      const again = readResourceToken(cacheKey, generation);
       if (isFresh(again)) return again.accessToken;
     }
-    const current = readSession();
+    const current = readSession(generation);
     if (!current?.refreshToken) return null;
 
     const body = new URLSearchParams({
@@ -469,32 +592,37 @@ async function getResourceAccessToken(
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: body.toString(),
       });
+      if (!isTabAuthorizationGenerationCurrent(generation)) return null;
       if (!res.ok) {
         if (res.status === 400 || res.status === 401) {
-          clearAuthorization();
-          window.dispatchEvent(new Event(DAB_SESSION_LOST_EVENT));
+          invalidateAuthorization(generation);
+          if (getAuthorizationGeneration() === generation) {
+            window.dispatchEvent(new Event(DAB_SESSION_LOST_EVENT));
+          }
         }
         return null;
       }
       const token = (await res.json()) as TokenResponse;
       if (token.refresh_token) {
-        localStorage.setItem(TOKEN_KEY, JSON.stringify({ ...current, refreshToken: token.refresh_token }));
+        if (!writeToken(TOKEN_KEY, JSON.stringify({ ...current, refreshToken: token.refresh_token }), generation)) {
+          return null;
+        }
       }
       const stored: StoredResourceToken = {
         accessToken: token.access_token,
         expiresAt: nowSeconds() + (token.expires_in ?? 600),
         subject,
       };
-      localStorage.setItem(cacheKey, JSON.stringify(stored));
+      if (!writeToken(cacheKey, JSON.stringify(stored), generation)) return null;
       return stored.accessToken;
     } catch {
       return null;
     }
   }).finally(() => {
-    inFlightResource.delete(cacheKey);
+    if (inFlightResource.get(flightKey) === request) inFlightResource.delete(flightKey);
   });
 
-  inFlightResource.set(cacheKey, request);
+  inFlightResource.set(flightKey, request);
   return request;
 }
 
@@ -555,10 +683,10 @@ export function isAuthorized(): boolean {
 }
 
 /** Clears all DAB authorization context. Call on logout / user switch. */
-export function clearAuthorization(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(MCP_TOKEN_KEY);
-  localStorage.removeItem(FUNCTIONS_TOKEN_KEY);
-  sessionStorage.removeItem(TOKEN_KEY); // legacy tab-scoped storage
-  sessionStorage.removeItem(PKCE_KEY);
+export function clearAuthorization(generation = getTabAuthorizationGeneration()): void {
+  invalidateAuthorization(generation);
+  if (getAuthorizationGeneration() === generation) {
+    sessionStorage.removeItem(TOKEN_KEY); // legacy tab-scoped storage
+    sessionStorage.removeItem(PKCE_KEY);
+  }
 }

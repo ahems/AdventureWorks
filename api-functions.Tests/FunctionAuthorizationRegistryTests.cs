@@ -15,6 +15,20 @@ namespace ApiFunctions.Tests;
 /// </summary>
 public class FunctionAuthorizationRegistryTests
 {
+    [Fact]
+    public void Normal_worker_build_excludes_isolated_host_probes()
+    {
+        var assembly = typeof(FunctionAuthorizationRegistry).Assembly;
+        Assert.Null(assembly.GetType("AuthAssurance.HostEntryProbe"));
+        Assert.Null(assembly.GetType("AuthAssurance.HandlerEntryProbe"));
+        Assert.Null(assembly.GetType("AuthAssurance.UnclassifiedProbe"));
+        var binary = File.ReadAllBytes(assembly.Location);
+        Assert.Equal(-1, binary.AsSpan().IndexOf(
+            System.Text.Encoding.Unicode.GetBytes("offline.table.example.invalid")));
+        Assert.Equal(-1, binary.AsSpan().IndexOf(
+            System.Text.Encoding.Unicode.GetBytes("offline.queue.example.invalid")));
+    }
+
     /// <summary>
     /// Every method in the api-functions assembly that carries a <c>[Function]</c> attribute and an
     /// <c>[HttpTrigger]</c> parameter — i.e. the real, reflected HTTP route surface. Non-HTTP triggers
@@ -136,11 +150,19 @@ public class FunctionAuthorizationRegistryTests
     [InlineData("RequestPasswordReset", AccessTier.Public, null, AccessMode.Anonymous)]
     [InlineData("ResetPassword", AccessTier.Public, null, AccessMode.Anonymous)]
     [InlineData("Signup", AccessTier.Public, null, AccessMode.Anonymous)]
+    [InlineData("HelpMeChooseCatalogMeta", AccessTier.Public, null, AccessMode.Anonymous)]
+    [InlineData("HelpMeChooseQuestions", AccessTier.Public, null, AccessMode.Anonymous)]
+    [InlineData("HelpMeChooseRecommend", AccessTier.Public, null, AccessMode.Anonymous)]
     // Tier C — consumer self-service with record-level ownership.
     [InlineData("SetPassword", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal)]
     [InlineData("VerifyPassword", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal)]
     [InlineData("GetAddressById", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal)]
+    [InlineData("GetPaymentMethods", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal)]
+    [InlineData("GetOwnedOrderDetails", AccessTier.Consumer, FunctionScopes.OrdersRead, AccessMode.SelfOrInternal)]
+    [InlineData("CreateOrderHeader", AccessTier.Consumer, FunctionScopes.OrdersWrite, AccessMode.SelfOrInternal)]
     [InlineData("CreateAddress", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal)]
+    // Authenticated, group-scoped capability; group grants are resolved from signed scopes.
+    [InlineData("NegotiateWebPubSub", AccessTier.Authenticated, FunctionScopes.RealtimeConnect, AccessMode.GroupScoped)]
     // Tier I — internal-only.
     [InlineData("AIJobQueue_Status", AccessTier.Internal, FunctionScopes.AdminRead, AccessMode.InternalOnly)]
     // MCP-proxied routes — internal-only; scopes mirror the MCP tool policy.

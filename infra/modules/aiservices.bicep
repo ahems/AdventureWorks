@@ -244,16 +244,12 @@ resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = 
   }
 }
 
-// Grant the managed identity data-plane permissions to invoke Microsoft Foundry deployments
-// Role: Cognitive Services OpenAI Contributor - allows both inference and deployment management
-// This role works with all Microsoft Foundry models (OpenAI, Meta, Mistral, etc.) not just OpenAI
-// For inference-only access, use 'Cognitive Services OpenAI User' (5e0bd9bd-7b93-4f28-af87-19fc36ad61bd)
+// Runtime inference must not grant model-deployment or RAI-policy administration.
 resource openAiUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = {
-  // Use deterministic GUID from account id + identity id + role definition
-  name: guid(account.id, azidentity.id, 'a001fd3d-188f-4b5d-821b-7da978bf7442')
+  name: guid(account.id, azidentity.id, '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')
   scope: account
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a001fd3d-188f-4b5d-821b-7da978bf7442') // Cognitive Services OpenAI Contributor
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd') // Cognitive Services OpenAI User
     principalId: azidentity.properties.principalId
     principalType: 'ServicePrincipal'
   }

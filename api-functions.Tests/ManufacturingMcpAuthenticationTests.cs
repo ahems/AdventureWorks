@@ -16,8 +16,8 @@ public class ManufacturingMcpAuthenticationTests
         using var http = new HttpClient(handler);
         var authentication = new McpServiceAuthentication(credential, http, "https://mcp.example.test/mcp");
 
-        Assert.Equal("Bearer service-token-1", await authentication.GetTokenAsync(default));
-        Assert.Equal("Bearer service-token-2", await authentication.GetTokenAsync(default));
+        Assert.Equal("Bearer service-token-1", await authentication.GetTokenAsync("ReadOnly", default));
+        Assert.Equal("Bearer service-token-2", await authentication.GetTokenAsync("ReadOnly", default));
         Assert.Equal(2, credential.Requests);
         Assert.Equal(2, handler.Requests.Count);
         Assert.All(handler.Requests, request =>
@@ -27,8 +27,47 @@ public class ManufacturingMcpAuthenticationTests
             Assert.Contains("client_id=adventureworks-agents", request.Body);
             Assert.Contains("assertion=test-identity-assertion", request.Body);
             Assert.Contains("resource=https%3A%2F%2Fmcp.example.test%2Fmcp", request.Body);
+            Assert.Contains("scope=", request.Body);
+            Assert.DoesNotContain("manufacturing.write", request.Body);
         });
         Assert.Equal("api://AzureADTokenExchange/.default", credential.Scope);
+    }
+
+    [Fact]
+    public async Task Autonomous_mode_alone_receives_manufacturing_write_scope()
+    {
+        using var handler = new TokenHandler();
+        using var http = new HttpClient(handler);
+        var authentication = new McpServiceAuthentication(new TestCredential(), http, "https://mcp.example.test/mcp");
+
+        await authentication.GetTokenAsync("FullyAutonomous", default);
+
+        Assert.Contains("manufacturing.write", handler.Requests[0].Body);
+        Assert.Contains("scope=", handler.Requests[0].Body);
+    }
+
+    [Fact]
+    public void Read_and_proposal_modes_do_not_receive_write_scopes()
+    {
+        foreach (var mode in new[] { "ReadOnly", "ProposePending" })
+        {
+            Assert.DoesNotContain("manufacturing.write", McpServiceAuthentication.GetScopesForMode(mode));
+        }
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => McpServiceAuthentication.GetScopesForMode("unexpected"));
+    }
+
+    [Fact]
+    public void Manufacturing_invocation_mode_is_parsed_fail_closed()
+    {
+        Assert.Equal("ReadOnly", McpServiceAuthentication.GetModeFromMessages(["order\nMode=ReadOnly (0)\nrun"]));
+        Assert.Equal("FullyAutonomous",
+            McpServiceAuthentication.GetModeFromMessages(["Mode=FullyAutonomous (2)"]));
+        Assert.Throws<InvalidOperationException>(() => McpServiceAuthentication.GetModeFromMessages(["order only"]));
+        Assert.Throws<InvalidOperationException>(() =>
+            McpServiceAuthentication.GetModeFromMessages(["Mode=ReadOnly (0)", "Mode=FullyAutonomous (2)"]));
+        Assert.Throws<InvalidOperationException>(() =>
+            McpServiceAuthentication.GetModeFromMessages(["Mode=FullyAutonomous (1)"]));
     }
 
     [Theory]
@@ -41,7 +80,7 @@ public class ManufacturingMcpAuthenticationTests
         using var handler = new TokenHandler { Status = status };
         using var http = new HttpClient(handler);
         var authentication = new McpServiceAuthentication(new TestCredential(), http, "https://mcp.example.test/mcp");
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => authentication.GetTokenAsync(default));
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => authentication.GetTokenAsync("ReadOnly", default));
         Assert.Contains("verify the hosted agent identity is trusted", error.Message);
         Assert.DoesNotContain("service-token", error.Message);
         Assert.DoesNotContain("test-identity-assertion", error.Message);
@@ -54,12 +93,14 @@ public class ManufacturingMcpAuthenticationTests
     [InlineData("""{"access_token":"token","token_type":"Basic","expires_in":600}""")]
     [InlineData("""{"access_token":"token","token_type":"Bearer","expires_in":0}""")]
     [InlineData("""{"access_token":"token","token_type":"Bearer","expires_in":"600"}""")]
+    [InlineData("""{"access_token":"token","token_type":"Bearer","expires_in":600,"scope":"mcp.access"}""")]
+    [InlineData("""{"access_token":"token","token_type":"Bearer","expires_in":600}""")]
     public async Task Invalid_token_response_never_reaches_mcp_tools(string body)
     {
         using var handler = new TokenHandler { Body = body };
         using var http = new HttpClient(handler);
         var authentication = new McpServiceAuthentication(new TestCredential(), http, "https://mcp.example.test/mcp");
-        await Assert.ThrowsAsync<InvalidOperationException>(() => authentication.GetTokenAsync(default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => authentication.GetTokenAsync("ReadOnly", default));
     }
 
     [Fact]
@@ -70,7 +111,7 @@ public class ManufacturingMcpAuthenticationTests
         var authentication = new McpServiceAuthentication(new TestCredential(), http, "https://mcp.example.test/mcp");
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => authentication.GetTokenAsync(cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => authentication.GetTokenAsync("ReadOnly", cancellation.Token));
         Assert.Empty(handler.Requests);
     }
 
@@ -81,7 +122,7 @@ public class ManufacturingMcpAuthenticationTests
         using var handler = new TokenHandler();
         using var http = new HttpClient(handler);
         var authentication = new McpServiceAuthentication(credential, http, "http://mcp.example.test/mcp");
-        await Assert.ThrowsAsync<InvalidOperationException>(() => authentication.GetTokenAsync(default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => authentication.GetTokenAsync("ReadOnly", default));
         Assert.Equal(0, credential.Requests);
     }
 
@@ -109,11 +150,15 @@ public class ManufacturingMcpAuthenticationTests
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            Requests.Add((request.RequestUri!.ToString(), await request.Content!.ReadAsStringAsync(cancellationToken)));
+            var requestBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+            Requests.Add((request.RequestUri!.ToString(), requestBody));
+            var encodedScope = requestBody.Split('&')
+                .Single(part => part.StartsWith("scope=", StringComparison.Ordinal))["scope=".Length..];
+            var scope = Uri.UnescapeDataString(encodedScope.Replace("+", " ", StringComparison.Ordinal));
             return new HttpResponseMessage(Status)
             {
                 Content = new StringContent(Body ??
-                    $$"""{"access_token":"service-token-{{Requests.Count}}","token_type":"Bearer","expires_in":600}""",
+                    $$"""{"access_token":"service-token-{{Requests.Count}}","token_type":"Bearer","expires_in":600,"scope":"{{scope}}"}""",
                     Encoding.UTF8, "application/json")
             };
         }

@@ -3,16 +3,22 @@ import React, {
   useContext,
   useState,
   useCallback,
+  useRef,
   useEffect,
   ReactNode,
 } from "react";
 import { toast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   DAB_SESSION_LOST_EVENT,
+  authorizationStorageKey,
   clearAuthorization as clearDabAuthorization,
+  getAuthorizationGeneration,
+  getTabAuthorizationGeneration,
   getCurrentClaims,
   getDabRole,
   hasSession as hasDabSession,
+  isTabAuthorizationGenerationCurrent,
   startSilentSignIn,
 } from "@/services/dabAuth";
 
@@ -32,7 +38,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string, returnTo?: string) => Promise<boolean>;
   /** Builds the signed-in user from the freshly issued token (called by /oauth/callback). */
-  completeSignIn: () => boolean;
+  completeSignIn: (generation: string | null) => boolean;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -46,14 +52,17 @@ const PENDING_EMAIL_KEY = "adventureworks_manufacturing_pending_email";
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
+  const queryClient = useQueryClient();
+  const sessionGeneration = useRef(getTabAuthorizationGeneration());
   const [user, setUser] = useState<User | null>(() => {
     try {
-      const storedUser = localStorage.getItem(CURRENT_USER_KEY);
+      const key = authorizationStorageKey(CURRENT_USER_KEY, sessionGeneration.current);
+      const storedUser = localStorage.getItem(key);
       if (!storedUser) return null;
       // A signed-in user without a renewable DAB session would see 403s
       // (DAB rejects anonymous reads), so treat it as signed out.
-      if (!hasDabSession()) {
-        localStorage.removeItem(CURRENT_USER_KEY);
+      if (!isTabAuthorizationGenerationCurrent(sessionGeneration.current) || !hasDabSession()) {
+        localStorage.removeItem(key);
         return null;
       }
       return JSON.parse(storedUser) as User;
@@ -69,12 +78,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   const login = useCallback(
     async (email: string, password: string, returnTo = "/"): Promise<boolean> => {
       setIsLoading(true);
+      queryClient.clear();
       // Clear any prior OAuth authorization so a user switch never inherits the
       // previous employee's delegated tokens or role.
-      clearDabAuthorization();
-      localStorage.removeItem(CURRENT_USER_KEY);
+      const previousGeneration = getAuthorizationGeneration();
+      clearDabAuthorization(previousGeneration);
+      localStorage.removeItem(authorizationStorageKey(CURRENT_USER_KEY, previousGeneration));
       sessionStorage.setItem(PENDING_EMAIL_KEY, email.trim());
 
+      let attemptGeneration = previousGeneration;
       try {
         // Leaves the app: api-mcp /login → /authorize → back to /oauth/callback.
         const destination =
@@ -83,9 +95,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
           !returnTo.includes("\\")
             ? returnTo
             : "/";
-        await startSilentSignIn(email.trim(), password, destination);
+        const signIn = startSilentSignIn(email.trim(), password, destination);
+        attemptGeneration = getAuthorizationGeneration();
+        await signIn;
         return true;
       } catch (err) {
+        if (getAuthorizationGeneration() !== attemptGeneration) return false;
         console.error("Sign-in error:", err);
         sessionStorage.removeItem(PENDING_EMAIL_KEY);
         toast({
@@ -98,10 +113,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         return false;
       }
     },
-    [],
+    [queryClient],
   );
 
-  const completeSignIn = useCallback((): boolean => {
+  const completeSignIn = useCallback((generation: string | null): boolean => {
+    if (!isTabAuthorizationGenerationCurrent(generation)) return false;
     const claims = getCurrentClaims();
     if (!claims?.sub) return false;
     const fullName = typeof claims.name === "string" ? claims.name.trim() : "";
@@ -116,17 +132,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       createdAt: new Date().toISOString(),
     };
     sessionStorage.removeItem(PENDING_EMAIL_KEY);
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(signedIn));
+    const key = authorizationStorageKey(CURRENT_USER_KEY, generation);
+    localStorage.setItem(key, JSON.stringify(signedIn));
+    if (!isTabAuthorizationGenerationCurrent(generation)) {
+      localStorage.removeItem(key);
+      return false;
+    }
+    sessionGeneration.current = generation;
+    queryClient.clear();
     setUser(signedIn);
     return true;
-  }, []);
+  }, [queryClient]);
 
   // Refresh token rejected/expired: the data session is over, so end the app session.
   useEffect(() => {
     const onSessionLost = () => {
-      if (!localStorage.getItem(CURRENT_USER_KEY)) return;
+      queryClient.clear();
+      const key = authorizationStorageKey(CURRENT_USER_KEY, sessionGeneration.current);
+      if (!localStorage.getItem(key)) return;
       setUser(null);
-      localStorage.removeItem(CURRENT_USER_KEY);
+      localStorage.removeItem(key);
       toast({
         title: "Session expired",
         description: "Please sign in again.",
@@ -134,7 +159,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       });
     };
     const checkSession = () => {
-      if (!localStorage.getItem(CURRENT_USER_KEY) || !hasDabSession()) {
+      const key = authorizationStorageKey(CURRENT_USER_KEY, sessionGeneration.current);
+      if (!isTabAuthorizationGenerationCurrent(sessionGeneration.current) || !localStorage.getItem(key) || !hasDabSession()) {
         onSessionLost();
         setUser(null);
       }
@@ -147,20 +173,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       window.removeEventListener("storage", checkSession);
       window.removeEventListener("focus", checkSession);
     };
-  }, []);
+  }, [queryClient]);
 
+  const logoutGeneration = sessionGeneration.current;
   const logout = useCallback(() => {
+    if (sessionGeneration.current !== logoutGeneration) return;
     const userName = user?.firstName;
+    queryClient.clear();
     setUser(null);
-    localStorage.removeItem(CURRENT_USER_KEY);
+    localStorage.removeItem(authorizationStorageKey(CURRENT_USER_KEY, logoutGeneration));
     // Clear the OAuth authorization context so the next user cannot inherit
     // the previous employee's delegated token/role.
-    clearDabAuthorization();
+    clearDabAuthorization(logoutGeneration);
     toast({
       title: "Logged Out",
       description: `Goodbye, ${userName}! See you next time.`,
     });
-  }, [user]);
+  }, [user, queryClient, logoutGeneration]);
 
   return (
     <AuthContext.Provider
@@ -170,7 +199,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         login,
         completeSignIn,
         logout,
-        isAuthenticated: !!user,
+        isAuthenticated: !!user && isTabAuthorizationGenerationCurrent(sessionGeneration.current),
       }}
     >
       {children}

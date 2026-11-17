@@ -15,9 +15,9 @@ namespace AddressFunctions.Functions;
 public class PasswordFunctions
 {
     private readonly ILogger<PasswordFunctions> _logger;
-    private readonly PasswordService _passwordService;
+    private readonly IPasswordService _passwordService;
 
-    public PasswordFunctions(ILogger<PasswordFunctions> logger, PasswordService passwordService)
+    public PasswordFunctions(ILogger<PasswordFunctions> logger, IPasswordService passwordService)
     {
         _logger = logger;
         _passwordService = passwordService;
@@ -152,6 +152,10 @@ public class PasswordFunctions
             // Ownership: a consumer may only change their own password; staff (customers.write)
             // may reset customer passwords but never another employee's.
             var user = FunctionUser.Current(executionContext);
+            if (!user.IsAuthenticated || !(user.IsConsumer || user.IsInternal))
+            {
+                return await ForbiddenAsync(req, "An authenticated consumer or internal identity is required.");
+            }
             if (user.IsConsumer && user.BusinessEntityId != setPasswordRequest.BusinessEntityID)
             {
                 return await ForbiddenAsync(req, "You can only change your own password.");
@@ -252,7 +256,8 @@ public class PasswordFunctions
             // Self-only: verifying someone else's password would be a password-guessing oracle.
             // Sign-in itself happens at the api-mcp authorization server, not here.
             var user = FunctionUser.Current(executionContext);
-            if (user.IsAuthenticated && user.BusinessEntityId != verifyPasswordRequest.BusinessEntityID)
+            if (!user.IsAuthenticated || !(user.IsConsumer || user.IsInternal) ||
+                user.BusinessEntityId != verifyPasswordRequest.BusinessEntityID)
             {
                 return await ForbiddenAsync(req, "You can only verify your own password.");
             }

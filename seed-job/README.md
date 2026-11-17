@@ -19,13 +19,30 @@ The seed job is automatically deployed and executed during `azd up` by the `post
 
 Deployment hooks do not run the offline manufacturing asset validator. It remains available as an explicit content-generation/publication tool: `python3 scripts/data-management/validate-manufacturing-assets.py`. The seed importer still validates its artifacts and database integrity during import.
 
-The post-provision hook starts the seed job and continues service deployment **without waiting for completion**. Failure to start the job fails the hook; later seed failures are reported through the job logs and the site's `/health` page, not the `azd up` exit status. The site may be unavailable until seeding finishes. An existing populated database is preserved: only the manufacturing overlays are imported. An empty database receives the full base seed first. No AI generation runs during deployment.
+The post-provision hook builds the seed image and updates the job template in the background while it performs independent resource configuration. After SQL setup is complete, it confirms that image/template preparation succeeded and starts the job before the longer Foundry-agent setup. It waits only for image preparation and execution submission, **not for seeding to complete**. Failure to build, update or start the job fails the hook; later seed failures are reported through the job logs and the site's `/health` page, not the `azd up` exit status. The site may be unavailable until seeding finishes. An existing populated database is preserved: only the manufacturing overlays are imported. An empty database receives the full base seed first. No AI generation runs during deployment.
 
 Fresh provisioning configures SQL with **public access disabled from creation** and makes a **dedicated seed/bootstrap user-assigned managed identity** (`av-seed-identity-*`) its Microsoft Entra administrator (`principalType: Application`, SID = identity object/principal ID). Only the existing seed job attaches this identity; runtime applications retain their separate existing identity. The seed job uses the dedicated identity for SQL authentication and ACR pull, reaches SQL through the existing Container Apps private network, and can initialize the empty database without host grants. This adds one identity and its ACR pull assignment, but no compute/service/job. Identity creation precedes SQL and job deployment; no dependency cycle is introduced.
 
 `RuntimeDatabaseAccess.psm1` uses the Bicep-supplied runtime application/client ID and name to create its contained user via `CREATE USER ... WITH SID = ..., TYPE = E` (no Graph lookup). Azure SQL application-user SIDs use the client ID, unlike the server Entra administrator configuration, which uses the principal/object ID. Existing conflicting SID/type fails explicitly. On a fresh database it grants only `db_datareader`, `db_datawriter`, and `EXECUTE` initially. After schema creation and Change Tracking enablement, it grants `VIEW CHANGE TRACKING ON OBJECT::[Sales].[SalesOrderHeader]` (an object permission, not a database-wide grant). The existing-database path grants that permission only after checking that the table exists and is tracked; missing tracking fails explicitly. Both paths also grant `REFERENCES, VIEW DEFINITION ON XML SCHEMA COLLECTION::[Production].[ManuInstructionsSchemaCollection]` (the minimum `XML_SCHEMA_NAMESPACE` requires) so the manufacturing content grounding Functions can read the instruction schema; a missing collection fails explicitly. On an existing database those grants are additive/idempotent; all legacy role memberships and permissions are preserved, not revoked or audited by this task. Runtime identity initialization runs for normal fresh/incremental seed executions; explicit `-ManufacturingOverlaysOnly` remains restricted to overlay changes.
 
 **Administrator audit note:** SQL supports one Entra administrator; dedicated seed identity replaces the deployer as that administrator. The shared runtime identity is not administrator and is not attached to the seed job. Deployment-user direct SQL administration is no longer automatic. An authorized operator must use an approved private-network administration path or deliberately change the administrator through Azure's control plane; there is no password, host-login fallback, impersonation command, or public-access enablement. Existing private deployments need IaC provisioning to establish the dedicated identity/admin/job configuration before using this bootstrap model; rerunning only the hook cannot create it.
+
+Normal seeding also calls `Grant-RuntimeDefaultMetadataAccess` after application
+table setup. It grants object-scoped `VIEW DEFINITION` only on user tables with
+default/computed columns. Without definition visibility SQL hides default
+expressions, and DAB can incorrectly require server-defaulted fields such as
+review `ModifiedDate`/`HelpfulVotes` in create requests. This grant does not add
+DDL, ownership, database-wide metadata or new data-plane roles. Identity and
+object identifiers are parameterized/quoted; missing base tables or an empty
+target inventory fail explicitly. Fresh and existing normal seed paths wire
+the grant; targeted verify-only paths do not apply it.
+
+The disposable mutation suite exposed this missing metadata obligation; the
+private SQL probe now checks review default IDs/definitions and object metadata
+permission. The source correction is not an in-place repair authorization:
+agents must not run a seed/grant repair against the deployed demo. Follow the
+demo lifecycle policy and ask the user to recreate when the provisioning/seed
+contract must change. Ordinary repeat mutation tests do not require recreation.
 
 The identity resource is named `av-seed-identity-${resourceToken}`. Provisioning exports `SEED_MANAGED_IDENTITY_NAME`, `SEED_MANAGED_IDENTITY_CLIENT_ID`, and `SEED_MANAGED_IDENTITY_PRINCIPAL_ID` to azd. Existing global `AZURE_CLIENT_ID`/`USER_MANAGED_IDENTITY_NAME` still identify the runtime UAMI; only the seed container receives its dedicated client ID/name under those container-local names. The container also receives runtime bootstrap inputs as `RUNTIME_MANAGED_IDENTITY_NAME` and `RUNTIME_MANAGED_IDENTITY_CLIENT_ID`.
 

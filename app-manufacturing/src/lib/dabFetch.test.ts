@@ -4,8 +4,10 @@ import { getDabRole, getValidAccessToken, hasSession, refreshAccessToken } from 
 
 vi.mock("@/services/dabAuth", () => ({
   getDabRole: vi.fn(),
+  getTabAuthorizationGeneration: () => "test-session",
   getValidAccessToken: vi.fn(),
   hasSession: vi.fn(),
+  isTabAuthorizationGenerationCurrent: (generation: string | null) => generation === "test-session",
   refreshAccessToken: vi.fn(),
 }));
 

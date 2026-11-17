@@ -10,11 +10,12 @@ resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' 
 }
 
 // Create Communication Service
-resource communicationService 'Microsoft.Communication/communicationServices@2023-04-01' = {
+resource communicationService 'Microsoft.Communication/communicationServices@2025-05-01' = {
   name: communicationServiceName
   location: 'global'
   properties: {
     dataLocation: dataLocation
+    disableLocalAuth: true
     linkedDomains: [
       emailDomain.id
     ]

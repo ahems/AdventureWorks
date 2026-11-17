@@ -109,13 +109,15 @@ public sealed class OwnedCartFunctionsTests : IDisposable
         Assert.Equal(0, _store.Calls);
     }
 
-    [Fact]
-    public async Task Valid_consumer_resolves_owner_from_signed_claim_not_query()
+    [Theory]
+    [InlineData(7)]
+    [InlineData(8)]
+    public async Task Valid_consumer_resolves_owner_from_signed_claim_not_query(int owner)
     {
         var request = new Request("GET", "https://functions.example.test/api/cart/items?cartId=99");
-        request.Headers.Add("Authorization", "Bearer " + Token());
+        request.Headers.Add("Authorization", "Bearer " + Token(owner: owner));
         Assert.Equal(HttpStatusCode.OK, (await _functions.Items(request)).StatusCode);
-        Assert.Equal(7, _store.Actor!.BusinessEntityId);
+        Assert.Equal(owner, _store.Actor!.BusinessEntityId);
         Assert.Null(_store.Actor.GuestHash);
         Assert.Equal("99", _store.Actor.ExpectedCartId);
         // This fake records the trusted boundary; it does not prove SQL ownership enforcement.
@@ -173,6 +175,25 @@ public sealed class OwnedCartFunctionsTests : IDisposable
     }
 
     [Theory]
+    [InlineData(7)]
+    [InlineData(8)]
+    public async Task Merge_binds_both_signed_owners_and_hashed_guest_proof(int owner)
+    {
+        var request = new Request("POST", $"https://functions.example.test/api/cart/merge?cartId={owner}");
+        request.FunctionContext.Items[FunctionUser.ContextKey] = new FunctionUser
+        {
+            IsAuthenticated = true, Category = "consumer", BusinessEntityId = owner,
+            Scopes = new HashSet<string> { FunctionScopes.OrdersWrite },
+        };
+        request.Headers.Add(OwnedCartFunctions.GuestHeader, new string('A', 64));
+        request.Headers.Add("X-MS-CLIENT-PRINCIPAL-ID", "99");
+        Assert.Equal(HttpStatusCode.OK, (await _functions.Merge(request, request.FunctionContext)).StatusCode);
+        Assert.Equal(1, _store.Calls);
+        Assert.Equal(owner, _store.Actor!.BusinessEntityId);
+        Assert.Equal(SHA256.HashData(Convert.FromHexString(new string('A', 64))), _store.Actor.GuestHash);
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData("A")]
     [InlineData("not-a-session")]
@@ -210,7 +231,12 @@ public sealed class OwnedCartFunctionsTests : IDisposable
         public Task<OwnedCartItem> UpdateAsync(CartActor actor, int itemId, int quantity, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task DeleteAsync(CartActor actor, int? itemId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task RetireAsync(byte[] hash, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task MergeAsync(int businessEntityId, byte[] hash, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task MergeAsync(int businessEntityId, byte[] hash, CancellationToken cancellationToken)
+        {
+            Calls++;
+            Actor = new(businessEntityId, hash);
+            return Task.CompletedTask;
+        }
         public Task CleanupAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 

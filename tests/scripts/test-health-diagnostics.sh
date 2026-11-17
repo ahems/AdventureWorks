@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-functions_url="${API_FUNCTIONS_URL:-$(azd env get-value API_FUNCTIONS_URL)}"
-mcp_url="${API_MCP_URL:-$(azd env get-value API_MCP_URL)}"
+functions_url="${API_FUNCTIONS_URL:-$(azd env get-value API_FUNCTIONS_URL --no-prompt)}"
+mcp_url="${API_MCP_URL:-$(azd env get-value API_MCP_URL --no-prompt)}"
 functions_url="${functions_url%/}"
 mcp_base="${mcp_url%/}"
 mcp_base="${mcp_base%/mcp}"
@@ -43,8 +43,16 @@ done
 
 jq -e '
   [.checks[] | select(.required)] as $required |
-  ($required | length == 7) and all($required[]; .status == "healthy") and
-  ([.checks[].id] | unique | length == 15)
+  ([.checks[].id] | sort) == ([
+    "sql", "sql-identity", "blobs", "blob-identity", "queues", "queue-identity",
+    "tables", "table-identity", "files", "file-identity", "webpubsub-service",
+    "webpubsub-identity", "mcp", "mcp-ready", "oauth", "openai", "foundry",
+    "manufacturing-agent", "email", "order-emails", "telemetry"
+  ] | sort) and
+  ([$required[].id] | sort) == (["sql", "blobs", "queues", "tables", "mcp", "mcp-ready", "oauth"] | sort) and
+  all(.checks[]; (.required | type) == "boolean") and
+  all(.checks[] | select(.id | endswith("-identity")); .required == false) and
+  all($required[]; .status == "healthy")
 ' "$temporary_dir/functions.json" >/dev/null
 jq -e '[.checks[].id] | sort == ["sql", "tasks"]' "$temporary_dir/mcp.json" >/dev/null
 echo "Health diagnostics smoke test passed (read-only; no inference or mutations)."

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Azure.Core;
 using Microsoft.Extensions.Logging;
@@ -5,8 +6,8 @@ using Microsoft.Extensions.Logging;
 namespace api_functions.Services;
 
 /// <summary>
-/// Obtains a short-lived api-mcp service access token for backend AI agent tool calls that run
-/// without a delegated end-user token (e.g. "Generate Customer with AI" in the admin app).
+/// Obtains a short-lived, explicitly scoped api-mcp service access token for backend AI agent
+/// tool calls that run without a delegated end-user token (e.g. customer/order generation).
 ///
 /// Flow: the Function App's user-assigned managed identity requests an Entra token for the
 /// federated-credential audience <c>api://AzureADTokenExchange</c>, then presents it to the
@@ -18,6 +19,14 @@ public class McpServiceTokenProvider
 {
     public const string GrantType = "urn:adventureworks:params:oauth:grant-type:managed-identity";
     public const string ClientId = "adventureworks-agents";
+    public const string McpAccessScope = "mcp.access";
+    public const string ProductsReadScope = "products.read";
+    public const string CustomersReadScope = "customers.read";
+    public const string InventoryReadScope = "inventory.read";
+    public const string OrdersReadScope = "orders.read";
+    public const string AdminWriteScope = "admin.write";
+    public const string ManufacturingReadScope = "manufacturing.read";
+    public const string ManufacturingWriteScope = "manufacturing.write";
     private const string AssertionScope = "api://AzureADTokenExchange/.default";
     private static readonly TimeSpan RefreshSkew = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan FailureBackoff = TimeSpan.FromSeconds(30);
@@ -27,9 +36,8 @@ public class McpServiceTokenProvider
     private readonly ILogger<McpServiceTokenProvider> _logger;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    private string? _token;
-    private DateTimeOffset _expiresOn;
-    private DateTimeOffset _retryAfter;
+    private readonly ConcurrentDictionary<string, (string Token, DateTimeOffset ExpiresOn)> _tokens = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _retryAfter = new(StringComparer.Ordinal);
 
     public McpServiceTokenProvider(
         TokenCredential credential,
@@ -65,10 +73,30 @@ public class McpServiceTokenProvider
     }
 
     /// <summary>
-    /// Returns a cached or freshly issued service token, or null when it cannot be obtained
-    /// (the tool call then proceeds unauthenticated and api-mcp returns a clear 401).
+    /// Returns an MCP service token limited to the requested scopes plus mcp.access.
+    /// Tokens are cached separately by their normalized scope set so a narrow token cannot
+    /// reuse a broader one. The issued scope claim must exactly match the request.
     /// </summary>
-    public virtual async Task<string?> GetTokenAsync(CancellationToken cancellationToken)
+    public virtual Task<string?> GetTokenAsync(
+        IReadOnlyCollection<string> scopes,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(scopes);
+        if (scopes.Count == 0 || scopes.Any(scope =>
+                string.IsNullOrWhiteSpace(scope) || scope != scope.Trim() || scope.Contains(' ')))
+        {
+            throw new ArgumentException("At least one non-empty MCP scope is required.", nameof(scopes));
+        }
+
+        return GetTokenAsyncCore(
+            string.Join(' ', scopes.Append(McpAccessScope).Distinct(StringComparer.Ordinal)
+                .OrderBy(scope => scope, StringComparer.Ordinal)),
+            cancellationToken);
+    }
+
+    private async Task<string?> GetTokenAsyncCore(
+        string scopeKey,
+        CancellationToken cancellationToken)
     {
         if (McpOrigin is null)
         {
@@ -76,12 +104,12 @@ public class McpServiceTokenProvider
         }
 
         var now = DateTimeOffset.UtcNow;
-        if (_token is not null && _expiresOn - RefreshSkew > now)
+        if (_tokens.TryGetValue(scopeKey, out var cached) && cached.ExpiresOn - RefreshSkew > now)
         {
-            return _token;
+            return cached.Token;
         }
 
-        if (now < _retryAfter)
+        if (_retryAfter.TryGetValue(scopeKey, out var retryAfter) && now < retryAfter)
         {
             return null;
         }
@@ -90,28 +118,30 @@ public class McpServiceTokenProvider
         try
         {
             now = DateTimeOffset.UtcNow;
-            if (_token is not null && _expiresOn - RefreshSkew > now)
+            if (_tokens.TryGetValue(scopeKey, out cached) && cached.ExpiresOn - RefreshSkew > now)
             {
-                return _token;
+                return cached.Token;
             }
 
             var assertion = await _credential.GetTokenAsync(
                 new TokenRequestContext(new[] { AssertionScope }), cancellationToken);
 
-            var form = new FormUrlEncodedContent(new Dictionary<string, string>
+            var formValues = new Dictionary<string, string>
             {
                 ["grant_type"] = GrantType,
                 ["client_id"] = ClientId,
                 ["assertion"] = assertion.Token,
                 ["resource"] = ResourceIdentifier!,
-            });
+                ["scope"] = scopeKey,
+            };
 
+            using var form = new FormUrlEncodedContent(formValues);
             var http = _httpClientFactory.CreateClient(nameof(McpServiceTokenProvider));
             using var response = await http.PostAsync(McpOrigin + "/token", form, cancellationToken);
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                _retryAfter = DateTimeOffset.UtcNow + FailureBackoff;
+                _retryAfter[scopeKey] = DateTimeOffset.UtcNow + FailureBackoff;
                 _logger.LogWarning(
                     "api-mcp service token request failed with HTTP {Status}: {Body}",
                     (int)response.StatusCode, body.Length > 300 ? body[..300] : body);
@@ -124,14 +154,32 @@ public class McpServiceTokenProvider
                 ? secs
                 : 600;
 
-            _token = token;
-            _expiresOn = DateTimeOffset.UtcNow.AddSeconds(expiresIn);
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                throw new JsonException("api-mcp returned an empty service access token.");
+            }
+
+            var expectedScopes = scopeKey.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .ToHashSet(StringComparer.Ordinal);
+            var grantedScopes = !doc.RootElement.TryGetProperty("scope", out var scopeElement)
+                ? expectedScopes
+                : scopeElement.ValueKind == JsonValueKind.String
+                    ? scopeElement.GetString()!.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                        .ToHashSet(StringComparer.Ordinal)
+                    : null;
+            if (grantedScopes is null || !grantedScopes.SetEquals(expectedScopes))
+            {
+                throw new JsonException("api-mcp granted a service-token scope set that differs from the request.");
+            }
+
+            var expiresOn = DateTimeOffset.UtcNow.AddSeconds(expiresIn);
+            _tokens[scopeKey] = (token, expiresOn);
             _logger.LogInformation("Obtained api-mcp service token (expires in {Seconds}s)", expiresIn);
-            return _token;
+            return token;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _retryAfter = DateTimeOffset.UtcNow + FailureBackoff;
+            _retryAfter[scopeKey] = DateTimeOffset.UtcNow + FailureBackoff;
             _logger.LogWarning(ex, "Unable to obtain api-mcp service token");
             return null;
         }

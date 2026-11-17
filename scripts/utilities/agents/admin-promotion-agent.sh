@@ -83,7 +83,8 @@ STRUCTURED_INPUTS='{
   "subcategoryName": {"type": "string", "description": "Optional display name of the target product subcategory.", "default_value": ""}
 }'
 
-AGENT_ID=$(upsert_agent "admin-promotion-agent" "Promotions & Offers Advisor" "$INSTRUCTIONS" "$MEMORY_STORE" "$DESCRIPTION" "$STARTER_PROMPTS" "$STRUCTURED_INPUTS")
+# Product and promotion data is supplied by the backend; this agent must not query MCP.
+AGENT_ID=$(upsert_agent "admin-promotion-agent" "Promotions & Offers Advisor" "$INSTRUCTIONS" "$MEMORY_STORE" "$DESCRIPTION" "$STARTER_PROMPTS" "$STRUCTURED_INPUTS" "[]" "false")
 if [ -z "$AGENT_ID" ]; then error "Failed to create admin-promotion-agent"; exit 1; fi
 success "admin-promotion-agent created: $AGENT_ID"
 azd env set AI_AGENT_PROMOTION_ID "$AGENT_ID"

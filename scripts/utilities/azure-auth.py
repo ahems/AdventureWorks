@@ -27,10 +27,11 @@ IDENTITIES = {
                       "manufacturing-engineer"),
 }
 SCOPES = {
-    "admin": "mcp.access products.read sales.read customers.read customers.write "
+    "admin": "mcp.access realtime.connect products.read sales.read customers.read customers.write "
              "inventory.read orders.read orders.write manufacturing.read "
              "manufacturing.write admin.read admin.write mcp.admin",
-    "manufacturing": "mcp.access products.read inventory.read manufacturing.read manufacturing.write",
+    "manufacturing": "mcp.access realtime.connect products.read inventory.read "
+                     "manufacturing.read manufacturing.write",
 }
 
 
@@ -45,6 +46,18 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def azd_value(key, environment, required=True):
+    if os.environ.get("AUTH_ASSURANCE_MANIFEST_FILE"):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("assurance_runtime", ROOT / "tests/auth/runtime_config.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        document = module.load()
+        if environment and document["values"].get("AZURE_ENV_NAME") != environment:
+            raise AuthError("Private assurance environment mismatch")
+        value = document["values"].get(key, "")
+        if not isinstance(value, str) or (required and not value.strip()):
+            raise AuthError("Missing selected deployment value: " + key)
+        return value.strip()
     command = ["azd", "env", "get-value", key, "--no-prompt", "--cwd", str(ROOT)]
     if environment:
         command += ["--environment", environment]
@@ -209,6 +222,8 @@ def main():
         parser.error("--timeout must be finite and positive")
     if args.command == "request" and not args.path:
         parser.error("request requires --path")
+    if not args.environment:
+        args.environment = azd_value("AZURE_ENV_NAME", None)
     base, audience = deployment(args.environment, args.resource)
     target = None
     if args.command == "request":

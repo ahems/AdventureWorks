@@ -4,7 +4,12 @@
 // Requests that already carry an Authorization header (e.g. the AI agent chat,
 // which forwards a per-user MCP token) are left untouched.
 import { getFunctionsApiUrl } from "@/lib/utils";
-import { getFunctionsAccessToken, hasSession } from "@/services/dabAuth";
+import {
+  getFunctionsAccessToken,
+  getTabAuthorizationGeneration,
+  hasSession,
+  isTabAuthorizationGenerationCurrent,
+} from "@/services/dabAuth";
 
 let installed = false;
 
@@ -38,12 +43,22 @@ export function installFunctionsAuthInterceptor(): void {
       return nativeFetch(input, init);
     }
 
+    const generation = getTabAuthorizationGeneration();
+    const ensureSession = () => {
+      if (!isTabAuthorizationGenerationCurrent(generation)) {
+        throw new Error("Your session has expired. Please sign in again.");
+      }
+    };
     const send = async (force: boolean) => {
+      ensureSession();
       const token = await getFunctionsAccessToken(force);
+      ensureSession();
       const h = new Headers(headers);
       if (token) h.set("Authorization", `Bearer ${token}`);
       const req = input instanceof Request ? input.clone() : input;
-      return nativeFetch(req, { ...init, headers: h });
+      const result = await nativeFetch(req, { ...init, headers: h });
+      ensureSession();
+      return result;
     };
 
     const response = await send(false);

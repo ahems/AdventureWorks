@@ -115,5 +115,55 @@ public sealed class FunctionsAccessTokenValidatorTests : IDisposable
         Assert.Equal("resource_server_not_configured", result.Error);
     }
 
+    [Theory]
+    [InlineData("not-a-jwt")]
+    [InlineData("header.payload")]
+    public async Task Malformed_tokens_are_rejected_without_fetching_metadata(string token)
+    {
+        var metadata = new UnavailableConfigurationManager();
+        var validator = new FunctionsAccessTokenValidator(new FunctionsOAuthOptions
+        {
+            Issuer = Issuer, Audience = Audience, MetadataAddress = Issuer + "metadata",
+        }, NullLogger<FunctionsAccessTokenValidator>.Instance, metadata);
+
+        var functions = await validator.ValidateAsync(token, default);
+        var mcp = await validator.ValidateMcpAsync(token, default);
+
+        Assert.False(functions.Succeeded);
+        Assert.Equal("invalid_token", functions.Error);
+        Assert.False(mcp.Succeeded);
+        Assert.Equal("invalid_token", mcp.Error);
+        Assert.Equal(0, metadata.Calls);
+    }
+
+    [Fact]
+    public async Task Well_formed_tokens_still_fail_closed_when_metadata_is_unavailable()
+    {
+        var metadata = new UnavailableConfigurationManager();
+        var validator = new FunctionsAccessTokenValidator(new FunctionsOAuthOptions
+        {
+            Issuer = Issuer, Audience = Audience, MetadataAddress = Issuer + "metadata",
+        }, NullLogger<FunctionsAccessTokenValidator>.Instance, metadata);
+
+        var result = await validator.ValidateAsync(Token(), default);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("metadata_unavailable", result.Error);
+        Assert.Equal(1, metadata.Calls);
+    }
+
+    private sealed class UnavailableConfigurationManager : IConfigurationManager<OpenIdConnectConfiguration>
+    {
+        public int Calls { get; private set; }
+
+        public Task<OpenIdConnectConfiguration> GetConfigurationAsync(CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromException<OpenIdConnectConfiguration>(new InvalidOperationException("Unavailable"));
+        }
+
+        public void RequestRefresh() { }
+    }
+
     public void Dispose() => _rsa.Dispose();
 }

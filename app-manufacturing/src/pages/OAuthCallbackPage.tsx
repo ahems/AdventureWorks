@@ -3,7 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
 import {
   clearAuthorization,
+  getCallbackGeneration,
   handleCallback as handleDabCallback,
+  isTabAuthorizationGenerationCurrent,
 } from "@/services/dabAuth";
 import { useAuth } from "@/context/AuthContext";
 
@@ -22,14 +24,28 @@ const OAuthCallbackPage: React.FC = () => {
     if (ran.current) return; // guard React 18 StrictMode double-invoke
     ran.current = true;
     (async () => {
+      const binding = getCallbackGeneration();
+      if (!binding) {
+        setError("Missing or invalid sign-in state.");
+        return;
+      }
+      const { generation } = binding;
+      if (!isTabAuthorizationGenerationCurrent(generation)) {
+        setError("Sign-in was superseded.");
+        return;
+      }
       const result = await handleDabCallback();
-      if (result.ok && completeSignIn()) {
+      if (!isTabAuthorizationGenerationCurrent(generation)) {
+        setError("Sign-in was superseded.");
+        return;
+      }
+      if (result.ok && completeSignIn(generation)) {
         navigate(result.returnTo || "/", { replace: true });
         return;
       }
       // Wrong password, or an account that may not use the manufacturing portal:
       // the authorization server redirects back here with error=access_denied.
-      clearAuthorization();
+      clearAuthorization(generation);
       const message = result.ok
         ? "Sign-in did not return a usable token."
         : result.error ?? "Authorization failed.";

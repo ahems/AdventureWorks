@@ -191,7 +191,7 @@ public class AdventureWorksMcpTools
     }
 
     [McpServerTool]
-    [Description("Get personalized product recommendations for a customer based on their purchase history, preferences, and buying patterns. Returns products the customer might like. Requires an existing customer ID with purchase history. Supports multiple languages.")]
+    [Description("Get personalized product recommendations for a customer based on their purchase history, preferences, and buying patterns. Returns products the customer might like. Requires orders.read and an existing customer ID with purchase history. Supports multiple languages.")]
     public async Task<string> GetPersonalizedRecommendations(int? customerId = null, int limit = 5, [McpHeader("Culture")] string? cultureId = null)
     {
 
@@ -207,6 +207,13 @@ public class AdventureWorksMcpTools
     {
 
         return await _reviewService.AnalyzeProductReviewsAsync(productId, cultureId ?? "en");
+    }
+
+    [McpServerTool]
+    [Description("Check whether a customer-facing finished product is in stock. Returns only the product ID and an inStock boolean; null means the finished product was not found. Does not expose quantities or locations.")]
+    public async Task<string> GetProductAvailability(int productId)
+    {
+        return await _productService.GetProductAvailabilityAsync(productId);
     }
 
     [McpServerTool]

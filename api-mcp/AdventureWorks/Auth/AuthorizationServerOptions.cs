@@ -80,6 +80,7 @@ public sealed class AuthorizationServerOptions
         "adventureworks-admin",
         "adventureworks-eshop",
         "adventureworks-manufacturing",
+        "adventureworks-inspector",
     };
 
     /// <summary>Finds a registered client by id, or null.</summary>

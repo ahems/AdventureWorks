@@ -4,7 +4,7 @@
 > [`api-mcp/AdventureWorks/Auth/ToolAuthorizationPolicy.cs`](../../../api-mcp/AdventureWorks/Auth/ToolAuthorizationPolicy.cs).
 > A startup assertion (`McpAuthorizationExtensions`) fails fast if **any** MCP tool
 > discovered by the server is missing from that registry, so no tool can ship
-> unclassified. There are **62** tools across 6 tool classes.
+> unclassified. There are **63** tools across 6 tool classes.
 
 ## How to read this matrix
 
@@ -26,7 +26,7 @@ to `mcp.access`.
 | `manufacturing.read` | 24 |
 | `sales.read` | 11 |
 | `manufacturing.write` | 9 |
-| `products.read` | 7 |
+| `products.read` | 8 |
 | `admin.write` | 4 |
 | `orders.read` | 2 |
 | `customers.read` | 2 |
@@ -36,7 +36,7 @@ to `mcp.access`.
 
 ## Matrix by tool class
 
-### AdventureWorksMcpTools (19 tools)
+### AdventureWorksMcpTools (20 tools)
 
 | Tool (MCP wire name) | Required scope | Access mode | Ownership arg |
 | -------------------- | -------------- | ----------- | ------------- |
@@ -45,8 +45,9 @@ to `mcp.access`.
 | `find_complementary_products` | `products.read` | Public | — |
 | `search_products` | `products.read` | Public | — |
 | `get_product_details` | `products.read` | Public | — |
-| `get_personalized_recommendations` | `products.read` | Self-or-internal (ownership) | `customerId` |
+| `get_personalized_recommendations` | `orders.read` | Self-or-internal (ownership) | `customerId` |
 | `analyze_product_reviews` | `products.read` | Public | — |
+| `get_product_availability` | `products.read` | Public | — |
 | `check_inventory_availability` | `inventory.read` | Internal-only | — |
 | `get_products_for_promotion` | `admin.read` | Internal-only | — |
 | `get_categories_with_products` | `products.read` | Public | — |

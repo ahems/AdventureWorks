@@ -2,7 +2,7 @@ param acrName string = 'avacr${toLower(uniqueString(resourceGroup().id))}'
 param diagnosticsName string = 'acr-diagnostics-${toLower(uniqueString(resourceGroup().id))}'
 param workspaceName string = 'av-workspace-${toLower(uniqueString(resourceGroup().id))}'
 param location string = resourceGroup().location
-param adminUserEnabled bool = true
+param adminUserEnabled bool = false
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspaceName

@@ -63,7 +63,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   useEffect(() => {
     let cancelled = false;
     const restoreSession = async () => {
-      const storedUser = localStorage.getItem(CURRENT_USER_KEY);
+      localStorage.removeItem(CURRENT_USER_KEY);
+      const storedUser = sessionStorage.getItem(CURRENT_USER_KEY);
       if (!storedUser) {
         clearEshopOAuthSession();
         setIsLoading(false);
@@ -83,7 +84,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         trackError("Unable to restore the e-shop OAuth session", error, {
           context: "AuthContext.restoreSession",
         });
-        localStorage.removeItem(CURRENT_USER_KEY);
+        sessionStorage.removeItem(CURRENT_USER_KEY);
         clearEshopOAuthSession();
         if (!cancelled) {
           toast({
@@ -106,6 +107,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   const login = useCallback(
     async (email: string, password: string): Promise<boolean> => {
       setIsLoading(true);
+      setUser(null);
+      clearUserContext();
+      sessionStorage.removeItem(CURRENT_USER_KEY);
       clearEshopOAuthSession();
 
       const result = await loginUser(email, password);
@@ -131,7 +135,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       };
 
       setUser(user);
-      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+      sessionStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
       setIsLoading(false);
 
       // Track login event in Application Insights
@@ -159,6 +163,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       lastName: string,
     ): Promise<boolean> => {
       setIsLoading(true);
+      setUser(null);
+      clearUserContext();
+      sessionStorage.removeItem(CURRENT_USER_KEY);
       clearEshopOAuthSession();
 
       const result = await signupUser(email, password, firstName, lastName);
@@ -184,7 +191,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       };
 
       setUser(user);
-      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+      sessionStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
       setIsLoading(false);
 
       // Track signup event in Application Insights
@@ -211,8 +218,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     }
     clearUserContext();
 
-    // Clear user state and localStorage
+    // Clear user state and tab-scoped storage with its matching OAuth session.
     setUser(null);
+    sessionStorage.removeItem(CURRENT_USER_KEY);
     localStorage.removeItem(CURRENT_USER_KEY);
     // Clear any DAB OAuth authorization so the next visitor browses anonymously
     // and cannot inherit the previous consumer's delegated token/role.
@@ -262,7 +270,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       };
 
       setUser(updatedUser);
-      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedUser));
+      sessionStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedUser));
       setIsLoading(false);
 
       toast({

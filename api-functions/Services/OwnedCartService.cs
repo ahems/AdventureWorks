@@ -1,4 +1,5 @@
 using System.Data;
+using System.Data.Common;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json.Serialization;
@@ -47,27 +48,36 @@ public interface IOwnedCartService
     Task CleanupAsync(CancellationToken cancellationToken);
 }
 
-public sealed class OwnedCartService(IConfiguration configuration, TimeProvider clock) : IOwnedCartService
+public class OwnedCartService(IConfiguration configuration, TimeProvider clock) : IOwnedCartService
 {
     private const string Columns = "ShoppingCartItemID, ShoppingCartID, ProductID, Quantity, DateCreated, ModifiedDate";
     private readonly string _connectionString = configuration["SQL_CONNECTION_STRING"]
         ?? throw new InvalidOperationException("SQL_CONNECTION_STRING is required.");
 
-    private static SqlCommand Command(SqlConnection connection, SqlTransaction transaction, string sql,
+    protected virtual DbConnection CreateConnection() => new SqlConnection(_connectionString);
+
+    private static DbCommand Command(DbConnection connection, DbTransaction transaction, string sql,
         params (string Name, object Value)[] parameters)
     {
-        var command = new SqlCommand(sql, connection, transaction);
+        var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = sql;
         foreach (var (name, value) in parameters)
-            command.Parameters.AddWithValue(name, value);
+        {
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = name;
+            parameter.Value = value;
+            command.Parameters.Add(parameter);
+        }
         return command;
     }
 
     private async Task<T> TransactionAsync<T>(
-        Func<SqlConnection, SqlTransaction, Task<T>> work, CancellationToken cancellationToken)
+        Func<DbConnection, DbTransaction, Task<T>> work, CancellationToken cancellationToken)
     {
-        await using var connection = new SqlConnection(_connectionString);
+        await using var connection = CreateConnection();
         await connection.OpenAsync(cancellationToken);
-        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(
+        await using var transaction = await connection.BeginTransactionAsync(
             IsolationLevel.Serializable, cancellationToken);
         try
         {
@@ -89,7 +99,7 @@ public sealed class OwnedCartService(IConfiguration configuration, TimeProvider 
         }
     }
 
-    private static async Task LockCartAsync(SqlConnection connection, SqlTransaction transaction,
+    private static async Task LockCartAsync(DbConnection connection, DbTransaction transaction,
         string cartId, CancellationToken cancellationToken)
     {
         await using var command = Command(connection, transaction, """
@@ -101,26 +111,53 @@ public sealed class OwnedCartService(IConfiguration configuration, TimeProvider 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private async Task<string> ResolveAsync(SqlConnection connection, SqlTransaction transaction,
+    private sealed record StoredGuestSession(
+        string CartId, DateTimeOffset ExpiresAt, DateTimeOffset? RetiredAt, int? MergedOwner);
+
+    private static async Task<StoredGuestSession> GuestSessionAsync(
+        DbConnection connection, DbTransaction transaction, byte[] hash, CancellationToken cancellationToken)
+    {
+        await using var query = Command(connection, transaction, """
+            SELECT CartID, ExpiresUtc, RetiredUtc, MergedBusinessEntityID
+            FROM Sales.GuestCartSession WITH (UPDLOCK, HOLDLOCK)
+            WHERE TokenHash = @hash;
+            """, ("@hash", hash));
+        await using var reader = await query.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+            throw new CartAccessException(HttpStatusCode.Unauthorized, "guest_session_expired_or_invalid");
+        return new(reader.GetString(0),
+            new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(1), DateTimeKind.Utc)),
+            reader.IsDBNull(2) ? null :
+                new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(2), DateTimeKind.Utc)),
+            reader.IsDBNull(3) ? null : reader.GetInt32(3));
+    }
+
+    private void RequireActive(StoredGuestSession session)
+    {
+        if (session.ExpiresAt <= clock.GetUtcNow() || session.RetiredAt is not null)
+            throw new CartAccessException(HttpStatusCode.Unauthorized, "guest_session_expired_or_invalid");
+    }
+
+    private async Task<string> ResolveAsync(DbConnection connection, DbTransaction transaction,
         CartActor actor, CancellationToken cancellationToken)
     {
         string cartId;
+        StoredGuestSession? guest = null;
         if (actor.BusinessEntityId is > 0 && actor.GuestHash is null)
             cartId = actor.BusinessEntityId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
         else if (actor.BusinessEntityId is null && actor.GuestHash is { Length: 32 })
         {
-            await using var query = Command(connection, transaction, """
-                SELECT CartID FROM Sales.GuestCartSession WITH (UPDLOCK, HOLDLOCK)
-                WHERE TokenHash = @hash AND ExpiresUtc > @now AND RetiredUtc IS NULL;
-                """, ("@hash", actor.GuestHash), ("@now", clock.GetUtcNow().UtcDateTime));
-            cartId = await query.ExecuteScalarAsync(cancellationToken) as string
-                ?? throw new CartAccessException(HttpStatusCode.Unauthorized, "guest_session_expired_or_invalid");
+            guest = await GuestSessionAsync(connection, transaction, actor.GuestHash, cancellationToken);
+            RequireActive(guest);
+            cartId = guest.CartId;
         }
         else
             throw new CartAccessException(HttpStatusCode.Unauthorized, "cart_identity_required");
         if (actor.ExpectedCartId is not null && actor.ExpectedCartId != cartId)
             throw new CartAccessException(HttpStatusCode.Forbidden, "cart_owner_mismatch");
         await LockCartAsync(connection, transaction, cartId, cancellationToken);
+        if (guest is not null)
+            RequireActive(guest);
         return cartId;
     }
 
@@ -144,7 +181,7 @@ public sealed class OwnedCartService(IConfiguration configuration, TimeProvider 
         }, cancellationToken);
 
     private static async Task<IReadOnlyList<OwnedCartItem>> RowsAsync(
-        SqlCommand command, CancellationToken cancellationToken)
+        DbCommand command, CancellationToken cancellationToken)
     {
         var rows = new List<OwnedCartItem>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -243,16 +280,15 @@ public sealed class OwnedCartService(IConfiguration configuration, TimeProvider 
         {
             if (businessEntityId <= 0)
                 throw new CartAccessException(HttpStatusCode.Forbidden, "consumer_identity_required");
-            await using var session = Command(connection, transaction, """
-                SELECT MergedBusinessEntityID FROM Sales.GuestCartSession WITH (UPDLOCK, HOLDLOCK)
-                WHERE TokenHash = @hash AND ExpiresUtc > @now;
-                """, ("@hash", hash), ("@now", clock.GetUtcNow().UtcDateTime));
-            var previous = await session.ExecuteScalarAsync(cancellationToken);
-            if (previous is int owner && owner == businessEntityId)
+            var session = await GuestSessionAsync(connection, transaction, hash, cancellationToken);
+            if (session.ExpiresAt <= clock.GetUtcNow())
+                throw new CartAccessException(HttpStatusCode.Unauthorized, "guest_session_expired_or_invalid");
+            if (session.MergedOwner == businessEntityId)
                 return true;
             var guest = await ResolveAsync(connection, transaction, new(null, hash), cancellationToken);
             var account = businessEntityId.ToString(System.Globalization.CultureInfo.InvariantCulture);
             await LockCartAsync(connection, transaction, account, cancellationToken);
+            RequireActive(session);
             await using var merge = Command(connection, transaction, """
                 DECLARE @totals TABLE (ProductID int PRIMARY KEY, Quantity bigint, DateCreated datetime);
                 INSERT @totals

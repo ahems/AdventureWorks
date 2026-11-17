@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using Azure.Data.Tables;
 using Azure.Identity;
+using AdventureWorks.Auth;
 using ModelContextProtocol.Extensions.Tasks;
 using ModelContextProtocol.Protocol;
 
@@ -18,19 +19,49 @@ public sealed class AzureTableMcpTaskStore : IMcpTaskStore
     private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromSeconds(2);
 
     private readonly TableClient _table;
+    private readonly McpTaskOwnership _ownership;
     private readonly ConcurrentDictionary<string, TaskCompletionSource<IDictionary<string, InputResponse>>> _inputWaiters = new();
 
     public event Action<InputResponseReceivedEventArgs>? InputResponseReceived;
 
-    public AzureTableMcpTaskStore(string storageAccountName)
+    public AzureTableMcpTaskStore(string storageAccountName, McpTaskOwnership ownership)
     {
         var serviceUri = new Uri($"https://{storageAccountName}.table.core.windows.net");
         var serviceClient = new TableServiceClient(serviceUri, new DefaultAzureCredential());
         _table = serviceClient.GetTableClient(TableName);
+        _ownership = ownership;
+    }
+
+    public AzureTableMcpTaskStore(TableClient table, McpTaskOwnership ownership)
+    {
+        _table = table;
+        _ownership = ownership;
+    }
+
+    private async Task<TableEntity?> ReadAuthorizedAsync(string taskId, CancellationToken cancellationToken)
+    {
+        TableEntity? entity;
+        try
+        {
+            entity = (await _table.GetEntityAsync<TableEntity>(
+                PartitionKey, taskId, cancellationToken: cancellationToken)).Value;
+        }
+        catch (Azure.RequestFailedException ex) when (ex.Status == 404)
+        {
+            entity = null;
+        }
+        _ownership.AuthorizeAccess(entity is null ? null : new(
+            entity.GetString("OwnerSubject") ?? "",
+            entity.GetString("OwnerApplication") ?? "",
+            entity.GetString("OwnerCategory") ?? "",
+            entity.GetString("OwnerTool") ?? "",
+            entity.GetString("RequiredScope") ?? ""));
+        return entity;
     }
 
     public async Task<McpTaskInfo> CreateTaskAsync(CancellationToken cancellationToken = default)
     {
+        var owner = _ownership.AuthorizeCreation();
         var taskId = Guid.NewGuid().ToString("N");
         var now = DateTimeOffset.UtcNow;
 
@@ -40,6 +71,11 @@ public sealed class AzureTableMcpTaskStore : IMcpTaskStore
             ["CreatedAt"] = now,
             ["UpdatedAt"] = now,
             ["PollIntervalMs"] = (long)DefaultPollInterval.TotalMilliseconds,
+            ["OwnerSubject"] = owner.Subject,
+            ["OwnerApplication"] = owner.Application,
+            ["OwnerCategory"] = owner.Category,
+            ["OwnerTool"] = owner.Tool,
+            ["RequiredScope"] = owner.RequiredScope,
         };
 
         await _table.AddEntityAsync(entity, cancellationToken);
@@ -59,19 +95,13 @@ public sealed class AzureTableMcpTaskStore : IMcpTaskStore
 
     public async Task<McpTaskInfo?> GetTaskAsync(string taskId, CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var response = await _table.GetEntityAsync<TableEntity>(PartitionKey, taskId, cancellationToken: cancellationToken);
-            return MapToTaskInfo(response.Value);
-        }
-        catch (Azure.RequestFailedException ex) when (ex.Status == 404)
-        {
-            return null;
-        }
+        var entity = await ReadAuthorizedAsync(taskId, cancellationToken);
+        return entity is null ? null : MapToTaskInfo(entity);
     }
 
     public async Task SetCompletedAsync(string taskId, JsonElement result, CancellationToken cancellationToken = default)
     {
+        await ReadAuthorizedAsync(taskId, cancellationToken);
         var entity = new TableEntity(PartitionKey, taskId)
         {
             ["Status"] = McpTaskStatus.Completed.ToString(),
@@ -84,6 +114,7 @@ public sealed class AzureTableMcpTaskStore : IMcpTaskStore
 
     public async Task SetFailedAsync(string taskId, JsonElement error, CancellationToken cancellationToken = default)
     {
+        await ReadAuthorizedAsync(taskId, cancellationToken);
         var entity = new TableEntity(PartitionKey, taskId)
         {
             ["Status"] = McpTaskStatus.Failed.ToString(),
@@ -95,6 +126,7 @@ public sealed class AzureTableMcpTaskStore : IMcpTaskStore
 
     public async Task<bool> SetCancelledAsync(string taskId, CancellationToken cancellationToken = default)
     {
+        await ReadAuthorizedAsync(taskId, cancellationToken);
         try
         {
             var entity = new TableEntity(PartitionKey, taskId)
@@ -113,6 +145,7 @@ public sealed class AzureTableMcpTaskStore : IMcpTaskStore
 
     public async Task SetInputRequestsAsync(string taskId, IDictionary<string, InputRequest> inputRequests, CancellationToken cancellationToken = default)
     {
+        await ReadAuthorizedAsync(taskId, cancellationToken);
         var entity = new TableEntity(PartitionKey, taskId)
         {
             ["Status"] = McpTaskStatus.InputRequired.ToString(),
@@ -124,6 +157,7 @@ public sealed class AzureTableMcpTaskStore : IMcpTaskStore
 
     public async Task ResolveInputRequestsAsync(string taskId, IDictionary<string, InputResponse> inputResponses, CancellationToken cancellationToken = default)
     {
+        await ReadAuthorizedAsync(taskId, cancellationToken);
         var entity = new TableEntity(PartitionKey, taskId)
         {
             ["Status"] = McpTaskStatus.Working.ToString(),

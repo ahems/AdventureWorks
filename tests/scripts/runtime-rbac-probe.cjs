@@ -57,6 +57,27 @@
     const manifest = response.status === 200 ? await response.json() : null;
     requireCheck("acr-manifest-pull", response.status === 200 && manifest?.schemaVersion === 2,
       "Existing runtime UAMI fetched the actual deployed image manifest with repository pull authorization");
+    if (config.webPubSub) {
+      phase = "webpubsub";
+      const { host, probeId } = config.webPubSub;
+      const endpoint = new URL("https://" + host);
+      if (endpoint.hostname !== host || endpoint.pathname !== "/" || endpoint.search || endpoint.hash ||
+          endpoint.username || endpoint.password ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(probeId))
+        throw new Error("webpubsub-configuration");
+      const pubsubToken = await token("https://webpubsub.azure.com/");
+      const claims = JSON.parse(Buffer.from(pubsubToken.split(".")[1], "base64url").toString());
+      requireCheck("webpubsub-identity",
+        claims.tid === config.tenantId && (claims.azp ?? claims.appid) === config.clientId,
+        "Web PubSub token matches the selected runtime principal, client and tenant");
+      const send = await request(new URL("/api/hubs/adventureworks/groups/utilities/:send?api-version=2024-12-01", endpoint), {
+        method: "POST",
+        headers: { Authorization: "Bearer " + pubsubToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ event: "auth-assurance-probe", probeId }),
+      });
+      requireCheck("webpubsub-group-send", send.status === 202,
+        "One opt-in nonpersistent utilities-group message; expected HTTP 202, received " + send.status);
+    }
     if (config.recipient) {
       phase = "email-send";
       const endpoint = new URL(config.communicationEndpoint);

@@ -1,8 +1,10 @@
 import { GraphQLClient } from "graphql-request";
 import {
   getDabRole,
+  getTabAuthorizationGeneration,
   getValidAccessToken,
   hasSession,
+  isTabAuthorizationGenerationCurrent,
   refreshAccessToken,
 } from "@/services/dabAuth";
 
@@ -63,21 +65,34 @@ const isNotAuthenticated = async (response: Response): Promise<boolean> => {
 };
 
 const authenticatedFetch: typeof fetch = async (input, init) => {
+  const generation = getTabAuthorizationGeneration();
   if (!hasSession()) {
     return fetch(input, applyAuth(init, null));
   }
 
+  const ensureSession = () => {
+    if (!isTabAuthorizationGenerationCurrent(generation)) {
+      throw new Error("Your session has expired. Please sign in again.");
+    }
+  };
   const token = await getValidAccessToken();
+  ensureSession();
   const response = await fetch(input, applyAuth(init, token));
-  if (!(await isNotAuthenticated(response))) {
+  ensureSession();
+  const notAuthenticated = await isNotAuthenticated(response);
+  ensureSession();
+  if (!notAuthenticated) {
     return response;
   }
 
   const renewed = await refreshAccessToken(true);
+  ensureSession();
   if (!renewed) {
     throw new Error("Your session has expired. Please sign in again.");
   }
-  return fetch(input, applyAuth(init, renewed));
+  const retry = await fetch(input, applyAuth(init, renewed));
+  ensureSession();
+  return retry;
 };
 
 export const graphqlClient = new GraphQLClient(getApiUrl(), {

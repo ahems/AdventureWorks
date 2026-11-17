@@ -70,7 +70,8 @@ public class CustomerGenerationAgentService
             userId: memoryUserId,
             previousResponseId: null,
             structuredInputs: structuredInputs,
-            toolChoice: "auto");
+            toolChoice: "auto",
+            mcpServiceScopes: [McpServiceTokenProvider.AdminWriteScope]);
 
         var rawJson = agentResponse.ResponseText.Trim();
 

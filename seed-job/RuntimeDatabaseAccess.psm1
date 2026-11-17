@@ -166,4 +166,38 @@ EXEC sp_executesql @sql;
     } finally { $command.Dispose() }
 }
 
-Export-ModuleMember -Function Initialize-RuntimeDatabaseAccess, Grant-RuntimeChangeTrackingAccess, Grant-RuntimeXmlSchemaAccess
+function Grant-RuntimeDefaultMetadataAccess {
+    param(
+        [Parameter(Mandatory)] $Connection,
+        [Parameter(Mandatory)][string] $IdentityName
+    )
+
+    $command = $Connection.CreateCommand()
+    try {
+        $command.CommandTimeout = 120
+        $command.CommandText = @'
+IF OBJECT_ID('Production.ProductReview', 'U') IS NULL
+    THROW 51025, 'Cannot grant runtime default metadata access before base tables exist.', 1;
+DECLARE @quoted nvarchar(258) = QUOTENAME(@identityName), @sql nvarchar(max);
+IF @quoted IS NULL OR LEN(@identityName) = 0
+    THROW 51020, 'Invalid runtime database identity name.', 1;
+SELECT @sql = STRING_AGG(CONVERT(nvarchar(max),
+    N'GRANT VIEW DEFINITION ON OBJECT::' + QUOTENAME(s.name) + N'.' + QUOTENAME(t.name)
+    + N' TO ' + @quoted + N';'), CHAR(10))
+FROM sys.tables t JOIN sys.schemas s ON t.schema_id=s.schema_id
+WHERE t.is_ms_shipped=0 AND EXISTS (
+    SELECT 1 FROM sys.columns c WHERE c.object_id=t.object_id
+        AND (c.default_object_id<>0 OR c.is_computed=1));
+IF @sql IS NULL
+    THROW 51026, 'No runtime default/computed-column metadata targets found.', 1;
+EXEC sp_executesql @sql;
+'@
+        $parameter = $command.CreateParameter()
+        $parameter.ParameterName = '@identityName'
+        $parameter.Value = $IdentityName
+        $null = $command.Parameters.Add($parameter)
+        $null = $command.ExecuteNonQuery()
+    } finally { $command.Dispose() }
+}
+
+Export-ModuleMember -Function Initialize-RuntimeDatabaseAccess, Grant-RuntimeChangeTrackingAccess, Grant-RuntimeXmlSchemaAccess, Grant-RuntimeDefaultMetadataAccess

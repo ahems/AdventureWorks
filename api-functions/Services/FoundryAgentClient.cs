@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -61,6 +62,28 @@ public class FoundryAgentClient
     private static readonly JsonSerializerOptions _deserializeOptions = new()
     {
         PropertyNameCaseInsensitive = true
+    };
+
+    private static readonly IReadOnlySet<string> PublicCatalogToolNames = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "search_products", "get_product_details",
+        "find_complementary_products", "get_categories_with_products"
+    };
+
+    private static readonly IReadOnlySet<string> CustomerChatToolNames = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "get_customer_orders", "get_order_details", "find_complementary_products", "search_products",
+        "get_product_details", "get_personalized_recommendations", "analyze_product_reviews",
+        "get_product_availability"
+    };
+
+    private static readonly IReadOnlySet<string> AdminChatToolNames = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "get_business_stats", "get_top_customers", "get_orders_by_status", "get_sales_report_by_status",
+        "get_product_performance_summary", "get_recent_customers_without_orders", "search_customers",
+        "get_top_selling_products", "search_products", "get_product_details", "check_inventory_availability",
+        "get_categories_with_products", "get_products_for_promotion", "get_active_promotions",
+        "analyze_product_reviews"
     };
 
     public FoundryAgentClient(
@@ -129,10 +152,14 @@ public class FoundryAgentClient
     /// </param>
     /// <param name="mcpAccessToken">
     ///   Optional delegated OAuth access token for the end user. When supplied it is injected
-    ///   as an HTTP Authorization header on every MCP tool (per request, never cached) so the
+    ///   as an HTTP Authorization header on configured api-mcp tools (per request, never cached) so the
     ///   protected api-mcp resource authorizes the call as that AdventureWorks user. When
     ///   <c>null</c>, tools that target the api-mcp server receive a backend service token
     ///   (managed-identity assertion grant) so agent tool calls are still authorized.
+    /// </param>
+    /// <param name="mcpServiceScopes">
+    ///   Required least-privilege scope set when this invocation uses api-mcp tools without a
+    ///   delegated token. Calls without this set fail closed before sending the Foundry request.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="additionalInstructions">Trusted server instructions appended for this invocation only.</param>
@@ -140,6 +167,9 @@ public class FoundryAgentClient
     /// <param name="conversationOwner">Validated caller subject; binds stored responses to that caller and agent.</param>
     /// <param name="requireConfiguredDefinition">Reject missing prompt definitions rather than using a generic fallback.</param>
     /// <param name="retryTransientResponses">Use the bounded retry budget for throttled or unavailable model responses.</param>
+    /// <param name="requirePublicCatalogTools">Enforce the public wizard's exact catalog-only MCP policy on the definition actually used.</param>
+    /// <param name="requireCustomerChatTools">Enforce the customer chat's exact delegated MCP tool policy on the definition actually used.</param>
+    /// <param name="requireAdminChatTools">Enforce the admin chat's exact delegated read-only MCP tool policy on the definition actually used.</param>
     public async Task<FoundryAgentResponse> InvokeAsync(
         string agentId,
         string userMessage,
@@ -149,32 +179,82 @@ public class FoundryAgentClient
         Dictionary<string, object>? structuredInputs = null,
         string? toolChoice = null,
         string? mcpAccessToken = null,
+        IReadOnlyCollection<string>? mcpServiceScopes = null,
         CancellationToken cancellationToken = default,
         string? additionalInstructions = null,
         string? contentFilterPolicy = null,
         string? conversationOwner = null,
         bool requireConfiguredDefinition = false,
-        bool retryTransientResponses = false)
+        bool retryTransientResponses = false,
+        bool requirePublicCatalogTools = false,
+        bool requireCustomerChatTools = false,
+        bool requireAdminChatTools = false)
     {
+        if ((requirePublicCatalogTools ? 1 : 0) + (requireCustomerChatTools ? 1 : 0) +
+            (requireAdminChatTools ? 1 : 0) > 1)
+            throw new FoundryToolPolicyException("Only one guarded agent tool policy may be selected.");
+        if (requirePublicCatalogTools &&
+            (!string.IsNullOrEmpty(mcpAccessToken) || mcpServiceScopes is null || mcpServiceScopes.Count != 1
+             || !mcpServiceScopes.Contains(McpServiceTokenProvider.ProductsReadScope, StringComparer.Ordinal)))
+            throw new FoundryToolPolicyException("The public catalog agent requires only the products.read service scope.");
+        if (requireCustomerChatTools && (string.IsNullOrEmpty(mcpAccessToken) || mcpServiceScopes is not null))
+            throw new FoundryToolPolicyException("Customer chat requires the caller's delegated MCP token.");
+        if (requireAdminChatTools && (string.IsNullOrEmpty(mcpAccessToken) || mcpServiceScopes is not null))
+            throw new FoundryToolPolicyException("Admin chat requires the caller's delegated MCP token.");
+
+        var guardedTools = requirePublicCatalogTools ? PublicCatalogToolNames :
+            requireCustomerChatTools ? CustomerChatToolNames :
+            requireAdminChatTools ? AdminChatToolNames : null;
+        var toolPolicy = requirePublicCatalogTools ? "public-catalog" :
+            requireCustomerChatTools ? "customer-chat" : requireAdminChatTools ? "admin-chat" : "none";
+
         // --- Fetch agent definition (cached) ------------------------------------
-        var def = await GetOrFetchAgentDefinitionAsync(agentId, cancellationToken,
-            requireConfiguredDefinition: requireConfiguredDefinition || contentFilterPolicy is not null);
+        CachedAgentDefinition def;
+        try
+        {
+            def = await GetOrFetchAgentDefinitionAsync(agentId, cancellationToken,
+                requireConfiguredDefinition: requireConfiguredDefinition || contentFilterPolicy is not null || guardedTools is not null);
+        }
+        catch (Exception ex) when (guardedTools is not null && ex is (InvalidOperationException or JsonException or KeyNotFoundException))
+        {
+            throw new FoundryToolPolicyException("The guarded agent definition is unavailable or invalid.", ex);
+        }
+
+        if (guardedTools is not null)
+            ValidateGuardedTools(def, guardedTools);
 
         // --- Apply delegated MCP authorization (per-request, never cached) ------
         // When a caller supplies the end user's OAuth access token, inject it as an
-        // HTTP Authorization header on every MCP tool so api-mcp can authorize the
+        // HTTP Authorization header on api-mcp tools so api-mcp can authorize the
         // request as that AdventureWorks user. This produces a NEW per-request tool
         // list; the cached agent definition is never mutated, so a token can never
         // leak across users, conversations, or requests.
         // Foundry may enumerate remote MCP servers even when tool_choice is "none".
         // Data-supplied requests must omit tools entirely, not just forbid tool calls.
         var toolsDisabled = string.Equals(toolChoice, "none", StringComparison.Ordinal);
-        var serviceToken = toolsDisabled || !string.IsNullOrEmpty(mcpAccessToken)
-            ? null
-            : await GetServiceTokenAsync(cancellationToken);
+        var requiresApiMcpToken = !toolsDisabled &&
+                                  string.IsNullOrEmpty(mcpAccessToken) &&
+                                  ContainsApiMcpTool(def.Tools);
+        if (requiresApiMcpToken && mcpServiceScopes is null)
+        {
+            throw new InvalidOperationException(
+                $"Foundry agent '{agentId}' has api-mcp tools but no explicit service-token scopes were configured.");
+        }
+
+        if (requiresApiMcpToken && _serviceTokenProvider is null)
+        {
+            throw new InvalidOperationException(
+                $"Foundry agent '{agentId}' has api-mcp tools but no managed-identity token provider is configured.");
+        }
+
+        var serviceToken = requiresApiMcpToken
+            ? await GetServiceTokenAsync(mcpServiceScopes!, cancellationToken)
+            : null;
+        var currentActivity = Activity.Current;
+        var traceParent = currentActivity?.IdFormat == ActivityIdFormat.W3C ? currentActivity.Id : null;
         var effectiveTools = toolsDisabled
             ? Array.Empty<JsonElement>()
-            : ApplyMcpAuthorization(def.Tools, mcpAccessToken, serviceToken);
+            : ApplyMcpAuthorization(def.Tools, mcpAccessToken, serviceToken, traceParent);
 
         // --- Build initial input -----------------------------------------------
         object input;
@@ -346,7 +426,9 @@ public class FoundryAgentClient
                         "Foundry agent '{AgentId}' MCP tool enumeration failed (attempt {Attempt}/{Max}). " +
                         "Retrying in {Delay}ms. Error: {Body}",
                         agentId, retry + 1, maxToolRetries + 1, delayMs,
-                        responseBody.Length > 200 ? responseBody[..200] : responseBody);
+                        guardedTools is not null || contentFilterPolicy is not null
+                            ? "(guarded chat payload omitted)"
+                            : responseBody[..Math.Min(200, responseBody.Length)]);
                     await Task.Delay(delayMs, cancellationToken);
                     continue;
                 }
@@ -356,10 +438,13 @@ public class FoundryAgentClient
                 // This recovers from stale/broken MCP URLs in the agent definition.
                 if (isToolEnumError
                     && contentFilterPolicy is null
+                    && !requireConfiguredDefinition
+                    && guardedTools is null
                     && !usingFallbackTools
                     && !string.IsNullOrEmpty(_fallbackMcpServiceUrl))
                 {
-                    var fallbackTools = ApplyMcpAuthorization(BuildFallbackDefinition().Tools, mcpAccessToken, serviceToken);
+                    var fallbackTools = ApplyMcpAuthorization(
+                        BuildFallbackDefinition().Tools, mcpAccessToken, serviceToken, traceParent);
                     if (fallbackTools.Count > 0)
                     {
                         usingFallbackTools = true;
@@ -382,7 +467,9 @@ public class FoundryAgentClient
 
                 _logger.LogError("Foundry Responses API returned {Status}: {Body}",
                     (int)httpResponse.StatusCode,
-                    contentFilterPolicy is null ? responseBody[..Math.Min(500, responseBody.Length)] : "(guarded chat payload omitted)");
+                    guardedTools is not null || contentFilterPolicy is not null
+                        ? "(guarded chat payload omitted)"
+                        : responseBody[..Math.Min(500, responseBody.Length)]);
                 throw new InvalidOperationException(
                     $"Foundry Responses API failed ({(int)httpResponse.StatusCode})");
             }
@@ -410,6 +497,10 @@ public class FoundryAgentClient
                 }
             }
 
+            if (guardedTools is not null && approvalRequests.Any(approval =>
+                    approval.Server != "adventureworks_mcp" || !guardedTools.Contains(approval.Name)))
+                throw new FoundryToolPolicyException("The guarded agent requested an unapproved tool.");
+
             if (approvalRequests.Count == 0)
             {
                 // No pending approvals — we have the final answer
@@ -434,7 +525,7 @@ public class FoundryAgentClient
             currentInput = approvals;
         }
 
-        var parsedResponse = ParseResponse(lastResponseBody, agentId);
+        var parsedResponse = ParseResponse(lastResponseBody, agentId, def.VersionId, toolPolicy);
 
         // ── Empty-text recovery ────────────────────────────────────────────────
         // When tool_choice is "required", the model may consume all output tokens on
@@ -483,7 +574,7 @@ public class FoundryAgentClient
 
             if (continuationHttpResponse.IsSuccessStatusCode)
             {
-                var continuationParsed = ParseResponse(continuationResponseBody, agentId);
+                var continuationParsed = ParseResponse(continuationResponseBody, agentId, def.VersionId, toolPolicy);
                 if (!string.IsNullOrWhiteSpace(continuationParsed.ResponseText))
                 {
                     _logger.LogInformation(
@@ -519,7 +610,7 @@ public class FoundryAgentClient
 
     // ── Response parsing ───────────────────────────────────────────────────────
 
-    private FoundryAgentResponse ParseResponse(string responseBody, string agentId)
+    private FoundryAgentResponse ParseResponse(string responseBody, string agentId, string? versionId, string toolPolicy)
     {
         ThrowIfGuardrailBlocked(responseBody);
         using var doc = JsonDocument.Parse(responseBody);
@@ -540,6 +631,7 @@ public class FoundryAgentClient
 
         var responseText = new StringBuilder();
         var toolsUsed = new List<string>();
+        var completedMcpTools = new List<string>();
 
         // Walk the output array to collect text and tool-call names.
         // Output item types seen in Foundry responses:
@@ -592,7 +684,18 @@ public class FoundryAgentClient
                         // Collect distinct tool/function names for telemetry
                         var nameKey = itemType == "mcp_call" ? "name" : "name";
                         if (item.TryGetProperty(nameKey, out var toolName))
+                        {
                             toolsUsed.Add(toolName.GetString() ?? itemType!);
+                            if (itemType == "mcp_call"
+                                && item.TryGetProperty("status", out var toolStatus)
+                                && toolStatus.ValueKind == JsonValueKind.String
+                                && toolStatus.GetString() == "completed"
+                                && item.TryGetProperty("output", out var toolOutput)
+                                && toolOutput.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined
+                                && toolName.ValueKind == JsonValueKind.String
+                                && toolName.GetString() is { Length: > 0 } completedTool)
+                                completedMcpTools.Add(completedTool);
+                        }
                         break;
                 }
             }
@@ -613,9 +716,12 @@ public class FoundryAgentClient
         _telemetryClient.TrackEvent("Foundry.Responses.Completed", new Dictionary<string, string>
         {
             ["AgentId"] = agentId,
+            ["AgentVersionId"] = versionId ?? "unknown",
+            ["ToolPolicy"] = toolPolicy,
             ["ResponseId"] = responseId ?? "unknown",
             ["ToolCallCount"] = toolsUsed.Count.ToString(),
             ["ToolsUsed"] = string.Join(",", toolsUsed.Distinct()),
+            ["CompletedMcpTools"] = string.Join(",", completedMcpTools.Distinct()),
             ["InputTokens"] = inputTokens.ToString(),
             ["OutputTokens"] = outputTokens.ToString()
         });
@@ -767,10 +873,12 @@ public class FoundryAgentClient
         var root = doc.RootElement;
 
         // Navigate: versions.latest.definition
-        var definition = root
+        var latestVersion = root
             .GetProperty("versions")
-            .GetProperty("latest")
-            .GetProperty("definition");
+            .GetProperty("latest");
+        var definition = latestVersion.GetProperty("definition");
+        var versionId = latestVersion.TryGetProperty("id", out var versionIdValue)
+            && versionIdValue.ValueKind == JsonValueKind.String ? versionIdValue.GetString() : null;
         if (definition.TryGetProperty("kind", out var kind)
             && !string.Equals(kind.GetString(), "prompt", StringComparison.OrdinalIgnoreCase))
         {
@@ -830,7 +938,7 @@ public class FoundryAgentClient
             return def;
         }
 
-        var cachedDef = new CachedAgentDefinition(model, instructions, tools);
+        var cachedDef = new CachedAgentDefinition(model, instructions, tools, VersionId: versionId);
         _agentDefCache.TryAdd(agentId, cachedDef);
 
         _logger.LogInformation(
@@ -970,12 +1078,96 @@ public class FoundryAgentClient
     /// <summary>
     /// Returns a per-request copy of the MCP tool configuration with the caller's
     /// delegated OAuth access token injected as an HTTP Authorization header on
-    /// each MCP tool. The cached agent definition is NEVER mutated, so a token can
+    /// configured api-mcp tools. The cached agent definition is NEVER mutated, so a token can
     /// never leak across users, conversations, or requests. Non-MCP tools and the
     /// original list are returned unchanged when no token is supplied.
     /// </summary>
-    private async Task<string?> GetServiceTokenAsync(CancellationToken cancellationToken) =>
-        _serviceTokenProvider is null ? null : await _serviceTokenProvider.GetTokenAsync(cancellationToken);
+    private async Task<string> GetServiceTokenAsync(
+        IReadOnlyCollection<string> scopes,
+        CancellationToken cancellationToken)
+    {
+        var token = await _serviceTokenProvider!.GetTokenAsync(scopes, cancellationToken);
+        return token ?? throw new InvalidOperationException(
+            "Could not obtain the scoped api-mcp service token; the Foundry tool call was not sent.");
+    }
+
+    private bool ContainsApiMcpTool(IReadOnlyList<JsonElement> tools) =>
+        tools.Any(tool =>
+            tool.ValueKind == JsonValueKind.Object &&
+            tool.TryGetProperty("type", out var type) &&
+            type.ValueKind == JsonValueKind.String &&
+            string.Equals(type.GetString(), "mcp", StringComparison.OrdinalIgnoreCase) &&
+            tool.TryGetProperty("server_url", out var serverUrl) &&
+            serverUrl.ValueKind == JsonValueKind.String &&
+            IsApiMcpServer(serverUrl.GetString()));
+
+    private void ValidateGuardedTools(CachedAgentDefinition definition, IReadOnlySet<string> expectedTools)
+    {
+        var allowedProperties = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "type", "server_label", "server_url", "allowed_tools", "require_approval", "server_description", "headers"
+        };
+
+        bool ValidTool(JsonElement tool)
+        {
+            if (tool.ValueKind != JsonValueKind.Object)
+                return false;
+            var properties = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var property in tool.EnumerateObject())
+            {
+                if (!allowedProperties.Contains(property.Name) || !properties.Add(property.Name))
+                    return false;
+            }
+
+            if (!tool.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String || type.GetString() != "mcp"
+                || !tool.TryGetProperty("server_label", out var label) || label.ValueKind != JsonValueKind.String || label.GetString() != "adventureworks_mcp"
+                || !tool.TryGetProperty("server_url", out var url) || url.ValueKind != JsonValueKind.String
+                || !Uri.TryCreate(_fallbackMcpServiceUrl, UriKind.Absolute, out var expectedUrl)
+                || expectedUrl.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(expectedUrl.UserInfo)
+                || !string.IsNullOrEmpty(expectedUrl.Query) || !string.IsNullOrEmpty(expectedUrl.Fragment)
+                || !string.Equals(url.GetString()?.TrimEnd('/'), expectedUrl.AbsoluteUri.TrimEnd('/'), StringComparison.Ordinal))
+                return false;
+
+            if (tool.TryGetProperty("headers", out var headers)
+                && headers.ValueKind != JsonValueKind.Null
+                && (headers.ValueKind != JsonValueKind.Object || headers.EnumerateObject().Any()))
+                return false;
+
+            if (!tool.TryGetProperty("allowed_tools", out var allowed))
+                return false;
+            if (allowed.ValueKind == JsonValueKind.Object)
+            {
+                var entries = allowed.EnumerateObject().ToArray();
+                if (entries.Length != 1 || entries[0].Name != "tool_names")
+                    return false;
+                allowed = entries[0].Value;
+            }
+            if (allowed.ValueKind != JsonValueKind.Array)
+                return false;
+
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var name in allowed.EnumerateArray())
+            {
+                if (name.ValueKind != JsonValueKind.String || name.GetString() is not { } value || !names.Add(value))
+                    return false;
+            }
+            return names.SetEquals(expectedTools);
+        }
+
+        if (definition.IsFallback || definition.Tools.Count != 1 || !ValidTool(definition.Tools[0]))
+            throw new FoundryToolPolicyException("The guarded agent's MCP tool policy is invalid.");
+    }
+
+    private bool IsApiMcpServer(string? serverUrl)
+    {
+        if (_serviceTokenProvider?.IsMcpServer(serverUrl) == true)
+            return true;
+
+        return Uri.TryCreate(serverUrl, UriKind.Absolute, out var serverUri) &&
+               Uri.TryCreate(_fallbackMcpServiceUrl, UriKind.Absolute, out var configuredUri) &&
+               string.Equals(serverUri.GetLeftPart(UriPartial.Authority),
+                   configuredUri.GetLeftPart(UriPartial.Authority), StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <remarks>
     /// When no delegated token is supplied, <paramref name="serviceToken"/> (if any) is injected
@@ -983,7 +1175,8 @@ public class FoundryAgentClient
     /// already carry an Authorization header, so it is never sent to other MCP servers.
     /// </remarks>
     private IReadOnlyList<JsonElement> ApplyMcpAuthorization(
-        IReadOnlyList<JsonElement> tools, string? mcpAccessToken, string? serviceToken = null)
+        IReadOnlyList<JsonElement> tools, string? mcpAccessToken, string? serviceToken = null,
+        string? traceParent = null)
     {
         var useDelegated = !string.IsNullOrEmpty(mcpAccessToken);
         if ((!useDelegated && string.IsNullOrEmpty(serviceToken)) || tools.Count == 0)
@@ -999,12 +1192,18 @@ public class FoundryAgentClient
                 && typeValue.TryGetValue<string>(out var typeStr)
                 && string.Equals(typeStr, "mcp", StringComparison.OrdinalIgnoreCase))
             {
+                var serverUrl = obj["server_url"] is JsonValue urlValue && urlValue.TryGetValue<string>(out var u) ? u : null;
+                if (!IsApiMcpServer(serverUrl))
+                {
+                    result.Add(tool);
+                    continue;
+                }
+
                 if (!useDelegated)
                 {
-                    var serverUrl = obj["server_url"] is JsonValue urlValue && urlValue.TryGetValue<string>(out var u) ? u : null;
                     var hasAuth = obj["headers"] is JsonObject existing
                         && existing.Any(h => string.Equals(h.Key, "Authorization", StringComparison.OrdinalIgnoreCase));
-                    if (hasAuth || _serviceTokenProvider?.IsMcpServer(serverUrl) != true)
+                    if (hasAuth)
                     {
                         result.Add(tool);
                         continue;
@@ -1022,6 +1221,8 @@ public class FoundryAgentClient
                 // static secret scanners do not flag a "scheme <token>" pattern.
                 const string scheme = "Bearer";
                 headers["Authorization"] = scheme + " " + (useDelegated ? mcpAccessToken : serviceToken);
+                if (traceParent is not null)
+                    headers["traceparent"] = traceParent;
 
                 using var doc = JsonDocument.Parse(obj.ToJsonString());
                 result.Add(doc.RootElement.Clone());
@@ -1077,7 +1278,8 @@ internal sealed record CachedAgentDefinition(
     string Model,
     string? Instructions,
     IReadOnlyList<JsonElement> Tools,
-    bool IsFallback = false
+    bool IsFallback = false,
+    string? VersionId = null
 );
 
 // ── Wire-format request DTO ──────────────────────────────────────────────────
@@ -1120,6 +1322,8 @@ internal sealed class FoundryResponsesRequest
 public sealed class FoundryGuardrailException() : Exception("Foundry blocked this content under the configured safety policy.");
 
 public sealed class ChatConversationException() : Exception("This conversation is not available to the signed-in user.");
+
+public sealed class FoundryToolPolicyException(string message, Exception? inner = null) : InvalidOperationException(message, inner);
 
 // ── Public types ─────────────────────────────────────────────────────────────
 

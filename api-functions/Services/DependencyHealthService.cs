@@ -1,7 +1,9 @@
 #nullable enable
 using System.Diagnostics;
+using System.Data;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Azure.Core;
 using Azure.Data.Tables;
 using Azure.Identity;
 using Azure.Messaging.WebPubSub;
@@ -12,6 +14,8 @@ using Azure.Storage.Files.Shares.Models;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 
 namespace api_functions.Services;
 
@@ -25,6 +29,46 @@ public record DependencyHealthReport(DateTimeOffset CheckedAt, IReadOnlyList<Dep
 
 public record DependencyProbe(string Id, string Name, string Group, bool Required,
     Func<CancellationToken, Task<(string Status, string Message)>> Run);
+
+public sealed class SelectedIdentityCredential(TokenCredential inner, Guid expectedClientId) : TokenCredential
+{
+    private int _verified;
+    public bool Verified => Volatile.Read(ref _verified) != 0;
+
+    public override AccessToken GetToken(TokenRequestContext requestContext, CancellationToken cancellationToken) =>
+        Check(inner.GetToken(requestContext, cancellationToken));
+
+    public override async ValueTask<AccessToken> GetTokenAsync(
+        TokenRequestContext requestContext, CancellationToken cancellationToken) =>
+        Check(await inner.GetTokenAsync(requestContext, cancellationToken));
+
+    private AccessToken Check(AccessToken token)
+    {
+        JsonWebToken jwt;
+        try
+        {
+            jwt = new JsonWebTokenHandler().ReadJsonWebToken(token.Token);
+        }
+        catch (Exception error) when (error is ArgumentException or SecurityTokenException)
+        {
+            throw new UnverifiableIdentityTokenException();
+        }
+
+        var claims = jwt.Claims.Where(claim => claim.Type is "appid" or "azp").ToArray();
+        if (claims.Length == 0 || claims.Any(claim => !Guid.TryParse(claim.Value, out _)))
+            throw new UnverifiableIdentityTokenException();
+        if (claims.Any(claim => Guid.Parse(claim.Value) != expectedClientId))
+            throw new IdentityTokenMismatchException();
+        Interlocked.Exchange(ref _verified, 1);
+        return token;
+    }
+}
+
+public sealed class UnverifiableIdentityTokenException()
+    : InvalidOperationException("The Azure access token does not identify a verifiable application.");
+
+public sealed class IdentityTokenMismatchException()
+    : InvalidOperationException("The Azure access token belongs to a different application.");
 
 public class DependencyHealthService(
     IConfiguration configuration,
@@ -99,6 +143,14 @@ public class DependencyHealthService(
         }
     }
 
+    public static (string Status, string Message) EvaluateSqlIdentity(object? value) => value switch
+    {
+        1 => ("healthy", "SQL principal matches the configured managed identity."),
+        0 => ("unhealthy", "SQL principal does not match the configured managed identity."),
+        null or DBNull => ("unknown", "SQL principal identity could not be verified."),
+        _ => throw new InvalidOperationException("SQL identity probe returned an unexpected result.")
+    };
+
     private IEnumerable<DependencyProbe> BuildProbes()
     {
         yield return new("sql", "Azure SQL", "services", true, async ct =>
@@ -113,6 +165,27 @@ public class DependencyHealthService(
             command.CommandTimeout = 15;
             await command.ExecuteScalarAsync(ct);
             return ("healthy", "Connected and verified catalog read permission; no customer data returned.");
+        });
+        yield return new("sql-identity", "Azure SQL runtime identity", "capabilities", false, async ct =>
+        {
+            var connectionString = configuration["SQL_CONNECTION_STRING"];
+            var configuredClientId = configuration["AZURE_CLIENT_ID"];
+            if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(configuredClientId))
+                return ("not-configured", "SQL managed identity verification is not configured.");
+            if (!Guid.TryParse(configuredClientId, out var clientId) || clientId == Guid.Empty)
+                return ("unhealthy", "SQL managed identity configuration is invalid.");
+
+            await using var connection = new SqlConnection(connectionString);
+            await connection.OpenAsync(ct);
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT CONVERT(int, CASE WHEN type = 'E' AND sid = CONVERT(binary(16), @ClientId)
+                    THEN 1 ELSE 0 END)
+                FROM sys.database_principals WHERE principal_id = USER_ID();
+                """;
+            command.Parameters.Add("@ClientId", SqlDbType.UniqueIdentifier).Value = clientId;
+            command.CommandTimeout = 15;
+            return EvaluateSqlIdentity(await command.ExecuteScalarAsync(ct));
         });
         yield return StorageProbe("blobs", "Blob storage", async (account, ct) =>
         {
@@ -161,6 +234,38 @@ public class DependencyHealthService(
             await client.GetRootDirectoryClient().GetPropertiesAsync(cancellationToken: ct);
             return ("healthy", "Seed log root directory is readable; seed execution is checked separately.");
         });
+        yield return IdentityProbe("blob-identity", "Blob storage runtime identity", async (bound, ct) =>
+        {
+            var client = new BlobServiceClient(StorageUri(RequiredStorageAccount(), "blob"), bound);
+            await client.GetBlobContainerClient("adventureworks-receipts")
+                .GetPropertiesAsync(cancellationToken: ct);
+        }, "AzureWebJobsStorage:accountName");
+        yield return IdentityProbe("queue-identity", "Queue storage runtime identity", async (bound, ct) =>
+        {
+            var client = new QueueServiceClient(StorageUri(RequiredStorageAccount(), "queue"), bound);
+            await client.GetQueueClient("order-receipt-generation").GetPropertiesAsync(cancellationToken: ct);
+        }, "AzureWebJobsStorage:accountName");
+        yield return IdentityProbe("table-identity", "Table storage runtime identity", async (bound, ct) =>
+        {
+            var client = new TableServiceClient(StorageUri(RequiredStorageAccount(), "table"), bound);
+            await using var pages = client.GetTableClient("shoppingSimulator")
+                .QueryAsync<TableEntity>(maxPerPage: 1, select: ["PartitionKey"], cancellationToken: ct)
+                .AsPages().GetAsyncEnumerator(ct);
+            await pages.MoveNextAsync();
+        }, "AzureWebJobsStorage:accountName");
+        yield return IdentityProbe("file-identity", "File storage runtime identity", async (bound, ct) =>
+        {
+            var options = new ShareClientOptions { ShareTokenIntent = ShareTokenIntent.Backup };
+            var client = new ShareServiceClient(StorageUri(RequiredStorageAccount(), "file"), bound, options)
+                .GetShareClient("seed-job-logs");
+            await client.GetRootDirectoryClient().GetPropertiesAsync(cancellationToken: ct);
+        }, "AzureWebJobsStorage:accountName");
+        yield return IdentityProbe("webpubsub-identity", "Web PubSub runtime identity", async (bound, ct) =>
+        {
+            var client = new WebPubSubServiceClient(
+                new Uri($"https://{configuration["WEB_PUBSUB_HOST_NAME"]}"), "adventureworks", bound);
+            await client.GroupExistsAsync("orders", new Azure.RequestContext { CancellationToken = ct });
+        }, "WEB_PUBSUB_HOST_NAME");
         foreach (var probe in McpProbes())
             yield return probe;
         yield return ConfigurationProbe("openai", "Azure OpenAI configuration",
@@ -195,6 +300,38 @@ public class DependencyHealthService(
     private Uri StorageUri(string account, string service) => new(
         configuration[$"AzureWebJobsStorage:{service}ServiceUri"]
             ?? $"https://{account}.{service}.core.windows.net");
+
+    private string RequiredStorageAccount() => configuration["AzureWebJobsStorage:accountName"]
+        ?? throw new InvalidOperationException("Storage account configuration disappeared during a health check.");
+
+    private DependencyProbe IdentityProbe(string id, string name,
+        Func<TokenCredential, CancellationToken, Task> run, string dependencyKey) =>
+        new(id, name, "capabilities", false, async ct =>
+        {
+            var configuredClientId = configuration["AZURE_CLIENT_ID"];
+            if (string.IsNullOrWhiteSpace(configuredClientId) ||
+                string.IsNullOrWhiteSpace(configuration[dependencyKey]))
+                return ("not-configured", "Runtime identity verification is not configured.");
+            if (!Guid.TryParse(configuredClientId, out var clientId) || clientId == Guid.Empty)
+                return ("unhealthy", "Runtime identity configuration is invalid.");
+
+            var bound = new SelectedIdentityCredential(credential, clientId);
+            try
+            {
+                await run(bound, ct);
+            }
+            catch (IdentityTokenMismatchException)
+            {
+                return ("unhealthy", "The service token does not match the configured managed identity.");
+            }
+            catch (UnverifiableIdentityTokenException)
+            {
+                return ("unknown", "The service token identity could not be verified.");
+            }
+            return bound.Verified
+                ? ("healthy", "A read succeeded using the configured managed identity.")
+                : ("unknown", "The service token identity could not be verified.");
+        });
 
     private DependencyProbe ConfigurationProbe(string id, string name, string[] keys, string message) =>
         new(id, name, "capabilities", false, _ => Task.FromResult(

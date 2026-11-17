@@ -6,10 +6,18 @@ using System.Text;
 
 namespace AddressFunctions.Services;
 
+public interface IPasswordService
+{
+    Task<CreatedCustomerAccount?> CreateCustomerAccountAsync(string email, string password, string firstName, string lastName);
+    Task<bool> IsIndividualCustomerAsync(int businessEntityId);
+    Task<bool> StorePasswordAsync(int businessEntityId, string password);
+    Task<bool> VerifyPasswordAsync(int businessEntityId, string password);
+}
+
 /// <summary>
 /// Service for managing password hashing and verification using PBKDF2
 /// </summary>
-public class PasswordService
+public class PasswordService : IPasswordService
 {
     private readonly string _connectionString;
     private const int SaltSize = 6; // 6 bytes -> 8 chars base64 (fits varchar(10))

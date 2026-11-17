@@ -12,6 +12,14 @@
     <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(AuthAssuranceHost)' == 'true'">
+    <DefineConstants>$(DefineConstants);AUTH_ASSURANCE_HOST</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(AuthAssuranceHost)' == 'true'">
+    <Compile Include="..\tests\auth\FunctionsHostProbes.cs" Link="AuthAssurance\FunctionsHostProbes.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Azure.AI.Agents.Persistent" Version="1.2.0-beta.10" />

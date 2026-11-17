@@ -60,7 +60,8 @@ DESCRIPTION="Analyses abandoned shopping carts for AdventureWorks administrators
 
 STARTER_PROMPTS='[{"text":"Analyse these abandoned carts and suggest recovery strategies"},{"text":"Which carts have the highest recovery potential?"},{"text":"Generate recovery emails for high-urgency carts"}]'
 
-AGENT_ID=$(upsert_agent "admin-cart-recovery-agent" "Cart Recovery Specialist" "$INSTRUCTIONS" "$MEMORY_STORE" "$DESCRIPTION" "$STARTER_PROMPTS" "{}")
+# Cart data is supplied by the backend; this agent must not query MCP.
+AGENT_ID=$(upsert_agent "admin-cart-recovery-agent" "Cart Recovery Specialist" "$INSTRUCTIONS" "$MEMORY_STORE" "$DESCRIPTION" "$STARTER_PROMPTS" "{}" "[]" "false")
 if [ -z "$AGENT_ID" ]; then error "Failed to create admin-cart-recovery-agent"; exit 1; fi
 success "admin-cart-recovery-agent created: $AGENT_ID"
 azd env set AI_AGENT_CART_RECOVERY_ID "$AGENT_ID"

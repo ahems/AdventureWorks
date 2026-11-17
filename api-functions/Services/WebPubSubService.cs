@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using ApiFunctions.Auth;
 using Azure.Identity;
 using Azure.Messaging.WebPubSub;
 using Microsoft.Extensions.Logging;
@@ -16,20 +17,55 @@ public class WebPubSubService
     private static readonly JsonSerializerOptions JsonOpts =
         new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
-    /// <summary>Allowed groups that clients may subscribe to.</summary>
-    public static readonly HashSet<string> AllowedGroups = new(StringComparer.OrdinalIgnoreCase)
+    private sealed record GroupPolicy(IReadOnlyList<string> RequiredScopes, bool InternalOnly);
+
+    private static readonly IReadOnlyDictionary<string, GroupPolicy> GroupPolicies =
+        new Dictionary<string, GroupPolicy>(StringComparer.OrdinalIgnoreCase)
     {
-        "manufacturing-agent",
-        "manufacturing-ops",
-        "warehouse",
-        "supply-chain",
-        "orders",
-        "shopping-simulator",
-        "reviews",
-        "finance",
-        "promotions",
-        "utilities",
+        ["manufacturing-agent"] = new([FunctionScopes.ManufacturingRead], InternalOnly: true),
+        ["manufacturing-ops"] = new([FunctionScopes.ManufacturingRead], InternalOnly: true),
+        ["warehouse"] = new([FunctionScopes.InventoryRead], InternalOnly: true),
+        ["supply-chain"] = new([FunctionScopes.InventoryRead, FunctionScopes.ManufacturingRead], InternalOnly: true),
+        ["orders"] = new([FunctionScopes.OrdersRead, FunctionScopes.ManufacturingRead], InternalOnly: false),
+        ["shopping-simulator"] = new([FunctionScopes.AdminRead, FunctionScopes.ManufacturingRead], InternalOnly: true),
+        ["reviews"] = new([FunctionScopes.AdminRead], InternalOnly: true),
+        ["finance"] = new([FunctionScopes.SalesRead, FunctionScopes.ManufacturingRead], InternalOnly: true),
+        ["promotions"] = new([FunctionScopes.AdminRead], InternalOnly: true),
+        ["utilities"] = new([FunctionScopes.AdminRead], InternalOnly: true),
     };
+
+    /// <summary>
+    /// Resolves the caller's authorized group set from the validated identity and scopes.
+    /// Consumer order notifications contain no order-specific data.
+    /// </summary>
+    public static string[] GetAuthorizedGroups(FunctionUser user)
+    {
+        if (!user.IsAuthenticated ||
+            user.Category is not (UserCategories.Consumer or UserCategories.Employee or UserCategories.Manufacturing) ||
+            !user.HasScope(FunctionScopes.RealtimeConnect))
+        {
+            return [];
+        }
+
+        return GroupPolicies
+            .Where(entry =>
+                (!entry.Value.InternalOnly || user.IsInternal) &&
+                entry.Value.RequiredScopes.Any(user.HasScope))
+            .Select(entry => entry.Key)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Consumer-visible orders and cross-domain finance messages are invalidation
+    /// signals, not data feeds. Never broadcast record-level data through these groups.
+    /// </summary>
+    public static object SanitizePayloadForGroup(string group, object payload) =>
+        group.ToLowerInvariant() switch
+        {
+            "orders" => new { @event = "orders-changed" },
+            "finance" => new { @event = "finance-changed" },
+            _ => payload,
+        };
 
     private readonly WebPubSubServiceClient? _client;
     private readonly ILogger<WebPubSubService> _logger;
@@ -62,12 +98,12 @@ public class WebPubSubService
 
         try
         {
-            var json = JsonSerializer.Serialize(payload, JsonOpts);
+            var json = JsonSerializer.Serialize(SanitizePayloadForGroup(group, payload), JsonOpts);
             await _client.SendToGroupAsync(group, json, Azure.Core.ContentType.ApplicationJson);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "[WebPubSub] Failed to push event to group '{Group}'. Clients will fall back to polling.", group);
+            _logger.LogWarning(ex, "[WebPubSub] Failed to push event to group '{Group}'. Clients will report live updates unavailable.", group);
         }
     }
 
@@ -136,14 +172,16 @@ public class WebPubSubService
     /// Generates a client access URL with permissions to join the specified groups.
     /// Returns null if the service is not configured.
     /// </summary>
-    public async Task<Uri?> GetClientAccessUriAsync(IEnumerable<string> groups)
+    public async Task<Uri?> GetClientAccessUriAsync(FunctionUser user)
     {
         if (_client == null) return null;
 
-        var validGroups = groups.Where(g => AllowedGroups.Contains(g)).ToArray();
+        var authorizedGroups = GetAuthorizedGroups(user);
+        if (authorizedGroups.Length == 0) return null;
+
         var uri = await _client.GetClientAccessUriAsync(
             expiresAfter: TimeSpan.FromHours(1),
-            groups: validGroups);
+            groups: authorizedGroups);
         return uri;
     }
 }

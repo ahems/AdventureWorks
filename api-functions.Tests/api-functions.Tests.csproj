@@ -22,6 +22,8 @@
     <ProjectReference Include="..\api-functions\api-functions.csproj" />
     <Compile Include="..\manufacturing-agent\mcp-tools\src\mcp-tools\McpServiceAuthentication.cs"
              Link="HostedAgent\McpServiceAuthentication.cs" />
+    <Compile Include="..\tests\auth\private\AddressFixtures.cs" Link="Assurance\AddressFixtures.cs" />
+    <Compile Include="..\tests\auth\private\SqlPermissions.cs" Link="Assurance\SqlPermissions.cs" />
   </ItemGroup>
 
 </Project>

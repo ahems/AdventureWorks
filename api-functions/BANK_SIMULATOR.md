@@ -269,15 +269,19 @@ Returns recent manufacturing financial transactions.
 
 ### `POST /api/simulators/reset`
 
-Resets **all three simulators together** in the correct order:
+Resets the simulators together in the correct order:
 
 1. Clears the manufacturing work-order queue.
 2. Resets the supply chain — reverts POs and re-seeds vendor stock.
 3. Resets the bank — wipes all transactions and re-seeds the USD balance.
+4. Stops the shopping simulator and clears its queue and counters.
 
 **Destructive** — all bank history, vendor stock, and in-flight work orders are permanently deleted.
 
 Use this instead of individual resets to avoid orphaned bank transactions (e.g. a PO that was approved and debited, but whose supply-chain records are then wiped by an isolated supply-chain reset).
+If any step fails, the response is HTTP 500 with sanitized per-step results;
+earlier or later steps may already have succeeded. Reconcile the state before
+retrying. The MCP reset tool surfaces this as an error rather than a completed reset.
 
 **Response**
 

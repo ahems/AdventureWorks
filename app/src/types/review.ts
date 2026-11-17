@@ -27,7 +27,6 @@ export interface ProductReview {
   ProductID: number;
   ReviewerName: string;
   ReviewDate: string;
-  EmailAddress: string;
   Rating: number;
   Comments: string;
   HelpfulVotes: number;

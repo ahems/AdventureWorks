@@ -37,6 +37,7 @@ public sealed class OAuthTestFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("FUNCTIONS_RESOURCE_IDENTIFIER", FunctionsResourceIdentifier);
         Environment.SetEnvironmentVariable("MCP_ENTRA_TENANT_ID", "00000000-0000-0000-0000-00000000aaaa");
         Environment.SetEnvironmentVariable("MCP_TRUSTED_SERVICE_PRINCIPAL_IDS", TrustedServicePrincipalId);
+        Environment.SetEnvironmentVariable("OAUTH_INSPECTOR_REDIRECT_URIS", "https://inspector.example.test/oauth/callback");
     }
 
     public const string TrustedServicePrincipalId = "3a3f63e6-0000-0000-0000-000000000001";

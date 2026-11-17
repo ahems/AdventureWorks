@@ -65,6 +65,11 @@ import {
   type SupplyQuote,
   type PurchaseOrder,
 } from "@/services/supplyChainApi";
+import {
+  authorizationStorageKey,
+  getTabAuthorizationGeneration,
+  isTabAuthorizationGenerationCurrent,
+} from "@/services/dabAuth";
 
 interface Props {
   status: ManufacturingStatus | undefined;
@@ -309,17 +314,18 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
   // ── Re-Order All logic ──────────────────────────────────────────────────────
   const [reorderAllConfirm, setReorderAllConfirm] = useState(false);
   const [reorderAllInProgress, setReorderAllInProgress] = useState(false);
+  const [generation] = useState(getTabAuthorizationGeneration);
+  const submittedStorageKey = authorizationStorageKey("reorderAllSubmitted", generation);
 
-  // Persist submitted product IDs in sessionStorage so the state survives
-  // tab navigation (component unmount/remount). Expires after 10 minutes.
-  const STORAGE_KEY = "reorderAllSubmitted";
   const readSubmitted = useCallback((): {
     ids: Set<number>;
     totalOrdersPlanned: number;
     baselineOrderCount: number;
   } => {
+    if (!isTabAuthorizationGenerationCurrent(generation))
+      return { ids: new Set(), totalOrdersPlanned: 0, baselineOrderCount: 0 };
     try {
-      const raw = sessionStorage.getItem(STORAGE_KEY);
+      const raw = sessionStorage.getItem(submittedStorageKey);
       if (!raw)
         return { ids: new Set(), totalOrdersPlanned: 0, baselineOrderCount: 0 };
       const parsed = JSON.parse(raw) as {
@@ -330,7 +336,7 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
       };
       // Expire after 10 minutes
       if (Date.now() - parsed.ts > 10 * 60 * 1000) {
-        sessionStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(submittedStorageKey);
         return { ids: new Set(), totalOrdersPlanned: 0, baselineOrderCount: 0 };
       }
       return {
@@ -341,18 +347,19 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
     } catch {
       return { ids: new Set(), totalOrdersPlanned: 0, baselineOrderCount: 0 };
     }
-  }, []);
+  }, [generation, submittedStorageKey]);
   const writeSubmitted = useCallback(
     (
       ids: Set<number>,
       totalOrdersPlanned: number,
       baselineOrderCount: number,
     ) => {
+      if (!isTabAuthorizationGenerationCurrent(generation)) return;
       if (ids.size === 0) {
-        sessionStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(submittedStorageKey);
       } else {
         sessionStorage.setItem(
-          STORAGE_KEY,
+          submittedStorageKey,
           JSON.stringify({
             ids: Array.from(ids),
             totalOrdersPlanned,
@@ -360,9 +367,12 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
             ts: Date.now(),
           }),
         );
+        if (!isTabAuthorizationGenerationCurrent(generation)) {
+          sessionStorage.removeItem(submittedStorageKey);
+        }
       }
     },
-    [],
+    [generation, submittedStorageKey],
   );
   const initialSubmitted = readSubmitted();
   const [reorderAllSubmitted, setReorderAllSubmittedRaw] = useState<
@@ -379,6 +389,7 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
       totalOrdersPlanned?: number,
       baselineOrderCount?: number,
     ) => {
+      if (!isTabAuthorizationGenerationCurrent(generation)) return;
       const totalOrd = totalOrdersPlanned ?? reorderAllTotalOrders;
       const baseOrd = baselineOrderCount ?? reorderAllBaselineOrders;
       writeSubmitted(ids, totalOrd, baseOrd);
@@ -388,7 +399,7 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
       if (baselineOrderCount !== undefined)
         setReorderAllBaselineOrdersRaw(baselineOrderCount);
     },
-    [writeSubmitted, reorderAllTotalOrders, reorderAllBaselineOrders],
+    [generation, writeSubmitted, reorderAllTotalOrders, reorderAllBaselineOrders],
   );
 
   // Order-level progress: count current orders for submitted products vs planned
@@ -506,6 +517,7 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
   );
 
   const submitReorderAll = async () => {
+    if (!isTabAuthorizationGenerationCurrent(generation)) return;
     setReorderAllInProgress(true);
     try {
       const items = selectedFulfillable.map((item) => ({
@@ -524,6 +536,7 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
       }));
 
       const result = await submitBulkReorder(items);
+      if (!isTabAuthorizationGenerationCurrent(generation)) return;
       let baselineCount = 0;
       for (const item of selectedFulfillable) {
         baselineCount += (ordersByProduct.get(item.productId) || []).length;
@@ -539,10 +552,11 @@ const ShortagesPanel: React.FC<Props> = ({ status, ordersByProduct }) => {
         `Reordering ${selectedFulfillable.length} product${selectedFulfillable.length !== 1 ? "s" : ""} in background (${result.totalOrdersPlanned} POs planned)`,
       );
     } catch (e) {
+      if (!isTabAuthorizationGenerationCurrent(generation)) return;
       console.error("Bulk reorder failed:", e);
       toast.error("Failed to submit bulk reorder — please try again.");
     } finally {
-      setReorderAllInProgress(false);
+      if (isTabAuthorizationGenerationCurrent(generation)) setReorderAllInProgress(false);
     }
   };
 

@@ -378,9 +378,14 @@ and rejects recurring network polling across all three frontend source trees.
 
 **Groups**: `manufacturing-agent`, `manufacturing-ops`, `warehouse`, `supply-chain`,
 `orders`, `shopping-simulator`, `reviews`, `finance`, `promotions`, `utilities`.
-The allow-list is `WebPubSubService.AllowedGroups`; each app subscribes to its subset.
+`WebPubSubService` derives group grants from signed `realtime.connect` and domain
+scopes; all groups except `orders` also require an internal category. Each app
+filters incoming events to its own subset. The `orders` payload is only a generic
+cache-invalidation signal, as is the `finance` payload; neither may contain
+record identifiers or business values.
 
-**Negotiate endpoint**: `GET /api/webpubsub/negotiate?groups=manufacturing-agent,warehouse,...`
+**Negotiate endpoint**: `GET /api/webpubsub/negotiate` requires a Functions-audience
+user bearer token. The server, not the browser, selects authorized groups.
 
 ### Bicep Infrastructure Patterns
 
@@ -402,13 +407,21 @@ parameter names or assume every module parameter is an azd environment value.
 
 ### Infrastructure-as-Code Policy
 
-All Azure Storage resources (queues, tables, blob containers) are provisioned **exclusively** by `infra/modules/storage.bicep` via `azd up`. Application code must **never** call `CreateIfNotExistsAsync`, `CreateIfNotExists`, or `CreateTableIfNotExistsAsync` — it must assume all infrastructure already exists at runtime.
+All Azure Storage resources used by the demo application (queues, tables, blob containers) are provisioned by `infra/modules/storage.bicep` via `azd up`. Runtime application code must **never** call `CreateIfNotExistsAsync`, `CreateIfNotExists`, or `CreateTableIfNotExistsAsync` — it must assume all application infrastructure already exists at runtime.
 
 - **New queue or table needed?** Add application queues to `applicationQueueDescriptions`
   (the module derives their queues and poison queues), or tables to
   `tableServices.tables` in `storage.bicep`. Update the corresponding
   `DependencyHealthService.Application*` list so startup/readiness checks stay aligned.
 - **New blob container needed?** Add it to `blobServices.containers` in `storage.bicep`.
+- **Ephemeral tests that need persistent state:** Tests may create a temporary Azure
+  Table Storage table in the existing demo storage account without adding it to IaC.
+  Use a valid randomly generated table name with a recognizable test prefix, isolate
+  the test data, and delete only that table during test cleanup (including a `finally`
+  path). Do not use this exception from application/runtime code, add test tables to
+  `storage.bicep` or runtime health-check lists, or modify/delete pre-provisioned
+  application tables. Authenticate with the test's approved identity; do not use
+  storage account keys.
 - **Startup health check**: `Program.cs` uses `DependencyHealthService.Application*`
   resource lists, checks queues/containers with `GetPropertiesAsync()` and tables with
   `GetAccessPoliciesAsync()`, and logs warnings on failed checks. These checks run

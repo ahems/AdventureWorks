@@ -1,6 +1,11 @@
 import { useEffect, useRef } from "react";
 import { WebPubSubClient } from "@azure/web-pubsub-client";
 import { getWebPubSubNegotiateUrl } from "@/lib/utils";
+import {
+  getFunctionsAccessToken,
+  getTabAuthorizationGeneration,
+  isTabAuthorizationGenerationCurrent,
+} from "@/services/dabAuth";
 
 export type WebPubSubStatus = "connecting" | "connected" | "disconnected" | "failed" | "not-configured";
 let connectionStatus: WebPubSubStatus = "connecting";
@@ -31,6 +36,8 @@ export function useWebPubSub(
   const groupsKey = groups.join(",");
 
   useEffect(() => {
+    const generation = getTabAuthorizationGeneration();
+    const subscribedGroups = new Set(groupsKey.split(",").filter(Boolean));
     let client: WebPubSubClient | null = null;
     let cancelled = false;
     const controller = new AbortController();
@@ -40,11 +47,28 @@ export function useWebPubSub(
 
     async function connect() {
       try {
+        const ensureSession = () => {
+          if (!isTabAuthorizationGenerationCurrent(generation)) {
+            throw new Error("The live-updates session has changed.");
+          }
+        };
+        ensureSession();
         const negotiateUrl = getWebPubSubNegotiateUrl();
+        const accessToken = await getFunctionsAccessToken();
+        ensureSession();
+        if (!accessToken) {
+          console.warn("[WebPubSub] Functions authorization is required — live updates unavailable.");
+          setStatus("failed");
+          return;
+        }
         const res = await fetch(
-          `${negotiateUrl}?groups=${encodeURIComponent(groupsKey)}`,
-          { signal: controller.signal },
+          negotiateUrl,
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            signal: controller.signal,
+          },
         );
+        ensureSession();
         if (!res.ok) {
           console.warn(
             "[WebPubSub] Negotiate failed:",
@@ -55,24 +79,30 @@ export function useWebPubSub(
           return;
         }
         const { url } = (await res.json()) as { url: string };
+        ensureSession();
         if (cancelled) return;
         if (!url || typeof url !== "string") throw new Error("Invalid Web PubSub negotiate response.");
 
         client = new WebPubSubClient(url);
         client.on("connected", () => {
-          if (cancelled) return;
+          if (cancelled || !isTabAuthorizationGenerationCurrent(generation)) return;
           setStatus("connected");
           window.dispatchEvent(new Event("webpubsub-reconnected"));
         });
-        client.on("disconnected", () => setStatus("disconnected"));
-        client.on("stopped", () => setStatus("disconnected"));
+        client.on("disconnected", () => {
+          if (isTabAuthorizationGenerationCurrent(generation)) setStatus("disconnected");
+        });
+        client.on("stopped", () => {
+          if (isTabAuthorizationGenerationCurrent(generation)) setStatus("disconnected");
+        });
         client.on("rejoin-group-failed", () => {
+          if (!isTabAuthorizationGenerationCurrent(generation)) return;
           setStatus("failed");
           console.warn("[WebPubSub] Failed to rejoin a subscribed group.");
         });
 
         client.on("group-message", (e) => {
-          if (cancelled) return;
+          if (cancelled || !isTabAuthorizationGenerationCurrent(generation) || !subscribedGroups.has(e.message.group)) return;
           let data: unknown = e.message.data;
           if (typeof data === "string") {
             try {
@@ -90,6 +120,10 @@ export function useWebPubSub(
         });
 
         await client.start({ abortSignal: controller.signal });
+        if (!isTabAuthorizationGenerationCurrent(generation)) {
+          setStatus("failed");
+          await client.stop();
+        }
         // Groups are auto-joined via the negotiate token — no joinGroup needed
       } catch (err) {
         if (cancelled) return;

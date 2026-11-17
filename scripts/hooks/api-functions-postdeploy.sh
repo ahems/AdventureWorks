@@ -32,6 +32,14 @@ get_azd_value() {
 
 color_cyan "Injecting Foundry agent IDs into API Functions (Flex Consumption)..."
 
+# Keep the public Help-Me-Choose tool boundary in sync with its server code on
+# targeted Functions deployments, not only during full provisioning.
+help_me_choose_script="$(git rev-parse --show-toplevel)/scripts/utilities/agents/eshop-help-me-choose-agent.sh"
+if ! bash "$help_me_choose_script"; then
+  color_red "✗ Failed to apply the Help-Me-Choose agent's managed-identity tool policy."
+  exit 1
+fi
+
 # ── Read agent IDs from azd environment ────────────────────────────────────────
 chat_id=$(get_azd_value "AI_AGENT_CHAT_ID")
 order_id=$(get_azd_value "AI_AGENT_ORDER_ID")

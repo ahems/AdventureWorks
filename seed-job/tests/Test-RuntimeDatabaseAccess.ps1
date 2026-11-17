@@ -76,6 +76,31 @@ try { Initialize-RuntimeDatabaseAccess $connection 'runtime' '00112233-4455-6677
     $failed = $_.Exception.Message -match 'Simulated SID conflict'
 }
 Assert ($failed -and $connection.Command.Disposed) 'SQL errors propagate and dispose'
+
+$metadata = [RuntimeTestConnection]::new()
+Grant-RuntimeDefaultMetadataAccess $metadata "runtime's identity"
+Assert ($metadata.Command.Executed -and $metadata.Command.Disposed) 'Metadata grants execute and dispose'
+Assert ($metadata.Command.Parameters.Count -eq 1 -and $metadata.Command.Parameters[0].Value -eq "runtime's identity") 'Metadata identity is parameterized'
+Assert ($metadata.Command.CommandText -match 'GRANT VIEW DEFINITION ON OBJECT::' -and
+    $metadata.Command.CommandText -notmatch "runtime's identity|GRANT CONTROL|GRANT ALTER|ON DATABASE|ON SCHEMA|db_owner") 'Metadata grants are object-scoped, not data/DDL/admin elevation'
+Assert ($metadata.Command.CommandText -match 'sys.tables' -and $metadata.Command.CommandText -match 'sys.columns' -and
+    $metadata.Command.CommandText -match 'default_object_id<>0 OR c.is_computed=1' -and
+    $metadata.Command.CommandText -match 't.is_ms_shipped=0') 'Only user tables needing default/computed metadata are selected'
+Assert ($metadata.Command.CommandText -match 'QUOTENAME\(s.name\)' -and
+    $metadata.Command.CommandText -match 'QUOTENAME\(t.name\)' -and
+    $metadata.Command.CommandText -match 'QUOTENAME\(@identityName\)') 'All dynamic SQL identifiers are quoted'
+Assert ($metadata.Command.CommandText -match 'THROW 51025' -and
+    $metadata.Command.CommandText -match 'THROW 51026') 'Missing schema/empty metadata inventory cannot silently succeed'
+$metadata.Command.Fail = $true
+$failed = $false
+try { Grant-RuntimeDefaultMetadataAccess $metadata 'runtime' } catch {
+    $failed = $_.Exception.Message -match 'Simulated SID conflict'
+}
+Assert ($failed -and $metadata.Command.Disposed) 'Metadata SQL failures propagate'
+$seed = Get-Content -Raw (Join-Path $PSScriptRoot '../seed-database.ps1')
+Assert (($seed | Select-String 'Grant-RuntimeDefaultMetadataAccess' -AllMatches).Matches.Count -eq 2) 'Normal fresh and existing seed paths wire metadata grant'
+Assert ($seed.LastIndexOf('Grant-RuntimeDefaultMetadataAccess') -gt
+    $seed.LastIndexOf('Initialize-GuestCartSchema')) 'Fresh metadata grants follow final application-table setup'
 $parseErrors = $null
 $null = [System.Management.Automation.Language.Parser]::ParseFile(
     (Join-Path $PSScriptRoot '../RuntimeDatabaseAccess.psm1'), [ref]$null, [ref]$parseErrors)

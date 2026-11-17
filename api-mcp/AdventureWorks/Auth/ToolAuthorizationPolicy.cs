@@ -45,14 +45,15 @@ public static class ToolAuthorizationRegistry
     // the built assembly. Method names convert PascalCase -> snake_case.
     private static readonly ToolPolicy[] Policies =
     {
-        // ---- AdventureWorksMcpTools (19) ----
+        // ---- AdventureWorksMcpTools (20) ----
         new("get_customer_orders",              OAuthScopes.OrdersRead,      ToolAccessMode.SelfOrInternal, "customerId"),
         new("get_order_details",                OAuthScopes.OrdersRead,      ToolAccessMode.SelfOrInternal, "customerId"),
         new("find_complementary_products",      OAuthScopes.ProductsRead,    ToolAccessMode.Public),
         new("search_products",                  OAuthScopes.ProductsRead,    ToolAccessMode.Public),
         new("get_product_details",              OAuthScopes.ProductsRead,    ToolAccessMode.Public),
-        new("get_personalized_recommendations", OAuthScopes.ProductsRead,    ToolAccessMode.SelfOrInternal, "customerId"),
+        new("get_personalized_recommendations", OAuthScopes.OrdersRead,      ToolAccessMode.SelfOrInternal, "customerId"),
         new("analyze_product_reviews",          OAuthScopes.ProductsRead,    ToolAccessMode.Public),
+        new("get_product_availability",         OAuthScopes.ProductsRead,    ToolAccessMode.Public),
         new("check_inventory_availability",     OAuthScopes.InventoryRead,   ToolAccessMode.InternalOnly),
         new("get_products_for_promotion",       OAuthScopes.AdminRead,       ToolAccessMode.InternalOnly),
         new("get_categories_with_products",     OAuthScopes.ProductsRead,    ToolAccessMode.Public),

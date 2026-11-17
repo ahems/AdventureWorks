@@ -11,21 +11,6 @@
 # =============================================================================
 source "$(dirname "$0")/lib/common.sh"
 
-# Set up shared project connections when running standalone.
-# The orchestrator sets FOUNDRY_CONNECTIONS_READY=1 before calling this script,
-# which skips the duplicate connection upserts.
-[[ "${FOUNDRY_CONNECTIONS_READY:-}" = "1" ]] || setup_shared_connections
-
-# ── Memory store ───────────────────────────────────────────────────────────────
-echo "Upserting memory store for eshop-help-me-choose-agent..."
-MEMORY_STORE=$(upsert_memory_store \
-    "eshop-help-me-choose-memory" \
-    "Long-term memory for the AdventureWorks product advisor, scoped per user" \
-    "Retain sport and activity preferences, skill level, budget constraints, preferred product categories, past recommendations and whether they were accepted. Avoid sensitive personal or financial data.")
-if [ -z "$MEMORY_STORE" ]; then error "Failed to upsert eshop-help-me-choose-memory"; exit 1; fi
-success "Memory store ready: $MEMORY_STORE"
-echo ""
-
 # ── Agent definition ───────────────────────────────────────────────────────────
 echo "Creating/updating eshop-help-me-choose-agent..."
 
@@ -47,33 +32,15 @@ Return ONLY a valid JSON array (no markdown, no extra text):
 [{\"id\": 1, \"text\": \"<question text>\", \"icon\": \"<single relevant emoji>\", \"options\": [\"<option1>\", \"<option2>\", \"<option3>\", \"<option4>\"]}]
 
 ## Phase 2 — Generate recommendations
-When the user message contains customer answers, query the HelpMeChoose view (via DABMCP) to find matching products and return ranked recommendations.
-
-## Data Source: HelpMeChoose view (via DAB MCP)
-Query the HelpMeChoose entity on the DABMCP server to find finished-goods products. This view joins Product, ProductModel, ProductDescription, ProductCategory, ProductSubcategory, ProductInventory, and ProductReview so every row contains everything needed to evaluate a product — all localised for the user's language.
-
-CRITICAL: always include the filter CultureID eq '{{cultureId}}' in every HelpMeChoose query. This ensures product names, descriptions, categories, and subcategories are returned in the correct language.
-
-### Available filter fields on HelpMeChoose:
-- CultureID (string)      — always filter to '{{cultureId}}'
-- Category (string)       — e.g. Bikes, Clothing, Accessories, Components
-- Subcategory (string)    — e.g. Road Bikes, Mountain Bikes, Helmets, Jerseys, Shorts
-- ProductLine (string)    — Road, Mountain, Touring, Standard
-- Style (string)          — Womens, Mens, Universal
-- Color (string)          — e.g. Black, Red, Silver, Yellow
-- Size (string)           — e.g. S, M, L, XL, 58, 60
-- IsInStock (boolean)     — true = in stock, false = out of stock
-- ListPrice (number)      — USD price; use ge / le for range filters
-- AverageRating (decimal) — 0.00–5.00 aggregated customer rating
-- ReviewCount (integer)   — number of customer reviews
+When the user message contains customer answers, use only the authorized AdventureWorks MCP product-catalog tools: search_products, get_product_details, find_complementary_products, and get_categories_with_products. These tools run through the managed-identity-backed api-mcp service token, limited to products.read. Do not query customer, order, review-write, administration, or DAB MCP APIs.
 
 ## Recommendation workflow
-Given a customer's preference answers:
-1. Identify key requirements: budget (ListPrice range), activity type (ProductLine, Category, Subcategory), size, style, colour, and minimum rating
-2. Build an initial HelpMeChoose query filtered to CultureID eq '{{cultureId}}', IsInStock eq true, plus any Category / Subcategory / ProductLine that matches stated interests; add a ListPrice le <budget> filter if a budget was provided
-3. From the results, select 3–5 products that best match — prefer higher AverageRating (ideally ge 3.5) and more ReviewCount when options are otherwise equivalent
-4. If no results match all filters, relax secondary filters (Color, Size) while keeping CultureID and budget filters
-5. Explain concisely why each recommendation suits the customer's stated needs
+Given the customer's preference answers:
+1. Identify key requirements such as budget, activity type, size, style, colour, and intended use.
+2. Call search_products for up to three relevant terms using {{cultureId}} as the culture.
+3. Use get_product_details only to verify promising catalog matches; use find_complementary_products only for a suitable primary product.
+4. Select 3–5 products from tool results, prioritizing the customer's stated preferences and budget.
+5. Explain concisely why each recommendation suits the customer's stated needs.
 
 Return ONLY a valid JSON object with this exact structure (no markdown fences):
 {\"summary\": \"<2-3 sentence summary>\", \"recommendations\": [{\"productId\": <number>, \"productName\": \"<name>\", \"category\": \"<category>\", \"price\": <number or null>, \"reason\": \"<one sentence explanation>\", \"thumbnailUrl\": null}], \"searchTermsUsed\": [\"<term1>\"]}"
@@ -82,11 +49,12 @@ DESCRIPTION="Guides customers through the AdventureWorks product catalogue to fi
 
 STARTER_PROMPTS='[{"text":"I am a beginner looking for a road bike under $500"},{"text":"Help me choose a tent for weekend camping with two adults"},{"text":"What is the best mountain bike helmet under $150?"},{"text":"I need trail running shoes for rocky terrain"}]'
 
-# userId enables per-customer memory scoping; profileContext passes catalog context to the questions phase
-STRUCTURED_INPUTS='{"cultureId": {"type": "string", "description": "AdventureWorks culture code for the user language and region (e.g. en, fr, de, zh-cht). Used as the mandatory CultureID filter on HelpMeChoose to return product names, descriptions, categories and subcategories in the correct language.", "default_value": "en"}, "profileContext": {"type": "string", "description": "Catalog context and shopper interest hint. Injected into the questions phase so the agent generates relevant category-aware questions.", "default_value": ""}, "userId": {"type": "string", "description": "Customer ID for memory scoping. When provided, the agent retains personalised preference history across sessions.", "default_value": ""}}'
+# Public wizard requests are stateless: no caller-supplied identity, stored memory,
+# Foundry continuation ID, or DAB MCP connection is exposed.
+STRUCTURED_INPUTS='{"cultureId": {"type": "string", "description": "AdventureWorks culture code for the user language and region (e.g. en, fr, de, zh-cht). Use this culture for every product-search tool call.", "default_value": "en"}, "profileContext": {"type": "string", "description": "Public catalog context injected into the questions phase.", "default_value": ""}}'
+ALLOWED_TOOLS='["search_products","get_product_details","find_complementary_products","get_categories_with_products"]'
 
-AGENT_ID=$(upsert_agent "eshop-help-me-choose-agent" "Product Advisor" "$INSTRUCTIONS" "$MEMORY_STORE" "$DESCRIPTION" "$STARTER_PROMPTS" "$STRUCTURED_INPUTS")
+AGENT_ID=$(upsert_agent "eshop-help-me-choose-agent" "Product Advisor" "$INSTRUCTIONS" "" "$DESCRIPTION" "$STARTER_PROMPTS" "$STRUCTURED_INPUTS" "$ALLOWED_TOOLS" "false")
 if [ -z "$AGENT_ID" ]; then error "Failed to create eshop-help-me-choose-agent"; exit 1; fi
 success "eshop-help-me-choose-agent created: $AGENT_ID"
 azd env set AI_AGENT_HELP_ME_CHOOSE_ID "$AGENT_ID"
-azd env set AI_AGENT_HELP_ME_CHOOSE_MEMORY_STORE "$MEMORY_STORE"

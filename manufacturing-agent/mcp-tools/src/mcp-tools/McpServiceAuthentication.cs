@@ -10,13 +10,49 @@ namespace McpTools;
 /// </summary>
 internal sealed class McpServiceAuthentication(TokenCredential credential, HttpClient http, string serverUrl)
 {
-    internal async Task<string> GetTokenAsync(CancellationToken cancellationToken)
+    private static readonly string[] ReadScopes =
+    [
+        "mcp.access", "products.read", "orders.read", "inventory.read", "manufacturing.read",
+    ];
+
+    internal static IReadOnlyCollection<string> GetScopesForMode(string mode) =>
+        mode switch
+        {
+            "ReadOnly" or "ProposePending" => ReadScopes,
+            "FullyAutonomous" => [.. ReadScopes, "manufacturing.write"],
+            _ => throw new ArgumentOutOfRangeException(nameof(mode), "Unknown manufacturing agent mode."),
+        };
+
+    internal static string GetModeFromMessages(IEnumerable<string?> messages)
+    {
+        var modeLines = messages
+            .Where(message => !string.IsNullOrEmpty(message))
+            .SelectMany(message => message!.Split('\n'))
+            .Select(line => line.TrimEnd('\r'))
+            .Where(line => line.StartsWith("Mode=", StringComparison.Ordinal))
+            .ToArray();
+
+        if (modeLines.Length != 1)
+            throw new InvalidOperationException("Manufacturing invocation must contain exactly one mode.");
+
+        return modeLines[0] switch
+        {
+            "Mode=ReadOnly (0)" => "ReadOnly",
+            "Mode=ProposePending (1)" => "ProposePending",
+            "Mode=FullyAutonomous (2)" => "FullyAutonomous",
+            _ => throw new InvalidOperationException("Manufacturing invocation is missing a recognized mode."),
+        };
+    }
+
+    internal async Task<string> GetTokenAsync(string mode, CancellationToken cancellationToken)
     {
         var uri = new Uri(serverUrl, UriKind.Absolute);
         if (uri.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(uri.UserInfo))
             throw new InvalidOperationException("MCP_SERVICE_URL must be an HTTPS URL without credentials.");
 
         var origin = uri.GetLeftPart(UriPartial.Authority);
+        var scopes = GetScopesForMode(mode);
+        var scopeText = string.Join(' ', scopes);
         var assertion = await credential.GetTokenAsync(
             new TokenRequestContext(["api://AzureADTokenExchange/.default"]), cancellationToken);
         using var form = new FormUrlEncodedContent(new Dictionary<string, string>
@@ -25,6 +61,7 @@ internal sealed class McpServiceAuthentication(TokenCredential credential, HttpC
             ["client_id"] = "adventureworks-agents",
             ["assertion"] = assertion.Token,
             ["resource"] = origin + "/mcp",
+            ["scope"] = scopeText,
         });
         using var request = new HttpRequestMessage(HttpMethod.Post, origin + "/token") { Content = form };
         using var response = await http.SendAsync(request, cancellationToken);
@@ -43,6 +80,16 @@ internal sealed class McpServiceAuthentication(TokenCredential credential, HttpC
             !root.TryGetProperty("expires_in", out var expires) ||
             expires.ValueKind != JsonValueKind.Number || !expires.TryGetInt32(out var seconds) || seconds <= 0)
             throw new InvalidOperationException("MCP service authentication returned an invalid token response.");
+
+        var grantedScopeText = root.TryGetProperty("scope", out var scopeElement) &&
+                              scopeElement.ValueKind == JsonValueKind.String
+            ? scopeElement.GetString()
+            : null;
+        var expectedScopes = scopes.ToHashSet(StringComparer.Ordinal);
+        var grantedScopes = grantedScopeText?.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .ToHashSet(StringComparer.Ordinal);
+        if (grantedScopes is null || !grantedScopes.SetEquals(expectedScopes))
+            throw new InvalidOperationException("MCP service authentication returned an unexpected scope set.");
 
         // A fresh exchange for each invocation avoids sharing expired tokens between runs.
         return new AuthenticationHeaderValue("Bearer", token.GetString()).ToString();

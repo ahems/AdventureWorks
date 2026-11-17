@@ -28,6 +28,7 @@ const TOKEN_KEY = "dab_oauth_token";
 // requirement that a token carries at least one granted scope to be issued.
 export const DAB_CONSUMER_REQUESTED_SCOPES = [
   "mcp.access",
+  "realtime.connect",
   "products.read",
   "customers.read",
   "customers.write",

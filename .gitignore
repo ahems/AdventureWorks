@@ -52,6 +52,10 @@ htmlcov/
 nosetests.xml
 coverage.xml
 /.auth-results/
+*.trx
+*.binlog
+[Tt]est[Rr]esults/
+playwright-report/
 *.cover
 *.py,cover
 .hypothesis/
@@ -128,6 +132,12 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
+!.env.example
+!.env.*.example
+!.env.template
+!.env.*.template
+local.settings.json
 .venv
 env/
 venv/
@@ -188,13 +198,14 @@ app/.env.production
 app/public/config.js
 app-admin/.env.production
 app-admin/public/config.js
+app-manufacturing/public/config.js
 
 # AI Agent configuration (auto-generated during deployment)
 AI_AGENT_CONFIG.json
 
 # Node.js dependencies
 node_modules/
-config.json
+/config.json
 
 blob-report/
 test-results/

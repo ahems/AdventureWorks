@@ -28,8 +28,6 @@ export interface WizardQuestion {
 export interface WizardQuestionsResponse {
   sessionId: string;
   questions: WizardQuestion[];
-  /** Foundry response ID — pass back as previousThreadId in the recommendations request to chain both wizard phases. */
-  threadId?: string;
 }
 
 export interface WizardAnswer {
@@ -51,8 +49,6 @@ export interface RecommendationsResponse {
   summary: string;
   recommendations: ProductRecommendation[];
   searchTermsUsed: string[];
-  /** Foundry response ID for multi-turn refinement — pass back as previousThreadId for follow-up refinement requests. */
-  threadId?: string;
 }
 
 export interface CatalogMeta {
@@ -70,7 +66,6 @@ export interface CatalogMeta {
 export const getWizardQuestions = async (
   context?: string,
   cultureId?: string,
-  customerId?: number,
 ): Promise<WizardQuestionsResponse> => {
   const endpoint = getFunctionsEndpoint();
 
@@ -78,7 +73,7 @@ export const getWizardQuestions = async (
     const res = await fetch(`${endpoint}/questions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ context, cultureId, customerId }),
+      body: JSON.stringify({ context, cultureId }),
     });
 
     if (!res.ok)
@@ -95,7 +90,6 @@ export const getWizardQuestions = async (
           options: q.options ?? q.Options ?? [],
         }),
       ),
-      threadId: data.threadId ?? data.ThreadId ?? undefined,
     };
   } catch (error) {
     trackError("HelpMeChoose getWizardQuestions error", error, {
@@ -116,8 +110,6 @@ export const getRecommendations = async (
   gender?: string,
   heightLabel?: string,
   preferredColors?: string[],
-  customerId?: number,
-  previousThreadId?: string,
 ): Promise<RecommendationsResponse> => {
   const endpoint = getFunctionsEndpoint();
 
@@ -133,8 +125,6 @@ export const getRecommendations = async (
         gender,
         heightLabel,
         preferredColors,
-        customerId,
-        previousThreadId,
       }),
     });
 
@@ -155,7 +145,6 @@ export const getRecommendations = async (
         }),
       ),
       searchTermsUsed: data.searchTermsUsed ?? data.SearchTermsUsed ?? [],
-      threadId: data.threadId ?? data.ThreadId ?? undefined,
     };
   } catch (error) {
     trackError("HelpMeChoose getRecommendations error", error, {

@@ -10,15 +10,15 @@ using System.Collections.Frozen;
 namespace ApiFunctions.Auth;
 
 /// <summary>
-/// Authoritative, per-function authorization policy for every api-functions HTTP route (189
-/// routes). Keyed by the <c>[Function]</c> name. Mirrors the committed route-to-scope matrix and
+/// Authoritative, per-function authorization policy for every api-functions HTTP function.
+/// Keyed by the <c>[Function]</c> name. Mirrors the committed route-to-scope matrix and
 /// the pattern of api-mcp's <c>ToolAuthorizationRegistry</c>.
 /// </summary>
 public static class FunctionAuthorizationRegistry
 {
     private static readonly FrozenDictionary<string, FunctionPolicy> Policies = new FunctionPolicy[]
     {
-        // ---- Tier P — anonymous / handler-enforced (21) ----
+        // ---- Tier P — anonymous / handler-enforced (20) ----
         new("AIAgentChat", AccessTier.Public, null, AccessMode.Anonymous, null),  // Validates MCP-audience OAuth inside the function.
         new("AIAgentStatus", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/agent/status
         new("GetOpenApiSpec", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/openapi.json
@@ -30,7 +30,6 @@ public static class FunctionAuthorizationRegistry
         new("HelpMeChooseCatalogMeta", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/helpme/catalog-meta
         new("HelpMeChooseQuestions", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/helpme/questions
         new("HelpMeChooseRecommend", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/helpme/recommend
-        new("NegotiateWebPubSub", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/webpubsub/negotiate
         new("RequestPasswordReset", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/password/reset/request
         new("ResetPassword", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/password/reset/complete
         new("SeedJobStatus", AccessTier.Public, null, AccessMode.Anonymous, null),  // /api/seed/status
@@ -41,7 +40,10 @@ public static class FunctionAuthorizationRegistry
         new("OwnedCartItems", AccessTier.Public, null, AccessMode.Anonymous, null),
         new("OwnedCartItem", AccessTier.Public, null, AccessMode.Anonymous, null),
 
-        // ---- Tier C — consumer self-or-internal, ownership (13) ----
+        // ---- Tier A — authenticated; handler enforces per-group scopes ----
+        new("NegotiateWebPubSub", AccessTier.Authenticated, FunctionScopes.RealtimeConnect, AccessMode.GroupScoped, null),  // /api/webpubsub/negotiate
+
+        // ---- Tier C — consumer self-or-internal, ownership (17) ----
         new("MergeGuestCart", AccessTier.Consumer, FunctionScopes.OrdersWrite, AccessMode.SelfOrInternal, "consumer + guest session"),
         new("SetPassword", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityID(self; internal → customers only)"),  // /api/password
         new("VerifyPassword", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal, "businessEntityID(self only)"),  // /api/password/verify
@@ -53,10 +55,14 @@ public static class FunctionAuthorizationRegistry
         new("GetAddressById", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses/{id:int}
         new("GetAddresses", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses
         new("GetPersonAddresses", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/person-addresses
+        new("GetPaymentMethods", AccessTier.Consumer, FunctionScopes.CustomersRead, AccessMode.SelfOrInternal, "business_entity_id(self)"),
+        new("CreateOrderHeader", AccessTier.Consumer, FunctionScopes.OrdersWrite, AccessMode.SelfOrInternal, "customerId + businessEntityId (signed consumer)"),  // /api/orders
+        new("CreateOrderDetail", AccessTier.Consumer, FunctionScopes.OrdersWrite, AccessMode.SelfOrInternal, "salesOrderId(owner CustomerID)"),  // /api/orders/{salesOrderId:int}/details
+        new("GetOwnedOrderDetails", AccessTier.Consumer, FunctionScopes.OrdersRead, AccessMode.SelfOrInternal, "orderIds(owner CustomerID)"),  // /api/orders/details
         new("SetAddressType", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses/{id:int}/type
         new("UpdateAddress", AccessTier.Consumer, FunctionScopes.CustomersWrite, AccessMode.SelfOrInternal, "businessEntityId"),  // /api/addresses/{id:int}
 
-        // ---- Tier I — internal-only (119) ----
+        // ---- Tier I — internal-only (162) ----
         new("GenerateManufacturingDiagram", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),
         new("GenerateManufacturingInstructions", AccessTier.Internal, FunctionScopes.ManufacturingWrite, AccessMode.InternalOnly, null),
         new("ExportManufacturingIllustrations", AccessTier.Internal, FunctionScopes.ManufacturingRead, AccessMode.InternalOnly, null),

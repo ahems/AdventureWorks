@@ -41,6 +41,7 @@ public sealed class EntraManagedIdentityAssertionValidator : IServiceAssertionVa
     private readonly AuthorizationServerOptions _options;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<EntraManagedIdentityAssertionValidator> _logger;
+    private readonly TimeProvider _clock;
     private readonly JsonWebTokenHandler _handler = new();
     private readonly SemaphoreSlim _keysLock = new(1, 1);
 
@@ -50,11 +51,13 @@ public sealed class EntraManagedIdentityAssertionValidator : IServiceAssertionVa
     public EntraManagedIdentityAssertionValidator(
         AuthorizationServerOptions options,
         IHttpClientFactory httpClientFactory,
-        ILogger<EntraManagedIdentityAssertionValidator> logger)
+        ILogger<EntraManagedIdentityAssertionValidator> logger,
+        TimeProvider? clock = null)
     {
         _options = options;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _clock = clock ?? TimeProvider.System;
     }
 
     public async Task<ServiceAssertion?> ValidateAsync(string assertion, CancellationToken cancellationToken)
@@ -118,7 +121,7 @@ public sealed class EntraManagedIdentityAssertionValidator : IServiceAssertionVa
 
     private async Task<JsonWebKeySet?> GetKeysAsync(bool forceRefresh, CancellationToken ct)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _clock.GetUtcNow();
         var age = now - _keysFetchedAt;
         if (_keys is not null && age < KeyCacheLifetime && (!forceRefresh || age < MinRefreshInterval))
         {
@@ -128,7 +131,7 @@ public sealed class EntraManagedIdentityAssertionValidator : IServiceAssertionVa
         await _keysLock.WaitAsync(ct);
         try
         {
-            age = DateTimeOffset.UtcNow - _keysFetchedAt;
+            age = _clock.GetUtcNow() - _keysFetchedAt;
             if (_keys is not null && age < KeyCacheLifetime && (!forceRefresh || age < MinRefreshInterval))
             {
                 return _keys;
@@ -138,13 +141,17 @@ public sealed class EntraManagedIdentityAssertionValidator : IServiceAssertionVa
             var client = _httpClientFactory.CreateClient(nameof(EntraManagedIdentityAssertionValidator));
             var json = await client.GetStringAsync(url, ct);
             _keys = new JsonWebKeySet(json);
-            _keysFetchedAt = DateTimeOffset.UtcNow;
+            _keysFetchedAt = _clock.GetUtcNow();
             return _keys;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or ArgumentException)
         {
             _logger.LogError(ex, "Failed to fetch Entra signing keys for managed-identity assertion validation.");
-            return _keys;
+            return _keys is not null && _clock.GetUtcNow() - _keysFetchedAt < KeyCacheLifetime ? _keys : null;
         }
         finally
         {

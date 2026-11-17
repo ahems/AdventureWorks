@@ -318,7 +318,8 @@ print(json.dumps(d))
 # =============================================================================
 # upsert_agent <name> <display_name> <instructions> <memory_store_name>
 #              <description> <starter_prompts_json> <structured_inputs_json>
-#              [allowed_tools_json="[]"] [include_dabmcp="true"]
+#              [allowed_tools_json="[]"] [include_dabmcp="false"]
+#              [allowed_dab_tools_json="[]"]
 #
 # Creates or updates a 'kind: prompt' Foundry agent.
 #
@@ -333,11 +334,11 @@ print(json.dumps(d))
 #   structured_inputs  — JSON object declaring Handlebars template variables,
 #                        e.g. '{"userId":{"type":"string","default_value":""}}'
 #                        Pass "" or "{}" to omit.
-#   allowed_tools      — JSON array of tool names to allow on adventureworks_mcp,
-#                        e.g. '["search_products","get_order_details"]'.
-#                        Pass "[]" or "{}" to allow all tools.
-#   include_dabmcp     — "true" (default) to attach the DAB MCP server as an
-#                        additional tool; "false" to omit it.
+#   allowed_tools      — explicit JSON array of api-mcp tool names.
+#                        An empty array omits the api-mcp server.
+#   include_dabmcp     — "true" only when a DAB MCP allow-list is provided;
+#                        defaults to "false".
+#   allowed_dab_tools  — explicit JSON array of DAB MCP tool names.
 #
 # Outputs the agent ID to stdout.  Returns 1 on failure.
 # =============================================================================
@@ -350,7 +351,8 @@ upsert_agent() {
     local starter_prompts="${6:-}"
     local structured_inputs="${7:-}"
     local allowed_tools="${8:-[]}"
-    local include_dabmcp="${9:-true}"
+    local include_dabmcp="${9:-false}"
+    local allowed_dab_tools="${10:-[]}"
 
     local token
     token=$(get_ai_token)
@@ -359,53 +361,14 @@ upsert_agent() {
         return 1
     fi
 
-    # ── Build the tools array ─────────────────────────────────────────────────
+    # ── Build the least-privilege tools array ─────────────────────────────────
     local tools_json
-    tools_json=$(python3 -c "
-import json, sys
-
-mcp_url      = sys.argv[1]
-dab_mcp_url  = sys.argv[2]
-raw_tools    = sys.argv[3]
-include_dab  = sys.argv[4].lower() == 'true'
-conn_id      = sys.argv[5]
-
-# Parse allowed_tools — accept JSON array or empty/object → all tools
-try:
-    allowed = json.loads(raw_tools)
-    if not isinstance(allowed, list):
-        allowed = []
-except Exception:
-    allowed = []
-
-tools = []
-
-# adventureworks_mcp tool
-mcp_tool = {
-    'type':             'mcp',
-    'server_label':     'adventureworks_mcp',
-    'server_url':       mcp_url,
-    'require_approval': 'never',
-    'allowed_tools':    allowed
-}
-tools.append(mcp_tool)
-
-# DAB MCP tool (optional)
-if include_dab and dab_mcp_url:
-    dab_tool = {
-        'type':             'mcp',
-        'server_label':     'dabmcp',
-        'require_approval': 'never',
-        'allowed_tools':    []
-    }
-    if conn_id:
-        dab_tool['project_connection_id'] = conn_id
-    else:
-        dab_tool['server_url'] = dab_mcp_url
-    tools.append(dab_tool)
-
-print(json.dumps(tools))
-" "$MCP_SERVICE_URL" "$DAB_MCP_URL" "$allowed_tools" "$include_dabmcp" "$DAB_MCP_CONNECTION_ID")
+    if ! tools_json=$(python3 "$(dirname "${BASH_SOURCE[0]}")/build-agent-tools.py" \
+        "$MCP_SERVICE_URL" "$DAB_MCP_URL" "$allowed_tools" "$include_dabmcp" \
+        "$DAB_MCP_CONNECTION_ID" "$allowed_dab_tools"); then
+        error "Could not build a fail-closed MCP tool configuration for $name."
+        return 1
+    fi
 
     # ── Build the complete agent request body ─────────────────────────────────
     local body
@@ -437,9 +400,12 @@ if starter_s and starter_s not in ('', '[]'):
 definition = {
     'kind':         'prompt',
     'model':        model,
-    'instructions': instructions,
-    'tools':        json.loads(tools_json)
+    'instructions': instructions
 }
+
+tools = json.loads(tools_json)
+if tools:
+    definition['tools'] = tools
 
 if memory_name:
     definition['memory_stores'] = [{'name': memory_name}]
